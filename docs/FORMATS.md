@@ -626,7 +626,7 @@ rim the reflection running on away from the camera.
 ## Vehicles (.bus/.ovh) - unit `mc_roadvehicle`
 
 type friendlyname friendlyname_inv ai_veh_type coupling_back/front control_cable_back/front
-couple_back/front coupling_front_character boogies sinus rail_body_osc contact_shoe rowdy_factor
+couple_back/front coupling_front_character coupling_pitch_offset (openOMSI) boogies sinus rail_body_osc contact_shoe rowdy_factor
 ai_brakeperformance add_camera_driver add_camera_pax view_schedule view_ticketselling set_camera_std
 set_camera_outside_center schwerpunkt rollwiderstand rot_pnt_long inv_min_turnradius ai_deltaheight
 newachse (achse_long achse_maxwidth achse_minwidth achse_raddurchmesser achse_feder achse_maxforce
@@ -879,6 +879,13 @@ the train, not a mesh index. The stock jackknife protection watches alpha and br
 47° while reversing, and the joint's plates turn with it. The bellows are `[smoothskin]`
 meshes whose `[setbone]` ids are **the bone mesh's position in the model's first LOD**, and
 they follow the joint's dummy meshes; the modelled pose is the straight one.
+
+The joint turns (alpha) and pitches (beta) about the coupling point - the ball - unless the
+rear section's `.bus` has `[coupling_pitch_offset]` (openOMSI, see MODDING.md): a pusher's
+joint, which pitches about a hinge that far ahead of the ball along the front section. The
+rear section's slope then runs from the hinge, and the ball rides the link between them: it
+swings up or down off the coupling point by about `offset · sin(beta)`. Without the key, or
+with 0, everything is as before.
 
 The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToPrevVeh]`
 path points: the rear section's seats and exits are numbered after the front's, which is
