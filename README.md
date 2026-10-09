@@ -1,3 +1,18 @@
+# Project Depot
+
+Independent repository: https://github.com/OmsiModsBR/depot
+
+Historical baseline: openOMSI `v0.2.16` (`2026-10-07`), commit
+`c85b2e0dda13d219fd12d0496c653d20cdb54145`.
+
+Maintenance policy: **stable base + selective upstream integration**.
+See [baseline provenance and integration policy](DEPOT_BASELINE.md).
+
+The documentation below is preserved from the historical source. Its branding,
+community links and service references describe openOMSI, not Depot releases.
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logos/openomsi-wordmark-light.svg">

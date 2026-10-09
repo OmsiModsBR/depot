@@ -1,4 +1,4 @@
-//! Updates from the project's GitHub releases (github.com/openOMSI-Project/openOMSI).
+//! Updates from Project Depot's GitHub releases (github.com/OmsiModsBR/depot).
 //!
 //! Every push to main publishes a release `v<MAJOR.MINOR.COMMIT>` with one archive per
 //! platform (see .github/workflows/release.yml). The launcher asks the GitHub API for the
@@ -43,9 +43,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// The project on GitHub.
-pub const REPO: &str = "openOMSI-Project/openOMSI";
-pub const REPO_URL: &str = "https://github.com/openOMSI-Project/openOMSI";
-const LATEST_API: &str = "https://api.github.com/repos/openOMSI-Project/openOMSI/releases/latest";
+pub const REPO: &str = "OmsiModsBR/depot";
+pub const REPO_URL: &str = "https://github.com/OmsiModsBR/depot";
+const LATEST_API: &str = "https://api.github.com/repos/OmsiModsBR/depot/releases/latest";
 
 /// A release newer than this build, with the file for this platform.
 #[derive(Clone, Debug, PartialEq)]
