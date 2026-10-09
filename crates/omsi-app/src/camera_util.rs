@@ -466,3 +466,31 @@ mod tests {
         assert_eq!((turned.yaw, turned.pitch), (95.0, -89.0));
     }
 }
+
+/// The outside view's (F3) field of view when none is set: 60 degrees up and down, but never more
+/// than 16:9 shows sideways - at 21:9 and wider the rectilinear picture would otherwise stretch
+/// towards the edges. Narrower screens keep the 60.
+pub fn auto_outside_fov(aspect: f32) -> f32 {
+    const BASE: f32 = 60.0;
+    const REFERENCE: f32 = 16.0 / 9.0;
+    if !aspect.is_finite() || aspect <= REFERENCE {
+        return BASE;
+    }
+    let tan_y = (BASE.to_radians() * 0.5).tan() * REFERENCE / aspect;
+    (2.0 * tan_y.atan()).to_degrees().max(8.0)
+}
+
+#[cfg(test)]
+mod outside_fov_tests {
+    use super::auto_outside_fov;
+
+    #[test]
+    fn ultrawide_keeps_the_sideways_view_of_16_9() {
+        assert_eq!(auto_outside_fov(16.0 / 9.0), 60.0);
+        assert_eq!(auto_outside_fov(4.0 / 3.0), 60.0);
+        let wide = |fov: f32, a: f32| (fov.to_radians() * 0.5).tan() * a;
+        let uw = auto_outside_fov(21.0 / 9.0);
+        assert!(uw < 60.0);
+        assert!((wide(uw, 21.0 / 9.0) - wide(60.0, 16.0 / 9.0)).abs() < 1e-4);
+    }
+}

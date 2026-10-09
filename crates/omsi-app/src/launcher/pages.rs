@@ -756,6 +756,11 @@ fn camera_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, co
         s[fov_key] = json!(if fov < 20.0 { 0.0 } else { fov.round() });
         *dirty = 0.3;
     }
+    let mut outside = get(s, "outside_fov").as_f64().unwrap_or(0.0) as f32;
+    if ui.slider("s-outside-fov", c.row(), &mut outside, 0.0, 120.0, 1.0, "Outside view field of view (F3)", &|v| if v < 20.0 { "Auto".to_string() } else { format!("{v:.0}°") }) {
+        s["outside_fov"] = json!(if outside < 20.0 { 0.0 } else { outside.round() });
+        *dirty = 0.3;
+    }
     let mut look = get(s, "look_sens").as_f64().unwrap_or(1.0) as f32;
     if ui.slider("s-look-sens", c.row(), &mut look, 0.1, 2.0, 0.05, "Mouse look sensitivity", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }) {
         s["look_sens"] = json!((look * 100.0).round() / 100.0);
@@ -2755,6 +2760,7 @@ mod settings_tests {
             "s-seat-pitch",
             "s-seatreset",
             "s-fov",
+            "s-outside-fov",
             "s-look-sens",
             "set-right_stick_look",
             "s-look-smoothing",
