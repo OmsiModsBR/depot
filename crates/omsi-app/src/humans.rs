@@ -2558,7 +2558,14 @@ impl Humans {
         let h = heading.to_radians();
         let objects = world.object_positions.lock();
         let mut spots: Vec<WaitSpot> = Vec::new();
+        let reach = 40.0_f64.max(length as f64 + 15.0);
         for (obj, p, face, height) in world.waiting_places.lock().iter() {
+            // (a place this far from the stop is no object's near it - a `[passpos]` lies
+            // metres from its object, not 100 m: no need to look the object up, which on
+            // a big map is most of the time this takes)
+            if (*p - pos).truncate().length() > reach + 100.0 {
+                continue;
+            }
             let Some((opos, _)) = objects.get(obj) else {
                 if debug_pax() && (*p - pos).length() < 30.0 {
                     log::info!("stop {id}: waiting place of object {obj} at {p:?}: object position unknown");
@@ -2570,7 +2577,7 @@ impl Humans {
             // (Omsi.exe looks at every object of the stop's tile and the ones round it; the
             // region below reaches the stop's length ahead, which a long bus station stop
             // takes past 40 m)
-            if v.length() > 40.0_f64.max(length as f64 + 15.0) {
+            if v.length() > reach {
                 continue;
             }
             // (0x7efb08 with -heading: in the stop's frame)
@@ -2649,8 +2656,16 @@ impl Humans {
         if self.mirror || self.avatar_only {
             return;
         }
-        let mut ids: Vec<i64> = self.stops.keys().copied().collect();
-        ids.sort_unstable();
+        // the nearest stops first: when the pool runs short (a bus station of many stops),
+        // the people go to the stops the player sees rather than to the lowest ids
+        let centers: Vec<DVec3> = std::iter::once(self.center).chain(self.lan_centers.iter().copied()).collect();
+        let mut ids: Vec<(f64, i64)> = self
+            .stops
+            .iter()
+            .map(|(id, s)| (centers.iter().map(|c| (s.pos - *c).length()).fold(f64::MAX, f64::min), *id))
+            .collect();
+        ids.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let ids: Vec<i64> = ids.into_iter().map(|(_, id)| id).collect();
         let forced = omsi_cfg::env::var("OMSI_PAX_WAITING").ok().and_then(|v| v.parse::<usize>().ok());
         // the people handed over to another player's bus stop counting once it has left
         // their stop (or the session)
@@ -2726,6 +2741,9 @@ impl Humans {
             let mut count = count;
             while count < want {
                 if self.spawn_waiting(world, renderer, scene, id).is_none() {
+                    if debug_pax() && self.pool_used() >= bounded_people_limit(self.max_people) {
+                        log::info!("stop {id}: {count} of {want} waiting, the pool is full ({} people)", self.pool_used());
+                    }
                     break;
                 }
                 count += 1;
