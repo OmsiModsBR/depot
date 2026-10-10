@@ -353,10 +353,6 @@ impl State {
         self.queued_launch.is_some() || self.launch_hold.is_some_and(|t| t.elapsed().as_secs_f32() < 15.0) || self.instances.iter().any(|i| i.running)
     }
 
-    pub fn instances_ready(&self) -> bool {
-        self.stamp.is_some()
-    }
-
     pub fn spawn_launch(&mut self, d: core::Duty) {
         self.launch_hold = Some(std::time::Instant::now());
         self.launched_pid = None;

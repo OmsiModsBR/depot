@@ -24505,13 +24505,6 @@ _version: 2
 
   pt: "Controles personalizados"
   pt-pt: "Controlos personalizados"
-"Discord Rich Presence":
-  ca: "Presència enriquida a Discord"
-  fr: "Statut Discord (Rich Presence)"
-  zh-tw: "Discord 狀態顯示"
-
-  pt: "Discord Rich Presence"
-  pt-pt: "Discord Rich Presence"
 "Display and driver":
   ca: "Pantalla i controlador"
   zh-tw: "顯示與駕駛"
@@ -24873,13 +24866,6 @@ _version: 2
 
   pt: "Troca as marchas de um câmbio manual por você conforme a rotação do motor"
   pt-pt: "Muda as velocidades de uma caixa manual por si conforme a rotação do motor"
-"Shows the launcher or your map, bus, line and multiplayer status in Discord.":
-  ca: "Mostra el launcher o el mapa, l'autobús, la línia i l'estat multijugador a Discord."
-  fr: "Affiche dans Discord le lanceur ou votre carte, votre bus, votre ligne et votre statut multijoueur."
-  zh-tw: "在 Discord 中顯示啟動器或您的地圖、巴士、線路和多人遊戲狀態。"
-
-  pt: "Mostra no Discord o launcher ou o status do seu mapa, ônibus, linha e multijogador."
-  pt-pt: "Mostra no Discord o launcher ou o estado do seu mapa, autocarro, linha e multijogador."
 "Snow":
   ca: "Neu"
   zh-tw: "雪天"

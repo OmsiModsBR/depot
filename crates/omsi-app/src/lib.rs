@@ -10,7 +10,6 @@
 //! window of one process.
 
 mod admin;
-mod discord;
 #[cfg(steam)]
 mod steam;
 mod voice;
@@ -538,8 +537,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         pad_voice_radio: false,
         arrow_glance: false,
         teleport_pick: false,
-        discord: None,
-        discord_t: 0.0,
         #[cfg(steam)]
         steam: None,
         voice: None,

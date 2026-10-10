@@ -1098,16 +1098,6 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
         c.y += 14.0;
     }
     toggle_setting(ui, s, dirty, c.row(), "The launcher rests while a game runs (gives the graphics card to the game)", "launcher_rest");
-    toggle_setting(ui, s, dirty, c.row(), "Discord Rich Presence", "discord_status");
-    let help_height = ui.paragraph(
-        "Shows the launcher or your map, bus, line and multiplayer status in Discord.",
-        Vec2::new(c.inner.x + 12.0, c.y - 5.0),
-        c.inner.w - 24.0,
-        11.5,
-        omsi_ui::Weight::Regular,
-        TEXT_FAINT,
-    );
-    c.y += help_height + 3.0;
     toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
     let help_height = ui.paragraph(
         "Players near you are heard from where they stand, when GreenTeaSpeak runs with the Project Depot plugin and the server names a voice server.",
@@ -2767,7 +2757,7 @@ mod settings_tests {
             "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
         ];
         let general = vec![
-            "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
+            "s-lang", "set-machine_translation", "set-launcher_rest", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
             "s-about-releases", "s-reset",
         ];

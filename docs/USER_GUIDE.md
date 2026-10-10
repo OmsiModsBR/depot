@@ -158,14 +158,10 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   *Graphics* (the quality preset first, the screen, distances and memory), *Driving* (keys,
   mouse, wheel and pedals, with the way to the Controls page), *Camera* (the seat, the views,
   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
-  *General* (language, the game's interface size, navigator, Discord Rich Presence,
+  *General* (language, the game's interface size, navigator,
   the version and the Releases link, and resetting every setting).
-  **Discord Rich Presence** shows the launcher while preparing a drive, then the map and
-  line above the vehicle type and tour while playing. The full vehicle name is in the logo's
-  tooltip. The launcher status returns when the game ends.
-  It is enabled by default and can be turned off under Settings → General; the switch
-  affects the launcher immediately and the game on its next start. Discord must be running
-  on the same computer.
+  (Discord Rich Presence is disabled until Depot has its own Discord application, see
+  [removed/DISCORD_DISABLED.md](removed/DISCORD_DISABLED.md).)
   **Voice chat through GreenTeaSpeak** (on by default): in multiplayer, the other players
   are heard from where they are, when GreenTeaSpeak 2 runs with the openOMSI plugin and the
   server names a voice channel (see [SERVER.md](SERVER.md) and
