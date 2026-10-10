@@ -70,10 +70,10 @@ impl WindingVotes {
 }
 
 /// Entries and exits of a vehicle with variables of their own (`PAX_Entry<n>_Open` …
-/// `PAX_Exit<n>_Req`): Omsi.exe's eight, and eight more for buses with more doors than
+/// `PAX_Exit<n>_Req`): OMSI's eight, and eight more for buses with more doors than
 /// that (#719). A cabin's entries and exits past the eighth that the scripts give no
-/// variables of their own open with the eighth, as in Omsi.exe, and ask through the eighth's
-/// `_Req` (openOMSI's choice: Omsi.exe's request arrays have eight slots and lose them).
+/// variables of their own open with the eighth, as in OMSI, and ask through the eighth's
+/// `_Req` (openOMSI's choice: OMSI's request arrays have eight slots and lose them).
 pub const PAX_DOORS: usize = 16;
 
 /// Built-in variables every road vehicle has (`program/varlist_roadvehicle.txt` + generated).
@@ -115,7 +115,7 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
             v.push(format!("articulation_{i}_{n}"));
         }
     }
-    // the doors past Omsi.exe's eight (#719), after all of its own variables
+    // the doors past OMSI's eight (#719), after all of its own variables
     for a in 8..PAX_DOORS {
         v.push(format!("PAX_Entry{a}_Open"));
         v.push(format!("PAX_Entry{a}_Req"));
@@ -361,7 +361,7 @@ impl VehicleType {
         (hi.y > lo.y).then_some((lo, hi))
     }
 
-    /// Half its length as Omsi.exe keeps it (type +0xd4): half the `[boundingbox]`'s
+    /// Half its length as OMSI keeps it: half the `[boundingbox]`'s
     /// length, else half the model's.
     pub fn half_length(&self) -> Option<f32> {
         match self.def.bounding_box {
@@ -919,7 +919,7 @@ pub struct AiFrame {
     pub priority_warning: bool,
     /// `AI_Engine` -1: a timetable bus standing at a stop for its departure with time to
     /// spare switches its engine off (the stock AI scripts: engine off, parking brake on),
-    /// and on again 20 s before it leaves (Omsi.exe 0x7d9128).
+    /// and on again 20 s before it leaves.
     pub engine_off: bool,
 }
 
@@ -1378,7 +1378,7 @@ impl VehicleInstance {
     /// The string a `[texttexture]` names: its first field is either a script variable's name
     /// or - as the Chinese AI cars write it, `[texttexture] 0 CN_REG ...` - the *number* of a
     /// built-in string (`program/stringvarlist_roadvehicle.txt`: 0 ident, 1 number, ...).
-    /// Omsi.exe takes a number as that index (the scenery objects' `[texttexture]` do the same,
+    /// OMSI takes a number as that index (the scenery objects' `[texttexture]` do the same,
     /// see `resolve_scenery_freetex_name`); taken for a variable's name it matches nothing and
     /// the plate stays empty. See `Program::text_texture_var`.
     pub fn text_texture_string(&self, field: &str) -> String {
@@ -1515,8 +1515,8 @@ impl VehicleInstance {
             .iter()
             .flat_map(|a| a.iter().map(|w| self.get(w[4]).max(0.0) + shared))
             .collect();
-        // Read, the brake forces go back to 0, as Omsi.exe clears them every frame before
-        // the scripts run (0x7e58d9..0x7e5930): a script sets them each frame it brakes. Kept,
+        // Read, the brake forces go back to 0, as OMSI clears them every frame before
+        // the scripts run: a script sets them each frame it brakes. Kept,
         // a mod that brakes only inside an {if} (a retarder, a stop brake, its own physics)
         // stayed braked for good, and one that adds to its own value kept on growing.
         self.put(self.v_brakeforce, 0.0);
@@ -1897,7 +1897,7 @@ impl VehicleInstance {
             .map(|w| w.rpm)
             .unwrap_or(0.0);
         self.put(self.v_n_wheel, n_wheel);
-        // `A_Trans_*` as Omsi.exe has them (0x7d5124): the change of the body's velocity
+        // `A_Trans_*` as OMSI has them: the change of the body's velocity
         // over the frame, turned into the body frame - its acceleration, not what an
         // accelerometer reads, so 0 standing or cruising. `accel_body` carries gravity's
         // 9.81 m/s² (the wheels' springs need it), which as `A_Trans_Z` kept checks such
@@ -1924,8 +1924,8 @@ impl VehicleInstance {
                     // the value is minus the compression. Handing over the compression
                     // itself pushed every wheel down by twice its travel - into the road
                     // under braking, with the body riding high above the arches.
-                    // (never below where the spring is unloaded: Omsi.exe hands over
-                    // -clamp(travel, 0, maxforce / k), 0x7e4afa - a wheel in the air stays
+                    // (never below where the spring is unloaded: OMSI hands over
+                    // -clamp(travel, 0, maxforce / k) - a wheel in the air stays
                     // where it hangs at rest)
                     let shown = -rw.compression.max(0.0);
                     self.put(w[3], shown);
@@ -1940,15 +1940,15 @@ impl VehicleInstance {
         self.rigid = Some(rb);
     }
 
-    /// The bus's total mileage, as Omsi.exe 0x64207E writes it into a situation:
+    /// The bus's total mileage, as OMSI writes it into a situation:
     /// the starting reading plus the kilometres driven since it was loaded.
     pub fn odometer_km(&self) -> f64 {
         self.host.km_base + self.driven_km
     }
 
     /// Continue a saved reading without giving the bus another random service history.
-    /// Omsi.exe clears driven km at 0x643DBB and restores the total into the starting
-    /// reading at 0x643DF3; subtract our already driven distance to keep the same total
+    /// OMSI clears driven km and restores the total into the starting
+    /// reading; subtract our already driven distance to keep the same total
     /// even when the caller has ticked the vehicle before restoring its situation.
     pub fn set_odometer_km(&mut self, km: f64) {
         self.host.km_base = km - self.driven_km;
@@ -2097,8 +2097,8 @@ impl VehicleInstance {
     }
 
     /// The engine's own vehicle variables that OMSI binds to fields of the vehicle
-    /// (`TRoadVehicle.virtual_00` registers them, the original points each at its field, and
-    /// the original keeps the fields up to date): the odometer (`kmcounter_km` whole
+    /// (the original registers them, points each at its field, and
+    /// keeps the fields up to date): the odometer (`kmcounter_km` whole
     /// kilometres, `kmcounter_m` the metres of the fractions), the people aboard, whether a
     /// timetable is driven, the precipitation type, and the cabin air - kept within reach of
     /// the weather (never more than 10 °C from the air outside and pulled towards 18..25 °C
@@ -2108,9 +2108,9 @@ impl VehicleInstance {
         // `[kmcounter_init] year km`: in service since that year, so many kilometres a year -
         // the odometer starts at what that comes to on the day driven (it stood at 0 on
         // every bus that has one, #305), a little different from bus to bus of the kind.
-        // Omsi.exe 0x7D1E42: Random(100)/10 + 8 + max(0, years) * km * (1 + 0.2 *
+        // OMSI's formula: Random(100)/10 + 8 + max(0, years) * km * (1 + 0.2 *
         // (Random(100) - 50) / 50), and 1980 / 60000 km a year without the keyword
-        // (TRoadVehicle.LoadFromFile's defaults).
+        // (OMSI's defaults).
         if !self.km_started {
             self.km_started = true;
             if self.host.km_base == 0.0 {
@@ -2267,7 +2267,7 @@ impl VehicleInstance {
             self.host.coll_energy = 0.0;
         }
         self.update_dirt(dt);
-        // (signed, as Omsi.exe 0x7e5163 adds it: reversing takes it back)
+        // (signed, as OMSI adds it: reversing takes it back)
         self.driven_km += (self.physics.velocity_kmh() as f64 / 3600.0) * dt as f64;
         self.update_engine_vars(dt);
         let p = self.ty.program.clone();
@@ -2315,8 +2315,8 @@ impl VehicleInstance {
         }
     }
 
-    /// The passengers' door requests are pulses: Omsi.exe clears all eight of each kind
-    /// (here all [`PAX_DOORS`]) after the vehicle's scripts ran (0x7d6214) and the
+    /// The passengers' door requests are pulses: OMSI clears all eight of each kind
+    /// (here all [`PAX_DOORS`]) after the vehicle's scripts ran and the
     /// passengers set them again every frame. Kept, a timetable bus that drove out of the
     /// passengers' reach kept its last request, and its automatic door never shut.
     fn clear_pax_requests(&mut self) {
@@ -2408,7 +2408,7 @@ impl VehicleInstance {
                 };
                 let arm = ws.long - rot;
                 let across = 1.0 - ws.lat * k;
-                // (the axle's angle, the same for both sides, as Omsi.exe hands it to the
+                // (the axle's angle, the same for both sides, as OMSI hands it to the
                 // scripts: see `RigidBody::axle_steer`)
                 let steer = if arm > 0.5 {
                     (arm * k).atan().clamp(-1.2, 1.2)
@@ -2467,7 +2467,7 @@ impl VehicleInstance {
             ("AI_Blinker_R", matches!(ai.blinker, 2 | 3) as i32 as f32),
             ("AI_Brakelight", ai.brake as i32 as f32),
             ("AI_Light", ai.lights as i32 as f32),
-            // (the engine's field +0x638: an AI bus lights its saloon when it drives with
+            // (an AI bus lights its saloon when it drives with
             // its lights on - the LiAZ's `lights_AI` switches both saloon circuits on it)
             ("AI_Interiorlight", ai.lights as i32 as f32),
             ("AI_Engine", if ai.engine_off { -1.0 } else { 1.0 }),
@@ -2925,7 +2925,7 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
                     // (its items follow it: item n shows at n, 1 <= n <= their number)
                     let items = def.materials[mi + 1..].iter().take_while(|d| d.item).count().max(1) as f32;
                     if let Some(slot) = override_slot(&vm.materials, m) {
-                        // (the item as Omsi.exe picks it: the variable rounded is 1; an
+                        // (the item as OMSI picks it: the variable rounded is 1; an
                         // undeclared one is 0 - see scene.rs `change_picks_item`)
                         let x = v
                             .trim()
@@ -3152,9 +3152,9 @@ impl PropsPlan {
             for &(slot, _) in &plan.light {
                 props.slot_light[slot] = 0.0;
             }
-            // (a light map is on at its variable's 0.5 and off below - Omsi.exe skips the
-            // texture stage of one whose variable reads under 0.5, 0x7fe51f - never half lit;
-            // one whose variable the bus does not have - index -1 - is always on, 0x7fe4e7)
+            // (a light map is on at its variable's 0.5 and off below - OMSI skips the
+            // texture stage of one whose variable reads under 0.5 - never half lit;
+            // one whose variable the bus does not have - index -1 - is always on)
             for &(slot, src) in &plan.light {
                 props.slot_light[slot] = props.slot_light[slot].max(if src.value(vars, 1.0) >= 0.5 { 1.0 } else { 0.0 });
             }
@@ -3329,7 +3329,7 @@ pub struct TrailerPart {
 }
 
 /// OMSI's frames, a thirtieth of a second (`[maxFPS]` 30 in its options.cfg and every option
-/// preset but one): `A_Trans_*` is the body's velocity change over one of them (0x7d5124),
+/// preset but one): `A_Trans_*` is the body's velocity change over one of them,
 /// and the stock rattle scripts (`klappern.osc`: `Klappern_Vol` follows how much |A_Trans|
 /// changes from one frame to the next) were tuned on that. Taken over this game's frames -
 /// 60 to 150 a second - the change from frame to frame was a half to a fifth of OMSI's for
@@ -3365,7 +3365,7 @@ impl OmsiFrames {
     }
 }
 
-/// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
+/// The body-frame acceleration the scripts see as `A_Trans_*` (as OMSI computes it: the
 /// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
 /// an accelerometer would read, less gravity's share in the body frame.
 fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
@@ -3422,7 +3422,7 @@ fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
 }
 
 /// Where the two parts meet, in their respective model frames. Bogie-defined trains
-/// use declared couplings, as Omsi.exe does, even when a mod's
+/// use declared couplings, as OMSI does, even when a mod's
 /// joints do not match its bodies: the CR200J's inset rear coupling causes overlap
 /// in vanilla too.
 /// Other rail definitions retain body-end placement; road vehicles retain their
@@ -3553,7 +3553,7 @@ impl TrailerPart {
         );
         let (coupling_back, coupling_front) = coupling_points(main, main_reversed, &ty, reversed);
         // the line the part turns about: its own `[rot_pnt_long]` where a road part names
-        // one (Omsi.exe runs every section as a body of its own on the same wheel physics,
+        // one (OMSI runs every section as a body of its own on the same wheel physics,
         // each axle steered towards the turning centre on that line), else the axle
         // farthest from the coupled end. A rear section whose axle steers (the Van Hool
         // AG300's, set ahead of its axle) followed it as if it were a fixed one (#322);
@@ -3892,8 +3892,8 @@ impl VehicleInstance {
         (eye, self.body_heading() as f32 + cam.yaw, cam.pitch)
     }
 
-    /// A camera fixed to the body as OMSI keeps one (`[add_camera_reflexion]`: Omsi.exe
-    /// 0x7edfd0 puts it in the vehicle's own matrix): its eye, and yaw, pitch and roll (deg)
+    /// A camera fixed to the body as OMSI keeps one (`[add_camera_reflexion]`: OMSI
+    /// puts it in the vehicle's own matrix): its eye, and yaw, pitch and roll (deg)
     /// of its view with the body's pitch and bank in them - a mirror leans with the bus. A
     /// `dist` above zero puts the eye that far behind the point along the view.
     pub fn camera_world_full(&self, cam: &omsi_vehicle::Camera) -> (DVec3, f32, f32, f32) {
@@ -3957,7 +3957,7 @@ fn rest_transforms(animators: &[MeshAnimator], n_vars: usize) -> Vec<Mat4> {
 /// top); `rest` are the transforms of the modelled pose. None for a mesh without bones or
 /// vertices.
 ///
-/// As in Omsi.exe, the bones move the vertices first and the mesh's own motion (its
+/// As in OMSI, the bones move the vertices first and the mesh's own motion (its
 /// animations and its `[animparent]`) comes on top: the Agora L's rear half of the bellows
 /// (`gelenk_B`) hangs on the arch that turns by half the joint's angle and takes the same
 /// bones as the front half (a quarter and a half of it), so that its far ring ends up at
@@ -5093,8 +5093,8 @@ mod tests {
         compare(&v);
     }
 
-    /// A `[matl_lightmap]` whose variable the bus does not have is always on (Omsi.exe's
-    /// index -1, 0x7fe4e7); one on a variable at 0.3 is off.
+    /// A `[matl_lightmap]` whose variable the bus does not have is always on (OMSI's
+    /// index -1); one on a variable at 0.3 is off.
     #[test]
     fn a_lightmap_on_an_unknown_variable_is_on() {
         let root = omsi_cfg::env::var_os("OMSI_ROOT")
@@ -5266,7 +5266,7 @@ mod tests {
         assert_eq!(v.odometer_km(), 0.0);
     }
 
-    /// A bus without `[kmcounter_init]` starts with Omsi.exe's defaults (in service since
+    /// A bus without `[kmcounter_init]` starts with OMSI's defaults (in service since
     /// 1980, 60000 km a year, +-20 %), not at 0 km; reversing takes the counter back.
     #[test]
     fn odometer_starts_at_the_default_service_life() {
@@ -5345,7 +5345,7 @@ mod tests {
         assert!(fast > 0.6 * omsi && fast < 1.4 * omsi, "30 fps {omsi}, 144 fps {fast}");
     }
 
-    /// `A_Trans_*` are the body's acceleration without gravity, as in Omsi.exe: 0 for a bus
+    /// `A_Trans_*` are the body's acceleration without gravity, as in OMSI: 0 for a bus
     /// standing still, on the level or on a grade, and the braking's deceleration alone.
     #[test]
     fn scripts_acceleration_leaves_gravity_out() {

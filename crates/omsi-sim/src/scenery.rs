@@ -106,7 +106,7 @@ pub struct SceneryInstance {
 impl SceneryInstance {
     /// `meshes`: (mesh definition, pivot) per rendered mesh; `strings`: the placed object's
     /// strings from the map, which are its string variables in order, before the `{init}`
-    /// runs (Omsi.exe sub_7eea70 copies them into the object's string variables when it
+    /// runs (OMSI copies them into the object's string variables when it
     /// is placed - a sign's label naming its picture, a display's stop).
     pub fn new(program: Arc<Program>, meshes: &[(&MeshDef, Mat4)], clock: crate::SimClock, strings: &[String]) -> SceneryInstance {
         let mut state = State::new(&program);

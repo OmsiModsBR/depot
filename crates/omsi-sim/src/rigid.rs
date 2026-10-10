@@ -1,4 +1,4 @@
-//! Rigid-body vehicle dynamics after Omsi.exe's own (0x7e2574; OMSI uses ODE only for the
+//! Rigid-body vehicle dynamics after OMSI's own (OMSI uses ODE only for the
 //! objects a crash knocks over): a six-degree-of-freedom body with mass,
 //! `[momentofintertia]` and `[schwerpunkt]`, wheels on spring/damper suspensions
 //! (`achse_feder`, `achse_daempfer`, `achse_maxforce`, measured where the tyres stand
@@ -44,7 +44,7 @@ const TYRE_C: f32 = 3_000.0;
 /// `RigidBus::step`): a thirtieth of a second, the rate its options.cfg caps OMSI at.
 const OMSI_FRAME: f32 = 1.0 / 30.0;
 
-/// The suspension as Omsi.exe has it (see `step_slice`); `OMSI_TYRE_SUSPENSION=1` gives
+/// The suspension as OMSI has it (see `step_slice`); `OMSI_TYRE_SUSPENSION=1` gives
 /// the old one with a wheel mass, a tyre and bump stops (A/B).
 fn omsi_suspension() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -61,7 +61,7 @@ fn body_damping(body_freq: f32, dt: f32) -> f32 {
 }
 
 /// OMSI has no tyre between the road and the spring: `achse_feder` alone carries the body
-/// (Omsi.exe 0x7e4960..0x7e4c40, force = feder x penetration - daempfer x speed). The
+/// (force = feder x penetration - daempfer x speed). The
 /// tyre here is at least this many times as stiff as the spring, so that the two in series
 /// give the body 94 % of the file's spring rate instead of the 79 % a fixed 900 kN/m tyre
 /// left a bus with 240 kN/m springs - that softness was a good part of its sway.
@@ -173,14 +173,14 @@ pub struct RigidWheel {
     /// How much farther out than the hub the strut's force acts (m, signed like `attach.x`).
     /// OMSI measures the spring's travel where the tyres stand - halfway between
     /// `achse_minwidth` and `achse_maxwidth`, (max + min) / 4 from the middle - but turns the
-    /// body with the force at `achse_maxwidth` / 2 (Omsi.exe 0x7e47b3 and 0x7e4bad).
+    /// body with the force at `achse_maxwidth` / 2.
     pub lever: f32,
     pub radius: f32,
     pub driven: bool,
     pub steered: bool,
     /// The wheel's steering angle this step (rad, positive to the right): every axle points
     /// at the turning centre on the `[rot_pnt_long]` line, atan((long - rot_pnt_long) x
-    /// curvature) (Omsi.exe 0x7e3060), so an axle behind that line steers the other way.
+    /// curvature), so an axle behind that line steers the other way.
     pub steer: f32,
     /// The tyre's vertical stiffness and damping (N/m, N s/m).
     pub tyre_k: f32,
@@ -443,9 +443,9 @@ pub struct RigidBody {
     pub rot_pnt_long: f32,
     pub inv_min_turn_radius: f32,
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
-    /// sin(x)/x a frame with x = 1.5 of it times the frame (Omsi.exe 0x7e4f55).
+    /// sin(x)/x a frame with x = 1.5 of it times the frame.
     pub body_freq: f32,
-    /// OMSI's two states of the tyres across (Omsi.exe `+0x1d8`): holding - the bus follows
+    /// OMSI's two states of the tyres across: holding - the bus follows
     /// its wheels however quickly they are turned, as long as the bend asks no more than
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
@@ -478,10 +478,10 @@ impl RigidBody {
         let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
         let moi = def.moment_of_inertia;
         let scale = if moi[0] < 5000.0 { 1000.0 } else { 1.0 };
-        // `[momentofintertia]` goes to ODE as I11, I22, I33 of Omsi.exe's y-up body frame
-        // (0x7af0a4): about the lateral axis (pitch), the vertical one (yaw) and the
-        // longitudinal one (roll) - roll takes the third value (0x7e4ef3), yaw the second
-        // (0x7e5110), whatever the SDK's comment says. Here (right, forward, up): pitch,
+        // `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame:
+        // about the lateral axis (pitch), the vertical one (yaw) and the
+        // longitudinal one (roll) - roll takes the third value, yaw the second,
+        // whatever the SDK's comment says. Here (right, forward, up): pitch,
         // roll, yaw. Read in the comment's order the SD202 rolled on 80 t m² instead of
         // 300, twice as fast, and every uneven patch rocked it like a boat.
         let inertia = Vec3::new((moi[0] * scale).max(100.0), (moi[2] * scale).max(100.0), (moi[1] * scale).max(100.0));
@@ -562,8 +562,8 @@ impl RigidBody {
 
     /// The steering angle of wheel `i`'s axle (rad, positive to the right): the angle at the
     /// middle of the axle, atan((long - rot_pnt_long) x curvature), the same for its left and
-    /// right wheel. That is what Omsi.exe hands the scripts as `Axle_Steering_<n>_L` and
-    /// `_R` alike (0x7cffb8 writes both variables of 0x7ea834 from the axle record's +8) -
+    /// right wheel. That is what OMSI hands the scripts as `Axle_Steering_<n>_L` and
+    /// `_R` alike (both variables get the same value) -
     /// the tyres' own angles (Ackermann, `RigidWheel::steer`) made the steering
     /// wheel of the cab, which turns with `Axle_Steering_0_L`, go further to the left than
     /// to the right (#953, #1073).
@@ -1756,7 +1756,7 @@ mod tests {
         }
         assert!(rb.origin().y > 30.0, "{:?}", rb.origin());
         assert!(lift < 0.05, "the body lifted {lift:.3} m");
-        // (Omsi.exe's wheel stands on the point under it: at the hump's edge its travel
+        // (OMSI's wheel stands on the point under it: at the hump's edge its travel
         // takes the hump's height at once, no more)
         assert!(jump < 0.065, "a wheel's travel jumped {jump:.3} m in a frame");
         assert!(air < 16, "wheels off the road for {air} wheel-frames");
@@ -2010,7 +2010,7 @@ mod tests {
             count.set(0);
             rb.step(1.0 / 60.0, 0.0, &[30_000.0; 4], 0.0, &probe);
             // (and three across the tread, `tread_step`, and the point under the wheel
-            // Omsi.exe's suspension stands on)
+            // OMSI's suspension stands on)
             assert!(count.get() <= 4 * rb.wheels.len() * (LATTICE + 6), "{s}: {} probes", count.get());
         }
     }
@@ -2088,7 +2088,7 @@ mod tests {
                 assert!(crash > 0.5 * kinetic && crash < 1.05 * kinetic, "{kmh} km/h at {fps} fps: crash of {crash} J for {kinetic} J");
                 assert!(front < 6.0 - 0.47 + 0.03, "{kmh} km/h at {fps} fps: front axle reached {front}");
                 assert!(top < 0.3, "{kmh} km/h at {fps} fps: thrown up to {top}");
-                // (a rebound of a metre or so: with the moments of inertia on Omsi.exe's axes
+                // (a rebound of a metre or so: with the moments of inertia on OMSI's axes
                 // the body's lower yaw inertia takes a little more of the blow back)
                 assert!(rb.forward_speed().abs() < 1.5, "{kmh} km/h at {fps} fps: still at {}", rb.forward_speed());
             }

@@ -136,8 +136,8 @@ struct Wheel {
     c: f32,
 }
 
-/// How far over an AI car's wheel its ground is looked for (m): Omsi.exe casts the ray of its
-/// ground query from 3 m over the point (0x7c40c8) and takes the highest face under that.
+/// How far over an AI car's wheel its ground is looked for (m): OMSI casts the ray of its
+/// ground query from 3 m over the point and takes the highest face under that.
 pub const AI_RAY_UP: f64 = 3.0;
 /// A face this far under the wheel's lane is not this wheel's ground (m): the road under the
 /// bridge the lane crosses, or the ground beyond the edge of the road, which the wheel hangs
@@ -241,7 +241,7 @@ impl AiBody {
             damper[2] += w.c * w.lat * w.lat;
         }
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
-        // (pitch and roll: the first and the third value, as Omsi.exe reads them - see
+        // (pitch and roll: the first and the third value, as OMSI reads them - see
         // `RigidBody::from_definition`)
         let mut inertia = [def.moment_of_inertia[0] * unit, def.moment_of_inertia[2] * unit];
         if inertia[0] <= 0.0 {
@@ -421,10 +421,10 @@ impl AiBody {
             }
             let path_z = axle_z[w.axle];
             let p = origin + right * w.lat as f64 + fwd * w.long as f64;
-            // What the wheel stands on, as Omsi.exe stands an AI car's wheels: its AI cars
-            // are bodies on the same wheel physics as the player's bus (0x7d5124 ->
-            // 0x7e2574), asking the ground under each wheel (0x7aec3c -> 0x7a0814): a ray
-            // from 3 m over the wheel (0x7c40c8 adds 3 to z) down into the terrain, the
+            // What the wheel stands on, as OMSI stands an AI car's wheels: its AI cars
+            // are bodies on the same wheel physics as the player's bus,
+            // asking the ground under each wheel: a ray
+            // from 3 m over the wheel down into the terrain, the
             // splines and the first mesh of the `[surface]` objects, and the highest face it
             // meets is the ground. Each wheel on its own face: a car on a cambered road, a
             // kerb or a junction plate tilted on a hill leans with it. (Kept to the lane's
@@ -449,7 +449,7 @@ impl AiBody {
         }
         // A wheel hangs over a drop on its spring while the others carry the car; with no
         // wheel near its lane's height the car has nothing to hang from and comes down onto
-        // what is drawn under it, as Omsi.exe's wheel physics drops it. (Kept at the lane's
+        // what is drawn under it, as OMSI's wheel physics drops it. (Kept at the lane's
         // height, a car whose junction's paths ran half a metre over the drawn road drove
         // through the junction in the air, #876.)
         if hung.iter().all(|h| *h) && low.iter().any(|l| l.is_some()) {
@@ -807,7 +807,7 @@ mod tests {
         assert!(rolling.iter().all(|&x| (4.0..=20.0).contains(&x)), "{rolling:?}");
     }
 
-    /// Every wheel stands on the face drawn under it, as Omsi.exe's ground query stands an
+    /// Every wheel stands on the face drawn under it, as OMSI's ground query stands an
     /// AI car's (the highest face under a ray from 3 m over the wheel): a road drawn 8 cm
     /// over the lane and cambered across it carries each wheel at its own height, and a lane
     /// laid 0.9 m under its road has the car on the road, not inside it.
