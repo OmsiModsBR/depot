@@ -221,8 +221,8 @@ impl Daylight {
             ratio(b, stops(&stock.light_color_b, stock.twilight_start_end, alt)),
             ratio(c, stops(&stock.light_color_c, stock.twilight_start_end, alt)),
         ];
-        // the street lamps come on below a light value of 0.6, as OMSI switches them
-        // (FUN_006ff1bc), the same value at which a scenery object's NightlightA does
+        // the street lamps come on below a light value of 0.6, as OMSI switches them,
+        // the same value at which a scenery object's NightlightA does
         let brightness = ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
         let light_a = ((a.x + a.y + a.z) / 3.0).clamp(0.0, 1.0);
         let here = place();
