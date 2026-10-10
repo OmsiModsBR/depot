@@ -781,7 +781,7 @@ impl RigidBody {
                 wheel: None,
             });
         }
-        // Tyre forces as OMSI has them (Omsi.exe 0x7e2dc1..0x7e44ee).
+        // Tyre forces as OMSI has them.
         // Along the tyre: a rolling one passes on the drive and the brake, a slipping one
         // the sliding friction. Tyres that stand hold like static friction - but
         // together: they take up everything else that pushes the body (gravity on a
@@ -832,9 +832,9 @@ impl RigidBody {
             torque += rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(f_world));
         }
         // Driving and braking pitch the body about a lever longer than the centre of
-        // gravity's height over the road: Omsi.exe takes the tyres' forces at the hubs,
-        // their radius more (0x7e46a5: (drive - brake) x d/2 besides [schwerpunkt] x
-        // the pull), and not while the bus stands with its brakes holding (0x7e4660).
+        // gravity's height over the road: OMSI 2 takes the tyres' forces at the hubs,
+        // their radius more ((drive - brake) x d/2 besides [schwerpunkt] x
+        // the pull), and not while the bus stands with its brakes holding.
         if self.velocity.dot(body_fwd).abs() > 0.2 {
             let r = self.wheels.iter().map(|w| w.radius).sum::<f32>() / self.wheels.len().max(1) as f32;
             torque.x += long_sum * r;
@@ -880,24 +880,24 @@ impl RigidBody {
             // load already where it just touches, so that the ride height stays the
             // springs' alone (see the module's notes).
             let (tyre_f, tyre_static, n) = if omsi_suspension() {
-                // Omsi.exe's suspension (0x7e47aa..0x7e4de8): the body hangs straight on
+                // OMSI 2's suspension: the body hangs straight on
                 // the ground point under each wheel. The spring pushes by how far the
                 // ground lies over the wheel's unloaded place, times `Axle_Springfactor`
                 // and `achse_feder`; below it the wheel is in the air, pushes nothing and
-                // the tyres stop holding (0x7e4b13). Pressed, the damper takes
+                // the tyres stop holding. Pressed, the damper takes
                 // `achse_daempfer` times the body's upward speed where the strut acts
-                // (the roll rate at `achse_maxwidth` / 2, 0x7e4899), and the whole never
-                // passes `achse_maxforce` (0x7e4b71) - there is no wheel of its own mass,
+                // (the roll rate at `achse_maxwidth` / 2), and the whole never
+                // passes `achse_maxforce` - there is no wheel of its own mass,
                 // no tyre and no bump stop between the road and the body. (Those, with a
                 // tyre envelope smoothing the road, had the bus float over what it drove
                 // on: "like a boat on the sea".)
                 let k = w.spring * w.spring_factor.max(0.0);
                 let top = hub0.z + (CLIMB * r) as f64;
-                // (nothing under it: Omsi.exe's ground query looks from 3 m over the model
-                // origin's plane, 0x7a0985 - a wheel that sank through a face at a joint of
+                // (nothing under it: OMSI 2's ground query looks from 3 m over the model
+                // origin's plane - a wheel that sank through a face at a joint of
                 // two surfaces, or into a bridge deck, found nothing within reach, the
                 // spring let go and the bus fell through the world)
-                // The spring's point is where Omsi.exe puts it (0x7e47aa): on the model's
+                // The spring's point is where OMSI 2 puts it: on the model's
                 // origin plane (z = 0) under the wheel, and its height over the ground is
                 // measured straight up. Measured from the hub less the `.bus` file's tyre
                 // radius instead, a mod whose tyre mesh is larger than that radius stood
@@ -990,7 +990,7 @@ impl RigidBody {
             // the strut's force turns the body about its length from the outer width, not
             // from where the tyre stands (see `RigidWheel::lever`): body x cross body z
             *torque += Vec3::new(0.0, -w.lever * n, 0.0);
-            // and OMSI's damper reads the body's speed out there too (0x7e4899: roll rate
+            // and OMSI's damper reads the body's speed out there too (roll rate
             // x maxwidth / 2): the part of it the hub does not see, while the tyre carries
             if tyre_f > 0.0 && !omsi_suspension() {
                 torque.y -= (w.attach.x + w.lever) * w.damper * self.omega.y * w.lever;
@@ -1065,7 +1065,7 @@ impl RigidBody {
             .map(|&k| {
                 let c = &contacts[k];
                 let mut rn = rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(c.right));
-                // (holding, no roll from the tyres' hold across: Omsi.exe then sets the
+                // (holding, no roll from the tyres' hold across: OMSI 2 then sets the
                 // sideways motion outright and rolls the body by the bend's pull alone,
                 // below - taken at the ground, every turn of the wheel kicked the body
                 // over; sliding, the tyres trip it as before)
@@ -1076,13 +1076,13 @@ impl RigidBody {
                 (rn, inv.max(1e-9))
             })
             .collect();
-        // holding: the bend's pull against the grip of all tyres (0x7e4dee), and
-        // no wheel spinning or locked (0x7e3c3b)
+        // holding: the bend's pull against the grip of all tyres, and
+        // no wheel spinning or locked
         let grip_all: f32 = lat.iter().map(|&k| self.friction * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
         let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(0.5)).abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
-        // (and a wheel in the air: Omsi.exe drops the holding state there, 0x7e4b13)
+        // (and a wheel in the air: OMSI 2 drops the holding state there)
         let airborne = omsi_suspension() && self.wheels.iter().any(|w| !w.on_ground);
         if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne) {
             self.holding = false;
@@ -1094,7 +1094,7 @@ impl RigidBody {
         Lateral { lat, arms, j, v, w, reach, gripped, slipping, m, mt, joint_p: Vec3::ZERO, joint_l: Vec3::ZERO, jointed: false }
     }
 
-    /// One pass of the tyres' hold across, as Omsi.exe has it (see `lateral_start`).
+    /// One pass of the tyres' hold across, as OMSI 2 has it (see `lateral_start`).
     fn lateral_pass(&self, s: &Substep, l: &mut Lateral, h: f32) {
         let (rot, body_fwd, contacts) = (s.rot, s.body_fwd, &s.contacts);
         let Lateral { lat, arms, j, v, w, reach, m, mt, .. } = l;
@@ -1125,7 +1125,7 @@ impl RigidBody {
         if !self.holding && !slipping && lat.iter().all(|&k| (v + rot.mul_vec3(w).cross(contacts[k].r)).dot(contacts[k].right).abs() < 0.1) {
             self.holding = true;
         }
-        // the bend's pull rolls the body out of it (0x7e4629: [schwerpunkt] x mass x
+        // the bend's pull rolls the body out of it ([schwerpunkt] x mass x
         // the centripetal acceleration)
         if self.holding && gripped && !lat.is_empty() {
             torque.y += m * self.cog.z * v_fwd * self.omega.z;

@@ -888,7 +888,7 @@ swings up or down off the coupling point by about `offset · sin(beta)`. Without
 with 0, everything is as before.
 
 Behind the player's vehicle every road part - the rear section of an articulated bus, a
-lorry's trailer - is a body of its own on the same wheel physics as the front, as Omsi.exe
+lorry's trailer - is a body of its own on the same wheel physics as the front, as OMSI 2
 runs each section: its own `[mass]`, `[momentofintertia]`, `[schwerpunkt]` / `[cog]`,
 `[newachse]` springs, dampers and driven axles, `[rollwiderstand]`, and its own
 `Axle_Brakeforce_<n>_*` and `Axle_Springfactor_<n>_*` (numbered on after the front's axles).

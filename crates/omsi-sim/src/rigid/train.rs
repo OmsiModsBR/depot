@@ -1,5 +1,5 @@
 //! Bodies coupled by joints: the sections of an articulated bus and a lorry's trailer, each
-//! a [`RigidBody`] of its own `.bus` file on the same wheel physics, as Omsi.exe runs them.
+//! a [`RigidBody`] of its own `.bus` file on the same wheel physics, as OMSI 2 runs them.
 //! A joint holds the two bodies together at the ball - and, at a pusher's joint, at the hinge
 //! ahead of it the joint pitches about -, keeps an articulated bus's sections from rolling
 //! against each other (`[coupling_front_character]` type other than 0), and stops at the
@@ -20,7 +20,7 @@ use std::borrow::Cow;
 /// (m/s, rad/s): a part put down a little off its joint is drawn to it, not thrown.
 const BAUMGARTE: f32 = 0.2;
 const MAX_BIAS: f32 = 1.0;
-/// Passes over the constraints of a substep: the tyres' alone take 8 (Omsi.exe's hold across
+/// Passes over the constraints of a substep: the tyres' alone take 8 (OMSI 2's hold across
 /// converges within them); with joints the sections share their tyres through the joint, which
 /// takes a few more.
 const PASSES: usize = 8;
@@ -356,7 +356,7 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
         slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe);
         for (b, impacts) in bodies.iter_mut().zip(impacts.iter_mut()) {
             // OMSI damps the body's pitch and roll - never its yaw - by sin(x)/x each frame,
-            // x = 1.5 x sqrt(springs / mass) x frame (Omsi.exe 0x7e4f55..0x7e50b0). Its
+            // x = 1.5 x sqrt(springs / mass) x frame. Its
             // frames are OMSI's (its options.cfg caps them at 30 a second): taken per frame
             // of this game, a machine drawing 150 frames a second damped the body a fifth as
             // much, and the bus rocked on its springs like a boat. The same damping a second
@@ -771,7 +771,7 @@ mod tests {
         let light = Vehicle { mass: 3.0, moment_of_inertia: [60.0, 15.0, 60.0], ..rear.clone() };
         let heavy = Vehicle { mass: 12.0, moment_of_inertia: [250.0, 80.0, 250.0], ..rear.clone() };
         let ball = Vehicle { coupling_front_character: Some([52.5, -20.0, 20.0, 0.0]), ..rear.clone() };
-        // (on a dry road the front follows its wheels, as Omsi.exe's holds it: the yaw is the
+        // (on a dry road the front follows its wheels, as OMSI 2's holds it: the yaw is the
         // steering's; on a wet one its tyres slide and the rear section's inertia shows)
         let ((_, rl), (_, rh)) = (bend(&light, 0.85), bend(&heavy, 0.85));
         let ((yl, _), (yh, _)) = (bend(&light, 0.25), bend(&heavy, 0.25));

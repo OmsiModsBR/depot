@@ -2,7 +2,7 @@
 //! trailers. Behind the player's vehicle (the one with a [`RigidBody`]) every road part is a
 //! body of its own on the same wheel physics, with its own `.bus` file's mass, inertia,
 //! centre of gravity, axles and springs, held to the part in front by its joint
-//! (`crate::rigid::Joint`, `[coupling_front_character]`), as Omsi.exe runs each section: what
+//! (`crate::rigid::Joint`, `[coupling_front_character]`), as OMSI 2 runs each section: what
 //! the rear section weighs, brakes, drives and leans comes back to the front. The parts of the
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle - and so do all of
@@ -213,7 +213,7 @@ impl TrailerPart {
         };
         let lead_pitch = if lead_pitch.abs() > 90.0 { lead_pitch - 180.0 * lead_pitch.signum() } else { lead_pitch };
         let alpha = ((lead_heading - self.heading + 540.0) % 360.0) - 180.0;
-        // (the part in front's pitch less this one's, as Omsi.exe's beta runs (0x7de798: it
+        // (the part in front's pitch less this one's, as OMSI 2's beta runs (it
         // grows as the rear axle sinks): taken the other way round the bellows bent away
         // from the rear section on any grade, their folds sheared and a gap opened at one end)
         let beta = lead_pitch - self.pitch as f64;
@@ -291,7 +291,7 @@ impl TrailerPart {
         let mut dir = dir.normalize();
         let mut heading = dir.x.atan2(dir.y).to_degrees();
         // `[coupling_front_character]`: a bus joint (type != 0) stops hard at its max
-        // alpha (Omsi.exe 0x7e0848); the rear section's axle is dragged sideways there
+        // alpha; the rear section's axle is dragged sideways there
         // instead of jackknifing through the part in front.
         if let Some([amax, _, _, kind]) = self.ty.def.coupling_front_character {
             if kind != 0.0 && amax > 0.0 {
@@ -381,7 +381,7 @@ impl TrailerPart {
             Some(z) if on_track.is_some() => z,
             Some(z) if main.contact.is_some() && dt > 0.0 => {
                 // On the road the part stands on its springs as the part in front does in
-                // Omsi.exe (each section is a body of its own on the same wheel springs): a
+                // OMSI 2 (each section is a body of its own on the same wheel springs): a
                 // bump under its axle is a jolt that swings out, not a height eased into over
                 // a sixth of a second, which smoothed every bump away under the rear of an
                 // articulated bus. (Sprung at about 1.6 Hz, a little damped, as a bus body.)
@@ -448,7 +448,7 @@ impl TrailerPart {
         self.position = ball - rot.transform_point3(self.coupling_front).as_dvec3();
         // The wheels stand on the road under them, wherever the body above swings: the
         // travel of each wheel is the gap between its hub on the body and the ground under
-        // it (Omsi.exe runs the section as a body on its own springs, each wheel's travel
+        // it (OMSI 2 runs the section as a body on its own springs, each wheel's travel
         // its own). Held at the static sag, the rear axle of an articulated bus was a rigid
         // one - its wheels bounced and leant with the body over every bump and in every
         // bend (#901).
