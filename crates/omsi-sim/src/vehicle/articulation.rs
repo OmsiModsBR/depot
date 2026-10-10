@@ -138,7 +138,7 @@ impl VehicleInstance {
         let friction = bodies[0].friction;
         for (b, (_, vars)) in bodies[1..].iter_mut().zip(&meta) {
             for (w, v) in b.wheels.iter_mut().zip(vars) {
-                w.spring_factor = v[4].map(|i| self.state.vars[i as usize]).unwrap_or(1.0);
+                w.spring_factor = v[4].filter(|_| !self.springs_full).map(|i| self.state.vars[i as usize]).unwrap_or(1.0);
             }
             b.friction = friction;
             b.wheel_walls = self.wheel_walls;
@@ -328,6 +328,7 @@ impl TrailerPart {
             } else if self.ty.suspension_axles.contains(&axle) {
                 let factor = main
                     .var(&format!("Axle_Springfactor_{axle}_L"))
+                    .filter(|_| !main.springs_full)
                     .unwrap_or(1.0)
                     .max(0.05);
                 (load / (k * factor)).min(crate::rigid::BUMP)

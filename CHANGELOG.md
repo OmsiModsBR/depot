@@ -51,6 +51,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   validated against real articulated buses. See `docs/FORMATS.md`, `docs/MODDING.md`.
 
 ### Removed (reversible records in [docs/removed](docs/removed))
+- Wheel seating (`seat_wheels`): the drawn tyres of the rigid-body vehicle are no longer moved up or down
+  onto the hub the physics has when the model's `Axle_Suspension` animation does not match the spring's
+  travel. A model's 3D animation is shown as configured; the correction only ever applied to the front
+  section of an articulated bus. `docs/removed/SEAT_WHEELS_REMOVED.md`.
 - In-app updater (check, download, install, `update_*` settings, flags, UI, Android install flow). The
   Settings "About" section shows the version and a link to the releases page. `docs/removed/UPDATER_DISABLED.md`.
 - Discord Rich Presence and its borrowed application ID, until Depot registers its own. The community
@@ -81,6 +85,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Vehicle viewer in the launcher: the rear sections of an articulated bus no longer stand with their wheels
+  above the floor. The viewer gave the bus no ground and ran its rear sections kinematically, hung level with
+  their coupling while their wheels went up into the arches by the springs' sag. The viewer now puts the bus
+  on a flat floor at z = 0 and on the same wheel physics as the game (the bus and each rear section a rigid
+  body on its own springs) with the springs held at full air (`Axle_Springfactor` 1, new
+  `VehicleInstance::springs_full`: the scripts' kneeling and levelling left the bus knelt and leaning in the
+  picture), and steps it until every body has been still for 0.5 s (at most 10 s) before showing it
+  (`crates/omsi-app/src/launcher/showroom.rs`).
 - The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
   departure and the next arrival shared out by the distance covered) instead of standing still at the delay
