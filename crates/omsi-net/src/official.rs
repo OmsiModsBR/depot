@@ -147,6 +147,6 @@ mod tests {
         assert!(verify(&format!("{text} #{}", hex(other.sign(text.as_bytes()).as_ref())), &key, t).is_none());
         let good = post("https://a.trycloudflare.com", t);
         assert!(verify(&good.replace("https://a.", "https://b."), &key, t).is_none());
-        assert!(is_alias(" OpenOMSI "));
+        assert!(is_alias(" DePoT "));
     }
 }
