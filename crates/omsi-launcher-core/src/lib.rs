@@ -1957,6 +1957,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     }
     v["steer_look_angle"] = json!(30.0);
     v["look_sens"] = json!(1.0);
+    v["outside_fov"] = json!(0.0);
     v["look_smoothing_ms"] = json!(0.0);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
@@ -2011,6 +2012,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "chat_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 3.0)),
             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
+            "outside_fov" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
@@ -2381,6 +2383,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("triple_hud_center={}\ntriple_fov_deg={}\n", b("triple_hud_center", true), if triple_fov < 20.0 { 0.0 } else { triple_fov.min(120.0) }));
     text.push_str(&format!("triple_screen={}\ntriple_span={}\n", b("triple_screen", false), b("triple_span", true)));
     text.push_str(&format!("triple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\n", f("triple_width_mm", 600.0).clamp(200.0, 2000.0), f("triple_distance_mm", 650.0).clamp(200.0, 3000.0), f("triple_bezel_mm", 0.0).clamp(0.0, 100.0)));
+    let outside_fov = f("outside_fov", 0.0);
+    text.push_str(&format!("outside_fov={}\n", if outside_fov < 20.0 { 0.0 } else { outside_fov.min(120.0) }));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
@@ -3258,6 +3262,25 @@ mod tests {
         assert!(!now.iter().any(|l| l == "5 & 5N") && now.iter().any(|l| l == "130 & N30"), "{now:?}");
         assert!(names("1991-06-01").iter().any(|l| l == "5 & 5N") && !names("1991-06-02").iter().any(|l| l == "5 & 5N"));
         assert!(lines_on(&map, "someday").is_err());
+    }
+
+    #[test]
+    fn outside_fov_survives_launcher_save_and_rejects_nonfinite_values() {
+        assert_eq!(settings_from_text(None)["outside_fov"], json!(0.0));
+        let v = settings_from_text(Some("outside_fov=48\nfov=72\n"));
+        let saved = settings_from_text(Some(&settings_to_text(&v, None)));
+        assert_eq!(saved["outside_fov"], json!(48.0));
+        assert_eq!(saved["fov"], json!(72.0));
+        let mut changed = v.clone();
+        changed["outside_fov"] = json!(80.0);
+        let updated = settings_to_text(&changed, Some("outside_fov=48\nfov=72\nunknown_camera_key=keep\n"));
+        assert_eq!(settings_from_text(Some(&updated))["outside_fov"], json!(80.0));
+        assert_eq!(updated.matches("outside_fov=").count(), 1);
+        assert!(updated.contains("unknown_camera_key=keep"));
+        for invalid in ["NaN", "inf", "-1", "15", "garbage"] {
+            assert_eq!(settings_from_text(Some(&format!("outside_fov={invalid}\n")))["outside_fov"], json!(0.0));
+        }
+        assert_eq!(settings_from_text(Some("outside_fov=200\n"))["outside_fov"], json!(120.0));
     }
 
     #[test]

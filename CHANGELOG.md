@@ -6,6 +6,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Added
+- Outside camera (F3) gets an independent `outside_fov` setting, 20-120 vertical degrees or Auto. Auto
+  preserves the 16:9 horizontal extent on ultrawide windows when no general override is set. Source:
+  openOMSI `ea47e092ee6e0a2c472d2c7261ea7a7913e6ca9f` (MIT), selective backport authored by zane_thruston;
+  no later upstream architecture imported. See `docs/integrations/OUTSIDE-FOV-ULTRAWIDE.md`.
+
 ### Removed (reversible records in [docs/removed](docs/removed))
 - In-app updater (check, download, install, `update_*` settings, flags, UI, Android install flow). The
   Settings "About" section shows the version and a link to the releases page. `docs/removed/UPDATER_DISABLED.md`.
