@@ -997,7 +997,7 @@ pub(crate) fn button(name: &str, text: &str, desc: &str, id: &str) -> (String, S
 
 /// A switch row, if the setting `id` is one.
 /// The duty given up (the game menu's "End the duty", Free drive in the list of lines): the
-/// bus is unscheduled, and the `GetTT*` callbacks answer ""/0/-1 again as in Omsi.exe. "End
+/// bus is unscheduled, and the `GetTT*` callbacks answer ""/0/-1 again as in OMSI. "End
 /// the duty" dropped the duty alone, and the bus's own displays went on with the old trip -
 /// a paper sign with its line in the window, the IBIS's stop list (#1317).
 pub(crate) fn end_duty(app: &mut App) {

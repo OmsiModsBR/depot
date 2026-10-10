@@ -261,7 +261,7 @@ const MIRROR_MIN_RADIUS: f32 = 0.3;
 
 /// Whether a mirror is in the picture of `view` (camera and aspect): its camera's place as
 /// a sphere of the `[add_camera_reflexion_2]` radius (a point for `[add_camera_reflexion]`)
-/// against the view's frustum, as Omsi.exe tests it (0x6f611f, 0x7f41ac) before it redraws
+/// against the view's frustum, as OMSI tests it before it redraws
 /// a mirror.
 fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
     let (cam, aspect) = view;
@@ -279,15 +279,15 @@ fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
     d.dot(r).abs() <= z.max(0.0) * tan_x + slack_x && d.dot(u).abs() <= z.max(0.0) * tan_y + slack_y
 }
 
-/// A mirror's picture is drawn this wide over its height (Omsi.exe sub_6f6468 gives the
+/// A mirror's picture is drawn this wide over its height (OMSI gives the
 /// reflection cameras' projection 1.6 on their square textures), and the mirror meshes show
 /// its middle: drawn square, a mirror showed a slice two thirds as wide as OMSI's - the
 /// strip of the bus at its edge and hardly any of the lane beside it.
 const MIRROR_ASPECT: f32 = 1.6;
 
-/// A mirror's camera as Omsi.exe aims it, every frame (0x6f6468 -> 0x7ed0e8): the yaw and
+/// A mirror's camera as OMSI aims it, every frame: the yaw and
 /// pitch of an `[add_camera_reflexion]` are not where it looks but which way the mirror's
-/// face is turned - (cos p sin y, cos p cos y, sin p) in the vehicle's frame (0x7edfd0); the
+/// face is turned - (cos p sin y, cos p cos y, sin p) in the vehicle's frame; the
 /// ray from the eye of the view being drawn to the mirror is reflected in that face, and the
 /// camera looks along the reflection (yaw 90 - atan2(forward, right) and its elevation) from
 /// the mirror - what a mirror shows whoever looks into it. `off` is the player's own turn of
@@ -347,7 +347,7 @@ pub(crate) fn render_mirrors(
     only: Option<usize>,
     view: Option<(Camera, f32)>,
 ) -> usize {
-    // (aimed from the eye of the view being drawn, as Omsi.exe aims them - from the
+    // (aimed from the eye of the view being drawn, as OMSI aims them - from the
     // driver's without one)
     let eye = view.as_ref().map(|v| v.0.position).unwrap_or_else(|| driver_eye(p));
     // the leading vehicle's cameras, then its rear sections' (openOMSI: numbered on from the
@@ -432,7 +432,7 @@ pub(crate) fn render_mirrors(
             pitch,
             roll,
             fov_deg: if c.fov > 1.0 { c.fov } else { 50.0 },
-            // (Omsi.exe's reflection pass, 0x6f68a8: near 0.1 m, far 100 km. Ours cut at
+            // (OMSI's reflection pass: near 0.1 m, far 100 km. Ours cut at
             // 0.3 m and 450 m: what is close to an inside mirror's camera - a handrail, the
             // driver's head - vanished, and the street behind ended at the next junction.
             // The far end is the objects' own reach here, as in the main view.)

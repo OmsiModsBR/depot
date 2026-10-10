@@ -580,8 +580,8 @@ pub fn collect(
     scene.lights.sort_by(|a, b| (a.position - camera_pos).length_squared().total_cmp(&(b.position - camera_pos).length_squared()));
 }
 
-/// How far Omsi.exe moves every `[smoke]` and `[particle_emitter]` puff towards the eye in
-/// depth (m): 0x5a1d54 gives each particle 0.1, which 0x5a2b5c takes off the view depth it
+/// How far OMSI moves every `[smoke]` and `[particle_emitter]` puff towards the eye in
+/// depth (m): each particle gets 0.1, which is taken off the view depth it
 /// projects the puff's depth at.
 const SMOKE_Z_OFFSET: f32 = 0.1;
 
@@ -612,7 +612,7 @@ pub fn particle_sprites(set: &omsi_sim::particles::ParticleSet, smoke: &mut Vec<
                 alpha,
                 spin: p.spin,
                 z_offset: SMOKE_Z_OFFSET,
-                // (to fade into, where Omsi.exe lets the road cut it off)
+                // (to fade into, where OMSI lets the road cut it off)
                 ground: p.ground.is_finite().then_some(p.ground),
             });
         }

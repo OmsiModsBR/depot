@@ -1254,7 +1254,7 @@ impl Controllers {
                             Func::Brake => set(&mut out.brake, crate::settings::pedal_curve(pedal, self.pedal_brake)),
                             Func::Clutch => set(&mut out.clutch, pedal),
                             Func::ThrottleBrake => {
-                                // Omsi.exe: throttle = 2v-1 and brake = 1-2v (v = 0..1), so the
+                                // As in OMSI: throttle = 2v-1 and brake = 1-2v (v = 0..1), so the
                                 // raw-maximum half is the throttle
                                 set(&mut out.throttle, crate::settings::pedal_curve(v.max(0.0), self.pedal_throttle));
                                 set(&mut out.brake, crate::settings::pedal_curve((-v).max(0.0), self.pedal_brake));
@@ -1841,7 +1841,7 @@ pub(crate) fn code_button(code: u32) -> Option<usize> {
 }
 
 /// An axis' characteristic from its gamectrler.cfg flags, on 0..1 (after the inversion),
-/// as Omsi.exe applies it (poll sub_6466b8): 2 extends the range by a quarter, 4 is
+/// as OMSI applies it: 2 extends the range by a quarter, 4 is
 /// degressive, 8 progressive, 0x10 makes either of them symmetric round the centre.
 pub(crate) fn axis_shape(v: f32, flags: i32) -> f32 {
     use std::f32::consts::PI;
@@ -1863,7 +1863,7 @@ pub(crate) fn axis_shape(v: f32, flags: i32) -> f32 {
     v.clamp(0.0, 1.0)
 }
 
-/// The characteristics the set-up offers, with their flag bits (Omsi.exe's combo, 0x652ac4).
+/// The characteristics the set-up offers, with their flag bits (as OMSI's combo box offers them).
 pub(crate) const AXIS_SHAPES: [(&str, i32); 5] = [("Linear", 0), ("Progressive", 8), ("Degressive", 4), ("Bi-progressive", 8 | 0x10), ("Bi-degressive", 4 | 0x10)];
 
 #[cfg(test)]

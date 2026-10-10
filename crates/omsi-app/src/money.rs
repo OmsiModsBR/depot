@@ -88,7 +88,7 @@ impl Money {
     }
 
 
-    /// What a passenger puts on the desk for `price`, as Omsi.exe does it (sub_7e8254):
+    /// What a passenger puts on the desk for `price`, as OMSI does it:
     /// coins drawn at random until they cover the price, then every coin that is not needed
     /// (the rest still covers the price less half the smallest coin) taken back again.
     pub fn omsi_coins_for(&mut self, price: f32) -> Vec<usize> {
@@ -161,7 +161,7 @@ impl Money {
         Some((id, mats))
     }
 
-    /// Put coins on a point of the cabin as Omsi.exe does (sub_7e7e08): each one flat at the
+    /// Put coins on a point of the cabin as OMSI does: each one flat at the
     /// point's height, somewhere in the variation rectangle and turned at random about the
     /// vertical. Nothing is stacked: the coins had been raised 3 mm per coin already lying
     /// there, so a driver clicking change built an endless tower on the tray.

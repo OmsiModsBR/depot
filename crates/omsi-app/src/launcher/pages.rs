@@ -2048,7 +2048,7 @@ fn wizard_result(rest: &[Option<f32>; 8], at: &[[Option<f32>; 8]]) -> [Option<(c
     let brake = pedal(2, &taken);
     match (throttle, brake) {
         // one axis for both (pedals on a single axis): the throttle towards the raw maximum
-        // (as in Omsi.exe), else the axis is reversed
+        // (as in OMSI), else the axis is reversed
         (Some((kt, dt)), Some((kb, db))) if kt == kb && dt * db < 0.0 => axes[kt] = Some((Func::ThrottleBrake, dt < 0.0)),
         _ => {
             // a pedal pressed goes towards 1

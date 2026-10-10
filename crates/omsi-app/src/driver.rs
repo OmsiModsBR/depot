@@ -254,7 +254,7 @@ pub struct DriverFigure {
     floor: Vec3,
     heading: f32,
     /// The seat's four `[interiorlight]`s (see `PassPos::illumination`): the lamps that
-    /// light the figure, as Omsi.exe lights a seated person (0x62f7b8).
+    /// light the figure, as OMSI lights a seated person.
     lamps: [i32; 4],
     wheel: Option<Wheel>,
     /// The sign that turns the wheel variable's angle into the angle seen from the seat
@@ -828,7 +828,7 @@ impl DriverFigure {
         let body = v.body_rotation();
         let at = v.position + body.transform_point3(floor).as_dvec3();
         let xf = body * Mat4::from_rotation_z(-h);
-        // lit by the seat's four lamps as Omsi.exe lights a seated person (0x62f7b8 enables
+        // lit by the seat's four lamps as OMSI lights a seated person (it enables
         // them as Direct3D lights for the figure): the bus meshes' point lights, coloured,
         // falling off with distance and only on the side facing them. (A flat warm term of
         // the lamps' sum lit the figure evenly on every side, glowing in the dark cab.)
