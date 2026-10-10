@@ -23,6 +23,17 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Source: openOMSI `a97595b1b254cf94abc27bb67844a8a1dfcee2ab` (MIT), authored by zane_thruston
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
+### Changed
+- Articulated buses and trailers: every section is a body of its own. Behind the player's vehicle the rear
+  section of an articulated bus and a lorry's trailer run on the same wheel physics as the front, each with
+  its own `.bus` mass, inertia, centre of gravity, axles, springs and brakes, held by a joint that follows
+  `[coupling_front_character]` (a bus turntable keeps the sections from rolling against each other, a lorry's
+  hitch does not). The AI's vehicles, LAN players and trains on rails follow as before, and so does every part
+  with `OMSI_KINEMATIC_TRAILERS=1` (A/B). Source: maintainer's fork lmonteirotech/openOMSI branch
+  `feat/multibody-articulation`, code authored by zane_thruston, MIT (confirmed by the maintainer); comments
+  and docs cleaned of references to addresses of the reference executable. High-risk physics change, not
+  validated against real articulated buses. See `docs/FORMATS.md`, `docs/MODDING.md`.
+
 ### Removed (reversible records in [docs/removed](docs/removed))
 - In-app updater (check, download, install, `update_*` settings, flags, UI, Android install flow). The
   Settings "About" section shows the version and a link to the releases page. `docs/removed/UPDATER_DISABLED.md`.
