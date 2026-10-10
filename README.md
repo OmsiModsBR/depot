@@ -15,9 +15,17 @@ See [baseline provenance and integration policy](DEPOT_BASELINE.md).
 > missing, broken or change between versions. Please report problems in
 > [Issues](https://github.com/OmsiModsBR/depot/issues).
 
-**Project Depot** is a from-scratch recreation of the bus simulator **OMSI 2**, written in Rust:
-64-bit, multithreaded, with a modern renderer (Metal / Vulkan / DirectX 12 through wgpu),
-and fully compatible with the existing maps, buses, scenery and mods.
+**Project Depot** began as an independent project derived from
+[openOMSI](https://github.com/openOMSI-org/openOMSI), a Rust recreation of the bus
+simulator **OMSI 2**. It retains that technical foundation: 64-bit, multithreaded,
+with a modern renderer (Metal / Vulkan / DirectX 12 through wgpu).
+
+The project's explicit goal is to **achieve 1:1 compatibility with OMSI 2**,
+including its existing maps, buses, scenery, scripts and mods. This is a development
+target, not a claim that complete compatibility has already been achieved.
+Alongside that goal, **evolutions to the simulator's physics and simulation are
+a development priority**, while preserving compatibility and a stable base through
+selective upstream integration.
 
 > [!IMPORTANT]
 > **Project Depot needs an original copy of OMSI 2.** It contains no game content of its own: it

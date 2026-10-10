@@ -1,6 +1,10 @@
 # Project Depot — historical baseline
 
 Project Depot is maintained independently at https://github.com/OmsiModsBR/depot.
+It began as a project derived from openOMSI, with the explicit goal of achieving
+1:1 compatibility with OMSI 2 and prioritizing evolutions to the simulator's
+physics and simulation. Full compatibility is a development target, not an
+already-verified guarantee.
 Its initial policy is **stable base + selective upstream integration**.
 
 ## Canonical source
@@ -23,7 +27,7 @@ the `depot` name; user-facing text uses Project Depot. Internal identifiers and
 source filenames remain unchanged.
 Inherited GitHub workflows and Dependabot configuration are archived in
 `docs/upstream-automation/`; enabling Depot automation requires a separate review.
-The original README is retained below the Depot introduction as historical documentation.
+The README is adapted to describe Depot's origin, goals and distribution names.
 
 ## Selective integration
 
