@@ -292,7 +292,7 @@ decodificada, então reuso entre cenas redecodifica: manter os blocos BC residen
 | `panic = "abort"` | 1-5% e binário 5-10% menor | **Bloqueio:** há `catch_unwind` em `omsi-render/src/lib.rs:13056,15827`, `tiles.rs:1209`, `launcher/state.rs:367`, `install.rs:226`, e rayon propaga panics. Só no `dist`, se isolamento de crash for aceitável |
 | Allocator global | 5-15% do tempo de carga *(especulativo)*, menos contenção entre workers rayon; mais relevante no Windows | `mimalloc` só no `omsi-app` (testar antes em cdylib/Android). Churn alto: `CfgFile` com `Vec<String>`, `str8`, mixer por callback, loaders por tile |
 | `debug = 1` | Nenhum em runtime; menos tempo de link/disco | `line-tables-only` ou `split-debuginfo` + `strip` no `dist` |
-| `target-cpu` / PGO | `x86-64-v3` 5-20% nos kernels (BC, downsample, mixer, glam) *(especulativo)*; PGO 5-15% | `x86-64-v3` quebra CPUs pré-2013 (decisão de distribuição); alternativa: `#[target_feature]` com dispatch em runtime nos kernels. PGO: `scripts/profile-th-wald.ps1` serve de treino; trabalho de CI |
+| `target-cpu` / PGO | `x86-64-v3` 5-20% nos kernels (BC, downsample, mixer, glam) *(especulativo)*; PGO 5-15% | `x86-64-v3` (AVX2/FMA/BMI2) não roda em Intel pré-Haswell (2013), em Pentium/Celeron/Atom de várias gerações, nem em AMD FX/Bulldozer–Steamroller; o projeto declara suporte a hardware assim (Intel HD 2500, #770, `startup.rs:258`). Preferir `x86-64-v2` ou dispatch em runtime (`#[target_feature]`) só nos kernels quentes. PGO: `scripts/profile-th-wald.ps1` serve de treino; trabalho de CI |
 
 ### 4.3 Parsing e VFS
 - **`CfgFile`** (`omsi-cfg/src/lib.rs:55-79`): `decode_text` devolve `String`, `split_lines` copia char a
@@ -340,7 +340,40 @@ desenvolvedor, não de runtime.
 
 ---
 
-## 5. Ordem de ataque sugerida
+## 5. Launcher (UI): redesenho planejado
+
+Marcado como prioridade. Leitura de código, **sem medição**. O preview 3D do ônibus é mantido (é um
+diferencial); o resto da UI é o problema.
+
+**Diagnóstico**
+1. `make_surface` (`launcher/mod.rs:316-339`) abre o `Renderer` 3D completo do jogo, com MSAA 4x e
+   `showroom_options` (`mod.rs:1297`), mesmo em páginas sem ônibus (Settings, Controls, Mods...).
+   *A verificar:* se `Renderer::new` compila todos os pipelines na criação (provável maior custo de abertura).
+2. A UI é desenhada em modo imediato sobre esse device, com **MSAA 4x em tela cheia** (`mod.rs:331`).
+3. Sem dirty tracking: todo frame refaz layout, re-tessela e reenvia o buffer de vértices inteiro
+   (`mod.rs:~870`). `about_to_wait` (`mod.rs:562-606`) usa `Poll` por 3 s após input e depois redesenha
+   tudo a 20 fps parado.
+4. Custo por texto, todo frame: `i18n::tr` (RwLock + tabela + tradução automática), chave `String` do
+   atlas (`omsi-ui/src/atlas.rs`), `fit` com busca binária alocando `String`s e `cap_height` com
+   `outline_glyph` (`omsi-ui/src/text.rs`); `rounded_outline` aloca `Vec` com sin/cos por forma.
+5. Listas só pulam o desenho via `rect_visible` (`drive.rs:310,400,907`); o layout de todas as linhas roda.
+6. Acoplamento launcher/jogo na GPU gera remendos (devolver o device ao abrir o jogo, recuperação de
+   device perdido #274, ordem de backends #1058/#1044/#746/#770).
+
+**Plano (por risco crescente)**
+1. Redesenhar só quando algo mudou (`ControlFlow::Wait`, `request_redraw` por input/animação/dados) em
+   vez de 20 fps contínuos. Independente dos demais.
+2. UI sem MSAA (1x); cantos arredondados continuam suaves pelo shader/tesselação.
+3. Cache de texto por frame: tradução e `fit`/`cap_height` memoizados por (texto, px, peso, largura);
+   chave do atlas sem alocar; buffers de `rounded_outline` reaproveitados.
+4. `Renderer` 3D criado só ao abrir uma página com preview e liberado ao sair; UI com device/pipeline
+   próprios e leves.
+5. Layout virtualizado nas listas longas (calcular só as linhas visíveis).
+
+**Medir antes e depois:** tempo até a primeira janela útil, CPU/GPU em idle por 60 s, frame time ao
+rolar a lista de ônibus, memória residente.
+
+## 6. Ordem de ataque sugerida
 
 **Fase 0: medir (antes de tudo).** Capturar `OMSI_PROFILE` (inclui `tick_split` plan/par/post) em 2-3
 cenários fixos (cidade pesada com tráfego; Enhanced+MSAA à noite; viagem rápida com streaming de
@@ -363,7 +396,7 @@ Cache em disco de texturas BC (§4.1) e de índice de mapa (§2.4) · cascata de
 estática+dinâmica (§1.3) · substeps da física (§3.5) · `CfgFile` em buffer único (§4.3) · PBR
 comprimido/ASTC (§1.6) · PGO · skinning na GPU (§3.6) · desenho GPU-driven/Hi-Z (§1.8).
 
-## 6. Limitações desta auditoria
+## 7. Limitações desta auditoria
 
 - Nenhum benchmark foi executado; todas as estimativas de ganho vêm do formato do código.
 - Não foram lidos em profundidade: `omsi-scenery`, `omsi-map`, `omsi-vehicle`, `omsi-timetable`,
