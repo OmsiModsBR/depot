@@ -1,4 +1,4 @@
-# Contributing to openOMSI
+# Contributing to Project Depot
 
 Thanks for helping! A few rules keep the project healthy:
 
