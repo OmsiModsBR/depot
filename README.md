@@ -89,7 +89,7 @@ brings no game content of its own; it plays the original's maps, buses and mods.
    `…\Steam\steamapps\common\OMSI 2`.
 4. **Drive:** pick a bus, a map and a duty on the **Drive** page and press **Start the duty**.
 
-**Mods** are installed on the **Mods** page (a folder or a `.zip`, or dropped on the window) or
+**Mods** are installed on the **Mods** page (a folder, or a `.zip` that is used in place from `Archives` and never unpacked; or dropped on the window) or
 by putting them into the `Mods` folder next to the game; the OMSI 2 folder is never written
 to.
 

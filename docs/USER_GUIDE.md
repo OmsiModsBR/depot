@@ -226,7 +226,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   it save its run (SIGTERM, up to 8 s, and only a stuck game is killed) and, for a LAN
   session, the code to copy, who is playing and the chat.
 * **Mods** - installing mods and archives (see *Mods and the content folder*); a folder or
-  .zip, .7z or .rar dropped on the window is installed.
+  .zip dropped on the window is installed (a .zip is never unpacked: it goes to `Archives`).
 * **Timetable** - a map's lines, their tours and trips. Changes stay while you move between
   lines and are saved together (*Save all*); **New line** makes a line, **Repeat** turns a tour
   into a whole day of them (every *n* minutes up to a last departure).
@@ -464,26 +464,26 @@ vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy ta
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
 Installing a mod: the launcher's **Mods** page opens the system's folder / file picker
-(Finder, Explorer, GTK) for a mod folder or a `.zip`, `.7z` or `.rar` archive and sorts it
+(Finder, Explorer, GTK) for a mod folder or a `.zip` archive and sorts it
 into place (OMSI-style folders anywhere inside are merged; a lone bus, map, object or
 spline folder is recognised by its `.bus` / `global.cfg` / `.sco` / `.sli` files and put
 under the right folder), or drop it into `Mods/` next to the binary and open the page.
-`openomsi-launcher --cli install '{"path":"/path/to/mod.7z"}'` and `--cli mods` do the same
-from a shell. An installation is a background job: the archive's table of contents becomes
-a plan, the disk is checked for room, everything is unpacked into a staging folder on the
-content volume and moved into place in one step, and it can be cancelled and cleaned up at
-any point. A repaint for a bus that is not installed is kept aside and installed when the
+`openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` and `--cli mods` do the same
+from a shell. **`.rar` and `.7z` archives are not supported** (unpack them with your own tool
+and install the folder), and **a `.zip` is never unpacked by the launcher**. An installation is
+a background job: a folder's listing (or a `.zip`'s table of contents) becomes a plan, the disk
+is checked for room, a folder is copied into a staging folder on the content volume and moved
+into place in one step, and it can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is kept aside and installed when the
 bus arrives.
 
-Archives can also be **used in place**: a `.zip` laid out like OMSI 2 is put into the
+A `.zip` is **used in place**, and only that way: a `.zip` laid out like OMSI 2 is put into the
 content folder's `Archives/` (hard-linked when it is on the same disk, moved from the
 `Mods/` inbox, else copied after a free-space check) and read by the game without
 unpacking (`omsi_cfg::vfs` mounts every archive there, as well as `--content-zip` and
-`OMSI_CONTENT_ZIP`). The Mods page offers it ("use the archive in place"), and its default
-unpacks what fits on the disk and uses an archive in place when its unpacked size does not;
-`.7z` and `.rar` archives are always unpacked.
-`--cli install '{"path":…,"mode":"inplace"}'` (or `extract` / `auto`) and
-`--cli modinfo '{"path":…}'` do the same from a shell. The launcher's lists see the maps
+`OMSI_CONTENT_ZIP`). A `.zip` whose folders are not where the game looks for them (a lone bus
+folder, say) is refused; unpack it yourself and install the folder. The `mode` of
+`--cli install '{"path":…,"mode":…}'` is accepted but no longer changes anything, and
+`--cli modinfo '{"path":…}'` shows what the launcher would do. The launcher's lists see the maps
 and buses inside the archives.
 
 ## Season and weather

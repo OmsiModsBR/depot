@@ -440,10 +440,9 @@ pub struct ModsStatus {
     pub jobs: Vec<install::Progress>,
 }
 
-/// Start installing the mod at `src` (a folder, .zip, .7z or .rar) into the content folder in the
-/// background; `mode` is "auto" (unpack, or use a .zip in place when it does not fit; .7z
-/// and .rar are always unpacked),
-/// "extract" or "inplace".
+/// Start installing the mod at `src` (a folder, or a .zip) into the content folder in the
+/// background. A folder is copied; a .zip is never unpacked, only put into `Archives` and read
+/// in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content = content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     if !src.exists() {
@@ -454,7 +453,7 @@ pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     Ok(job.snapshot())
 }
 
-/// How big the mod at `src` is unpacked, what is free, and whether it can be used in place.
+/// What the mod at `src` holds, what is free, and whether a .zip can be used in place.
 pub fn inspect_mod(src: &Path) -> Result<install::SourceInfo> {
     let content = content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     install::inspect(&content, root().ok().as_deref(), src)
@@ -475,7 +474,7 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
         .filter(|p| {
             let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
             !(name.starts_with('.') || name.eq_ignore_ascii_case("installed") || name.eq_ignore_ascii_case(install::WAITING) || name.eq_ignore_ascii_case(install::PLUGINS_HELD) || name.eq_ignore_ascii_case(install::UNINSTALLED) || name.eq_ignore_ascii_case("README.txt"))
-                && (p.is_dir() || p.extension().map(|x| ["zip", "7z", "rar"].iter().any(|ext| x.eq_ignore_ascii_case(ext))).unwrap_or(false))
+                && (p.is_dir() || p.extension().map(|x| x.eq_ignore_ascii_case("zip")).unwrap_or(false))
         })
         .collect();
     v.sort();
@@ -2772,7 +2771,7 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
     #[cfg(not(target_os = "android"))]
     {
         if zip {
-            rfd::FileDialog::new().set_title("Choose a mod archive").add_filter("Mod archive", &["zip", "7z", "rar"]).pick_file()
+            rfd::FileDialog::new().set_title("Choose a mod archive").add_filter("Mod archive", &["zip"]).pick_file()
         } else {
             rfd::FileDialog::new().set_title("Choose the mod folder").pick_folder()
         }

@@ -238,7 +238,6 @@ pub struct State {
     pub mods_asked: bool,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
-    pub mod_mode: usize,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
     pub cmdline: String,
     pub join: (bool, String),
@@ -309,7 +308,6 @@ impl State {
             mods_asked: false,
             mod_info: None,
             mod_path: String::new(),
-            mod_mode: 0,
             ibis: None,
             cmdline: String::new(),
             join: (true, String::new()),
@@ -601,7 +599,8 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
-        let mode = ["auto", "extract", "inplace"][self.mod_mode.min(2)].to_string();
+        // (a .zip is only ever used in place, from Archives; a folder is copied)
+        let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
         self.spawn(move || Msg::ModInfo(core::inspect_mod(std::path::Path::new(&p2)).map_err(|e| format!("{e:#}"))));
@@ -1071,12 +1070,6 @@ impl State {
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
             Msg::ModInfo(r) => {
-                if let Ok(i) = &r {
-                    // a big archive that does not fit is used in place
-                    if !i.fits && i.in_place_ok && self.mod_mode == 1 {
-                        self.mod_mode = 2;
-                    }
-                }
                 self.mod_info = Some(r);
             }
             Msg::Installed(Ok(j)) => {
