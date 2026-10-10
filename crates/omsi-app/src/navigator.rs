@@ -28,8 +28,9 @@ use hashbrown::HashMap;
 use omsi_render::{Renderer, Scene, TextureId};
 use omsi_sim::traffic::{LaneKey, LaneKind, Network};
 use omsi_ui::paint::Align;
-use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Weight};
+use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weight};
 
+use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER};
 use crate::traffic::Traffic;
 
 // --- colours (sRGB) -------------------------------------------------------------------
@@ -78,6 +79,22 @@ fn traffic_kind(c: &crate::traffic::AiCar) -> (Color, Option<String>) {
     };
     (color, line)
 }
+/// The player as a triangle (tip ahead, short base behind), after the radar's: a dark edge, a
+/// white ring when the player is on a line, and the colour of the line's kind inside.
+fn player_triangle(ui: &mut Painter, at: Vec2, angle: f32, side: f32, fill: Color, ring: bool) {
+    let (alt, base) = (0.905 * side, 0.85 * side);
+    let rot = |v: Vec2| Vec2::new(v.x * angle.cos() - v.y * angle.sin(), v.x * angle.sin() + v.y * angle.cos());
+    let tri = |k: f32, c: Color, ui: &mut Painter| {
+        let (a, b, d) = (at + rot(Vec2::new(0.0, -0.62 * alt * k)), at + rot(Vec2::new(base * 0.5 * k, 0.38 * alt * k)), at + rot(Vec2::new(-base * 0.5 * k, 0.38 * alt * k)));
+        ui.tri(a, b, d, c, c, c);
+    };
+    tri(1.5, Color::rgba(10, 10, 10, 0.9), ui);
+    if ring {
+        tri(1.25, Color::WHITE, ui);
+    }
+    tri(1.0, fill, ui);
+}
+
 /// A bus, trolleybus or tram on the map as a pictogram, not a dot: a body with a cut front and
 /// a windscreen, turned to the way it heads (`heading`: degrees clockwise from north), a dark
 /// edge round it. `min_px` keeps it readable from far away; the line number is drawn beside it.
@@ -238,8 +255,87 @@ fn words(lang: &str) -> Words {
         "DEU" | "DE" | "GER" => Words { kmh: "km/h", days: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], off_route: "Abseits der Route", rerouting: "Route wird neu berechnet", recalculated: "Route neu berechnet", jam: "Stau", slow: "Zähfließend", no_duty: "Freie Fahrt", last_stop: "Endhaltestelle", on_time: "pünktlich" },
         "FRA" | "FR" => Words { kmh: "km/h", days: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], off_route: "Hors itinéraire", rerouting: "Recalcul de l'itinéraire", recalculated: "Itinéraire recalculé", jam: "Bouchon", slow: "Ralentissement", no_duty: "Conduite libre", last_stop: "Terminus", on_time: "à l'heure" },
         "RUS" | "RU" => Words { kmh: "км/ч", days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], off_route: "Вне маршрута", rerouting: "Перестроение маршрута", recalculated: "Маршрут перестроен", jam: "Пробка", slow: "Затруднено", no_duty: "Свободная езда", last_stop: "Конечная", on_time: "по графику" },
+        "PTB" | "PT" | "POR" | "BRA" => Words { kmh: "km/h", days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"], off_route: "Fora da rota", rerouting: "Recalculando a rota", recalculated: "Rota recalculada", jam: "Congestionamento", slow: "Trânsito lento", no_duty: "Direção livre", last_stop: "Ponto final", on_time: "no horário" },
         _ => Words { kmh: "km/h", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], off_route: "Off route", rerouting: "Recalculating route", recalculated: "Route recalculated", jam: "Traffic jam", slow: "Slow traffic", no_duty: "Free drive", last_stop: "Final stop", on_time: "on time" },
     }
+}
+
+/// The texts of the lines panel and of the "you are on" chip. A language without its own gets English.
+struct LinesText {
+    lines: &'static str,
+    line_data: &'static str,
+    map_lines: &'static str,
+    all: &'static str,
+    brt: &'static str,
+    express: &'static str,
+    feeders: &'static str,
+    length: &'static str,
+    stops: &'static str,
+    trip: &'static str,
+    route: &'static str,
+    vehicles: &'static str,
+    you_are_on: &'static str,
+    circular: &'static str,
+    out_back: &'static str,
+    minutes: &'static str,
+    count: &'static str,
+    /// Decimals with a comma.
+    comma: bool,
+}
+
+fn lines_text(lang: &str) -> LinesText {
+    match lang.to_ascii_uppercase().as_str() {
+        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", comma: true },
+        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", comma: false },
+    }
+}
+
+/// The colour a bus line is drawn in on the city map (a fixed palette that keeps clear of the map's own colours).
+const GROUP_BRT_TAB: u8 = GROUP_BRT;
+const GROUP_EXPRESS_TAB: u8 = GROUP_EXPRESS;
+const GROUP_FEEDER_TAB: u8 = GROUP_FEEDER;
+
+fn line_color(i: usize) -> Color {
+    const P: [u32; 10] = [0xe83f9b, 0x17b8c4, 0xff8a1f, 0xff4d4d, 0x8bd13f, 0xd46bff, 0x1fd1a0, 0xff6fb5, 0xf2c14e, 0x4da3ff];
+    Color::hex(P[i % P.len()])
+}
+
+/// What a click on the lines panel of the city map does.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum LinesHit {
+    /// Tick or untick a line (its index in the package's lines).
+    Toggle(usize),
+    /// Show a ticked line's data (or tick it).
+    Focus(usize),
+    /// The filter tab: 0 all, 1 BRT, 2 express, 3 feeders.
+    Filter(u8),
+    /// The route of the line in focus (0 = route 1).
+    RoutePick(usize),
+}
+
+/// The lines panel of the city map: which lines are ticked and what is on show.
+#[derive(Default)]
+struct LinesView {
+    open: bool,
+    /// Lines ticked, in the order they were ticked.
+    selected: Vec<usize>,
+    /// The line the data card is about.
+    focus: Option<usize>,
+    /// The route chosen for a line (index into its routes).
+    route: HashMap<usize, usize>,
+    filter: u8,
+    /// First row of the list on show.
+    scroll: f32,
+    /// Bumped whenever the choice changes: the ways are drawn again.
+    version: u64,
+    /// The ways' mesh (buffer 10): the version it was built for, its size and anchor.
+    mesh: Option<(u64, u32, DVec2)>,
+    /// The panel and its list, and what a click lands on (map picture pixels).
+    panel: Option<Rect>,
+    list: Option<Rect>,
+    hits: Vec<(Rect, LinesHit)>,
+    /// The view is moved to the line just ticked at the next frame.
+    fit: bool,
 }
 
 /// The route being followed: the lanes, how far along the bus is, and whether it was
@@ -272,6 +368,7 @@ struct Route {
 
 /// Roads around a centre, built into vertex buffer 0.
 struct Roads {
+    light: bool,
     anchor: DVec2,
     lanes_seen: usize,
     verts: usize,
@@ -318,8 +415,24 @@ pub struct Navigator {
     stop_pos: std::sync::Arc<HashMap<i64, DVec3>>,
     /// Street names of the map's lanes (from its street name signs).
     streets: Option<std::sync::Arc<Streets>>,
+    /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, its names, and a
+    /// number that changes when it arrives (the meshes are built again).
+    surface: Option<std::sync::Arc<crate::map_surface::MapSurface>>,
+    surface_labels: Vec<crate::map_surface::Label>,
+    surface_version: u64,
+    /// The surface is drawn (the `nav_surface` setting).
+    pub show_surface: bool,
+    /// The map's marker pictures as a texture of the navigator's own GPU state.
+    icon_tex: Option<usize>,
+    /// The municipality and the street the bus is on (from the package), refreshed now and then.
+    loc_city: Option<String>,
+    loc_street: Option<String>,
+    /// The light look of the maps (the `nav_light` setting).
+    pub light: bool,
+    /// The small map's surface mesh (buffer 6): the surface version and anchor it was built for, and its size.
+    surface_mesh: Option<(u64, DVec2, u32)>,
     #[allow(clippy::type_complexity)]
-    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets)>>,
+    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets, Option<crate::map_surface::MapSurface>)>>,
     pub global_version: u64,
     roads: Option<Roads>,
     route: Route,
@@ -438,6 +551,15 @@ impl Navigator {
             global: None,
             stop_pos: Default::default(),
             streets: None,
+            surface: None,
+            surface_labels: Vec::new(),
+            surface_version: 0,
+            show_surface: true,
+            icon_tex: None,
+            loc_city: None,
+            loc_street: None,
+            light: false,
+            surface_mesh: None,
             building: None,
             global_version: 0,
             roads: None,
@@ -473,13 +595,14 @@ impl Navigator {
         std::thread::Builder::new()
             .name("navigator map".into())
             .spawn(move || {
+                let surface = crate::map_surface::MapSurface::open(&world.map_dir);
                 let m = world.navigation_map();
                 let mut net = Network { lanes: m.lanes, ..Default::default() };
                 net.link(1.5);
                 confirm_road_surfaces(&mut net, &m.road_surfaces);
                 probe_lanes(&net);
                 let streets = build_streets(&net, &m.signs);
-                let _ = tx.send((net, m.places, streets));
+                let _ = tx.send((net, m.places, streets, surface));
             })
             .ok();
         self.building = Some(rx);
@@ -496,6 +619,17 @@ impl Navigator {
         self.global = Some(global);
         self.stop_pos = std::sync::Arc::new(map.places);
         self.global_version += 1;
+    }
+
+    /// The map's package, given at once (an offscreen picture reads it on its own thread).
+    pub fn set_surface(&mut self, surface: Option<crate::map_surface::MapSurface>) {
+        if let Some(s) = surface {
+            let mut labels = s.labels();
+            labels.sort_by(|a, b| b.rank.cmp(&a.rank));
+            self.surface_labels = labels;
+            self.surface = Some(std::sync::Arc::new(s));
+            self.surface_version += 1;
+        }
     }
 
     /// The places of every object on the map (stops beyond the loaded tiles), once read.
@@ -890,9 +1024,10 @@ impl Navigator {
         }
         self.time += f.dt;
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets)) = rx.try_recv() {
+            if let Ok((net, pos, streets, surface)) = rx.try_recv() {
                 log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
                 self.streets = Some(std::sync::Arc::new(streets));
+                self.set_surface(surface);
                 self.global = Some(std::sync::Arc::new(net));
                 self.stop_pos = std::sync::Arc::new(pos);
                 self.global_version += 1;
@@ -949,6 +1084,10 @@ impl Navigator {
                 global.as_deref().and_then(|g| g.nearest_lane_near(f.bus, LaneKind::Street)).filter(|l| l.2 < 10.0).and_then(|l| self.street_of(l.0))
             }
                 .map(str::to_string);
+            (self.loc_city, self.loc_street) = match self.surface.as_ref().filter(|s| self.show_surface && s.has_location()) {
+                Some(sf) => sf.locate(f.bus.truncate()),
+                None => (None, None),
+            };
         }
         self.first = false;
         if !self.enabled && self.shown < 0.01 {
@@ -973,7 +1112,10 @@ impl Navigator {
         let s = pw / 360.0;
         let bars = (34.0 + 46.0) * s;
         let sched = if self.schedule { (f.stops.len().clamp(1, 5) as f32 * 22.0 + 12.0) * s } else { 0.0 };
-        let ph = (map_h + bars + sched).round();
+        // a row under the next stop: the municipality and the street, when the map's package says them
+        let loc_on = self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location());
+        let loc_h = if loc_on { 22.0 * s } else { 0.0 };
+        let ph = (map_h + bars + loc_h + sched).round();
         let (w, h) = (pw as u32, ph as u32);
         let (x0, y0) = self.panel_origin((sw, sh), (pw, ph), crate::platform::touch_controls(), f.info_rect);
 
@@ -1025,7 +1167,7 @@ impl Navigator {
         let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
         let rebuild = match &self.roads {
             None => lanes_now > 0,
-            Some(r) => (r.anchor - f.bus.truncate()).length() > ROAD_RADIUS * 0.45 || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
+            Some(r) => r.light != self.light || (r.anchor - f.bus.truncate()).length() > ROAD_RADIUS * 0.45 || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5),
         };
         let mut road_verts = None;
         if rebuild {
@@ -1033,17 +1175,29 @@ impl Navigator {
                 let anchor = f.bus.truncate();
                 let mut p = Painter::new();
                 let t0 = std::time::Instant::now();
-                build_roads(&mut p, net, anchor);
+                build_roads(&mut p, net, anchor, self.light);
                 if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
                     log::info!("navigator: roads around ({:.0}, {:.0}) in {:.1} ms: {} vertices", anchor.x, anchor.y, t0.elapsed().as_secs_f64() * 1000.0, p.verts.len());
                 }
                 road_verts = Some(p.verts);
-                self.roads = Some(Roads { anchor, lanes_seen: lanes_now, verts: 0, built_at: self.time });
+                self.roads = Some(Roads { light: self.light, anchor, lanes_seen: lanes_now, verts: 0, built_at: self.time });
             }
         }
 
         // --- the map camera (world coordinates relative to the anchor)
         let anchor = self.roads.as_ref().map(|r| r.anchor).unwrap_or(f.bus.truncate());
+        // --- the map's surface (buffer 6): built again when it arrives or the anchor moved
+        let mut surface_verts = None;
+        if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
+            let key = self.surface_version * 2 + self.light as u64;
+            if self.surface_mesh.map(|m| m.0 != key || m.1 != anchor).unwrap_or(true) {
+                let mut p = Painter::new();
+                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light);
+                self.surface_mesh = Some((key, anchor, p.len()));
+                surface_verts = Some(p.verts);
+            }
+        }
+        let surface_n = if self.show_surface { self.surface_mesh.map(|m| m.2).unwrap_or(0) } else { 0 };
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let hd = self.cam_heading.to_radians();
         let fwd = DVec2::new(hd.sin(), hd.cos());
@@ -1078,6 +1232,10 @@ impl Navigator {
         // --- background (half transparent), traffic, markers, text
         let mut bg = Painter::new();
         bg.rounded(panel, radius, if self.cockpit_display { Color::rgba(10, 10, 10, 1.0) } else { PANEL });
+        // the map's own ground under the roads (the panel's opacity setting dims it as it does the panel)
+        if let (true, Some(sf)) = (self.show_surface, self.surface.as_ref()) {
+            bg.rect(map, sf.palette(self.light).land);
+        }
         let n_bg = bg.len();
 
         let mut dy = Painter::new();
@@ -1202,10 +1360,28 @@ impl Navigator {
             ui.rounded(r, 3.5 * s, *color);
             ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, LINE_TEXT);
         }
-        // the bus: a plain white arrow
-        if let Some(bp) = project(vpm, vp, rel(f.bus)) {
+        // the bus: a plain white arrow (the map's own triangle, when its package draws the player so)
+        let player = self.surface.as_ref().filter(|_| self.show_surface).and_then(|s| s.player_style(f.line.as_deref()));
+        if let (Some(bp), Some((fill, ring))) = (project(vpm, vp, rel(f.bus)), player) {
+            player_triangle(&mut ui, bp, (angle_diff(self.cam_heading, f.heading) as f32).to_radians(), 22.0 * s, fill, ring);
+        } else if let Some(bp) = project(vpm, vp, rel(f.bus)) {
             let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();
             arrow(&mut ui, bp, a, 9.0 * s, 1.25, Color::rgba(10, 10, 10, 0.8), TEXT);
+        }
+
+        // the map's icons (terminals, stations, the garage): pictures of the package's sheet,
+        // upright on the screen at the place they mark
+        let mut icon_verts: Vec<Vertex> = Vec::new();
+        if let (true, Some(sf)) = (self.show_surface, self.surface.as_ref()) {
+            let reach = self.zoom * 3.5 + 300.0;
+            for m in sf.markers() {
+                if (m.at - f.bus.truncate()).length() > reach {
+                    continue;
+                }
+                if let Some(p) = project(vpm, vp, rel(m.at.extend(0.0))).filter(|p| map.contains(*p)) {
+                    sf.push_icon(m, p, s, &mut icon_verts);
+                }
+            }
         }
 
         // top bar: speed (and the limit) · line ……… game time
@@ -1259,6 +1435,24 @@ impl Navigator {
         // bottom bar: the next stop; its distance, the time to it, the planned time and
         // whether the bus is early or late
         let bottom = Rect::new(0.0, map.bottom(), pw, 46.0 * s);
+        // (the row under the next stop; `frame` made room for it)
+        let loc_on = self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location());
+        let loc_h = if loc_on { 22.0 * s } else { 0.0 };
+        if loc_on {
+            let row = Rect::new(0.0, bottom.bottom(), pw, loc_h);
+            ui.rect(row, BAR);
+            let text = match (&self.loc_city, &self.loc_street) {
+                (Some(c), Some(st)) => format!("{c}  ·  {st}"),
+                (Some(c), None) => c.clone(),
+                (None, Some(st)) => st.clone(),
+                _ => String::new(),
+            };
+            if !text.is_empty() {
+                ui.icon(&mut self.atlas, "location_on", Vec2::new(pad + 7.0 * s, row.center().y), 15.0 * s, TEXT_DIM);
+                let text = self.fonts.fit(&text, 12.5 * s, Weight::Medium, pw - 2.0 * pad - 24.0 * s);
+                ui.text_in(&mut self.atlas, &self.fonts, &text, 12.5 * s, Weight::Medium, Rect::new(pad + 22.0 * s, row.y, pw - 2.0 * pad - 22.0 * s, row.h), Align::Left, TEXT);
+            }
+        }
         ui.rect(bottom, BAR);
         let stop_row = if f.stops.is_empty() {
             Rect::new(pad, bottom.y, pw - 2.0 * pad, bottom.h)
@@ -1324,8 +1518,8 @@ impl Navigator {
         }
         // the schedule: the next stops with their planned times
         if self.schedule && !f.stops.is_empty() {
-            let mut y = bottom.bottom() + 6.0 * s;
-            ui.rect(Rect::new(pad, bottom.bottom(), pw - 2.0 * pad, 1.0), Color::WHITE.alpha(0.06));
+            let mut y = bottom.bottom() + loc_h + 6.0 * s;
+            ui.rect(Rect::new(pad, bottom.bottom() + loc_h, pw - 2.0 * pad, 1.0), Color::WHITE.alpha(0.06));
             let late = f.delay.unwrap_or(0.0);
             for st in f.stops.iter().take(5) {
                 let r = Rect::new(pad, y, pw - 2.0 * pad, 22.0 * s);
@@ -1348,6 +1542,9 @@ impl Navigator {
             }
             gpu.upload(device, queue, 0, &v);
         }
+        if let Some(v) = surface_verts {
+            gpu.upload(device, queue, 6, &v);
+        }
         if let Some(v) = route_verts {
             gpu.upload(device, queue, 1, &v);
         }
@@ -1356,6 +1553,13 @@ impl Navigator {
         let n_ui_start = all.len() as u32;
         all.extend(ui.verts);
         gpu.upload(device, queue, 2, &all);
+        if self.icon_tex.is_none() {
+            if let Some(sheet) = self.surface.as_ref().and_then(|s| s.sheet()) {
+                self.icon_tex = Some(gpu.add_image(device, queue, sheet.w, sheet.h, &sheet.rgba));
+            }
+        }
+        gpu.upload(device, queue, 8, &icon_verts);
+        let (icon_n, icon_tex) = (icon_verts.len() as u32, self.icon_tex.unwrap_or(0));
         gpu.upload_atlas(queue, &mut self.atlas);
         // (the opacity setting is the background's: the map and the text stay solid)
         let flat = Layer::flat(clip_panel, radius, 1.0);
@@ -1367,10 +1571,12 @@ impl Navigator {
         let roads_n = self.roads.as_ref().map(|r| r.verts as u32).unwrap_or(0);
         let draws = [
             Draw { buffer: 2, range: 0..n_bg, layer: 2, texture: 0 },
+            Draw { buffer: 6, range: 0..surface_n, layer: 1, texture: 0 },
             Draw { buffer: 0, range: 0..roads_n, layer: 1, texture: 0 },
             Draw { buffer: 2, range: n_bg..n_bg + n_traffic, layer: 1, texture: 0 },
             Draw { buffer: 1, range: 0..self.route_mesh.3, layer: 1, texture: 0 },
             Draw { buffer: 2, range: n_bg + n_traffic..n_bg + n_world, layer: 1, texture: 0 },
+            Draw { buffer: 8, range: 0..icon_n, layer: 0, texture: icon_tex },
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
@@ -1611,7 +1817,17 @@ fn spaced_markers(points: impl IntoIterator<Item = (usize, Vec2)>, gap: f32) -> 
 
 /// Street lanes within `ROAD_RADIUS` of `anchor`: casings first, then surfaces (so that a
 /// junction's surfaces cover each other's casings).
-fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2) {
+/// The colours roads are drawn in: edge, side street, main road (the light look has pale roads with a grey edge on the light ground).
+fn road_colors(light: bool) -> (Color, Color, Color) {
+    if light {
+        (Color::hex(0xa8a397), Color::hex(0xffffff), Color::hex(0xf3d98b))
+    } else {
+        (ROAD_CASING, ROAD, ROAD_MAIN)
+    }
+}
+
+fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2, light: bool) {
+    let (casing, road, main) = road_colors(light);
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
     let lanes: Vec<(MapRoad, Vec<Vec3>)> = road_geometry(net)
         .into_iter()
@@ -1619,10 +1835,10 @@ fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2) {
         .map(|l| { let pts = simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), 0.12); (l, pts) })
         .collect();
     for (l, pts) in &lanes {
-        p.ribbon(pts, l.width + 1.6, 3.6, ROAD_CASING, true);
+        p.ribbon(pts, l.width + 1.6, 3.6, casing, true);
     }
     for (l, pts) in &lanes {
-        p.ribbon(pts, l.width + 0.2, 2.4, if l.main { ROAD_MAIN } else { ROAD }, true);
+        p.ribbon(pts, l.width + 0.2, 2.4, if l.main { main } else { road }, true);
     }
 }
 
@@ -2138,6 +2354,10 @@ pub struct CityMap {
     extent: (DVec2, DVec2),
     /// "Centre on the bus" and zoom buttons (window pixels).
     buttons: Vec<(Rect, u8)>,
+    /// The surface mesh (buffer 7): the surface version it was built for, its size and anchor.
+    surface: Option<(u64, u32, DVec2)>,
+    /// The lines panel (the package's bus lines).
+    lines: LinesView,
 }
 
 impl Navigator {
@@ -2304,6 +2524,184 @@ impl Navigator {
         x >= r[0] && y >= r[1] && x < r[2] && y < r[3]
     }
 
+
+    /// A click on the lines panel.
+    fn lines_click(&mut self, h: LinesHit) {
+        let n = self.surface.as_ref().map_or(0, |s| s.lines().len());
+        let st = &mut self.city.lines;
+        match h {
+            LinesHit::Filter(k) => {
+                st.filter = k;
+                st.scroll = 0.0;
+            }
+            LinesHit::Toggle(i) if i < n => {
+                if let Some(p) = st.selected.iter().position(|&x| x == i) {
+                    st.selected.remove(p);
+                    if st.focus == Some(i) {
+                        st.focus = st.selected.last().copied();
+                    }
+                } else {
+                    st.selected.push(i);
+                    st.focus = Some(i);
+                    st.fit = true;
+                }
+                st.version += 1;
+            }
+            LinesHit::Focus(i) if i < n => {
+                if st.selected.contains(&i) {
+                    st.focus = Some(i);
+                } else {
+                    st.selected.push(i);
+                    st.focus = Some(i);
+                    st.fit = true;
+                    st.version += 1;
+                }
+            }
+            LinesHit::RoutePick(r) => {
+                if let Some(i) = st.focus {
+                    st.route.insert(i, r);
+                    st.version += 1;
+                    st.fit = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The lines panel on the right of the city map (after the package's `lines.lin`): the data of
+    /// the line in focus above, the list of the map's lines below with a tick box each, filters
+    /// and a scroll. `on_line` is how many vehicles each ticked line has on the road now.
+    #[allow(clippy::too_many_arguments)]
+    fn lines_panel(&mut self, ui: &mut Painter, w: f32, h: f32, s: f32, head_h: f32, lt: &LinesText, on_line: &HashMap<usize, usize>) {
+        let Some(sf) = self.surface.clone() else { return };
+        let lines = sf.lines();
+        let pw = (332.0 * s).min(w * 0.42);
+        let x0 = w - pw - 12.0 * s;
+        let top = head_h + 12.0 * s;
+        let card_h = 178.0 * s;
+        let ink = Color::rgba(22, 26, 33, 0.95);
+        let pad = 14.0 * s;
+        let mut hits: Vec<(Rect, LinesHit)> = Vec::new();
+        let num = |v: f32, dec: usize| {
+            let t = format!("{v:.dec$}");
+            if lt.comma {
+                t.replace('.', ",")
+            } else {
+                t
+            }
+        };
+
+        // --- the data card
+        let card = Rect::new(x0, top, pw, card_h);
+        ui.rounded(card, 8.0 * s, ink);
+        let focus = self.city.lines.focus.filter(|&i| i < lines.len());
+        ui.text(&mut self.atlas, &self.fonts, lt.line_data, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        if let Some(i) = focus {
+            let l = &lines[i];
+            let ri = self.city.lines.route.get(&i).copied().unwrap_or(0).min(l.routes.len().saturating_sub(1));
+            let r = &l.routes[ri];
+            ui.rect(Rect::new(x0, top + 6.0 * s, 4.0 * s, card_h - 12.0 * s), line_color(i));
+            let nw = ui.text(&mut self.atlas, &self.fonts, &l.number, 18.0 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 48.0 * s), Align::Left, TEXT);
+            let name = self.fonts.fit(&l.name, 16.0 * s, Weight::Bold, pw - 2.0 * pad - nw - 18.0 * s);
+            ui.text(&mut self.atlas, &self.fonts, &name, 16.0 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s + nw + 10.0 * s, top + 48.0 * s), Align::Left, TEXT);
+            let itin = self.fonts.fit(&r.itinerary, 11.5 * s, Weight::Medium, pw - 2.0 * pad - 4.0 * s);
+            ui.text(&mut self.atlas, &self.fonts, &itin, 11.5 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 68.0 * s), Align::Left, TEXT_DIM);
+            // length, stops, trip time
+            let colw = (pw - 2.0 * pad) / 3.0;
+            let stats = [(lt.length, format!("{} km", num(r.km, 1))), (lt.stops, format!("{}", r.stops_n)), (lt.trip, format!("{} {}", r.minutes, lt.minutes))];
+            for (k, (label, value)) in stats.iter().enumerate() {
+                let sx = x0 + pad + 4.0 * s + colw * k as f32;
+                ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(label, 10.0 * s, Weight::Medium, colw - 6.0 * s), 10.0 * s, Weight::Medium, Vec2::new(sx, top + 92.0 * s), Align::Left, TEXT_DIM);
+                ui.text(&mut self.atlas, &self.fonts, value, 17.0 * s, Weight::Bold, Vec2::new(sx, top + 114.0 * s), Align::Left, TEXT);
+            }
+            let meta = format!("{}  ·  {}  ·  {}", r.days, r.model, if r.circular { lt.circular } else { lt.out_back });
+            let meta = self.fonts.fit(&meta, 11.0 * s, Weight::Medium, pw - 2.0 * pad - 4.0 * s);
+            ui.text(&mut self.atlas, &self.fonts, &meta, 11.0 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 138.0 * s), Align::Left, TEXT_DIM);
+            let n = on_line.get(&i).copied().unwrap_or(0);
+            ui.text(&mut self.atlas, &self.fonts, &format!("{}: {}", lt.vehicles, n), 12.0 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 162.0 * s), Align::Left, if n > 0 { Color::hex(0x7bd88f) } else { TEXT_DIM });
+            if l.routes.len() > 1 {
+                let mut tx = x0 + pw - pad;
+                for k in (0..l.routes.len()).rev() {
+                    let label = format!("{} {}", lt.route, k + 1);
+                    let tw = self.fonts.width(&label, 11.5 * s, Weight::Bold) + 16.0 * s;
+                    let rr = Rect::new(tx - tw, top + 148.0 * s, tw, 22.0 * s);
+                    ui.rounded(rr, 4.0 * s, if k == ri { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                    ui.text_in(&mut self.atlas, &self.fonts, &label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
+                    hits.push((rr, LinesHit::RoutePick(k)));
+                    tx -= tw + 6.0 * s;
+                }
+            }
+        }
+
+        // --- the list of the map's lines
+        let ly = top + card_h + 10.0 * s;
+        let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
+        let list_panel = Rect::new(x0, ly, pw, panel_h);
+        ui.rounded(list_panel, 8.0 * s, ink);
+        ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        ui.text(&mut self.atlas, &self.fonts, &format!("{} {}", lines.len(), lt.count), 10.5 * s, Weight::Medium, Vec2::new(x0 + pw - pad, ly + 20.0 * s), Align::Right, TEXT_DIM);
+        let mut tx = x0 + pad;
+        for (k, label) in [(0u8, lt.all), (GROUP_BRT_TAB, lt.brt), (GROUP_EXPRESS_TAB, lt.express), (GROUP_FEEDER_TAB, lt.feeders)] {
+            let tw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 16.0 * s;
+            let rr = Rect::new(tx, ly + 30.0 * s, tw, 22.0 * s);
+            ui.rounded(rr, 4.0 * s, if self.city.lines.filter == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+            ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
+            hits.push((rr, LinesHit::Filter(k)));
+            tx += tw + 6.0 * s;
+        }
+        let row_h = 27.0 * s;
+        let rows = Rect::new(x0, ly + 60.0 * s, pw, (list_panel.bottom() - ly - 66.0 * s).max(row_h));
+        let shown: Vec<usize> = (0..lines.len()).filter(|&i| self.city.lines.filter == 0 || lines[i].group == self.city.lines.filter).collect();
+        let vis = ((rows.h / row_h).floor() as usize).max(1);
+        let max_scroll = shown.len().saturating_sub(vis) as f32;
+        self.city.lines.scroll = self.city.lines.scroll.clamp(0.0, max_scroll);
+        let first = self.city.lines.scroll.round() as usize;
+        for (n, &i) in shown.iter().skip(first).take(vis).enumerate() {
+            let l = &lines[i];
+            let ry = rows.y + n as f32 * row_h;
+            let row = Rect::new(x0 + 4.0 * s, ry, pw - 14.0 * s, row_h);
+            let ticked = self.city.lines.selected.contains(&i);
+            if self.city.lines.focus == Some(i) && ticked {
+                ui.rounded(row, 4.0 * s, Color::WHITE.alpha(0.07));
+            }
+            let cb = Rect::new(x0 + pad, ry + (row_h - 14.0 * s) * 0.5, 14.0 * s, 14.0 * s);
+            if ticked {
+                ui.rounded(cb, 3.0 * s, line_color(i));
+                ui.icon(&mut self.atlas, "check", cb.center(), 12.0 * s, Color::rgba(10, 10, 10, 1.0));
+            } else {
+                ui.rounded_border(cb, 3.0 * s, 1.2, Color::WHITE.alpha(0.35));
+            }
+            hits.push((Rect::new(x0 + 4.0 * s, ry, 34.0 * s, row_h), LinesHit::Toggle(i)));
+            let nx = x0 + pad + 24.0 * s;
+            ui.text_in(&mut self.atlas, &self.fonts, &l.number, 13.0 * s, Weight::Bold, Rect::new(nx, ry, 44.0 * s, row_h), Align::Left, TEXT);
+            let badge = match l.group {
+                GROUP_BRT => Some(("BRT", Color::hex(0x2e8b45))),
+                GROUP_EXPRESS => Some(("EXP", Color::hex(0x6b7480))),
+                _ => None,
+            };
+            let name_w = pw - 2.0 * pad - 24.0 * s - 44.0 * s - 44.0 * s;
+            let name = self.fonts.fit(&l.name, 12.0 * s, Weight::Medium, name_w);
+            ui.text_in(&mut self.atlas, &self.fonts, &name, 12.0 * s, Weight::Medium, Rect::new(nx + 44.0 * s, ry, name_w, row_h), Align::Left, TEXT);
+            if let Some((label, c)) = badge {
+                let bw = 32.0 * s;
+                let br = Rect::new(x0 + pw - pad - 6.0 * s - bw, ry + (row_h - 15.0 * s) * 0.5, bw, 15.0 * s);
+                ui.rounded(br, 3.0 * s, c);
+                ui.text_in(&mut self.atlas, &self.fonts, label, 9.5 * s, Weight::Bold, br, Align::Center, Color::WHITE);
+            }
+            hits.push((Rect::new(nx, ry, pw - 14.0 * s - (nx - x0), row_h), LinesHit::Focus(i)));
+        }
+        // a thin scroll bar, when the list is longer than its room
+        if max_scroll > 0.0 {
+            let track = Rect::new(x0 + pw - 7.0 * s, rows.y, 3.0 * s, vis as f32 * row_h);
+            ui.rounded(track, 1.5 * s, Color::WHITE.alpha(0.08));
+            let (th, tp) = (track.h * vis as f32 / shown.len() as f32, self.city.lines.scroll / max_scroll);
+            ui.rounded(Rect::new(track.x, track.y + (track.h - th) * tp, track.w, th.max(14.0 * s)), 1.5 * s, Color::WHITE.alpha(0.35));
+        }
+        self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
+        self.city.lines.list = Some(rows);
+        self.city.lines.hits = hits;
+    }
+
     /// A mouse press while the map is open: on it, a drag or a button; outside, it closes.
     pub fn map_press(&mut self, x: f32, y: f32) {
         if !self.map_hit(x, y) {
@@ -2312,7 +2710,15 @@ impl Navigator {
         }
         let local = Vec2::new(x - self.city.rect[0], y - self.city.rect[1]);
         let hit = self.city.buttons.iter().find(|(r, _)| r.contains(local)).map(|b| b.1);
+        // the lines panel: its rows and tabs, or its background (never a drag of the map)
+        if hit.is_none() && self.city.lines.open && self.city.lines.panel.is_some_and(|p| p.contains(local)) {
+            if let Some(h) = self.city.lines.hits.iter().find(|(r, _)| r.contains(local)).map(|h| h.1) {
+                self.lines_click(h);
+            }
+            return;
+        }
         match hit {
+            Some(4) => self.city.lines.open = !self.city.lines.open,
             Some(0) => self.city.follow = true,
             Some(1) => self.city.mpp = (self.city.mpp / 1.6).max(0.25),
             Some(2) => self.city.mpp = (self.city.mpp * 1.6).min(self.max_mpp()),
@@ -2352,6 +2758,11 @@ impl Navigator {
     /// The wheel over the map: zoom, keeping the point under the cursor where it is.
     pub fn map_wheel(&mut self, amount: f32, x: f32, y: f32) {
         let r = self.city.rect;
+        // over the lines list the wheel scrolls it (anywhere else it zooms the map)
+        if self.city.lines.open && self.city.lines.list.is_some_and(|l| l.contains(Vec2::new(x - r[0], y - r[1]))) {
+            self.city.lines.scroll -= amount * 2.0;
+            return;
+        }
         let (w, h) = ((r[2] - r[0]) as f64, (r[3] - r[1]) as f64);
         let (lx, ly) = ((x - r[0]) as f64 - w * 0.5, (y - r[1]) as f64 - h * 0.5);
         let before = self.city.center + DVec2::new(lx, -ly) * self.city.mpp;
@@ -2400,7 +2811,7 @@ impl Navigator {
         // roads of the whole map (buffer 3), once per map version
         let mut roads_verts = None;
         if let Some(n) = net {
-            let version = self.global_version * 1_000_000 + n.lanes.len() as u64;
+            let version = (self.global_version * 1_000_000 + n.lanes.len() as u64) * 2 + self.light as u64;
             if self.city.roads.map(|r| r.0 != version).unwrap_or(true) {
                 let (mut lo, mut hi) = (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN));
                 let road_lanes = road_geometry(n);
@@ -2418,13 +2829,15 @@ impl Navigator {
                 self.city.extent = (lo, hi);
                 let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
                 let mut p = Painter::new();
+                let (edge, road, main) = road_colors(self.light);
+                let edge = if self.light { edge } else { Color::rgba(26, 26, 26, 1.0) };
                 for pass in 0..2 {
                     for l in &road_lanes {
                         let pts = simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), 0.12);
                         if pass == 0 {
-                            p.ribbon(&pts, l.width + 2.0, 2.4, Color::rgba(26, 26, 26, 1.0), true);
+                            p.ribbon(&pts, l.width + 2.0, 2.4, edge, true);
                         } else {
-                            p.ribbon(&pts, l.width, 1.4, if l.main { ROAD_MAIN } else { ROAD }, true);
+                            p.ribbon(&pts, l.width, 1.4, if l.main { main } else { road }, true);
                         }
                     }
                 }
@@ -2433,7 +2846,58 @@ impl Navigator {
             }
         }
         let anchor = self.city.roads.map(|r| r.2).unwrap_or(f.bus.truncate());
+        // the map's surface (buffer 7), once per surface and anchor
+        let mut surface_verts = None;
+        if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
+            let key = self.surface_version * 2 + self.light as u64;
+            if self.city.surface.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
+                let mut p = Painter::new();
+                sf.build(&mut p, anchor, None, self.light);
+                self.city.surface = Some((key, p.len(), anchor));
+                surface_verts = Some(p.verts);
+            }
+        }
+        let surface_n = if self.show_surface { self.city.surface.map(|m| m.1).unwrap_or(0) } else { 0 };
         let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
+        // the lines panel: the view goes to a line just ticked, and the ticked ways are a mesh (buffer 10)
+        let mut ln_verts = None;
+        if let (true, Some(sf)) = (self.city.lines.open, self.surface.clone()) {
+            let route_of = |st: &LinesView, i: usize| sf.lines().get(i).and_then(|l| l.routes.get(st.route.get(&i).copied().unwrap_or(0).min(l.routes.len().saturating_sub(1))));
+            if std::mem::take(&mut self.city.lines.fit) {
+                if let Some(r) = self.city.lines.focus.and_then(|i| route_of(&self.city.lines, i)) {
+                    let (mut lo, mut hi) = (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN));
+                    for q in &r.pts {
+                        lo = lo.min(*q);
+                        hi = hi.max(*q);
+                    }
+                    if lo.x <= hi.x {
+                        let (free_w, free_h) = (((w - 332.0 * s) - 60.0 * s).max(300.0) as f64, (h - 44.0 * s - 60.0 * s).max(200.0) as f64);
+                        let mpp = (((hi.x - lo.x) / free_w).max((hi.y - lo.y) / free_h) * 1.12).clamp(0.25, self.max_mpp());
+                        self.city.mpp = mpp;
+                        // (the panel takes the right side: the way is centred in what is left)
+                        self.city.center = (lo + hi) * 0.5 + DVec2::new(166.0 * s as f64 * mpp, 0.0);
+                        self.city.follow = false;
+                    }
+                }
+            }
+            let key = (self.city.lines.version << 8) ^ self.surface_version;
+            if self.city.lines.mesh.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
+                let mut p = Painter::new();
+                for &i in &self.city.lines.selected {
+                    let Some(r) = route_of(&self.city.lines, i) else { continue };
+                    let c = line_color(i);
+                    let v: Vec<Vec3> = r.pts.iter().map(|q| rel(q.extend(0.0))).collect();
+                    p.ribbon(&v, 7.0, 3.4, c.alpha(0.62), false);
+                    for q in &r.stops {
+                        p.world_disc(rel(q.extend(0.0)), 4.5, 3.6, Color::rgba(8, 8, 8, 0.85));
+                        p.world_disc(rel(q.extend(0.0)), 3.0, 2.4, Color::WHITE.alpha(0.95));
+                    }
+                }
+                self.city.lines.mesh = Some((key, p.len(), anchor));
+                ln_verts = Some(p.verts);
+            }
+        }
+        let ln_n = if self.city.lines.open { self.city.lines.mesh.map(|m| m.1).unwrap_or(0) } else { 0 };
         // the whole route (buffer 4): the part driven grey, the rest by how busy it is,
         // with arrows about 90 pixels apart (built again when the zoom changes that much)
         let mut route_verts = None;
@@ -2469,15 +2933,35 @@ impl Navigator {
         let win = Rect::new(0.0, 0.0, w, h);
         let mut bg = Painter::new();
         // (the opacity setting the map's ground too; the roads, names and header stay solid)
-        bg.rounded(win, 10.0 * s, Color::rgba(15, 15, 15, crate::ui::backdrop(self.opacity).min(1.0)));
+        let ground = match (self.show_surface, self.surface.as_ref()) {
+            (true, Some(sf)) => sf.palette(self.light).land.alpha(crate::ui::backdrop(self.opacity).min(1.0)),
+            _ => Color::rgba(15, 15, 15, crate::ui::backdrop(self.opacity).min(1.0)),
+        };
+        bg.rounded(win, 10.0 * s, ground);
         let n_bg = bg.len();
         // traffic: blue dots, the public transport in its colours with its line (as on the
         // small map)
         let mut dots = Painter::new();
         let mut lines: Vec<(DVec3, Color, String)> = Vec::new();
+        // the lines ticked on the lines panel: their numbers, and how many cars run on each
+        let mut ticked: HashMap<String, (usize, Color)> = HashMap::new();
+        let mut on_line: HashMap<usize, usize> = HashMap::new();
+        if let (true, Some(sf)) = (self.city.lines.open, self.surface.as_ref()) {
+            for &i in &self.city.lines.selected {
+                if let Some(l) = sf.lines().get(i) {
+                    ticked.insert(l.number.clone(), (i, line_color(i)));
+                }
+            }
+        }
         if let Some(t) = f.traffic.filter(|_| self.show_ai) {
             for car in t.cars.iter().filter(|c| !c.gone) {
-                let (color, line) = traffic_kind(car);
+                let (mut color, line) = traffic_kind(car);
+                // a car on a ticked line: in that line's colour, with a ring round it
+                if let Some(&(idx, c)) = line.as_deref().and_then(|l| ticked.get(l.trim())) {
+                    color = c;
+                    *on_line.entry(idx).or_insert(0) += 1;
+                    dots.world_disc(rel(car.vehicle.position), 9.0, 11.0, c.alpha(0.30));
+                }
                 if color == DOT {
                     dots.world_disc(rel(car.vehicle.position), 2.2, 3.4, Color::rgba(8, 8, 8, 0.9));
                     dots.world_disc(rel(car.vehicle.position), 1.5, 2.3, color);
@@ -2528,6 +3012,62 @@ impl Navigator {
             ui.rounded(r, 4.0 * s, *color);
             ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, LINE_TEXT);
         }
+        if self.show_surface && self.surface.is_some() {
+            // the municipalities' names as a watermark: big, faint, inside their outlines (the box
+            // the package computed); out of sight when zoomed in, where the streets' names take over
+            if let Some(sf) = self.surface.clone() {
+                let col = if self.light { Color::rgba(70, 58, 44, 0.26) } else { Color::WHITE.alpha(0.15) };
+                for r in sf.regions().iter().filter(|r| r.box_w > 0.0) {
+                    let p = to_screen(r.label.extend(0.0));
+                    let (bw, bh) = ((r.box_w / self.city.mpp) as f32, (r.box_h / self.city.mpp) as f32);
+                    if bh > 110.0 * s || p.x + bw * 0.5 < 0.0 || p.x - bw * 0.5 > w || p.y + bh < 0.0 || p.y - bh > h {
+                        continue;
+                    }
+                    let name = r.name.to_uppercase();
+                    let mut px = bh;
+                    let tw = self.fonts.width(&name, px, Weight::Bold);
+                    if tw > bw {
+                        px *= bw / tw;
+                    }
+                    // (in steps: every size is a set of glyphs in the atlas)
+                    px = (px / 6.0).round() * 6.0;
+                    if px < 12.0 * s {
+                        continue;
+                    }
+                    ui.text(&mut self.atlas, &self.fonts, &name, px, Weight::Bold, p + Vec2::new(0.0, px * 0.36), Align::Center, col);
+                }
+            }
+            // names of districts, terminals and towns, the more important ones from further away
+            let min_rank = if self.city.mpp > 60.0 { 200 } else if self.city.mpp > 25.0 { 140 } else if self.city.mpp > 10.0 { 100 } else { 0 };
+            let px = 13.0 * s;
+            for l in &self.surface_labels {
+                if l.rank < min_rank {
+                    continue;
+                }
+                let p = to_screen(l.at.extend(0.0));
+                if !win.pad(40.0 * s, 30.0 * s).contains(p) {
+                    continue;
+                }
+                let weight = if l.kind == 0 { Weight::Medium } else { Weight::Bold };
+                let name = self.fonts.fit(&l.name, px, weight, 220.0 * s);
+                let tw = self.fonts.width(&name, px, weight);
+                let bb = Rect::new(p.x - tw * 0.5, p.y - px * 0.7, tw, px * 1.3);
+                if taken.iter().any(|t| rects_overlap(t, &bb)) {
+                    continue;
+                }
+                taken.push(bb);
+                let (halo, ink_dim, ink) = if self.light { (Color::hex(0xf4f1ea).alpha(0.9), Color::hex(0x5b564c), Color::hex(0x2d2a25)) } else { (Color::rgba(15, 15, 15, 0.9), TEXT_DIM, TEXT) };
+                let at = p + Vec2::new(0.0, px * 0.35);
+                for o in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
+                    ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at + o * s, Align::Center, halo);
+                }
+                ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at, Align::Center, if l.kind == 0 { ink_dim } else { ink });
+            }
+            // the data's attribution (the map's licence asks for it)
+            if let Some(sf) = self.surface.as_ref().filter(|s| !s.credit.is_empty()) {
+                ui.text(&mut self.atlas, &self.fonts, &sf.credit, 10.5 * s, Weight::Medium, Vec2::new(w - 12.0 * s, h - 8.0 * s), Align::Right, if self.light { Color::hex(0x5b564c).alpha(0.8) } else { TEXT_DIM.alpha(0.7) });
+            }
+        }
         if let (Some(st), true) = (self.streets.clone(), self.city.mpp < 3.2 && self.global.is_some()) {
             let px = 12.0 * s;
             for (q, a, id) in &st.labels {
@@ -2553,11 +3093,11 @@ impl Navigator {
                     continue;
                 }
                 taken.push(bb);
-                let halo = Color::rgba(15, 15, 15, 0.9);
+                let (halo, ink) = if self.light { (Color::hex(0xf4f1ea).alpha(0.9), Color::hex(0x4a463f)) } else { (Color::rgba(15, 15, 15, 0.9), STREET) };
                 for o in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
                     ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, c + o * s, ang, halo);
                 }
-                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, c, ang, STREET);
+                ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, c, ang, ink);
             }
         }
         for (k, p) in markers.into_iter().rev() {
@@ -2596,7 +3136,21 @@ impl Navigator {
             ui.rounded(r, 4.0 * s, PLAYER);
             ui.text_in(&mut self.atlas, &self.fonts, &name, px, Weight::Bold, r, Align::Center, LINE_TEXT);
         }
-        arrow(&mut ui, to_screen(f.bus), (f.heading as f32).to_radians(), 10.0 * s, 1.3, Color::rgba(10, 10, 10, 0.9), TEXT);
+        if let Some((fill, ring)) = self.surface.as_ref().filter(|_| self.show_surface).and_then(|s| s.player_style(f.line.as_deref())) {
+            player_triangle(&mut ui, to_screen(f.bus), (f.heading as f32).to_radians(), 24.0 * s, fill, ring);
+        } else {
+            arrow(&mut ui, to_screen(f.bus), (f.heading as f32).to_radians(), 10.0 * s, 1.3, Color::rgba(10, 10, 10, 0.9), TEXT);
+        }
+        // the map's icons: terminals, BRT stations, the garage
+        let mut icon_verts: Vec<Vertex> = Vec::new();
+        if let (true, Some(sf)) = (self.show_surface, self.surface.as_ref()) {
+            for m in sf.markers() {
+                let p = to_screen(m.at.extend(0.0));
+                if win.pad(30.0 * s, 30.0 * s).contains(p) {
+                    sf.push_icon(m, p, s, &mut icon_verts);
+                }
+            }
+        }
         // header: the line and where it goes, the next stop; buttons on the right
         // (opaque: the route and the stops showed through behind its text)
         let head = Rect::new(0.0, 0.0, w, 44.0 * s);
@@ -2623,6 +3177,39 @@ impl Navigator {
             self.city.buttons.push((r, id));
             bx -= bs + 8.0 * s;
         }
+        // the lines button (only where the map's package has bus lines) and the lines panel
+        let have_lines = self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty());
+        let lt = lines_text(f.language);
+        if have_lines {
+            let bw = (self.fonts.width(lt.lines, 13.5 * s, Weight::Bold) + 40.0 * s).max(92.0 * s);
+            let r = Rect::new(bx + bs - bw, head.y + (head.h - bs) * 0.5, bw, bs);
+            ui.rounded(r, 5.0 * s, if self.city.lines.open { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
+            ui.icon(&mut self.atlas, "route", Vec2::new(r.x + 17.0 * s, r.center().y), 17.0 * s, TEXT);
+            ui.text_in(&mut self.atlas, &self.fonts, lt.lines, 13.5 * s, Weight::Bold, Rect::new(r.x + 30.0 * s, r.y, r.w - 32.0 * s, r.h), Align::Center, TEXT);
+            self.city.buttons.push((r, 4));
+        }
+        // where the bus is: the municipality and the street, from the package
+        if self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location()) {
+            let mut y = head.bottom() + 10.0 * s;
+            if let Some(c) = self.loc_city.clone() {
+                let c = c.to_uppercase();
+                let tw = self.fonts.width(&c, 12.5 * s, Weight::Bold) + 20.0 * s;
+                let r = Rect::new(pad, y, tw, 24.0 * s);
+                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.88));
+                ui.text_in(&mut self.atlas, &self.fonts, &c, 12.5 * s, Weight::Bold, r, Align::Center, TEXT);
+                y += 28.0 * s;
+            }
+            if let Some(st) = self.loc_street.clone() {
+                let t = self.fonts.fit(&format!("{}: {}", lt.you_are_on, st), 12.0 * s, Weight::Medium, w * 0.38);
+                let tw = self.fonts.width(&t, 12.0 * s, Weight::Medium) + 20.0 * s;
+                let r = Rect::new(pad, y, tw, 22.0 * s);
+                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
+                ui.text_in(&mut self.atlas, &self.fonts, &t, 12.0 * s, Weight::Medium, r, Align::Center, TEXT);
+            }
+        }
+        if have_lines && self.city.lines.open {
+            self.lines_panel(&mut ui, w, h, s, head.h, &lt, &on_line);
+        }
         // a scale bar, bottom left
         let nice = [10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0];
         let metres = nice.iter().copied().find(|m| m / self.city.mpp > 70.0 * s as f64).unwrap_or(5000.0);
@@ -2639,6 +3226,12 @@ impl Navigator {
         if let Some(v) = roads_verts {
             gpu.upload(device, queue, 3, &v);
         }
+        if let Some(v) = surface_verts {
+            gpu.upload(device, queue, 7, &v);
+        }
+        if let Some(v) = ln_verts {
+            gpu.upload(device, queue, 10, &v);
+        }
         if let Some(v) = route_verts {
             gpu.upload(device, queue, 4, &v);
         }
@@ -2647,15 +3240,25 @@ impl Navigator {
         let n_ui = all.len() as u32;
         all.extend(ui.verts);
         gpu.upload(device, queue, 5, &all);
+        if self.icon_tex.is_none() {
+            if let Some(sheet) = self.surface.as_ref().and_then(|s| s.sheet()) {
+                self.icon_tex = Some(gpu.add_image(device, queue, sheet.w, sheet.h, &sheet.rgba));
+            }
+        }
+        gpu.upload(device, queue, 9, &icon_verts);
+        let (icon_n, icon_tex) = (icon_verts.len() as u32, self.icon_tex.unwrap_or(0));
         gpu.upload_atlas(queue, &mut self.atlas);
         let flat = Layer::flat([0.0, 0.0, w, h], 10.0 * s, 1.0);
         let layers = [flat, world];
         let roads_n = self.city.roads.map(|r| r.1).unwrap_or(0);
         let draws = [
             Draw { buffer: 5, range: 0..n_bg, layer: 0, texture: 0 },
+            Draw { buffer: 7, range: 0..surface_n, layer: 1, texture: 0 },
             Draw { buffer: 3, range: 0..roads_n, layer: 1, texture: 0 },
             Draw { buffer: 4, range: 0..self.city.route.1, layer: 1, texture: 0 },
+            Draw { buffer: 10, range: 0..ln_n, layer: 1, texture: 0 },
             Draw { buffer: 5, range: n_bg..n_bg + n_dots, layer: 1, texture: 0 },
+            Draw { buffer: 9, range: 0..icon_n, layer: 0, texture: icon_tex },
             Draw { buffer: 5, range: n_ui..all.len() as u32, layer: 0, texture: 0 },
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("city map") });

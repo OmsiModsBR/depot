@@ -1952,11 +1952,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         v[k] = d;
     }
     // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
-    for (k, d) in [("pax_voices", json!("all")), ("nav_arrows", json!(false)), ("nav_ai", json!(true)), ("get_up", json!(false)), ("time_speed", json!("1")), ("time_sync", json!(false)), ("metar_sync", json!(false)), ("metar_station", json!("")), ("machine_translation", json!(false)), ("shadow_casters", json!("all")), ("shadow_blobs", json!(true)), ("reflections", json!(true)), ("mouse_sens", json!(1.0)), ("graphics_api", json!("auto")), ("ctrl_off", json!("")), ("steering_linear", json!(false)), ("old_steering", json!(false)), ("red_steer_spd", json!(false)), ("ff_invert", json!(false)), ("ff_enabled", json!(true)), ("brake_hold", json!(true)), ("auto_clutch", json!(true)), ("momentary_gears", json!(false)), ("auto_shift", json!(false)), ("wheel_range", json!(900.0)), ("wheel_lock", json!(0.0)), ("fov", json!(0.0)), ("camera_collision", json!(true)), ("right_stick_look", json!(true)), ("steer_look", json!(false)), ("pedal_throttle", json!(1.0)), ("pedal_brake", json!(1.0)), ("seat_x", json!(0.0)), ("seat_y", json!(0.0)), ("seat_z", json!(0.0)), ("seat_pitch_deg", json!(0.0)), ("head_tracking", json!(false)), ("head_tracking_yaw_sens", json!(100.0)), ("head_tracking_pitch_sens", json!(100.0)), ("head_tracking_roll_sens", json!(100.0)), ("head_tracking_x_sens", json!(100.0)), ("head_tracking_y_sens", json!(100.0)), ("head_tracking_z_sens", json!(100.0)), ("head_tracking_invert_yaw", json!(false)), ("head_tracking_invert_pitch", json!(false)), ("head_tracking_invert_roll", json!(false)), ("head_tracking_invert_x", json!(false)), ("head_tracking_invert_y", json!(false)), ("head_tracking_invert_z", json!(false)), ("led_glow", json!(6)), ("led_mips", json!(1.3)), ("night_brightness", json!(0.0)), ("ui_scale", json!(1.0)), ("ui_scale_window", json!(true)), ("chat_size", json!(1.0)), ("notes", json!(true)), ("mouse_steering", json!(false)), ("mouse_right_off", json!(false)), ("mouse_smooth", json!(true)), ("blinker_cancel", json!(true)), ("ff_road_vib", json!(1.0)), ("ff_engine_vib", json!(1.0)), ("ff_fade", json!(0.28))] {
+    for (k, d) in [("pax_voices", json!("all")), ("nav_arrows", json!(false)), ("nav_ai", json!(true)), ("nav_surface", json!(true)), ("nav_light", json!(false)), ("get_up", json!(false)), ("time_speed", json!("1")), ("time_sync", json!(false)), ("metar_sync", json!(false)), ("metar_station", json!("")), ("machine_translation", json!(false)), ("shadow_casters", json!("all")), ("shadow_blobs", json!(true)), ("reflections", json!(true)), ("mouse_sens", json!(1.0)), ("graphics_api", json!("auto")), ("ctrl_off", json!("")), ("steering_linear", json!(false)), ("old_steering", json!(false)), ("red_steer_spd", json!(false)), ("ff_invert", json!(false)), ("ff_enabled", json!(true)), ("brake_hold", json!(true)), ("auto_clutch", json!(true)), ("momentary_gears", json!(false)), ("auto_shift", json!(false)), ("wheel_range", json!(900.0)), ("wheel_lock", json!(0.0)), ("fov", json!(0.0)), ("camera_collision", json!(true)), ("right_stick_look", json!(true)), ("steer_look", json!(false)), ("pedal_throttle", json!(1.0)), ("pedal_brake", json!(1.0)), ("seat_x", json!(0.0)), ("seat_y", json!(0.0)), ("seat_z", json!(0.0)), ("seat_pitch_deg", json!(0.0)), ("head_tracking", json!(false)), ("head_tracking_yaw_sens", json!(100.0)), ("head_tracking_pitch_sens", json!(100.0)), ("head_tracking_roll_sens", json!(100.0)), ("head_tracking_x_sens", json!(100.0)), ("head_tracking_y_sens", json!(100.0)), ("head_tracking_z_sens", json!(100.0)), ("head_tracking_invert_yaw", json!(false)), ("head_tracking_invert_pitch", json!(false)), ("head_tracking_invert_roll", json!(false)), ("head_tracking_invert_x", json!(false)), ("head_tracking_invert_y", json!(false)), ("head_tracking_invert_z", json!(false)), ("led_glow", json!(6)), ("led_mips", json!(1.3)), ("night_brightness", json!(0.0)), ("ui_scale", json!(1.0)), ("ui_scale_window", json!(true)), ("chat_size", json!(1.0)), ("notes", json!(true)), ("mouse_steering", json!(false)), ("mouse_right_off", json!(false)), ("mouse_smooth", json!(true)), ("blinker_cancel", json!(true)), ("ff_road_vib", json!(1.0)), ("ff_engine_vib", json!(1.0)), ("ff_fade", json!(0.28))] {
         v[k] = d;
     }
     v["steer_look_angle"] = json!(30.0);
     v["look_sens"] = json!(1.0);
+    v["outside_fov"] = json!(0.0);
     v["look_smoothing_ms"] = json!(0.0);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
@@ -2011,6 +2012,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "chat_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 3.0)),
             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
+            "outside_fov" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
@@ -2031,7 +2033,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "seat_x" | "seat_y" | "seat_z" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
             "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
-            "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
+            "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
             "info_bar" => v[&k] = json!(b(val)),
             "windy_trees" => v[&k] = json!(b(val)),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
@@ -2381,6 +2383,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("triple_hud_center={}\ntriple_fov_deg={}\n", b("triple_hud_center", true), if triple_fov < 20.0 { 0.0 } else { triple_fov.min(120.0) }));
     text.push_str(&format!("triple_screen={}\ntriple_span={}\n", b("triple_screen", false), b("triple_span", true)));
     text.push_str(&format!("triple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\n", f("triple_width_mm", 600.0).clamp(200.0, 2000.0), f("triple_distance_mm", 650.0).clamp(200.0, 3000.0), f("triple_bezel_mm", 0.0).clamp(0.0, 100.0)));
+    let outside_fov = f("outside_fov", 0.0);
+    text.push_str(&format!("outside_fov={}\n", if outside_fov < 20.0 { 0.0 } else { outside_fov.min(120.0) }));
+    text.push_str(&format!("nav_surface={}\nnav_light={}\n", b("nav_surface", true), b("nav_light", false)));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
@@ -3258,6 +3263,38 @@ mod tests {
         assert!(!now.iter().any(|l| l == "5 & 5N") && now.iter().any(|l| l == "130 & N30"), "{now:?}");
         assert!(names("1991-06-01").iter().any(|l| l == "5 & 5N") && !names("1991-06-02").iter().any(|l| l == "5 & 5N"));
         assert!(lines_on(&map, "someday").is_err());
+    }
+
+    #[test]
+    fn navigator_surface_switches_survive_launcher_save() {
+        let v = settings_from_text(None);
+        assert_eq!((v["nav_surface"].clone(), v["nav_light"].clone()), (json!(true), json!(false)));
+        let mut changed = settings_from_text(Some("nav_surface=0\nnav_light=1\n"));
+        assert_eq!((changed["nav_surface"].clone(), changed["nav_light"].clone()), (json!(false), json!(true)));
+        changed["nav_surface"] = json!(true);
+        let text = settings_to_text(&changed, None);
+        assert_eq!(text.matches("nav_surface=").count(), 1);
+        let back = settings_from_text(Some(&text));
+        assert_eq!((back["nav_surface"].clone(), back["nav_light"].clone()), (json!(true), json!(true)));
+    }
+
+    #[test]
+    fn outside_fov_survives_launcher_save_and_rejects_nonfinite_values() {
+        assert_eq!(settings_from_text(None)["outside_fov"], json!(0.0));
+        let v = settings_from_text(Some("outside_fov=48\nfov=72\n"));
+        let saved = settings_from_text(Some(&settings_to_text(&v, None)));
+        assert_eq!(saved["outside_fov"], json!(48.0));
+        assert_eq!(saved["fov"], json!(72.0));
+        let mut changed = v.clone();
+        changed["outside_fov"] = json!(80.0);
+        let updated = settings_to_text(&changed, Some("outside_fov=48\nfov=72\nunknown_camera_key=keep\n"));
+        assert_eq!(settings_from_text(Some(&updated))["outside_fov"], json!(80.0));
+        assert_eq!(updated.matches("outside_fov=").count(), 1);
+        assert!(updated.contains("unknown_camera_key=keep"));
+        for invalid in ["NaN", "inf", "-1", "15", "garbage"] {
+            assert_eq!(settings_from_text(Some(&format!("outside_fov={invalid}\n")))["outside_fov"], json!(0.0));
+        }
+        assert_eq!(settings_from_text(Some("outside_fov=200\n"))["outside_fov"], json!(120.0));
     }
 
     #[test]

@@ -7,6 +7,17 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Navigator map packages: the navigator and the city map can draw a surface (water, green, rivers, names),
+  icons, regions, street names and bus lines supplied by an optional per-map package
+  (`docs/MAP_PACKAGE.md`), also looked up in the content folder and used for offscreen pictures. New
+  settings `nav_surface` and `nav_light`. Source: maintainer (Leo, `lmonteirotech`), fork
+  lmonteirotech/openOMSI branch `feat/map-package` (commits `80fb1482`, `dbcb93f9`, `4c7a284d`,
+  `d898c8fb`), MIT. Example packages (OpenStreetMap/ODbL data) left out pending licence review. Not
+  validated against real OMSI 2 content; only build and automated tests were run.
+- Outside camera (F3) gets an independent `outside_fov` setting, 20-120 vertical degrees or Auto. Auto
+  preserves the 16:9 horizontal extent on ultrawide windows when no general override is set. Source:
+  openOMSI `ea47e092ee6e0a2c472d2c7261ea7a7913e6ca9f` (MIT), selective backport authored by zane_thruston;
+  no later upstream architecture imported. See `docs/integrations/OUTSIDE-FOV-ULTRAWIDE.md`.
 - Articulated buses can opt into a pusher joint with `[coupling_pitch_offset]` in the rear section's
   `.bus`. Without the key, or with an invalid/zero offset, the baseline puller behaviour is unchanged.
   Source: openOMSI `a97595b1b254cf94abc27bb67844a8a1dfcee2ab` (MIT), authored by zane_thruston
