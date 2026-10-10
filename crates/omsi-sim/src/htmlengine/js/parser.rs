@@ -5,9 +5,27 @@ use super::*;
 pub(crate) struct Parser {
     pub(crate) t: Vec<Tok>,
     pub(crate) i: usize,
+    /// Current syntactic nesting, bounded by `MAX_PARSE_DEPTH` so hostile input is an error, not a stack overflow.
+    pub(crate) depth: usize,
 }
 
+/// Deepest syntactic nesting (parentheses, brackets, braces, unary chains, nested statements).
+pub(crate) const MAX_PARSE_DEPTH: usize = 100;
+/// Longest left-deep chain (`a+a+a+...`, `a.b.c...`, `f()()()`): the evaluator and `Drop` recurse over it.
+pub(crate) const MAX_CHAIN: usize = 256;
+
 impl Parser {
+    /// Run `f` one nesting level deeper, failing past `MAX_PARSE_DEPTH`.
+    fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, String>) -> Result<T, String> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err("script is nested too deeply".into());
+        }
+        self.depth += 1;
+        let r = f(self);
+        self.depth -= 1;
+        r
+    }
+
     pub(crate) fn peek(&self) -> &Tok {
         self.t.get(self.i).unwrap_or(&Tok::Eof)
     }
@@ -69,6 +87,10 @@ impl Parser {
     }
 
     pub(crate) fn stmt(&mut self) -> Result<Stmt, String> {
+        self.nested(|p| p.stmt_inner())
+    }
+
+    fn stmt_inner(&mut self) -> Result<Stmt, String> {
         if self.is_p("{") {
             return Ok(Stmt::Block(self.block()?));
         }
@@ -211,6 +233,10 @@ impl Parser {
     }
 
     pub(crate) fn assign(&mut self) -> Result<Expr, String> {
+        self.nested(|p| p.assign_inner())
+    }
+
+    fn assign_inner(&mut self) -> Result<Expr, String> {
         if self.is_arrow() {
             return self.arrow();
         }
@@ -261,9 +287,14 @@ impl Parser {
 
     pub(crate) fn bin(&mut self, min: u8) -> Result<Expr, String> {
         let mut lhs = self.unary()?;
+        let mut chain = 0;
         while let Some((op, p)) = self.prec() {
             if p < min {
                 break;
+            }
+            chain += 1;
+            if chain > MAX_CHAIN {
+                return Err("expression chain is too long".into());
             }
             self.i += 1;
             let rhs = self.bin(p + 1)?;
@@ -273,6 +304,10 @@ impl Parser {
     }
 
     pub(crate) fn unary(&mut self) -> Result<Expr, String> {
+        self.nested(|p| p.unary_inner())
+    }
+
+    fn unary_inner(&mut self) -> Result<Expr, String> {
         if let Tok::P(p) = self.peek().clone() {
             if matches!(p.as_str(), "!" | "-" | "+") {
                 self.i += 1;
@@ -298,7 +333,12 @@ impl Parser {
 
     pub(crate) fn postfix(&mut self) -> Result<Expr, String> {
         let mut e = self.primary()?;
+        let mut chain = 0;
         loop {
+            chain += 1;
+            if chain > MAX_CHAIN {
+                return Err("expression chain is too long".into());
+            }
             if self.eat(".") {
                 let n = self.ident()?;
                 e = Expr::Member(Box::new(e), Box::new(Expr::Str(n)));

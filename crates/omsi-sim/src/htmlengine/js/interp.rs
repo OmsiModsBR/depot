@@ -185,7 +185,7 @@ impl Interp {
     }
 
     pub(crate) fn run(&mut self, src: &str) -> Result<(), String> {
-        let prog = Parser { t: lex(src)?, i: 0 }.program()?;
+        let prog = Parser { t: lex(src)?, i: 0, depth: 0 }.program()?;
         self.steps = 0;
         let env = self.global.clone();
         self.exec_block(&prog, &env).map(|_| ())
@@ -425,7 +425,7 @@ impl Interp {
         match op {
             "+" => {
                 if matches!(l, Val::Str(_)) || matches!(r, Val::Str(_)) {
-                    Val::Str(format!("{}{}", to_str(&l), to_str(&r)))
+                    Val::Str(cap_str(format!("{}{}", to_str(&l), to_str(&r))))
                 } else {
                     Val::Num(to_num(&l) + to_num(&r))
                 }
@@ -511,6 +511,9 @@ impl Interp {
                 if let Ok(i) = key.parse::<usize>() {
                     let mut a = a.lock().unwrap();
                     if i >= a.len() {
+                        if i >= MAX_JS_ARR {
+                            return Err(format!("array index {i} is past the limit of {MAX_JS_ARR}"));
+                        }
                         a.resize(i + 1, Val::Undef);
                     }
                     a[i] = v;
@@ -601,7 +604,11 @@ impl Interp {
                     "endsWith" => Some(Val::Bool(s.ends_with(&arg_s(0)))),
                     "indexOf" => Some(Val::Num(s.find(&arg_s(0)).map_or(-1.0, |b| s[..b].chars().count() as f64))),
                     "charAt" => Some(Val::Str(chars.get(arg_n(0).unwrap_or(0.0) as usize).map(|c| c.to_string()).unwrap_or_default())),
-                    "repeat" => Some(Val::Str(s.repeat(arg_n(0).unwrap_or(0.0).clamp(0.0, 1000.0) as usize))),
+                    "repeat" => {
+                        let n = arg_n(0).unwrap_or(0.0).clamp(0.0, 1000.0) as usize;
+                        let n = if s.is_empty() { 0 } else { n.min(MAX_JS_STR / s.len()) };
+                        Some(Val::Str(s.repeat(n)))
+                    }
                     "replace" => Some(Val::Str(s.replacen(&arg_s(0), &arg_s(1), 1))),
                     "split" => {
                         let sep = arg_s(0);
@@ -620,7 +627,7 @@ impl Interp {
                         Some(Val::Str(if a < b { chars[a..b].iter().collect() } else { String::new() }))
                     }
                     "padStart" | "padEnd" => {
-                        let want = arg_n(0).unwrap_or(0.0).max(0.0) as usize;
+                        let want = (arg_n(0).unwrap_or(0.0).max(0.0) as usize).min(MAX_JS_STR);
                         let pad = if args.len() > 1 { arg_s(1) } else { " ".into() };
                         let mut fill = String::new();
                         if !pad.is_empty() {
@@ -642,7 +649,7 @@ impl Interp {
                 }
                 "join" => {
                     let sep = if args.is_empty() { ",".to_string() } else { arg_s(0) };
-                    Some(Val::Str(a.lock().unwrap().iter().map(to_str).collect::<Vec<_>>().join(&sep)))
+                    Some(Val::Str(arr_join(a, &sep)))
                 }
                 "forEach" | "map" | "filter" => {
                     let f = args.first().cloned().unwrap_or(Val::Undef);

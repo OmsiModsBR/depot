@@ -27,20 +27,44 @@ impl HeadPose {
     }
 }
 
+/// The address the head-tracking port listens on, from the setting `head_tracking_bind`:
+/// empty (the default) is `127.0.0.1`, this computer only; `any` (or `all`) is every interface
+/// (`0.0.0.0`) for opentrack on another machine; otherwise an IP address (`192.168.1.20`,
+/// `::1`). Anything that is not an address falls back to `127.0.0.1` with a warning.
+pub fn bind_addr(setting: &str) -> std::net::IpAddr {
+    use std::net::{IpAddr, Ipv4Addr};
+    let s = setting.trim();
+    if s.is_empty() {
+        return IpAddr::V4(Ipv4Addr::LOCALHOST);
+    }
+    if s.eq_ignore_ascii_case("any") || s.eq_ignore_ascii_case("all") {
+        return IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    }
+    s.parse().unwrap_or_else(|_| {
+        log::warn!("head tracking: head_tracking_bind={s:?} is not an IP address or `any`: listening on 127.0.0.1 only");
+        IpAddr::V4(Ipv4Addr::LOCALHOST)
+    })
+}
+
 pub struct HeadTracker {
     last: Arc<Mutex<Option<(HeadPose, Instant)>>>,
 }
 
 impl HeadTracker {
-    /// Listen on `port` (on every interface: opentrack may run on another machine).
-    /// On Windows, `window_handle` is the native game window used by NPClient.
-    pub fn start(port: u16, window_handle: Option<isize>) -> Option<HeadTracker> {
+    /// Listen on `port`, by default on this computer only (see [`bind_addr`]: the datagrams
+    /// have no authentication, so nothing on the network may move the camera unless `bind`
+    /// says so). On Windows, `window_handle` is the native game window used by NPClient.
+    pub fn start(port: u16, bind: &str, window_handle: Option<isize>) -> Option<HeadTracker> {
         #[cfg(not(windows))]
         let _ = window_handle;
         // (the port may be taken: opentrack's own "UDP over network" input listens on 4242
         // too, which is how FreePIE hands it a TrackIR's pose. On Windows the freetrack
         // mapping is still read then; elsewhere there is nothing to read.)
-        let sock = match std::net::UdpSocket::bind(("0.0.0.0", port)) {
+        let addr = bind_addr(bind);
+        if !addr.is_loopback() {
+            log::warn!("head tracking: listening on {addr}:{port} (head_tracking_bind): anyone who can reach this port can move the camera");
+        }
+        let sock = match std::net::UdpSocket::bind((addr, port)) {
             Ok(s) => Some(s),
             Err(e) if cfg!(windows) => {
                 log::warn!("head tracking: cannot listen on UDP port {port} ({e}), reading opentrack's freetrack output only");
@@ -526,6 +550,28 @@ mod npclient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn head_tracking_listens_on_this_computer_only_unless_told_otherwise() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        let local = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        assert_eq!(bind_addr(""), local);
+        assert_eq!(bind_addr("  "), local);
+        assert_eq!(bind_addr("any"), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(bind_addr("ALL"), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(bind_addr("192.168.1.20"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)));
+        assert_eq!(bind_addr("::1"), IpAddr::V6(Ipv6Addr::LOCALHOST));
+        // not an address: the safe default, never every interface
+        assert_eq!(bind_addr("localhost; drop"), local);
+        assert_eq!(bind_addr("0.0.0.0/0"), local);
+    }
+
+    #[test]
+    fn the_default_socket_does_not_take_datagrams_from_other_hosts() {
+        // bound where the setting says by default: a loopback address
+        let sock = std::net::UdpSocket::bind((bind_addr(""), 0)).unwrap();
+        assert!(sock.local_addr().unwrap().ip().is_loopback());
+    }
 
     #[test]
     fn freetrack_pose_is_in_cm_and_degrees() {

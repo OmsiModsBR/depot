@@ -1036,6 +1036,14 @@ fn ws_join_target(url: &str) -> Result<String, String> {
 /// cannot be started is reported and the game runs on alone. A joining player waits
 /// briefly for the host's welcome, so that its map is loaded with the host's world.
 pub fn start(args: &Args) -> Option<LanSession> {
+    // Multiplayer is switched off in this client (see docs/removed/MULTIPLAYER_DISABLED.md):
+    // no session is hosted or joined, nothing is sent, nothing listens.
+    if args.lan_host.is_some() || args.lan_join.is_some() {
+        log::warn!("multiplayer is disabled in this build: --lan-host / --lan-join are ignored");
+    }
+    if true {
+        return None;
+    }
     // (every bus offered until the server joined now says otherwise, see `ServerOffers`)
     let offers_session = server_offers_state().reset();
     let world = world_info(args);

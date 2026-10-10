@@ -58,7 +58,7 @@ gives, so a mod bus is driven by them as by the keyboard.
    cable, from a PC or a USB stick). Project Depot finds it by itself in `depot/`,
    `Download/` or the top of the storage; anywhere else choose it in the launcher under
    **Setup → Browse → Use this folder → Save**.
-4. **Mods**: copy mod folders or .zip, .7z and .rar files into `depot/Mods` (installed when the launcher
+4. **Mods**: copy mod folders or .zip files into `depot/Mods` (installed when the launcher
    opens), or install them from the launcher's **Mods** page (Choose a folder / Choose an
    archive); .zip archives can also lie in `depot/Archives` and are used in place. Maps and buses
    work exactly as on the computer.
@@ -89,7 +89,9 @@ scripts/build-android.sh install    # ... and adb install it on the attached pho
 17. The script builds the game library as a shared object (`cargo rustc --lib --crate-type
 cdylib --profile android`), compiles the one Java class (`android/java`, the activity: full
 screen, storage permission, vibration) with javac and d8, and packs, aligns and signs the APK
-with a debug key made on the first build (`android/debug.keystore`, not in git).
+with a debug key made on the first build (`android/debug.keystore`, not in git). Its password
+is never in the repository: set `ANDROID_KEYSTORE_PASSWORD`, or let the script make a random one
+on the first build (`android/debug.keystore.pass`, not in git).
 
 The touch controls can be looked at on the computer: `OMSI_TOUCH=1` shows them in the game
 window, and `OMSI_INPUT` drives them with `touch down|move|up x,y[,finger]` (logical pixels),
@@ -103,18 +105,18 @@ the size of one).
 Every push to main builds the APK in GitHub Actions (`android` job of
 `.github/workflows/release.yml`) and attaches it to the release as
 `depot-<version>-android-arm64.apk`. Set the repository secret `ANDROID_KEYSTORE_B64`
-(`base64 < android/debug.keystore`) so that every release is signed with the same key and
+(`base64 < android/debug.keystore`) and `ANDROID_KEYSTORE_PASSWORD` (the key's password) so that every release is signed with the same key and
 installs over the previous one.
 
 ## Updates
 
-The launcher looks for a newer GitHub release when it starts (Settings → General → Updates) and offers
-it; **Update now** downloads the APK and hands it to Android's package installer. The first
-time Android asks to allow Project Depot to install apps. Then Android asks "Do you want to update
-this app?": **Update** replaces Project Depot and starts it again, **Cancel** comes back to the
-launcher as "not updated". The APK must be signed with the same key as the installed app
-(release builds are).
+There are none inside the app: it does not check for, download or install new versions, and it
+no longer asks for the "install unknown apps" permission. Download a newer APK from the Releases
+page and install it over the old one yourself (it must be signed with the same key as the
+installed app; release builds are). See [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md).
 
-`depot/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
-environment (one `NAME=value` a line), for example `OMSI_UPDATE_URL=file:///sdcard/…/release.json`
-to try an update from a local release description.
+`depot/env.txt` on the shared storage takes a few `OMSI_*` switches a computer takes from its
+environment (one `NAME=value` a line): only the harmless rendering and diagnostic ones listed in
+`crates/omsi-app/src/env_file.rs` (for example `OMSI_NO_SHADOWS=1`, `OMSI_MAX_FPS=30`); paths,
+programs, URLs and input scripts are ignored, with a line in the log, because other apps can
+write to that folder.

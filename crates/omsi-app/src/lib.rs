@@ -10,7 +10,6 @@
 //! window of one process.
 
 mod admin;
-mod discord;
 #[cfg(steam)]
 mod steam;
 mod voice;
@@ -28,9 +27,8 @@ mod platform;
 mod touch;
 mod placing;
 mod mt;
-mod updater;
-mod update_watch;
-mod presence;
+mod about;
+mod env_file;
 mod ambience;
 mod camera_arm;
 mod career;
@@ -51,6 +49,7 @@ mod lights;
 mod launcher;
 mod menu;
 mod mirror_hud;
+mod map_surface;
 mod navigator;
 mod vr_navigator;
 mod money;
@@ -232,6 +231,10 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     // (a server has no interface to translate)
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
+    if args.server.is_some() {
+        eprintln!("server: the dedicated server is no longer built or supported (see docs/removed/MULTIPLAYER_DISABLED.md)");
+        std::process::exit(2);
+    }
     let server_cfg = match args.server.clone() {
         Some(p) => match server::prepare(&mut args, &p) {
             Ok(c) => Some(c),
@@ -440,7 +443,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     let clock_note = args.clock_moved.clone();
     // (as the last session left it, #1164)
     let info_bar = settings.info_bar;
-    let is_server = args.server.is_some();
     let mut app = App {
         args,
         instance: graphics_instance(),
@@ -537,8 +539,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         pad_voice_radio: false,
         arrow_glance: false,
         teleport_pick: false,
-        discord: None,
-        discord_t: 0.0,
         #[cfg(steam)]
         steam: None,
         voice: None,
@@ -602,9 +602,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         service_msg: clock_note.map(|m| (m, 10.0)),
         pumping: None,
         notices: Vec::new(),
-        update_watch: crate::update_watch::UpdateWatch::new(),
         // (a server counts its players by their own games, not itself)
-        presence: if is_server { None } else { crate::presence::Presence::start() },
         log_state: Default::default(),
         plugins: None,
         career: Default::default(),

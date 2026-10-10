@@ -104,6 +104,10 @@ that camera sees from the rear section.
 
 ## Articulated buses: a pusher's joint
 
+This is an experimental Project Depot extension on `feat/pusher-articulation`,
+not a feature of the released 0.2.17 packages. See the
+[integration record](integrations/PUSHER-ARTICULATION.md).
+
 OMSI 2 turns and pitches an articulated bus's joint about one point, the coupling (the ball
 joint). That is a puller's joint. A pusher's (JOST, Hübner) turns about the vertical through
 the ball, but pitches about a hinge on the front section, ahead of the ball: the floor plate,
@@ -189,20 +193,6 @@ wrong way round.
 OMSI 2 ignores `[coupling_pitch_offset]` but reads the `model.cfg`: a model changed this way
 looks right only with the key. For a bus played in both, give the pusher variant its own
 `model.cfg`, used by its own pair of `.bus` files.
-
-## Articulated buses and trailers: every section a body
-
-The player's articulated bus runs each section as a body of its own (see FORMATS.md, "Vehicle
-list and coupled parts"), so the rear section's `.bus` physics now count as they do in
-OMSI 2: its `[mass]`, `[momentofintertia]` and `[schwerpunkt]` swing the front section in a
-bend and under braking, its `[newachse]` springs carry it, its driven axle pushes (a pusher's
-front section needs no driven axle), and `[coupling_front_character]` limits the joint. Values
-that were never looked at before - a rear section's inertia copied from a solo bus, a
-`[coupling_front_character]` narrower than the model's joint - now show. Check them against
-the front section's: the GN92's rear section has 7.2 t and `150 40 150`, the front 8 t and
-`300 80 300`, and its joint `52.5 -20 20 1`. To compare with the old behaviour, start the game
-with `OMSI_KINEMATIC_TRAILERS=1`; `OMSI_DEBUG_TRAILER` logs the joint's gap and angles every
-step.
 
 ## Models
 
@@ -307,6 +297,29 @@ station), or `SndExt_Radio` (the station button, 0 = off) with `SndVol_Radio` (t
 0..1, up to 2). Dmitrij's "Magnitola" is served as it comes: while it shows its track,
 its `magnitola_1` (`frequency@station`, `@` the line break) gets the map's frequency for the
 place in its first line and the station and song in its second.
+
+## Articulated buses and trailers: every section a body
+
+The player's articulated bus runs each section as a body of its own (see FORMATS.md, "Vehicle
+list and coupled parts"), so the rear section's `.bus` physics now count as they do in
+OMSI 2: its `[mass]`, `[momentofintertia]` and `[schwerpunkt]` swing the front section in a
+bend and under braking, its `[newachse]` springs carry it, its driven axle pushes (a pusher's
+front section needs no driven axle), and `[coupling_front_character]` limits the joint. Values
+that were never looked at before - a rear section's inertia copied from a solo bus, a
+`[coupling_front_character]` narrower than the model's joint - now show. Check them against
+the front section's: the GN92's rear section has 7.2 t and `150 40 150`, the front 8 t and
+`300 80 300`, and its joint `52.5 -20 20 1`. To compare with the old behaviour, start the game
+with `OMSI_KINEMATIC_TRAILERS=1`; `OMSI_DEBUG_TRAILER` logs the joint's gap and angles every
+step.
+
+## A map's package: surface, icons, regions, bus lines
+
+A map may bring a pre-built picture of itself for the navigator and the city map: water, green
+areas, rivers and rail under the roads, icons for terminals and garages, the municipalities' names,
+the municipality and street the player is on, and a panel with the map's bus lines. Everything is
+made beforehand by the map's author and put in one folder, `Maps/<Map>/openomsi-realmap/`;
+openOMSI computes none of it and a map without the folder looks as it always did. Omsi.exe ignores
+the folder. The files, the formats and what each one switches on are in [MAP_PACKAGE.md](MAP_PACKAGE.md).
 
 ## What stays as in OMSI 2
 

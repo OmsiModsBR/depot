@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logos/pd-black.png" alt="Project Depot" width="640">
+</p>
+
 # Project Depot
 
 Independent repository: https://github.com/OmsiModsBR/depot
@@ -48,7 +52,7 @@ The first rebranding release is available on the
 | Platform | File |
 | --- | --- |
 | Windows x64 | `depot-0.2.17-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
-| Dedicated server, Windows x64 | `depot-0.2.17-server-windows-x64.zip` - see [docs/SERVER.md](docs/SERVER.md) |
+| Dedicated server | **discontinued** - no longer built on any architecture, see [docs/SERVER.md](docs/SERVER.md) |
 
 ARM64, Linux, macOS and Android packages are not included in Depot 0.2.17.
 Inherited platform support and build instructions do not imply published Depot packages.
@@ -57,10 +61,10 @@ Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus
 and drive. Mods go into the folder next to the game (or through the launcher's **Mods**
 page); the original installation is never written to.
 
-From 0.1.7 on the launcher updates itself: when a newer release is out it asks at the start
-and, with your yes, downloads it, replaces the program and starts again (on Android through
-the system's installer). Settings → General → Updates switches the check off or installs without
-asking.
+The program does not update itself: new versions are published on the
+[Releases](https://github.com/OmsiModsBR/depot/releases) page, and you download them yourself
+(in-app updating is disabled, see [docs/removed/UPDATER_DISABLED.md](docs/removed/UPDATER_DISABLED.md)).
+Settings → General → About shows the version you run and links to that page.
 
 ## Installation
 
@@ -71,7 +75,7 @@ brings no game content of its own; it plays the original's maps, buses and mods.
 1. **Download** the file for your system from
    [Releases](https://github.com/OmsiModsBR/depot/releases) (table above) and unpack it
    into a folder of its own that you can write to - your Documents, a games folder, or the
-   OMSI 2 folder itself. Not `Program Files`: the launcher could not update itself there.
+   OMSI 2 folder itself. Not `Program Files`: the game writes its settings and logs next to itself.
 2. **Start it.**
    * **Windows:** `depot.exe`. Windows SmartScreen may warn about an unknown app: *More
      info* → *Run anyway*.
@@ -89,7 +93,7 @@ brings no game content of its own; it plays the original's maps, buses and mods.
    `…\Steam\steamapps\common\OMSI 2`.
 4. **Drive:** pick a bus, a map and a duty on the **Drive** page and press **Start the duty**.
 
-**Mods** are installed on the **Mods** page (a folder or a `.zip`, or dropped on the window) or
+**Mods** are installed on the **Mods** page (a folder, or a `.zip` that is used in place from `Archives` and never unpacked; or dropped on the window) or
 by putting them into the `Mods` folder next to the game; the OMSI 2 folder is never written
 to.
 
@@ -122,7 +126,7 @@ to.
 2. **No original code or assets.** Nothing from the original is copied; the formats are
    described in [docs/FORMATS.md](docs/FORMATS.md).
 3. **A better engine.** 64-bit address space, streaming and texture loading on worker threads,
-   no 2 GB limit, no single-thread stalls, LAN multiplayer and a dedicated server.
+   no 2 GB limit, no single-thread stalls (multiplayer and the dedicated server are disabled for now).
 
 ## Documentation
 
@@ -140,9 +144,9 @@ Documentation is available locally. The pages live in [`docs/`](docs):
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
 | [Plugins](docs/PLUGINS.md) | Lua plugins (API and examples), OMSI plugin DLLs and the 32-bit plugin host |
-| [Dedicated server](docs/SERVER.md) | hosting a session without a window |
+| [Dedicated server](docs/SERVER.md) | disabled (historical) |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.COMMIT` scheme and the CI |
-| [Changelog](CHANGELOG.md) | what changed in each version |
+| [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |
 
 ## Building from source
 
@@ -152,7 +156,7 @@ scripts/build-macos.sh        # macOS   → dist/macos/depot.app
 scripts\build-windows.cmd     # Windows → dist\windows\depot.exe
 scripts/build-linux.sh        # Linux   → dist/linux/depot
 scripts/build-android.sh      # Android → dist/android/depot-<version>.apk
-scripts/build-server.sh       # server  → dist/server
+scripts/build-server.sh       # server  → disabled (exits with an error)
 ```
 
 Needs the latest [Rust stable](https://rustup.rs) and the platform's C toolchain; details in
@@ -175,7 +179,7 @@ depot/
 │   ├── omsi-audio/ omsi-net/ omsi-plugin/ omsi-ui/   sound, multiplayer, plugins, UI toolkit
 ├── tools/             developer tools: omsi-check (format coverage)
 ├── scripts/           build scripts for every platform, version.sh, packaging files
-├── assets/            fonts, Material icons, app icons (assets/icons/app), logos (assets/logos)
+├── assets/            fonts, Material icons, app icons (assets/icons/app), Project Depot logos (assets/logos)
 ├── docs/              documentation (also published as the website)
 ├── site/              the GitHub Pages website
 └── docs/upstream-automation/ archived upstream CI recipes (inactive)

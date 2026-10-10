@@ -99,7 +99,13 @@ pub(crate) struct Layouter<'a> {
     pub(crate) vw: f32,
     pub(crate) vh: f32,
     pub(crate) imgs: &'a ImageStore,
+    /// How many shrink-to-fit `inline-block` ancestors are being measured right now.
+    pub(crate) shrink: std::cell::Cell<u32>,
 }
+
+/// Shrink-to-fit lays a box out twice, so nested ones cost 2^depth; past this many levels
+/// a box is laid out once at its available width instead.
+pub(crate) const MAX_SHRINK_DEPTH: u32 = 3;
 
 impl<'a> Layouter<'a> {
     pub(crate) fn tw(&self, s: &str, px: f32, bold: bool) -> f32 {
@@ -303,9 +309,15 @@ impl<'a> Layouter<'a> {
         if force.is_none() && st.inline_block && st.width.is_none() {
             // shrink to fit: lay it out at full width, then narrow it to what the content used
             let auto = (avail - ml - mr - pl - pr).max(0.0);
+            if self.shrink.get() >= MAX_SHRINK_DEPTH {
+                return self.build_w(idx, ps, x0, y0, avail, pct_h, Some(auto));
+            }
+            self.shrink.set(self.shrink.get() + 1);
             let probe = self.build_w(idx, ps, x0, y0, avail, pct_h, Some(auto));
             let nat = natural_width(&probe, x0 + ml + pl);
-            return self.build_w(idx, ps, x0, y0, avail, pct_h, Some(nat.ceil().min(auto)));
+            let out = self.build_w(idx, ps, x0, y0, avail, pct_h, Some(nat.ceil().min(auto)));
+            self.shrink.set(self.shrink.get() - 1);
+            return out;
         }
         let (outer_w, content_w) = match (force, st.width) {
             (Some(cw), _) => (cw + pl + pr, cw),

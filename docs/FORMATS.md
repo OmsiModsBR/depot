@@ -626,7 +626,7 @@ rim the reflection running on away from the camera.
 ## Vehicles (.bus/.ovh) - unit `mc_roadvehicle`
 
 type friendlyname friendlyname_inv ai_veh_type coupling_back/front control_cable_back/front
-couple_back/front coupling_front_character coupling_pitch_offset (openOMSI) boogies sinus rail_body_osc contact_shoe rowdy_factor
+couple_back/front coupling_front_character coupling_pitch_offset (experimental Depot extension) boogies sinus rail_body_osc contact_shoe rowdy_factor
 ai_brakeperformance add_camera_driver add_camera_pax view_schedule view_ticketselling set_camera_std
 set_camera_outside_center schwerpunkt rollwiderstand rot_pnt_long inv_min_turnradius ai_deltaheight
 newachse (achse_long achse_maxwidth achse_minwidth achse_raddurchmesser achse_feder achse_maxforce

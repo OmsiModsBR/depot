@@ -1,3 +1,6 @@
+> **DISABLED.** Plugin loading (native and Lua) is switched off in this client; nothing under
+> `Plugins/` is loaded. See [removed/MULTIPLAYER_DISABLED.md](removed/MULTIPLAYER_DISABLED.md).
+
 # Plugins
 
 openOMSI runs two kinds of plugins from the `plugins` folder of the game (and of every
