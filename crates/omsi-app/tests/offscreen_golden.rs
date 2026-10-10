@@ -47,7 +47,20 @@ impl Root {
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+        // the stock files the start-up check asks for (`omsi_cfg::ORIGINAL_ESSENTIALS`), as empty
+        // placeholders: the run only checks that they exist
+        for rel in omsi_cfg::ORIGINAL_ESSENTIALS {
+            let path = dir.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            if rel.contains('.') {
+                std::fs::write(&path, "").unwrap();
+            } else {
+                std::fs::create_dir_all(&path).unwrap();
+            }
+        }
+        let map_dir = dir.join("maps").join("Golden");
+        std::fs::create_dir_all(&map_dir).unwrap();
+        let w = |name: &str, text: &str| std::fs::write(map_dir.join(name), text).unwrap();
         w("global.cfg", "[name]\nGolden offscreen\n\n[map]\n0\n0\ntile_0_0.map\n");
         // one object 20 m north of the camera, at the tile's origin height
         w("tile_0_0.map", "[version]\n14\n\n[object]\n0\nbox.sco\n7\n10\n20\n0\n0\n0\n0\n0\n");
@@ -79,7 +92,7 @@ impl Root {
                 vec!["0"; faces.len()].join(","),
             ),
         );
-        image::save_buffer(dir.join("box.png"), &[200, 40, 40, 255].repeat(16), 4, 4, image::ColorType::Rgba8).unwrap();
+        image::save_buffer(map_dir.join("box.png"), &[200, 40, 40, 255].repeat(16), 4, 4, image::ColorType::Rgba8).unwrap();
         Root(dir)
     }
 
@@ -91,7 +104,7 @@ impl Root {
         let run = Command::new(env!("CARGO_BIN_EXE_depot"))
             .arg("--root")
             .arg(&self.0)
-            .args(["--map", "global.cfg", "--offscreen"])
+            .args(["--map", "maps/Golden/global.cfg", "--offscreen"])
             .arg(&out)
             .args(["--size", &format!("{}x{}", SIZE.0, SIZE.1), "--cam", "10,0,2,0,0", "--time", "12:00"])
             // settings, the remembered root and the content folder stay out of the user's home
@@ -169,11 +182,11 @@ fn golden_path() -> PathBuf {
 #[test]
 fn synthetic_root_reads_back_as_written() {
     let root = Root::new();
-    let global = omsi_map::GlobalCfg::load(&root.0.join("global.cfg")).unwrap();
+    let global = omsi_map::GlobalCfg::load(&root.0.join("maps/Golden/global.cfg")).unwrap();
     assert_eq!(global.name, "Golden offscreen");
     assert_eq!(global.tiles.len(), 1);
     assert_eq!((global.tiles[0].x, global.tiles[0].y, global.tiles[0].file.as_str()), (0, 0, "tile_0_0.map"));
-    let tile = omsi_map::Tile::load(&root.0.join("tile_0_0.map")).unwrap();
+    let tile = omsi_map::Tile::load(&root.0.join("maps/Golden/tile_0_0.map")).unwrap();
     assert_eq!(tile.objects.len(), 1);
     let o = &tile.objects[0];
     assert_eq!((o.file.as_str(), o.id, o.pos), ("box.sco", 7, [10.0, 20.0, 0.0]));
