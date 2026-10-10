@@ -3,6 +3,24 @@
 Depot releases are published manually after review; pushes to `main` do not
 automatically produce releases. See [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## Unreleased
+
+- Navigator map packages: the navigator and the city map can draw a surface
+  (water, green, rivers, names), icons, regions, street names and bus lines
+  supplied by an optional per-map package (`docs/MAP_PACKAGE.md`), also looked
+  up in the content folder and used for offscreen pictures. New settings
+  `nav_surface` and `nav_light`.
+- Provenance: written by the maintainer (Leo, `lmonteirotech`) in his fork
+  https://github.com/lmonteirotech/openOMSI, branch `feat/map-package`
+  (commits `80fb1482`, `dbcb93f9`, `4c7a284d`, `d898c8fb`, head
+  `d898c8fb`), on top of upstream `e6349cfb`. Licence: MIT. Only the code
+  and `docs/MAP_PACKAGE.md` / `MODDING.md` / `USER_GUIDE.md` changes of that
+  diff were adapted; the example packages (OpenStreetMap/ODbL data) were
+  left out pending licence review. Not enabled by any multiplayer, plugin,
+  updater or Discord code. No OMSI 2 reference material involved.
+- Not validated against real OMSI 2 content or on the supported hardware
+  matrix; only build and automated tests were run.
+
 ## Project Depot 0.2.17 - 2026-10-09
 
 - Rebranding only, derived from openOMSI `v0.2.16` (2026-10-07), commit

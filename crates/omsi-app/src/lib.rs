@@ -51,6 +51,7 @@ mod lights;
 mod launcher;
 mod menu;
 mod mirror_hud;
+mod map_surface;
 mod navigator;
 mod vr_navigator;
 mod money;
