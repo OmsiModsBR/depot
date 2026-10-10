@@ -128,7 +128,7 @@ impl EngineRenderer {
     pub(crate) fn hit_node(&self, x: f32, y: f32) -> usize {
         let body = self.js.dom.body;
         with_fonts(|reg, bold| {
-            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs };
+            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs, shrink: Default::default() };
             let c = self.layout_cache(&lay);
             let r = hit(&c.b, x, y);
             *self.cache.lock().unwrap() = Some(c);
@@ -255,7 +255,7 @@ impl EngineRenderer {
         let started = std::time::Instant::now();
         let mut cv = Canvas { w: self.width, h: self.height, px: vec![0; (self.width * self.height * 4) as usize] };
         with_fonts(|reg, bold| {
-            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs };
+            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs, shrink: Default::default() };
             let mut c = self.layout_cache(&lay);
             // the background of html and body covers the whole texture
             let full = [0.0, 0.0, self.width as f32, self.height as f32];

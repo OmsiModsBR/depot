@@ -994,3 +994,17 @@ fn js_array_and_string_growth_is_capped() {
     assert!(get_var(&it, "n").parse::<usize>().unwrap() <= MAX_JS_STR);
     assert_eq!(get_var(&it, "r").len(), 2000);
 }
+
+#[test]
+fn nested_inline_blocks_lay_out_in_bounded_time() {
+    let n = 60;
+    let html = format!(
+        "<body style='margin:0'>{}hi{}</body>",
+        "<div style='display:inline-block'>".repeat(n),
+        "</div>".repeat(n)
+    );
+    let start = std::time::Instant::now();
+    let mut r = EngineRenderer::new(64, 64, &html);
+    assert!(r.poll_frame().is_some());
+    assert!(start.elapsed().as_secs() < 10, "layout took {:?}", start.elapsed());
+}
