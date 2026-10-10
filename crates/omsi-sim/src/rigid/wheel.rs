@@ -2,9 +2,9 @@
 //! as OMSI keeps it.
 
 use super::ground::WallFace;
-use super::params::STANDING;
+use super::params::{DROOP, STANDING};
 use super::tyre::Contact;
-use glam::Vec3;
+use glam::{DVec3, Quat, Vec3};
 
 #[derive(Debug, Clone)]
 pub struct RigidWheel {
@@ -136,5 +136,30 @@ impl RigidWheel {
     /// Compression the static load gives with the current spring factor.
     pub fn rest_compression(&self) -> f32 {
         self.rest_load / (self.spring * self.spring_factor.max(0.05))
+    }
+}
+
+/// Where a wheel's tyre is in the world this substep: its plane (forward and right, turned by
+/// the wheel's steering angle, and forward on the level), and its hub with the spring
+/// unloaded (`hub0`) and where the strut holds it now (`hub`, at most the droop below).
+pub(super) struct TyreFrame {
+    pub(super) fwd: Vec3,
+    pub(super) right: Vec3,
+    pub(super) fwd_h: Vec3,
+    pub(super) hub0: DVec3,
+    pub(super) hub: DVec3,
+}
+
+impl TyreFrame {
+    /// Wheel `w`'s tyre on a body turned by `rot` whose centre of gravity (`cog`, body frame)
+    /// stands at `position`.
+    pub(super) fn of(w: &RigidWheel, rot: Quat, position: DVec3, cog: Vec3) -> TyreFrame {
+        let up = rot.mul_vec3(Vec3::Z);
+        let ang = w.steer;
+        let fwd = rot.mul_vec3(Vec3::new(ang.sin(), ang.cos(), 0.0));
+        let right = rot.mul_vec3(Vec3::new(ang.cos(), -ang.sin(), 0.0));
+        let hub0 = position + rot.mul_vec3(w.attach - cog).as_dvec3();
+        let hub = hub0 + (up * w.compression.max(-DROOP)).as_dvec3();
+        TyreFrame { fwd, right, fwd_h: Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y), hub0, hub }
     }
 }

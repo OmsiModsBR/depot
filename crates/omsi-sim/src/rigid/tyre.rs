@@ -5,9 +5,9 @@
 use super::body::RigidBody;
 use super::collide::Impact;
 use super::ground::{track_walls, tread_step, tyre_line, GroundProbe};
-use super::params::{CLIMB, DROOP, STANDING, WALL_HEIGHT};
+use super::params::{CLIMB, STANDING, WALL_HEIGHT};
 use super::toggles::omsi_suspension;
-use super::wheel::{sign, RigidWheel};
+use super::wheel::{sign, TyreFrame};
 use glam::{Quat, Vec2, Vec3};
 
 /// A wheel on the ground in one substep, before its tyre forces are settled.
@@ -73,7 +73,6 @@ impl RigidBody {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn prepare(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], air: bool, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Substep {
         let rot = self.orientation;
-        let up = rot.mul_vec3(Vec3::Z);
         let mut force = Vec3::new(0.0, 0.0, -9.81 * self.mass);
         // the air: ½ ρ cw A v² (cw 0.6, the front a bus's or a car's by the mass). Without it
         // a bus rolling downhill without its brakes ran on to any speed
@@ -86,17 +85,7 @@ impl RigidBody {
         // the towed mass moves with the body along its length
         let body_fwd = rot.mul_vec3(Vec3::Y);
         let towed: f32 = self.coupled.iter().map(|d| d.mass).sum();
-        // tyre plane (forward turned by the wheel's steering angle), the hub with the
-        // spring unloaded and where it is now
         let (position, cog) = (self.position, self.cog);
-        let tyre = move |w: &RigidWheel| {
-            let ang = w.steer;
-            let fwd = rot.mul_vec3(Vec3::new(ang.sin(), ang.cos(), 0.0));
-            let right = rot.mul_vec3(Vec3::new(ang.cos(), -ang.sin(), 0.0));
-            let hub0 = position + rot.mul_vec3(w.attach - cog).as_dvec3();
-            let hub = hub0 + (up * w.compression.max(-DROOP)).as_dvec3();
-            (fwd, right, Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y), hub0, hub)
-        };
         // What each tyre finds under and around it: the hub height it needs, how steeply
         // that rises as the wheel rolls on, and the faces it cannot climb. Steps up to
         // CLIMB radii over the ground it stood on are ground; the first step after
@@ -105,7 +94,7 @@ impl RigidBody {
         let mut found: Vec<Option<(f64, f32, f32)>> = Vec::with_capacity(self.wheels.len());
         for i in 0..self.wheels.len() {
             let w = &self.wheels[i];
-            let (_, _, fwd_h, _, hub) = tyre(w);
+            let TyreFrame { fwd_h, hub, .. } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
             let z_top = if w.ground_seen { w.ground_z + (CLIMB * r) as f64 } else { hub.z + 0.05 };
             let wall_top = hub.z + WALL_HEIGHT;
@@ -133,7 +122,7 @@ impl RigidBody {
         // pushed at all.
         for _ in 0..2 {
             for i in 0..self.wheels.len() {
-                let (_, _, fwd_h, _, hub) = tyre(&self.wheels[i]);
+                let TyreFrame { fwd_h, hub, .. } = TyreFrame::of(&self.wheels[i], rot, position, cog);
                 let r_hub = (hub - self.position).as_vec3();
                 for f in 0..self.wheels[i].walls.len() {
                     let face = self.wheels[i].walls[f];

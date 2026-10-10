@@ -7,7 +7,7 @@ use super::ground::GroundProbe;
 use super::params::{BUMP, CLIMB, DROOP, UNSPRUNG, WALL_C, WALL_K};
 use super::toggles::omsi_suspension;
 use super::tyre::Contact;
-use super::wheel::{sign, RigidWheel};
+use super::wheel::{sign, TyreFrame};
 use glam::{DVec3, Vec3};
 use omsi_vehicle::Vehicle;
 
@@ -41,18 +41,10 @@ impl RigidBody {
         let up = rot.mul_vec3(Vec3::Z);
         let n_wheels = self.wheels.len().max(1) as f32;
         let (position, cog) = (self.position, self.cog);
-        let tyre = move |w: &RigidWheel| {
-            let ang = w.steer;
-            let fwd = rot.mul_vec3(Vec3::new(ang.sin(), ang.cos(), 0.0));
-            let right = rot.mul_vec3(Vec3::new(ang.cos(), -ang.sin(), 0.0));
-            let hub0 = position + rot.mul_vec3(w.attach - cog).as_dvec3();
-            let hub = hub0 + (up * w.compression.max(-DROOP)).as_dvec3();
-            (fwd, right, Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y), hub0, hub)
-        };
         let omega_world = rot.mul_vec3(self.omega);
         let mut contacts: Vec<Contact> = Vec::with_capacity(self.wheels.len());
         for (i, w) in self.wheels.iter_mut().enumerate() {
-            let (fwd, right, fwd_h, hub0, hub) = tyre(w);
+            let TyreFrame { fwd, right, fwd_h, hub0, hub } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
             // pressed into a face: pushed back out
             let mut f_world = Vec3::ZERO;
