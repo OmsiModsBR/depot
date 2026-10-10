@@ -315,8 +315,10 @@ fn patchwork(def: &Spline, curve: &SplineCurve, stations: &mut usize) -> Option<
     if !(seg > 0.0) {
         return None;
     }
-    let stretches = ((curve.length / seg).max(0.0).min(1e6) as usize) + 1;
     let cap = station_cap(def);
+    // (never more stretches than the spline type's buffers hold stations: past that `per`
+    // fell to 0, was forced to 1 and the cap was gone - 1.2 M vertices for a 300 km spline)
+    let stretches = (((curve.length / seg).max(0.0).min(1e6) as usize) + 1).min(cap.clamp(1, 65_536));
     let mut count = (*stations).min(cap);
     let mut per = count / stretches + 1;
     count = stretches * per;
@@ -625,13 +627,33 @@ pub fn outline_crosses_itself(ring: &[DVec2]) -> bool {
         let (d3, d4) = (cross(p1, p2, q1), cross(p1, p2, q2));
         ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
     };
-    for i in 0..n {
+    // Sweep over x: an edge can only meet edges whose x-range overlaps its own, so the edges
+    // are sorted by their left end and each is compared with the ones that start before its
+    // right end (same answer as comparing all pairs, near-linear for an outline that is not
+    // a heap of overlapping edges). The work is budgeted: a ring that would take longer than
+    // the budget is taken as crossing (no hole is cut) instead of hanging the loader.
+    const BUDGET: u64 = 40_000_000;
+    let mut edges: Vec<(f64, f64, usize)> = (0..n).map(|i| {
         let (a, b) = (ring[i], ring[(i + 1) % n]);
-        for j in i + 2..n {
-            if (j + 1) % n == i {
+        (a.x.min(b.x), a.x.max(b.x), i)
+    }).collect();
+    edges.sort_by(|p, q| p.0.total_cmp(&q.0));
+    let mut work = 0u64;
+    for (k, &(_, right, i0)) in edges.iter().enumerate() {
+        for &(left, _, j0) in &edges[k + 1..] {
+            if left > right {
+                break;
+            }
+            work += 1;
+            if work > BUDGET {
+                log::warn!("outline of {n} edges is too tangled to test for crossings; taken as crossing");
+                return true;
+            }
+            let (i, j) = if i0 < j0 { (i0, j0) } else { (j0, i0) };
+            if j == i + 1 || (j + 1) % n == i {
                 continue;
             }
-            if hits(a, b, ring[j], ring[(j + 1) % n]) {
+            if hits(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n]) {
                 return true;
             }
         }
@@ -1555,6 +1577,32 @@ mod tests {
 
     /// Stock `str_2spur_8m_DDR_Bahnstr.sli`: 16 parts of a 512x4096 texture, 5 m each; the
     /// parts follow on letter by letter and the spline ends on the first letter again.
+    #[test]
+    fn patchwork_respects_the_station_cap_on_a_huge_spline() {
+        let mut def = strip(3.6, 0.1);
+        def.textures[0].patchwork = Some(omsi_scenery::sli::PatchworkChain { segment_length: 1.0, chain: "AA".into(), weights: "1".into(), invertable: "0".into() });
+        let c = plain_curve(300_000.0, 0.0);
+        let cap = station_cap(&def);
+        let mut n = spline_station_count(&def, &c);
+        let pw = patchwork(&def, &c, &mut n).unwrap();
+        assert!(n <= cap && pw.order.len() <= cap, "{n} {} {cap}", pw.order.len());
+        let m = build_spline_mesh(&def, &c, false, DVec3::ZERO);
+        assert!(m.positions.len() < 10_000, "{}", m.positions.len());
+    }
+
+    #[test]
+    fn crossing_test_matches_the_pairwise_answer() {
+        let sq = [DVec2::new(0.0, 0.0), DVec2::new(4.0, 0.0), DVec2::new(4.0, 4.0), DVec2::new(0.0, 4.0)];
+        assert!(!outline_crosses_itself(&sq));
+        let bow = [DVec2::new(0.0, 0.0), DVec2::new(4.0, 4.0), DVec2::new(4.0, 0.0), DVec2::new(0.0, 4.0)];
+        assert!(outline_crosses_itself(&bow));
+        // a long thin ring of 200 000 points is checked quickly
+        let n = 100_000;
+        let mut ring: Vec<DVec2> = (0..n).map(|i| DVec2::new(i as f64, 0.0)).collect();
+        ring.extend((0..n).rev().map(|i| DVec2::new(i as f64, 1.0)));
+        assert!(!outline_crosses_itself(&ring));
+    }
+
     #[test]
     fn patchwork_parts_join_up() {
         let mut def = strip(3.6, 0.1);

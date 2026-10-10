@@ -122,7 +122,7 @@ img, video { max-width: 100%; height: auto; }
   display: flex; align-items: center; gap: 8px; padding: 0 12px;
   background: var(--appbar); color: var(--appbar-fg); border-bottom: 1px solid var(--appbar-border);
 }
-.brand img { height: 30px; display: block; margin-left: 4px; }
+.brand img { height: 26px; display: block; margin-left: 4px; }
 .spacer { flex: 1; }
 .icon-btn {
   width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; color: inherit;
@@ -239,8 +239,6 @@ h1 { line-height: 1.25; }
   .hero-actions .btn { width: min(100%, 280px); justify-content: center; }
   .card-warning { flex-direction: column; gap: 4px; padding: 16px; }
   .grid { grid-template-columns: 1fr; }
-  /* room for the Donate pill, which floats over the end of the page */
-  .footer { padding-bottom: 80px; }
   .release summary .spacer { display: none; }
 }
 
@@ -282,31 +280,7 @@ h1 { line-height: 1.25; }
 .comment .doc { padding: 4px 16px; overflow-wrap: anywhere; }
 .comment .doc img { max-width: 100%; height: auto; }
 
-/* Donate: a small pill in the corner, out of the way of the content; it opens a menu
-   upwards with the ways to give (Buy Me a Coffee, Ko-fi) */
-.donate { position: fixed; right: 20px; bottom: 20px; z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.donate-fab { display: flex; align-items: center; gap: 8px; padding: 10px 18px 10px 14px; border: 0; border-radius: 999px;
-  background: #ffdd00; color: #1b1b1b; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
-  opacity: .92; transition: opacity .15s, transform .15s; }
-.donate-fab .material-icons { font-size: 18px; color: #d93025; }
-.donate-fab:hover, .donate-fab[aria-expanded="true"] { opacity: 1; transform: translateY(-2px); }
-.donate-fab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.donate-menu { display: flex; flex-direction: column; min-width: 200px; padding: 6px; border-radius: 12px;
-  background: var(--surface); color: var(--on-surface); border: 1px solid var(--divider); transform-origin: bottom right; animation: donate-up .14s ease-out; }
-.donate-menu[hidden] { display: none; }
-.donate-menu a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: inherit; text-decoration: none; font-weight: 500; }
-.donate-menu a:hover, .donate-menu a:focus-visible { background: var(--hover); text-decoration: none; outline: none; }
-.donate-icon { width: 22px; text-align: center; font-size: 18px; }
-.donate-menu .material-icons.donate-icon { color: #29abe0; }
-@keyframes donate-up { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
-@media (max-width: 700px) {
-  .donate { right: 14px; bottom: 14px; }
-  .donate-fab { padding: 10px 14px 10px 12px; }
-}
 .dl-mine { outline: 2px solid var(--primary); }
 .dl-mine { outline-offset: -2px; }
 .dl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dl-badge { white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1; padding: 5px 10px; border-radius: 999px; background: var(--primary); color: #fff; }
-
-/* "playing now": a green dot in front of the count */
-.chip-live .material-icons { color: #2ea043; }

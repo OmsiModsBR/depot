@@ -387,7 +387,7 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
         Op::StrConcat => {
             let a = s.pop_str();
             let b = s.pop_str();
-            s.push_str(format!("{b}{a}"))
+            s.push_str(concat_capped(b, &a))
         }
         Op::StrEq => {
             let a = s.pop_str();
@@ -538,6 +538,34 @@ fn omsi_round(v: f32) -> usize {
     if r.is_finite() && r > 0.0 { r.min(1e9) as usize } else { 0 }
 }
 
+/// Longest string, in characters, one VM operation produces. Real scripts keep texts of a few
+/// dozen characters; the ceiling stops `"" 999999999 $SetLengthL` and friends from allocating gigabytes.
+pub const MAX_STR_LEN: usize = 65_536;
+
+/// Log the first string-limit hit loudly and later ones quietly (a script loop would repeat it every frame).
+fn str_limit_hit(what: &str, wanted: usize) {
+    static FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+    if FIRST.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        log::error!("script: {what} wants {wanted} characters, limited to {MAX_STR_LEN}");
+    } else {
+        log::debug!("script: {what} wants {wanted} characters, limited to {MAX_STR_LEN}");
+    }
+}
+
+/// `b` followed by `a`, cut at `MAX_STR_LEN` characters.
+fn concat_capped(b: String, a: &str) -> String {
+    let mut out = b;
+    out.push_str(a);
+    if out.len() > MAX_STR_LEN {
+        // `len` counts bytes, which is never fewer than the characters: only measure when it may matter
+        if let Some((cut, _)) = out.char_indices().nth(MAX_STR_LEN) {
+            str_limit_hit("string concatenation", out.chars().count());
+            out.truncate(cut);
+        }
+    }
+    out
+}
+
 #[derive(Clone, Copy)]
 enum Align {
     Left,
@@ -546,6 +574,10 @@ enum Align {
 }
 
 fn set_length(s: &str, n: usize, align: Align) -> String {
+    if n > MAX_STR_LEN {
+        str_limit_hit("$SetLength", n);
+    }
+    let n = n.min(MAX_STR_LEN);
     let chars: Vec<char> = s.chars().collect();
     if chars.len() >= n {
         return match align {
@@ -580,6 +612,10 @@ fn int_to_str_enh(v: f32, fmt: &str) -> String {
         return "ERROR".into();
     }
     let width = rest.trim().parse::<i64>().unwrap_or(0).max(0) as usize;
+    if width > MAX_STR_LEN {
+        str_limit_hit("$IntToStrEnh", width);
+    }
+    let width = width.min(MAX_STR_LEN);
     if width == 0 {
         return String::new();
     }
@@ -905,6 +941,25 @@ pub fn digits_first(text: &str) -> String {
     }
     let letter = others.first().copied().unwrap_or(' ');
     format!("{:0>3}{}", digits, letter)
+}
+
+#[cfg(test)]
+mod string_limit_tests {
+    use super::*;
+
+    #[test]
+    fn huge_lengths_are_capped_not_allocated() {
+        // each of these asked for ~1 GB (or 10^12 characters) before
+        for align in [Align::Left, Align::Right, Align::Center] {
+            assert_eq!(set_length("", 999_999_999, align).chars().count(), MAX_STR_LEN);
+        }
+        assert_eq!(set_length("ab", 5, Align::Left), "ab   ");
+        assert_eq!(int_to_str_enh(7.0, "00999999999999").chars().count(), MAX_STR_LEN);
+        assert_eq!(int_to_str_enh(7.0, "04"), "0007");
+        let long = "x".repeat(MAX_STR_LEN);
+        assert_eq!(concat_capped(long.clone(), &long).chars().count(), MAX_STR_LEN);
+        assert_eq!(concat_capped("ab".into(), "cd"), "abcd");
+    }
 }
 
 #[cfg(test)]

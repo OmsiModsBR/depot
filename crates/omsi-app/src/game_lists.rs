@@ -1062,7 +1062,7 @@ fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "vol_ai" | "vol_scenery" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "wheel_range" => (6..=60).map(|v| v as f32 * 30.0).collect(),
         "wheel_lock" => std::iter::once(0.0).chain((2..=60).map(|v| v as f32 * 30.0)).collect(),
-        "fov" => std::iter::once(0.0).chain((20..=120).map(|v| v as f32)).collect(),
+        "outside_fov" | "fov" => std::iter::once(0.0).chain((20..=120).map(|v| v as f32)).collect(),
         "steer_look_angle" => (0..=60).map(|v| v as f32).collect(),
         "steer_look_response" => (1..=20).map(|v| v as f32 * 0.05).collect(),
         "head_idle" => (0..=20).map(|v| v as f32 * 0.05).collect(),
@@ -1223,6 +1223,7 @@ fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
                 s.fov
             }
         }
+        "outside_fov" => s.outside_fov,
         "steer_look_angle" => s.steer_look_angle,
         "steer_look_response" => s.steer_look_response,
         "head_idle" => s.head_idle,
@@ -1385,6 +1386,10 @@ fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option<(&'static 
             ))
         }
         "fov" => Some(set_camera_fov(&mut app.settings, v)),
+        "outside_fov" => {
+            app.settings.outside_fov = if v < 20.0 { 0.0 } else { v.round().min(120.0) };
+            Some(("outside_fov", app.settings.outside_fov.to_string()))
+        }
         "steer_look_angle" => {
             app.settings.steer_look_angle = v.round();
             Some(("steer_look_angle", app.settings.steer_look_angle.to_string()))
@@ -2439,6 +2444,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI, the wheel button turns"),
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
+        slider_row(app, "outside_fov", "Outside view field of view (F3)", "Vertical field of view of the outside camera; Auto fits the shape of your monitor (ultrawide keeps the sides undistorted)", &|v| if v < 20.0 { "Auto".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
         slider_row(app, "seat 0", "Seat left and right", "Adjust the driver's seat position from side to side", &cm),

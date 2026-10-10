@@ -63,18 +63,37 @@ sed -e "s/@VERSION_CODE@/$code/" -e "s/@VERSION_NAME@/$version/" -e "s/android:l
 ( cd "$build/apk" && "$BUILD_TOOLS/aapt" add ../unsigned.apk classes.dex lib/arm64-v8a/* >/dev/null )
 "$BUILD_TOOLS/zipalign" -f -p 4 "$build/unsigned.apk" "$build/aligned.apk"
 key=android/debug.keystore
+# The keystore password is never in the repository. CI gives it as the secret
+# ANDROID_KEYSTORE_PASSWORD (next to ANDROID_KEYSTORE_B64); on a developer machine it is
+# ANDROID_KEYSTORE_PASSWORD too, or - when this script makes a new debug key - a random one
+# written (mode 600) to android/debug.keystore.pass, which is git-ignored like the key.
+pass_file=android/debug.keystore.pass
+if [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] && [ -f "$pass_file" ]; then
+    ANDROID_KEYSTORE_PASSWORD=$(cat "$pass_file")
+fi
 # (the CI signs with the same key every time when it is given as a secret: an update then
 # installs over the last release)
 if [ ! -f "$key" ] && [ -n "${ANDROID_KEYSTORE_B64:-}" ]; then
     printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$key"
 fi
 if [ ! -f "$key" ]; then
-    "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$key" -storepass android -keypass android \
+    if [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+        ANDROID_KEYSTORE_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+        ( umask 077; printf '%s' "$ANDROID_KEYSTORE_PASSWORD" > "$pass_file" )
+        echo "A new debug key was made; its random password is in $pass_file (not in git)." >&2
+    fi
+    export ANDROID_KEYSTORE_PASSWORD
+    "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$key" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEYSTORE_PASSWORD \
         -alias openomsi -keyalg RSA -keysize 2048 -validity 10000 \
         -dname "CN=Project Depot, O=Project Depot, C=DE" >/dev/null 2>&1
 fi
+if [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+    echo "The keystore password is missing: set ANDROID_KEYSTORE_PASSWORD (the secret next to ANDROID_KEYSTORE_B64)." >&2
+    exit 1
+fi
+export ANDROID_KEYSTORE_PASSWORD
 apk="dist/android/depot-$version.apk"
-"$BUILD_TOOLS/apksigner" sign --ks "$key" --ks-pass pass:android --key-pass pass:android \
+"$BUILD_TOOLS/apksigner" sign --ks "$key" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEYSTORE_PASSWORD \
     --ks-key-alias openomsi --out "$apk" "$build/aligned.apk"
 rm -f "$apk.idsig"
 printf '\nProject Depot %s for Android: %s (%s)\n' "$version" "$PWD/$apk" "$(du -h "$apk" | cut -f1)"

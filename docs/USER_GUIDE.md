@@ -65,37 +65,11 @@ second (starter), **Shift+D** (drive), **.** (parking brake off), then throttle.
 whole start-up by itself (main switch, ignition, starter, gearbox to neutral); `--autostart`
 is the same thing for an offscreen run.
 
-**Updates.** When the launcher starts it asks
-[github.com/openOMSI-Project/openOMSI](https://github.com/openOMSI-Project/openOMSI) for the latest release
-and, when there is a newer one, offers it: **Update now** downloads it (checked against the
-SHA-256 GitHub lists), puts the new program in place of the old one and starts the launcher
-again - on Windows `openomsi.exe` and `openomsi-launcher.exe`, on macOS the `openOMSI.app`
-you started, on Linux the program files; mods, content and settings stay. On Android the
-system's installer asks "Do you want to update this app?"; Update replaces openOMSI and starts
-it again, Cancel leaves it as it was. Settings → General → Updates: look for updates at the start (on
-by default), install without asking (off by default), Check now. A folder openOMSI cannot
-write to (Program Files, an app opened straight from Downloads on macOS) is reported with
-what to do. A download that breaks goes on where it stopped (up to four times), a request
-that times out is tried again after 3 and 10 s, and when the GitHub API does not answer (or
-says its hourly limit is reached) the latest tag is taken from github.com itself.
-
-The launcher also looks again every 30 minutes while it is open, and right after a game it
-started ends. During a session the game looks a minute in and every hour after: a newer
-version is downloaded in the background and a card over the navigator says so ("openOMSI
-X is out"); when the session ends the launcher installs the file already downloaded (by
-itself with "Install updates without asking", else it offers it), and never while a game
-runs. "Tell me about a new version during a session" switches the cards off (the download
-goes on). `OMSI_NO_UPDATE=1` switches the checks off; `OMSI_UPDATE_URL` points them at another
-release description (GitHub's format; `file://` works, for testing - the game then looks after
-3 s).
-
-**Playing now.** While a session runs the game tells the project's counter (a Cloudflare
-Worker, `services/presence/`) every ten minutes that it is being played, and says goodbye
-when it ends; the website and the README show how many play right now. What goes out is a
-random id made new for each session, the version and the kind of system - nothing else, and
-the counter keeps no addresses. Settings → General → "Count me in the website's \"playing
-now\"" (on by default) or `OMSI_NO_PRESENCE=1` switch it off; a dedicated server is never
-counted.
+**Updates.** There are none inside the program: it does not check for, download or install new
+versions (disabled on purpose, see [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md)).
+Settings → General → About shows the version you run and a link to the Releases page, which opens
+in your browser only when you click it. Download a new release yourself and unpack it over (or
+beside) the old one; mods, content and settings are not touched by that.
 
 **O** switches mouse steering on and off, as in OMSI (Omsi.exe's own formula): the cursor's
 place across the whole window is the steering from full left to full right lock
@@ -184,14 +158,13 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   *Graphics* (the quality preset first, the screen, distances and memory), *Driving* (keys,
   mouse, wheel and pedals, with the way to the Controls page), *Camera* (the seat, the views,
   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
-  *General* (language, the game's interface size, navigator, Discord Rich Presence,
-  updates, and resetting every setting).
-  **Discord Rich Presence** shows the launcher while preparing a drive, then the map and
-  line above the vehicle type and tour while playing. The full vehicle name is in the logo's
-  tooltip. The launcher status returns when the game ends.
-  It is enabled by default and can be turned off under Settings → General; the switch
-  affects the launcher immediately and the game on its next start. Discord must be running
-  on the same computer.
+  *General* (language, the game's interface size, navigator,
+  the version and the Releases link, and resetting every setting).
+  Head tracking from opentrack's UDP output (port 4242, `head_tracking_port`) listens on this
+  computer only (127.0.0.1); the datagrams carry no password. For opentrack on another machine
+  write `head_tracking_bind=any` (or one interface's address) in `settings.cfg`.
+  (Discord Rich Presence is disabled until Depot has its own Discord application, see
+  [removed/DISCORD_DISABLED.md](removed/DISCORD_DISABLED.md).)
   **Voice chat through GreenTeaSpeak** (on by default): in multiplayer, the other players
   are heard from where they are, when GreenTeaSpeak 2 runs with the openOMSI plugin and the
   server names a voice channel (see [SERVER.md](SERVER.md) and
@@ -234,7 +207,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   it save its run (SIGTERM, up to 8 s, and only a stuck game is killed) and, for a LAN
   session, the code to copy, who is playing and the chat.
 * **Mods** - installing mods and archives (see *Mods and the content folder*); a folder or
-  .zip, .7z or .rar dropped on the window is installed.
+  .zip dropped on the window is installed (a .zip is never unpacked: it goes to `Archives`).
 * **Timetable** - a map's lines, their tours and trips. Changes stay while you move between
   lines and are saved together (*Save all*); **New line** makes a line, **Repeat** turns a tour
   into a whole day of them (every *n* minutes up to a last departure).
@@ -474,26 +447,26 @@ vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy ta
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
 Installing a mod: the launcher's **Mods** page opens the system's folder / file picker
-(Finder, Explorer, GTK) for a mod folder or a `.zip`, `.7z` or `.rar` archive and sorts it
+(Finder, Explorer, GTK) for a mod folder or a `.zip` archive and sorts it
 into place (OMSI-style folders anywhere inside are merged; a lone bus, map, object or
 spline folder is recognised by its `.bus` / `global.cfg` / `.sco` / `.sli` files and put
 under the right folder), or drop it into `Mods/` next to the binary and open the page.
-`openomsi-launcher --cli install '{"path":"/path/to/mod.7z"}'` and `--cli mods` do the same
-from a shell. An installation is a background job: the archive's table of contents becomes
-a plan, the disk is checked for room, everything is unpacked into a staging folder on the
-content volume and moved into place in one step, and it can be cancelled and cleaned up at
-any point. A repaint for a bus that is not installed is kept aside and installed when the
+`openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` and `--cli mods` do the same
+from a shell. **`.rar` and `.7z` archives are not supported** (unpack them with your own tool
+and install the folder), and **a `.zip` is never unpacked by the launcher**. An installation is
+a background job: a folder's listing (or a `.zip`'s table of contents) becomes a plan, the disk
+is checked for room, a folder is copied into a staging folder on the content volume and moved
+into place in one step, and it can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is kept aside and installed when the
 bus arrives.
 
-Archives can also be **used in place**: a `.zip` laid out like OMSI 2 is put into the
+A `.zip` is **used in place**, and only that way: a `.zip` laid out like OMSI 2 is put into the
 content folder's `Archives/` (hard-linked when it is on the same disk, moved from the
 `Mods/` inbox, else copied after a free-space check) and read by the game without
 unpacking (`omsi_cfg::vfs` mounts every archive there, as well as `--content-zip` and
-`OMSI_CONTENT_ZIP`). The Mods page offers it ("use the archive in place"), and its default
-unpacks what fits on the disk and uses an archive in place when its unpacked size does not;
-`.7z` and `.rar` archives are always unpacked.
-`--cli install '{"path":…,"mode":"inplace"}'` (or `extract` / `auto`) and
-`--cli modinfo '{"path":…}'` do the same from a shell. The launcher's lists see the maps
+`OMSI_CONTENT_ZIP`). A `.zip` whose folders are not where the game looks for them (a lone bus
+folder, say) is refused; unpack it yourself and install the folder. The `mode` of
+`--cli install '{"path":…,"mode":…}'` is accepted but no longer changes anything, and
+`--cli modinfo '{"path":…}'` shows what the launcher would do. The launcher's lists see the maps
 and buses inside the archives.
 
 ## Season and weather
@@ -533,6 +506,14 @@ SD200/SD202/NL and of many mods: it plays the first station) or `SndExt_Radio` (
 made for the Sound Extension plugin: station button *n* plays the *n*-th station, the volume
 knob `SndVol_Radio` sets how loud). Switch the radio on in the cockpit as in OMSI; the
 screen says which station plays and the song when the stream names it.
+
+**Which station addresses play.** Only `https://` addresses of public hosts (also for the
+playlists and redirects a station names). Addresses of this computer or the local network
+(`localhost`, `127.x`, `10.x`, `192.168.x`, `169.254.x`, `.local` names, ...) and addresses with
+`user:password@` are refused, because a map's `radio.cfg` could otherwise make the game talk to
+your router or local services; the radio display says "blocked: ..." and `game.log` the reason.
+Plain `http://` stations are refused too unless you start the game with `OMSI_RADIO_ALLOW_HTTP=1`
+(the private ranges stay blocked even then).
 
 **Your stations.** `~/.openomsi/radio.cfg` (on Windows `C:\Users\<you>\.openomsi\radio.cfg`)
 is written with a few stations the first time the game starts. One station a line, the

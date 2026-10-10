@@ -12,5 +12,6 @@ node_modules/
 
 # the Android build's signing key (made on the first build) and intermediate files
 /android/debug.keystore
+/android/debug.keystore.pass
 /android/build
 tools/greenteaspeak-plugin/*.zip

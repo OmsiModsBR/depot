@@ -150,7 +150,7 @@ impl Situation {
                     }
                 }
                 "vars" => {
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     let mut vars = Vec::with_capacity(n);
                     for _ in 0..n {
                         let name = r.str().to_string();
@@ -162,7 +162,7 @@ impl Situation {
                     }
                 }
                 "stringvars" => {
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     let mut vars = Vec::with_capacity(n);
                     for _ in 0..n {
                         let name = r.str().to_string();

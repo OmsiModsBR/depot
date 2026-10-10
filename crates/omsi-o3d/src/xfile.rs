@@ -15,7 +15,7 @@ impl<'a> Tok<'a> {
     fn skip_ws(&mut self) {
         let b = self.s.as_bytes();
         loop {
-            while self.p < b.len() && (b[self.p] as char).is_whitespace() {
+            while self.p < b.len() && b[self.p].is_ascii_whitespace() {
                 self.p += 1;
             }
             if self.p + 1 < b.len() && b[self.p] == b'/' && b[self.p + 1] == b'/' {
@@ -53,7 +53,7 @@ impl<'a> Tok<'a> {
             self.p += 1;
             return Some(&self.s[start..self.p]);
         }
-        while self.p < b.len() && !(b[self.p] as char).is_whitespace() && !b"{};,<>\"".contains(&b[self.p]) {
+        while self.p < b.len() && !b[self.p].is_ascii_whitespace() && !b"{};,<>\"".contains(&b[self.p]) {
             self.p += 1;
         }
         Some(&self.s[start..self.p])
@@ -104,7 +104,13 @@ struct Ctx {
     named_materials: HashMap<String, Material>,
     /// Resolve after the whole file, because definitions may follow their references.
     material_refs: Vec<(usize, String)>,
+    /// How many `Frame`s are open around the one being read.
+    depth: usize,
 }
+
+/// The deepest `Frame` nesting that is read (real exporters stay well under 30); deeper
+/// files are an error instead of a stack overflow.
+const MAX_FRAME_DEPTH: usize = 128;
 
 pub fn parse_x(bytes: &[u8]) -> Result<Mesh, O3dError> {
     // (the 16-byte header is checked as bytes: a short file or a non-ASCII byte there made
@@ -192,6 +198,16 @@ fn parse_objects(t: &mut Tok, ctx: &mut Ctx, xform: Mat4) -> Result<(), O3dError
 }
 
 fn parse_frame(t: &mut Tok, ctx: &mut Ctx, parent: Mat4) -> Result<(), O3dError> {
+    if ctx.depth >= MAX_FRAME_DEPTH {
+        return Err(O3dError::XFile(format!("Frame nesting deeper than {MAX_FRAME_DEPTH}")));
+    }
+    ctx.depth += 1;
+    let r = parse_frame_inner(t, ctx, parent);
+    ctx.depth -= 1;
+    r
+}
+
+fn parse_frame_inner(t: &mut Tok, ctx: &mut Ctx, parent: Mat4) -> Result<(), O3dError> {
     let mut xform = parent;
     loop {
         let tok = t.next().ok_or_else(|| O3dError::XFile("eof in frame".into()))?;
@@ -669,6 +685,20 @@ Frame Root {\n FrameTransformMatrix {\n 1.0, 0.0, 0.0, 0.0,\n 0.0,-0.0, 1.0, 0.0
 #[cfg(test)]
 mod damaged_tests {
     use super::*;
+
+    #[test]
+    fn non_ascii_bytes_and_deep_frames_do_not_crash() {
+        // 0xE0 (a-grave) and 0xA0 (NBSP) used to end a token inside a multi-byte char
+        let mut b = b"xof 0302txt 0032\nMesh m".to_vec();
+        b.extend_from_slice(&[0xE0, 0xA0, 0x85]);
+        b.extend_from_slice(b" {\n}\n");
+        let _ = parse_x(&b);
+        let mut deep = b"xof 0302txt 0032\n".to_vec();
+        for _ in 0..200_000 {
+            deep.extend_from_slice(b"Frame {\n");
+        }
+        assert!(parse_x(&deep).is_err());
+    }
 
     #[test]
     fn damaged_files_are_errors_not_panics() {
