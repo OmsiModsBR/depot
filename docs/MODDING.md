@@ -261,7 +261,7 @@ then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
 ## Radio: a map's stations and a bus's display
 
 What a player sees and hears is in the [user guide](USER_GUIDE.md#radio); here is what a map
-or a bus can add. Omsi.exe reads none of it, so a map or bus made for both games loses
+or a bus can add. OMSI 2 reads none of it, so a map or bus made for both games loses
 nothing in OMSI 2.
 
 **A map's own stations.** `radio.cfg` beside the map's `global.cfg`, written like the
@@ -318,7 +318,7 @@ A map may bring a pre-built picture of itself for the navigator and the city map
 areas, rivers and rail under the roads, icons for terminals and garages, the municipalities' names,
 the municipality and street the player is on, and a panel with the map's bus lines. Everything is
 made beforehand by the map's author and put in one folder, `Maps/<Map>/openomsi-realmap/`;
-openOMSI computes none of it and a map without the folder looks as it always did. Omsi.exe ignores
+openOMSI computes none of it and a map without the folder looks as it always did. OMSI 2 ignores
 the folder. The files, the formats and what each one switches on are in [MAP_PACKAGE.md](MAP_PACKAGE.md).
 
 ## What stays as in OMSI 2

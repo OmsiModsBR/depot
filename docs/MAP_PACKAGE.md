@@ -10,7 +10,7 @@ geometry pipeline; the game never needs to know where the data came from; any au
 city, fictional map, other tools) produces the same files.
 
 Fits the existing precedent `radio.cfg`: optional files in the map folder, read only by
-openOMSI, ignored by Omsi.exe, so a map made for both games loses nothing.
+openOMSI, ignored by OMSI 2, so a map made for both games loses nothing.
 
 ## 1. Fixed location and layout
 
@@ -36,7 +36,7 @@ Rules:
 - The folder may be in the map's own folder or in the same place of another content root: a package for a map
   one does not own goes in the game's content folder (`Maps/<Map>/openomsi-realmap/`), as a mod does, so the OMSI 2
   installation is never written to. The root with the most priority wins.
-- The package is read only by openOMSI. Omsi.exe ignores the folder, so a map made for both
+- The package is read only by openOMSI. OMSI 2 ignores the folder, so a map made for both
   games loses nothing and the folder can ship inside the map's own download.
 - Paths inside `manifest.cfg` are relative to the `openomsi-realmap` folder.
 - Same precedent as `radio.cfg` (beside `global.cfg`), grouped in one folder because the

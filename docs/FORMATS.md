@@ -68,7 +68,7 @@ and constfiles under its own scripts and its displays stayed dark.
 ## Scripts (.osc) - unit `mc_exprcalc`
 
 An 8-float *working stack* (`st[0..8]`) and a 10-float *register file* (`l0..l9` load,
-`s0..s9` store without popping; the exe's `TCache` is `array[0..9] of Single`). Values push: the new value goes to `st[0]`, everything shifts
+`s0..s9` store without popping; there are ten single-precision slots). Values push: the new value goes to `st[0]`, everything shifts
 down one slot, `st[7]` is dropped. **Binary operators pop both operands and push the result**;
 popping shifts the stack up and refills `st[7]` with 0, so underflow reads zeros. (The old
 `Info_scriptcode.txt` table suggests operands stay on the stack, but stock scripts such as
@@ -76,13 +76,13 @@ popping shifts the stack up and refills `st[7]` with 0, so underflow reads zeros
 popping semantics.)
 
 Binary ops: `+ - * / % = < > <= >= && || min max` with `a b -` meaning `a - b`. Division (and
-`%`) by zero gives 0 (the exe's `divide` handler compares the divisor with 0.0 and stores 0;
+`%`) by zero gives 0 (OMSI 2 stores 0;
 the LiAZ 5292 charges its battery by `Timegap V_generator /` and relies on it). Unary ops replace `st[0]`: `sin arcsin arctan exp sqrt sqr sgn abs
 trunc ! /-/` (negate); `d` duplicates. `pi` pushes π, `random` replaces `st[0]` by a random
-whole number in `[0, n)` with `n = |round(st[0])|` (the exe calls `Random(Abs(Round(x)))`). A reached `{else}` jumps to the next `{endif}` even when a stray `{endif}` has already closed its
+whole number in `[0, n)` with `n = |round(st[0])|` (from `|round(x)|`). A reached `{else}` jumps to the next `{endif}` even when a stray `{endif}` has already closed its
 `{if}` (the Procity's dashboard script has one; ignoring that `{else}` blanked its odometer every
 frame). `$SetLengthL n` keeps the left n characters or pads on the right, `$SetLengthR n` keeps the
-right n or pads on the left (read off the exe's `str_SetLengthL/R`); re-checked Sept 24 2026 in `TXPC_calcblock_func` op 0x25 at 0x5d584a: `Copy(s, len-n+1, n)`). Mod scripts that cannot show what they were written for under these semantics are patched before compiling by `omsi_script::compat` (recognised by their text: the LiAZ 5292's 4-character line matrix pads the line to `4 $SetLengthL` and then keeps `3 $SetLengthR`, which left lines 1-9 blank and 5E as `   E`; its number is now written `"03" $IntToStrEnh` → `005E`. Aachen's ibox keeps route digits in float `ibox_eingabe` and blanks the display at 0, so leading zeros never appeared; mode-10 route entry uses a string digit buffer on `ibox_Zahleingabe` (empty until typed — no `"00"` / `"02" $IntToStrEnh` auto-pad): typed `0` then `1` shows `01`, typed `1` alone shows `1`; mode-7 line entry stays empty for free typing with no auto leading zeros). `{if}` does **not** pop its condition (28 spots in the stock scripts
+right n or pads on the left (`Copy(s, len-n+1, n)`). Mod scripts that cannot show what they were written for under these semantics are patched before compiling by `omsi_script::compat` (recognised by their text: the LiAZ 5292's 4-character line matrix pads the line to `4 $SetLengthL` and then keeps `3 $SetLengthR`, which left lines 1-9 blank and 5E as `   E`; its number is now written `"03" $IntToStrEnh` → `005E`. Aachen's ibox keeps route digits in float `ibox_eingabe` and blanks the display at 0, so leading zeros never appeared; mode-10 route entry uses a string digit buffer on `ibox_Zahleingabe` (empty until typed — no `"00"` / `"02" $IntToStrEnh` auto-pad): typed `0` then `1` shows `01`, typed `1` alone shows `1`; mode-7 line entry stays empty for free typing with no auto leading zeros). `{if}` does **not** pop its condition (28 spots in the stock scripts
 work on it: `(L.L.bremse_feststell) {if} ! (S.L.bremse_feststell)` releases the parking brake,
 `cond {if} (L.L.IBIS_busstop) 0 > &&` in the IBIS; the chura matrix writes `x d -1 = ! {if} *`).
 Tokens found in the executable's operator table: `/-/ <= >= && || sin arcsin arctan min max exp
@@ -99,7 +99,7 @@ Variable access is `(X.Y.name)`:
 | `M` | macro call (`M.L.name`) or callback (`M.V.name`) | `V` | host callback |
 | `T` | sound trigger (`T.L.name`, `T.F.name`) | | |
 
-Strings: `"literal"` (may contain spaces) pushes on the string stack. String ops (from the exe):
+Strings: `"literal"` (may contain spaces) pushes on the string stack. String ops:
 `$+ $= $d $* $< $> $<= $>= $length $msg $RemoveSpaces $cutBegin $cutEnd $SetLengthL $SetLengthR
 $SetLengthC $IntToStr $IntToStrEnh $StrToFloat`. `$IntToStrEnh` takes a format string whose first
 character is the pad character and the rest the width (`"02"`, `" 2"`). `$length` pushes the length
@@ -119,12 +119,10 @@ another unknown word is an error.
 
 Constfiles: `[const] name value`, `[newcurve] name` followed by `[pnt] x y` (piece-wise linear,
 clamped). Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
-defines is logged as `SC_ErrorInCommand_functioninvalid` and still takes its argument, giving
+defines is logged as an invalid-function error and still takes its argument, giving
 0 (the O530 Facelift's ZF-6AP-1300/1700 lack two converter curves that its `zf-eco.osc` uses
 in the line that computes `M_Wheel`).
 
-Errors in the exe: `SC_ErrorInCommand_{varinvalid,macroinvalid,constantinvalid,functioninvalid}`,
-`SC_ErrorInConstfile`, `SC_pnt_before_newcurve`.
 
 System variables (`varlist_system.txt`): Timegap GetTime NoSound Pause Time Day Month Year DayOfYear
 mouse_x mouse_y PrecipType PrecipRate coll_pos_x/y/z coll_energy Weather_Temperature
@@ -195,7 +193,7 @@ are not in its registration list; that check is not reproduced.
 
 ## Map - units `mc_mapclass`, `mc_terrain_2`, `mc_chrono`
 
-`global.cfg` keywords (from the exe): name friendlyname description/end version NextIDCode
+`global.cfg` keywords: name friendlyname description/end version NextIDCode
 worldcoordinates dynhelperactive entrypoints realrail LHT mapcam standarddepot moneysystem
 repair_time_min years realyearoffset ticketpack splineObjTypes scenObjList backgroundimage groundtex
 map addseason trafficdensity_road trafficdensity_passenger. Calendar: Holidays.txt (`[holidays]`
@@ -233,12 +231,12 @@ a keyword, is a label too). They are what the editor's Labels dialog edits - sig
 (`@` breaks a line), line numbers, a tree's texture, height and height/width ratio, a bus
 stop's name and timetable data - and fill the object's string variables in order; the count
 is no type (trees write 3 or 4). `[attachObj]`: `0`, path, IDCode, the parent's IDCode, the
-parent's instance (only `0` loads: Omsi.exe refuses objects on later objects of a spline
+parent's instance (only `0` loads: OMSI 2 refuses objects on later objects of a spline
 attachment row), the index of the parent's `[new_attachment]` point, heading, pitch, bank,
 labels. The parent is looked up among the records ([object], [attachObj],
 [splineAttachement]) written **before** it in the tile; an attachment whose parent comes
 later is not loaded.
-Older tile versions write shorter records (TMapKachel.loadMapFile): the leading detail level
+Older tile versions write shorter records (tile files): the leading detail level
 (`0`) only from version 9 on (an object above the detail setting is not loaded), IDCodes
 from 6 on (older records are numbered as they load), an `[attachObj]` parent by IDCode from 10
 on (before: its index among the tile's records so far), its heading from 8 on, pitch and bank
@@ -281,20 +279,19 @@ The plate is one flat object a couple of hundred metres across, placed at an abs
 height; the named mesh is a coarse version of the same plate. Every vertex of the object is
 moved by the difference between the ground under it and that base mesh, so the plate keeps
 its kerbs and camber while its arms come down onto the roads that run into them, and the
-plate's paths take their heights from it (Omsi.exe 0x7ba818). The ground is not pressed into
-it at load: nothing in Omsi.exe reads that mesh for the terrain, and objects stand on the
+plate's paths take their heights from it. The ground is not pressed into
+it at load: nothing in OMSI 2 reads that mesh for the terrain, and objects stand on the
 `.terrain` heights.
 
 `[spline_terrain_align]` (no parameter) and `[spline_terrain_align_2] <n>` follow a
 `[spline]` in a tile file (Berlin-Spandau: 33 and 203 of 2486 splines). The editor's
 "align terrain" wrote the ground's heights into the `.terrain` file already; at load the
-flag (1, or `n`) only makes the spline cut its outline out of the ground (Omsi.exe: tile
-parser 0x794e1a -> spline +0x35 -> segment +0x205 -> Generate 0x5b1178 -> GenerateTerrain,
+flag (1, or `n`) only makes the spline cut its outline out of the ground (OMSI 2 logs it as
 "Terrain hole cutting: Spline"). The outline is the spline type's `[terrainholeprofile]`
 extruded along the spline: right edge, far end, left edge, near end; `n` 2 and 4 keep the
 far end at the spline's end, 3 and 4 the near end at its start, otherwise each point's
 third value moves it past the end. A `.sli` without `[terrainholeprofile]` gets one per
-string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and 3 mm
+string of joined `[profile]`s: its left end and right end 3 cm in and 3 mm
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
 that crosses itself cuts nothing. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
 object-wide cutter, including declarations before the first `[mesh]` and repeated commands.
@@ -424,25 +421,24 @@ useTextTexture alphascale matl_freetex matl_lightmap matl_nightmap matl_allcolor
 particle_emitter PS_attachTo; material manager: matl_alpha matl_noZwrite matl_noZcheck matl_Zbias
 matl_envmap matl_envmaprealtime matl_bumpmap matl_envmap_mask matl_transmap.
 
-**`[smoke]` particles (Omsi.exe, established Oct 2026).** Nineteen lines: position (3),
+**`[smoke]` particles (OMSI 2, established Oct 2026).** Nineteen lines: position (3),
 direction (3), speed and its spread, frequency (a second), lifetime (s), brake factor,
-gravity, start size, growth (a second), initial alpha, a line Omsi.exe skips, red, green,
-blue; numbers or variable names (TRauch, read at 0x5f5e58; the final alpha stays 0, so a puff
-fades out over its life). Every frame (0x5a238c) a particle's velocity is multiplied by the
-brake factor raised to 20 x dt - 0x5a145c keeps 20 ln(max(brake, 0.1)) per emitter, so the
+gravity, start size, growth (a second), initial alpha, a line OMSI 2 skips, red, green,
+blue; numbers or variable names (the final alpha stays 0, so a puff
+fades out over its life). Every frame a particle's velocity is multiplied by the
+brake factor raised to 20 x dt - ln(max(brake, 0.1)) x 20 is kept per emitter, so the
 factor is per twentieth of a second at any frame rate - its level speed is drawn towards the
-weather's wind (0x753428) by what that takes off (not yet in openOMSI, where it slows to a
+weather's wind by what that takes off (not yet in Project Depot, where it slows to a
 standstill), and 9.81 x gravity x dt is taken off its vertical speed (a negative gravity
-lifts it). Size and alpha go linearly with its age (0x5a183c).
+lifts it). Size and alpha go linearly with its age.
 Nothing stops it at the ground: it falls on through the road until its life is over (the
 stock buses' and cars' wheel spray has gravity 1 and is under the road within a fifth of a
-second). It is drawn (0x5a47d4 -> 0x5a2b5c builds the quads per camera, 0x5a4180 draws them
-from the scene pass 0x6f1520 after the scenery and before the camera's own vehicle) as a
+second). It is drawn (the quads are built per camera and drawn from the scene pass after the scenery and before the camera's own vehicle) as a
 square facing the screen, reaching `size / view depth` from its centre in projection space
-and turned by its own random angle (0x5a1d54), its depth moved 0.1 m towards the eye; with
+and turned by its own random angle, its depth moved 0.1 m towards the eye; with
 fog and lighting off, `ALPHABLENDENABLE` on, `ZWRITEENABLE` off but the depth test on,
 `SRCALPHA`/`INVSRCALPHA`, the colour the vertex colour alone (`COLOROP SELECTARG2`: the
-particle's colour lit by the weather's light and the one lamp of 0x858efc on the CPU, white
+particle's colour lit by the weather's light and the one lamp on the CPU, white
 for `--PS_emissive--`) and the alpha rauch.tga's times the vertex's (a `[particle_emitter]`
 whose `--PS_bitmap--` is not marked as alpha: `ONE`/`INVSRCCOLOR`, texture times vertex
 colour). So the road cuts every
@@ -450,21 +446,21 @@ puff that sinks into it off in a straight line; openOMSI fades a puff out over t
 6-25 cm above the ground it was set off over instead (the plane its vehicle's wheels stand on,
 an object's own z = 0), and leaves out one wholly under it (`omsi_render::SmokeParticle`).
 
-**Object visibility (OMSI 0x5fdc7c, established Sept 2026).** OMSI decides per *object*
+**Object visibility (OMSI 2, established Sept 2026).** OMSI decides per *object*
 (scenery object, vehicle), never per mesh, with the model's radius R, `[detail_factor]` D
-(default 1; parsed into the model at +0xa8) and `[noDistanceCheck]` (+0xad, a flag of the whole
+(default 1) and `[noDistanceCheck]` (a flag of the whole
 model wherever it stands). With d the distance to the camera and z the depth along the view:
 the object is dropped when `d > R + maxObjDist` or `(z − R) / maxObjDist > 1` (both skipped by
 `[noDistanceCheck]`), and when `size / D < minObjSize` where
 `size = 2R / (z · fov · π/180)` - the object's diameter over its depth as a share of the
-camera's vertical field of view (degrees, camera +0x38). The same `size` (not divided by D)
+camera's vertical field of view (degrees). The same `size` (not divided by D)
 chooses the `[LOD]` level, so the `[LOD]` values of a model are in this measure. The values
 come from `options.cfg`: `[performance_maxObjDist]` (750 in the shipped file, 900 in the high
 presets, 1200 for Chicago), `[performance_minObjSize]` (0.013; 0.020 in "PC 2006") and, for
 reflections, `[performance_minObjSizeRefl]` (0.046). A detail factor above 1 therefore makes
 an object vanish sooner (clutter), below 1 keeps it longer.
 
-**`[LOD]` choice (OMSI 0x5ef860, Sept 2026).** Each `[LOD] x` appends x to the model's list and
+**`[LOD]` choice (OMSI 2, Sept 2026).** Each `[LOD] x` appends x to the model's list and
 makes its index the level of the meshes after it. With that `size`, OMSI takes the *first*
 level in file order whose x ≤ size, else the *last* level whatever its own x (a model with one
 `[LOD]` is drawn at any size; the stock Sv signals' `[LOD] 0.1` is the signal and `[LOD] 1`
@@ -472,7 +468,7 @@ its far version). A mesh written before the first `[LOD]` gets the loader's leve
 before any `[LOD]` has set it (an uninitialised local); here it joins the first level - the
 WH UK AI cars put their shadow there.
 
-**`[matl_transmap]`** is the effect's `gMatlTransMapOn` map (the material's `AlphaMap`, +0x58):
+**`[matl_transmap]`** is the effect's `gMatlTransMapOn` map (the material's `AlphaMap`):
 its *alpha* is the slot's alpha, and a picture without an alpha channel is opaque as Direct3D
 samples it (the WH UK AI cars' paint layer uses a black 24-bit `transmap_null.tga`).
 
@@ -564,7 +560,7 @@ rim the reflection running on away from the camera.
   one. A weather with `[snow]` takes the `WinterSnow` pictures whatever the season, and with
   `[snowOnRoad]` as well the `WinterSnowfall` ones before them (the stock roads keep their
   snowy asphalt there); a texture with no snow picture takes its winter one, else its autumn
-  one (Omsi.exe 0x7f910c).
+  one (OMSI 2).
   `[trafficdensity_road]` / `[trafficdensity_passenger] hour factor` lines form a curve
   over the day that scales AI traffic and waiting passengers.
 * Scenery `.sco` `[sound] sound\x.cfg` uses the vehicle sound.cfg format, driven by the
@@ -576,7 +572,7 @@ rim the reflection running on away from the camera.
   (texels 85⅓..170⅔ each way). Neighbouring light maps are the same picture shifted by a
   third - 85 texels between two tiles, 171 between every other one, on all stock maps.
   A tile with `[variable_terrainlightmap]` (296 of Spandau's 329) has its light map baked
-  from the `[maplight]`s of the objects of the nine tiles when they are loaded (Omsi.exe
+  from the `[maplight]`s of the objects of the nine tiles when they are loaded (OMSI 2
   writes it over the file, unless options.cfg has `[no_generateTerrLightMaps]`), so the file
   is only what the last OMSI run left: openOMSI bakes it the same way. A texel, on the ground
   at its south-west corner, takes each lamp's colour × min(1, (radius / distance)²), the
@@ -619,7 +615,7 @@ rim the reflection running on away from the camera.
   A `[texttexture]` whose variable is one of the object's script string variables (the stock
   stop departure displays) is drawn from the script whenever it calls `Refresh_Strings`.
   `[helparrow]` objects (route arrows a map's author puts up) are drawn only while OMSI 2's
-  route arrows are on (`nav_arrows`, the game menu's "Route arrows"), as in Omsi.exe.
+  route arrows are on (`nav_arrows`, the game menu's "Route arrows"), as in OMSI 2.
 * `[matl_envmap]`: the reflectivity mask is the diffuse alpha; textures without an alpha
   channel (DXT1 paint schemes such as the GN92 HVL livery) do not reflect at all.
 
@@ -635,7 +631,7 @@ registration_free kmcounter_init + model/script/sound/paths/passengercabin.
 Built-in vehicle variables are listed in `program/varlist_roadvehicle.txt`; generated per axle:
 `Wheel_Rotation_ Wheel_RotationSpeed_ Axle_Steering_ Axle_Suspension_ Axle_Springfactor_
 Axle_Brakeforce_ Axle_SurfaceID_` × `{n}_{L|R}`, `PAX_Entry{n}_Open/_Req`, `PAX_Exit{n}_…`,
-`Debug_0..5`; `PAX_Entry8..15` and `PAX_Exit8..15` besides Omsi.exe's eight, and
+`Debug_0..5`; `PAX_Entry8..15` and `PAX_Exit8..15` besides OMSI 2's eight, and
 `PAX_Entry{n}_Busy` / `PAX_Exit{n}_Busy` (somebody in that doorway; see MODDING.md).
 Callbacks: `program/callbacklist_*.txt`.
 
@@ -667,7 +663,7 @@ onlytypes end types_prefered number_tour.
 ## Misc
 
 * Weather .owt: name description end fog clouds precip groundwet snow snowOnRoad wind temp press.
-* Options (.cfg/.oop): see `[performance_*]` table in the exe (full list in `omsi-options`).
+* Options (.cfg/.oop): see `[performance_*]` table (full list in `omsi-options`).
 * Fonts .oft: `[newfont] name bitmap alpha height gap` + `[char] ch x0 x1 y`.
 * Languages .olf: `KEY<TAB>text` lines, first line = language code.
 * Money: `[currency] name decimals`, `[coin]/[bill] o3d value`. Tickets .otp: ticketpack voicepath ticket ticket_2.
@@ -675,7 +671,7 @@ onlytypes end types_prefered number_tour.
 * Drivers .odr: ident busstops hektom crashs tickets rating perbusinfo. The personnel file
   is UTF-16 LE with a BOM like a situation. `[ident]` is name, sex, date of birth, date of
   hire; `[busstops]` counts the stops served and, of those, the ones reached too late and the
-  ones left too early (in that order, like Omsi.exe's driver record); `[hektom]` is the distance driven in hectometres; `[crashs]` counts crashes, hurt
+  ones left too early (in that order, like OMSI 2's driver record); `[hektom]` is the distance driven in hectometres; `[crashs]` counts crashes, hurt
   pedestrians, abscondings and, of those, the heavy ones; `[tickets]` the tickets sold and
   the takings; `[rating]` the ratings the personnel dialog shows (driving on a 0 = excellent
   to 10 = perilous scale, passenger comfort, ticket selling) followed by two accumulators
@@ -691,7 +687,7 @@ onlytypes end types_prefered number_tour.
 * Sound conditions: `[conditionSingle]` / `[conditionInt]` give the variable, the **value**
   and then the relation - 0 `<>`, 1 `=`, 2 `<`, 3 `>`, 4 `<=`, 5 `>=` (`engine_n 200 3` =
   the engine runs, `velocity 2 2` = standing); `[conditionBool]` has no relation and
-  compares for equality. How an entry plays (the exe's `TSound` update): with a
+  compares for equality. How an entry plays (in OMSI 2): with a
   `[trigger]` it plays once each time the trigger fires, from the start and never looped (a
   `[loopsound]` too), **without looking at its conditions**; without one it loops for as
   long as its conditions hold and it is audible (the long horn, rain, the compressor, the
@@ -714,9 +710,9 @@ onlytypes end types_prefered number_tour.
   random part lifetime the stock scripts draw is 0, which makes the SD200's rear door
   reopen by itself for ever.
 * Input: keyboard.cfg `[game]/[vehicles]` + `[entry] name scancode modifier` (the modifier
-  is a mask, as Omsi.exe reads it (0x6478d0): 1 the action is told the key's state every
+  is a mask, as OMSI 2 reads it: 1 the action is told the key's state every
   frame - the throttle, brake and steering keys, " *" in OMSI's key list - 2 Shift, 4 Ctrl;
-  Omsi.exe has no Alt, openOMSI's own Alt is 8, which OMSI leaves alone);
+  OMSI 2 has no Alt, the Depot's own Alt is 8, which OMSI leaves alone);
   gamectrler.cfg ctrl axis buttons FFScale.
 * Startup order (logfile.txt) documents the manager creation sequence, mirrored in `omsi-sim`.
 
@@ -738,7 +734,7 @@ script has that variable, and into the second line of `magnitola_1` (`frequency@
 (`mp3_display_track_name`).
 
 A map may bring stations of its own: a `radio.cfg` beside its `global.cfg` (not an OMSI
-file; Omsi.exe does not read it), a line `name = address` each. They come first, on the
+file; OMSI 2 does not read it), a line `name = address` each. They come first, on the
 first station buttons, and the player's follow. Its `volume` line is not read. Behind the
 address the frequencies the station is on may stand, for the display: `| 94.6` is its
 frequency everywhere, `| 94.6 @ x, y` the one near that place of the map, in the game's
@@ -791,7 +787,7 @@ Regional = https://example.org/regional.mp3 | 97.9
   `[lightcolor_A/B/C]` = 5 RGB stops (nadir, twilight start, sunrise, twilight end, zenith)
   for direct sun, light from above and ambient.
 * `[light_enh]` (mesh): pos, rgb 0-255, size (m), fading variable (name or constant),
-  brightness factor, z offset, effect bits, fade time, optional texture - Omsi.exe reads it
+  brightness factor, z offset, effect bits, fade time, optional texture - OMSI 2 reads it
   into the same lamp as a `[light_enh_2]` (omnidirectional, turned to the viewer) and draws
   it alike. `[light_enh_2]`: pos, dir, up, omni, rotating, rgb, size, cone
   inner/outer, variable, factor, z-offset, parameters, cone, timeconst, bitmap. The lights
@@ -818,7 +814,7 @@ scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index firs
 letter-spacing, "text")` (mode bit 0: colour from the font's colour bitmap, else the
 `STSetColor` colour; alpha from the font's mask; `mode & 3 == 2` writes only covered pixels,
 other modes the whole glyph cell), `STReadPixel(i, x, y)` + `STGetR/G/B/A(0)`, `STLoadTex("path", i)`
-(pushes nothing - OMSI 0x7bba4e only logs a missing file; the path is relative to the
+(pushes nothing - OMSI 2 only logs a missing file; the path is relative to the
 object's `Texture` folder, then to the global `Texture`, so the Krüger
 matrix's `..\..\Anzeigen\Krueger\x.bmp` is `Vehicles\Anzeigen\Krueger\x.bmp`), `STCopyColor(a, b)`.
 `GetFontIndex("name")` registers an .oft font and answers **-1** for a font that does not exist
@@ -832,9 +828,9 @@ channels with alpha 0 (the Krüger matrix draws `STSetColor(0, 0, 255, 0, 0)`), 
 textures in alpha only (`[matl_transmap] \S:n`, one texture per LED colour).
 Glyph pixels of an .oft `[char] c x0 x1 y` sit in columns x0..x1 (x1 exclusive as drawn).
 In colour mode a glyph pixel takes the colour bitmap's pixel at the same row and column as
-its alpha pixel (0x5d67bc), whatever size the colour bitmap has: often a small swatch of one
+its alpha pixel, whatever size the colour bitmap has: often a small swatch of one
 colour (stock `EFADfont.bmp`, 128×128 under a 128×200 alpha). For a row past the colour
-bitmap's height Omsi.exe's `TBitmap.ScanLine` raises a range error (0x4763b0) and the text
+bitmap's height OMSI 2 raises a range error and the text
 stops being drawn there; a column past its width reads into the neighbouring scanline's
 bytes. openOMSI repeats the colour bitmap in both cases instead.
 `NrSpecRandom(seed)` = stable pseudo random in [0, 1).
@@ -847,14 +843,14 @@ index), `GetRouteTerminusIndex(route)`, `GetTerminusCode(idx)`, `GetTerminusInde
 strings (no separate station line in any shipped file). AI buses get their destination the
 original way: string `SetLineTo` + `AI_target_index` (terminus index) and the
 `ai_scheduled_settarget` trigger - and, as every trip a bus starts calls
-`TRoadVehicleInst.virtual_10`, also when the depot file has no row for the trip's terminus or
+the trip-start call, also when the depot file has no row for the trip's terminus or
 the group names no depot file at all (`AI_target_index` stays as it was). Depot callbacks with
 index -1 (what the lookups answer for an unknown code) return "" / -1, never entry 0. A depot
 file belongs to a map: when the bus folder has none of the name the map's `ailists.cfg` wants
-(a mod bus brings only its own map's), the openOMSI takes it from another vehicle folder
+(a mod bus brings only its own map's), Project Depot takes it from another vehicle folder
 (`omsi_vehicle::hof::depot_anywhere`); a bus of a plain `[aigroup_2]` pool, whose group names
 no depot, takes the map's depot of its folder where it has one, else the folder's first
-(`schedule::pool_depot`, Omsi.exe's selected-hof index 0). The FloFix
+(`schedule::pool_depot`, OMSI 2's selected-hof index 0). The FloFix
 "Atron" IBIS of many mods starts in a PIN mode (`IBIS_mode` 10) and wants the `PIN` constant
 of its constfile typed and confirmed before the mode keys work.
 
@@ -914,7 +910,7 @@ pitched towards the ground under the axle, pulling and braking the front along i
 The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToPrevVeh]`
 path points: the rear section's seats and exits are numbered after the front's, which is
 how the stock door scripts count them, and a person walking from one section to the other
-crosses the joint on those links. Omsi.exe joins two coupled cabins only where both give
+crosses the joint on those links. OMSI 2 joins two coupled cabins only where both give
 these points. openOMSI also crosses a bus joint whose cabins give none, between the ends of
 the two aisles, but not a trailer on a lorry's hitch (`[coupling_front_character]` type 0):
 without the points that is a cabin of its own in openOMSI, and passengers whose place is in
@@ -948,7 +944,7 @@ path points, `[ticket_sale]`, `[stamper]`. In openOMSI a `[passpos]` may go on w
 two script variable names on the lines straight after its five values (see MODDING.md). `[entry]` may carry `{noticketsale}`: passengers
 who use that door walk straight to a seat instead of past the cash desk. It and `{withbutton}`
 are lines of their own that mark the entry read last, wherever they stand between the blocks
-(the stock cabins write a blank line before them), as Omsi.exe reads them.
+(the stock cabins write a blank line before them), as OMSI 2 reads them.
 
 The entries and exits are numbered in file order, and that number is how the engine and the
 bus script talk about the doors. The engine writes `PAX_Entry<i>_Req` while somebody at the
@@ -983,7 +979,7 @@ of a dirt overlay material. `veh_wash` clears them.
 
 `[matl_change] texture index variable` followed by one `[matl_item]` block (every stock
 file has exactly one): the block's `[matl_nightmap]`, `[matl_lightmap]`, `[matl_allcolor]` …
-describe the material *variant*. Omsi.exe (0x5fd6xx) rounds the variable to the nearest
+describe the material *variant*. OMSI 2 rounds the variable to the nearest
 whole number (ties to even) and shows item n for 1 ≤ n ≤ the number of items, the plain
 material for anything else - a variable at 2 with one item is dark. A variable no script
 declares is registered by the model loader at 0 (the stock MANs' spare buttons are switched

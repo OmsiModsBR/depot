@@ -10,9 +10,9 @@ Loader the original (called by the map loader the original after `global.cfg`):
 * Finds every `Chrono.cfg` under `<map>/Chrono` with `FindFilesRecursive`:
   depth first, a folder's subfolders before its own files, in the order Windows lists names
   (case-insensitive). The index in that list is the scenario's number; later ones override.
-* the original parses one file into a 52-byte record (`chrono.f_10[i]`):
-  `[name]`, `[description]` … `[end]`, `[startdate]` (flag bit 1, day at +0x1c),
-  `[enddate]` (flag bit 2, day at +0x20), `[ticketpack]`, `[moneysystem]`,
+* a scenario file holds one record:
+  `[name]`, `[description]` … `[end]`, `[startdate]`,
+  `[enddate]`, `[ticketpack]`, `[moneysystem]`,
   `[deactivate_lines]` = **a count, then that many line names** (`StrToInt`, then `ReadLn`
   count times).
 * Dates are `YYYYMMDD`, converted to day numbers.
@@ -20,8 +20,8 @@ Loader the original (called by the map loader the original after `global.cfg`):
   `day >= start` (if given) **and** `day <= end` (if given) - both ends inclusive; a
   scenario without dates is never in force.
 * the original builds the "Time Line" (every start/end change point) and the original(day)`
-  sets each record's active byte (+0x29) for the current date (also called when the date
-  changes: the original).
+  marks each scenario as active or not for the current date (also when the date
+  changes).
 
 ## Timetable loading
 
@@ -36,11 +36,11 @@ For k = last active scenario … 0, then the map's own `TTData` (k = −1):
 
 ## Lines and tours (`.ttl`, reader the original)
 
-* `[userallowed]` sets the line record's byte +4; the player's line list in the
-  "select timetable" dialog (`Tform_settt.FormShow` → the original) shows **only** lines
+* `[userallowed]` marks a line as selectable; the player's line list in the
+  "select timetable" dialog shows **only** lines
   with it. (Berlin-Spandau: 5 of 23 lines; the rest are AI-only.) `[priority]` → +5.
 * `[newtour]`: number, AI group (depot), day mask (empty → 1023). The mask is split into ten
-  bytes at tour +0x20…+0x29.
+  day flags.
 * Validity: on a public holiday (`[holiday]` date) only bit 7 counts;
   otherwise the weekday bit (0 Monday … 5 Saturday, 6 Sunday). In addition, in the school
   holidays (a `[holidays]` range) bit **8** must be set, otherwise bit **9**. The printed
@@ -56,23 +56,18 @@ ignored with "has no valid [line] entry for the current chrono scenario".
 
 ## Hof files and IBIS
 
-* `TRoadVehicle.LoadFromFile` loads **every** `*.hof` of the vehicle folder
-  into its list (field 0x5e4) with `THof.LoadFromFile`.
-* `TRoadVehicleInst.virtual_10` - `SetLineTo` / `ai_scheduled_settarget`;
-  `TRoadVehicle.virtual_00` - `AI_target_index`.
-* A hof's `[name]` is THof +4; its termini (`[addterminus]`, `[addterminus_allexit]`, 24-byte
-  records: +0 code, +8 name, +0x10 strings, +0x14 all-exit flag) are THof +0x14.
+* A vehicle loads **every** `*.hof` of its folder into its list of hofs.
+* A hof has a `[name]` and a list of termini (`[addterminus]`, `[addterminus_allexit]`: code, name, strings, all-exit flag).
 * `ailists.cfg`: `[aigroup_depot]` = group name, then the **hof name** (a
-  hof's `[name]`, not a file name) at group record +8; `[aigroup_depot_typgroup(_2)]` must
+  hof's `[name]`, not a file name); `[aigroup_depot_typgroup(_2)]` must
   come before it.
 * An AI timetable bus takes the hof of its vehicle whose `[name]` equals the
-  depot's hof name exactly (case-sensitive) into its selected-hof index (+0x7c8). Without
-  a match the index stays 0: the vehicle folder's **first** hof (they are loaded in the
-  order the folder lists them). The player's hof is the one chosen in the vehicle dialog
-  (`Tform_selectVeh.ComboBox5Change`).
-* Starting a trip calls `TRoadVehicleInst.virtual_10` with the
+  depot's hof name exactly (case-sensitive) as the bus's selected hof. Without
+  a match it stays the vehicle folder's **first** hof (they are loaded in the
+  order the folder lists them). The player's hof is the one chosen in the vehicle dialog.
+* Starting a trip hands the bus the
   trip's line and **terminus name** (the `.ttp`'s `[trip]` fields): the selected hof's
-  terminus of that exact name gives `AI_target_index` (float, +0x674; unchanged when there
+  terminus of that exact name gives `AI_target_index` (a float; unchanged when there
   is none), the line goes into the string variable `SetLineTo`, and the bus script's
   `ai_scheduled_settarget` trigger runs. The script does the rest (IBIS_TerminusIndex,
   codes, the displays). Coupled parts get the same call.
@@ -91,7 +86,7 @@ ignored with "has no valid [line] entry for the current chrono scenario".
 * Tour masks: bit 8 = school holidays, bit 9 = school days (they were swapped, so tours
   marked for one ran on the other and showed as "not on this date" in the launcher).
 * A tour whose `[ai_group]` names a plain `[aigroup_2]` pool (no `[aigroup_depot]` block)
-  gets a depot file as well: Omsi.exe leaves such a bus's selected-hof index at 0 (its
+  gets a depot file as well: OMSI 2 leaves such a bus's selected hof at the first one (its
   folder's first `.hof`), openOMSI takes the map's own depot of that folder where it has
   one. Without it the bus had no `SetLineTo`/`AI_target_index` and never ran
   `ai_scheduled_settarget`, and every mod whose display switches its destination picture on

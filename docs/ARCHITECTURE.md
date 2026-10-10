@@ -22,7 +22,7 @@ state.
 | tessellation, spline geometry          | `omsi-geometry`               | splines, terrain, placement done; the ground cut under flush surfaces and `[terrainhole]` |
 | `mc_d3d_classes` (Direct3D 9)          | `omsi-render` (wgpu)          | the vanilla picture complete (materials, lights, night maps, reflections, mirrors, shadow cascades); `enhanced` is a physically based renderer of its own |
 | `mc_Form_Main`, main loop              | `omsi-app`                    | offscreen + window, start menu, HUD, tile streaming; the original's dialogs are the launcher |
-| vehicle runtime (`TRoadVehicleInst`)   | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
+| vehicle runtime                        | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
 | AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai_motion` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `rigid` + `physics` (wheels, collisions) |
 | Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game's own window (wgpu, `omsi-ui`): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
 | - (no original counterpart)            | `omsi-net`, `omsi-app::lan`   | LAN play: UDP session, bit-packed vehicle states, chat |
@@ -147,8 +147,8 @@ budget.
    Traffic lights (crossing phase programs, lamp objects), CTC paint schemes, scheduled AI
    buses driving timetable tracks with stops (`omsi-app::schedule`, `--schedule --time`).
    Simple collisions: oriented obstacle boxes from placed objects ([boundingbox] or mesh
-   extents) stop the player vehicle and feed coll_* sysvars. **(done)** As in Omsi.exe
-   (0x7af0a4) only `[fixed]` and `[crashmode_pole]` objects are solid (a collision mesh if
+   extents) stop the player vehicle and feed coll_* sysvars. **(done)** As in OMSI 2
+   only `[fixed]` and `[crashmode_pole]` objects are solid (a collision mesh if
    they have one, else their `[boundingbox]`), and none with `collision_objects=0` (OMSI's
    `no_collision`).
    Passengers, first pass: skinned `.hum` models posed procedurally from the `[links]`
@@ -221,7 +221,7 @@ budget.
    everything blended behind it), glass reflections weighted by the viewing angle, WASD
    driving with shift for the three vehicle keys it covers, and a build stamp in the log and
    the HUD. **(done)**
-   Also: `[spline_terrain_align]` (the spline's hole outline, as Omsi.exe cuts it) and
+   Also: `[spline_terrain_align]` (the spline's hole outline, as OMSI 2 cuts it) and
    `[terrainhole]` applied, and the ground only cut
    where a surface really crosses it; `OMSI_ROAD_PHOTO` photographs the carriageway network
    from above and reports where the picture shows ground instead of road (0 of ~400 points
@@ -401,9 +401,9 @@ flapping, the C2's BVG screen and air hiss, the Citaro Facelift's dark IBIS and 
 Sprinter 412D without a body, the Sprinter 312D that would not move off, the Scania's
 windows. Each was traced to a general cause, most of them read off OMSI:
 
-* **Script VM** - division by zero gives 0 (the exe's `divide` stores 0; clearing the
+* **Script VM** - division by zero gives 0 (OMSI 2 stores 0; clearing the
   stack flattened the LiAZ's battery every frame); `random` is `Random(Abs(Round(x)))`.
-* **Sounds** (`TSound` update) - a triggered entry plays once per trigger and ignores its
+* **Sounds** (sound update) - a triggered entry plays once per trigger and ignores its
   conditions; without a trigger it loops while its conditions hold, and `[noloop]` makes it
   play once on the rising edge (the endless ECAS/parking-brake hiss); loopsound pitch from
   the sample rate with DirectSound's 100 Hz floor; the rear section of an articulated bus
@@ -414,10 +414,10 @@ windows. Each was traced to a general cause, most of them read off OMSI:
 * **Pack versions** - a vehicle pack installed in two versions (content folder and a map
   archive) no longer mixes files; a bus that borrows meshes from a pack that is not
   installed says so (the Ahlheim Citaro needs Urbino_II).
-* **Meshes and textures** - o3d skips unknown bytes like the exe (protected v7 meshes);
+* **Meshes and textures** - o3d skips unknown bytes like OMSI 2 (protected v7 meshes);
   `.x` data objects may be named; 4-bit bitmaps with 17 palette entries; DDS with
   D3DFORMAT fourccs; absolute texture paths of the author's machine.
-* **Engine inputs** - `AutoClutch` is 1 as in the exe's default options (manual gearboxes
+* **Engine inputs** - `AutoClutch` is 1 as in OMSI 2's default options (manual gearboxes
   kept throwing their gear out); `Weather_Temperature` is known before `{init}` (engines
   were made at 0 °C). Shift+digit door keys send `_off` on release like a keyboard.cfg
   key. Shift+U waits for the engine to catch, checks it keeps running and presses a
@@ -563,12 +563,11 @@ windows. Each was traced to a general cause, most of them read off OMSI:
   height, turns eased by the angle left, the landing height eased (1.8 m/s) with the landing
   waiting for it and the rise/drop curves blended.
 * **LiAZ 5292 line matrix** - its `Matrix_D.osc` pads a one-digit line to four characters
-  and then keeps the right three (`$SetLengthR` keeps the right end - re-read in OMSI:
-  op 0x25 at 0x5d584a is `Copy(s, len-n+1, n)`), so 1-9 were blank and 5E showed `   E`.
+  and then keeps the right three (`$SetLengthR` keeps the right end: `Copy(s, len-n+1, n)`), so 1-9 were blank and 5E showed `   E`.
   `omsi_script::compat` rewrites that script's number as `"03" $IntToStrEnh` → `005E`,
   recognised by its text; the AI's `SetLineTo` is zero-padded to match.
 
-Round 12 (Sept 25 2026, user bug list): sound `[volcurve] -1/-2` (TSound: time since active /
+Round 12 (Sept 25 2026, user bug list): sound `[volcurve] -1/-2` (time since active /
 directional factor) - the LiAZ 5292's engine was silent under way; LiAZ letter lines 052D;
 fonts fall back to the other case / unaccented letter; I = all saloon circuits; L also side
 lights where they have a switch of their own; terrain cells split (i,j)-(i+1,j+1) as in
@@ -618,7 +617,7 @@ no gap where a loop turns, at most 200 voices mixed; **NaN** - non-finite number
 float sorts with `total_cmp`, a panic hook; quicksave and screenshots into the content folder;
 the personnel file's distance carried over; the smallest note for the fare. **(done)**
 Round 14b: the complaints of a dark, hot, cold or muggy saloon,
-greetings and complaints only in the player's bus, `Cabinair_relHum` a fraction as in the exe;
+greetings and complaints only in the player's bus, `Cabinair_relHum` a fraction as in OMSI 2;
 stamping at the validators (`[stamper]`, the bus's `ev_Stamper` sound); voice parameters queued
 for the mixer's next block instead of waiting on the voice list's lock. A bus driven off the
 edge of a map falls (the "615 km/h" of a 90 s offscreen drive on Grundorf was the fall).
@@ -634,7 +633,7 @@ outside in through open doors, underpasses echo (`[triggerbox_setreverb]`, a Sch
 **sun** from `timezone.txt` (zone, place, summer time); **grip** from `StreetCond` and the
 temperature (black ice); **nothing written into the original** (personnel files, key bindings);
 **particles** - `[smoke]` and `[particle_emitter]` (TRauch: exhaust, coolant, spray, chimneys,
-the fireworks) drawn with `Texture/rauch.tga` (how Omsi.exe moves and draws them, and where a
+the fireworks) drawn with `Texture/rauch.tga` (how OMSI 2 moves and draws them, and where a
 puff meets the road: FORMATS.md, Model); **coronas** - z offset, rotating 0/1/2, inner
 cone, star, double brightness; `[nomaplighting]`; **railways** - trains throw the switches
 (`[switchdir]`), signals from `signalroutes.cfg` (Signal/NextSignal), `train_*coupling`;
@@ -679,8 +678,8 @@ its box off the fogged distance; the saloon and the door panes went milky in gro
 own half of the wheel locked to the rim (push-pull, lifted round the outside to regrip, the rim
 sliding through the hands when the wheel is flicked), a fist round the rim, the seat slid at
 most 16 cm and the rest reached by leaning; **passengers** - greetings and complaints only when
-the same voice file has not been heard for 10 s (the original, the list at 0x861244;
-the ticket, "thanks" and the missing change are never held back), riders tilt with the floor
+the same voice file has not been heard for 10 s (the
+ticket, "thanks" and the missing change are never held back), riders tilt with the floor
 (pitch, bank), their interior light eases in and out, money held out only at the desk, no twin
 figures side by side, each notices an arriving bus 0.2-2.4 s after it stopped; **AI** - bends
 sampled at fixed places of the road (the car-fixed 2.5 m grid made the allowed speed fall in
@@ -801,7 +800,7 @@ survives a panic and lets go of tiles it cannot make, bad triangle indices dropp
 LAN status written off the frame, controllers merged per device with DirectInput slots;
 **per OMSI** (see RE notes in the commits) - cant in percent within `[halfcantwidth]`,
 `GetTime` as play time, `$IntToStrEnh`, (L.M.)/(S.M.) as system variables, (S.S.) writes,
-STLoadTex/STTextOut/Refresh_Strings, driver ratings as the exe's counters (late > 180 s on
+STLoadTex/STTextOut/Refresh_Strings, driver ratings as OMSI 2's counters (late > 180 s on
 arrival, early < −120 s on departure, driving 100(1−P)), Brakeforce, all-exit termini,
 TrafficPriority, FF_Vib_Period, tank_percent, Colorscheme, `[NightMapMode]` hours and InUse,
 the legacy `[ailist]`, registrations.txt, `[shadow]` casters as an option, wheels that
@@ -816,8 +815,8 @@ volume setting reaches the mixer, OMSI 2's options.cfg imported on a first start
 navigator shows what a jam costs, no compiler warnings. **(done)**
 Still open: the map and timetable editor, player-driven trains and trams (track-bound
 physics, overhead wire, `[realrail]` bogies), timetable and passenger sync over LAN, chrono
-and season changes at midnight (the exe re-evaluates them; here they are fixed at load),
-`relrange`, `Snd_Microphone` (the exe toggles the OS microphone line), cubemap DDS (first
+and season changes at midnight (OMSI 2 re-evaluates them; here they are fixed at load),
+`relrange`, `Snd_Microphone` (OMSI 2 toggles the OS microphone line), cubemap DDS (first
 face only), a controller axis/button editor with calibration and a steering spring,
 Colorscheme for scenery objects and people, parallel scenery scripts, real reflections in
 the driver's windows, one Grundorf road point that shows ground (0.4 %, older than this round).
@@ -847,7 +846,7 @@ were already synchronised (the host simulates, clients claim riders); the overhe
 not an OMSI variable and was dropped. Still open: splines in the map editor (moving or
 making road pieces regenerates their meshes, lanes and terrain cuts), a trip's route
 (`.ttr`) and stop times in the timetable editor, `relrange` (no stock use, meaning
-unclear), `Snd_Microphone` (the exe toggles the OS microphone line; deliberately not done).
+unclear), `Snd_Microphone` (OMSI 2 toggles the OS microphone line; deliberately not done).
 
 Round 23 (Sept 27 2026, the player's bug list and a diagnostic of ~70 more): **lights** -
 fog cones mapped as OMSI maps `light_cone.bmp` (the original: rim uv = sin a, 1 − cos a;
@@ -941,10 +940,10 @@ position, message) is `PluginIo`'s new default methods. Tests: `crates/omsi-plug
   `view_reset_all_directions`. `App::view_looks` keeps a look direction per view
   (`sync_view_look` on every change of view); `App::view_zoom` narrows the field of view of
   the driver's and passenger views (the wheel, = / -, a pinch).
-* **Mouse control** (0x6f4284..0x6f447b, `Panel1MouseMove` 0x82c5f8): the cursor is the
+* **Mouse control**: the cursor is the
   panel's client position; steering = (2x/w - 1) / max(1, km/h / 10) x
-  `[inv_min_turnradius]` into `inv_lenkradius` (+0x73c, read by the integrator 0x7e27c0);
-  throttle max(0, 1 - 2y/h), brake max(0, 2y/h - 1) (`throttle` +0x5dc, `bremspedal` +0x5e0),
+  `[inv_min_turnradius]` into `inv_lenkradius`;
+  throttle max(0, 1 - 2y/h), brake max(0, 2y/h - 1) (`throttle`, `bremspedal`),
   all three eased for a second after switching on. `mouse_sens` scales ours.
 * **Game controllers** (`controllers.rs`, `dinput.rs`): `Devices` joins gilrs (gamepads; every
   device on macOS and Linux) and on Windows DirectInput 8 (`DI8DEVCLASS_GAMECTRL`, a data
@@ -1001,30 +1000,30 @@ position, message) is `PluginIo`'s new default methods. Tests: `crates/omsi-plug
 
 ### 0.1.7 (Sept 28 2026): the bus as its `.bus` file makes it, sharp screens, trees, steering, updates
 
-Reverse engineered from Omsi.exe and put in place of our own guesses:
+Matched to the observable behaviour of OMSI 2 and put in place of our own guesses:
 
-* **Driving physics** (`omsi-sim::rigid`, OMSI's integrator is sub_7e2574; ODE there only
+* **Driving physics** (`omsi-sim::rigid`; ODE there only
   knocks over crash objects). Across the tyres OMSI has no slip angle: in its holding state
-  (`+0x1d8`) the bus follows its steering geometry outright, and only when the bend asks more
+  the bus follows its steering geometry outright, and only when the bend asks more
   than mu x the load on all tyres, or a wheel spins or locks, does each axle slide with at
   most mu x its load, until the side speed at every tyre is under 0.1 m/s again. Ours had a
   tyre of 12 x load per radian: every bus turned at 70 % of what its steering asked, 0.8 s
   late, drifting 2-3° - the same for every file. Now a constraint per tyre with those limits.
   Every axle steers at atan((long - `[rot_pnt_long]`) x curvature), curvature = steering x
-  `[inv_min_turnradius]` (0x7e3060; a tag axle behind the line steers the other way), with no
+  `[inv_min_turnradius]` (a tag axle behind the line steers the other way), with no
   rate limit of the physics' own (the inputs have theirs). Springs: travel measured at
-  (maxwidth + minwidth) / 4, force and damper speed at maxwidth / 2 (0x7e47b3..0x7e4c8d),
+  (maxwidth + minwidth) / 4, force and damper speed at maxwidth / 2,
   spring + damper capped at `achse_maxforce`, the tyre at least 15x the spring (94 % of the
   file's rate reaches the body; the fixed 900 kN/m tyre left 79 %). Pitch and roll damped by
-  sin(x)/x a step, x = 1.5 sqrt(sum springs / mass) dt (0x7e4f55); no yaw damping.
+  sin(x)/x a step, x = 1.5 sqrt(sum springs / mass) dt; no yaw damping.
   `cargo run --release -p omsi-sim --example handling -- <file.bus>...` prints yaw response,
   side slip, roll, roll frequency and settling per file.
-* **Mouse steering** (0x6f4284): the window's full width is the full lock, divided by
+* **Mouse steering**: the window's full width is the full lock, divided by
   max(1, km/h / 10); a one-second ease-in after switching on; the mouse owns the wheel (a
   steering key's leftover no longer takes over when the cursor passes the middle). The speed
   in that divisor is smoothed over 0.4 s and the wheel eases towards its target in 60 ms: the
   raw speed made the wheel creep on by itself and come back in steps.
-* **Keyboard steering and pedals** (sub_7e614c / sub_7d5124): OMSI's curvature grows by
+* **Keyboard steering and pedals**: OMSI's curvature grows by
   0.00005 per ms a key is held (`steering_linear`), `old_steering` leaves it where it is when
   the key is let go; the clutch key presses the pedal at once and it comes up at 0.7/s.
 * **Graphics device.** The instance asks Vulkan, then DirectX 12 (Windows), then OpenGL
@@ -1036,16 +1035,16 @@ Reverse engineered from Omsi.exe and put in place of our own guesses:
 * **Mirrors**: `[add_camera_reflexion]` cameras sit in the body's own matrix (pitch and roll
   included, `Camera::roll`); `dist` puts the eye behind the point; the 8th value of
   `[add_camera_reflexion_2]` is the radius of the sphere OMSI tests against the view frustum
-  before it redraws a mirror (0x6f611f, 0x7f41ac) - mirrors out of view are not redrawn, the
+  before it redraws a mirror - mirrors out of view are not redrawn, the
   visible ones take turns (with at least 0.3 m, or a mirror half in view stood frozen).
 * **Screens**: text and script texture slots are `MaterialExtra::screen`; the enhanced pass
   writes a screen mask (`MASK_FORMAT`, second colour target) that the glow's first level
   and FXAA read - FXAA had halved the contrast of the IBIS's letters.
-* **Trees** (`[tree]` objects, OMSI's RefreshTrees 0x77e6b0 / 0x774444): the map's strings
+* **Trees** (`[tree]` objects, OMSI 2): the map's strings
   are texture, height and the width/height ratio; the billboard is height x ratio wide. We
   divided by the ratio: a slim fir (0.4) was six times too wide.
 * **Tiles**: objects and spline attachments have pitch, bank (and a tilt flag) only from
-  tile version 12, strings from version 4 (0x792ee7, 0x794892).
+  tile version 12, strings from version 4.
 * **Touch wheel**: turns with the finger round its centre (120° of rim = full lock); the old
   drag across ran off the screen at about 0.4 of the lock to the left.
 * **Updates** (DISABLED, see `docs/removed/UPDATER_DISABLED.md`; the code described here was removed; formerly `updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the

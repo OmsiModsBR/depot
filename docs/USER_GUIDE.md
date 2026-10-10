@@ -71,7 +71,7 @@ Settings → General → About shows the version you run and a link to the Relea
 in your browser only when you click it. Download a new release yourself and unpack it over (or
 beside) the old one; mods, content and settings are not touched by that.
 
-**O** switches mouse steering on and off, as in OMSI (Omsi.exe's own formula): the cursor's
+**O** switches mouse steering on and off, as in OMSI (OMSI 2's own formula): the cursor's
 place across the whole window is the steering from full left to full right lock
 (`[inv_min_turnradius]` of the bus), from the middle up to the top edge is the throttle and
 down to the bottom edge the brake. Above 10 km/h the same hand movement turns the wheels less

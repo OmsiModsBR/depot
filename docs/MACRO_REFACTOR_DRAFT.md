@@ -138,7 +138,7 @@ Cinco fases em sequência, cada uma liberando a seguinte. Sem integração com o
 
 Riscos principais:
 
-- **Regressão silenciosa de comportamento.** O jogo depende de compatibilidade fina com o Omsi.exe e muitos testes pulam sem `OMSI_ROOT`. Por isso os testes de caracterização vêm primeiro, e o `omsi-check` deve rodar antes e depois de cada fase, como o CONTRIBUTING já pede.
+- **Regressão silenciosa de comportamento.** O jogo depende de compatibilidade fina com o OMSI 2 e muitos testes pulam sem `OMSI_ROOT`. Por isso os testes de caracterização vêm primeiro, e o `omsi-check` deve rodar antes e depois de cada fase, como o CONTRIBUTING já pede.
 - **Branches paralelas.** Sem o upstream, o conflito que importa é entre branches do próprio depot, como a de articulação. Cada movimentação grande deve ser anunciada e mergeada rápido, num momento sem branches longas abertas.
 - **PRs grandes demais para revisar.** Cada extração deve ser um PR de movimentação pura (sem mudar lógica), seguido de PRs de ajuste.
 
