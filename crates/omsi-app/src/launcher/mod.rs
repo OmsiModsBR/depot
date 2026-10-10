@@ -52,9 +52,9 @@ pub enum Page {
     Setup,
 }
 
-const PAGES: [(Page, &str, &str); 10] = [
+// (the Multiplayer page is hidden: multiplayer is disabled in this version)
+const PAGES: [(Page, &str, &str); 9] = [
     (Page::Drive, "Drive", "directions_bus"),
-    (Page::Multiplayer, "Multiplayer", "groups"),
     (Page::Profile, "Profile", "badge"),
     (Page::Settings, "Settings", "tune"),
     (Page::Controls, "Controls", "keyboard"),

@@ -48,7 +48,7 @@ The first rebranding release is available on the
 | Platform | File |
 | --- | --- |
 | Windows x64 | `depot-0.2.17-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
-| Dedicated server, Windows x64 | `depot-0.2.17-server-windows-x64.zip` - see [docs/SERVER.md](docs/SERVER.md) |
+| Dedicated server | **discontinued** - no longer built on any architecture, see [docs/SERVER.md](docs/SERVER.md) |
 
 ARM64, Linux, macOS and Android packages are not included in Depot 0.2.17.
 Inherited platform support and build instructions do not imply published Depot packages.
@@ -122,7 +122,7 @@ to.
 2. **No original code or assets.** Nothing from the original is copied; the formats are
    described in [docs/FORMATS.md](docs/FORMATS.md).
 3. **A better engine.** 64-bit address space, streaming and texture loading on worker threads,
-   no 2 GB limit, no single-thread stalls, LAN multiplayer and a dedicated server.
+   no 2 GB limit, no single-thread stalls (multiplayer and the dedicated server are disabled for now).
 
 ## Documentation
 
@@ -140,7 +140,7 @@ Documentation is available locally. The pages live in [`docs/`](docs):
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
 | [Plugins](docs/PLUGINS.md) | Lua plugins (API and examples), OMSI plugin DLLs and the 32-bit plugin host |
-| [Dedicated server](docs/SERVER.md) | hosting a session without a window |
+| [Dedicated server](docs/SERVER.md) | disabled (historical) |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.COMMIT` scheme and the CI |
 | [Changelog](CHANGELOG.md) | what changed in each version |
 
@@ -152,7 +152,7 @@ scripts/build-macos.sh        # macOS   → dist/macos/depot.app
 scripts\build-windows.cmd     # Windows → dist\windows\depot.exe
 scripts/build-linux.sh        # Linux   → dist/linux/depot
 scripts/build-android.sh      # Android → dist/android/depot-<version>.apk
-scripts/build-server.sh       # server  → dist/server
+scripts/build-server.sh       # server  → disabled (exits with an error)
 ```
 
 Needs the latest [Rust stable](https://rustup.rs) and the platform's C toolchain; details in

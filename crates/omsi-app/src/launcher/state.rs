@@ -479,6 +479,10 @@ impl State {
     }
 
     pub fn check_join(&mut self) {
+        // (multiplayer is disabled: nothing is looked up)
+        if true {
+            return;
+        }
         if self.join_checked == self.choice.lan_addr {
             return;
         }
@@ -510,6 +514,10 @@ impl State {
 
     /// Ask a server about itself (its status and icon), at most every `every` seconds.
     pub fn ask_server(&mut self, address: &str, every: f32) {
+        // (multiplayer is disabled: no server is asked, nothing goes on the network)
+        if true {
+            return;
+        }
         if self.server_asked.get(address).map(|t| t.elapsed().as_secs_f32() < every).unwrap_or(false) {
             return;
         }
@@ -616,11 +624,8 @@ impl State {
     /// The duty as the backend takes it.
     pub fn duty(&self) -> core::Duty {
         let c = &self.choice;
-        let lan = match c.lan_mode.as_str() {
-            "host" => "host".to_string(),
-            "join" => format!("join:{}", c.lan_addr.trim()),
-            _ => "off".to_string(),
-        };
+        // (multiplayer is disabled: a duty never hosts or joins)
+        let lan = "off".to_string();
         // Joining: the host's map, as its status gives it (a code's host is asked when the
         // code is typed). The game takes it from the host's welcome too, but only when that
         // comes before the map is loaded: through a tunnel it came later, the game started

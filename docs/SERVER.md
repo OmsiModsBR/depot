@@ -1,3 +1,8 @@
+> **DISABLED.** The dedicated server is no longer built, packaged or supported, on any
+> architecture, and `--server` now exits with an error. The source is kept untouched for the future
+> multiplayer redo. See [docs/removed/MULTIPLAYER_DISABLED.md](removed/MULTIPLAYER_DISABLED.md).
+> Everything below is historical.
+
 # Dedicated server
 
 Depot 0.2.17 is a rebranding-only release of the openOMSI 0.2.16 baseline,
