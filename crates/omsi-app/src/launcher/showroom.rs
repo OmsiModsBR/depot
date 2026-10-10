@@ -286,9 +286,37 @@ impl Showroom {
                         vehicle.set_var(&var, v);
                     }
                 }
+                // On the floor (z = 0) and on the wheel physics the game drives it with: the
+                // bus and each rear section a body of its own on its springs (the multibody
+                // articulation). The rear sections followed kinematically here before, hung
+                // on their coupling, and stood visibly apart from how they stand in the game
+                // (without a ground, with their wheels over the floor by the springs' sag).
+                vehicle.ground = Some(Arc::new(|_: f64, _: f64| Some(0.0)));
+                // on full springs: the scripts lower the air springs' `Axle_Springfactor` as
+                // the bus is switched on (kneeling, levelling), and the bus stood knelt and
+                // leaning in the picture - an articulated one less than a single one, its rear
+                // section's springs untouched and holding it up through the joint
+                vehicle.springs_full = true;
                 load_coupled_parts(&root, &mut vehicle);
-                for _ in 0..3 {
+                if !crate::rail_drive::is_rail(&vt.def) {
+                    vehicle.enable_rigid_body();
+                }
+                // Settled before it is shown: placed at rest on loaded springs, the bus still
+                // takes on the load its rear sections hang on the joint, and they settle onto
+                // their wheels. Two seconds left them moving in the picture: the steps go on
+                // until every body has been still for half a second (or ten seconds have
+                // passed): a slow swing passes under the thresholds for a step or two as it
+                // turns, and a single still step stopped it short of where it comes to rest.
+                let still = |v: &omsi_sim::VehicleInstance| {
+                    v.rigid.iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity.length() < 0.002 && rb.omega.length() < 0.0005)
+                };
+                let mut still_for = 0;
+                for _ in 0..300 {
                     vehicle.update(1.0 / 30.0);
+                    still_for = if still(&vehicle) { still_for + 1 } else { 0 };
+                    if still_for >= 15 {
+                        break;
+                    }
                 }
                 prefetch.prefetch(&vt, scheme);
                 for t in &vehicle.trailers {
@@ -311,8 +339,11 @@ impl Showroom {
         add_floor(renderer, &mut scene);
         let world = r.world;
         let mut vehicle = r.vehicle;
-        vehicle.position = DVec3::ZERO;
-        vehicle.heading = 0.0;
+        // (a rigid body stands where it settled, on the floor at the origin)
+        if vehicle.rigid.is_none() {
+            vehicle.position = DVec3::ZERO;
+            vehicle.heading = 0.0;
+        }
         let render = world.add_vehicle(renderer, &mut scene, &r.vt, r.scheme);
         let trailers: Vec<scene::VehicleRender> = vehicle.trailers.iter().map(|t| world.add_vehicle_part(renderer, &mut scene, &t.ty, r.scheme.filter(|i| *i < t.ty.paint_schemes.len()), &render)).collect();
         vehicle.init_text_textures(&mut world.fonts.lock(), &|p| omsi_texture::decode_file(p).ok().map(|i| (i.width, i.height, i.rgba)));

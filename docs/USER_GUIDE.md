@@ -1,10 +1,10 @@
 # User guide
 
-How to run openOMSI, drive, use the launcher, install mods and play over LAN. For building
+How to run Project Depot, drive, use the launcher, install mods and play over LAN. For building
 from source see [BUILDING.md](BUILDING.md).
 For OpenXR headset setup and controls on Windows, see [VR.md](VR.md).
 
-> openOMSI runs on the content of an **original OMSI 2 installation**. Without one the game does not start.
+> Project Depot runs on the content of an **original OMSI 2 installation**. Without one the game does not start.
 
 ## Checking an installation
 
@@ -22,7 +22,7 @@ openomsi --root "/path/to/OMSI 2"
 
 `--root` is only needed once: the path is remembered, so afterwards the program can be
 started with no arguments at all. Without it the installation is looked for in `$OMSI_ROOT`,
-next to the program (an `OMSI 2 Original` or `OMSI 2` folder beside openOMSI) and in the
+next to the program (an `OMSI 2 Original` or `OMSI 2` folder beside Project Depot) and in the
 usual Steam locations.
 
 Started without arguments the program opens the launcher (see below). `--menu` shows the
@@ -213,7 +213,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   into a whole day of them (every *n* minutes up to a last departure).
 * **Setup** - where the original installation and the game binary are. The OMSI 2 folder may
   be given as a path with quotes, as `Omsi.exe` itself or as a folder inside it; unpacked into
-  the OMSI 2 folder itself, openOMSI keeps its own content in an `openOMSI` folder there and
+  the OMSI 2 folder itself, Project Depot keeps its own content in an `openOMSI` folder there and
   never writes to the game's.
 
 ```bash
@@ -276,7 +276,7 @@ own cameras), `head_idle` (0..1, 0 by default: how far the view sways on its own
 rest breathes and shifts its weight, and 0 of it is exactly as OMSI; most of it is seen while
 the bus waits at a stop) and `head_idle_pace` (0.5..2: how fast that sway moves, 1 being the
 pace it is designed at), `collision_objects` (walls, poles and bridges stop the bus; off is OMSI's `no_collision`
-option and is taken from OMSI's options when openOMSI starts the first time), `graphics_api`
+option and is taken from OMSI's options when Project Depot starts the first time), `graphics_api`
 (`auto`, `vulkan`, `dx12` on Windows, `gl`: which graphics interface the game asks first -
 with `auto` Vulkan, then DirectX 12, then OpenGL), `ctrl_off` (game controllers switched off
 on the Controllers page, by name, separated by `|`) and `language` (`ENG`, `DEU`, `FRA`: the language the HUD names cockpit switches
@@ -499,7 +499,7 @@ air. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes the air for comparisons.
 ## Radio
 
 OMSI plays no music itself: a bus's radio only sets variables that radio plugins turn into
-sound. openOMSI plays internet radio for them, with no plugin needed.
+sound. Project Depot plays internet radio for them, with no plugin needed.
 
 **Which buses.** Every bus whose radio sets `Snd_Radio` (the cassette player of the stock
 SD200/SD202/NL and of many mods: it plays the first station) or `SndExt_Radio` (the radios

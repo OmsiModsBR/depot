@@ -48,7 +48,7 @@ pub struct KeyboardAxes {
     pub speed_kmh: f32,
     /// Rate of the steering wheel (fraction per second) while it swings back on its own.
     pub steer_vel: f32,
-    /// "Steering linearity": the keys turn the wheel as Omsi.exe does (0x7e64c6): the
+    /// "Steering linearity": the keys turn the wheel as OMSI does: the
     /// curvature changes by 0.00005 per millisecond whatever the speed, so the wheel goes at
     /// one steady pace; `lock_curvature` (`[inv_min_turnradius]`) turns that into a share
     /// of the lock.
@@ -56,9 +56,9 @@ pub struct KeyboardAxes {
     /// "Old Steering": let go, the wheel stays where it is and is turned back by hand - OMSI
     /// without `[autoCenter]`.
     pub old_steering: bool,
-    /// OMSI's `[redSteerSpd]` option (off by default, as in Omsi.exe): the keys turn the
+    /// OMSI's `[redSteerSpd]` option (off by default, as in OMSI): the keys turn the
     /// wheel, and `steering_neutral` and the self-centring bring it back, slower at speed -
-    /// by min(1, 1.5 e^(-0.1 v)), v in m/s (key handler 0x7e614c, frame 0x7d5124): all of
+    /// by min(1, 1.5 e^(-0.1 v)), v in m/s: all of
     /// the pace up to 14.6 km/h, 0.37 of it at 50.
     pub red_steer_spd: bool,
     pub lock_curvature: f32,
@@ -66,7 +66,7 @@ pub struct KeyboardAxes {
     /// the throttle key is pressed - tap the brake and it keeps that pressure. Off, the brake
     /// comes off with its key, as in most games. (The throttle never stays: see `update`.)
     pub pedal_hold: bool,
-    /// The steering is on its way back to the middle (Omsi.exe +0x5d6): set by the
+    /// The steering is on its way back to the middle: set by the
     /// `steering_neutral` key, cleared by a steering key.
     pub centering: bool,
 }
@@ -163,8 +163,8 @@ impl KeyboardAxes {
     }
 
     pub fn update(&mut self, dt: f32) {
-        // The pedals as Omsi.exe works them from the keys (key handler sub_7e614c, frame
-        // sub_7d5124): the throttle key raises the throttle at 2 a second up to 0.85 - to
+        // The pedals as OMSI works them from the keys:
+        // the throttle key raises the throttle at 2 a second up to 0.85 - to
         // the floor only with throttle_amplify held - and takes the brake off at once; let
         // go, the throttle falls at 1 a second. The brake key raises the brake at 1 a second
         // and takes the throttle off; let go, the brake stays where it is until the throttle
@@ -184,7 +184,7 @@ impl KeyboardAxes {
         } else if self.amplify_key {
             self.brake = (self.brake - 0.5 * dt).max(0.0);
         }
-        // The clutch as Omsi.exe works it from a key (0x7e648f, 0x7d59c0): pressed, the
+        // The clutch as OMSI works it from a key: pressed, the
         // pedal is down at once; let go, it comes up at 0.7 a second - a foot letting the
         // clutch in, which is what makes a gear change on the keyboard smooth.
         if self.clutch_key {
@@ -218,7 +218,7 @@ impl KeyboardAxes {
             self.centering = false;
         }
         if self.left_key && self.right_key {
-            // Omsi.exe keeps the wheel where it is while both steering keys are held.
+            // OMSI keeps the wheel where it is while both steering keys are held.
             // Releasing either key immediately hands control to the direction still held.
             self.steer_vel = 0.0;
         } else if self.left_key {
@@ -228,9 +228,9 @@ impl KeyboardAxes {
             self.steering = (self.steering + rate * dt).min(1.0);
             self.steer_vel = 0.0;
         } else if self.centering {
-            // steering_neutral as in Omsi.exe (sub_7d5124 at 0x7d55d6): the wheel goes back
+            // steering_neutral as in OMSI: the wheel goes back
             // to the middle at the pace the keys turn it - in OMSI both are 0.05 of curvature
-            // a second (0x7e6a58, 0x7d8a00) - in a straight line, and stays there until a
+            // a second - in a straight line, and stays there until a
             // steering key is pressed; it used to jump to the middle, a jerk of the whole bus
             // at speed. Here the keys turn faster than that while rolling, and the wheel comes
             // back faster on its own: at OMSI's figure alone the centring key brought the
@@ -310,7 +310,7 @@ mod tests {
         assert!(a.steering.is_finite() && a.steering < 0.5, "{}", a.steering);
     }
 
-    /// `[redSteerSpd]` with the steady pace: Omsi.exe's keys at speed (0x7e614c).
+    /// `[redSteerSpd]` with the steady pace: OMSI's keys at speed.
     #[test]
     fn red_steer_spd_slows_the_keys_at_speed() {
         for (v, want) in [(50.0, 0.5 * 1.5 * (-0.1f32 * 50.0 / 3.6).exp()), (10.0, 0.5)] {
@@ -324,7 +324,7 @@ mod tests {
         assert!((0.5 * 1.5 * (-0.1f32 * 50.0 / 3.6).exp() - 0.187).abs() < 1e-3);
     }
 
-    /// Omsi.exe's keyboard pedals: the brake stays until the throttle key, the throttle
+    /// OMSI's keyboard pedals: the brake stays until the throttle key, the throttle
     /// goes up to 0.85 (1 with throttle_amplify) and comes back by itself.
     #[test]
     fn pedals_as_omsi_works_them_from_the_keys() {
@@ -462,7 +462,7 @@ mod tests {
         assert_eq!(a.steering, 0.0);
     }
 
-    /// Omsi.exe treats the two steering keys symmetrically: either one works alone,
+    /// OMSI treats the two steering keys symmetrically: either one works alone,
     /// both together hold the current wheel position, and releasing one immediately lets
     /// the other continue steering.
     #[test]

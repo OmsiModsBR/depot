@@ -315,7 +315,7 @@ impl Rig {
             head_top,
             seat_lift,
             scale,
-            // (line 1 is the stride, hum+0x2d8: Omsi.exe's walk phase 0x626ae8 runs 2.0 per
+            // (line 1 is the stride: OMSI's walk phase runs 2.0 per
             // two strides and sets a foot down at 0.2, 0.7, 1.2 and 1.7, one step per half a
             // stride; line 2, {upper_arm_beta}, is an angle of the arm)
             walk_step: 0.5 * if wp[0] > 0.3 { wp[0] } else { 1.4 },
@@ -353,7 +353,7 @@ impl Rig {
         (self.thigh * 0.85).clamp(0.25, 0.4)
     }
 
-    /// Steps per second at `speed`, as Omsi.exe times the walk (0x626ae8): the stride is
+    /// Steps per second at `speed`, as OMSI times the walk: the stride is
     /// the full one from 1.2 m/s on and shortens with the speed below that, so the steps
     /// keep one pace when walking slowly; never with a step longer than the legs allow.
     pub fn cadence(&self, speed: f32) -> f32 {
@@ -365,7 +365,7 @@ impl Rig {
 
 pub struct HumanType {
     pub def: Human,
-    /// The skeleton as Omsi.exe animates it (see [`crate::human_omsi`]).
+    /// The skeleton as OMSI animates it (see [`crate::human_omsi`]).
     pub omsi: crate::human_omsi::OmsiRig,
     pub model: Model,
     pub model_dir: PathBuf,
@@ -2175,7 +2175,7 @@ fn limit_quat(q: Quat, max: f32) -> Quat {
     }
 }
 
-/// The bone transforms of [`skin`] from Omsi.exe's thirteen bones
+/// The bone transforms of [`skin`] from OMSI's thirteen bones
 /// ([`crate::human_omsi::OmsiAnim::bones`]): the feet and toes, which the original does not
 /// have, go with the shins they were split off.
 pub fn slots_from_omsi(b: &[Affine3A; crate::human_omsi::BONES]) -> [Affine3A; SLOTS] {

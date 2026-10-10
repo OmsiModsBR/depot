@@ -51,7 +51,7 @@ impl ScriptTexture {
         }
     }
 
-    /// `STNewTex`: a new, empty texture of the declared size (TComplMapObjInst.v06 case 0
+    /// `STNewTex`: a new, empty texture of the declared size (OMSI
     /// releases it and calls D3DXCreateTexture with the `[scripttexture]` entry's size).
     pub fn renew(&mut self) {
         let (w, h) = self.declared;
@@ -128,7 +128,7 @@ impl ScriptTexture {
 
     /// Draw `text` with the font at (x, y) (top-left), `spacing` extra pixels between
     /// letters. Glyph coverage scales the colour's alpha; RGB is the draw colour.
-    /// `STTextOut` as OMSI draws (0x7bb731, the original): `mode` bit 0 takes the colour
+    /// `STTextOut` as OMSI draws it: `mode` bit 0 takes the colour
     /// from the font's colour bitmap (else the `STSetColor` colour), the alpha is the font's
     /// mask; `mode & 3 == 2` writes only the glyphs' covered pixels (a transparent
     /// background), any other mode the whole glyph cell.
@@ -172,8 +172,8 @@ impl ScriptTexture {
         }
     }
 
-    /// `STLoadTex`: the texture becomes the file's picture. Omsi.exe (TComplMapObjInst.v06,
-    /// 0x7bbb08) releases it and calls D3DXCreateTextureFromFileExA with width and height
+    /// `STLoadTex`: the texture becomes the file's picture. OMSI
+    /// releases it and calls D3DXCreateTextureFromFileExA with width and height
     /// D3DX_DEFAULT and a full mip chain: the file's own size rounded up to a power of two,
     /// the picture stretched to fill it, so the mesh's UVs always cover the whole bitmap
     /// (a 256x64 bitmap into a 256x32 entry is not cut to its top half).

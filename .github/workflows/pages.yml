@@ -6,7 +6,7 @@ name: Pages (temporary site)
 on:
   push:
     branches: [main]
-    paths: ['site/**', 'docs/**', 'assets/logos/**', 'assets/icons/app/**', '.github/workflows/pages.yml']
+    paths: ['site/**', 'docs/**', 'assets/icons/app/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -27,7 +27,6 @@ jobs:
           cp -r site/. _site/
           cp -r docs _site/docs
           rm -rf _site/docs/removed _site/docs/security _site/docs/upstream-automation
-          cp assets/logos/wordmark-on-dark.png assets/logos/wordmark-on-light.png _site/assets/logos/
           cp assets/icons/app/depot-256.png _site/assets/icon.png
           touch _site/.nojekyll
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
