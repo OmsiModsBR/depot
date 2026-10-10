@@ -788,7 +788,7 @@ mod scenarios {
         frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 360, 1.0 / 60.0, drive(7000.0, 0.0));
         frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, drive(3000.0, 0.3));
-        // the road freezes over: the grip follows a frame later
+        // the road freezes over: the grip follows in the same frame
         v.host.street_cond = 1.0;
         v.host.temperature = -5.0;
         frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, drive(9000.0, -0.2));

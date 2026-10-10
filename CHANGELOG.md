@@ -105,6 +105,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Vehicle physics: the tyres take the road's grip of the frame they drive in. The grip (`road_grip` of
+  `StreetCond` and the air temperature) was set after the physics' step, so a road that froze over or dried
+  took hold one frame late, and an articulated bus's rear sections copied the late value. It is now set at
+  the start of the rigid body's step. The physics traces differ only there: the scenario whose road freezes
+  over and thaws is bit for bit the old code with the weather changed a frame earlier.
 - Vehicle viewer in the launcher: the rear sections of an articulated bus no longer stand with their wheels
   above the floor. The viewer gave the bus no ground and ran its rear sections kinematically, hung level with
   their coupling while their wheels went up into the arches by the springs' sag. The viewer now puts the bus
