@@ -189,7 +189,7 @@ impl VehicleHost {
         // weather update) every engine was cold, and the PAZ's carburettor engine, which
         // wants its choke below 0 °C, caught and died again on the key
         let (temperature, abs_humidity) = ambient_weather().unwrap_or((0.0, 0.0));
-        // `AutoClutch` is 1 unless OMSI's options say `[no_automaticClutch]` (the exe sets
+        // `AutoClutch` is 1 unless OMSI's options say `[no_automaticClutch]` (OMSI sets
         // 1.0 before reading them): the manual gearboxes of the Sprinters, the PAZ and the
         // LAZ work their clutch themselves then, and at 0 every gear a driver without a
         // clutch pedal put in was thrown out again at once

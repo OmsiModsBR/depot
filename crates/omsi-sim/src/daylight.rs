@@ -92,7 +92,7 @@ pub fn moon_position(clock: &SimClock, place: &SunPlace) -> (f64, f64, f64) {
 
 /// Where the map lies and how its clocks run, from its `timezone.txt` (OMSI
 /// the original: `[timezone]` hours east of UTC, `[location]` latitude and longitude,
-/// `[DST]` periods). Without the file the exe keeps Spandau: 52.505 N, 13.2782 E, UTC+1.
+/// `[DST]` periods). Without the file OMSI keeps Spandau: 52.505 N, 13.2782 E, UTC+1.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SunPlace {
     pub latitude: f64,
