@@ -259,6 +259,21 @@ struct Cabin {
 /// counted with the `[passpos]`), from the places (indices into `seats`) taken by people
 /// sitting there. (Counted by the `[passpos]` alone, every seat of a cabin with the
 /// driver's place first was one off: a tip-up seat folded down under the next one.)
+/// A busy stop's waiting places grown by `fresh` (the stop set up again): the places it has
+/// keep their numbers - the people on them hold those -, the new ones come after, free.
+/// The places added.
+fn merge_spots(spots: &mut Vec<WaitSpot>, taken: &mut Vec<bool>, fresh: Vec<WaitSpot>) -> usize {
+    let mut added = 0;
+    for sp in fresh {
+        if !spots.iter().any(|o| (o.pos - sp.pos).length() < 0.05) {
+            spots.push(sp);
+            taken.push(false);
+            added += 1;
+        }
+    }
+    added
+}
+
 fn seat_numbers(seats: &[Seat], sitting: impl Iterator<Item = usize>) -> Vec<u32> {
     let n = seats.iter().map(|s| s.omsi_seat + 1).max().unwrap_or(0);
     let mut out = vec![0u32; n];
@@ -1959,8 +1974,25 @@ impl Humans {
         for id in idle {
             self.stops.remove(&id);
         }
+        // a stop people wait at keeps its places - they stand on them by number - and gains
+        // the ones the new tiles brought: the stop the player starts at is set up with the
+        // first tile and filled at once, before the shelters on the tiles round it are there,
+        // and would otherwise never get more than those first places
+        let busy: Vec<(i64, DVec3, f64, String)> = world
+            .bus_stops
+            .lock()
+            .iter()
+            .filter(|s| used.contains(&s.0) && self.stops.contains_key(&s.0))
+            .map(|s| (s.0, s.1, s.2, s.3.clone()))
+            .collect();
+        let mut gained = 0usize;
+        for (id, pos, rot, name) in busy {
+            let fresh = self.build_pax_stop(world, None, id, pos, rot, &name);
+            let s = self.stops.get_mut(&id).unwrap();
+            gained += merge_spots(&mut s.spots, &mut s.taken, fresh.spots);
+        }
         if debug_pax() || (omsi_cfg::env::var_os("OMSI_PROFILE").is_some() && (removed > 0 || !gone.is_empty())) {
-            log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {removed} people taken away", gone.len());
+            log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {gained} waiting places added to busy stops, {removed} people taken away", gone.len());
         }
     }
 
@@ -6750,5 +6782,22 @@ mod population_limit_tests {
         );
         assert_eq!(h.pool_used(), 1);
         assert!(h.people.iter().any(|p| p.id == 1));
+    }
+
+    #[test]
+    fn busy_stop_gains_the_waiting_places_of_new_tiles() {
+        let spot = |x: f64| WaitSpot { pos: DVec3::new(x, 0.0, 0.0), face: 0.0, height: 0.0 };
+        // set up with the first tile: two places, the second taken
+        let mut spots = vec![spot(0.0), spot(1.0)];
+        let mut taken = vec![false, true];
+        // the shelters of the next tile came: the same two and three more
+        let fresh = vec![spot(1.0), spot(5.0), spot(0.0), spot(6.0), spot(7.0)];
+        assert_eq!(merge_spots(&mut spots, &mut taken, fresh), 3);
+        let xs: Vec<f64> = spots.iter().map(|s| s.pos.x).collect();
+        assert_eq!(xs, [0.0, 1.0, 5.0, 6.0, 7.0], "the old places keep their numbers");
+        assert_eq!(taken, [false, true, false, false, false]);
+        // nothing new: nothing added
+        assert_eq!(merge_spots(&mut spots, &mut taken, vec![spot(5.0)]), 0);
+        assert_eq!(spots.len(), 5);
     }
 }
