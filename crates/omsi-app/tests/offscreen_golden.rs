@@ -6,14 +6,18 @@
 //! * Always (no graphics adapter needed): the synthetic root reads back through the map
 //!   crate as written, and the one known difference between the window and the offscreen
 //!   run is pinned (see `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`).
-//! * Only with a graphics adapter (a software one is enough): the real `depot` binary
-//!   renders the synthetic root twice. The two pictures must be byte-identical, must show
+//! * Only when `OMSI_GOLDEN_RENDER=1` (or `OMSI_GOLDEN_BLESS=1`) is set and a graphics
+//!   adapter exists (a software one is enough): the real `depot` binary renders the
+//!   synthetic root twice. It is off by default because it has not been run on CI's
+//!   adapters yet; the refactoring plan runs it on the maintainer's machine, before and
+//!   after each step. The two pictures must be byte-identical, must show
 //!   the box, and, when a golden file for this adapter exists, must match it within a
 //!   tolerance. Without an adapter these tests print `SKIP` and pass.
 //!
 //! Regenerating the golden: on the machine whose pictures should be the reference run
 //!
 //! ```text
+//! OMSI_GOLDEN_RENDER=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture
 //! OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture
 //! ```
 //!
@@ -177,6 +181,10 @@ fn synthetic_root_reads_back_as_written() {
 
 #[test]
 fn offscreen_picture_is_stable_and_shows_the_box() {
+    if std::env::var_os("OMSI_GOLDEN_RENDER").is_none() && std::env::var_os("OMSI_GOLDEN_BLESS").is_none() {
+        eprintln!("SKIP: set OMSI_GOLDEN_RENDER=1 to render the synthetic root (needs a graphics adapter)");
+        return;
+    }
     let Some((name, backend)) = adapter() else {
         eprintln!("SKIP: no graphics adapter here; the offscreen picture cannot be rendered");
         return;
