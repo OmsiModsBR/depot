@@ -113,8 +113,14 @@ impl ScriptTexture {
 
     pub fn rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
         let c = self.color;
-        for y in y1.min(y2)..=y1.max(y2) {
-            for x in x1.min(x2)..=x1.max(x2) {
+        // clip to the texture first: the arguments come from the script and may span the whole i32 range
+        let (x0, x1) = (x1.min(x2).max(0), x1.max(x2).min(self.width as i32 - 1));
+        let (y0, y1) = (y1.min(y2).max(0), y1.max(y2).min(self.height as i32 - 1));
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
                 self.put(x, y, c);
             }
         }
@@ -134,11 +140,11 @@ impl ScriptTexture {
         let transparent = mode & 3 == 2;
         for ch in text.chars() {
             if ch.is_whitespace() {
-                cx += atlas.font.space_width() + atlas.font.gap + spacing;
+                cx = cx.saturating_add(atlas.font.space_width().saturating_add(atlas.font.gap).saturating_add(spacing));
                 continue;
             }
             let Some(g) = atlas.font.glyph(ch) else {
-                cx += atlas.font.gap.max(1) + spacing;
+                cx = cx.saturating_add(atlas.font.gap.max(1)).saturating_add(spacing);
                 continue;
             };
             let gw = (g.x1 - g.x0).max(0);
@@ -158,10 +164,11 @@ impl ScriptTexture {
                         continue;
                     }
                     let rgb = if from_font && si + 2 < atlas.color.len() { [atlas.color[si], atlas.color[si + 1], atlas.color[si + 2]] } else { [c[0], c[1], c[2]] };
-                    self.put(cx + gx, y + gy, [rgb[0], rgb[1], rgb[2], cov]);
+                    let (Some(px), Some(py)) = (cx.checked_add(gx), y.checked_add(gy)) else { continue };
+                    self.put(px, py, [rgb[0], rgb[1], rgb[2], cov]);
                 }
             }
-            cx += gw + atlas.font.gap + spacing;
+            cx = cx.saturating_add(gw).saturating_add(atlas.font.gap).saturating_add(spacing);
         }
     }
 
@@ -222,6 +229,24 @@ pub struct FontTable {
 #[cfg(test)]
 mod tests {
     use super::{ScriptTexture, MAX_SCRIPT_TEXTURE_SIDE};
+
+    #[test]
+    fn a_huge_rect_is_clipped_to_the_texture() {
+        let mut t = ScriptTexture::new(4, 3);
+        t.color = [9, 8, 7, 6];
+        // ~4e18 iterations if it walked the argument range
+        t.rect(i32::MIN, i32::MIN, i32::MAX, i32::MAX);
+        assert!(t.rgba.chunks(4).all(|p| p == [9, 8, 7, 6]));
+        let mut t = ScriptTexture::new(4, 3);
+        t.color = [1, 1, 1, 1];
+        t.rect(2, 1, 100, 100);
+        assert_eq!(t.get(1, 1), [0; 4]);
+        assert_eq!(t.get(2, 1), [1; 4]);
+        assert_eq!(t.get(3, 2), [1; 4]);
+        t.rect(-50, -50, -10, 2);
+        t.rect(10, 0, 20, 2);
+        assert_eq!(t.get(0, 0), [0; 4]);
+    }
 
     #[test]
     fn hostile_texture_sizes_are_clamped_not_overflowed() {
