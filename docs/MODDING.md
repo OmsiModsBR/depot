@@ -105,7 +105,7 @@ that camera sees from the rear section.
 ## Articulated buses: a pusher's joint
 
 This is an experimental Project Depot extension on `feat/pusher-articulation`,
-not a feature of the released 0.2.17 packages. See the
+not a feature of the 0.2.17 packages; it is part of Depot 0.2.52. See the
 [integration record](integrations/PUSHER-ARTICULATION.md).
 
 OMSI 2 turns and pitches an articulated bus's joint about one point, the coupling (the ball

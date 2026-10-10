@@ -63,3 +63,11 @@ The MIT license and internal source identifiers are preserved.
 Physics/simulation evolutions and 1:1 compatibility are future goals, not claims
 about improvements in 0.2.17. Only Windows x64 game/launcher and dedicated-server
 packages are published. See [release notes](docs/releases/0.2.17.md).
+
+## Depot 0.2.52
+
+Published 2026-10-10 from tag `v0.2.52`. It still derives from the openOMSI 0.2.16 baseline and no later
+openOMSI commit was imported wholesale; selected openOMSI changes (MIT) were reimplemented or backported
+one at a time, with source and licence recorded in [CHANGELOG.md](CHANGELOG.md). It carries behaviour
+changes, including vehicle physics changes whose match with OMSI 2 is not yet demonstrated. Only a
+Windows x64 game/launcher package is published. See [release notes](docs/releases/0.2.52.md).

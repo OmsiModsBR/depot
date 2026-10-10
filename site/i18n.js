@@ -16,7 +16,7 @@ const PT = {
  "c2.h": "Uma base moderna",
  "c2.p": "64 bits, multithread, com renderizador em wgpu (Metal / Vulkan / DirectX&nbsp;12 herdados da base).",
  "c3.h": "Windows x64 primeiro",
- "c3.p": "A versão 0.2.17 é publicada só para Windows x64. Outras plataformas ainda não são oferecidas como pacotes do Depot.",
+ "c3.p": "A versão 0.2.52 é publicada só para Windows x64. Outras plataformas ainda não são oferecidas como pacotes do Depot.",
  "c4.h": "Upstream seletivo",
  "c4.p": "Mudanças do upstream são revisadas quanto a licença, escopo e regressões antes de entrar - nunca sincronizadas às cegas.",
  "c5.h": "Materiais PBR",

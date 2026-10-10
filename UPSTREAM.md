@@ -36,4 +36,4 @@ git merge-base depot-baseline-openomsi-0.2.16 main
 ```
 
 Both commands must return `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
-The Depot release number 0.2.17 does not mean openOMSI 0.2.17 was imported.
+The Depot release numbers (0.2.17, 0.2.52) are Depot's own and do not mean openOMSI 0.2.17 or 0.2.52 was imported.

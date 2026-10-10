@@ -1,8 +1,8 @@
 # Project Depot on Android
 
-Depot 0.2.17 is a rebranding-only release and includes no Android package.
+Depot 0.2.17 was a rebranding-only release, and neither it nor 0.2.52 includes an Android package.
 This document describes inherited Android support and build instructions,
-not a published Depot APK or new functionality in 0.2.17.
+not a published Depot APK or new functionality in any release.
 
 Project Depot runs on Android phones and tablets (arm64, Android 8.0 or newer, a GPU with
 Vulkan 1.1; on a phone without Vulkan Project Depot tries OpenGL ES 3). It is the same game as on the computer: the same renderer, simulation, scripts,

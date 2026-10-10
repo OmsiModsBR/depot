@@ -6,6 +6,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.52 - 2026-10-10
+
+Release notes: [docs/releases/0.2.52.md](docs/releases/0.2.52.md).
+
 ### Added
 - Golden test for the offscreen run (`crates/omsi-app/tests/offscreen_golden.rs`): runs `depot --offscreen` on a
   synthetic root the test writes itself and checks that the picture is repeatable, shows the scene and matches a

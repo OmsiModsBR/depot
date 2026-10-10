@@ -13,7 +13,9 @@ import plan after the authorized Depot rebranding and release publication.
   to that commit. Its merge base with Depot main is the same SHA.
 - Original MIT LICENSE and ancestral Git history remain intact.
 - No later openOMSI commits were imported into main. Depot 0.2.17 is a
-  rebranding release, not an import of openOMSI 0.2.17.
+  rebranding release, not an import of openOMSI 0.2.17. (Update, 2026-10-10:
+  Depot 0.2.52 adds changes; its evidence is in [its release notes](releases/0.2.52.md).
+  This file describes the 0.2.17 baseline only.)
 - The separate experimental multibody branch was not merged or modified.
 
 `PROJECT.md` and `UPSTREAM.md` record the goals and provenance. Local

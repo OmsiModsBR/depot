@@ -36,5 +36,5 @@ in the same profile. This is not a new optimized distribution build.
 Visual/gameplay behavior on a physical ultrawide
 monitor is not certified by unit tests.
 
-This branch is not merged into main and is not part of released Depot 0.2.17.
+This change is merged into main and part of released Depot 0.2.52 (not of 0.2.17).
 MIT, internal identifiers and Depot branding are retained.
