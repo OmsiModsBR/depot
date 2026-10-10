@@ -14,10 +14,6 @@ const DOCS = [
 const PLATFORMS = [
   { key: "windows-x64", name: "plat.windows", icon: "desktop_windows", note: "plat.windows.note", os: "windows" },
 ];
-// The dedicated server was only published with 0.2.17 and is discontinued (see docs/removed/MULTIPLAYER_DISABLED.md).
-const SERVERS = [
-  { key: "server-windows-x64", name: "plat.server", icon: "dns", note: "plat.server.note" },
-];
 
 // Which build fits the visitor, roughly: the one to put first and mark.
 function visitorOs() {
@@ -87,8 +83,7 @@ async function download() {
   }
   const v = String(rel.tag_name).replace(/[^0-9A-Za-z._-]/g, "").replace(/^v/, "");
   ver.innerHTML = `${t("dl.latest", v)} · ${new Date(rel.published_at).toLocaleDateString(lang)}`;
-  // Each file by its exact name: matched by its ending alone, "-windows-x64.zip" was the
-  // dedicated server's zip as well, and the Windows button downloaded the server.
+  // Each file by its exact name, not by its ending.
   const card = p => {
     const file = `depot-${v}-${p.key}.${p.ext || "zip"}`;
     const a = (rel.assets || []).find(a => a.name === file);
@@ -100,9 +95,7 @@ async function download() {
           : `<p>${t("dl.notin")}</p>`}</div>`;
   };
   const games = [...PLATFORMS].sort((x, y) => (y.os === visitorOs()) - (x.os === visitorOs()));
-  grid.innerHTML = games.map(card).join("")
-    + `<h2 class="section-title" style="grid-column:1/-1">${t("dl.server")}</h2>`
-    + SERVERS.map(card).join("");
+  grid.innerHTML = games.map(card).join("");
 }
 
 async function doc(name, anchor) {

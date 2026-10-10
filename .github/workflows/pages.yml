@@ -26,7 +26,9 @@ jobs:
           mkdir -p _site/assets/logos
           cp -r site/. _site/
           cp -r docs _site/docs
-          rm -rf _site/docs/removed _site/docs/security _site/docs/upstream-automation
+          # Only the pages listed in site/prepare-docs.py are published, and only what Depot supports today.
+          python3 -I site/prepare-docs.py _site/docs
+          rm -f _site/prepare-docs.py
           cp assets/icons/app/depot-256.png _site/assets/icon.png
           touch _site/.nojekyll
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
