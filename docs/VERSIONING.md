@@ -22,7 +22,7 @@ relied on for release stamping.
 
 ## Historical upstream policy — not active in Depot
 
-The remaining text records the inherited openOMSI versioning and automation.
+The remaining text records the inherited Project Depot versioning and automation.
 Descriptions of automatic releases, PR builds, badges and website publication
 below are historical, not current Depot behavior. Refer to the archived
 workflows rather than the inactive `.github/workflows/` paths mentioned below.
@@ -73,7 +73,7 @@ A pull request's builds are test builds for anyone who wants to try the change:
 * their version names the pull request, `<version>-pr<number>` (e.g. `0.1.1313-pr1192`),
   in the launcher's side bar, `game.log` and crash reports;
 * nothing in the program replaces them (in-app updating is disabled), so a test build stays until it is deleted;
-* the Android one is an app of its own, *openOMSI PR #N* (`org.openomsi.game.pr`), that
+* the Android one is an app of its own, *Project Depot PR #N* (`org.openomsi.game.pr`), that
   installs beside the release and shares its `openOMSI` folder;
 * [`.github/workflows/pr_builds.yml`](../.github/workflows/pr_builds.yml) comments on the
   pull request with a download link per platform (through [nightly.link](https://nightly.link),
