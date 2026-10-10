@@ -9,7 +9,7 @@ body:
 
         * **Write in English.** Issues in other languages are closed until they are translated - a translator such as DeepL or Google Translate is fine.
         * **One problem per issue.** Several problems in one report get lost; open one issue for each.
-        * **Use the latest release.** The launcher updates itself; many problems are already fixed in a newer build.
+        * **Use the latest release.** The program does not update itself: download the newest release first; many problems are already fixed in a newer build.
         * **The game stopped on an error?** Use *Report on GitHub* in the launcher's error message - it fills in the error and the end of the log for you.
 
   - type: checkboxes

@@ -13,8 +13,8 @@ you want.
 
 ## Supported versions
 
-Only the latest release. The game updates itself, so fixes are not backported to older
-builds.
+Only the latest release. The game does not update itself (download new releases from the
+Releases page), and fixes are not backported to older builds.
 
 ## What counts
 
@@ -25,8 +25,8 @@ Examples of what we want to hear about:
   from the host;
 * **content files**: a map, vehicle, script or archive that makes the game read or write
   files outside the game's folders, or run code, just by being loaded;
-* the **launcher's updates and downloads**: anything that could make it install something
-  that is not an openOMSI release;
+* the **launcher's downloads** (the machine-translation model, for example): anything that
+  could make it fetch or run something it should not;
 * the crash reporter or the logs sending or showing more than they say (passwords, tokens,
   personal paths beyond the user name).
 

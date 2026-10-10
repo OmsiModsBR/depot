@@ -310,10 +310,8 @@ fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &
 pub const SETTINGS_TABS: [&str; 6] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General"];
 
 /// What the tabs show of the launcher and ask of it (they see only the settings): the
-/// updater's state, "Check now", "Reset all settings", the Controls page at one of its tabs.
+/// "Reset all settings" and the Controls page at one of its tabs.
 struct Outside {
-    update: crate::updater::Status,
-    check_updates: bool,
     reset: bool,
     controls: Option<usize>,
 }
@@ -336,7 +334,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let body = Rect::new(body.x, bar.bottom() + 18.0, body.w, (body.bottom() - bar.bottom() - 18.0).max(0.0));
     let s = &mut l.state.settings;
     let dirty = &mut l.state.settings_dirty;
-    let mut out = Outside { update: l.update.status(), check_updates: false, reset: false, controls: None };
+    let mut out = Outside { reset: false, controls: None };
     // (two columns side by side; where they would be too narrow to read - a phone - one
     // under the other, each as high as it was the frame before)
     let stacked = body.w < 900.0;
@@ -359,9 +357,6 @@ pub fn settings(l: &mut Launcher, area: Rect) {
         });
         h
     });
-    if out.check_updates {
-        l.update.check();
-    }
     if out.reset {
         l.pages.confirm_reset = true;
     }
@@ -1081,7 +1076,7 @@ fn gameplay_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     [left, c.used()]
 }
 
-/// The language, what the screen shows besides the bus, online, the navigator, updates.
+/// The language, what the screen shows besides the bus, online, the navigator, the version.
 fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Interface & online");
     {
@@ -1179,29 +1174,15 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     }
     c.y += 74.0;
     let left = c.used();
-    // updates from the GitHub releases (see `crate::updater`)
-    let mut c = Col::new(ui, cols[1], "Updates");
-    toggle_setting(ui, s, dirty, c.row(), "Look for updates when the launcher starts", "update_check");
-    toggle_setting(ui, s, dirty, c.row(), "Install updates without asking", "update_auto");
-    toggle_setting(ui, s, dirty, c.row(), "Tell me about a new version during a session", "update_notify");
+    // this build's version and the project's release page (in-app updating is disabled, see
+    // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
+    let mut c = Col::new(ui, cols[1], "About");
     {
-        use crate::updater::Status;
         let r = c.row();
-        let busy = matches!(out.update, Status::Checking | Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_));
-        if ui.button("s-upd-check", Rect::new(r.x, r.y, 150.0, r.h), if busy { "Checking…" } else { "Check now" }, Some("refresh"), ButtonKind::Normal) && !busy {
-            out.check_updates = true;
-        }
-        let text = match &out.update {
-            Status::UpToDate if crate::updater::is_test_build(crate::updater::current_version()) => format!("{} is a test build: it is not updated", crate::updater::current_version()),
-            Status::UpToDate => format!("{} is the latest version", crate::updater::current_version()),
-            Status::Available(rel) => format!("{} is available", rel.version),
-            Status::Failed(_) => "The last check failed".to_string(),
-            _ => format!("This is Project Depot {}", crate::updater::current_version()),
-        };
-        ui.text_in(&text, Rect::new(r.x + 162.0, r.y, r.w - 162.0, r.h), 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
+        ui.text_in(&format!("This is Project Depot {}", crate::about::current_version()), r, 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
     }
-    if ui.button("s-upd-github", c.row(), "github.com/OmsiModsBR/depot", Some("open_in_new"), ButtonKind::Ghost) {
-        crate::updater::open_url(crate::updater::REPO_URL);
+    if ui.button("s-about-releases", c.row(), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
+        crate::about::open_url(crate::about::RELEASES_URL);
     }
     // every setting at once: here at the end, not first on the page where it was the
     // control one saw before any other
@@ -2722,7 +2703,6 @@ mod wizard_tests {
 #[cfg(test)]
 mod settings_tests {
     use super::*;
-    use crate::updater::Status;
 
     /// Every clickable thing of the settings page by the tab it is on (switches are named
     /// `set-<key>`). Taken from the page as it was before the tabs: nothing may go missing.
@@ -2789,7 +2769,7 @@ mod settings_tests {
         let general = vec![
             "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
-            "set-update_check", "set-update_auto", "set-update_notify", "s-upd-check", "s-upd-github", "s-reset",
+            "s-about-releases", "s-reset",
         ];
         vec![graphics, driving, camera, sound, gameplay, general]
     }
@@ -2804,7 +2784,7 @@ mod settings_tests {
     }
 
     fn outside() -> Outside {
-        Outside { update: Status::Idle, check_updates: false, reset: false, controls: None }
+        Outside { reset: false, controls: None }
     }
 
     /// One frame of tab `tab`, its two columns tall enough that nothing is cut off. The Sound

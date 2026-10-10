@@ -21,7 +21,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod timetable;
 mod ui;
-mod update;
+mod dialogs;
 
 use glam::Vec2;
 use omsi_launcher_lib as core;
@@ -153,8 +153,6 @@ pub struct Launcher {
     page_scroll: f32,
     page_max: f32,
     ime: bool,
-    /// Updates from the GitHub releases (see `crate::updater`, `update.rs`).
-    pub update: crate::updater::Updater,
     #[cfg(not(target_os = "android"))]
     discord: Option<crate::discord::Discord>,
     #[cfg(not(target_os = "android"))]
@@ -230,20 +228,12 @@ impl Launcher {
         page_scroll: 0.0,
         page_max: 0.0,
         ime: false,
-        update: Default::default(),
         #[cfg(not(target_os = "android"))]
         discord: None,
         #[cfg(not(target_os = "android"))]
         discord_next_try: Instant::now(),
         gpu_rest_drop: None,
     };
-    // after an update: the files it set aside go, and the launcher says what happened
-    #[cfg(not(target_os = "android"))]
-    crate::updater::cleanup_after_update();
-    if let Some(v) = crate::updater::just_updated() {
-        log::info!("update: this start follows the update to {v}");
-        app.update.updated = Some((v, Instant::now()));
-    }
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
     if omsi_cfg::missing_original_essentials(std::path::Path::new(&app.state.config.root)).len() > 0 {
@@ -614,7 +604,6 @@ impl ApplicationHandler for Launcher {
             self.state.update(dt);
             #[cfg(not(target_os = "android"))]
             self.update_discord();
-            self.update_tick(event_loop);
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.renderer.is_none() && !self.state.in_game() {
@@ -847,7 +836,6 @@ impl Launcher {
         self.state.update(dt);
         #[cfg(not(target_os = "android"))]
         self.update_discord();
-        self.update_tick(event_loop);
         // the preview shows the chosen bus in the chosen light
         let c = &self.state.choice;
         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
@@ -1067,16 +1055,15 @@ impl Launcher {
         }
         let size = self.ui.size;
         let mobile = mobile::mobile();
-        // the storage browser (or the update dialog) lies over the page: the page sees no
+        // the storage browser lies over the page: the page sees no
         // finger meanwhile
-        let dialog = self.update_dialog_open();
-        let disconnected = !dialog && self.state.disconnected.is_some();
-        let crash = !dialog && !disconnected && self.state.crash.is_some();
-        let reset = !dialog && !crash && !disconnected && self.pages.confirm_reset;
-        if self.browser.is_some() || dialog || crash || reset || disconnected {
+        let disconnected = self.state.disconnected.is_some();
+        let crash = !disconnected && self.state.crash.is_some();
+        let reset = !crash && !disconnected && self.pages.confirm_reset;
+        if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || dialog || crash || reset || disconnected).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1125,12 +1112,9 @@ impl Launcher {
         self.rail();
         self.status_bar();
         }
-        self.draw_updated_notice();
         if let Some(i) = saved {
             self.ui.input = i;
-            if dialog {
-                self.draw_update_dialog();
-            } else if disconnected {
+            if disconnected {
                 self.draw_disconnect_dialog();
             } else if crash {
                 self.draw_crash_dialog();

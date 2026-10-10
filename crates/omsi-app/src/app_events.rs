@@ -2261,7 +2261,6 @@ impl ApplicationHandler for App {
                         }
                     }
                     self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
-                    self.update_watch.tick(&mut self.notices);
                     for n in self.notices.iter_mut() {
                         n.left -= dt;
                     }

@@ -108,13 +108,10 @@ installs over the previous one.
 
 ## Updates
 
-The launcher looks for a newer GitHub release when it starts (Settings → General → Updates) and offers
-it; **Update now** downloads the APK and hands it to Android's package installer. The first
-time Android asks to allow Project Depot to install apps. Then Android asks "Do you want to update
-this app?": **Update** replaces Project Depot and starts it again, **Cancel** comes back to the
-launcher as "not updated". The APK must be signed with the same key as the installed app
-(release builds are).
+There are none inside the app: it does not check for, download or install new versions, and it
+no longer asks for the "install unknown apps" permission. Download a newer APK from the Releases
+page and install it over the old one yourself (it must be signed with the same key as the
+installed app; release builds are). See [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md).
 
 `depot/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
-environment (one `NAME=value` a line), for example `OMSI_UPDATE_URL=file:///sdcard/…/release.json`
-to try an update from a local release description.
+environment (one `NAME=value` a line).

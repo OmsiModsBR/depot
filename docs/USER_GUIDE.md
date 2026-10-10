@@ -65,29 +65,11 @@ second (starter), **Shift+D** (drive), **.** (parking brake off), then throttle.
 whole start-up by itself (main switch, ignition, starter, gearbox to neutral); `--autostart`
 is the same thing for an offscreen run.
 
-**Updates.** When the launcher starts it asks
-[github.com/OmsiModsBR/depot](https://github.com/OmsiModsBR/depot) for the latest release
-and, when there is a newer one, offers it: **Update now** downloads it (checked against the
-SHA-256 GitHub lists), puts the new program in place of the old one and starts the launcher
-again - on Windows `openomsi.exe` and `openomsi-launcher.exe`, on macOS the `openOMSI.app`
-you started, on Linux the program files; mods, content and settings stay. On Android the
-system's installer asks "Do you want to update this app?"; Update replaces openOMSI and starts
-it again, Cancel leaves it as it was. Settings → General → Updates: look for updates at the start (on
-by default), install without asking (off by default), Check now. A folder openOMSI cannot
-write to (Program Files, an app opened straight from Downloads on macOS) is reported with
-what to do. A download that breaks goes on where it stopped (up to four times), a request
-that times out is tried again after 3 and 10 s, and when the GitHub API does not answer (or
-says its hourly limit is reached) the latest tag is taken from github.com itself.
-
-The launcher also looks again every 30 minutes while it is open, and right after a game it
-started ends. During a session the game looks a minute in and every hour after: a newer
-version is downloaded in the background and a card over the navigator says so ("openOMSI
-X is out"); when the session ends the launcher installs the file already downloaded (by
-itself with "Install updates without asking", else it offers it), and never while a game
-runs. "Tell me about a new version during a session" switches the cards off (the download
-goes on). `OMSI_NO_UPDATE=1` switches the checks off; `OMSI_UPDATE_URL` points them at another
-release description (GitHub's format; `file://` works, for testing - the game then looks after
-3 s).
+**Updates.** There are none inside the program: it does not check for, download or install new
+versions (disabled on purpose, see [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md)).
+Settings → General → About shows the version you run and a link to the Releases page, which opens
+in your browser only when you click it. Download a new release yourself and unpack it over (or
+beside) the old one; mods, content and settings are not touched by that.
 
 **O** switches mouse steering on and off, as in OMSI (Omsi.exe's own formula): the cursor's
 place across the whole window is the steering from full left to full right lock
@@ -177,7 +159,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   mouse, wheel and pedals, with the way to the Controls page), *Camera* (the seat, the views,
   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
   *General* (language, the game's interface size, navigator, Discord Rich Presence,
-  updates, and resetting every setting).
+  the version and the Releases link, and resetting every setting).
   **Discord Rich Presence** shows the launcher while preparing a drive, then the map and
   line above the vehicle type and tour while playing. The full vehicle name is in the logo's
   tooltip. The launcher status returns when the game ends.
