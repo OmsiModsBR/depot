@@ -118,6 +118,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `VehicleInstance::springs_full`: the scripts' kneeling and levelling left the bus knelt and leaning in the
   picture), and steps it until every body has been still for 0.5 s (at most 10 s) before showing it
   (`crates/omsi-app/src/launcher/showroom.rs`).
+- Vehicle physics: the rear section of an articulated bus loses its tyres' hold to a bend too fast for their
+  grip, as the front section does. The test (the bend's pull against the grip of all of a body's tyres) worked
+  the bend out again from the steering angle of the body's front axle; a rear section with its one axle on its
+  own turning line has no angle there, so the test never saw its bend, and on ice its tyres went on passing up
+  to several times their grip. It now takes the curvature the body turns on in the slice (the steering's for
+  the front section, its joint's for a section behind); the constant `KAPPA_ARM_MIN`, which only the old
+  reckoning used, is gone. New trace scenario B7 (an articulated bus into a bend on ice at 13 km/h): the
+  physics traces differ only there, from the first frame the rear section's bend outgrows its grip.
 - The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
   departure and the next arrival shared out by the distance covered) instead of standing still at the delay

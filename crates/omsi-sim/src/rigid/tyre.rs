@@ -7,8 +7,8 @@ use super::collide::Impact;
 use super::ground::{track_walls, tyre_line, GroundProbe};
 use super::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
-    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, KAPPA_ARM_MIN, MASS_PER_FRONT_AREA, PITCH_SPEED,
-    REHOLD_SPEED, STANDING, WALL_HEIGHT,
+    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, MASS_PER_FRONT_AREA, PITCH_SPEED, REHOLD_SPEED, STANDING,
+    WALL_HEIGHT,
 };
 use super::wheel::{sign, TyreFrame};
 use glam::{Quat, Vec2, Vec3};
@@ -267,10 +267,11 @@ impl RigidBody {
             })
             .collect();
         // holding: the bend's pull against the grip of all tyres, and
-        // no wheel spinning or locked
+        // no wheel spinning or locked (the bend the body turns on this slice: the steering's
+        // for the front section, its joint's for a section behind)
         let grip_all: f32 = lat.iter().map(|&k| self.friction * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
-        let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(KAPPA_ARM_MIN)).abs();
+        let kappa = self.kappa.abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: OMSI 2 drops the holding state there)
         let airborne = self.wheels.iter().any(|w| !w.on_ground);
