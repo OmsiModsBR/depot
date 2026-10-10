@@ -233,7 +233,7 @@ fn lightmap_is_white(name: &str, dirs: &[&Path]) -> Option<bool> {
 }
 
 impl ObjectType {
-    /// The folders the object's textures are looked for in. Omsi.exe loads the model of a
+    /// The folders the object's textures are looked for in. OMSI loads the model of a
     /// `.sco` with the `.sco`'s own folder as the base of `texture\`, also when `[model]`
     /// takes the model file from another folder: a retexture (a copy of the `.sco` with its
     /// own `texture` folder that points at the original's model) shows its own pictures, not
@@ -309,7 +309,7 @@ pub struct ScriptedObject {
     /// A child of a crossing that names one of its lights without being one of our lamps
     /// (its own textures to choose, see `child_lamp`): (the crossing, the light). Its
     /// script reads that light's `TrafficLightPhase` and `TrafficLightApproach`, as
-    /// Omsi.exe's RefreshAmpelParenting (0x77d460) hands them to any such child. The
+    /// OMSI hands them to any such child. The
     /// crossing's program is looked up when the script runs: it may stand on a tile
     /// loaded later.
     pub light_parent: Option<(i64, usize)>,
@@ -404,7 +404,7 @@ impl LampSlots {
     /// The slots' alpha and light-map switch from the lamp's variables (`value`: `None`
     /// for a variable the lamp does not have). Alpha: the variable's value, a slot without
     /// one opaque as authored. Light map: on from 0.5; a variable the lamp does not have
-    /// (or none at all) leaves it on, as Omsi.exe's stage does with an unregistered one.
+    /// (or none at all) leaves it on, as OMSI's stage does with an unregistered one.
     pub fn values(&self, value: &dyn Fn(&str) -> Option<f32>) -> (Vec<f32>, Vec<f32>) {
         let mut alpha = vec![1.0; self.count.max(1)];
         let mut light = vec![1.0; self.count.max(1)];
@@ -640,7 +640,7 @@ const SPLINE_OVERHEAD: f32 = 2.0;
 /// every point of every mesh between 5 cm under and 25 cm over its origin, all of them
 /// within 5 cm of height (a plate standing upright - a line plate on a bridge rail, a stop's
 /// name plate - is a sign, not paint; the mesh pivots are for animations, not for the
-/// points). Omsi.exe draws such a marking after the roads at its own height, a few
+/// points). OMSI draws such a marking after the roads at its own height, a few
 /// millimetres over the road it was made for - a bus bay's lines (`Korean Road Object\
 /// Parkinglot\Parkbox(bus).sco`) lie 5 mm over a road at 10 cm. The roads here are pulled
 /// towards the eye by their depth bias instead, and an object lying that close over one
@@ -737,8 +737,8 @@ fn overhead_only(def: &omsi_scenery::sli::Spline) -> bool {
     !def.profiles.is_empty() && def.profiles.iter().all(|p| !p.points.is_empty() && p.points.iter().all(|q| q.z >= SPLINE_OVERHEAD))
 }
 
-/// Which `parklist_p` a car park draws from: its first map string, as a number (Omsi.exe
-/// sub_79c8b8 - `StrToInt`, 0 when that fails or there is none). 0 is `parklist_p.txt`,
+/// Which `parklist_p` a car park draws from: its first map string, as a number
+/// (0 when that fails or there is none). 0 is `parklist_p.txt`,
 /// n is `parklist_p_n.txt`.
 fn parklist_index(strings: &[String]) -> usize {
     strings.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(0)
@@ -1970,7 +1970,7 @@ fn tree_quad_mesh() -> MeshData {
 /// How far a road surface may ride above the ground and still have the ground cut away
 /// under it. Anything higher is a bridge or an embankment, where cutting would open a hole.
 /// `OMSI_HEIGHTPROFILE_GROUND=1`: the wheels stand on the splines' `[heightprofile]`s as
-/// they did before, instead of on the drawn splines as Omsi.exe stands them (A/B runs).
+/// they did before, instead of on the drawn splines as OMSI stands them (A/B runs).
 /// `OMSI_CHECK_ROADS`: road points under the ground, and where.
 static OVER_ROAD: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static OVER_ROAD_AT: std::sync::Mutex<Vec<(f64, f64, f32, f32)>> = std::sync::Mutex::new(Vec::new());
@@ -2357,8 +2357,8 @@ pub fn model_lights_faded(
 
 /// Every light of a model in the order [`model_lights_owned`] numbers them: the mesh it
 /// belongs to, its place and its direction (zero for a `[light_enh]` and an omni light).
-/// Omsi.exe files each `[light_enh]`/`[light_enh_2]` with the `[mesh]` before it (the
-/// model loader, 0x5f3140: the light goes into the current mesh's list, mesh +0x1b0) and
+/// OMSI files each `[light_enh]`/`[light_enh_2]` with the `[mesh]` before it (the
+/// model loader: the light goes into the current mesh's list) and
 /// draws it where that mesh's animation takes it - the lamps along a level crossing's arm
 /// rise with the arm.
 pub fn model_light_sources(model: &Model) -> Vec<(usize, glam::Vec3, glam::Vec3)> {
@@ -2374,7 +2374,7 @@ pub fn model_light_sources(model: &Model) -> Vec<(usize, glam::Vec3, glam::Vec3)
     out
 }
 
-/// The sprites of one lamp, a `[light_enh]` or a `[light_enh_2]` alike (Omsi.exe 0x5a0068):
+/// The sprites of one lamp, a `[light_enh]` or a `[light_enh_2]` alike:
 /// its `glow`, left out with effect bit 4; with effect bit 1 a star (light_effect1.bmp)
 /// turned to the viewer, 2.5 times the size and growing with the glow's strength
 /// (corona.wgsl, flag bit 8); without bit 2 a halo round it in fog, seen from in front
@@ -2436,8 +2436,8 @@ pub fn model_lights_owned(
         for l in &md.light_enh {
             owners.resize(out.len(), seq.wrapping_sub(1));
             seq += 1;
-            // Omsi.exe reads a `[light_enh]` into the same lamp as a `[light_enh_2]` (0x5f2bb6,
-            // a TLampensetting) and draws it alike (0x5a0068): omnidirectional, turned to the
+            // OMSI reads a `[light_enh]` into the same lamp as a `[light_enh_2]`
+            // and draws it alike: omnidirectional, turned to the
             // viewer, its four numbers the brightness factor, the z offset, the effect bits
             // and the fade time, then its own bitmap. Drawn as a bare licht.bmp glow on the
             // lamp, the stop request lamp of the MAN NL and SD202 (`D92_Haltewunsch.bmp`,
@@ -2539,8 +2539,8 @@ pub fn model_lights_owned(
 /// a `[collision_mesh]` it is a step the wheels climb (a traffic island).
 pub const LOW_OBJECT: f32 = 0.3;
 
-/// Faces this close over another road face are paint on it, not a step (m). Omsi.exe's
-/// ground query (0x7a0814) takes the highest face whatever lies under it; this keeps only
+/// Faces this close over another road face are paint on it, not a step (m). OMSI's
+/// ground query takes the highest face whatever lies under it; this keeps only
 /// the thinnest layers flat (a marking a centimetre or two over the asphalt). At 4.5 cm it
 /// also took the speed cushions, manhole and plate objects, lowered kerbs and slab edges
 /// away, and the bottom 4.5 cm of every speed bump's ramp - "no road bumps", and wheels
@@ -2624,7 +2624,7 @@ fn probe_tile(
     });
     // ... unless that face lies buried well under ground that is drawn here and is under the
     // wheel, not over it: the lower slope of an embankment spline (Marcel's `Damm1` falls
-    // 20 m over 30 m on each side) reaching under a junction the terrain carries. Omsi.exe
+    // 20 m over 30 m on each side) reaching under a junction the terrain carries. OMSI
     // takes the highest face there, the ground; taken as the road, it dropped the bus 8 m
     // through the asphalt into the slope (Cotterell, the junction by the park at 250, 427).
     let buried = matches!((probe.below, ground), (Some(z), Some((h, false))) if h <= top as f32 && h - z > BURIED_FACE);
@@ -2930,12 +2930,12 @@ impl World {
     }
 
     /// The floor under somebody at height `near` at (x, y): the highest face no more than a
-    /// step (0.5 m, Omsi.exe 0x630498) over them - a station's floor under its roof, a car park's level under the
+    /// step (0.5 m, as OMSI does) over them - a station's floor under its roof, a car park's level under the
     /// deck above - else [`World::walk_height`]'s highest one. (Asked for the highest, the
     /// people of an indoor station stood on its roof.)
     ///
     /// Nothing under them within 3 m: the highest face, but only up to 0.5 m over them - a
-    /// pavement whose tile came after them. Omsi.exe keeps its people at the heights of
+    /// pavement whose tile came after them. OMSI keeps its people at the heights of
     /// their paths and waiting places; the highest face, a bus shelter's roof 2.5 m up, put
     /// the people waiting under it on top of it.
     pub fn walk_height_near(&self, x: f64, y: f64, near: f64) -> Option<f64> {
@@ -3313,7 +3313,7 @@ impl World {
                     }
                 }
             });
-            // Omsi.exe hands the deformation mesh to the model loader, which drapes every
+            // OMSI hands the deformation mesh to the model loader, which drapes every
             // [mesh] of the object onto it and rebuilds the normals from the faces
             // (D3DXComputeNormals): the file's normals of a crossing are never used.
             if deform.is_some() {
@@ -4135,11 +4135,10 @@ impl World {
             return out;
         };
         out.bakes_light_map = tile.variable_terrain_lightmap;
-        // a tile with water carries one surface with a height at each corner. As in Omsi.exe
-        // (TMapKachel.loadMapFile 0x792188) only a `[water]` tile has it: the editor never
+        // a tile with water carries one surface with a height at each corner. As in OMSI
+        // only a `[water]` tile has it: the editor never
         // deletes the `.water` file of a tile whose water was removed. The corners start at
-        // -5 m (TFileWater 0x7ab6f0) and take the file's heights only when its count is 1
-        // (0x7ab760).
+        // -5 m and take the file's heights only when its count is 1.
         out.water = tile.has_water.then(|| {
             match omsi_cfg::vfs::read(&crate::tiles::water_file(&tile, path))
                 .ok()
@@ -4178,12 +4177,12 @@ impl World {
                 continue;
             }
             // What the wheels stand on is the spline's drawn mesh, not its `[heightprofile]`:
-            // Omsi.exe's ground query (0x7a0814) casts a ray from 3 m over the point down
-            // into each spline segment of the tile (0x5b2d94 -> 0x7c40c8, D3DXIntersect on
-            // the segment's mesh +0xa0), and that mesh is the one TSplineSegment.Generate
-            // (0x5b1e14) builds from the `[profile]`/`[profilepnt]` lists (+0xc) for drawing.
-            // The height profile (+0x20) is read by the editor's "is the point on this
-            // spline" test alone (0x5b2b1c). Taken as the ground, a height profile wider than
+            // OMSI's ground query casts a ray from 3 m over the point down
+            // into each spline segment of the tile (D3DXIntersect on
+            // the segment's mesh), and that mesh is the one OMSI
+            // builds from the `[profile]`/`[profilepnt]` lists for drawing.
+            // The height profile is read by the editor's "is the point on this
+            // spline" test alone. Taken as the ground, a height profile wider than
             // the drawn road reached under the bus from the road beside it, one lower than
             // the asphalt sank the wheels into it, and a road without one had no ground at
             // all. `OMSI_HEIGHTPROFILE_GROUND=1` goes back to the height profiles (A/B).
@@ -4240,8 +4239,8 @@ impl World {
                 if aligned {
                     out.align
                         .push((out.splines.len(), s.terrain_align.unwrap_or(1.0) as f32));
-                    // Omsi.exe cuts the ground out under such a spline (the flag, or the
-                    // `_2` number, goes to the segment, 0x79b95e -> +0x205, and Generate
+                    // OMSI cuts the ground out under such a spline (the flag, or the
+                    // `_2` number, goes to the segment, and it
                     // makes the outline from it; the terrain takes it with the `[terrainhole]`
                     // meshes, "Terrain hole cutting: Spline")
                     let mode = s.terrain_align.map(|v| v.clamp(0.0, 255.0) as u8).unwrap_or(1);
@@ -4267,7 +4266,7 @@ impl World {
                     indices: mesh.indices.clone(),
                     ..Default::default()
                 };
-                // (every spline the game draws: Omsi.exe asks them all, roads or not)
+                // (every spline the game draws: OMSI asks them all, roads or not)
                 if !heightprofile_ground() {
                     out.drive.push((shape.clone(), bounds, omsi_geometry::SurfFaces::of(&mesh, &st.surf)));
                 }
@@ -4336,8 +4335,8 @@ impl World {
             // absolute heights like the splines themselves; so are [absheight] ones.
             let absolute = ot.sco.absolute_height();
             // An object that stands on the terrain but lies outside its own tile is never
-            // seen in OMSI: Omsi.exe finds its height with a ray from 1000 m down onto that
-            // tile's terrain mesh only (0x79e43d -> 0x7ab594), and where the ray misses the
+            // seen in OMSI: it finds its height with a ray from 1000 m down onto that
+            // tile's terrain mesh only, and where the ray misses the
             // mesh it answers 10000 m more, which puts the object 11 km under the ground.
             // Maps copied from a `[worldcoordinates]` map keep such leftovers (Ahlheim's
             // Bostoner Weg: 588 objects past the edge, redrawn by the author where they
@@ -4564,9 +4563,8 @@ impl World {
                 );
                 let base_height = Self::base_ground(src, *x, *y)
                     .unwrap_or_else(|| st.base_terrain.sample(lx, ly) as f64);
-                // Omsi.exe sets every object without an absolute height (those are `Pose`s,
-                // `SceneryObject::absolute_height`) on the terrain, `[surface]` ones as well
-                // (TMap.RefreshObjectsKacheln 0x79e3c8 reads sco+0x194).
+                // OMSI sets every object without an absolute height (those are `Pose`s,
+                // `SceneryObject::absolute_height`) on the terrain, `[surface]` ones as well.
                 Some(Pose {
                     pos: DVec3::new(*x, *y, z + base_height),
                     rot: object_rotation(*rot),
@@ -4577,8 +4575,8 @@ impl World {
     }
 
     /// The `[maplight]`s of the objects of tile `key` and its eight neighbours, as a light map
-    /// bakes them (Omsi.exe 0x7903e0 goes through the tile's near objects, those of the nine
-    /// tiles, 0x77fe5c).
+    /// bakes them (OMSI goes through the tile's near objects, those of the nine
+    /// tiles).
     fn light_map_lamps(
         &self,
         key: (i32, i32),
@@ -4653,9 +4651,9 @@ impl World {
             .objects
             .iter()
             .map(|o| match &o.place {
-                // Omsi.exe places every object, a parking space's car as well, with the pitch
-                // and bank of the map file on the terrain height at its position (0x79e3c8
-                // .. 0x79e5fb: RotationX(pitch), RotationZ(bank), RotationY(heading), the
+                // OMSI places every object, a parking space's car as well, with the pitch
+                // and bank of the map file on the terrain height at its position
+                // (RotationX(pitch), RotationZ(bank), RotationY(heading), the
                 // translation) - it is never leaned to the slope. Leaned by the terrain under
                 // it, a car at the kerb of a hill street stood crooked on a road that runs
                 // on a different grade from the ground beneath.
@@ -4692,7 +4690,7 @@ impl World {
                 if fp.is_some() {
                     continue;
                 }
-                // (a spline attachment row by its first object: Omsi.exe refuses objects
+                // (a spline attachment row by its first object: OMSI refuses objects
                 // on its later ones)
                 let Some((pp, pt)) = poses.get(&(*parent, 0)) else {
                     continue;
@@ -4769,8 +4767,8 @@ impl World {
             let ot = &st.objects[oi].ot;
             // Wherever the map puts the plate - a bridge deck twenty metres over the river
             // under it, a dead junction record buried in a field - it is draped by its own
-            // field: Omsi.exe lays the meshes onto it in the object's frame as it loads the
-            // type (0x7c5934), and the ground under a placement plays no part (nor is it
+            // field: OMSI lays the meshes onto it in the object's frame as it loads the
+            // type, and the ground under a placement plays no part (nor is it
             // pressed onto the field, see `final_ground`). Left flat more than 12 m from the
             // ground, London Bridge's deck met neither of its roads (#961).
             // The Juliusturm junction's field is a 3.5 % plane, -0.62 m under its west
@@ -4794,7 +4792,7 @@ impl World {
                         biggest = biggest.max(d.abs());
                     }
                 }
-                // (the normals of the draped mesh, as Omsi.exe makes them after draping)
+                // (the normals of the draped mesh, as OMSI makes them after draping)
                 omsi_geometry::compute_normals_d3d(&mut m);
                 meshes.push(m);
             }
@@ -4815,7 +4813,7 @@ impl World {
         out
     }
 
-    /// The ground of tile `key`: the tile's `.terrain` as Omsi.exe loads it, which the objects
+    /// The ground of tile `key`: the tile's `.terrain` as OMSI loads it, which the objects
     /// stand on. The editor's "align the terrain to this spline" (`[spline_terrain_align]`)
     /// and a crossing's `[crossing_heightdeformation]` were applied when the map was made;
     /// `OMSI_TERRAIN_ALIGN=1` and `OMSI_CROSSING_DEFORM=1` apply them again (A/B runs).
@@ -4836,7 +4834,7 @@ impl World {
         // tie should not depend on it either)
         let mut order: Vec<&Arc<StagedTile>> = src.values().collect();
         order.sort_by_key(|q| (q.tx, q.ty));
-        // (Omsi.exe does not move the ground at all when it loads a map: the editor's "align
+        // (OMSI does not move the ground at all when it loads a map: the editor's "align
         // the terrain to the spline" wrote the heights into the tile's `.terrain`, and the
         // flag left in the map only makes the spline cut its outline out of the ground -
         // see `hole_rims`. Pulled onto the road again here, every vertex under it took
@@ -4923,8 +4921,8 @@ impl World {
             }
         }
         // (Nor does it press the ground into a crossing's `[crossing_heightdeformation]` mesh:
-        // Omsi.exe reads that mesh only to warp the plate and to give its paths their heights
-        // (0x7ba818, "Path deform"); the editor's terrain tools left the ground as the
+        // OMSI reads that mesh only to warp the plate and to give its paths their heights
+        // ("Path deform"); the editor's terrain tools left the ground as the
         // `.terrain` has it. Pressed in here, the ground stood up to 2.3 m over a Spandau
         // pavement in front of the houses beside a junction, and everything standing on the
         // ground - every pole, sign and tree there - floated over the pavement with it (#860).
@@ -5064,8 +5062,8 @@ impl World {
                 // Trees are billboards: the map stores texture, height and the ratio of the
                 // width to the height chosen by the editor; a row of trees along a spline
                 // takes the middle of the type's ranges. OMSI scales its tree by (height x
-                // ratio, height, height x ratio) (Omsi.exe 0x77e6b0 fills the record,
-                // 0x774444 builds the matrix): the ratio multiplies. Divided by it, as here
+                // ratio, height, height x ratio):
+                // the ratio multiplies. Divided by it, as here
                 // before, a slim tree (0.4 on Spandau) came out six times too wide and its
                 // crown stood metres away from its trunk's place.
                 let texture = o
@@ -5179,7 +5177,7 @@ impl World {
                     &o.rules,
                 );
                 // An object tilted on a slope (the map's pitch and bank) tilts its paths with
-                // it, as the whole object matrix places them in Omsi.exe: laid out by the
+                // it, as the whole object matrix places them in OMSI: laid out by the
                 // heading alone, a junction on a hill had flat lanes through a sloping plate
                 // and its traffic drove into the road on one side and over it on the other.
                 let yaw = omsi_geometry::object_rotation([heading, 0.0, 0.0]);
@@ -5214,15 +5212,15 @@ impl World {
             // around a housing estate's mesh or the Heerstraße bridge stood as an invisible
             // wall across the roads through and under it.
             // Only a `[fixed]` object (or a `[crashmode_pole]`) is solid for the vehicles, as
-            // Omsi.exe sets it up (0x7af0a4: the shape is made for those only; any other is a
+            // OMSI sets it up (the shape is made for those only; any other is a
             // loose body the bus is not stopped by). We made every object with a shape solid:
             // the line plates and name signs hanging off bus stop poles, and any bridge or
             // gantry of a mod map not marked `[fixed]` - an invisible wall under it.
             // (a parked car is a vehicle: it is hit as the traffic is)
             let solid = ot.sco.fixed || ot.sco.crash_mode_pole.is_some() || o.parked;
-            // (Not a `[surface]` object, although Omsi.exe makes it `[fixed]` and puts its
-            // collision mesh into the tile's static ODE space like any other (0x7af0a4, the
-            // vehicle collides with that space in 0x6ff5b8): the Spandau depot's
+            // (Not a `[surface]` object, although OMSI makes it `[fixed]` and puts its
+            // collision mesh into the tile's static ODE space like any other; the
+            // vehicle collides with that space): the Spandau depot's
             // `Betr_S_Bauten` has fence rails 1.9 m up across its yard's drive paths, which
             // the original's buses pass through - something drops those contacts that is not
             // found yet, and made solid here they walled in the whole yard.)
@@ -5466,9 +5464,9 @@ impl World {
             }
         }
         self.tile_state.lock().insert(key, state);
-        // the tile's night light map (lamp light pools on the ground). Omsi.exe bakes a
+        // the tile's night light map (lamp light pools on the ground). OMSI bakes a
         // `[variable_terrainlightmap]` tile's own from the lamps of the tiles round it once
-        // those are loaded (0x780694, unless `[no_generateTerrLightMaps]`) and writes it over
+        // those are loaded (unless `[no_generateTerrLightMaps]`) and writes it over
         // the `.map.LM.bmp`: the file is only what the map's last OMSI run left there, if
         // anything. (Novi Sad's light maps are older than its tiles: read from them, a road
         // lay dark under the lamps put up along it since, #951.)
@@ -5716,10 +5714,10 @@ impl World {
                             Some(w) => w.iter().collect(),
                             None => ot.meshes.iter().map(|(m, _, _)| m).collect(),
                         };
-                        // What the wheels stand on is Omsi.exe's ground query (0x7a0814): the
+                        // What the wheels stand on is OMSI's ground query: the
                         // terrain, the splines, and of the objects only the `[surface]` ones
-                        // (the tile's list of them, 0x79eb63) - and of those only the first
-                        // `[mesh]` of the model, a ray cast down into it (0x5f9218 with only
+                        // (the tile's list of them) - and of those only the first
+                        // `[mesh]` of the model, a ray cast down into it (with only
                         // mesh 0). A collision mesh is never ground (it only shapes the crash
                         // body), nor is an object drawn as a ground layer without `[surface]`
                         // (the road markings), nor are the other meshes of a surface object
@@ -5781,7 +5779,7 @@ impl World {
                             }
                             check.1 += 1;
                             let th = t.sample((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell);
-                            // the ground over a road: shows through it (Omsi.exe cuts nothing)
+                            // the ground over a road: shows through it (OMSI cuts nothing)
                             if ts.road_covered(k) && th > ts.road_height(k) + 0.03 && th < ts.road_height(k) + 1.5 && !ts.cut_at((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell, th, surface_flush()) {
                                 OVER_ROAD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 if let Ok(mut w) = OVER_ROAD_AT.lock() {
@@ -6363,7 +6361,7 @@ impl World {
                 // surface phases draw a blend without writing depth, so every spline after
                 // it showed through - the far roads and a bridge over NCCR's apartment
                 // blocks (`[matl_alpha] 2` on a 24-bit BMP), Westcountry's road signs. In
-                // Omsi.exe such a blend writes depth and its alpha is 1 throughout, the same
+                // In OMSI such a blend writes depth and its alpha is 1 throughout, the same
                 // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha.)
                 let surface_phase = matches!(
                     ot.sco.render_type,
@@ -6509,8 +6507,8 @@ impl World {
                 },
             ));
         }
-        // lower LODs (plain materials). OMSI picks a level the way the model lists them
-        // (Omsi.exe 0x5ef860): the first whose least size the object's screen size reaches,
+        // lower LODs (plain materials). OMSI picks a level the way the model lists them:
+        // the first whose least size the object's screen size reaches,
         // else the last one whatever its own. A level is so drawn from its least size (the
         // last from 0) up to the least of the sizes listed before it. The stock Sv signals
         // say [LOD] 0.1 (the signal) before [LOD] 1 (its low version): taken as size bands
@@ -7185,7 +7183,7 @@ impl World {
                     let src = rest.as_ref().unwrap_or(mesh);
                     let (road, paint) = split_spline_paint(src, &st.def);
                     // Drawn where the map puts it and drawn over the ground by the surfaces'
-                    // depth bias, as a road wins over flush ground in Omsi.exe. Lifted 8 cm
+                    // depth bias, as a road wins over flush ground in OMSI. Lifted 8 cm
                     // instead, it stood over the ground the editor had aligned to it (the
                     // footways of Spandau's Hansastr. lie at the ground's height), and under
                     // every kerb and footway edge one saw into the hole cut beneath it (#823).
@@ -7790,9 +7788,9 @@ impl World {
                         pl.poles.push(collision_key);
                     }
                     if ot.sco.is_help_arrow {
-                        // A route arrow the map's author put up: Omsi.exe draws its `[helparrow]`
-                        // objects (type 8) only while its route arrows are on (0x78e4b8; the
-                        // game menu's button switches them, 0x686e3c). Left out for good, the
+                        // A route arrow the map's author put up: OMSI draws its `[helparrow]`
+                        // objects (type 8) only while its route arrows are on (the
+                        // game menu's button switches them). Left out for good, the
                         // stock maps' arrows to Grundorf's hospital and round Spandau's
                         // junctions never showed (#954).
                         let instances: Vec<usize> = all_instances.iter().chain(&lod_instances).copied().collect();
@@ -8320,7 +8318,7 @@ impl World {
         for (mi, (mesh_id, mats)) in meshes.iter().enumerate() {
             let new = renderer.add_instance(scene, *mesh_id, pos, xf, mats.clone());
             renderer.set_omsi_caster(scene, new, ot.mesh_casts.get(mi).copied().unwrap_or(false));
-            // a route arrow casts no shadow (only [shadow] meshes do in Omsi.exe)
+            // a route arrow casts no shadow (only [shadow] meshes do in OMSI)
             if ot.sco.is_help_arrow {
                 renderer.set_casts_shadow(scene, new, false);
             }
@@ -9248,10 +9246,10 @@ struct BakeLamp {
     radius: f32,
 }
 
-/// A light map as Omsi.exe bakes one (0x7903e0): 256 x 256 texels over the tile at `origin`
+/// A light map as OMSI bakes one: 256 x 256 texels over the tile at `origin`
 /// and its eight neighbours, north at the top row. A texel, on the ground at its south-west
 /// corner, takes each lamp's colour x min(1, (core / distance)^2), added up and held at 1,
-/// and its bytes truncated (0x404c88). The distance is in three dimensions from the lamp's
+/// and its bytes truncated. The distance is in three dimensions from the lamp's
 /// height over its own object (the `[maplight]`'s z: where the object stands does not count),
 /// and a lamp further than 15.96 cores along either axis adds nothing (less than a step).
 fn bake_light_map(lamps: &[BakeLamp], origin: DVec3) -> omsi_texture::Image {
@@ -9592,8 +9590,8 @@ impl World {
 
     /// The colour the tile's night light map (its own part, see [`own_tile_of_light_map`])
     /// has at `pos` (0..1, bilinear), or `None` where no light map is loaded: the light it
-    /// throws on a vehicle standing there (Omsi.exe samples it at the vehicle's place,
-    /// 0x61378c, for its ambient light and `Envir_Brightness`).
+    /// throws on a vehicle standing there (OMSI samples it at the vehicle's place,
+    /// for its ambient light and `Envir_Brightness`).
     pub fn light_map_light_at(&self, pos: DVec3) -> Option<glam::Vec3> {
         let ts = tile_size();
         let key = ((pos.x / ts).floor() as i32, (pos.y / ts).floor() as i32);
@@ -10243,7 +10241,7 @@ fn sync_materials(
             let mut mask = 0u32;
             for (k, (_, var)) in l.maps.iter().enumerate() {
                 let x = var.trim().parse::<f32>().ok().or_else(|| vehicle.var(var)).unwrap_or(0.0);
-                // (on at 0.5, as each map's texture stage is, 0x7fe51f: a variable a script
+                // (on at 0.5, as each map's texture stage is: a variable a script
                 // dims through 0.1 lit the map at full)
                 if x >= 0.5 {
                     mask |= 1 << k;
@@ -10425,8 +10423,8 @@ fn sync_interior_lamps(
     for (first, set) in blocks {
         for (k, &li) in set.iter().enumerate() {
             let il = &ty.model.interior_lights[li];
-            // on or off: OMSI enables the lamp when its variable is 0.5 or more
-            //, there is no dimming
+            // on or off: OMSI enables the lamp when its variable is 0.5 or more,
+            // there is no dimming
             let on = il
                 .variable
                 .trim()
@@ -10598,8 +10596,8 @@ fn d3d_material(
     allcolor: Option<[f32; 14]>,
     textured: bool,
 ) -> ([f32; 4], [f32; 3], [f32; 4], [f32; 3]) {
-    // (the ambient colour: Omsi.exe gives every o3d slot a white one, 0x7c62f8, and a
-    // textured .x slot too, 0x7c6d2d; a [matl_allcolor] sets its own)
+    // (the ambient colour: OMSI gives every o3d slot a white one, and a
+    // textured .x slot too; a [matl_allcolor] sets its own)
     let (diffuse, emissive, specular, power, ambient) = match allcolor {
         Some(v) => (
             [v[0], v[1], v[2], v[3]],
@@ -10651,9 +10649,9 @@ fn material_extra(
         env_mask,
         no_z_write: ov.iter().any(|o| o.no_z_write),
         writes_depth: false,
-        // `[matl_noZcheck]` leaves Omsi.exe's depth test on: its draw of the slot (0x7fd6c4)
+        // `[matl_noZcheck]` leaves OMSI's depth test on: its draw of the slot
         // never reads the flag, which only adds a colourless stencil pass marking the panes
-        // for the raindrops (0x7c32c4 -> 0x7fc58c, ZENABLE 1, blend ZERO/ONE). Taken as "no
+        // for the raindrops (ZENABLE 1, blend ZERO/ONE). Taken as "no
         // depth test", the Sprinter's inner window glass (flagged so) was drawn over the
         // body skin round every opening. OMSI_NOZCHECK_BIAS=1: the old reading.
         no_z_check: ov.iter().any(|o| o.no_z_check) && omsi_cfg::env::var_os("OMSI_NOZCHECK_BIAS").is_some(),
@@ -10814,7 +10812,7 @@ fn text_material(renderer: &Renderer, scene: &mut Scene, tex: TextureId, alpha: 
     let plain = MaterialExtra::default();
     let border_only = MaterialExtra { border: extra.border, ..plain.clone() };
     renderer.address_next.set(tex_addressing(slot_ov.iter().copied()));
-    // (lit like the rest of the object: Omsi.exe only swaps the slot's texture, a sign
+    // (lit like the rest of the object: OMSI only swaps the slot's texture, a sign
     // does not shine at night)
     renderer.add_material_extra(scene, Some(tex), alpha, [1.0; 4], false, None, None, None, None, [0.0; 3], border_only)
 }
@@ -11036,7 +11034,7 @@ fn slot_is_see_through(mesh: &MeshData, slot: usize, mask: &[u8]) -> bool {
 /// Whether a texture (`mask`, see [`alpha_mask`]) is clear all over: no texel above 8 of
 /// 255. A slot blended by `[matl_alpha] 2` with such a texture is drawn for its depth alone
 /// - an "invisible cover" bus makers put in front of a roller blind or a window to hide it
-/// (a 16x16 clear `.tga`, #1113, #576): Omsi.exe writes its depth in model order, and what
+/// (a 16x16 clear `.tga`, #1113, #576): OMSI writes its depth in model order, and what
 /// the model lists after it behind it is gone.
 fn texture_is_clear(mask: &[u8]) -> bool {
     !mask.is_empty() && mask.iter().all(|&a| a <= 8)
@@ -11157,8 +11155,8 @@ pub struct DynSlot {
     pub emissive: [f32; 3],
 }
 
-/// Whether a `[matl_change]` variable at `x` shows the slot's `[matl_item]`: Omsi.exe
-/// (0x5fd6xx) rounds the variable (to the nearest, ties to even) and shows item `n` for
+/// Whether a `[matl_change]` variable at `x` shows the slot's `[matl_item]`: OMSI
+/// rounds the variable (to the nearest, ties to even) and shows item `n` for
 /// 1 <= n <= the items there are, the plain material otherwise - a lamp's variable at 2
 /// with one item is dark. A variable no script declares is registered by the model loader
 /// at 0 (the stock MANs' spare buttons, `*Noch nicht belegt*`, and a mod's door lamps
@@ -11179,7 +11177,7 @@ pub struct VariantSlot {
     /// `[matl_change]` variable: at 1 (rounded) the item variant shows.
     pub var: String,
     /// The variables of the slot's further `[matl_change]`s: the item shows while any of
-    /// them is on as well (Omsi.exe sub_7c2d80: each record picks its item by its own
+    /// them is on as well (OMSI: each record picks its item by its own
     /// variable, and one at 0 leaves the material to the others).
     pub more_vars: Vec<String>,
     /// `[texchanges]`: the (base, item) pair of every entry of the master, in order.
@@ -11253,8 +11251,8 @@ impl MultiLight {
                             let sx = x * iw / w.max(1);
                             let (d, s) = ((y * w + x) * 4, (sy * iw + sx) * 4);
                             for c in 0..3 {
-                                // (ADDSMOOTH, as Omsi.exe chains a slot's maps in its
-                                // texture stages, 0x7fe5ff: a + b - a b)
+                                // (ADDSMOOTH, as OMSI chains a slot's maps in its
+                                // texture stages: a + b - a b)
                                 let (a, b) = (acc.rgba[d + c] as u32, img.rgba[s + c] as u32);
                                 acc.rgba[d + c] = (a + b - a * b / 255).min(255) as u8;
                             }
@@ -12510,8 +12508,8 @@ impl World {
                 inst
             });
         }
-        // Omsi.exe draws a model mesh after mesh and each material subset in its turn, with
-        // the subset's own blend and depth-write states (0x7c32c4 -> 0x7fd6c4), so a slot
+        // OMSI draws a model mesh after mesh and each material subset in its turn, with
+        // the subset's own blend and depth-write states, so a slot
         // blended by `[matl_alpha] 2` that writes depth hides what the model lists after it.
         // Where that happens - a blended slot writing depth before an opaque or cut-out one -
         // the whole vehicle is drawn in that order (see `Instance::ordered`); drawn with its
@@ -12524,7 +12522,7 @@ impl World {
                 .filter_map(|(_, _, slot)| inst.materials.get(*slot as usize))
                 .filter_map(|&m| scene.materials.get(m))
                 // (a pane - a window, or a layer over the glass painted on its own unwrap -
-                // writes its depth as Omsi.exe writes it, but it is no blended bodywork:
+                // writes its depth as OMSI writes it, but it is no blended bodywork:
                 // taken as one, a bus whose glass the model lists before its saloon was
                 // drawn in model order and its saloon was gone behind every window, the
                 // panes on both sides over the street behind them coming out black)
@@ -12710,7 +12708,7 @@ impl World {
                     let ov_all: Vec<&MaterialDef> = vm.overrides.iter().filter(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot)).collect();
                     let ov_item: Vec<&MaterialDef> = ov_all.iter().copied().filter(|o| o.item).collect();
                     let ov: Vec<&MaterialDef> = ov_all.iter().copied().filter(|o| !o.item).collect();
-                    // (every [matl_change] of the slot: Omsi.exe keeps one switch per record,
+                    // (every [matl_change] of the slot: OMSI keeps one switch per record,
                     // each showing its item while its variable is on - the Procity's door
                     // buttons light with door_light_n as well as with haltewunschlampe)
                     let change_vars: Vec<String> = ov.iter().filter_map(|o| o.change.as_ref().map(|c| c.2.clone())).collect();
@@ -12809,7 +12807,7 @@ impl World {
                         (hi - lo).max_element() > 0.5
                             && vt.mesh_boxes[..mesh_index].iter().any(|&(l2, h2)| (l2 - lo).abs().max_element() < 0.03 && (h2 - hi).abs().max_element() < 0.03)
                     });
-                    // (Retired: a body blended by `[matl_alpha] 2` is drawn as Omsi.exe draws
+                    // (Retired: a body blended by `[matl_alpha] 2` is drawn as OMSI draws
                     // it, in model order with its depth written - see `Instance::ordered` -
                     // instead of being guessed opaque, which drew overlay layers black, #127.
                     // `OMSI_REPAIR_BODY_DEPTH=1` brings the old guess back for comparison.)
@@ -12904,7 +12902,7 @@ impl World {
                     // though their alpha mode is Blend. They are transparent colour layers,
                     // not solid shadow casters; letting them into the shadow map paints the
                     // bus shadow with the pane/film texture (the striped triangular artifact).
-                    // (Its depth is still written as Omsi.exe writes it, whenever the model
+                    // (Its depth is still written as OMSI writes it, whenever the model
                     // blends the slot by [matl_alpha] 2 without [matl_noZwrite] - a dirt
                     // film's as well: see `MaterialExtra::writes_depth`. Left out of the
                     // depth buffer, the stacked panes of a door blended over each other
@@ -12942,7 +12940,7 @@ impl World {
                     // faces backwards, away from the sun) is what made mirrors look black
                     let unlit = mirror_index(&tex_name).is_some();
                     // [matl_item] variant: same slot with the item's own maps / colours
-                    // (Omsi.exe keeps every [matl_item] of a [matl_change] as a material of its
+                    // (OMSI keeps every [matl_item] of a [matl_change] as a material of its
                     // own and shows item round(x): a door button at 2 - lit while its door is
                     // open - showed the plain dark material, and item 2's maps leaked into item
                     // 1, #352. Each item of the first [matl_change] is made of its own block:
@@ -13396,9 +13394,9 @@ fn object_lanes(
 ///
 /// The object's own string variable owns the slot: when its `[stringvarnamelist]` (or a
 /// script) declares `var`, its value is the file name and an empty value means the slot
-/// has none - the object's own texture stays, as in Omsi.exe. Reading the placement
+/// has none - the object's own texture stays, as in OMSI. Reading the placement
 /// strings of another variable instead put a bus stop sign's route number (`72`, `A47X`)
-/// or a stop name in a `[matl_freetex]` slot, which Omsi.exe never does; those are the
+/// or a stop name in a `[matl_freetex]` slot, which OMSI never does; those are the
 /// `[texttexture]` sizes of the sign, not files (#1756).
 pub(crate) fn resolve_scenery_freetex_name<'a>(
     var: &str,
@@ -14040,7 +14038,7 @@ mod tests {
         assert!(road.one_sided && paint.one_sided);
     }
 
-    /// A `[variable_terrainlightmap]` tile's light map is baked as Omsi.exe bakes it: over the
+    /// A `[variable_terrainlightmap]` tile's light map is baked as OMSI bakes it: over the
     /// tile and its neighbours, north up, colour x min(1, (core / distance)^2) from the lamp's
     /// own height, added up, held at 1 and truncated, nothing beyond 15.96 cores.
     #[test]
@@ -14232,7 +14230,7 @@ mod tests {
     }
 
     /// The MAN NL's stop request lamp (`model_EN92.cfg`): a `[light_enh]` is drawn as
-    /// Omsi.exe draws a `[light_enh_2]` - its own bitmap, 5 cm towards the viewer, its
+    /// OMSI draws a `[light_enh_2]` - its own bitmap, 5 cm towards the viewer, its
     /// brightness factor and its effect bits (3: a star, no halo in fog) - not as a bare
     /// glow in its dome (#1159).
     #[test]
@@ -14265,7 +14263,7 @@ mod tests {
     }
 
     /// A bridge deck high over the ground under it (London Bridge over the Thames) is
-    /// draped by its `[crossing_heightdeformation]` as one lying on the ground is: Omsi.exe
+    /// draped by its `[crossing_heightdeformation]` as one lying on the ground is: OMSI
     /// does it in the object's own frame, wherever the map puts the object (#961).
     #[test]
     fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
@@ -14347,7 +14345,7 @@ mod tests {
             omsi_texture::find_texture(&ot.meshes[0].1[0].texture, &dirs).and_then(|p| std::fs::read(p).ok())
         };
         assert_eq!(found("orig/orig.sco").as_deref(), Some(&b"original"[..]));
-        // the copy's own `texture` folder, as Omsi.exe takes it, not the model file's
+        // the copy's own `texture` folder, as OMSI takes it, not the model file's
         assert_eq!(found("retex/retex.sco").as_deref(), Some(&b"retexture"[..]));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -14421,7 +14419,7 @@ mod material_tests {
         assert_eq!(color, [0.64, 0.64, 0.64, 1.0]);
         assert_eq!(emissive, [0.0; 3]);
         assert_eq!(specular, [1.0, 1.0, 1.0, 96.0]);
-        // Omsi.exe's o3d slot: a white ambient, whatever the diffuse colour (0x7c62f8)
+        // OMSI's o3d slot: a white ambient, whatever the diffuse colour
         assert_eq!(ambient, [1.0; 3]);
         // untextured: the material's alpha
         assert_eq!(d3d_material(&m, None, false).0[3], 0.0);

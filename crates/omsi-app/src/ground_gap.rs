@@ -220,7 +220,7 @@ impl GroundGap {
 }
 
 /// `OMSI_GROUND_LANES=1`: along every street lane of the loaded tiles, every metre, how far
-/// the drawn ground (from 3 m over the lane, as Omsi.exe's wheels ask it) lies over or under
+/// the drawn ground (from 3 m over the lane, as OMSI's wheels ask it) lies over or under
 /// the lane's own height - what an AI car's wheels meet where it follows its lane.
 pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
     if omsi_cfg::env::var_os("OMSI_GROUND_LANES").is_none() {
@@ -244,7 +244,7 @@ pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
             };
             n += 1;
             // and what the wheels stand on there (the faces under 3 m over the lane, as
-            // Omsi.exe asks), against the window an AI car looks in (0.6 m over its lane,
+            // OMSI asks), against the window an AI car looks in (0.6 m over its lane,
             // 0.1 m under it)
             if let Some(w) = crate::scene::drive_probe(&world.terrains, &world.surfaces, p.x, p.y, p.z + 3.0).below {
                 let off = w - p.z;

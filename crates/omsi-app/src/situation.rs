@@ -208,7 +208,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
 }
 
 /// Prefer OMSI's saved total; old openOMSI only kept it in the script variables.
-/// A new bus starts at least at 8 km (Omsi.exe 0x7D1E42), so smaller header values
+/// A new bus starts at least at 8 km, so smaller header values
 /// are placeholders. The old writer's ordinal pattern also excludes its 8, 9, 10...
 /// ids; rejecting every reading below 10 would discard legitimate OMSI situations.
 fn saved_odometer_km(v: &omsi_content::situation::SituationVehicle, legacy_ids: bool) -> Option<f64> {

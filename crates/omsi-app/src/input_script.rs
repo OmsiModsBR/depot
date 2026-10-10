@@ -346,7 +346,7 @@ impl App {
                     let action = self.game_keys.iter().find(|b| b.scan_code == scan && b.matches(m)
                         && !b.action.starts_with("vr_")
                         && !(plain_arrow && b.action.starts_with("view_interiorcam_"))).map(|b| b.action.clone());
-                    // (a key bound in [game] and in [vehicles] does both, as in Omsi.exe: the
+                    // (a key bound in [game] and in [vehicles] does both, as in OMSI: the
                     // parking brake put on Space, the stock view_reset_all_directions key,
                     // reset the view and never reached the bus - #745)
                     let vehicle_too = self.player.as_ref().is_some_and(|p| p.bindings.iter().any(|b| b.scan_code == scan && b.matches(m)));
@@ -893,8 +893,8 @@ impl App {
     }
 
     /// Which camera the look belongs to: the view, and for the driver's and the passengers'
-    /// view the camera chosen in it. Each of Omsi.exe's cameras keeps where it was turned
-    /// (a `TCamera` has its own yaw and pitch besides the file's, 0x7edde4 resets them): the
+    /// view the camera chosen in it. Each of OMSI's cameras keeps where it was turned
+    /// (a camera has its own yaw and pitch besides the file's, which a reset clears): the
     /// look went back to straight ahead whenever the viewpoint changed.
     pub(crate) fn look_key(&self) -> String {
         look_key_of(&self.view, self.player.as_ref().map(|p| p.cam_choice))
@@ -983,8 +983,8 @@ impl App {
         self.mouse_look && self.player.is_some() && !matches!(self.view.as_str(), "foot" | "free")
     }
 
-    /// The right button alone zooms, as in Omsi.exe (TForm_main.Panel1MouseMove 0x82c5f8:
-    /// ssRight without `[altView]`, or Shift+right with it); otherwise it turns the view.
+    /// The right button alone zooms, as in OMSI (the right button
+    /// without `[altView]`, or Shift+right with it); otherwise it turns the view.
     pub(crate) fn right_zooms(&self) -> bool {
         !self.settings.alt_view || self.keys.contains(&KeyCode::ShiftLeft) || self.keys.contains(&KeyCode::ShiftRight)
     }
@@ -1184,9 +1184,9 @@ impl App {
         if let Some((y0, v0)) = self.both_drag {
             // a hand on the zoom cancels an eased Space return.
             self.f1_reset = None;
-            // (0x82c5f8: outside, the distance at the press times 1 + the way up over 500
+            // (outside, the distance at the press times 1 + the way up over 500
             // pixels; in the bus the field of view at the press plus the way up over 500
-            // pixels times the camera's own, which is also its widest (+0x31c, 0x7edde4):
+            // pixels times the camera's own, which is also its widest:
             // moving up widens the view as it backs the outside camera away)
             if self.view == "outside" {
                 let k = (1.0 + (y0 - y) / 500.0).max(0.05);
@@ -1262,8 +1262,8 @@ impl App {
             n.map_move(x, y);
             return false;
         }
-        // looking round in a view of the bus follows the cursor, as Omsi.exe turns it
-        // (0x82c5f8: yaw and pitch at the press plus the cursor's way times fov / 78.75):
+        // looking round in a view of the bus follows the cursor, as OMSI turns it
+        // (yaw and pitch at the press plus the cursor's way times fov / 78.75):
         // raw device deltas are no window pixels (a tablet, a remote desktop or a VM
         // reports positions there and spun the view) and did not follow the zoom
         if self.cursor_looks() {
@@ -3162,8 +3162,8 @@ impl App {
 
     /// Go over to weather `file` (None: the map's default) in `secs` of the day (see
     /// `weather_cycle`); a host tells the others (`share`), who come over to it the same way.
-    /// The player's own choice comes at once, as in Omsi.exe (the weather dialog loads the
-    /// .owt and applies it straight away, 0x6828e0 -> 0x754c80); the cycle blends it in.
+    /// The player's own choice comes at once, as in OMSI (the weather dialog loads the
+    /// .owt and applies it straight away); the cycle blends it in.
     pub(crate) fn change_weather(&mut self, file: Option<String>, share: bool, secs: f32) {
         if self.metar_locked() {
             self.service_msg = Some(("The weather cannot be changed while the METAR sync is on".into(), 3.0));
@@ -3716,7 +3716,7 @@ impl App {
                 }
             }
             "view_toggle_informationdisplay" => self.set_info_bar(!self.info_bar),
-            // (Omsi.exe's camera reset, 0x7edde4, puts back the field of view with the
+            // (OMSI's camera reset puts back the field of view with the
             // direction: the zoom goes as well, #244)
             "view_reset_direction" => {
                 // F1 eases home (look + zoom glide) from the values in place:
@@ -3768,8 +3768,8 @@ impl App {
                 }
             }
             // the next (or the previous) view mode, driver - passenger - outside - map and
-            // round again; nothing on foot (Omsi.exe 0x706278 @0x70634a: (mode + 1) and 3,
-            // @0x706392 the inverse)
+            // round again; nothing on foot (OMSI steps with (mode + 1) and 3,
+            // the inverse likewise)
             "view_toggle_viewpoint" | "view_toggle_viewpoint_inverse" => {
                 if self.ego {
                     return true;
@@ -4378,7 +4378,7 @@ pub(crate) fn gate_gear_var(program: &omsi_script::Program) -> Option<String> {
 }
 
 /// Degrees the view turns per (logical) pixel of the cursor's way while looking round:
-/// Omsi.exe's fov / 78.75 (TForm_main.Panel1MouseMove 0x82c5f8).
+/// OMSI's fov / 78.75.
 fn look_deg_per_px(fov_deg: f32) -> f32 {
     fov_deg / 78.75
 }
@@ -4762,7 +4762,7 @@ pub(crate) fn look_key_of(view: &str, cam: Option<(usize, usize)>) -> String {
 }
 
 /// How far the head turns inside the bus: all the way round, in the driver's seat as in a
-/// passenger's - Omsi.exe's mouse look (0x82c5f8) adds the cursor's way to the camera's
+/// passenger's - OMSI's mouse look adds the cursor's way to the camera's
 /// yaw with no stop. Capped at 140 degrees each way, a quarter of the coach stayed out of
 /// sight (#909). The turn is kept within -180..180 so that letting go of a glance still
 /// swings the short way back.
@@ -4898,7 +4898,7 @@ mod reach_tests {
 mod cab_look_tests {
     use super::cab_look_yaw;
 
-    /// A passenger and the driver turn all the way round, as in Omsi.exe (#909).
+    /// A passenger and the driver turn all the way round, as in OMSI (#909).
     #[test]
     fn the_head_turns_all_the_way_round() {
         let mut yaw = 0.0;

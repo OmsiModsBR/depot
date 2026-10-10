@@ -231,7 +231,7 @@ pub struct AiCar {
     /// Seconds its body and script took last frame (heavy ones get an AI job of their own).
     pub ai_secs: f32,
     /// A train turned round as a whole (its last car leads now): what a trip's
-    /// `[trainreverse]` is compared with (Omsi.exe's vehicle +0x4e1).
+    /// `[trainreverse]` is compared with.
     pub consist_reversed: bool,
 }
 
@@ -877,7 +877,7 @@ fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
             bb[1] * 0.5 - bb[4],
             (bb[0] * 0.5).max(0.5),
         ),
-        // without a `[boundingbox]` the model's own box, as Omsi.exe takes it (0x7b5da4):
+        // without a `[boundingbox]` the model's own box, as OMSI takes it:
         // the Berlin S-Bahn's cars, 18 m long, counted as 12 m ones
         _ => match ty.model_box() {
             Some((lo, hi)) if hi.y - lo.y > 1.0 => (hi.y.max(0.5), (-lo.y).max(0.5), (hi.x.max(-lo.x)).max(0.5)),
@@ -925,7 +925,7 @@ struct Junction {
 }
 
 /// A vehicle the AI does not drive (the player's bus, a LAN player's) as the right of way
-/// sees it: Omsi.exe keeps the player's vehicle on the paths like any AI vehicle, so the
+/// sees it: OMSI keeps the player's vehicle on the paths like any AI vehicle, so the
 /// cars give way to it by the same rules; here it is put onto the lanes where it is.
 #[derive(Debug, Clone)]
 struct WayUser {
@@ -1225,7 +1225,7 @@ impl Traffic {
             }
             let lists = &world.ailists;
             // Without `unsched_vehgroups.txt` the random traffic is the ailists' default group
-            // alone (the first, or the one the `[ailist]` header names): Omsi.exe 0x785f98
+            // alone (the first, or the one the `[ailist]` header names): OMSI
             // makes one nameless group then, and a nameless group takes the default group.
             // Taking every group instead, a map whose ailists keep an ambulance (or a bus,
             // or a lorry) in a group of its own had one car in four of that kind (#1025).
@@ -1546,8 +1546,8 @@ impl Traffic {
         self.attach_cars(world, renderer, scene, ci, cars);
     }
 
-    /// Turn train `ci` round as Omsi.exe does for a trip whose `[trainreverse]` differs from
-    /// how the train stands (0x613a98): the whole consist the other way, its last car
+    /// Turn train `ci` round as OMSI does for a trip whose `[trainreverse]` differs from
+    /// how the train stands: the whole consist the other way, its last car
     /// leading - here the vehicle that drives is made anew as that car, standing where it
     /// stands (at `s` on `lane`, which runs the new way), and the others coupled behind it
     /// in the opposite order, each turned round. `behind`: the lanes the train has behind
@@ -1628,8 +1628,8 @@ impl Traffic {
     }
 
     /// The vehicles coupled behind `ty` (its rear sections, trailers, the cars of a unit),
-    /// each with whether it is turned round, loaded (once per file). As Omsi.exe builds a
-    /// consist (0x70a174): towards the back of the train a vehicle goes on with its
+    /// each with whether it is turned round, loaded (once per file). As OMSI builds a
+    /// consist: towards the back of the train a vehicle goes on with its
     /// `[couple_back]`, or with its `[couple_front]` when it is itself turned round; the
     /// coupled one is turned round when the coupling's flag says so, against the one it
     /// hangs on; and a coupling back to the file it came from that turns nothing round is
@@ -1825,7 +1825,7 @@ impl Traffic {
             })
             .collect();
         // (and only the vehicles the lane is open to: Grundorf's trucks where it says
-        // `trucks`, Omsi.exe 0x71d714)
+        // `trucks`, as OMSI does)
         let barred: Vec<*const VehicleType> = match lane.filter(|_| kind == LaneKind::Street).and_then(|i| self.net.lanes.get(i)) {
             Some(l) => self.types.iter().filter(|t| !l.allows(t.0.def.ai_veh_type)).map(|t| Arc::as_ptr(&t.0)).collect(),
             None => Vec::new(),
@@ -2071,9 +2071,9 @@ impl Traffic {
             off_ground += unloaded as usize;
             let random = !c.is_bus() || c.gone;
             let r = (c.state.length as f64 * 0.5).max(2.0);
-            // standing at the end of the network (the map's edge): Omsi.exe never lets a
-            // random car stand there - once 0x71dc9c finds no next segment (0x612e10) its
-            // segment stays -1 and 0x6fe3fc deletes it the same frame (0x703bb0); a bus
+            // standing at the end of the network (the map's edge): OMSI never lets a
+            // random car stand there - once it finds no next segment its
+            // segment stays -1 and it is deleted the same frame; a bus
             // that gave up goes once out of sight, or too far off for the renderer to draw it
             let at_end = c.gone
                 && c.stopped > if c.is_bus() { 20.0 } else { 0.5 }
@@ -2747,8 +2747,8 @@ impl Traffic {
             }
         } else {
             // A vehicle of the random traffic with a `[number]` list takes a number of it at
-            // random and the plate beside it, else the plate its mode makes of the number
-            // (TRoadVehicleInst.virtual_11 at 0x7e7b51); a free plate is one of the map's
+            // random and the plate beside it, else the plate its mode makes of the number;
+            // a free plate is one of the map's
             // registrations.txt.
             let numbers = ty.def.numbers_with_plates();
             if !numbers.is_empty() {
@@ -4486,8 +4486,8 @@ impl Traffic {
         let mut why: Vec<String> = Vec::new();
         let mut stop_at = if jn.inside { None } else { Some(entry) };
         let me_id = car.id;
-        // (Omsi.exe: a vehicle whose script sets `TrafficPriority` claims a crossing with
-        // priority 1000, above any vehicle type's, FUN_007d9128 - the AI ambulance as much
+        // (OMSI: a vehicle whose script sets `TrafficPriority` claims a crossing with
+        // priority 1000, above any vehicle type's - the AI ambulance as much
         // as the player; ours honoured it for the player's bus only)
         let prio = |c: &AiCar| c.vehicle.var("TrafficPriority").is_some_and(|v| v > 0.5);
         let me_prio = prio(car);
@@ -6082,9 +6082,9 @@ impl Traffic {
                             );
                         }
                     } else if st.route.is_empty() {
-                        // a dead end (the map's edge, the end of a street spline): Omsi.exe
+                        // a dead end (the map's edge, the end of a street spline): OMSI
                         // drives on at speed and deletes the car the frame it runs out of
-                        // road (0x71dc9c finds no next segment, 0x6fe3fc deletes it), and
+                        // road (it finds no next segment and is deleted), and
                         // `drive` takes it off there. Braking for the end, the cars stopped
                         // there one by one and those behind queued into a stop-and-go (an
                         // aircraft flies on in any case)
@@ -7252,7 +7252,7 @@ impl Traffic {
         // the GPU at most every half second, a slice of the cars per frame.
         let tick = (self.time as f64 * 2.0) as u64;
         let mut budget = SCRIPT_UPLOAD_BUDGET;
-        // `Envir_Brightness`, which Omsi.exe sets for every road vehicle as for the
+        // `Envir_Brightness`, which OMSI sets for every road vehicle as for the
         // player's: the stock buses fade their windows by it at night (left at the engine's
         // default of 1, an AI bus under the street lamps kept its daytime brown glass)
         if let Some(d) = self.daylight {

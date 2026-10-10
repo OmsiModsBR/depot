@@ -975,6 +975,9 @@ pub struct VehicleInstance {
     /// Faces the wheels cannot climb stop the vehicle (see `RigidBody::wheel_walls`); the
     /// player's bus follows the setting for collisions with objects.
     pub wheel_walls: bool,
+    /// The springs as at full air whatever the scripts' `Axle_Springfactor_*` say (the
+    /// launcher's vehicle viewer shows the bus on full springs, not knelt or leaning).
+    pub springs_full: bool,
     /// What the radio plays, cut to what a text display shows (see `show_radio_text`):
     /// `None` leaves the scripts' own texts alone, an empty text is a radio that is off.
     pub radio_text: Option<String>,
@@ -1000,10 +1003,6 @@ pub struct VehicleInstance {
     pub dirt: f32,
     /// Rigid-body dynamics (player vehicles); None = simple kinematic model.
     pub rigid: Option<crate::rigid::RigidBody>,
-    /// The tyre meshes that are seated on their physical hub (see `seat_wheels`): mesh,
-    /// wheel of the rigid body, the mesh's turning centre at rest (model frame). Built on
-    /// first use.
-    wheel_seats: Option<Vec<(usize, usize, Vec3)>>,
     /// The AI odometer at the last `update_ai` (the wheels roll the difference).
     ai_odometer: f32,
     /// Kilometres driven this session (the odometer's `kmcounter_*`).
@@ -1282,13 +1281,13 @@ impl VehicleInstance {
             collided: false,
             last_crash: 0.0,
             wheel_walls: true,
+            springs_full: false,
             radio_text: None,
             radio_frequency: None,
             crashes: 0,
             last_impact: 0.0,
             dirt: 0.0,
             rigid: None,
-            wheel_seats: None,
             ai_odometer: 0.0,
             seat: (0.0, 0.0, Vec3::ZERO),
             driven_km: 0.0,
@@ -1484,6 +1483,9 @@ impl VehicleInstance {
     }
 
     fn spring_factor(&self, axle: usize, side: usize) -> f32 {
+        if self.springs_full {
+            return 1.0;
+        }
         self.v_springfactor
             .get(axle)
             .and_then(|a| a[side])
@@ -2533,63 +2535,6 @@ impl VehicleInstance {
             .unwrap_or(true)
     }
 
-    /// Seat the drawn tyres on the hubs the physics has: a model whose suspension
-    /// animation lifts its wheels by less (or more) than the spring is compressed - the
-    /// LiAZ 5292 turns them about pivots across the bus, and at rest they stood 4 cm in the
-    /// asphalt, like flat tyres - has each tyre mesh moved up or down to where its hub is.
-    /// Only small corrections (under 8 cm) and only axles the model moves with
-    /// `Axle_Suspension`: a larger mismatch is the model's own business.
-    fn seat_wheels(&mut self) {
-        let Some(rb) = self.rigid.as_ref() else { return };
-        if self.wheel_seats.is_none() {
-            let mut seats = Vec::new();
-            for (i, vm) in self.ty.meshes.iter().enumerate() {
-                let def = &self.ty.model.meshes[vm.def_index];
-                let Some(an) = def.animations.iter().find(|a| a.variable.to_ascii_lowercase().starts_with("wheel_rotation_")) else { continue };
-                let v = an.variable.to_ascii_lowercase();
-                let rest = v.trim_start_matches("wheel_rotation_");
-                let mut parts = rest.split('_');
-                let (Some(Ok(axle)), Some(side)) = (parts.next().map(|a| a.parse::<usize>()), parts.next()) else { continue };
-                if !self.ty.suspension_axles.contains(&axle) {
-                    continue;
-                }
-                let k = axle * 2 + if side.starts_with('r') { 1 } else { 0 };
-                if k >= rb.wheels.len() {
-                    continue;
-                }
-                // (the hub is where the wheel turns about: its `origin_trans`, or the mesh's
-                // own pivot for `origin_from_mesh`. Measured at the .o3d's pivot, a tyre without
-                // one - the NEOMAN's right front, at the model's origin - was measured at a point
-                // swinging round the hub as the wheel turned: it was pushed up and down by
-                // centimetres while its hub cap stayed, and the cap "rolled off" the tyre.)
-                let mut hub = None;
-                for o in &an.origins {
-                    match o {
-                        omsi_model::AnimOrigin::Trans(t) => hub = Some(hub.unwrap_or(Vec3::ZERO) + Vec3::from(*t)),
-                        omsi_model::AnimOrigin::FromMesh => hub = Some(vm.pivot.w_axis.truncate()),
-                        _ => {}
-                    }
-                }
-                seats.push((i, k, hub.unwrap_or(vm.pivot.w_axis.truncate())));
-            }
-            self.wheel_seats = Some(seats);
-        }
-        let seats = self.wheel_seats.as_ref().unwrap();
-        for &(i, k, pivot) in seats {
-            let comp = rb.wheels[k].compression.clamp(-crate::rigid::DROOP, crate::rigid::BUMP);
-            let drawn = self.mesh_transforms[i].transform_point3(pivot).z;
-            let dz = pivot.z + comp - drawn;
-            if omsi_cfg::env::var_os("OMSI_DEBUG_SEAT").is_some() {
-                log::info!("seat mesh {i} wheel {k}: comp {:.4} drawn {:.4} pivot {:.4} dz {:.4}", comp, drawn, pivot.z, dz);
-            }
-            // (every frame, however small: a dead band of 3 mm had the correction switch on
-            // and off as the travel crossed it, and the tyre ticked up and down by that much)
-            if dz.abs() < 0.08 {
-                self.mesh_transforms[i] = Mat4::from_translation(Vec3::new(0.0, 0.0, dz)) * self.mesh_transforms[i];
-            }
-        }
-    }
-
     /// Coupled vehicles follow and animate from this vehicle's variables.
     fn update_trailers(&mut self, dt: f32) {
         let mut trailers = std::mem::take(&mut self.trailers);
@@ -2632,7 +2577,6 @@ impl VehicleInstance {
             self.mesh_transforms[i] = a.update(dt, &self.state.vars);
         }
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
-        self.seat_wheels();
         static DEBUG_ANIM: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
         if let Some(want) = DEBUG_ANIM.get_or_init(|| omsi_cfg::env::var("OMSI_DEBUG_ANIM").ok()) {
             for (i, m) in self.ty.meshes.iter().enumerate() {

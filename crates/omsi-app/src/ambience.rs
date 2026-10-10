@@ -21,7 +21,7 @@ pub struct Footfall {
     /// On the floor of the player's own bus.
     pub own_bus: bool,
     /// The files (in `Sounds\Passengers\`) of the `[stepsoundpack]` of the path link the
-    /// step is on, one picked at random as Omsi.exe does (0x6274c9); none, no sound - a
+    /// step is on, one picked at random as OMSI does; none, no sound - a
     /// link without a pack, a bus whose paths.cfg has none, the street.
     pub pack: Option<Arc<[String]>>,
 }

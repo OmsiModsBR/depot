@@ -68,7 +68,7 @@ pub struct MapIndex {
     pub covers: HashMap<(i32, i32), [f64; 4]>,
     pub tiles_read: usize,
     pub tiles_failed: usize,
-    /// Object id → how many passengers get off at it, as Omsi.exe weighs a `[busstop]`'s
+    /// Object id → how many passengers get off at it, as OMSI weighs a `[busstop]`'s
     /// strings (see [`stop_exit_weight`]); only objects that carry strings.
     pub stop_weights: HashMap<i64, f32>,
     /// Object id → its `[busstop]`'s (pass_enter_max, pass_enter_min) (see
@@ -78,16 +78,15 @@ pub struct MapIndex {
     /// the way the map lays the road (the side a bus stopping in its own lane keeps its
     /// doors on), 1 = the other. Only objects that carry strings.
     pub stop_side: HashMap<i64, f32>,
-    /// Object id → the stop's length (string 4, 30 m when not given; Omsi.exe's +0x7c,
-    /// sub_620058): how far along it the waiting places and a standing bus may be.
+    /// Object id → the stop's length (string 4, 30 m when not given): how far along it the waiting places and a standing bus may be.
     pub stop_length: HashMap<i64, f32>,
 }
 
-/// How many passengers get off at a bus stop, as Omsi.exe reads the stop object's strings
-/// when it sets the station up (0x620058): `pass_enter_max` (string 1, else 1) and
+/// How many passengers get off at a bus stop, as OMSI reads the stop object's strings
+/// when it sets the station up: `pass_enter_max` (string 1, else 1) and
 /// `pass_enter_min` (string 2, else 0) rounded, and `pass_exit` (string 3) rounded - or,
 /// without it, the mean of the two - never below 0. A boarding passenger draws where to get
-/// off among the stops ahead by these numbers (0x61baa8), so a stop with twice the number
+/// off among the stops ahead by these numbers, so a stop with twice the number
 /// takes twice the riders; the stock maps put 10 on every stop.
 pub fn stop_exit_weight(strings: &[String]) -> f32 {
     let (max, min) = stop_enter(strings);
@@ -99,12 +98,12 @@ fn stop_num(strings: &[String], i: usize) -> Option<f32> {
 }
 
 /// A bus stop's `pass_enter_max` (string 1, else 1) and `pass_enter_min` (string 2, else
-/// 0), rounded, as Omsi.exe sets the station up (0x620058): how many people wait there.
+/// 0), rounded, as OMSI sets the station up: how many people wait there.
 pub fn stop_enter(strings: &[String]) -> (f32, f32) {
     (stop_num(strings, 1).unwrap_or(1.0), stop_num(strings, 2).unwrap_or(0.0))
 }
 
-/// The side a bus stop's platform lies on, as Omsi.exe reads it off the stop object's
+/// The side a bus stop's platform lies on, as OMSI reads it off the stop object's
 /// *timetable data* strings: string 5 (0-based, after name and the entering/exiting
 /// numbers), 0 = the right of the way the map lays the road down, 1 = the other side.
 ///
@@ -126,7 +125,7 @@ pub fn stop_side(strings: &[String]) -> f32 {
 }
 
 /// Does a child of a crossing name one of its lights? OMSI's `RefreshAmpelParenting`
-/// (0x77d460) switches a crossing's light program on for every object whose `[varparent]`
+/// switches a crossing's light program on for every object whose `[varparent]`
 /// is that crossing and whose first string is a light index (`StrToInt` >= 0) - whatever
 /// kind of object it is: it never asks for `[trafficlight]`. A mod's lamp without that
 /// keyword (a copy of a lamp with its own script) still runs its junction, and the lamp
@@ -506,7 +505,7 @@ pub struct Pose {
 
 impl Pose {
     /// The pose of an object hanging on attachment point `attach` of this pose, turned by
-    /// its own heading/pitch/bank `own`, as Omsi.exe puts it there (0x79d4c4..0x79d689): the
+    /// its own heading/pitch/bank `own`, as OMSI puts it there: the
     /// point's place turned with the parent, and for the turn the D3DX quaternion product
     /// point x own x parent - the point's rotation, then the object's own (bank, pitch,
     /// heading), then the parent's, all taken as rotations of the world axes. For the
@@ -713,8 +712,8 @@ fn place_on(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Op
             // spline's pitch/bank to the object's Euler angles instead tilts a
             // sideways railing across the road, and a reversed object downhill.
             // The half turn of a backwards chain belongs to that same local frame.
-            // The row's own matrix uses bank, then pitch, then heading (Omsi.exe
-            // 0x79dd20..0x79de02), unlike a plain map object's pitch-first matrix.
+            // The row's own matrix uses bank, then pitch, then heading,
+            // unlike a plain map object's pitch-first matrix.
             // Two quarter turns otherwise laid retaining blocks across the street.
             let rot = omsi_geometry::object_rotation([curve.heading_at(u), pitch, bank])
                 * omsi_geometry::object_rotation_ypr(own);

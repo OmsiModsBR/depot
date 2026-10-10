@@ -78,9 +78,9 @@ pub struct Settings {
     /// `[AIMaxCountParked]`: parked cars placed in the loaded tiles (0 = every space, -1 =
     /// none at all).
     pub ai_max_parked: i32,
-    /// `[AIMaxCountRandom]`'s second line: Omsi.exe makes this many people at the start and
-    /// no more (0x709274, "Create Humans") - everybody waiting, walking and riding comes out
-    /// of them, and at most half walk the pavements (0x62463c).
+    /// `[AIMaxCountRandom]`'s second line: OMSI makes this many people at the start and
+    /// no more - everybody waiting, walking and riding comes out
+    /// of them, and at most half walk the pavements.
     pub ai_max_humans: u32,
     /// `[no_collision_vehToVeh]` off: the player's bus collides with the traffic.
     pub collision_vehicles: bool,
@@ -96,7 +96,7 @@ pub struct Settings {
     pub hands_in_cab: bool,
     /// OMSI's `[altView]` (options.cfg): the right mouse button turns the view and
     /// Shift+right zooms. Off, the right button zooms and the middle one turns the view
-    /// (TForm_main.Panel1MouseMove 0x82c5f8) - OMSI's default, but on here by default: a
+    /// - OMSI's default, but on here by default: a
     /// laptop's touchpad has no middle button to look round with, and right-drag looking
     /// is what openOMSI always did.
     pub alt_view: bool,
@@ -268,14 +268,14 @@ pub struct Settings {
     /// Mouse steering as it was left last time (O or the menu switches it; the game
     /// starts with it as the player had it).
     pub mouse_steering: bool,
-    /// A right click ends the mouse steering, as in Omsi.exe (0x6f44aa: the right button
+    /// A right click ends the mouse steering, as in OMSI (the right button
     /// held while the mouse steers fires `toggel_mouse_ctrl`). Off by default: looking
     /// round with the right button dragged switched it off every time.
     pub mouse_right_off: bool,
     /// The mouse steering's wheel and pedals ease after the cursor (~60 ms); off, they follow
-    /// it at once, as in Omsi.exe (#1092).
+    /// it at once, as in OMSI (#1092).
     pub mouse_smooth: bool,
-    /// How fast the view turns for the mouse's way while looking round (1 = Omsi.exe's
+    /// How fast the view turns for the mouse's way while looking round (1 = OMSI's
     /// field of view / 78.75 degrees per pixel in the views of the bus; #859).
     pub look_sens: f32,
     /// How long the view takes to come round to where the mouse (or the stick, or the
