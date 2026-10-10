@@ -259,6 +259,21 @@ struct Cabin {
 /// counted with the `[passpos]`), from the places (indices into `seats`) taken by people
 /// sitting there. (Counted by the `[passpos]` alone, every seat of a cabin with the
 /// driver's place first was one off: a tip-up seat folded down under the next one.)
+/// A busy stop's waiting places grown by `fresh` (the stop set up again): the places it has
+/// keep their numbers - the people on them hold those -, the new ones come after, free.
+/// The places added.
+fn merge_spots(spots: &mut Vec<WaitSpot>, taken: &mut Vec<bool>, fresh: Vec<WaitSpot>) -> usize {
+    let mut added = 0;
+    for sp in fresh {
+        if !spots.iter().any(|o| (o.pos - sp.pos).length() < 0.05) {
+            spots.push(sp);
+            taken.push(false);
+            added += 1;
+        }
+    }
+    added
+}
+
 fn seat_numbers(seats: &[Seat], sitting: impl Iterator<Item = usize>) -> Vec<u32> {
     let n = seats.iter().map(|s| s.omsi_seat + 1).max().unwrap_or(0);
     let mut out = vec![0u32; n];
@@ -1959,8 +1974,25 @@ impl Humans {
         for id in idle {
             self.stops.remove(&id);
         }
+        // a stop people wait at keeps its places - they stand on them by number - and gains
+        // the ones the new tiles brought: the stop the player starts at is set up with the
+        // first tile and filled at once, before the shelters on the tiles round it are there,
+        // and would otherwise never get more than those first places
+        let busy: Vec<(i64, DVec3, f64, String)> = world
+            .bus_stops
+            .lock()
+            .iter()
+            .filter(|s| used.contains(&s.0) && self.stops.contains_key(&s.0))
+            .map(|s| (s.0, s.1, s.2, s.3.clone()))
+            .collect();
+        let mut gained = 0usize;
+        for (id, pos, rot, name) in busy {
+            let fresh = self.build_pax_stop(world, None, id, pos, rot, &name);
+            let s = self.stops.get_mut(&id).unwrap();
+            gained += merge_spots(&mut s.spots, &mut s.taken, fresh.spots);
+        }
         if debug_pax() || (omsi_cfg::env::var_os("OMSI_PROFILE").is_some() && (removed > 0 || !gone.is_empty())) {
-            log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {removed} people taken away", gone.len());
+            log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {gained} waiting places added to busy stops, {removed} people taken away", gone.len());
         }
     }
 
@@ -2526,7 +2558,14 @@ impl Humans {
         let h = heading.to_radians();
         let objects = world.object_positions.lock();
         let mut spots: Vec<WaitSpot> = Vec::new();
+        let reach = 40.0_f64.max(length as f64 + 15.0);
         for (obj, p, face, height) in world.waiting_places.lock().iter() {
+            // (a place this far from the stop is no object's near it - a `[passpos]` lies
+            // metres from its object, not 100 m: no need to look the object up, which on
+            // a big map is most of the time this takes)
+            if (*p - pos).truncate().length() > reach + 100.0 {
+                continue;
+            }
             let Some((opos, _)) = objects.get(obj) else {
                 if debug_pax() && (*p - pos).length() < 30.0 {
                     log::info!("stop {id}: waiting place of object {obj} at {p:?}: object position unknown");
@@ -2538,7 +2577,7 @@ impl Humans {
             // (Omsi.exe looks at every object of the stop's tile and the ones round it; the
             // region below reaches the stop's length ahead, which a long bus station stop
             // takes past 40 m)
-            if v.length() > 40.0_f64.max(length as f64 + 15.0) {
+            if v.length() > reach {
                 continue;
             }
             // (0x7efb08 with -heading: in the stop's frame)
@@ -2617,8 +2656,16 @@ impl Humans {
         if self.mirror || self.avatar_only {
             return;
         }
-        let mut ids: Vec<i64> = self.stops.keys().copied().collect();
-        ids.sort_unstable();
+        // the nearest stops first: when the pool runs short (a bus station of many stops),
+        // the people go to the stops the player sees rather than to the lowest ids
+        let centers: Vec<DVec3> = std::iter::once(self.center).chain(self.lan_centers.iter().copied()).collect();
+        let mut ids: Vec<(f64, i64)> = self
+            .stops
+            .iter()
+            .map(|(id, s)| (centers.iter().map(|c| (s.pos - *c).length()).fold(f64::MAX, f64::min), *id))
+            .collect();
+        ids.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let ids: Vec<i64> = ids.into_iter().map(|(_, id)| id).collect();
         let forced = omsi_cfg::env::var("OMSI_PAX_WAITING").ok().and_then(|v| v.parse::<usize>().ok());
         // the people handed over to another player's bus stop counting once it has left
         // their stop (or the session)
@@ -2694,6 +2741,9 @@ impl Humans {
             let mut count = count;
             while count < want {
                 if self.spawn_waiting(world, renderer, scene, id).is_none() {
+                    if debug_pax() && self.pool_used() >= bounded_people_limit(self.max_people) {
+                        log::info!("stop {id}: {count} of {want} waiting, the pool is full ({} people)", self.pool_used());
+                    }
                     break;
                 }
                 count += 1;
@@ -2748,13 +2798,14 @@ impl Humans {
         if self.stops.get(&id)?.taken.iter().all(|t| *t) || !self.pool_room() {
             return None;
         }
-        let k = self.take_spot(id)?;
-        let sp = self.stops[&id].spots[k].clone();
+        let (k, beside) = self.take_spot(id)?;
+        let sp = beside.clone().unwrap_or_else(|| self.stops[&id].spots[k].clone());
         let (dest, line) = self.draw_dest(id);
         let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
         let mut pax = Pax::new(walk, self.rand_f());
         pax.stop = Some(id);
         pax.spot = Some(k);
+        pax.beside = beside;
         pax.pos = sp.pos;
         pax.yaw = sp.face.to_radians();
         pax.dest = dest;
@@ -5742,7 +5793,12 @@ impl Humans {
             if let Some(t) = self.stops.get_mut(&stop).unwrap().taken.get_mut(spot) {
                 *t = true;
             }
-            if sp.height != 0.0 {
+            // (the host stood them beside their place - somebody of a neighbouring stop had
+            // it -: they stay where they stand, on foot)
+            let feet = sp.pos - DVec3::Z * sp.height as f64;
+            if (pax.pos - feet).truncate().length() > 0.3 {
+                pax.beside = Some(WaitSpot { pos: pax.pos, face: sp.face, height: 0.0 });
+            } else if sp.height != 0.0 {
                 pax.seat_h = sp.height;
                 pax.pos = sp.pos - DVec3::Z * seatheight as f64;
                 pax.pax_state = 2.0;
@@ -6750,5 +6806,38 @@ mod population_limit_tests {
         );
         assert_eq!(h.pool_used(), 1);
         assert!(h.people.iter().any(|p| p.id == 1));
+    }
+
+    #[test]
+    fn busy_stop_gains_the_waiting_places_of_new_tiles() {
+        let spot = |x: f64| WaitSpot { pos: DVec3::new(x, 0.0, 0.0), face: 0.0, height: 0.0 };
+        // set up with the first tile: two places, the second taken
+        let mut spots = vec![spot(0.0), spot(1.0)];
+        let mut taken = vec![false, true];
+        // the shelters of the next tile came: the same two and three more
+        let fresh = vec![spot(1.0), spot(5.0), spot(0.0), spot(6.0), spot(7.0)];
+        assert_eq!(merge_spots(&mut spots, &mut taken, fresh), 3);
+        let xs: Vec<f64> = spots.iter().map(|s| s.pos.x).collect();
+        assert_eq!(xs, [0.0, 1.0, 5.0, 6.0, 7.0], "the old places keep their numbers");
+        assert_eq!(taken, [false, true, false, false, false]);
+        // nothing new: nothing added
+        assert_eq!(merge_spots(&mut spots, &mut taken, vec![spot(5.0)]), 0);
+        assert_eq!(spots.len(), 5);
+    }
+
+    #[test]
+    fn beside_a_shared_place_by_turns_along_the_kerb_on_foot() {
+        // a seat 0.45 m up, the stop heading north (+y)
+        let seat = WaitSpot { pos: DVec3::new(10.0, 20.0, 1.45), face: 90.0, height: 0.45 };
+        let at = |n| beside_place(&seat, 0.0, n);
+        for (n, dy) in [(1, 0.7), (2, -0.7), (3, 1.4), (4, -1.4)] {
+            let b = at(n);
+            assert!((b.pos - DVec3::new(10.0, 20.0 + dy, 1.0)).length() < 1e-6, "step {n}: {:?}", b.pos);
+            assert_eq!(b.height, 0.0, "on foot");
+            assert_eq!(b.face, 90.0);
+        }
+        // heading east: along +x
+        let b = beside_place(&seat, 90.0, 1);
+        assert!((b.pos - DVec3::new(10.7, 20.0, 1.0)).length() < 1e-6);
     }
 }
