@@ -58,6 +58,17 @@ jobs:
             throw 'Workspace tests or build failed; inspect the original diagnostics. No release was published.'
           }
 
+  # Blocking: the committed third-party binaries must match the recorded hashes.
+  provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Steam redistributables match SHA256SUMS
+        run: cd assets/steam_redist && sha256sum -c SHA256SUMS
+
   # Informational quality gates: they never fail the workflow. Each step reports its own
   # outcome in the log and in the job summary; what is still pending is in docs/QUALITY.md.
   quality:
