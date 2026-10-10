@@ -29,6 +29,5 @@ dedicated target directory; dependencies remained locked. These checks
 do not certify a real bus model, bellows animation, all road
 profiles or a full physical multibody implementation.
 
-This branch is independent of `feat/outside-fov-ultrawide` and the existing
-experimental multibody branch. It is not merged into main and is not part of
-released Depot 0.2.17. MIT, internal identifiers and Depot branding are retained.
+This branch was independent of `feat/outside-fov-ultrawide` and the multibody branch. It is merged into
+main and part of released Depot 0.2.52 (not of 0.2.17). MIT, internal identifiers and Depot branding are retained.
