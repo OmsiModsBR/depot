@@ -937,3 +937,94 @@ fn departures_are_asked_by_stop_and_handed_back() {
     r.set_vars(&[], &[]);
     assert_eq!(r.text_of("o").as_deref(), Some("1:5|Hbf|1000"));
 }
+fn interp() -> Interp {
+    Interp::with_api(Dom::parse("<body></body>"), crate::htmltex::PageApi::Vehicle)
+}
+
+#[test]
+fn deeply_nested_script_is_an_error_not_a_stack_overflow() {
+    for open in ["(", "[", "!", "-", "{"] {
+        let src = format!("var a = {}1", open.repeat(20_000));
+        assert!(interp().run(&src).is_err(), "{open:?} nesting must be rejected");
+    }
+    let chain = format!("var a = 1{}", "+1".repeat(5_000));
+    assert!(interp().run(&chain).is_err());
+    assert!(interp().run("var a = ((((1)))) + [[2]];").is_ok());
+}
+
+#[test]
+fn deeply_nested_html_keeps_a_bounded_tree() {
+    let html = format!("<body>{}x{}</body>", "<div>".repeat(50_000), "</div>".repeat(50_000));
+    let dom = Dom::parse(&html);
+    assert!((0..dom.nodes.len()).all(|i| dom.depth_of(i) <= MAX_DOM_DEPTH));
+    let mut r = EngineRenderer::new(16, 16, &html);
+    assert!(r.poll_frame().is_some());
+}
+
+fn get_var(it: &Interp, n: &str) -> String {
+    to_str(&it.lookup(&it.global, n).unwrap())
+}
+
+#[test]
+fn self_referencing_array_does_not_deadlock() {
+    let mut it = interp();
+    it.run("var a = []; a[0] = a; a[1] = 5; var s = String(a); var t = a + ''; var j = a.join('-');").unwrap();
+    assert_eq!(get_var(&it, "s"), ",5");
+    assert_eq!(get_var(&it, "t"), ",5");
+    assert_eq!(get_var(&it, "j"), "-5");
+    // a doubly-nested array tree is cut by the length cap instead of exploding
+    let mut it = interp();
+    it.run("var x = [1]; for (var i = 0; i < 40; i++) { x = [x, x]; } var s = String(x);").unwrap();
+    assert!(get_var(&it, "s").len() <= MAX_JS_STR + 8);
+}
+
+#[test]
+fn js_array_and_string_growth_is_capped() {
+    // a huge index is a JS error and allocates nothing
+    assert!(interp().run("var a = []; a[4000000000] = 1;").is_err());
+    let mut it = interp();
+    it.run("var a = []; a[100] = 1; var n = a.length;").unwrap();
+    assert_eq!(get_var(&it, "n"), "101");
+    // strings stay bounded however they grow
+    let mut it = interp();
+    it.run("var s = 'x'; for (var i = 0; i < 40; i++) { s += s; } var n = s.length;").unwrap();
+    assert!(get_var(&it, "n").parse::<usize>().unwrap() <= MAX_JS_STR);
+    let mut it = interp();
+    it.run("var p = 'x'.padStart(1e12, 'ab'); var q = 'x'.padEnd(1e12); var r = 'ab'.repeat(1000); var n = p.length;").unwrap();
+    assert!(get_var(&it, "n").parse::<usize>().unwrap() <= MAX_JS_STR);
+    assert_eq!(get_var(&it, "r").len(), 2000);
+}
+
+#[test]
+fn nested_inline_blocks_lay_out_in_bounded_time() {
+    let n = 60;
+    let html = format!(
+        "<body style='margin:0'>{}hi{}</body>",
+        "<div style='display:inline-block'>".repeat(n),
+        "</div>".repeat(n)
+    );
+    let start = std::time::Instant::now();
+    let mut r = EngineRenderer::new(64, 64, &html);
+    assert!(r.poll_frame().is_some());
+    assert!(start.elapsed().as_secs() < 10, "layout took {:?}", start.elapsed());
+}
+
+#[test]
+fn font_size_is_clamped_and_non_finite_lengths_are_rejected() {
+    let u = Units { font: 16.0, vw: 100.0, vh: 100.0 };
+    assert!(parse_len("infpx", &u).is_none());
+    assert!(parse_len("nanpx", &u).is_none());
+    assert!(parse_len("inf", &u).is_none());
+    for fs in ["60000px", "infpx", "1e30px", "999999em", "nanpx"] {
+        let html = format!("<body style='margin:0'><div style='font-size:{fs}'>Wg</div><h1 style='font-size:60000px'>x</h1></body>");
+        let mut r = EngineRenderer::new(32, 32, &html);
+        assert!(r.poll_frame().is_some(), "{fs} must render without exploding");
+    }
+    // a glyph bigger than the cap is refused instead of rasterized
+    with_fonts(|reg, _| {
+        let id = ab_glyph::Font::glyph_id(reg, 'W');
+        assert!(glyph_bmp(reg, false, id, 100_000.0, 0, 0).is_none());
+        assert!(glyph_bmp(reg, false, id, 24.0, 0, 0).is_some());
+    })
+    .unwrap();
+}

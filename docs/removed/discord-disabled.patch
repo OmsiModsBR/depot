@@ -1,0 +1,1458 @@
+commit 2bdb87de609dc1a83eb19913a078081ec3c0a60b
+Author: Claude <noreply@anthropic.com>
+Date:   Sat Oct 10 04:38:56 2026 +0000
+
+    feat!: disable all Discord Rich Presence until Depot has its own application ID
+    
+    Decision D5, resolves S15. Removes the IPC client (discord.rs), the
+    borrowed shared application ID, the launcher/game presence updates, the
+    discord_status and discord_app_id settings, the Settings switch, the
+    translations and the user-guide text. Community Discord links stay.
+    Registry: docs/removed/DISCORD_DISABLED.md.
+    
+    Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01FZQVQ3tmYW219vn9Z5vh6F
+
+diff --git a/crates/omsi-app/locales/app.yml b/crates/omsi-app/locales/app.yml
+index 7362b29..7a45fdb 100644
+--- a/crates/omsi-app/locales/app.yml
++++ b/crates/omsi-app/locales/app.yml
+@@ -24510,13 +24510,6 @@ _version: 2
+ 
+   pt: "Controles personalizados"
+   pt-pt: "Controlos personalizados"
+-"Discord Rich Presence":
+-  ca: "Presència enriquida a Discord"
+-  fr: "Statut Discord (Rich Presence)"
+-  zh-tw: "Discord 狀態顯示"
+-
+-  pt: "Discord Rich Presence"
+-  pt-pt: "Discord Rich Presence"
+ "Display and driver":
+   ca: "Pantalla i controlador"
+   zh-tw: "顯示與駕駛"
+@@ -24878,13 +24871,6 @@ _version: 2
+ 
+   pt: "Troca as marchas de um câmbio manual por você conforme a rotação do motor"
+   pt-pt: "Muda as velocidades de uma caixa manual por si conforme a rotação do motor"
+-"Shows the launcher or your map, bus, line and multiplayer status in Discord.":
+-  ca: "Mostra el launcher o el mapa, l'autobús, la línia i l'estat multijugador a Discord."
+-  fr: "Affiche dans Discord le lanceur ou votre carte, votre bus, votre ligne et votre statut multijoueur."
+-  zh-tw: "在 Discord 中顯示啟動器或您的地圖、巴士、線路和多人遊戲狀態。"
+-
+-  pt: "Mostra no Discord o launcher ou o status do seu mapa, ônibus, linha e multijogador."
+-  pt-pt: "Mostra no Discord o launcher ou o estado do seu mapa, autocarro, linha e multijogador."
+ "Snow":
+   ca: "Neu"
+   zh-tw: "雪天"
+diff --git a/crates/omsi-app/src/app.rs b/crates/omsi-app/src/app.rs
+index 2f3092f..07ca078 100644
+--- a/crates/omsi-app/src/app.rs
++++ b/crates/omsi-app/src/app.rs
+@@ -182,9 +182,6 @@ pub(crate) struct App {
+     pub(crate) arrow_glance: bool,
+     /// The next click on the city map puts the bus there (Esc → Move the bus on the map).
+     pub(crate) teleport_pick: bool,
+-    /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+-    pub(crate) discord: Option<crate::discord::Discord>,
+-    pub(crate) discord_t: f32,
+     // Steamworks API layer and it's last updated time
+     #[cfg(steam)]
+     pub(crate) steam: Option<crate::steam::Steam>,
+diff --git a/crates/omsi-app/src/app_events.rs b/crates/omsi-app/src/app_events.rs
+index fb2e959..805203a 100644
+--- a/crates/omsi-app/src/app_events.rs
++++ b/crates/omsi-app/src/app_events.rs
+@@ -1603,37 +1603,6 @@ impl ApplicationHandler for App {
+                     }
+                     self.service_msg = Some(("On foot: Esc menu, Place a vehicle..., then G at its driver's door to drive it".into(), 8.0));
+                 }
+-                // Discord's status: the map, the bus, the line (every few seconds)
+-                #[cfg(not(target_os = "android"))]
+-                {
+-                    self.discord_t -= dt;
+-                    if self.discord_t <= 0.0 {
+-                        self.discord_t = 5.0;
+-                        if self.args.server.is_none()
+-                            && self.discord.is_none()
+-                            && self.settings.discord_status
+-                        {
+-                            self.discord =
+-                                crate::discord::Discord::start(&self.settings.discord_app_id);
+-                        }
+-                        if let Some(d) = self.discord.as_ref() {
+-                            let bus = self.player.as_ref().map(|p| {
+-                                let definition = &p.vehicle.ty.def;
+-                                let short = omsi_launcher_lib::vehicle_type_label(&definition.type_name, &definition.path);
+-                                let full = omsi_launcher_lib::display_bus_name(&format!("{} {short}", definition.manufacturer));
+-                                (short, full)
+-                            });
+-                            let duty = self.duty.as_ref().map(|d| (d.line.as_str(), d.tour.as_str()));
+-                            d.set(crate::discord::Presence::for_game(
+-                                self.world.as_ref().map(|w| w.global.name.as_str()),
+-                                bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
+-                                duty,
+-                                self.lan.is_some(),
+-                            ));
+-                        }
+-                    }
+-                }
+-
+                 // Steam's callbacks (rich presence)
+                 #[cfg(steam)]
+                 if let Some(steam) = self.steam.as_ref() {
+diff --git a/crates/omsi-app/src/discord.rs b/crates/omsi-app/src/discord.rs
+deleted file mode 100644
+index 15172a3..0000000
+--- a/crates/omsi-app/src/discord.rs
++++ /dev/null
+@@ -1,975 +0,0 @@
+-//! Discord Rich Presence over the local Discord IPC connection.
+-
+-use std::io::{self, Read, Write};
+-use std::sync::{
+-    atomic::{AtomicBool, Ordering},
+-    Arc, Mutex,
+-};
+-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+-
+-// Shared test application; replace centrally if a different application is used for release.
+-pub(crate) const DEFAULT_APP_ID: &str = "1555504817110122526";
+-const MAX_FRAME: usize = 64 * 1024;
+-#[cfg(not(test))]
+-const POLL: Duration = Duration::from_millis(100);
+-#[cfg(test)]
+-const POLL: Duration = Duration::from_millis(10);
+-#[cfg(not(test))]
+-const CONNECT_RETRY: Duration = Duration::from_secs(20);
+-#[cfg(test)]
+-const CONNECT_RETRY: Duration = Duration::from_millis(40);
+-#[cfg(not(test))]
+-const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+-#[cfg(test)]
+-const RESPONSE_TIMEOUT: Duration = Duration::from_millis(250);
+-#[cfg(not(test))]
+-const UPDATE_INTERVAL: Duration = Duration::from_secs(5);
+-#[cfg(test)]
+-const UPDATE_INTERVAL: Duration = Duration::from_millis(10);
+-
+-#[derive(Debug, Clone, Default, PartialEq)]
+-pub(crate) struct Presence {
+-    pub details: String,
+-    pub state: String,
+-    pub large_text: String,
+-}
+-
+-impl Presence {
+-    pub(crate) fn for_game(
+-        map: Option<&str>,
+-        bus: Option<(&str, &str)>,
+-        duty: Option<(&str, &str)>,
+-        multiplayer: bool,
+-    ) -> Option<Self> {
+-        let map = map.filter(|name| !name.trim().is_empty())?;
+-        let bus = bus.map(|(short, full)| {
+-            let short = short.trim();
+-            let full = full.trim();
+-            (if short.is_empty() { full } else { short }, full)
+-        });
+-        let details = match duty {
+-            Some((line, _)) => format!("{} · Line {}", compact(map, 24), line.trim()),
+-            None => compact(map, 24),
+-        };
+-        let mut state = match (bus, duty) {
+-            (Some((short, _)), Some((_, tour))) => {
+-                format!("{} · Tour {}", compact(short, 16), tour.trim())
+-            }
+-            (Some((short, _)), None) => format!("{} · Free drive", compact(short, 16)),
+-            (None, _) => "On foot".to_string(),
+-        };
+-        if multiplayer {
+-            state.push_str(" · Multiplayer");
+-        }
+-        let large_text = match bus {
+-            Some((_, full)) => format!("Project Depot · {map} · {full}"),
+-            None => format!("Project Depot · {map}"),
+-        };
+-        Some(Self {
+-            details,
+-            state,
+-            large_text,
+-        })
+-    }
+-
+-    pub(crate) fn for_launcher(enabled: bool, launching: bool, game_running: bool) -> Option<Self> {
+-        (enabled && !launching && !game_running).then(|| Self {
+-            details: "In launcher".into(),
+-            state: "Preparing a drive".into(),
+-            large_text: "Project Depot".into(),
+-        })
+-    }
+-}
+-
+-/// Shorten at a word boundary without interpreting names supplied by content packs.
+-fn compact(text: &str, limit: usize) -> String {
+-    let text = text.trim();
+-    if text.chars().count() <= limit {
+-        return text.to_string();
+-    }
+-    let prefix: String = text.chars().take(limit - 1).collect();
+-    let short = prefix
+-        .rsplit_once(' ')
+-        .map_or(prefix.as_str(), |(words, _)| words);
+-    format!("{}…", short.trim_end())
+-}
+-
+-pub(crate) struct Discord {
+-    wanted: Arc<Mutex<Option<Presence>>>,
+-    stop: Arc<AtomicBool>,
+-    worker: Option<std::thread::JoinHandle<()>>,
+-}
+-
+-#[cfg(unix)]
+-type Pipe = std::os::unix::net::UnixStream;
+-#[cfg(windows)]
+-struct Pipe(windows::Win32::Foundation::HANDLE);
+-
+-#[cfg(windows)]
+-impl Drop for Pipe {
+-    fn drop(&mut self) {
+-        let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.0) };
+-    }
+-}
+-
+-#[cfg(windows)]
+-fn overlapped_io(
+-    handle: windows::Win32::Foundation::HANDLE,
+-    buffer: &mut [u8],
+-    write: bool,
+-) -> io::Result<usize> {
+-    use windows::core::PCWSTR;
+-    use windows::Win32::{
+-        Foundation::WAIT_OBJECT_0,
+-        System::{
+-            Threading::{CreateEventW, WaitForSingleObject},
+-            IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED},
+-        },
+-    };
+-
+-    let event = unsafe { CreateEventW(None, true, false, PCWSTR::null()) }
+-        .map_err(|e| io::Error::other(e.to_string()))?;
+-    let mut overlapped = OVERLAPPED {
+-        hEvent: event,
+-        ..Default::default()
+-    };
+-    let start = if write {
+-        unsafe {
+-            windows::Win32::Storage::FileSystem::WriteFile(
+-                handle,
+-                Some(buffer),
+-                None,
+-                Some(&mut overlapped),
+-            )
+-        }
+-    } else {
+-        unsafe {
+-            windows::Win32::Storage::FileSystem::ReadFile(
+-                handle,
+-                Some(buffer),
+-                None,
+-                Some(&mut overlapped),
+-            )
+-        }
+-    };
+-    if let Err(error) = start {
+-        if error.code().0 != 0x8007_03e5u32 as i32 {
+-            let _ = unsafe { windows::Win32::Foundation::CloseHandle(event) };
+-            return Err(io::Error::other(error.to_string()));
+-        }
+-    } else {
+-        let mut transferred = 0;
+-        let result = unsafe { GetOverlappedResult(handle, &overlapped, &mut transferred, false) };
+-        let _ = unsafe { windows::Win32::Foundation::CloseHandle(event) };
+-        result.map_err(|e| io::Error::other(e.to_string()))?;
+-        if !write && transferred == 0 {
+-            return Err(io::Error::new(
+-                io::ErrorKind::UnexpectedEof,
+-                "Discord IPC closed",
+-            ));
+-        }
+-        return Ok(transferred as usize);
+-    }
+-    let wait = unsafe { WaitForSingleObject(event, POLL.as_millis() as u32) };
+-    if wait != WAIT_OBJECT_0 {
+-        let _ = unsafe { CancelIoEx(handle, Some(&overlapped)) };
+-        let mut transferred = 0;
+-        let result = unsafe { GetOverlappedResult(handle, &overlapped, &mut transferred, true) };
+-        let _ = unsafe { windows::Win32::Foundation::CloseHandle(event) };
+-        if result.is_ok() {
+-            if !write && transferred == 0 {
+-                return Err(io::Error::new(
+-                    io::ErrorKind::UnexpectedEof,
+-                    "Discord IPC closed",
+-                ));
+-            }
+-            return Ok(transferred as usize);
+-        }
+-        return Err(io::Error::new(
+-            io::ErrorKind::WouldBlock,
+-            "Discord IPC operation timed out",
+-        ));
+-    }
+-    let mut transferred = 0;
+-    let result = unsafe { GetOverlappedResult(handle, &overlapped, &mut transferred, false) };
+-    let _ = unsafe { windows::Win32::Foundation::CloseHandle(event) };
+-    result.map_err(|e| io::Error::other(e.to_string()))?;
+-    if !write && transferred == 0 {
+-        return Err(io::Error::new(
+-            io::ErrorKind::UnexpectedEof,
+-            "Discord IPC closed",
+-        ));
+-    }
+-    Ok(transferred as usize)
+-}
+-
+-#[cfg(windows)]
+-impl Read for Pipe {
+-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+-        overlapped_io(self.0, buf, false)
+-    }
+-}
+-
+-#[cfg(windows)]
+-impl Write for Pipe {
+-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+-        overlapped_io(self.0, &mut buf.to_vec(), true)
+-    }
+-
+-    fn flush(&mut self) -> io::Result<()> {
+-        Ok(())
+-    }
+-}
+-
+-#[derive(Debug, PartialEq)]
+-struct Frame {
+-    opcode: u32,
+-    body: Vec<u8>,
+-}
+-
+-fn connect() -> Option<Pipe> {
+-    for i in 0..10 {
+-        #[cfg(unix)]
+-        {
+-            let dirs = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
+-                .iter()
+-                .filter_map(|k| std::env::var(k).ok())
+-                .chain(["/tmp".to_string()]);
+-            for dir in dirs {
+-                let path = std::path::Path::new(&dir).join(format!("discord-ipc-{i}"));
+-                if let Ok(pipe) = Pipe::connect(path) {
+-                    if pipe.set_read_timeout(Some(POLL)).is_ok()
+-                        && pipe.set_write_timeout(Some(POLL)).is_ok()
+-                    {
+-                        return Some(pipe);
+-                    }
+-                }
+-            }
+-        }
+-        #[cfg(windows)]
+-        {
+-            use windows::core::PCWSTR;
+-            use windows::Win32::{
+-                Foundation::{GENERIC_READ, GENERIC_WRITE},
+-                Storage::FileSystem::{
+-                    CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_FLAG_OVERLAPPED, FILE_SHARE_MODE,
+-                    OPEN_EXISTING,
+-                },
+-            };
+-            let path: Vec<u16> = format!(r"\\.\pipe\discord-ipc-{i}")
+-                .encode_utf16()
+-                .chain([0])
+-                .collect();
+-            if let Ok(handle) = unsafe {
+-                CreateFileW(
+-                    PCWSTR(path.as_ptr()),
+-                    GENERIC_READ.0 | GENERIC_WRITE.0,
+-                    FILE_SHARE_MODE(0),
+-                    None,
+-                    OPEN_EXISTING,
+-                    FILE_FLAGS_AND_ATTRIBUTES(FILE_FLAG_OVERLAPPED.0),
+-                    None,
+-                )
+-            } {
+-                return Some(Pipe(handle));
+-            }
+-        }
+-    }
+-    None
+-}
+-
+-fn write_frame(pipe: &mut impl Write, opcode: u32, body: &[u8]) -> io::Result<()> {
+-    if body.len() > MAX_FRAME {
+-        return Err(io::Error::new(
+-            io::ErrorKind::InvalidData,
+-            "Discord frame too large",
+-        ));
+-    }
+-    let mut frame = Vec::with_capacity(8 + body.len());
+-    frame.extend_from_slice(&opcode.to_le_bytes());
+-    frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
+-    frame.extend_from_slice(body);
+-    pipe.write_all(&frame)
+-}
+-
+-fn decode_frame(pending: &mut Vec<u8>) -> io::Result<Option<Frame>> {
+-    if pending.len() >= 8 {
+-        let opcode = u32::from_le_bytes(pending[..4].try_into().unwrap());
+-        let len = u32::from_le_bytes(pending[4..8].try_into().unwrap()) as usize;
+-        if len > MAX_FRAME {
+-            return Err(io::Error::new(
+-                io::ErrorKind::InvalidData,
+-                "Discord frame too large",
+-            ));
+-        }
+-        if pending.len() >= 8 + len {
+-            let body = pending[8..8 + len].to_vec();
+-            pending.drain(..8 + len);
+-            return Ok(Some(Frame { opcode, body }));
+-        }
+-    }
+-
+-    Ok(None)
+-}
+-
+-/// One bounded read per poll keeps partial frames while allowing shutdown and deadlines.
+-fn read_frame(pipe: &mut impl Read, pending: &mut Vec<u8>) -> io::Result<Option<Frame>> {
+-    if let Some(frame) = decode_frame(pending)? {
+-        return Ok(Some(frame));
+-    }
+-    let mut chunk = [0; 4096];
+-    match pipe.read(&mut chunk) {
+-        Ok(0) => Err(io::Error::new(
+-            io::ErrorKind::UnexpectedEof,
+-            "Discord IPC closed",
+-        )),
+-        Ok(n) => {
+-            pending.extend_from_slice(&chunk[..n]);
+-            decode_frame(pending)
+-        }
+-        Err(e)
+-            if matches!(
+-                e.kind(),
+-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut | io::ErrorKind::Interrupted
+-            ) =>
+-        {
+-            Ok(None)
+-        }
+-        Err(e) => Err(e),
+-    }
+-}
+-
+-fn text(frame: &Frame) -> Option<serde_json::Value> {
+-    serde_json::from_slice(&frame.body).ok()
+-}
+-
+-fn answer_ping(pipe: &mut impl Write, frame: &Frame) -> io::Result<bool> {
+-    if frame.opcode == 3 {
+-        write_frame(pipe, 4, &frame.body)?;
+-        Ok(true)
+-    } else {
+-        Ok(false)
+-    }
+-}
+-
+-fn activity(presence: &Presence, started: u64, with_assets: bool) -> serde_json::Value {
+-    let mut activity = serde_json::json!({
+-        "details": presence.details.chars().take(120).collect::<String>(),
+-        "state": presence.state.chars().take(120).collect::<String>(),
+-        "timestamps": { "start": started },
+-    });
+-    if with_assets {
+-        activity["assets"] = serde_json::json!({ "large_image": "logo", "large_text": presence.large_text.chars().take(120).collect::<String>() });
+-    }
+-    activity
+-}
+-
+-fn nonce(value: &serde_json::Value) -> Option<&str> {
+-    value.get("nonce")?.as_str()
+-}
+-
+-impl Discord {
+-    pub(crate) fn start(app_id: &str) -> Option<Self> {
+-        let app_id = if app_id.trim().is_empty() {
+-            DEFAULT_APP_ID
+-        } else {
+-            app_id.trim()
+-        };
+-        if !app_id.chars().all(|c| c.is_ascii_digit()) {
+-            return None;
+-        }
+-        let wanted = Arc::new(Mutex::new(None));
+-        let stop = Arc::new(AtomicBool::new(false));
+-        let worker_wanted = wanted.clone();
+-        let worker_stop = stop.clone();
+-        let app_id = app_id.to_string();
+-        let started = SystemTime::now()
+-            .duration_since(UNIX_EPOCH)
+-            .map_or(0, |d| d.as_secs());
+-        let worker = std::thread::Builder::new()
+-            .name("discord-rich-presence".into())
+-            .spawn(move || run(app_id, worker_wanted, worker_stop, started))
+-            .ok()?;
+-        Some(Self {
+-            wanted,
+-            stop,
+-            worker: Some(worker),
+-        })
+-    }
+-
+-    pub(crate) fn set(&self, presence: Option<Presence>) {
+-        if let Ok(mut wanted) = self.wanted.lock() {
+-            *wanted = presence;
+-        }
+-    }
+-
+-    pub(crate) fn stop(&self) {
+-        self.stop.store(true, Ordering::Release);
+-    }
+-
+-    pub(crate) fn is_stopping(&self) -> bool {
+-        self.stop.load(Ordering::Acquire)
+-    }
+-
+-    pub(crate) fn is_finished(&self) -> bool {
+-        self.worker
+-            .as_ref()
+-            .is_none_or(|worker| worker.is_finished())
+-    }
+-}
+-
+-impl Drop for Discord {
+-    fn drop(&mut self) {
+-        self.stop();
+-        // Disconnecting is background work too: never wait on IPC in the UI thread.
+-        if self.is_finished() {
+-            if let Some(worker) = self.worker.take() {
+-                if worker.join().is_err() {
+-                    log::error!("Discord: presence worker panicked");
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-fn run(app_id: String, wanted: Arc<Mutex<Option<Presence>>>, stop: Arc<AtomicBool>, started: u64) {
+-    run_with(app_id, wanted, stop, started, connect)
+-}
+-
+-fn run_with<T: Read + Write>(
+-    app_id: String,
+-    wanted: Arc<Mutex<Option<Presence>>>,
+-    stop: Arc<AtomicBool>,
+-    started: u64,
+-    mut connector: impl FnMut() -> Option<T>,
+-) {
+-    let mut pipe = None;
+-    let mut ready = false;
+-    let mut pending = Vec::new();
+-    let mut last_try = Instant::now() - CONNECT_RETRY;
+-    let mut connected_at = None;
+-    let mut last_update = Instant::now() - UPDATE_INTERVAL;
+-    let mut shown: Option<Option<Presence>> = None;
+-    let mut waiting_for: Option<(String, Instant, Option<Presence>, bool)> = None;
+-    let mut sequence = 0u64;
+-
+-    loop {
+-        if stop.load(Ordering::Acquire) {
+-            if let Some(pipe) = pipe.as_mut() {
+-                if ready {
+-                    sequence += 1;
+-                    let msg = serde_json::json!({ "cmd": "SET_ACTIVITY", "args": { "pid": std::process::id(), "activity": null }, "nonce": sequence.to_string() }).to_string();
+-                    let _ = write_frame(pipe, 1, msg.as_bytes());
+-                }
+-                let _ = write_frame(pipe, 2, &[]);
+-            }
+-            return;
+-        }
+-
+-        if pipe.is_none() {
+-            if last_try.elapsed() >= CONNECT_RETRY {
+-                last_try = Instant::now();
+-                if let Some(mut candidate) = connector() {
+-                    let hello = serde_json::json!({ "v": 1, "client_id": app_id }).to_string();
+-                    if write_frame(&mut candidate, 0, hello.as_bytes()).is_ok() {
+-                        pipe = Some(candidate);
+-                        connected_at = Some(Instant::now());
+-                        pending.clear();
+-                        waiting_for = None;
+-                        ready = false;
+-                        shown = None;
+-                        last_update = Instant::now() - UPDATE_INTERVAL;
+-                    }
+-                }
+-            }
+-            std::thread::sleep(POLL);
+-            continue;
+-        }
+-
+-        let current = wanted.lock().ok().and_then(|w| w.clone());
+-        if !ready && connected_at.is_some_and(|at| at.elapsed() > RESPONSE_TIMEOUT) {
+-            pipe = None;
+-            connected_at = None;
+-            continue;
+-        }
+-        if let Some((_, sent_at, _, _)) = &waiting_for {
+-            if sent_at.elapsed() > RESPONSE_TIMEOUT {
+-                pipe = None;
+-                continue;
+-            }
+-        } else if ready
+-            && shown.as_ref() != Some(&current)
+-            && last_update.elapsed() >= UPDATE_INTERVAL
+-        {
+-            sequence += 1;
+-            let activity = current.as_ref().map(|p| activity(p, started, true));
+-            let msg = serde_json::json!({ "cmd": "SET_ACTIVITY", "args": { "pid": std::process::id(), "activity": activity }, "nonce": sequence.to_string() }).to_string();
+-            if write_frame(pipe.as_mut().unwrap(), 1, msg.as_bytes()).is_err() {
+-                pipe = None;
+-                continue;
+-            }
+-            waiting_for = Some((sequence.to_string(), Instant::now(), current, true));
+-            last_update = Instant::now();
+-        }
+-
+-        match read_frame(pipe.as_mut().unwrap(), &mut pending) {
+-            Ok(Some(frame)) if answer_ping(pipe.as_mut().unwrap(), &frame).unwrap_or(false) => {
+-                continue
+-            }
+-            Ok(Some(frame)) => {
+-                let Some(value) = text(&frame) else {
+-                    pipe = None;
+-                    continue;
+-                };
+-                if frame.opcode != 1 {
+-                    pipe = None;
+-                    continue;
+-                }
+-                let evt = value.get("evt").and_then(|v| v.as_str());
+-                if evt == Some("READY") {
+-                    log::info!("Discord: connected");
+-                    ready = true;
+-                    shown = None;
+-                    last_update = Instant::now() - UPDATE_INTERVAL;
+-                    continue;
+-                }
+-                if evt == Some("ERROR")
+-                    || value.get("cmd").and_then(|v| v.as_str()) == Some("ERROR")
+-                {
+-                    log::warn!(
+-                        "Discord: IPC request failed: {}",
+-                        value.get("data").unwrap_or(&value)
+-                    );
+-                    if let Some((expected, _, Some(submitted), true)) = waiting_for.take() {
+-                        if nonce(&value) == Some(expected.as_str()) {
+-                            sequence += 1;
+-                            let activity = activity(&submitted, started, false);
+-                            let msg = serde_json::json!({ "cmd": "SET_ACTIVITY", "args": { "pid": std::process::id(), "activity": activity }, "nonce": sequence.to_string() }).to_string();
+-                            if write_frame(pipe.as_mut().unwrap(), 1, msg.as_bytes()).is_ok() {
+-                                waiting_for = Some((
+-                                    sequence.to_string(),
+-                                    Instant::now(),
+-                                    Some(submitted),
+-                                    false,
+-                                ));
+-                                continue;
+-                            }
+-                        }
+-                    }
+-                    pipe = None;
+-                    ready = false;
+-                    connected_at = None;
+-                    continue;
+-                }
+-                if let Some((expected, _, submitted, _)) = waiting_for.as_ref() {
+-                    if nonce(&value) == Some(expected.as_str()) {
+-                        shown = Some(submitted.clone());
+-                        waiting_for = None;
+-                    }
+-                }
+-            }
+-            Ok(None) => {}
+-            Err(e) => {
+-                log::debug!("Discord: IPC disconnected: {e}");
+-                pipe = None;
+-                ready = false;
+-                connected_at = None;
+-                pending.clear();
+-                waiting_for = None;
+-                shown = None;
+-            }
+-        }
+-        std::thread::sleep(POLL);
+-    }
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use super::*;
+-
+-    fn pair() -> (std::net::TcpStream, std::net::TcpStream) {
+-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+-        let client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+-        let (peer, _) = listener.accept().unwrap();
+-        for stream in [&client, &peer] {
+-            stream.set_read_timeout(Some(POLL)).unwrap();
+-            stream.set_write_timeout(Some(POLL)).unwrap();
+-            stream.set_nodelay(true).unwrap();
+-        }
+-        (client, peer)
+-    }
+-
+-    fn receive_buffered(
+-        pipe: &mut std::net::TcpStream,
+-        pending: &mut Vec<u8>,
+-        until: Instant,
+-    ) -> Frame {
+-        loop {
+-            if let Some(frame) = read_frame(pipe, pending).unwrap() {
+-                return frame;
+-            }
+-            assert!(
+-                Instant::now() < until,
+-                "timed out waiting for a Discord IPC frame"
+-            );
+-        }
+-    }
+-
+-    fn receive(pipe: &mut std::net::TcpStream, until: Instant) -> Frame {
+-        receive_buffered(pipe, &mut Vec::new(), until)
+-    }
+-
+-    fn ready_fragmented(pipe: &mut std::net::TcpStream) {
+-        let body = br#"{"cmd":"DISPATCH","evt":"READY","data":{}}"#;
+-        let mut packet = Vec::new();
+-        packet.extend_from_slice(&1u32.to_le_bytes());
+-        packet.extend_from_slice(&(body.len() as u32).to_le_bytes());
+-        packet.extend_from_slice(body);
+-        pipe.write_all(&packet[..3]).unwrap();
+-        std::thread::sleep(Duration::from_millis(15));
+-        pipe.write_all(&packet[3..]).unwrap();
+-    }
+-
+-    fn acknowledge(pipe: &mut std::net::TcpStream, request: &Frame) {
+-        let request: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+-        let response =
+-            serde_json::json!({ "cmd": "SET_ACTIVITY", "data": {}, "nonce": request["nonce"] });
+-        write_frame(pipe, 1, response.to_string().as_bytes()).unwrap();
+-    }
+-
+-    #[test]
+-    fn presence_requires_a_map_and_describes_session() {
+-        assert_eq!(
+-            Presence::for_game(None, Some(("Bus", "Bus")), None, false),
+-            None
+-        );
+-        assert_eq!(Presence::for_game(Some(" "), None, None, false), None);
+-        assert_eq!(
+-            Presence::for_game(
+-                Some("Map"),
+-                Some(("Bus", "Full bus name")),
+-                Some((" 5 ", " 2 ")),
+-                true
+-            ),
+-            Some(Presence {
+-                details: "Map · Line 5".into(),
+-                state: "Bus · Tour 2 · Multiplayer".into(),
+-                large_text: "Project Depot · Map · Full bus name".into(),
+-            })
+-        );
+-        assert_eq!(
+-            Presence::for_game(Some("Map"), None, None, false)
+-                .unwrap()
+-                .state,
+-            "On foot"
+-        );
+-    }
+-
+-    #[test]
+-    fn frames_reject_oversize_and_parse_fragmented_headers() {
+-        let mut pipe = pair();
+-        pipe.0
+-            .set_read_timeout(Some(Duration::from_millis(5)))
+-            .unwrap();
+-        pipe.1.write_all(&[1, 0, 0]).unwrap();
+-        let mut pending = Vec::new();
+-        assert_eq!(read_frame(&mut pipe.0, &mut pending).unwrap(), None);
+-        pipe.1.write_all(&[0, 2, 0, 0, 0, b'{', b'}']).unwrap();
+-        assert_eq!(
+-            receive_buffered(
+-                &mut pipe.0,
+-                &mut pending,
+-                Instant::now() + Duration::from_secs(2)
+-            ),
+-            Frame {
+-                opcode: 1,
+-                body: b"{}".to_vec()
+-            }
+-        );
+-        pending.clear();
+-        pending.extend_from_slice(&1u32.to_le_bytes());
+-        pending.extend_from_slice(&(MAX_FRAME as u32 + 1).to_le_bytes());
+-        assert_eq!(
+-            decode_frame(&mut pending).unwrap_err().kind(),
+-            io::ErrorKind::InvalidData
+-        );
+-    }
+-
+-    #[test]
+-    fn ping_gets_the_same_payload_back_as_pong() {
+-        let (mut client, mut server) = pair();
+-        let payload = br#"{"nonce":"ping"}"#;
+-        write_frame(&mut server, 3, payload).unwrap();
+-        let frame = receive(&mut client, Instant::now() + Duration::from_secs(2));
+-        assert!(answer_ping(&mut client, &frame).unwrap());
+-        let pong = receive(&mut server, Instant::now() + Duration::from_secs(2));
+-        assert_eq!(
+-            pong,
+-            Frame {
+-                opcode: 4,
+-                body: payload.to_vec()
+-            }
+-        );
+-    }
+-
+-    #[test]
+-    fn local_discord_peer_handles_ready_asset_failure_ping_and_reconnect() {
+-        use std::collections::VecDeque;
+-
+-        let (client_one, mut peer_one) = pair();
+-        let (client_two, mut peer_two) = pair();
+-        client_one.set_read_timeout(Some(POLL)).unwrap();
+-        client_one.set_write_timeout(Some(POLL)).unwrap();
+-        client_two.set_read_timeout(Some(POLL)).unwrap();
+-        client_two.set_write_timeout(Some(POLL)).unwrap();
+-        peer_one.set_read_timeout(Some(POLL)).unwrap();
+-        peer_two.set_read_timeout(Some(POLL)).unwrap();
+-        let connections = Arc::new(Mutex::new(VecDeque::from([client_one, client_two])));
+-        let connector_queue = connections.clone();
+-        let wanted = Arc::new(Mutex::new(Some(Presence {
+-            details: "Bus · Map".into(),
+-            state: "Free drive".into(),
+-            large_text: "Full bus name".into(),
+-        })));
+-        let stop = Arc::new(AtomicBool::new(false));
+-        let worker_wanted = wanted.clone();
+-        let worker_stop = stop.clone();
+-        let worker = std::thread::spawn(move || {
+-            run_with(
+-                DEFAULT_APP_ID.into(),
+-                worker_wanted,
+-                worker_stop,
+-                1234,
+-                move || connector_queue.lock().unwrap().pop_front(),
+-            )
+-        });
+-        let deadline = Instant::now() + Duration::from_secs(2);
+-
+-        let hello = receive(&mut peer_one, deadline);
+-        let hello: serde_json::Value = serde_json::from_slice(&hello.body).unwrap();
+-        assert_eq!(hello["client_id"], DEFAULT_APP_ID);
+-        ready_fragmented(&mut peer_one);
+-
+-        let first = receive(&mut peer_one, deadline);
+-        let first_json: serde_json::Value = serde_json::from_slice(&first.body).unwrap();
+-        assert_eq!(first_json["args"]["activity"]["details"], "Bus · Map");
+-        assert_eq!(
+-            first_json["args"]["activity"]["assets"]["large_image"],
+-            "logo"
+-        );
+-        let error = serde_json::json!({ "evt": "ERROR", "nonce": first_json["nonce"], "data": { "code": 400, "message": "unknown asset" } });
+-        write_frame(&mut peer_one, 1, error.to_string().as_bytes()).unwrap();
+-
+-        let fallback = receive(&mut peer_one, deadline);
+-        let fallback: serde_json::Value = serde_json::from_slice(&fallback.body).unwrap();
+-        assert_eq!(fallback["args"]["activity"]["details"], "Bus · Map");
+-        assert!(fallback["args"]["activity"].get("assets").is_none());
+-        acknowledge(
+-            &mut peer_one,
+-            &Frame {
+-                opcode: 1,
+-                body: fallback.to_string().into_bytes(),
+-            },
+-        );
+-
+-        let ping = serde_json::json!({ "nonce": "peer-ping" });
+-        write_frame(&mut peer_one, 3, ping.to_string().as_bytes()).unwrap();
+-        let pong = receive(&mut peer_one, deadline);
+-        assert_eq!(pong.opcode, 4);
+-        assert_eq!(
+-            serde_json::from_slice::<serde_json::Value>(&pong.body).unwrap(),
+-            ping
+-        );
+-
+-        drop(peer_one);
+-        let hello = receive(&mut peer_two, deadline);
+-        assert_eq!(
+-            serde_json::from_slice::<serde_json::Value>(&hello.body).unwrap()["client_id"],
+-            DEFAULT_APP_ID
+-        );
+-        ready_fragmented(&mut peer_two);
+-        let resent = receive(&mut peer_two, deadline);
+-        let resent: serde_json::Value = serde_json::from_slice(&resent.body).unwrap();
+-        assert_eq!(resent["args"]["activity"]["details"], "Bus · Map");
+-        assert_eq!(resent["args"]["activity"]["timestamps"]["start"], 1234);
+-        stop.store(true, Ordering::Release);
+-        worker.join().unwrap();
+-        let mut pending = Vec::new();
+-        let clear = receive_buffered(&mut peer_two, &mut pending, deadline);
+-        let clear: serde_json::Value = serde_json::from_slice(&clear.body).unwrap();
+-        assert!(clear["args"]["activity"].is_null());
+-        assert_eq!(
+-            receive_buffered(&mut peer_two, &mut pending, deadline).opcode,
+-            2
+-        );
+-    }
+-
+-    #[test]
+-    fn unanswered_activity_times_out_and_reconnects() {
+-        use std::sync::atomic::AtomicUsize;
+-
+-        let (client, mut peer) = pair();
+-        client.set_read_timeout(Some(POLL)).unwrap();
+-        client.set_write_timeout(Some(POLL)).unwrap();
+-        peer.set_read_timeout(Some(POLL)).unwrap();
+-        let attempts = Arc::new(AtomicUsize::new(0));
+-        let connector_attempts = attempts.clone();
+-        let wanted = Arc::new(Mutex::new(Some(Presence {
+-            details: "Map".into(),
+-            state: "On foot".into(),
+-            large_text: "Project Depot".into(),
+-        })));
+-        let stop = Arc::new(AtomicBool::new(false));
+-        let worker_stop = stop.clone();
+-        let worker = std::thread::spawn(move || {
+-            let mut client = Some(client);
+-            run_with(
+-                DEFAULT_APP_ID.into(),
+-                wanted,
+-                worker_stop,
+-                1234,
+-                move || {
+-                    connector_attempts.fetch_add(1, Ordering::Relaxed);
+-                    client.take()
+-                },
+-            )
+-        });
+-        let deadline = Instant::now() + Duration::from_secs(2);
+-        let _hello = receive(&mut peer, deadline);
+-        ready_fragmented(&mut peer);
+-        let _unanswered = receive(&mut peer, deadline);
+-        while attempts.load(Ordering::Relaxed) < 2 && Instant::now() < deadline {
+-            std::thread::sleep(POLL);
+-        }
+-        assert!(attempts.load(Ordering::Relaxed) >= 2);
+-        stop.store(true, Ordering::Release);
+-        worker.join().unwrap();
+-    }
+-
+-    #[test]
+-    fn activity_truncates_by_unicode_scalar_and_keeps_timestamp() {
+-        let p = Presence {
+-            details: "🚌".repeat(130),
+-            state: "line".into(),
+-            large_text: "Project Depot".into(),
+-        };
+-        let a = activity(&p, 1234, true);
+-        assert_eq!(a["details"].as_str().unwrap().chars().count(), 120);
+-        assert_eq!(a["timestamps"]["start"], 1234);
+-        assert_eq!(a["assets"]["large_image"], "logo");
+-        assert!(activity(&p, 1234, false).get("assets").is_none());
+-    }
+-
+-    #[test]
+-    fn launcher_yields_to_games_and_respects_the_switch() {
+-        let idle = Presence::for_launcher(true, false, false).unwrap();
+-        assert_eq!(idle.details, "In launcher");
+-        assert_eq!(Presence::for_launcher(false, false, false), None);
+-        assert_eq!(Presence::for_launcher(true, true, false), None);
+-        assert_eq!(Presence::for_launcher(true, false, true), None);
+-        assert_eq!(Presence::for_launcher(true, false, false), Some(idle));
+-    }
+-
+-    #[test]
+-    fn dropping_presence_does_not_wait_for_a_connecting_worker() {
+-        use std::sync::mpsc;
+-        let stop = Arc::new(AtomicBool::new(false));
+-        let worker_stop = stop.clone();
+-        let (release, connecting) = mpsc::channel();
+-        let (done, finished) = mpsc::channel();
+-        let worker = std::thread::spawn(move || {
+-            connecting.recv().unwrap();
+-            assert!(worker_stop.load(Ordering::Acquire));
+-            done.send(()).unwrap();
+-        });
+-        let discord = Discord {
+-            wanted: Arc::new(Mutex::new(None)),
+-            stop,
+-            worker: Some(worker),
+-        };
+-        let (dropped, returned) = mpsc::channel();
+-        let ui = std::thread::spawn(move || {
+-            drop(discord);
+-            dropped.send(()).unwrap();
+-        });
+-        let result = returned.recv_timeout(Duration::from_millis(250));
+-        release.send(()).unwrap();
+-        ui.join().unwrap();
+-        finished.recv_timeout(Duration::from_secs(2)).unwrap();
+-        assert!(
+-            result.is_ok(),
+-            "dropping presence blocked on the connection"
+-        );
+-    }
+-
+-    #[test]
+-    fn short_bus_label_preserves_full_name_in_tooltip() {
+-        let presence = Presence::for_game(
+-            Some("Grundorf"),
+-            Some((
+-                "MB O550 Euro3 Automatik",
+-                "Thueringer Wald MB O550 Euro3 Automatik",
+-            )),
+-            Some(("76", "1")),
+-            false,
+-        )
+-        .unwrap();
+-        assert_eq!(presence.details, "Grundorf · Line 76");
+-        assert_eq!(presence.state, "MB O550 Euro3… · Tour 1");
+-        assert!(presence
+-            .large_text
+-            .contains("Thueringer Wald MB O550 Euro3 Automatik"));
+-        assert_eq!(compact("🚌".repeat(20).as_str(), 16).chars().count(), 16);
+-    }
+-
+-    #[test]
+-    fn a_driven_bus_with_an_empty_type_uses_its_full_name() {
+-        for short in ["", "   "] {
+-            let free =
+-                Presence::for_game(Some("Grundorf"), Some((short, "MAN NL202")), None, false)
+-                    .unwrap();
+-            assert_eq!(free.state, "MAN NL202 · Free drive");
+-            let duty = Presence::for_game(
+-                Some("Grundorf"),
+-                Some((short, "MAN NL202")),
+-                Some(("76", "1")),
+-                false,
+-            )
+-            .unwrap();
+-            assert_eq!(duty.state, "MAN NL202 · Tour 1");
+-            assert!(duty.large_text.ends_with("MAN NL202"));
+-        }
+-    }
+-
+-    #[test]
+-    fn frame_reader_performs_only_one_read_per_poll() {
+-        struct ByteReader {
+-            bytes: std::io::Cursor<Vec<u8>>,
+-            reads: usize,
+-        }
+-        impl Read for ByteReader {
+-            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+-                self.reads += 1;
+-                self.bytes.read(&mut buffer[..1])
+-            }
+-        }
+-        let mut packet = Vec::new();
+-        packet.extend_from_slice(&1u32.to_le_bytes());
+-        packet.extend_from_slice(&(MAX_FRAME as u32).to_le_bytes());
+-        packet.resize(MAX_FRAME + 8, b' ');
+-        let mut reader = ByteReader {
+-            bytes: std::io::Cursor::new(packet),
+-            reads: 0,
+-        };
+-        let mut pending = Vec::new();
+-        for expected in 1..=32 {
+-            assert_eq!(read_frame(&mut reader, &mut pending).unwrap(), None);
+-            assert_eq!(reader.reads, expected);
+-        }
+-    }
+-
+-    #[test]
+-    fn empty_application_id_uses_shared_test_id() {
+-        assert_eq!(DEFAULT_APP_ID, "1555504817110122526");
+-    }
+-}
+diff --git a/crates/omsi-app/src/launcher/mod.rs b/crates/omsi-app/src/launcher/mod.rs
+index 89d41b0..ff6fca2 100644
+--- a/crates/omsi-app/src/launcher/mod.rs
++++ b/crates/omsi-app/src/launcher/mod.rs
+@@ -153,10 +153,6 @@ pub struct Launcher {
+     page_scroll: f32,
+     page_max: f32,
+     ime: bool,
+-    #[cfg(not(target_os = "android"))]
+-    discord: Option<crate::discord::Discord>,
+-    #[cfg(not(target_os = "android"))]
+-    discord_next_try: Instant,
+     /// Background drop of the graphics device given up while a game runs (see `frame`).
+     /// Joined before a new device is opened so the two do not meet on the card.
+     gpu_rest_drop: Option<std::thread::JoinHandle<()>>,
+@@ -228,10 +224,6 @@ impl Launcher {
+         page_scroll: 0.0,
+         page_max: 0.0,
+         ime: false,
+-        #[cfg(not(target_os = "android"))]
+-        discord: None,
+-        #[cfg(not(target_os = "android"))]
+-        discord_next_try: Instant::now(),
+         gpu_rest_drop: None,
+     };
+     // no original installation found anywhere: the launcher still opens, on Setup, and says
+@@ -602,8 +594,6 @@ impl ApplicationHandler for Launcher {
+             self.last = Instant::now();
+             self.run_script();
+             self.state.update(dt);
+-            #[cfg(not(target_os = "android"))]
+-            self.update_discord();
+             self.check_exit(event_loop);
+             // A game may have ended on this tick: wake so `frame` opens the device again.
+             if !mobile::mobile() && self.renderer.is_none() && !self.state.in_game() {
+@@ -671,46 +661,6 @@ impl Launcher {
+         true
+     }
+ 
+-    #[cfg(not(target_os = "android"))]
+-    fn update_discord(&mut self) {
+-        let enabled = self.state.settings.get("discord_status").and_then(|v| v.as_bool()).unwrap_or(true);
+-        let launching = self.state.queued_launch.is_some()
+-            || self.state.launch_hold.is_some_and(|at| at.elapsed().as_secs_f32() < 15.0);
+-        let game_running = self.state.instances.iter().any(|i| i.running);
+-        let presence = crate::discord::Presence::for_launcher(enabled, launching, game_running);
+-        if presence.is_none() {
+-            if let Some(discord) = self.discord.as_ref() {
+-                discord.stop();
+-                if discord.is_finished() {
+-                    drop(self.discord.take());
+-                }
+-            }
+-            return;
+-        }
+-        if let Some(discord) = self.discord.as_ref() {
+-            if discord.is_stopping() {
+-                if !discord.is_finished() {
+-                    return;
+-                }
+-                drop(self.discord.take());
+-            }
+-        }
+-        if self.discord.is_none() {
+-            if !self.state.instances_ready() {
+-                return;
+-            }
+-            if Instant::now() < self.discord_next_try {
+-                return;
+-            }
+-            self.discord_next_try = Instant::now() + std::time::Duration::from_secs(5);
+-            let app_id = self.state.settings.get("discord_app_id").and_then(|v| v.as_str()).unwrap_or("");
+-            self.discord = crate::discord::Discord::start(app_id);
+-        }
+-        if let Some(discord) = self.discord.as_ref() {
+-            discord.set(presence);
+-        }
+-    }
+-
+     /// The window got or lost the keyboard (`WindowEvent::Focused`, or `focus 0/1` of a
+     /// launcher script).
+     fn set_focus(&mut self, f: bool) {
+@@ -742,19 +692,6 @@ impl Launcher {
+             return;
+         }
+         let desktop = !mobile::mobile() && self.window.is_some();
+-        let presence_released = {
+-            #[cfg(not(target_os = "android"))]
+-            {
+-                if self.state.queued_launch.is_some() {
+-                    if let Some(discord) = self.discord.as_ref() {
+-                        discord.stop();
+-                    }
+-                }
+-                self.discord.as_ref().is_none_or(|discord| discord.is_finished())
+-            }
+-            #[cfg(target_os = "android")]
+-            { true }
+-        };
+         // (looked at while a game runs: drawn as usual, see `awake_in_game`)
+         let awake = self.awake();
+         if desktop && self.renderer.is_none() {
+@@ -767,8 +704,6 @@ impl Launcher {
+                 self.run_script();
+                 self.state.update(dt);
+                 self.ui.discard_input();
+-                #[cfg(not(target_os = "android"))]
+-                self.update_discord();
+                 // `update` may have seen the game end: open the device this frame instead of
+                 // returning with the resting picture until another redraw happens to notice.
+                 if self.state.in_game() && !self.awake() {
+@@ -791,9 +726,7 @@ impl Launcher {
+         // graphics device is given up until the game ends (with it open, a game on an NVIDIA
+         // card without Resizable BAR uploaded at 20 MB/s)
+         // (asked again: a script's `focus 0` comes in the frame just drawn)
+-        if desktop && self.renderer.is_some() && self.state.in_game() && !self.awake()
+-            && (self.state.queued_launch.is_none() || presence_released)
+-        {
++        if desktop && self.renderer.is_some() && self.state.in_game() && !self.awake() {
+             log::info!("launcher: a game starts or runs, the graphics device is given up until it ends");
+             self.surface = None;
+             self.drop_gpu();
+@@ -810,10 +743,7 @@ impl Launcher {
+                     .ok();
+             }
+         }
+-        if let Some(d) = presence_released.then(|| self.state.queued_launch.take()).flatten() {
+-            // Finish the Discord handoff in the background before starting the child.
+-            #[cfg(not(target_os = "android"))]
+-            drop(self.discord.take());
++        if let Some(d) = self.state.queued_launch.take() {
+             // The Controls page may still own the same DirectInput wheel non-exclusively.
+             // Drop it before the child asks for exclusive foreground access for force feedback.
+             self.pages.pads.release_io();
+@@ -834,8 +764,6 @@ impl Launcher {
+ 
+         self.run_script();
+         self.state.update(dt);
+-        #[cfg(not(target_os = "android"))]
+-        self.update_discord();
+         // the preview shows the chosen bus in the chosen light
+         let c = &self.state.choice;
+         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
+diff --git a/crates/omsi-app/src/launcher/pages.rs b/crates/omsi-app/src/launcher/pages.rs
+index 69f639c..0708305 100644
+--- a/crates/omsi-app/src/launcher/pages.rs
++++ b/crates/omsi-app/src/launcher/pages.rs
+@@ -1098,16 +1098,6 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
+         c.y += 14.0;
+     }
+     toggle_setting(ui, s, dirty, c.row(), "The launcher rests while a game runs (gives the graphics card to the game)", "launcher_rest");
+-    toggle_setting(ui, s, dirty, c.row(), "Discord Rich Presence", "discord_status");
+-    let help_height = ui.paragraph(
+-        "Shows the launcher or your map, bus, line and multiplayer status in Discord.",
+-        Vec2::new(c.inner.x + 12.0, c.y - 5.0),
+-        c.inner.w - 24.0,
+-        11.5,
+-        omsi_ui::Weight::Regular,
+-        TEXT_FAINT,
+-    );
+-    c.y += help_height + 3.0;
+     toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
+     let help_height = ui.paragraph(
+         "Players near you are heard from where they stand, when GreenTeaSpeak runs with the Project Depot plugin and the server names a voice server.",
+@@ -2776,7 +2766,7 @@ mod settings_tests {
+             "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
+         ];
+         let general = vec![
+-            "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
++            "s-lang", "set-machine_translation", "set-launcher_rest", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
+             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
+             "set-presence", "s-about-releases", "s-reset",
+         ];
+diff --git a/crates/omsi-app/src/launcher/state.rs b/crates/omsi-app/src/launcher/state.rs
+index 8f4e1cb..e2b7488 100644
+--- a/crates/omsi-app/src/launcher/state.rs
++++ b/crates/omsi-app/src/launcher/state.rs
+@@ -355,10 +355,6 @@ impl State {
+         self.queued_launch.is_some() || self.launch_hold.is_some_and(|t| t.elapsed().as_secs_f32() < 15.0) || self.instances.iter().any(|i| i.running)
+     }
+ 
+-    pub fn instances_ready(&self) -> bool {
+-        self.stamp.is_some()
+-    }
+-
+     pub fn spawn_launch(&mut self, d: core::Duty) {
+         self.launch_hold = Some(std::time::Instant::now());
+         self.launched_pid = None;
+diff --git a/crates/omsi-app/src/lib.rs b/crates/omsi-app/src/lib.rs
+index 9203a5e..8f661fc 100644
+--- a/crates/omsi-app/src/lib.rs
++++ b/crates/omsi-app/src/lib.rs
+@@ -10,7 +10,6 @@
+ //! window of one process.
+ 
+ mod admin;
+-mod discord;
+ #[cfg(steam)]
+ mod steam;
+ mod voice;
+@@ -536,8 +535,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
+         pad_voice_radio: false,
+         arrow_glance: false,
+         teleport_pick: false,
+-        discord: None,
+-        discord_t: 0.0,
+         #[cfg(steam)]
+         steam: None,
+         voice: None,
+diff --git a/crates/omsi-app/src/settings.rs b/crates/omsi-app/src/settings.rs
+index b216067..837f9dc 100644
+--- a/crates/omsi-app/src/settings.rs
++++ b/crates/omsi-app/src/settings.rs
+@@ -335,9 +335,6 @@ pub struct Settings {
+     pub head_tracking_invert_x: bool,
+     pub head_tracking_invert_y: bool,
+     pub head_tracking_invert_z: bool,
+-    /// Discord's "Playing" status (Rich Presence) and the Discord application it shows as.
+-    pub discord_status: bool,
+-    pub discord_app_id: String,
+     /// Positional voice in multiplayer through GreenTeaSpeak's openOMSI plugin (`voice`).
+     pub voice_chat: bool,
+ }
+@@ -387,7 +384,7 @@ impl Settings {
+     }
+     /// The defaults of a computer.
+     fn desktop() -> Self {
+-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), detail_textures: true, exact_fare: true, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), post_aa: "fxaa".into(), render_scale: 0.0, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, get_up: false, texture_compression: true, texture_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, clouds: true, windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_refresh: "full".into(), doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, pad_steer_smooth: 120.0, pad_steer_linear: false, arrows_switch_cams: false, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: true, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, discord_status: true, discord_app_id: String::new(), voice_chat: true, info_bar: false }
++        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), detail_textures: true, exact_fare: true, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), post_aa: "fxaa".into(), render_scale: 0.0, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, get_up: false, texture_compression: true, texture_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, clouds: true, windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_refresh: "full".into(), doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, pad_steer_smooth: 120.0, pad_steer_linear: false, arrows_switch_cams: false, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: true, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, voice_chat: true, info_bar: false }
+     }
+ }
+ 
+@@ -640,8 +637,6 @@ impl Settings {
+                 "head_tracking_invert_x" => s.head_tracking_invert_x = b(v),
+                 "head_tracking_invert_y" => s.head_tracking_invert_y = b(v),
+                 "head_tracking_invert_z" => s.head_tracking_invert_z = b(v),
+-                "discord_status" => s.discord_status = b(v),
+-                "discord_app_id" => s.discord_app_id = v.trim().to_string(),
+                 "voice_chat" => s.voice_chat = b(v),
+                 "head_tracking_port" => s.head_tracking_port = v.parse::<u16>().ok().filter(|p| *p > 0).unwrap_or(s.head_tracking_port),
+                 "pedal_throttle" => s.pedal_throttle = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.25, 4.0)).unwrap_or(s.pedal_throttle),
+@@ -711,7 +706,6 @@ impl Settings {
+         text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8));
+         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
+         text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", self.head_tracking_yaw_sens, self.head_tracking_pitch_sens, self.head_tracking_roll_sens, self.head_tracking_x_sens, self.head_tracking_y_sens, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
+-        text.push_str(&format!("discord_status={}\ndiscord_app_id={}\n", self.discord_status as u8, self.discord_app_id));
+         text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
+         text.push_str(&format!("right_stick_look={}\n", self.right_stick_look as u8));
+         text.push_str(&format!("pad_steer_smooth={}\n", self.pad_steer_smooth));
+@@ -947,10 +941,12 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn discord_settings_round_trip_and_default_enabled() {
+-        assert!(Settings::default().discord_status);
+-        let settings = Settings { discord_status: false, discord_app_id: "123456".into(), ..Default::default() };
+-        assert_eq!(Settings::from_text(&settings.to_text()), settings);
++    fn old_discord_lines_are_ignored_and_not_written() {
++        // Discord support is disabled (docs/removed/DISCORD_DISABLED.md)
++        let s = Settings::from_text("discord_status=0\ndiscord_app_id=123456\n");
++        assert_eq!(s, Settings::default());
++        let text = Settings::default().to_text();
++        assert!(!text.contains("discord"), "{text}");
+     }
+ 
+     #[test]
+diff --git a/crates/omsi-launcher-core/src/lib.rs b/crates/omsi-launcher-core/src/lib.rs
+index 5796835..23466e2 100644
+--- a/crates/omsi-launcher-core/src/lib.rs
++++ b/crates/omsi-launcher-core/src/lib.rs
+@@ -1938,8 +1938,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
+     v["vr_mirror_rate"] = json!(16);
+     v["mirror_refresh"] = json!("full");
+     v["vr_desktop_mirror"] = json!(true);
+-    v["discord_status"] = json!(true);
+-    v["discord_app_id"] = json!("");
+     // positional voice through GreenTeaSpeak's openOMSI plugin in multiplayer
+     v["voice_chat"] = json!(true);
+     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
+@@ -2008,7 +2006,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
+             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
+             "ctrl_off" => v[&k] = json!(val),
+             "metar_station" => v[&k] = json!(val.chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()),
+-            "discord_app_id" => v[&k] = json!(val),
+             "resolution" | "window_size" => v["resolution"] = json!(resolution_text(val)),
+             "graphics_api" => v[&k] = json!(match val.to_ascii_lowercase().as_str() { "vulkan" => "vulkan", "dx12" => "dx12", "gl" => "gl", _ => "auto" }),
+             "shadow_casters" => v[&k] = json!(if val.eq_ignore_ascii_case("omsi") { "omsi" } else { "all" }),
+@@ -2019,7 +2016,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
+             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
+             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
+             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
+-            "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
++            "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
+             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
+             // it was a number says 1 or 0)
+             "led_mips" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.3)),
+@@ -2374,7 +2371,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
+     let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
+     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
+     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
+-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", true), b("voice_chat", true), b("launcher_rest", true));
++    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true));
+     // what the page does not manage (keys of newer games, hand-written ones) stays as it
+     // was in the file; other spellings of the keys just written go
+     let mut text = text;
+@@ -2937,7 +2934,7 @@ mod tests {
+     fn the_games_options_survive_a_save() {
+         // what the pause menu's Options change, read back as they were set
+         let mut v = settings_from_text(None);
+-        for (k, x) in [("steer_look", json!(true)), ("discord_status", json!(false)), ("voice_chat", json!(false)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
++        for (k, x) in [("steer_look", json!(true)), ("voice_chat", json!(false)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
+             v[k] = x;
+         }
+         let back = settings_from_text(Some(&settings_to_text(&v, None)));
+@@ -2949,24 +2946,23 @@ mod tests {
+         assert_eq!(settings_from_text(Some(&settings_to_text(&r, None)))["resolution"], json!("1280x800"));
+         assert_eq!(resolution_text("1920 x 1080"), "1920x1080");
+         assert_eq!(resolution_text("huge"), "auto");
+-        for k in ["steer_look", "discord_status", "voice_chat", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
++        for k in ["steer_look", "voice_chat", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
+             assert_eq!(back[k], v[k], "{k}");
+         }
+-        assert!(settings_from_text(None)["discord_status"].as_bool().unwrap());
+         assert!(settings_from_text(None)["launcher_rest"].as_bool().unwrap());
+         assert!(settings_from_text(None)["voice_chat"].as_bool().unwrap());
+-        let prior = settings_from_text(Some("discord_status=1\ndiscord_status=0\n"));
+-        assert!(!prior["discord_status"].as_bool().unwrap());
+-        let mut enabled = prior;
+-        enabled["discord_status"] = json!(true);
+-        let saved = settings_to_text(&enabled, Some("discord_status=0\ndiscord_status=0\n"));
+-        assert_eq!(saved.lines().filter(|line| line.starts_with("discord_status=")).count(), 1);
+-        assert!(settings_from_text(Some(&saved))["discord_status"].as_bool().unwrap());
+-        let custom_id = "discord_app_id=123456\n";
+-        let values = settings_from_text(Some(custom_id));
+-        assert_eq!(values["discord_app_id"], json!("123456"));
+-        let saved = settings_to_text(&values, Some(custom_id));
+-        assert_eq!(settings_from_text(Some(&saved))["discord_app_id"], json!("123456"));
++    }
++
++    #[test]
++    fn discord_settings_are_gone_and_old_ones_do_nothing() {
++        // Discord support is disabled (docs/removed/DISCORD_DISABLED.md): no key is offered,
++        // read or written, and an old line is not turned into a setting
++        let d = settings_from_text(None);
++        assert!(d.get("discord_status").is_none() && d.get("discord_app_id").is_none());
++        let v = settings_from_text(Some("discord_status=1\ndiscord_app_id=123456\n"));
++        assert!(v.get("discord_status").is_none() && v.get("discord_app_id").is_none());
++        let text = settings_to_text(&v, None);
++        assert!(!text.contains("discord_status") && !text.contains("discord_app_id"), "{text}");
+     }
+ 
+     #[test]
+diff --git a/docs/USER_GUIDE.md b/docs/USER_GUIDE.md
+index 10f1b8d..d3ec9b3 100644
+--- a/docs/USER_GUIDE.md
++++ b/docs/USER_GUIDE.md
+@@ -166,14 +166,10 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
+   *Graphics* (the quality preset first, the screen, distances and memory), *Driving* (keys,
+   mouse, wheel and pedals, with the way to the Controls page), *Camera* (the seat, the views,
+   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
+-  *General* (language, the game's interface size, navigator, Discord Rich Presence,
++  *General* (language, the game's interface size, navigator,
+   the version and the Releases link, and resetting every setting).
+-  **Discord Rich Presence** shows the launcher while preparing a drive, then the map and
+-  line above the vehicle type and tour while playing. The full vehicle name is in the logo's
+-  tooltip. The launcher status returns when the game ends.
+-  It is enabled by default and can be turned off under Settings → General; the switch
+-  affects the launcher immediately and the game on its next start. Discord must be running
+-  on the same computer.
++  (Discord Rich Presence is disabled until Depot has its own Discord application, see
++  [removed/DISCORD_DISABLED.md](removed/DISCORD_DISABLED.md).)
+   **Voice chat through GreenTeaSpeak** (on by default): in multiplayer, the other players
+   are heard from where they are, when GreenTeaSpeak 2 runs with the openOMSI plugin and the
+   server names a voice channel (see [SERVER.md](SERVER.md) and

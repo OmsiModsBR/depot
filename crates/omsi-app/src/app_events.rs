@@ -1065,7 +1065,7 @@ impl ApplicationHandler for App {
                             // menu at once)
                             if self.settings.head_tracking && self.headtrack.is_none() && self.headtrack_failed.is_none_or(|t| t.elapsed().as_secs_f32() > 5.0) {
                                 let hwnd = self.window.as_ref().and_then(|window| crate::controllers::window_handle(window));
-                                self.headtrack = crate::headtrack::HeadTracker::start(self.settings.head_tracking_port, hwnd);
+                                self.headtrack = crate::headtrack::HeadTracker::start(self.settings.head_tracking_port, &self.settings.head_tracking_bind, hwnd);
                                 self.headtrack_failed = self.headtrack.is_none().then(std::time::Instant::now);
                             }
                             if !self.settings.head_tracking {
@@ -1603,37 +1603,6 @@ impl ApplicationHandler for App {
                     }
                     self.service_msg = Some(("On foot: Esc menu, Place a vehicle..., then G at its driver's door to drive it".into(), 8.0));
                 }
-                // Discord's status: the map, the bus, the line (every few seconds)
-                #[cfg(not(target_os = "android"))]
-                {
-                    self.discord_t -= dt;
-                    if self.discord_t <= 0.0 {
-                        self.discord_t = 5.0;
-                        if self.args.server.is_none()
-                            && self.discord.is_none()
-                            && self.settings.discord_status
-                        {
-                            self.discord =
-                                crate::discord::Discord::start(&self.settings.discord_app_id);
-                        }
-                        if let Some(d) = self.discord.as_ref() {
-                            let bus = self.player.as_ref().map(|p| {
-                                let definition = &p.vehicle.ty.def;
-                                let short = omsi_launcher_lib::vehicle_type_label(&definition.type_name, &definition.path);
-                                let full = omsi_launcher_lib::display_bus_name(&format!("{} {short}", definition.manufacturer));
-                                (short, full)
-                            });
-                            let duty = self.duty.as_ref().map(|d| (d.line.as_str(), d.tour.as_str()));
-                            d.set(crate::discord::Presence::for_game(
-                                self.world.as_ref().map(|w| w.global.name.as_str()),
-                                bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
-                                duty,
-                                self.lan.is_some(),
-                            ));
-                        }
-                    }
-                }
-
                 // Steam's callbacks (rich presence)
                 #[cfg(steam)]
                 if let Some(steam) = self.steam.as_ref() {
@@ -2261,7 +2230,6 @@ impl ApplicationHandler for App {
                         }
                     }
                     self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
-                    self.update_watch.tick(&mut self.notices);
                     for n in self.notices.iter_mut() {
                         n.left -= dt;
                     }
@@ -3175,8 +3143,6 @@ impl ApplicationHandler for App {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         crate::game_lists::flush_settings(true);
         self.finish_session();
-        // ("playing now" ends with the game)
-        self.presence = None;
         if let Some(lan) = self.lan.take() {
             // dropping the session says goodbye (BYE) to the host or the players
             drop(lan);

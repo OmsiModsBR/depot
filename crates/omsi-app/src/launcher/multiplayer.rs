@@ -31,7 +31,11 @@ pub struct MultiplayerView {
 }
 
 pub fn draw(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Multiplayer", "Drive with friends by a code, or on servers that are always on.");
+    let body = l.page_title(area, "Multiplayer", "Switched off in this version.");
+    if true {
+        l.ui.paragraph("Multiplayer is disabled while its structure is redone. Single-player is unaffected.", Vec2::new(body.x, body.y), body.w.min(520.0), 14.0, Weight::Regular, TEXT_DIM);
+        return;
+    }
     let tabs = Rect::new(body.x, body.y, 360.0, 36.0);
     let mut tab = l.mp.tab;
     if l.ui.segmented("mp-tab", tabs, &mut tab, &["Connect by Code", "Servers"]) {

@@ -140,7 +140,7 @@ pub struct Vehicle {
 }
 
 fn read_list(r: &mut omsi_cfg::CfgReader, base: &Path) -> Vec<PathBuf> {
-    let n = r.usize();
+    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
     (0..n).map(|_| r.str().to_string()).filter(|s| !s.trim().is_empty()).map(|s| omsi_cfg::resolve_path(base, &s)).collect()
 }
 

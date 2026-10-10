@@ -12,7 +12,7 @@ cargo build --locked --release -p omsi-app -p omsi-launcher-core
 out=dist/linux
 mkdir -p "$out"   # (the folder is also the content folder: mods stay)
 cp target/release/depot target/release/depot-launcher "$out/"
-cp assets/icons/app/openomsi-256.png "$out/depot.png"
+cp assets/icons/app/depot-256.png "$out/depot.png"
 # (Steam's library, x86-64 only: an ARM build has no Steam, see crates/omsi-app/build.rs)
 [ "$(uname -m)" = x86_64 ] && cp assets/steam_redist/libsteam_api.so "$out/"
 cp scripts/linux/openomsi.desktop "$out/depot.desktop"

@@ -21,7 +21,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod timetable;
 mod ui;
-mod update;
+mod dialogs;
 
 use glam::Vec2;
 use omsi_launcher_lib as core;
@@ -52,9 +52,9 @@ pub enum Page {
     Setup,
 }
 
-const PAGES: [(Page, &str, &str); 10] = [
+// (the Multiplayer page is hidden: multiplayer is disabled in this version)
+const PAGES: [(Page, &str, &str); 9] = [
     (Page::Drive, "Drive", "directions_bus"),
-    (Page::Multiplayer, "Multiplayer", "groups"),
     (Page::Profile, "Profile", "badge"),
     (Page::Settings, "Settings", "tune"),
     (Page::Controls, "Controls", "keyboard"),
@@ -153,12 +153,6 @@ pub struct Launcher {
     page_scroll: f32,
     page_max: f32,
     ime: bool,
-    /// Updates from the GitHub releases (see `crate::updater`, `update.rs`).
-    pub update: crate::updater::Updater,
-    #[cfg(not(target_os = "android"))]
-    discord: Option<crate::discord::Discord>,
-    #[cfg(not(target_os = "android"))]
-    discord_next_try: Instant,
     /// Background drop of the graphics device given up while a game runs (see `frame`).
     /// Joined before a new device is opened so the two do not meet on the card.
     gpu_rest_drop: Option<std::thread::JoinHandle<()>>,
@@ -230,20 +224,8 @@ impl Launcher {
         page_scroll: 0.0,
         page_max: 0.0,
         ime: false,
-        update: Default::default(),
-        #[cfg(not(target_os = "android"))]
-        discord: None,
-        #[cfg(not(target_os = "android"))]
-        discord_next_try: Instant::now(),
         gpu_rest_drop: None,
     };
-    // after an update: the files it set aside go, and the launcher says what happened
-    #[cfg(not(target_os = "android"))]
-    crate::updater::cleanup_after_update();
-    if let Some(v) = crate::updater::just_updated() {
-        log::info!("update: this start follows the update to {v}");
-        app.update.updated = Some((v, Instant::now()));
-    }
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
     if omsi_cfg::missing_original_essentials(std::path::Path::new(&app.state.config.root)).len() > 0 {
@@ -612,9 +594,6 @@ impl ApplicationHandler for Launcher {
             self.last = Instant::now();
             self.run_script();
             self.state.update(dt);
-            #[cfg(not(target_os = "android"))]
-            self.update_discord();
-            self.update_tick(event_loop);
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.renderer.is_none() && !self.state.in_game() {
@@ -682,46 +661,6 @@ impl Launcher {
         true
     }
 
-    #[cfg(not(target_os = "android"))]
-    fn update_discord(&mut self) {
-        let enabled = self.state.settings.get("discord_status").and_then(|v| v.as_bool()).unwrap_or(true);
-        let launching = self.state.queued_launch.is_some()
-            || self.state.launch_hold.is_some_and(|at| at.elapsed().as_secs_f32() < 15.0);
-        let game_running = self.state.instances.iter().any(|i| i.running);
-        let presence = crate::discord::Presence::for_launcher(enabled, launching, game_running);
-        if presence.is_none() {
-            if let Some(discord) = self.discord.as_ref() {
-                discord.stop();
-                if discord.is_finished() {
-                    drop(self.discord.take());
-                }
-            }
-            return;
-        }
-        if let Some(discord) = self.discord.as_ref() {
-            if discord.is_stopping() {
-                if !discord.is_finished() {
-                    return;
-                }
-                drop(self.discord.take());
-            }
-        }
-        if self.discord.is_none() {
-            if !self.state.instances_ready() {
-                return;
-            }
-            if Instant::now() < self.discord_next_try {
-                return;
-            }
-            self.discord_next_try = Instant::now() + std::time::Duration::from_secs(5);
-            let app_id = self.state.settings.get("discord_app_id").and_then(|v| v.as_str()).unwrap_or("");
-            self.discord = crate::discord::Discord::start(app_id);
-        }
-        if let Some(discord) = self.discord.as_ref() {
-            discord.set(presence);
-        }
-    }
-
     /// The window got or lost the keyboard (`WindowEvent::Focused`, or `focus 0/1` of a
     /// launcher script).
     fn set_focus(&mut self, f: bool) {
@@ -753,19 +692,6 @@ impl Launcher {
             return;
         }
         let desktop = !mobile::mobile() && self.window.is_some();
-        let presence_released = {
-            #[cfg(not(target_os = "android"))]
-            {
-                if self.state.queued_launch.is_some() {
-                    if let Some(discord) = self.discord.as_ref() {
-                        discord.stop();
-                    }
-                }
-                self.discord.as_ref().is_none_or(|discord| discord.is_finished())
-            }
-            #[cfg(target_os = "android")]
-            { true }
-        };
         // (looked at while a game runs: drawn as usual, see `awake_in_game`)
         let awake = self.awake();
         if desktop && self.renderer.is_none() {
@@ -778,8 +704,6 @@ impl Launcher {
                 self.run_script();
                 self.state.update(dt);
                 self.ui.discard_input();
-                #[cfg(not(target_os = "android"))]
-                self.update_discord();
                 // `update` may have seen the game end: open the device this frame instead of
                 // returning with the resting picture until another redraw happens to notice.
                 if self.state.in_game() && !self.awake() {
@@ -802,9 +726,7 @@ impl Launcher {
         // graphics device is given up until the game ends (with it open, a game on an NVIDIA
         // card without Resizable BAR uploaded at 20 MB/s)
         // (asked again: a script's `focus 0` comes in the frame just drawn)
-        if desktop && self.renderer.is_some() && self.state.in_game() && !self.awake()
-            && (self.state.queued_launch.is_none() || presence_released)
-        {
+        if desktop && self.renderer.is_some() && self.state.in_game() && !self.awake() {
             log::info!("launcher: a game starts or runs, the graphics device is given up until it ends");
             self.surface = None;
             self.drop_gpu();
@@ -821,10 +743,7 @@ impl Launcher {
                     .ok();
             }
         }
-        if let Some(d) = presence_released.then(|| self.state.queued_launch.take()).flatten() {
-            // Finish the Discord handoff in the background before starting the child.
-            #[cfg(not(target_os = "android"))]
-            drop(self.discord.take());
+        if let Some(d) = self.state.queued_launch.take() {
             // The Controls page may still own the same DirectInput wheel non-exclusively.
             // Drop it before the child asks for exclusive foreground access for force feedback.
             self.pages.pads.release_io();
@@ -845,9 +764,6 @@ impl Launcher {
 
         self.run_script();
         self.state.update(dt);
-        #[cfg(not(target_os = "android"))]
-        self.update_discord();
-        self.update_tick(event_loop);
         // the preview shows the chosen bus in the chosen light
         let c = &self.state.choice;
         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
@@ -1067,16 +983,15 @@ impl Launcher {
         }
         let size = self.ui.size;
         let mobile = mobile::mobile();
-        // the storage browser (or the update dialog) lies over the page: the page sees no
+        // the storage browser lies over the page: the page sees no
         // finger meanwhile
-        let dialog = self.update_dialog_open();
-        let disconnected = !dialog && self.state.disconnected.is_some();
-        let crash = !dialog && !disconnected && self.state.crash.is_some();
-        let reset = !dialog && !crash && !disconnected && self.pages.confirm_reset;
-        if self.browser.is_some() || dialog || crash || reset || disconnected {
+        let disconnected = self.state.disconnected.is_some();
+        let crash = !disconnected && self.state.crash.is_some();
+        let reset = !crash && !disconnected && self.pages.confirm_reset;
+        if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || dialog || crash || reset || disconnected).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1125,12 +1040,9 @@ impl Launcher {
         self.rail();
         self.status_bar();
         }
-        self.draw_updated_notice();
         if let Some(i) = saved {
             self.ui.input = i;
-            if dialog {
-                self.draw_update_dialog();
-            } else if disconnected {
+            if disconnected {
                 self.draw_disconnect_dialog();
             } else if crash {
                 self.draw_crash_dialog();

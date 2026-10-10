@@ -3,6 +3,10 @@
 # given as the first argument. The server is the game binary started with --server; the
 # folder gets start.sh and, on the first start, server.cfg with its defaults.
 set -eu
+# NOTICE: the dedicated server is no longer built or packaged, on any architecture. Its source
+# is kept untouched for the future multiplayer redo (docs/removed/MULTIPLAYER_DISABLED.md).
+echo "Dedicated server builds are disabled (see docs/removed/MULTIPLAYER_DISABLED.md)." >&2
+exit 1
 repo="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$repo"
 dest="${1:-$repo/dist/server}"

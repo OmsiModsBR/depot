@@ -257,7 +257,7 @@ pub fn parse_chrono_cfg(f: &CfgFile) -> ChronoCfg {
             // a count, then that many line names (the original: StrToInt, then ReadLn
             // n times). The count is not a line: read as one it took line "1" or "2" off.
             "deactivate_lines" => {
-                let n = r.i32().max(0);
+                let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                 c.deactivate_lines = (0..n).map(|_| r.str().trim().to_string()).filter(|s| !s.is_empty()).collect();
             }
             _ => {}

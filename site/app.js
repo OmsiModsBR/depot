@@ -1,8 +1,6 @@
 // openOMSI website: a small hash router that shows the overview, the download page and the
 // Markdown files of docs/ (copied next to this page by .github/workflows/pages.yml).
-const REPO = "openOMSI-Project/openOMSI";
-// the "playing now" counter (services/presence/): the games running right now
-const PRESENCE = "https://openomsi.savvabestbrother.workers.dev";
+const REPO = "OmsiModsBR/depot";
 const DOCS = [
   { file: "USER_GUIDE", title: "User guide", icon: "sports_esports" },
   { file: "ANDROID", title: "Android & mobile", icon: "smartphone" },
@@ -81,29 +79,9 @@ function showTemplate(id) {
 
 async function home() {
   showTemplate("home");
-  playingNow();
   const rel = await latestRelease();
   const chip = document.querySelector("#version-chip span:last-child");
   if (chip) chip.textContent = rel.tag_name ? `Latest: ${rel.tag_name.replace(/^v/, "")}` : "No release yet";
-}
-
-// How many play openOMSI right now, asked again every five minutes while the page shows it
-// (the counter runs on Cloudflare's free plan: every request counts against its daily limit).
-let playingTimer = null;
-async function playingNow() {
-  clearTimeout(playingTimer);
-  const chip = document.getElementById("players-chip");
-  if (!chip) return;
-  try {
-    const r = await fetch(`${PRESENCE}/players`);
-    const p = r.ok ? await r.json() : null;
-    if (p && typeof p.players === "number") {
-      chip.lastElementChild.textContent = `${p.players} playing now`;
-      chip.title = Object.entries(p.systems || {}).map(([os, n]) => `${os}: ${n}`).join(", ");
-      chip.hidden = false;
-    }
-  } catch { /* (the counter is out of reach: the chip stays hidden) */ }
-  playingTimer = setTimeout(playingNow, 300000);
 }
 
 async function download() {
@@ -115,7 +93,7 @@ async function download() {
     ver.textContent = "No release has been published yet.";
     return;
   }
-  const v = rel.tag_name.replace(/^v/, "");
+  const v = String(rel.tag_name).replace(/[^0-9A-Za-z._-]/g, "").replace(/^v/, "");
   ver.innerHTML = `Latest version: <b>${v}</b> · ${new Date(rel.published_at).toLocaleDateString()}`;
   // Each file by its exact name: matched by its ending alone, "-windows-x64.zip" was the
   // dedicated server's zip as well, and the Windows button downloaded the server.
@@ -126,7 +104,7 @@ async function download() {
     const mine = p.os && p.os === visitorOs();
     return `<div class="card elevation-${mine ? 3 : 1} dl-card${mine ? " dl-mine" : ""}"><div class="dl-head"><span class="material-icons card-icon">${p.icon}</span>${mine ? `<span class="dl-badge">Your system</span>` : ""}</div>
       <h3>${p.name}</h3><p>${p.note}${size}</p>
-      ${a ? `<a class="btn btn-contained" href="${a.browser_download_url}" download><span class="material-icons">download</span>Download</a>`
+      ${a ? `<a class="btn btn-contained" href="${esc(safeUrl(a.browser_download_url))}" download><span class="material-icons">download</span>Download</a>`
           : `<p>Not in this release.</p>`}</div>`;
   };
   const games = [...PLATFORMS].sort((x, y) => (y.os === visitorOs()) - (x.os === visitorOs()));
@@ -137,6 +115,7 @@ async function download() {
 
 async function doc(name, anchor) {
   const meta = DOCS.find(d => d.file === name);
+  if (!meta) { view.innerHTML = `<div class="content"><div class="doc"><h1>Not found</h1><p>There is no such document.</p></div></div>`; return; }
   view.innerHTML = `<div class="content"><div class="doc"><div class="loading">Loading…</div></div></div>`;
   let md;
   try {
@@ -144,12 +123,12 @@ async function doc(name, anchor) {
     if (!r.ok) throw new Error(r.status);
     md = await r.text();
   } catch {
-    view.querySelector(".doc").innerHTML = `<h1>Not found</h1><p>There is no document called <code>${name}</code>.</p>`;
+    view.querySelector(".doc").innerHTML = `<h1>Not found</h1><p>The document could not be loaded.</p>`;
     return;
   }
   const box = view.querySelector(".doc");
   box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${REPO}/blob/main/docs/${name}.md">
-    <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + marked.parse(md);
+    <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + clean(marked.parse(md));
   document.title = `${meta ? meta.title : name} · openOMSI`;
   // heading anchors
   box.querySelectorAll("h1, h2, h3, h4").forEach(h => {
@@ -181,19 +160,28 @@ async function gh(path) {
   if (!r.ok) throw new Error(r.status === 403 ? "GitHub's hourly request limit is reached - try again later." : `GitHub answered ${r.status}.`);
   return (cache[path] = await r.json());
 }
+// release asset links must be https on github.com (or the API's own download hosts)
+function safeUrl(u) {
+  try {
+    const x = new URL(u);
+    if (x.protocol === "https:" && (x.hostname === "github.com" || x.hostname.endsWith(".githubusercontent.com"))) return x.href;
+  } catch {}
+  return "#";
+}
 function esc(t) {
   return String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+// What may stay in rendered Markdown: no scripts, frames, forms, buttons, <base>, styles or
+// event handlers (DOMPurify's allow-list does the rest); links only https, mailto, in-page or
+// relative.
+const SANITIZE = {
+  FORBID_TAGS: ["base", "style", "form", "button", "svg", "math", "link", "meta"],
+  FORBID_ATTR: ["style", "class", "formaction", "xlink:href"],
+  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|[^a-z]|[a-z0-9+.\-]+(?:[^a-z0-9+.\-:]|$))/i,
+};
+function clean(html) { return DOMPurify.sanitize(html, SANITIZE); }
 function md(text) {
-  // the author's markdown, with anything active taken out of it (scripts, frames, event
-  // handlers, javascript: links)
-  const t = document.createElement("template");
-  t.innerHTML = marked.parse(text || "");
-  t.content.querySelectorAll("script, style, iframe, object, embed, form, link, meta").forEach(e => e.remove());
-  t.content.querySelectorAll("*").forEach(e => [...e.attributes].forEach(a => {
-    if (/^on/i.test(a.name) || (/^(href|src)$/i.test(a.name) && /^\s*(javascript|data):/i.test(a.value) && !/^data:image\//i.test(a.value))) e.removeAttribute(a.name);
-  }));
-  return t.innerHTML;
+  return clean(marked.parse(text || ""));
 }
 function ago(date) {
   const s = (Date.now() - new Date(date)) / 1000;
@@ -216,7 +204,7 @@ async function releases() {
   try { list = await gh("releases?per_page=30"); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/releases">Releases on GitHub</a></p>`; return; }
   if (!list.length) { box.innerHTML = "<p>No release has been published yet.</p>"; return; }
   box.innerHTML = list.map((r, i) => {
-    const assets = (r.assets || []).map(a => `<a class="asset" href="${esc(a.browser_download_url)}"><span class="material-icons">download</span>${esc(a.name)} <small>${(a.size / 1048576).toFixed(0)} MB</small></a>`).join("");
+    const assets = (r.assets || []).map(a => `<a class="asset" href="${esc(safeUrl(a.browser_download_url))}"><span class="material-icons">download</span>${esc(a.name)} <small>${(a.size / 1048576).toFixed(0)} MB</small></a>`).join("");
     return `<details class="card elevation-1 release"${i === 0 ? " open" : ""}>
       <summary><span class="rel-tag">${esc(r.tag_name.replace(/^v/, ""))}</span>
         ${i === 0 ? '<span class="label" style="--lc:#2da44e">Latest</span>' : ""}${r.prerelease ? '<span class="label" style="--lc:#bf8700">Pre-release</span>' : ""}
@@ -317,21 +305,3 @@ window.addEventListener("hashchange", route);
   show();
 })();
 route();
-
-// Donate: the button opens its menu upwards; a click elsewhere, Escape or a choice closes it
-(() => {
-  const button = document.getElementById("donate-button");
-  const menu = document.getElementById("donate-menu");
-  if (!button || !menu) return;
-  const open = on => {
-    menu.hidden = !on;
-    button.setAttribute("aria-expanded", on ? "true" : "false");
-    if (on) menu.querySelector("a").focus();
-  };
-  button.addEventListener("click", e => { e.stopPropagation(); open(menu.hidden); });
-  menu.addEventListener("click", e => { if (e.target.closest("a")) open(false); });
-  document.addEventListener("click", e => { if (!menu.hidden && !e.target.closest("#donate")) open(false); });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !menu.hidden) { open(false); button.focus(); }
-  });
-})();
