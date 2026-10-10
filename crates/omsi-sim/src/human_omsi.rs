@@ -1,4 +1,4 @@
-//! The animation of Omsi.exe's people (`THumanBeingInst`, sub_626ae8), as the original
+//! The animation of OMSI's people, as the original
 //! computes it: thirty joint angles from the walk phase and what the person is doing,
 //! turned into the thirteen bone matrices by plain rotations about the `[links]` joints.
 //! There is no inverse kinematics for the legs: a foot goes where the angles put it. The
@@ -11,17 +11,17 @@
 //! engine's model frame (x right, y forward, z up).
 //!
 //! Inputs per frame (fields of the human, see [`AnimInput`]):
-//! * `PAX_State` (+0x64c) rounded: 0 standing, 1 walking, 2 sitting;
-//! * the speed (+0x6a4) and the distance moved this frame (`LastMovedDist`, +0x644);
-//! * the room height of the path link walked on (+0x668, 50 outside a vehicle);
-//! * `HeightOfSeat` (+0x648) of the seat sat on;
-//! * the right hand's target (+0x665, +0x670) and the head's (+0x666, +0x688) in the
+//! * `PAX_State` rounded: 0 standing, 1 walking, 2 sitting;
+//! * the speed and the distance moved this frame (`LastMovedDist`);
+//! * the room height of the path link walked on (50 outside a vehicle);
+//! * `HeightOfSeat` of the seat sat on;
+//! * the right hand's target and the head's in the
 //!   person's own frame.
 //!
-//! The walk: the phase (+0x66c) runs 0..2 over two steps, advanced by the distance moved
+//! The walk: the phase runs 0..2 over two steps, advanced by the distance moved
 //! divided by the stride (`[walk_param]` line 1 times the speed / 1.2 m/s, at most 1); the
-//! thighs follow a fixed curve of the phase (0: 0.75, 0.2: 1.1, 0.8: -1.1, 1: 0.75, set up
-//! in sub_624820) and the knees another (1, 0, 0, 1), the other leg half a cycle behind;
+//! thighs follow a fixed curve of the phase (0: 0.75, 0.2: 1.1, 0.8: -1.1, 1: 0.75)
+//! and the knees another (1, 0, 0, 1), the other leg half a cycle behind;
 //! the pelvis bobs, the hips and the torso turn with sin(2*pi*phase) and the arms swing
 //! with it.
 
@@ -139,11 +139,11 @@ pub fn d3d(v: Vec3) -> Vec3 {
     Vec3::new(v.x, v.z, v.y)
 }
 
-/// The skeleton of a `.hum` as Omsi.exe keeps it (THumanBeing, loader sub_624a90): the
+/// The skeleton of a `.hum` as OMSI keeps it: the
 /// right side's joints in Direct3D's frame and the vectors derived from them at load.
 #[derive(Debug, Clone)]
 pub struct OmsiRig {
-    /// +0x2c0, +0x2cc, +0x2b4, +0x278, +0x284, +0x2a8, +0x290, +0x29c.
+    /// The joints of the right side (hip, knee, waist, shoulder, elbow, neck, hand, finger).
     pub hip: Vec3,
     pub knee: Vec3,
     pub waist: Vec3,
@@ -152,21 +152,20 @@ pub struct OmsiRig {
     pub neck: Vec3,
     pub hand: Vec3,
     pub finger: Vec3,
-    /// `[humangeom]`: feet distance (+0x274) and height (+0x270).
+    /// `[humangeom]`: feet distance and height.
     pub feet_dist: f32,
     pub height: f32,
-    /// `[seatheight]` (+0x26c, 0 when missing).
+    /// `[seatheight]` (0 when missing).
     pub seat_height: f32,
-    /// `[walk_param]`: stride (+0x2d8, 1.4), upper arm beta (+0x2e8, 66), arm swing
-    /// (+0x2dc, 1), hip turn (+0x2e0, 1), waist (+0x2e4, 0).
+    /// `[walk_param]`: stride (1.4), upper arm beta (66), arm swing
+    /// (1), hip turn (1), waist (0).
     pub stride: f32,
     pub beta: f32,
     pub arm_swing: f32,
     pub hip_turn: f32,
     pub waist_bend: f32,
-    /// Derived at load: the right upper arm (elbow - shoulder, +0x310) and its mirror
-    /// (+0x304), forearm and hand (finger - elbow, +0x2f8; +0x2ec), thigh (knee - hip,
-    /// +0x328; +0x31c).
+    /// Derived at load: the right upper arm (elbow - shoulder) and its mirror,
+    /// forearm and hand (finger - elbow) and thigh (knee - hip).
     pub upper_arm: [Vec3; 2],
     pub forearm: [Vec3; 2],
     pub thigh: [Vec3; 2],
@@ -175,7 +174,7 @@ pub struct OmsiRig {
 impl OmsiRig {
     pub fn new(def: &Human) -> OmsiRig {
         let l = |i: usize| def.links.get(i).copied().filter(|v| v.is_finite()).unwrap_or(0.0);
-        // [links] lists x, y (forward), z (up); Omsi.exe stores (x, z, y)
+        // [links] lists x, y (forward), z (up); OMSI stores (x, z, y)
         let hip = Vec3::new(l(0), l(2), l(1));
         let knee = Vec3::new(l(3), l(5), l(4));
         let waist = Vec3::new(0.0, l(7), l(6));
@@ -213,12 +212,12 @@ impl OmsiRig {
     }
 }
 
-/// The walk curves of sub_624820 (piecewise linear, held at the ends): the thigh's and the
+/// The walk curves (piecewise linear, held at the ends): the thigh's and the
 /// knee's angle over the phase's fraction, in units of the leg's swing angle.
 const THIGH_CURVE: [(f32, f32); 4] = [(0.0, 0.75), (0.2, 1.1), (0.8, -1.1), (1.0, 0.75)];
 const KNEE_CURVE: [(f32, f32); 4] = [(0.0, 1.0), (0.2, 0.0), (0.8, 0.0), (1.0, 1.0)];
 
-/// sub_7f061c: piecewise linear, the first or last value outside the points.
+/// Piecewise linear, the first or last value outside the points.
 fn curve(c: &[(f32, f32)], x: f32) -> f32 {
     if x < c[0].0 {
         return c[0].1;
@@ -265,7 +264,7 @@ pub struct AnimInput {
     pub reach: Option<Vec3>,
     /// The head looks here (person's frame, Direct3D axes).
     pub look: Option<Vec3>,
-    /// The angles ease towards their targets instead of jumping (+0x660: standing at the
+    /// The angles ease towards their targets instead of jumping (standing at the
     /// validator or the cash desk, sitting).
     pub smooth: bool,
     /// Frame time (ms).
@@ -275,11 +274,11 @@ pub struct AnimInput {
 /// A person's animation state: the walk phase and the thirty angles (degrees).
 #[derive(Debug, Clone)]
 pub struct OmsiAnim {
-    /// +0x66c, 0 .. 2.
+    /// The walk phase, 0 .. 2.
     pub phase: f32,
-    /// +0x530 .. +0x5a4.
+    /// The thirty joint angles (degrees).
     pub angles: [f32; 30],
-    /// The pelvis bob of the last frame (the translation of +0x4f0).
+    /// The pelvis bob of the last frame.
     bob: f32,
 }
 
@@ -292,17 +291,17 @@ impl Default for OmsiAnim {
 /// What [`OmsiAnim::advance`] reports.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AnimEvents {
-    /// The phase crossed 0.2, 0.7, 1.2 or 1.7: a foot came down (Omsi.exe plays the
+    /// The phase crossed 0.2, 0.7, 1.2 or 1.7: a foot came down (OMSI plays the
     /// link's step sound then).
     pub step: bool,
 }
 
 impl OmsiAnim {
-    /// The thirty angles for this frame (sub_626ae8 up to 0x628c8a) and the phase.
+    /// The thirty angles for this frame and the phase.
     pub fn advance(&mut self, rig: &OmsiRig, inp: &AnimInput) -> AnimEvents {
         let mut ev = AnimEvents::default();
         let mut a = [0.0f32; 30];
-        // the stride used at this speed (+0x2d8 times |v| / 1.2, at most 1)
+        // the stride used at this speed (the stride times |v| / 1.2, at most 1)
         let rel = (inp.speed.abs() / 1.2).min(1.0);
         let stride = rel * rig.stride;
         // stooping under a low ceiling
@@ -337,7 +336,7 @@ impl OmsiAnim {
                 if stride > 0.0 {
                     self.phase += inp.moved / stride;
                 }
-                // (0x6275e3: a foot down at 0.2, 0.7, 1.2 and 1.7)
+                // (a foot down at 0.2, 0.7, 1.2 and 1.7)
                 if [0.2f32, 0.7, 1.2, 1.7].iter().any(|&t| t <= self.phase && before < t) {
                     ev.step = true;
                 }
@@ -385,7 +384,7 @@ impl OmsiAnim {
         // how much of the arm swing is left when stooping
         let upright = ((90.0 - stoop) / 90.0).max(0.0);
         let sin2 = (2.0 * std::f32::consts::PI * self.phase).sin();
-        // the left arm (+0x661 is set for everybody: the left hand holds, the right reaches)
+        // the left arm (for everybody: the left hand holds, the right reaches)
         match kind {
             2 => {
                 a[13] = -3.0 - 0.4 * stoop;
@@ -414,7 +413,7 @@ impl OmsiAnim {
         }
         // the right arm
         if let Some(target) = inp.reach {
-            // (sub_626ae8 at 0x627dc6: the law of cosines for the elbow and the shoulder)
+            // (the law of cosines for the elbow and the shoulder)
             let l30 = rig.upper_arm[1].length();
             let l34 = rig.forearm[1].length();
             let v = target - rig.shoulder;
@@ -479,7 +478,7 @@ impl OmsiAnim {
                 a[7] = -((v.y / l).clamp(-1.0, 1.0).asin() / DEG);
             }
         }
-        // to the angles: at once, or easing towards them (0x628c95)
+        // to the angles: at once, or easing towards them
         let k = (inp.dt_ms / 1000.0 * 10.0).min(1.0);
         let lim = 18000.0 * inp.dt_ms / 1000.0;
         for (cur, to) in self.angles.iter_mut().zip(a.iter()) {
@@ -494,14 +493,14 @@ impl OmsiAnim {
         ev
     }
 
-    /// The thirteen bone matrices (sub_626ae8 from 0x628e78), Direct3D's.
+    /// The thirteen bone matrices, Direct3D's.
     pub fn bones_d3d(&self, rig: &OmsiRig) -> [DMat; BONES] {
         let a = &self.angles;
         let t = DMat::translation;
         let m = |x: f32, y: f32, z: f32| Vec3::new(x, y, z);
         let (h, k, w, s, e, n, hd) = (rig.hip, rig.knee, rig.waist, rig.shoulder, rig.elbow, rig.neck, rig.hand);
         let mut b = [DMat::IDENTITY; BONES];
-        // the pelvis: about the hip line, with the bob (+0x4f0)
+        // the pelvis: about the hip line, with the bob
         let pelvis = t(-h)
             .mul(&DMat::rot_x(RAD * a[11]))
             .mul(&t(m(0.0, self.bob, 0.0)))

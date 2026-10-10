@@ -15,7 +15,7 @@ pub struct VolCurve {
 /// relation: 0 `<>`, 1 `=`, 2 `<`, 3 `>`, 4 `<=`, 5 `>=` - `engine_n 200 3` (the engine runs),
 /// `velocity 2 2` (standing), `antrieb_getr_aktugang 2 4` (first or second gear).
 ///
-/// Omsi.exe (`TBoolClass` check 0x7effc8) compares exactly, without a tolerance; a
+/// OMSI compares exactly, without a tolerance; a
 /// `[conditionInt]` has an integer value and knows the relations 0 to 3 only (4 and 5 leave
 /// it out of the check), and a `[conditionBool]` (no relation line) holds when the variable
 /// is non-zero for a value of 1 and zero for any other value.

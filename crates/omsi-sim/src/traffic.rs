@@ -123,7 +123,7 @@ pub fn pool_density(rules: &[(u16, f32)], defaults: &[i32], pool: usize) -> f32 
 }
 
 impl Lane {
-    /// May an AI vehicle of `[ai_veh_type]` `veh_type` drive here (Omsi.exe 0x71d714, by
+    /// May an AI vehicle of `[ai_veh_type]` `veh_type` drive here (as OMSI does, by
     /// the path's rules): a car (0) where there is no `no_cars`, a taxi (1) also where
     /// `bus` or `trucks` opens a no_cars path, a bus (2) only where `bus` and a truck (3)
     /// only where `trucks` is set. Other values (and the timetable's buses, -1) anywhere.
@@ -1476,10 +1476,10 @@ pub struct LightStop {
 pub const DEFAULT_APPROACH: f32 = 50.0;
 
 /// The `TrafficLightPhase` of an object no crossing light drives: a signal without a
-/// `[varparent]`, one whose crossing has no program, any other scripted object. Omsi.exe
+/// `[varparent]`, one whose crossing has no program, any other scripted object. OMSI
 /// binds every placed object's `TrafficLightPhase` and `TrafficLightApproach` to a light
-/// of its parent crossing ("RefreshAmpelParenting", 0x77d460) and, failing that, to a
-/// shared dummy variable in .bss (0x8619a4), which reads 0: red, not "no light".
+/// of its parent crossing and, failing that, to a
+/// shared dummy variable, which reads 0: red, not "no light".
 pub const UNLINKED_PHASE: i32 = 0;
 
 /// Traffic light program of a crossing object instance (`TAmpelGroup`): its lights'
@@ -2724,7 +2724,7 @@ mod tests {
     #[test]
     fn path_rules_open_lanes_by_vehicle_type() {
         let mut l = LaneBuilder::polyline(vec![DVec3::ZERO, DVec3::new(0.0, 50.0, 0.0)], LaneKind::Street, 3.0);
-        // no rules: cars and taxis, no AI buses or trucks (Omsi.exe 0x71d714)
+        // no rules: cars and taxis, no AI buses or trucks (as in OMSI)
         assert!(l.allows(0) && l.allows(1) && !l.allows(2) && !l.allows(3) && l.allows(-1));
         l.rule_trucks = true;
         assert!(l.allows(0) && l.allows(3) && !l.allows(2));

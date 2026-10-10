@@ -173,12 +173,12 @@ impl FontLibrary {
     }
 }
 
-/// A font's colour bitmap laid over its alpha bitmap pixel for pixel. Omsi.exe reads a
+/// A font's colour bitmap laid over its alpha bitmap pixel for pixel. OMSI reads a
 /// glyph's colour at the very pixel it reads its coverage at, in the colour bitmap's own
-/// rows (0x5d67bc: the same scanline row and byte column in both), whatever size either
+/// rows (the same scanline row and byte column in both), whatever size either
 /// has - a colour bitmap need not be the alpha's size, and often is a small swatch of the
 /// one colour (the stock `EFADfont.bmp` is 128 x 128 under a 128 x 200 alpha). Past its
-/// edges, where Omsi.exe reads into other rows or fails, the swatch repeats. (Taken as no
+/// edges, where OMSI reads into other rows or fails, the swatch repeats. (Taken as no
 /// colour bitmap at all, a full-colour text came out in the alpha's white, #829.)
 fn color_at_alpha_pixels(color: &[u8], cw: u32, ch: u32, aw: u32, ah: u32) -> Vec<u8> {
     let mut out = vec![0u8; (aw * ah * 4) as usize];
@@ -234,7 +234,7 @@ mod tests {
     use super::*;
 
     /// A full-colour font whose colour bitmap is not the alpha's size takes each glyph
-    /// pixel's colour from the same pixel of the colour bitmap, as Omsi.exe reads it, not
+    /// pixel's colour from the same pixel of the colour bitmap, as OMSI reads it, not
     /// the alpha's white (#829).
     #[test]
     fn a_colour_bitmap_of_another_size_still_colours_the_glyphs() {

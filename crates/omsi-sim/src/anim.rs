@@ -118,8 +118,8 @@ impl MeshAnimator {
 /// swings with the driver's door). Sets the parent of every mesh, `defs` being the
 /// meshes in the order the animators have them. A name nobody carries leaves the mesh
 /// on its own, like the original. The parent is looked for among the meshes before this
-/// one, the last of them that carries the name (Omsi.exe resolves `[animparent]` as it
-/// reads the file, 0x5f1b3x: door variants that reuse their arms' names hung the later
+/// one, the last of them that carries the name (OMSI resolves `[animparent]` as it
+/// reads the file: door variants that reuse their arms' names hung the later
 /// variant's leaves on the first variant's arm, #348); one listed only after it is taken
 /// as a last resort.
 pub fn link_parents(animators: &mut [MeshAnimator], defs: &[&MeshDef]) {
