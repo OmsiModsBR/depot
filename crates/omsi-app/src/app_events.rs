@@ -3175,8 +3175,6 @@ impl ApplicationHandler for App {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         crate::game_lists::flush_settings(true);
         self.finish_session();
-        // ("playing now" ends with the game)
-        self.presence = None;
         if let Some(lan) = self.lan.take() {
             // dropping the session says goodbye (BYE) to the host or the players
             drop(lan);

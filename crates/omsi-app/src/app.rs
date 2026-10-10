@@ -336,8 +336,6 @@ pub(crate) struct App {
     pub(crate) notices: Vec<crate::ui::Notice>,
     /// The look for a newer release during the session (cards over the navigator).
     pub(crate) update_watch: crate::update_watch::UpdateWatch,
-    /// "Playing now" on the website (None: not counted, setting `presence`).
-    pub(crate) presence: Option<crate::presence::Presence>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::applog::LogState,
     /// The driver's personnel file and this session's statistics.

@@ -83,11 +83,6 @@ _version: 2
   zh-tw: "遊戲執行期間通知我有新版本"
   pt: "Avisar sobre uma nova versão durante a sessão"
   pt-pt: "Avisar-me sobre uma nova versão durante a sessão"
-"Count me in the website's \"playing now\" (anonymous)":
-  ca: "Compta'm a «jugant ara» del web (anònim)"
-  zh-tw: "將我計入網站的「目前遊玩人數」（匿名）"
-  pt: "Incluir-me no \"jogando agora\" do site (anônimo)"
-  pt-pt: "Incluir-me no \"a jogar agora\" do site (anónimo)"
 "Radio stations":
   ca: "Emissores de ràdio"
   zh-tw: "廣播電台"

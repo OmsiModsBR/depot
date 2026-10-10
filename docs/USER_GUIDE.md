@@ -89,14 +89,6 @@ goes on). `OMSI_NO_UPDATE=1` switches the checks off; `OMSI_UPDATE_URL` points t
 release description (GitHub's format; `file://` works, for testing - the game then looks after
 3 s).
 
-**Playing now.** While a session runs the game tells the project's counter (a Cloudflare
-Worker, `services/presence/`) every ten minutes that it is being played, and says goodbye
-when it ends; the website and the README show how many play right now. What goes out is a
-random id made new for each session, the version and the kind of system - nothing else, and
-the counter keeps no addresses. Settings → General → "Count me in the website's \"playing
-now\"" (on by default) or `OMSI_NO_PRESENCE=1` switch it off; a dedicated server is never
-counted.
-
 **O** switches mouse steering on and off, as in OMSI (Omsi.exe's own formula): the cursor's
 place across the whole window is the steering from full left to full right lock
 (`[inv_min_turnradius]` of the bus), from the middle up to the top edge is the throttle and

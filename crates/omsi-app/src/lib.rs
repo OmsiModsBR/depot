@@ -30,7 +30,6 @@ mod placing;
 mod mt;
 mod updater;
 mod update_watch;
-mod presence;
 mod ambience;
 mod camera_arm;
 mod career;
@@ -604,7 +603,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         notices: Vec::new(),
         update_watch: crate::update_watch::UpdateWatch::new(),
         // (a server counts its players by their own games, not itself)
-        presence: if is_server { None } else { crate::presence::Presence::start() },
         log_state: Default::default(),
         plugins: None,
         career: Default::default(),
