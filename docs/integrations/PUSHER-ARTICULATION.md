@@ -21,8 +21,12 @@ nonfinite offsets preserve the baseline puller joint. Existing articulation
 script variables retain their sign and meaning. See [modding instructions](../MODDING.md).
 
 Synthetic tests cover parsing, legacy defaults, hinge/link geometry, offset
-scaling and yaw equivalence. Validation results will be recorded after
-execution. They do not certify a real bus model, bellows animation, all road
+scaling and yaw equivalence. Validation on Windows x64 / Rust 1.99.0 passed
+298 tests across `omsi-sim` and `omsi-vehicle`; one existing benchmark remained
+ignored. `cargo check --locked --workspace --all-targets -j 1` also passed.
+Tests used the inherited development optimization level 1, debug=0 and a
+dedicated target directory; dependencies remained locked. These checks
+do not certify a real bus model, bellows animation, all road
 profiles or a full physical multibody implementation.
 
 This branch is independent of `feat/outside-fov-ultrawide` and the existing

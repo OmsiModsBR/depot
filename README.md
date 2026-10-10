@@ -1,5 +1,9 @@
 # Project Depot
 
+> Experimental branch `feat/pusher-articulation`: contains the selective
+> [pusher-joint integration](docs/integrations/PUSHER-ARTICULATION.md),
+> not included in main or the published Depot 0.2.17 packages.
+
 Independent repository: https://github.com/OmsiModsBR/depot
 
 Current Depot release: **[0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17)** — rebranding only, based on openOMSI 0.2.16.
