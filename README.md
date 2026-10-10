@@ -2,7 +2,7 @@
 
 Independent repository: https://github.com/OmsiModsBR/depot
 
-Initial version: **0.2.16** (historical baseline; no Depot release published yet).
+Current Depot release: **[0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17)** — rebranding only, based on openOMSI 0.2.16.
 
 Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openOMSI): `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
@@ -27,6 +27,12 @@ Alongside that goal, **evolutions to the simulator's physics and simulation are
 a development priority**, while preserving compatibility and a stable base through
 selective upstream integration.
 
+**Depot 0.2.17 is simply the project's rebranding release.** It changes branding,
+distribution names and Depot-specific repository/update configuration; it adds
+no gameplay, renderer, physics, simulation, scripting or multiplayer features.
+Physics/simulation evolutions and 1:1 compatibility remain development goals,
+not improvements delivered by this release. See the [release notes](docs/releases/0.2.17.md).
+
 > [!IMPORTANT]
 > **Project Depot needs an original copy of OMSI 2.** It contains no game content of its own: it
 > plays on the maps, vehicles and other files of an installed OMSI 2 and **will not start without one**.
@@ -34,16 +40,16 @@ selective upstream integration.
 
 ## Download
 
-Approved builds will be published on the
-[**Releases**](https://github.com/OmsiModsBR/depot/releases) page:
+The first rebranding release is available on the
+[**0.2.17 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17):
 
 | Platform | File |
 | --- | --- |
-| Windows x64 / ARM64 | `depot-<version>-windows-x64.zip` / `-windows-arm64.zip` - run `depot.exe` |
-| macOS (Apple silicon / Intel) | `depot-<version>-macos-arm64.zip` / `-macos-x64.zip` - open `depot.app` |
-| Linux x64 / ARM64 | `depot-<version>-linux-x64.zip` / `-linux-arm64.zip` - run `depot` |
-| Android (arm64, 8.0+) | `depot-<version>-android-arm64.apk` - see [docs/ANDROID.md](docs/ANDROID.md) |
-| Dedicated server | `depot-<version>-server-linux-x64.zip` (also `-linux-arm64`, `-windows-x64`, `-windows-arm64`) - see [docs/SERVER.md](docs/SERVER.md) |
+| Windows x64 | `depot-0.2.17-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
+| Dedicated server, Windows x64 | `depot-0.2.17-server-windows-x64.zip` - see [docs/SERVER.md](docs/SERVER.md) |
+
+ARM64, Linux, macOS and Android packages are not included in Depot 0.2.17.
+Inherited platform support and build instructions do not imply published Depot packages.
 
 Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus and a duty,
 and drive. Mods go into the folder next to the game (or through the launcher's **Mods**

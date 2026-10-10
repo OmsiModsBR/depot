@@ -46,3 +46,15 @@ their patches with this exact baseline and testing their behavior.
 No gameplay, renderer, physics, scripting or multiplayer feature is added.
 The baseline adaptation only records provenance, documents the integration
 policy, redirects the updater and archives inherited automation.
+
+## Depot 0.2.17 — rebranding only
+
+The first Depot release is simply a rebranding of the imported openOMSI 0.2.16
+baseline. It changes visible branding, executable/package/data-folder names,
+repository/update configuration and documentation. No gameplay, renderer,
+physics, simulation, scripting or multiplayer feature or fix is introduced.
+The MIT license and internal source identifiers are preserved.
+
+Physics/simulation evolutions and 1:1 compatibility are future goals, not claims
+about improvements in 0.2.17. Only Windows x64 game/launcher and dedicated-server
+packages are published. See [release notes](docs/releases/0.2.17.md).

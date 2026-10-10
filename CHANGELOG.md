@@ -1,8 +1,25 @@
 # Changelog
 
-Every push to `main` is released as `MAJOR.MINOR.COMMIT` (see
-[docs/VERSIONING.md](docs/VERSIONING.md)); the downloads are on the
-[Releases](https://github.com/openOMSI-Project/openOMSI/releases) page.
+Depot releases are published manually after review; pushes to `main` do not
+automatically produce releases. See [docs/VERSIONING.md](docs/VERSIONING.md).
+
+## Project Depot 0.2.17 - 2026-10-09
+
+- Rebranding only, derived from openOMSI `v0.2.16` (2026-10-07), commit
+  `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
+- Project Depot branding in the README and UI; `depot` executable, package and
+  generated data names; updater/repository configuration points to Depot.
+- MIT license and internal source names preserved; inherited automation disabled.
+- First packages: Windows x64 game/launcher and dedicated server.
+- No gameplay, renderer, physics, simulation, scripting or multiplayer additions
+  or fixes. Physics/simulation evolutions and 1:1 compatibility are future goals.
+- Build and command-line smoke checks passed; full gameplay and multiplayer
+  validation and the complete test suite were not performed.
+
+## Historical openOMSI changelog
+
+The entries below document upstream history, not changes introduced by Depot.
+Their original references are retained for attribution.
 
 ## 0.2.16 - 2026-10-07
 

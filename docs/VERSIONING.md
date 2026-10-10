@@ -1,5 +1,32 @@
 # Versioning and releases
 
+## Project Depot release policy
+
+Depot follows **stable base + selective upstream integration**. Releases are
+reviewed and published manually; a push to `main` does not publish anything.
+Inherited workflows are archived in `docs/upstream-automation/`, not active
+under `.github/workflows/`. No automatic upstream synchronization is enabled.
+
+**Depot 0.2.17 is a rebranding-only release of the openOMSI 0.2.16 baseline.**
+The version increment does not indicate new physics, simulation, renderer,
+scripting, gameplay or multiplayer functionality. See [release notes](releases/0.2.17.md).
+The only published packages for this release are Windows x64 game/launcher and
+dedicated server, named `depot-0.2.17-windows-x64.zip` and
+`depot-0.2.17-server-windows-x64.zip`.
+
+For a reviewed build, pass `OPENOMSI_VERSION` explicitly and check
+`depot --version` before packaging. The first release used
+`OPENOMSI_VERSION=0.2.17`; the inherited build-script fallback returned `0.2.0`
+when determining version history from the crate directory, so it must not be
+relied on for release stamping.
+
+## Historical upstream policy — not active in Depot
+
+The remaining text records the inherited openOMSI versioning and automation.
+Descriptions of automatic releases, PR builds, badges and website publication
+below are historical, not current Depot behavior. Refer to the archived
+workflows rather than the inactive `.github/workflows/` paths mentioned below.
+
 ## The version number: `MAJOR.MINOR.COMMIT`
 
 | Part | Where it comes from | Example |
