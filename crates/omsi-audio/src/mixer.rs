@@ -1,5 +1,5 @@
 //! A small software mixer on top of cpal: voices with per-sample linear resampling (pitch),
-//! gain, looping and Omsi.exe's 3D model (inverse-distance attenuation beyond a `[3d]`
+//! gain, looping and OMSI's 3D model (inverse-distance attenuation beyond a `[3d]`
 //! sound's range, a pan of a few dB - see [`pan_gains`]).
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -147,7 +147,7 @@ impl Shared {
         let frames = out.len() / ch;
         let rate = self.sample_rate.load(Ordering::Relaxed).max(1);
         let dev_rate = rate as f64;
-        // More voices than OMSI's `[sound_maxcount]` (200 by default): as Omsi.exe, the
+        // More voices than OMSI's `[sound_maxcount]` (200 by default): as OMSI, the
         // nearest sounds are kept and the far ones cut - by distance, which does not change
         // from one block to the next, not by loudness, which follows every volume curve and
         // cut voices in and out at the edge of the list (sounds breaking off in traffic).
@@ -658,8 +658,8 @@ impl AudioEngine {
         self.play_at(clip, params, 0.0)
     }
 
-    /// Start a loop from a random place in its clip, as Omsi.exe starts a looping buffer
-    /// (`SetCurrentPosition(Random(size))`, 0x750c0c): two buses of a type standing side by
+    /// Start a loop from a random place in its clip, as OMSI starts a looping buffer:
+    /// two buses of a type standing side by
     /// side do not drone in phase.
     pub fn play_from_random_place(&self, clip: Arc<Clip>, params: VoiceParams) -> VoiceId {
         static SEED: AtomicU64 = AtomicU64::new(0x2545_f491_4f6c_dd1d);
@@ -940,8 +940,8 @@ impl Reverb {
 }
 
 /// How loud a sound `dist` metres away arrives, with `range` its `[3d]` reference distance:
-/// Omsi.exe multiplies the volume by `min(range / distance, 1)` itself (`TSound` update
-/// 0x7509fe) - full up to the range, then 1/d (6 dB per doubling); a range of 0 is silent
+/// OMSI multiplies the volume by `min(range / distance, 1)` itself:
+/// full up to the range, then 1/d (6 dB per doubling); a range of 0 is silent
 /// anywhere but at the very spot.
 pub fn distance_gain(range: f32, dist: f32) -> f32 {
     if dist <= 0.0 {
@@ -954,8 +954,8 @@ pub fn distance_gain(range: f32, dist: f32) -> f32 {
 /// is panned.
 pub static STEREO: AtomicU32 = AtomicU32::new(10);
 
-/// The channel gains of a sound in direction `d` from the listener, as Omsi.exe pans a
-/// `[3d]` sound (0x7508ef): `s` is the side component of the horizontal direction (1 =
+/// The channel gains of a sound in direction `d` from the listener, as OMSI pans a
+/// `[3d]` sound: `s` is the side component of the horizontal direction (1 =
 /// straight right), the buffer's pan `50 * [sound_stereo] * s^3` hundredths of a dB, and
 /// DirectSound lowers the far channel by that much and leaves the near one alone - at the
 /// default stereo setting a sound straight to the right is 5 dB down on the left. Ours gave

@@ -29,6 +29,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
 ### Changed
+- Mixer, vehicle sound flags and player input/camera: comments cleaned of addresses and mentions of the reference
+  executable; they describe observable behaviour only. Comment text only, no code change.
 - `omsi-audio` sound set: comments cleaned of references to addresses of the reference executable; they
   describe observable behaviour only. Comment text only, no code change.
 - Articulated buses and trailers: every section is a body of its own. Behind the player's vehicle the rear
