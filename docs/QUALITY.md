@@ -20,3 +20,11 @@ of wrapping), because the parsers read untrusted content.
 | `cargo deny check` | advisories: same two crates; licenses: `omsi-net` has no `license` field, and `webpki-roots` is CDLA-Permissive-2.0 (allowed in `deny.toml` pending maintainer confirmation) | Add `license` to the `omsi-net` manifest; confirm the CDLA decision. Sources and bans pass. |
 
 When a row is cleared, switch its CI step from informational to blocking and update this table.
+
+## Offscreen golden
+
+`crates/omsi-app/tests/offscreen_golden.rs` renders a synthetic root (written by the test, no OMSI 2 content)
+with the real `depot --offscreen`. The picture checks need a graphics adapter (a software one is enough) and print
+`SKIP` and pass without one; the root read-back and the window/offscreen `signal_aspects` check always run. The
+thumbnail comparison runs only when `tests/golden/offscreen_synthetic.txt` exists and was recorded on the same
+adapter; regenerate it with `OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.

@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Golden test for the offscreen run (`crates/omsi-app/tests/offscreen_golden.rs`): runs `depot --offscreen` on a
+  synthetic root the test writes itself and checks that the picture is repeatable, shows the scene and matches a
+  stored thumbnail within a tolerance. It skips cleanly when the machine has no graphics adapter. It also records
+  that the window gives the player's rail to `signal_aspects` while the offscreen run gives none. Test only; no
+  behaviour change.
 - Navigator map packages: the navigator and the city map can draw a surface (water, green, rivers, names),
   icons, regions, street names and bus lines supplied by an optional per-map package
   (`docs/MAP_PACKAGE.md`), also looked up in the content folder and used for offscreen pictures. New
