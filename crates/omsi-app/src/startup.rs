@@ -532,6 +532,15 @@ mod monitor_tests {
     }
 
     #[test]
+    fn a_monitor_left_of_the_primary_one_gets_through_the_argument_parser() {
+        use clap::Parser;
+        for form in [vec!["depot", "--monitor-at=-1500,300"], vec!["depot", "--monitor-at", "-1500,300"]] {
+            let args = crate::cli::Args::try_parse_from(&form).unwrap_or_else(|e| panic!("{form:?}: {e}"));
+            assert_eq!(args.monitor_at.as_deref().and_then(parse_point), Some((-1500, 300)));
+        }
+    }
+
+    #[test]
     fn the_monitor_point_is_read_from_the_command_line() {
         assert_eq!(parse_point("-1500,300"), Some((-1500, 300)));
         assert_eq!(parse_point(" 10 , 20 "), Some((10, 20)));

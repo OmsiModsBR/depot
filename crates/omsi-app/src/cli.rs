@@ -162,7 +162,7 @@ pub(crate) struct Args {
     pub(crate) spawn: Option<String>,
     /// Open the window on the monitor that holds this desktop point (x,y in pixels; the
     /// launcher passes a point of its own window). Default: the primary monitor.
-    #[arg(long, value_name = "X,Y")]
+    #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
     pub(crate) monitor_at: Option<String>,
     /// Start without the menu (the command line defines everything).
     #[arg(long)]

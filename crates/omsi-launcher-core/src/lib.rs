@@ -2586,7 +2586,7 @@ pub fn duty_args(d: &Duty) -> Result<Vec<String>> {
 fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
     let mut a = duty_args_without_monitor(d, root)?;
     if let Some((x, y)) = d.monitor_at {
-        a.extend(["--monitor-at".into(), format!("{x},{y}")]);
+        a.push(format!("--monitor-at={x},{y}"));
     }
     Ok(a)
 }
@@ -3001,11 +3001,11 @@ mod tests {
         let plain = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
         assert!(!plain.iter().any(|x| x == "--monitor-at"), "{plain:?}");
         let with = duty_args_for_root(&Duty { monitor_at: Some((-1500, 300)), ..d.clone() }, Path::new("test-omsi")).unwrap();
-        let i = with.iter().position(|x| x == "--monitor-at").expect("the monitor is passed");
-        assert_eq!(with[i + 1], "-1500,300");
+        // (one token: a value starting with a minus sign is no option for the argument parser)
+        assert!(with.iter().any(|x| x == "--monitor-at=-1500,300"), "{with:?}");
         let sit = Duty { situation: Some("a.osn".into()), monitor_at: Some((5, 6)), ..d };
         let a = duty_args_for_root(&sit, Path::new("test-omsi")).unwrap();
-        assert!(a.windows(2).any(|w| w == ["--monitor-at", "5,6"]), "{a:?}");
+        assert!(a.iter().any(|x| x == "--monitor-at=5,6"), "{a:?}");
     }
 
     #[test]
