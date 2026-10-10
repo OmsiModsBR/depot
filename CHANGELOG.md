@@ -14,6 +14,19 @@ Every push to `main` is released as `MAJOR.MINOR.COMMIT` (see
   hinge and the ball swings up or down with the pitch. Without the key the joint is as before. How
   to fix a model's bellows and joint pieces for it: see docs/MODDING.md. (`vehicle.rs`)
 
+### Physics
+
+* **Articulated buses and trailers: every section a body of its own.** Behind the player's
+  vehicle the rear section of an articulated bus and a lorry's trailer run on the same wheel
+  physics as the front, each with its own `.bus` mass, inertia, centre of gravity, axles, springs
+  and brakes, held by its joint: the rear section's weight rests on the front's rear axle, its
+  mass and inertia swing the front in bends and under braking, a pusher's driven axle pushes the
+  front through the joint, and the joint stops at `[coupling_front_character]`'s angles (a bus's
+  turntable keeps the sections from rolling against each other, a lorry's hitch does not). The air
+  acts on the front alone. The AI's vehicles, other players' over the LAN and trains on rails
+  follow as before, and so does every part with `OMSI_KINEMATIC_TRAILERS=1` (A/B). See
+  docs/FORMATS.md and docs/MODDING.md. (`rigid/train.rs`, `vehicle/articulation.rs`)
+
 ## 0.2.16 - 2026-10-07
 
 ### New

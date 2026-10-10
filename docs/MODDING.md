@@ -190,6 +190,20 @@ OMSI 2 ignores `[coupling_pitch_offset]` but reads the `model.cfg`: a model chan
 looks right only with the key. For a bus played in both, give the pusher variant its own
 `model.cfg`, used by its own pair of `.bus` files.
 
+## Articulated buses and trailers: every section a body
+
+The player's articulated bus runs each section as a body of its own (see FORMATS.md, "Vehicle
+list and coupled parts"), so the rear section's `.bus` physics now count as they do in
+OMSI 2: its `[mass]`, `[momentofintertia]` and `[schwerpunkt]` swing the front section in a
+bend and under braking, its `[newachse]` springs carry it, its driven axle pushes (a pusher's
+front section needs no driven axle), and `[coupling_front_character]` limits the joint. Values
+that were never looked at before - a rear section's inertia copied from a solo bus, a
+`[coupling_front_character]` narrower than the model's joint - now show. Check them against
+the front section's: the GN92's rear section has 7.2 t and `150 40 150`, the front 8 t and
+`300 80 300`, and its joint `52.5 -20 20 1`. To compare with the old behaviour, start the game
+with `OMSI_KINEMATIC_TRAILERS=1`; `OMSI_DEBUG_TRAILER` logs the joint's gap and angles every
+step.
+
 ## Models
 
 - `.o3d` files with 32-bit indices (the long-index flag) are drawn with their full vertex

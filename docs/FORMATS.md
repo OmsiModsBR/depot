@@ -887,6 +887,30 @@ rear section's slope then runs from the hinge, and the ball rides the link betwe
 swings up or down off the coupling point by about `offset · sin(beta)`. Without the key, or
 with 0, everything is as before.
 
+Behind the player's vehicle every road part - the rear section of an articulated bus, a
+lorry's trailer - is a body of its own on the same wheel physics as the front, as Omsi.exe
+runs each section: its own `[mass]`, `[momentofintertia]`, `[schwerpunkt]` / `[cog]`,
+`[newachse]` springs, dampers and driven axles, `[rollwiderstand]`, and its own
+`Axle_Brakeforce_<n>_*` and `Axle_Springfactor_<n>_*` (numbered on after the front's axles).
+The part turns about its `[rot_pnt_long]` (else its axle farthest from the joint) and rests on
+its axles and on the joint, whose share the front section's axles carry. The joint holds the
+two bodies at the ball (at a pusher's hinge, see above) and follows
+`[coupling_front_character]`:
+
+```
+[coupling_front_character]
+52.5      most the joint turns either way about the vertical axis (alpha, degrees)
+-20       least and most it bends about the transverse axis (beta, degrees)
+20
+1         0: a lorry's hitch, free about every axis; anything else: an articulated bus's
+          turntable, the sections do not roll against each other, and alpha stops at its most
+```
+
+Without the keyword the joint is a turntable of 55° and ±15°. The air acts on the front
+section alone. The AI's vehicles, other players' over the LAN, trains on rails and every part
+with `OMSI_KINEMATIC_TRAILERS=1` (A/B) follow kinematically as before: hung on the coupling,
+pitched towards the ground under the axle, pulling and braking the front along its axis.
+
 The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToPrevVeh]`
 path points: the rear section's seats and exits are numbered after the front's, which is
 how the stock door scripts count them, and a person walking from one section to the other
