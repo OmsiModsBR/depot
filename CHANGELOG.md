@@ -72,6 +72,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Vehicle viewer in the launcher: the rear sections of an articulated bus no longer stand with their wheels
+  above the floor. The viewer gave the bus no ground, so each rear section was hung level with its coupling
+  while its wheels went up into the arches by the springs' sag. The viewer now puts the bus on a flat floor
+  at z = 0 and lets it settle for 1.5 s before showing it, as on a road
+  (`crates/omsi-app/src/launcher/showroom.rs`).
 - The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
   departure and the next arrival shared out by the distance covered) instead of standing still at the delay

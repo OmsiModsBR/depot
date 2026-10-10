@@ -286,8 +286,15 @@ impl Showroom {
                         vehicle.set_var(&var, v);
                     }
                 }
+                // The floor under it (z = 0): the bus and its rear sections sit down on their
+                // springs as they do on a road. Without a ground the rear sections were hung
+                // level with their coupling while their wheels went up into the arches by the
+                // springs' sag (`Axle_Suspension`), and stood that far over the floor.
+                vehicle.ground = Some(Arc::new(|_: f64, _: f64| Some(0.0)));
                 load_coupled_parts(&root, &mut vehicle);
-                for _ in 0..3 {
+                // (the simple physics eases its wheels into their travel over about a third of
+                // a second: settled after a second and a half)
+                for _ in 0..45 {
                     vehicle.update(1.0 / 30.0);
                 }
                 prefetch.prefetch(&vt, scheme);
