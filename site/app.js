@@ -14,6 +14,10 @@ const DOCS = [
 const PLATFORMS = [
   { key: "windows-x64", name: "Windows", icon: "desktop_windows", note: "64-bit (x64), Windows 10 or newer", os: "windows" },
 ];
+// The dedicated server was only published with 0.2.17 and is discontinued (see docs/removed/MULTIPLAYER_DISABLED.md).
+const SERVERS = [
+  { key: "server-windows-x64", name: "Dedicated server (discontinued)", icon: "dns", note: "Windows x64, no window. Only in 0.2.17; no longer built or supported" },
+];
 
 // Which build fits the visitor, roughly: the one to put first and mark.
 function visitorOs() {
@@ -92,7 +96,9 @@ async function download() {
           : `<p>Not in this release.</p>`}</div>`;
   };
   const games = [...PLATFORMS].sort((x, y) => (y.os === visitorOs()) - (x.os === visitorOs()));
-  grid.innerHTML = games.map(card).join("");
+  grid.innerHTML = games.map(card).join("")
+    + `<h2 class="section-title" style="grid-column:1/-1">Dedicated server</h2>`
+    + SERVERS.map(card).join("");
 }
 
 async function doc(name, anchor) {
