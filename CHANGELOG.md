@@ -52,6 +52,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
+  departure and the next arrival shared out by the distance covered) instead of standing still at the delay
+  it left the last stop with (upstream #1898). Behaviour taken from openOMSI commit `3c75499` (MIT,
+  turbo-devv), reimplemented; the existing test now expects the new value. Parity with the reference still
+  to be confirmed by observation.
 - `omsi-plugin` test `panels_clicks_and_focus_through_omsi_ui` failed on Windows CI because the reload is detected by
   modification time and the rewritten file could keep the old timestamp; the test now sets a newer one. The Lua
   feature itself is unchanged (it stays in the crate; it is only unreachable from the client).
