@@ -31,7 +31,7 @@ mod collide;
 mod ground;
 mod params;
 mod suspension;
-mod toggles;
+pub(crate) mod toggles;
 mod train;
 mod tyre;
 mod wheel;

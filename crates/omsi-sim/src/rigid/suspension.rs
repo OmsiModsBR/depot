@@ -5,7 +5,7 @@
 use super::body::RigidBody;
 use super::ground::GroundProbe;
 use super::params::{BUMP, CLIMB, DROOP, UNSPRUNG, WALL_C, WALL_K};
-use super::toggles::omsi_suspension;
+use super::toggles::{no_wheel_slip, omsi_suspension};
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
 use glam::{DVec3, Vec3};
@@ -185,7 +185,7 @@ impl RigidBody {
                 if before != 0.0 && sign(before) != sign(w.spin) && brake_w > 0.0 {
                     w.spin = 0.0;
                 }
-                w.slipping = omsi_cfg::env::var_os("OMSI_NO_WHEEL_SLIP").is_none();
+                w.slipping = !no_wheel_slip();
                 w.rpm = w.spin * 60.0 / std::f32::consts::TAU;
                 w.rotation_deg = (w.rotation_deg + w.spin.to_degrees() * h).rem_euclid(360.0);
                 // the tyre off the ground (or nothing under it: the edge of the loaded

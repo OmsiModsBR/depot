@@ -9,6 +9,7 @@
 //! them with `OMSI_KINEMATIC_TRAILERS=1` (A/B).
 
 use super::*;
+use crate::rigid::toggles::kinematic_trailers;
 use crate::rigid::{BodyInputs, Joint, RigidBody};
 
 /// A part's own body and the variables its wheels are written to.
@@ -55,13 +56,6 @@ impl TrailerPart {
     fn joint(&self, index: usize) -> Joint {
         Joint::new(index - 1, index, &self.ty.def, self.coupling_back, self.coupling_front)
     }
-}
-
-/// `OMSI_KINEMATIC_TRAILERS=1`: every part follows kinematically, as before the multibody
-/// physics (A/B; read once).
-fn kinematic_trailers() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| omsi_cfg::env::var_os("OMSI_KINEMATIC_TRAILERS").is_some())
 }
 
 impl VehicleInstance {

@@ -3,6 +3,7 @@
 
 use super::ground::WallFace;
 use super::params::{DROOP, STANDING};
+use super::toggles::no_wheel_slip;
 use super::tyre::Contact;
 use glam::{DVec3, Quat, Vec3};
 
@@ -87,7 +88,7 @@ impl RigidWheel {
         let mu_n = friction * c.grip;
         // (`OMSI_NO_WHEEL_SLIP=1`: every wheel grips, as before the wheels had a turning of
         // their own - for comparison)
-        let no_slip = omsi_cfg::env::var_os("OMSI_NO_WHEEL_SLIP").is_some();
+        let no_slip = no_wheel_slip();
         if no_slip {
             self.slipping = false;
             self.locked = false;
