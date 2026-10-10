@@ -8,6 +8,7 @@
 //! hung on their coupling and pitched towards the ground under their axle - and so do all of
 //! them with `OMSI_KINEMATIC_TRAILERS=1` (A/B).
 
+use super::physics_bridge::PartWheelVars;
 use super::*;
 use crate::rigid::toggles::kinematic_trailers;
 use crate::rigid::{BodyInputs, Joint, RigidBody};
@@ -17,12 +18,8 @@ pub(super) struct PartBody {
     pub(super) rb: RigidBody,
     /// Hung on its joint since the train was last put down (see [`TrailerPart::realign`]).
     pub(super) placed: bool,
-    vars: Vec<WheelVars>,
+    vars: Vec<PartWheelVars>,
 }
-
-/// `Wheel_Rotation`, `Wheel_RotationSpeed`, `Axle_Steering`, `Axle_Suspension` and
-/// `Axle_Springfactor` of one wheel (`<axle>_L`, `<axle>_R`).
-type WheelVars = [Option<omsi_script::VarId>; 5];
 
 impl PartBody {
     fn new(t: &TrailerPart, program: &Program) -> PartBody {
@@ -134,11 +131,11 @@ impl VehicleInstance {
             meta[k].0 = true;
         }
         // each part: its own brakes and air springs, the road's grip
-        let part_brakes: Vec<Vec<f32>> = self.trailers.iter().map(|t| t.v_brakes.iter().map(|&id| self.get(id).max(0.0)).collect()).collect();
+        let part_brakes: Vec<Vec<f32>> = self.trailers.iter().map(|t| self.part_brakes(t).collect()).collect();
         let friction = bodies[0].friction;
         for (b, (_, vars)) in bodies[1..].iter_mut().zip(&meta) {
             for (w, v) in b.wheels.iter_mut().zip(vars) {
-                w.spring_factor = v[4].filter(|_| !self.springs_full).map(|i| self.state.vars[i as usize]).unwrap_or(1.0);
+                w.spring_factor = self.part_spring_factor(v);
             }
             b.friction = friction;
             b.wheel_walls = self.wheel_walls;
@@ -169,14 +166,7 @@ impl VehicleInstance {
             t.position = rb.origin();
             let (heading, pitch, bank) = rb.heading_pitch_bank();
             (t.heading, t.pitch, t.bank) = (heading, pitch, bank);
-            for (i, (w, v)) in rb.wheels.iter().zip(&vars).enumerate() {
-                let shown = [w.rotation_deg.to_radians(), w.rpm, rb.axle_steer(i), -w.compression.max(0.0)];
-                for (id, x) in v.iter().zip(shown) {
-                    if let Some(id) = id {
-                        self.state.vars[*id as usize] = x;
-                    }
-                }
-            }
+            self.show_part_wheels(&rb, &vars);
             self.trailers[k].body = Some(PartBody { rb, placed, vars });
         }
         lead
@@ -235,21 +225,7 @@ impl TrailerPart {
             // radians, like every `Wheel_Rotation_*` (the degrees written here before spun the
             // rear section's wheels 57 times too fast: a flicker instead of a rolling wheel)
             let rot = (self.odometer / self.wheel_radius).rem_euclid(std::f32::consts::TAU);
-            for a in 0..self.axle_count {
-                for side in ["L", "R"] {
-                    let k = self.first_axle + a;
-                    if let Some(id) = main.ty.program.var(&format!("Wheel_Rotation_{k}_{side}")) {
-                        main.state.vars[id as usize] = rot;
-                    }
-                    if let Some(id) = main
-                        .ty
-                        .program
-                        .var(&format!("Wheel_RotationSpeed_{k}_{side}"))
-                    {
-                        main.state.vars[id as usize] = rpm;
-                    }
-                }
-            }
+            main.show_rolling_wheels(self.first_axle, self.axle_count, rot, rpm);
         }
         for (i, a) in self.animators.iter_mut().enumerate() {
             self.mesh_transforms[i] = a.update(dt, &main.state.vars);

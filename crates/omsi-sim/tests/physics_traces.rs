@@ -19,9 +19,10 @@
 use glam::{DVec2, DVec3, Quat, Vec3};
 use omsi_model::Model;
 use omsi_script::Program;
-use omsi_sim::collision::Obb;
+use omsi_sim::ai_motion::{AiBody, MotionKind};
+use omsi_sim::collision::{CollisionWorld, Obb};
 use omsi_sim::rigid::{place_train, step_train, support_rest_loads, BodyInputs, Ground, GroundProbe, Impact, Joint, RigidBody};
-use omsi_sim::vehicle::road_grip;
+use omsi_sim::vehicle::{road_grip, AiFrame};
 use omsi_sim::{Controls, SimClock, VehicleHost, VehicleInstance, VehicleType};
 use omsi_vehicle::vehicle::Coupling;
 use omsi_vehicle::{Axle, Vehicle};
@@ -242,6 +243,8 @@ scenarios!(
     b2_articulated_vehicle,
     b3_vehicle_crash,
     b4_kinematic_vehicle,
+    b5_ai_vehicle_follows_a_lane,
+    b6_kinematic_vehicle_crash,
 );
 
 mod scenarios {
@@ -691,7 +694,7 @@ mod scenarios {
         t.text
     }
 
-    // -- B1..B4: the vehicle, through its script variables --
+    // -- B1..B6: the vehicle, through its script variables --
 
     const WHEEL_VARS: [&str; 6] = ["Wheel_Rotation", "Wheel_RotationSpeed", "Axle_Steering", "Axle_Suspension", "Axle_Brakeforce", "Axle_Springfactor"];
 
@@ -804,10 +807,9 @@ mod scenarios {
         t.text
     }
 
-    /// A pusher's two sections (`articulation`'s tests' `sections()`): the rear section's
-    /// wheels are axle 2 of the vehicle's variables.
-    pub fn b2_articulated_vehicle() -> String {
-        let section = |axles: &[(f32, bool)], mass: f32| Vehicle {
+    /// A section of `articulation`'s tests' `sections()`: `axles` are (position, driven).
+    fn section(axles: &[(f32, bool)], mass: f32) -> Vehicle {
+        Vehicle {
             mass,
             moment_of_inertia: [300.0, 80.0, 300.0],
             cog_height: 1.2,
@@ -818,7 +820,12 @@ mod scenarios {
             coupling_back: Some(Coupling { pos: [0.0, -5.0, 0.3] }),
             coupling_front_character: Some([52.5, -20.0, 20.0, 1.0]),
             ..Default::default()
-        };
+        }
+    }
+
+    /// A pusher's two sections (`articulation`'s tests' `sections()`): the rear section's
+    /// wheels are axle 2 of the vehicle's variables.
+    pub fn b2_articulated_vehicle() -> String {
         let mut t = Trace::default();
         let names = var_names(3);
         let front = vehicle_type(section(&[(3.2, false), (-2.6, false)], 8.0), 3);
@@ -861,6 +868,70 @@ mod scenarios {
         frames(&mut t, &mut v, &names, 360, 1.0 / 60.0, |_| Script { m_wheel: 7000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, |_| Script { m_wheel: 2000.0, steering: 0.4, ..Default::default() });
         frames(&mut t, &mut v, &names, 180, 1.0 / 60.0, |_| Script { axle_brake: vec![(0, 9000.0), (1, 9000.0)], ..Default::default() });
+        t.text
+    }
+
+    /// An AI vehicle, two sections (the AI's path: no body, the parts follow on their
+    /// coupling): the traffic's `AiBody` follows a lane - 40 m straight, then a bend of 25 m
+    /// to the right, up a grade from y = 30 m - and hands the vehicle its pose, and
+    /// `update_ai` writes the motion into the scripts' variables.
+    pub fn b5_ai_vehicle_follows_a_lane() -> String {
+        let lane = |s: f64| {
+            if s < 40.0 {
+                DVec2::new(0.0, s)
+            } else {
+                let a = (s - 40.0) / 25.0;
+                DVec2::new(25.0 - 25.0 * a.cos(), 40.0 + 25.0 * a.sin())
+            }
+        };
+        let rise = |_x: f64, y: f64| Some(if y > 30.0 { (y - 30.0) * 0.05 } else { 0.0 });
+        let at = move |s: f64| {
+            let p = lane(s);
+            DVec3::new(p.x, p.y, rise(p.x, p.y).unwrap())
+        };
+        let mut t = Trace::default();
+        let names = var_names(3);
+        let front = vehicle_type(section(&[(3.2, false), (-2.6, true)], 8.0), 3);
+        let rear = vehicle_type(section(&[(-0.4, false)], 7.2), 3);
+        let mut body = AiBody::new(&front.def, MotionKind::Road);
+        let mut v = instance(front);
+        v.ground = Some(Arc::new(rise));
+        v.attach_trailer(rear);
+        let ground = v.ground.clone();
+        let ground = ground.as_ref().map(|g| g.as_ref() as &dyn Fn(f64, f64) -> Option<f64>);
+        body.place(&|d| at(d as f64), ground, None, 0.0);
+        body.apply(&mut v);
+        let dt = 1.0 / 60.0;
+        let (mut s, mut speed) = (0.0f64, 0.0f32);
+        for k in 0..1200 {
+            // up to 30 km/h at 1 m/s², and from 14 s on brought to a stop at 2 m/s²
+            let time = k as f32 * dt;
+            speed = if time < 14.0 { (speed + dt).min(30.0 / 3.6) } else { (speed - 2.0 * dt).max(0.0) };
+            s += (speed * dt) as f64;
+            let way = |d: f32| at(s + d as f64);
+            body.step(dt, speed, &way, ground, None);
+            body.apply(&mut v);
+            let frame = AiFrame { speed, odometer: s as f32, steer_deg: body.steer, blinker: if s > 35.0 && s < 80.0 { 2 } else { 0 }, brake: time >= 14.0, ..Default::default() };
+            t.frame(dt, &format!("speed {} odometer {} steer {} blinker {} brake {}", n32(frame.speed), n32(frame.odometer), n32(frame.steer_deg), frame.blinker, frame.brake));
+            v.update_ai(dt, &frame);
+            t.vehicle(&v, &names);
+        }
+        t.text
+    }
+
+    /// Without a body, into a wall: the simple model backs out of it and stops.
+    pub fn b6_kinematic_vehicle_crash() -> String {
+        let mut t = Trace::default();
+        let names = var_names(2);
+        let mut v = instance(vehicle_type(bus(), 2));
+        v.ground = Some(Arc::new(|_x: f64, _y: f64| Some(0.0)));
+        v.collision = Some(Arc::new(CollisionWorld::default()));
+        let mut wall = Obb::from_box([20.0, 1.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.0, 25.0, 0.0), 0.0);
+        wall.id = 5;
+        v.dynamic_boxes = vec![wall];
+        frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
+        frames(&mut t, &mut v, &names, 420, 1.0 / 60.0, |_| Script { m_wheel: 9000.0, ..Default::default() });
+        frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, |_| Script { m_wheel: -6000.0, steering: -0.5, ..Default::default() });
         t.text
     }
 }
