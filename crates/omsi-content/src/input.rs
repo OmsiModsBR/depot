@@ -8,7 +8,7 @@ pub struct KeyBinding {
     pub action: String,
     /// DirectInput scan code
     pub scan_code: i32,
-    /// The entry's third value, as Omsi.exe reads it (0x6478d0): [`KEY_HOLD`], [`KEY_SHIFT`],
+    /// The entry's third value, as OMSI reads it: [`KEY_HOLD`], [`KEY_SHIFT`],
     /// [`KEY_CTRL`] (and our [`KEY_ALT`]). Kept whole, so that it is written back as read.
     pub modifier: i32,
 }
@@ -20,7 +20,7 @@ pub const KEY_HOLD: i32 = 1;
 pub const KEY_SHIFT: i32 = 2;
 /// Held with Ctrl (Ctrl+Q ends the game: `exit` 16 / 4).
 pub const KEY_CTRL: i32 = 4;
-/// Held with Alt: Omsi.exe has no Alt (it reads the three bits above only); ours, which it
+/// Held with Alt: OMSI has no Alt (it reads the three bits above only); ours, which it
 /// leaves alone.
 pub const KEY_ALT: i32 = 8;
 
@@ -31,8 +31,8 @@ impl KeyBinding {
     }
 
     /// Whether the modifier keys held (`held`, [`chord`] bits) make its chord: Shift and
-    /// Ctrl as they are, as Omsi.exe compares them (0x6466b8); Alt only when it asks for
-    /// Alt (Omsi.exe has none, and fires its keys whether Alt is held or not).
+    /// Ctrl as they are, as OMSI compares them; Alt only when it asks for
+    /// Alt (OMSI has none, and fires its keys whether Alt is held or not).
     pub fn matches(&self, held: i32) -> bool {
         let sc = KEY_SHIFT | KEY_CTRL;
         self.chord() & sc == held & sc && (self.chord() & KEY_ALT == 0 || held & KEY_ALT != 0)
@@ -332,7 +332,7 @@ mod tests {
         assert!(b(2).matches(chord(true, false, false)) && !b(2).matches(chord(false, true, false)));
         assert!(b(4).matches(chord(false, true, false)) && !b(4).matches(chord(true, false, false)));
         assert!(b(6).matches(chord(true, true, false)) && b(3).matches(KEY_SHIFT) && b(5).matches(KEY_CTRL));
-        // Alt: Omsi.exe's keys fire with it held; ours with Alt want it
+        // Alt: OMSI's keys fire with it held; ours with Alt want it
         assert!(b(0).matches(KEY_ALT) && b(8).matches(KEY_ALT) && !b(8).matches(0));
         assert_eq!(b(3).chord(), KEY_SHIFT);
     }

@@ -88,9 +88,9 @@ pub struct Vehicle {
     /// then the prefix and postfix for a number the file has no plate for.
     pub registration_list: Option<(String, String, String)>,
     pub registration_free: bool,
-    /// The plate mode the last of those keywords set (TRoadVehicle +0x28d): 0 none, 1 free,
+    /// The plate mode the last of those keywords set: 0 none, 1 free,
     /// 2 list, 3 automatic; and the prefix and postfix the list and automatic modes share
-    /// (+0x2a4, +0x2a8: the later keyword's).
+    /// (the later keyword's).
     pub registration_mode: u8,
     pub registration_affix: (String, String),
     pub km_counter_init: Option<(i32, f32)>,
@@ -275,14 +275,14 @@ impl Vehicle {
         self.coupling_pitch_offset.filter(|d| d.is_finite() && *d > 0.0).unwrap_or(0.0)
     }
 
-    /// A rail vehicle: a car of a `.zug` runs on rails, which Omsi.exe stands end to end by
+    /// A rail vehicle: a car of a `.zug` runs on rails, which OMSI stands end to end by
     /// their model bodies (its cars' declared coupling points need not be at the cars' ends).
     /// A road vehicle, a trailer or an articulated-bus rear section keeps its declared
     /// `[coupling_front]` / `[coupling_back]`.
     ///
     /// Rails are what the file says they are: a `[boogies]`, a `[contact_shoe]` or a
     /// `[rail_body_osc]` (`rail_drive::is_rail` reads the same three; a rail car has all of
-    /// a bogie, and Omsi.exe's `[type] 2` marks the same vehicles).
+    /// a bogie, and OMSI's `[type] 2` marks the same vehicles).
     pub fn is_rail(&self) -> bool {
         self.boogies.is_some() || !self.contact_shoes.is_empty() || self.rail_body_osc.is_some()
     }
@@ -305,7 +305,7 @@ impl Vehicle {
                 "description" => v.description = r.until("[end]").join("\n"),
                 "ai_veh_type" => v.ai_veh_type = r.i32(),
                 "number" => v.number_file = Some(r.str().to_string()),
-                // Omsi.exe (TRoadVehicle.LoadFromFile 0x7cddf5, 0x7cde6e) reads these lines
+                // OMSI reads these lines
                 // as they come, whatever they say: the automatic mode's prefix and postfix
                 // (the stock "B-V " with its space), the list mode's file, prefix and postfix.
                 // The lines end where the next block starts, so a file that leaves them out
@@ -508,8 +508,8 @@ impl Train {
 }
 
 /// A `[number]` list (`.org`): one fleet number a line - every line, the first as well.
-/// (The stock `.bus` files describe a first line naming a repaint; Omsi.exe 2.3 reads none:
-/// 0x614f90 takes each non-empty line for a number.)
+/// (The stock `.bus` files describe a first line naming a repaint; OMSI 2.3 reads none:
+/// it takes each non-empty line for a number.)
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NumberList {
     pub numbers: Vec<String>,
@@ -525,7 +525,7 @@ impl NumberList {
 
 impl Vehicle {
     /// The fleet numbers of the `[number]` list with the plate `[registration_list]`'s file
-    /// gives each - line by line beside it, empty lines counted (0x614f90) - and no plate
+    /// gives each - line by line beside it, empty lines counted - and no plate
     /// where that file has none.
     pub fn numbers_with_plates(&self) -> Vec<(String, String)> {
         let Some(list) = self.number_file.as_ref() else { return Vec::new() };
@@ -560,8 +560,8 @@ impl Vehicle {
             .collect()
     }
 
-    /// The plate of fleet number `number`, as Omsi.exe gives it to an AI bus not in the
-    /// `[registration_free]` mode (0x7e7a80, from the depot buses' 0x70a174): the
+    /// The plate of fleet number `number`, as OMSI gives it to an AI bus not in the
+    /// `[registration_free]` mode: the
     /// `[registration_list]` file's plate of that number when it has one, whatever the mode,
     /// else prefix, number and postfix of the list or automatic mode - the number alone
     /// without a mode.
@@ -694,7 +694,7 @@ mod tests {
     }
 
     /// A repaint's own `[registration_list]` followed by the template's
-    /// `[registration_automatic]`: the list's plate still wins (Omsi.exe 0x7e7a80 reads the
+    /// `[registration_automatic]`: the list's plate still wins (OMSI reads the
     /// list file whatever the mode), prefix + number only where the list has none.
     #[test]
     fn list_plate_wins_over_a_later_automatic_mode() {

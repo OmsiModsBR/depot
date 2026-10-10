@@ -3,7 +3,7 @@
 //! Almost every OMSI content file (`.bus`, `.sco`, `.sli`, `.cfg`, `.hof`, `.map`, …) is a list
 //! of lines in which a *keyword* line such as `[mesh]` is followed by a fixed number of parameter
 //! lines.  Everything else is free text and ignored.  The rules, read off the loaders of
-//! `Omsi.exe` 2.2.032 (every one compares the line it read with its keyword literals by plain
+//! OMSI 2.2.032 (every one compares the line it read with its keyword literals by plain
 //! string equality) and checked against the stock and installed content, are:
 //!
 //! * a keyword is recognised only when the whole line is `[name]`: an indented keyword
@@ -885,7 +885,7 @@ pub fn original_keyboard_cfg(root: &Path) -> PathBuf {
 /// The essentials (see [`ORIGINAL_ESSENTIALS`]) that `root` lacks; empty for a complete
 /// original installation. openOMSI's content folder never counts as one.
 pub fn missing_original_essentials(root: &Path) -> Vec<String> {
-    // (a folder with Omsi.exe in it is the game's, even marked: openOMSI unpacked into the OMSI
+    // (a folder with the game's executable in it is the game's, even marked: openOMSI unpacked into the OMSI
     // folder made it its content folder once - see `content_folder_of` - and every start after
     // that said the game was not there)
     let marked = root.join(CONTENT_MARKER).exists() || root.join(LEGACY_CONTENT_MARKER).exists();

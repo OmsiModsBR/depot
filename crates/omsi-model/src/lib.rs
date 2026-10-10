@@ -324,10 +324,10 @@ pub struct ParticleSystemDef {
 
 impl ParticleSystemDef {
     /// `[smoke]`: position, direction, then speed, its spread, frequency, lifetime, brake
-    /// factor, gravity, start size, growth, initial alpha, a line Omsi.exe skips, red,
-    /// green, blue (the reader at 0x5f5e58: two lines on after the alpha, 0x5f654c). The
-    /// final alpha is not read: it stays 0, as Omsi.exe sets it before the lines
-    /// (0x5f5ec1) - a puff fades out over its life. (Taken from the skipped line, the
+    /// factor, gravity, start size, growth, initial alpha, a line OMSI skips, red,
+    /// green, blue (two lines on after the alpha). The
+    /// final alpha is not read: it stays 0, as OMSI sets it before the lines
+    /// are read - a puff fades out over its life. (Taken from the skipped line, the
     /// stock buses' `10`, every exhaust puff went opaque within a few tenths of a second.)
     pub fn from_smoke(p: &[String]) -> ParticleSystemDef {
         let f = |i: usize| p.get(i).map(|s| omsi_cfg::parse_f32(s)).unwrap_or(0.0);
@@ -436,11 +436,11 @@ pub struct Model {
     pub interior_lights: Vec<InteriorLight>,
     /// `[light]` legacy lights (raw).
     pub lights: Vec<Vec<String>>,
-    /// `[setvar]` lines before any `[item]`: Omsi.exe files them under an item that is
+    /// `[setvar]` lines before any `[item]`: OMSI files them under an item that is
     /// never chosen, so they set nothing (kept for the record).
     pub set_vars: Vec<(String, f32)>,
     /// The model's own paint items (`[item]`: name, `[CTCTexture]` name, texture), each with
-    /// the `[setvar]` lines after it - a `.cti` written into the model.cfg (0x5efae8 files
+    /// the `[setvar]` lines after it - a `.cti` written into the model.cfg (OMSI files
     /// a `[setvar]` under the item before it).
     pub items: Vec<ModelItem>,
     pub unknown_keywords: Vec<(String, usize)>,
@@ -841,9 +841,9 @@ impl Model {
                             .rev()
                             .find(|m| !m.item && m.change.is_none() && m.texture.eq_ignore_ascii_case(&change.texture) && m.index == change.index)
                             .cloned();
-                        // ... and what the [matl_change] (or the item before) set on top: Omsi.exe
-                        // copies the whole material record into the new item (0x5efae8 ->
-                        // 0x40a058), its free texture, scrolling and border with it. Copied from
+                        // ... and what the [matl_change] (or the item before) set on top: OMSI
+                        // copies the whole material record into the new item,
+                        // its free texture, scrolling and border with it. Copied from
                         // the plain [matl] alone, the SD77's lit roller blind (`lights_stand`)
                         // lost its destination text and scrolling with the lights on (#1419).
                         let mut item = change.clone();
@@ -1199,7 +1199,7 @@ mod tests {
 
     use super::*;
 
-    /// The SD202's exhaust `[smoke]` read as Omsi.exe reads it: its 16th line (`10`) is
+    /// The SD202's exhaust `[smoke]` read as OMSI reads it: its 16th line (`10`) is
     /// skipped, the colour is the three after it and a puff fades out to nothing.
     #[test]
     fn a_smoke_skips_the_line_after_its_alpha_and_fades_out() {
@@ -1218,7 +1218,7 @@ mod tests {
     }
 
     /// `[setvar]` belongs to the `[item]` before it (a paint scheme in the model.cfg), as
-    /// Omsi.exe files it; one before any item sets nothing.
+    /// OMSI files it; one before any item sets nothing.
     #[test]
     fn setvar_belongs_to_the_item_before_it() {
         let text = "[setvar]\nlost\n1\n[item]\nBVG\nbody\nbvg.dds\n[setvar]\nDisplay_Type\n2\n[item]\nHVL\nbody\nhvl.dds\n";

@@ -71,11 +71,11 @@ impl Font {
             .unwrap_or_else(|| (self.height / 2).max(1))
     }
 
-    /// The glyph Omsi.exe draws for `c` (0x5d66a4): the character itself (or the same
+    /// The glyph OMSI draws for `c`: the character itself (or the same
     /// character read in another code page: a font and the text it shows need not have
     /// been read in the same one - a Russian font's `Л` is the byte 0xCB, which a font file
     /// without other Cyrillic reads as `Ë`), else for a small Latin letter a-z its capital,
-    /// else nothing: its lookup (0x5d660c) gives -1 and the text is drawn and measured
+    /// else nothing: its lookup gives -1 and the text is drawn and measured
     /// without it (its callers skip a negative index), only the font's gap moves on.
     /// Whitespace the font lacks is still given a width ([`Font::space_width`]) so words
     /// keep their gaps - the font's first glyph, drawn in its place before, put a `|` in
@@ -105,7 +105,7 @@ impl Font {
         })
     }
 
-    /// A text's width as Omsi.exe measures it (0x5d6c00, the scripts' `TextLength` too):
+    /// A text's width as OMSI measures it (the scripts' `TextLength` too):
     /// its glyphs' widths and the font's gap between each two of them.
     pub fn text_width(&self, text: &str) -> i32 {
         let n = text.chars().count() as i32;
@@ -231,8 +231,8 @@ impl FontAtlas {
             }
             return out;
         }
-        // (a text wider than the texture runs off its edge, as Omsi.exe draws it: the
-        // start is not left of the texture and the rest is clipped, 0x5fb79c / 0x5d67bc)
+        // (a text wider than the texture runs off its edge, as OMSI draws it: the
+        // start is not left of the texture and the rest is clipped)
         self.render_unscaled(text, w, h, full_color, rgb, align)
     }
 

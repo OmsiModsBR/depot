@@ -85,7 +85,7 @@ pub struct SplineCurve {
     pub cant_end: f64,
     /// The map's skew at the start and the end: a cross-section at lateral `x` is shifted
     /// along the spline by `x * skew`, the skew running linearly from start to end
-    /// (Omsi.exe sub_5aaef4). Two splines meeting at a corner mitre there (a fence turning
+    /// as OMSI does it. Two splines meeting at a corner mitre there (a fence turning
     /// 90 degrees ends at skew 1 and the next starts at -1).
     pub skew_start: f64,
     pub skew_end: f64,
@@ -99,9 +99,9 @@ pub struct SplineCurve {
 }
 
 /// The half cant width OMSI uses for a spline type: the .sli's `[halfcantwidth]`, else as
-/// far as its `[heightprofile]`s reach either side (Omsi.exe 0x5adb3c: the width starts at
-/// -1 and becomes the larger of -min(0, x0) and max(0, x1) over the height profiles, 0x5ac727
-/// / 0x5ac78d) - not the drawn profile. A type without height profiles (the grass and
+/// far as its `[heightprofile]`s reach either side (the width starts at
+/// -1 and becomes the larger of -min(0, x0) and max(0, x1) over the height profiles)
+/// - not the drawn profile. A type without height profiles (the grass and
 /// pavement pieces of a crossing kit) has none at all, and a cant the map gives it does
 /// nothing: taken over the drawn width, Westcountry's crossings' `-70` tipped their pieces
 /// metres into the ground and the sky, pointed spikes at every corner.
@@ -246,8 +246,8 @@ impl SplineCurve {
     }
 }
 
-/// How many cross-sections a spline is drawn with, as Omsi.exe's TSplineSegment.Generate
-/// (sub_5b1e14) and the mesh builder (sub_5aee00) count them: one every half degree of
+/// How many cross-sections a spline is drawn with, as OMSI's spline generation
+/// and mesh builder count them: one every half degree of
 /// turn, one every half degree the gradient changes, at least one per 10 m - and never
 /// more than the spline type's buffers hold (2580 vertices, 3870 indices), which is what
 /// keeps a road of many profiles to a few dozen.
@@ -257,7 +257,7 @@ pub fn spline_station_count(def: &Spline, curve: &SplineCurve) -> usize {
     // (the turn: Generate's curvature times length)
     let turn = if curve.radius != 0.0 { (l / curve.radius).abs() } else { 0.0 };
     let horizontal = (turn / HALF_DEGREE) as usize + 1;
-    // the height polynomial g0 s + a s^2 + b s^3 (sub_5ab108)
+    // the height polynomial g0 s + a s^2 + b s^3
     let (g0, g1) = (curve.grad_start / 100.0, curve.grad_end / 100.0);
     let (a, b) = match curve.delta_h {
         Some(dh) if l > 1e-6 => ((3.0 * (dh - g0 * l) - (g1 - g0) * l) / (l * l), ((g1 - g0) * l - 2.0 * (dh - g0 * l)) / (l * l * l)),
@@ -274,8 +274,8 @@ pub fn spline_station_count(def: &Spline, curve: &SplineCurve) -> usize {
     n.min(station_cap(def)).max(1)
 }
 
-/// The most cross-sections a spline type's mesh may have (Omsi.exe 0x5adbf0: 2580 vertices
-/// and 3870 indices over all its profiles).
+/// The most cross-sections a spline type's mesh may have (2580 vertices
+/// and 3870 indices over all its profiles, as in OMSI).
 fn station_cap(def: &Spline) -> usize {
     let points: usize = def.profiles.iter().map(|p| p.points.len()).sum();
     let segments: usize = def.profiles.iter().map(|p| p.points.len().saturating_sub(1)).sum();
@@ -297,7 +297,7 @@ struct Patchwork {
     order: Vec<i32>,
 }
 
-/// OMSI's patchwork order (Omsi.exe sub_5aee00): the spline is cut into
+/// OMSI's patchwork order: the spline is cut into
 /// `trunc(length / segment_length) + 1` stretches; each takes a part whose first letter is the
 /// last letter of the part before (or, if invertible, a part laid backwards), drawn by weight
 /// with the map's own random numbers: seeded by the spline's IDCode plus 100 per stretch and
@@ -375,8 +375,8 @@ fn patchwork(def: &Spline, curve: &SplineCurve, stations: &mut usize) -> Option<
 }
 
 /// The point of a spline mesh at distance `s` along it, `x` across (right positive, already
-/// mirrored) and `z` up: the cross-section shifted along the spline by the skew (Omsi.exe
-/// sub_5aaef4: `x * (skew_start (1 - s/L) + skew_end s/L)`), and that shifted distance.
+/// mirrored) and `z` up: the cross-section shifted along the spline by the skew
+/// (`x * (skew_start (1 - s/L) + skew_end s/L)`, as OMSI does), and that shifted distance.
 fn skewed_point(curve: &SplineCurve, s: f64, x: f64, z: f64) -> (DVec3, f64) {
     let t = if curve.length > 0.0 { s / curve.length } else { 0.0 };
     let skew = curve.skew_start * (1.0 - t) + curve.skew_end * t;
@@ -385,7 +385,7 @@ fn skewed_point(curve: &SplineCurve, s: f64, x: f64, z: f64) -> (DVec3, f64) {
 }
 
 /// Extrude a spline definition along a map curve into a mesh (one material slot per texture),
-/// as Omsi.exe's sub_5aee00 does: [`spline_station_count`] cross-sections, each shifted by the
+/// as OMSI does: [`spline_station_count`] cross-sections, each shifted by the
 /// skew; `v = v_scale * (s + tex_offset)` so a chain's textures run on across its joints
 /// (`[scaleTexByLength]`: from 0 to `v_scale` over the whole spline; a `[patchwork_chain]`:
 /// part by part); a mirrored spline is flipped across and its v turned round.
@@ -489,15 +489,15 @@ pub fn build_spline_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin
 
 /// The profiles of the hole a spline laid with `[spline_terrain_align]` cuts into the ground,
 /// as points (x across, height, how far that end of the hole stands off the spline's end):
-/// the `.sli`'s own `[terrainholeprofile]`s, or else those Omsi.exe makes from the drawn
-/// profiles when it loads the spline (0x5ab908, from 0x5adc52): the profiles are strung
+/// the `.sli`'s own `[terrainholeprofile]`s, or else those OMSI makes from the drawn
+/// profiles when it loads the spline: the profiles are strung
 /// together where one begins within a centimetre of where the last ended, and each string
 /// gives a trough from its left end to its right end, 3 cm in from both and 3 mm below them,
 /// whose bottom lies 10 cm under the lowest point of the string and reaches half a metre
 /// past both ends of the spline. (The bottom's corners are where the lines from the edges
 /// through the points below them come down to that depth; with nothing below an edge, a
 /// quarter of the way across. The left edge is always the first profile's first point:
-/// Omsi.exe compares every other profile's start with it but then takes the first one's
+/// OMSI compares every other profile's start with it but then takes the first one's
 /// again.)
 pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
     if !def.terrain_hole_profiles.is_empty() {
@@ -565,8 +565,8 @@ pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
 }
 
 /// The outlines (world x, y) a spline laid with `[spline_terrain_align]` cuts out of the
-/// ground, one per [`terrain_hole_profiles`] profile, as Omsi.exe's TSplineSegment.Generate
-/// makes them (0x5b1178, from 0x5b13b1): along the right edge (the profile's last point)
+/// ground, one per [`terrain_hole_profiles`] profile, as OMSI's spline generation
+/// makes them: along the right edge (the profile's last point)
 /// at the inner cross-sections, across the far end (the profile backwards), back along the
 /// left edge (its first point) and across the near end. An end lies where each point's
 /// third value puts it (the hole reaching past the spline's end) unless the map's
@@ -614,8 +614,8 @@ pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u
         .collect()
 }
 
-/// Does a closed outline cross itself? Omsi.exe cuts no hole along one that does (0x5748bc
-/// and the terrain's "Terrain hole cutting" error): a tight curve folds the inner edge over.
+/// Does a closed outline cross itself? OMSI cuts no hole along one that does (it reports a
+/// "Terrain hole cutting" error for the terrain): a tight curve folds the inner edge over.
 pub fn outline_crosses_itself(ring: &[DVec2]) -> bool {
     let n = ring.len();
     if n < 4 {
@@ -835,7 +835,7 @@ pub fn compute_normals(mesh: &mut MeshData) {
 
 /// Smooth vertex normals from the faces as D3DXComputeNormals makes them for a mesh read
 /// from a file: (v1 - v0) x (v2 - v0) in the file's Direct3D frame, which the y/z swap of
-/// `mesh_from_o3d` mirrors, hence (v2 - v0) x (v1 - v0) here. Omsi.exe rebuilds the normals
+/// `mesh_from_o3d` mirrors, hence (v2 - v0) x (v1 - v0) here. OMSI rebuilds the normals
 /// of every mesh of an object with `[crossing_heightdeformation]` this way. Each face's unit
 /// normal counts with the face's angle at the vertex, D3DX's default weighting (neither
 /// D3DXTANGENT_WEIGHT_BY_AREA nor _EQUAL), not with its area.
@@ -905,8 +905,8 @@ pub fn terrain_height(t: &Terrain, x: f32, y: f32) -> f32 {
 }
 
 /// Rotation of a map object: heading (Z), pitch (X), bank (Y). The position is kept apart
-/// as the instance origin (f64). Pitched first, then banked, then turned, as Omsi.exe puts
-/// an object down (sub_79cb18: RotationX(pitch) · RotationZ(bank) · RotationY(heading)) - a
+/// as the instance origin (f64). Pitched first, then banked, then turned, as OMSI puts
+/// an object down (RotationX(pitch) · RotationZ(bank) · RotationY(heading)) - a
 /// rock both pitched and banked a good deal leant otherwise with the bank taken first.
 pub fn object_rotation(rot_deg: [f64; 3]) -> Mat4 {
     let heading = (-rot_deg[0]).to_radians() as f32; // clockwise heading → counter-clockwise rotation about +z
@@ -917,8 +917,8 @@ pub fn object_rotation(rot_deg: [f64; 3]) -> Mat4 {
 }
 
 /// The same angles in the order D3DX's `QuaternionRotationYawPitchRoll` applies them (the
-/// bank first, then the pitch, then the heading), which is how Omsi.exe turns an attached
-/// object by its own angles (0x79d547).
+/// bank first, then the pitch, then the heading), which is how OMSI turns an attached
+/// object by its own angles.
 pub fn object_rotation_ypr(rot_deg: [f64; 3]) -> Mat4 {
     let heading = (-rot_deg[0]).to_radians() as f32;
     let pitch = rot_deg[1].to_radians() as f32;
@@ -971,7 +971,7 @@ pub fn mesh_from_o3d_turning(m: &omsi_o3d::Mesh, may_turn: bool) -> MeshData {
         }
         let first = out.indices.len() as u32;
         out.indices.extend_from_slice(&idx);
-        // Omsi.exe draws per material, so a material-less o3d (bone dummies, collision
+        // OMSI draws per material, so a material-less o3d (bone dummies, collision
         // meshes) is invisible; its triangles stay for whatever reads them.
         if !m.materials.is_empty() {
             out.ranges.push((first, idx.len() as u32, slot as u32));
@@ -1098,7 +1098,7 @@ mod tests {
         assert_eq!(merged.indices.len(), b.indices.len() * 2);
     }
 
-    /// A map object turned, pitched and banked a good deal at once stands as Omsi.exe puts
+    /// A map object turned, pitched and banked a good deal at once stands as OMSI puts
     /// it: `v · RotationX(pitch) · RotationZ(bank) · RotationY(heading)` in Direct3D's
     /// left-handed frame (x right, y up, z forward), read in the world's (x, z, y).
     #[test]
@@ -1416,7 +1416,7 @@ mod tests {
         assert_eq!(ts.hole_height(k(12.0, 20.0)), None);
         assert!(ts.cut_at(115.0, 115.0, 0.0, 0.12));
         assert!(!ts.cut_at(200.0, 200.0, 0.0, 0.12));
-        // a surface alone takes no ground away (only the map's holes do, as in Omsi.exe)
+        // a surface alone takes no ground away (only the map's holes do, as in OMSI)
         // unless OMSI_ROAD_CUT asks for it
         assert_eq!(ts.cut_at(12.0, 20.0, 1.95, 0.12), road_cut());
         assert!(!ts.cut_at(12.0, 20.0, 1.5, 0.12));
@@ -1507,7 +1507,7 @@ mod tests {
         def
     }
 
-    /// Omsi.exe counts a cross-section every half degree of turn, but never more than its
+    /// OMSI counts a cross-section every half degree of turn, but never more than its
     /// buffers hold: an island's nose (radius 2, a quarter turn) is round, a road of many
     /// profiles stays at a few dozen.
     #[test]
@@ -1663,7 +1663,7 @@ mod tests {
         assert_eq!(positive_det_faces_forward(&o3d), Some(false));
         assert!(turns_round(&o3d));
         // the same faces from a file without a matrix (an `.x`, an old `.o3d`) or with the
-        // identity: drawn as wound, as Omsi.exe draws every mesh (#874)
+        // identity: drawn as wound, as OMSI draws every mesh (#874)
         let plain = omsi_o3d::Mesh { has_transform: false, ..o3d.clone() };
         assert!(!turns_round(&plain));
         assert_eq!(mesh_from_o3d(&plain).indices[..3], [0, 1, 2]);
@@ -1947,7 +1947,7 @@ impl Probe {
 /// two edges come out a fraction of a millimetre apart: a point that fell into that sliver met
 /// neither face and dropped through to whatever lay under the road (a car's wheel fell 18 cm
 /// onto the ground for a frame where Spandau's Falkenseer Chaussee joins its next segment, and
-/// the cars bounced at the seam). Omsi.exe's own meshes are drawn without such gaps showing;
+/// the cars bounced at the seam). OMSI's own meshes are drawn without such gaps showing;
 /// a few millimetres closes them and is lost in a tyre's footprint.
 pub const SEAM_TOLERANCE: f32 = 0.005;
 
@@ -2297,7 +2297,7 @@ impl DriveGrid {
 /// surface height is used for ground queries.
 /// How far below the ground a surface may lie and still take the ground away: enough for a
 /// Take the ground away under every road surface lying about its height (`OMSI_ROAD_CUT=1`).
-/// Omsi.exe does not: the ground goes only where the map says (`[terrainhole]` meshes, the
+/// OMSI does not: the ground goes only where the map says (`[terrainhole]` meshes, the
 /// splines' `[terrainholeprofile]`, a tile's `.hole` file), and a road lying on it wins by
 /// its depth bias. Cut by a raster of 1.5-3 m texels, the ground went a metre or two past
 /// the road's edge too, and the sky showed through along kerbs and car parks.
@@ -2349,7 +2349,7 @@ pub struct TileSurface {
     hole_cover: Vec<Option<Box<[u16; BLOCK * BLOCK]>>>,
     /// The outlines the splines laid with `[spline_terrain_align]` cut out of the ground
     /// ([`spline_hole_outlines`]), in tile metres, with their bounds (x0, y0, x1, y1): cut
-    /// exactly along them, as Omsi.exe cuts the terrain's triangles, not by texel.
+    /// exactly along them, as OMSI cuts the terrain's triangles, not by texel.
     outlines: Vec<(Vec<Vec2>, [f32; 4])>,
     /// The faces the wheels stand on over this tile (spline height profiles, surface objects):
     /// a texel of the raster is most of a metre wide and holds one height, which put a wheel
