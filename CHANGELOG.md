@@ -29,6 +29,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
 ### Changed
+- `omsi-audio` sound set: comments cleaned of references to addresses of the reference executable; they
+  describe observable behaviour only. Comment text only, no code change.
 - Articulated buses and trailers: every section is a body of its own. Behind the player's vehicle the rear
   section of an articulated bus and a lorry's trailer run on the same wheel physics as the front, each with
   its own `.bus` mass, inertia, centre of gravity, axles, springs and brakes, held by a joint that follows
