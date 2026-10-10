@@ -2,7 +2,11 @@
 //! the envelope laid over the road along its length ([`tyre_line`]), a kerb under part of
 //! its tread ([`tread_step`]) and the faces it cannot climb ([`WallFace`], [`track_walls`]).
 
-use super::params::{EDGE, EDGE_HALVINGS, ENVELOPE, FACE_HALVINGS, FACE_SPAN, HALF_WIDTH, LATTICE, SIDE_REACH, TYRE_SAMPLES};
+use super::params::{
+    EDGE, EDGE_HALVINGS, ENVELOPE, FACE_HALVINGS, FACE_SPAN, HALF_WIDTH, LATTICE, SIDE_REACH,
+    TREAD_HALVINGS, TREAD_STEP_MIN, TYRE_SAMPLES, WALL_BEFORE, WALL_BEHIND, WALL_FACING, WALL_GRAZE,
+    WALL_KEEP,
+};
 use glam::{DVec2, DVec3, Vec2, Vec3};
 
 /// The ground a wheel finds at one point: the highest face at or below the probe's top and
@@ -219,13 +223,13 @@ pub(super) fn tread_step(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec
     for side in [-1.0f64, 1.0] {
         let Some(gs) = g(side * w) else { continue };
         let h = gs - gc;
-        if h.abs() < 0.02 {
+        if h.abs() < TREAD_STEP_MIN {
             continue;
         }
         // where across the tread the ground changes: halving between the middle and the
         // shoulder
         let (mut lo, mut hi) = (0.0, w);
-        for _ in 0..5 {
+        for _ in 0..TREAD_HALVINGS {
             let m = 0.5 * (lo + hi);
             match g(side * m) {
                 Some(z) if (z - gs).abs() < (z - gc).abs() => hi = m,
@@ -268,10 +272,10 @@ pub(super) fn track_walls(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, old: &[W
             let d = f.distance(hub);
             let n = f.normal.as_dvec2();
             let foot = hub2 - n * d as f64;
-            d > -r && d < 2.5 * r && is_wall(foot - n * 0.05) && !is_wall(foot + n * 0.03)
+            d > -r && d < WALL_KEEP * r && is_wall(foot - n * WALL_BEHIND) && !is_wall(foot + n * WALL_BEFORE)
         })
         .collect();
-    let facing = |out: &[WallFace], dir: Vec2| out.iter().any(|f| f.normal.dot(-dir) > 0.5);
+    let facing = |out: &[WallFace], dir: Vec2| out.iter().any(|f| f.normal.dot(-dir) > WALL_FACING);
     let fwd2 = fwd_h.truncate().normalize_or(Vec2::Y);
     for (clear, wall) in line.faces.iter().flatten().copied() {
         let dir = fwd2 * wall.signum();
@@ -328,7 +332,7 @@ fn find_face(is_wall: &dyn Fn(DVec2) -> bool, hub2: DVec2, dir: Vec2, d: f32) ->
     if normal.dot(dir) > 0.0 {
         normal = -normal;
     }
-    if normal.dot(dir) > -0.1 {
+    if normal.dot(dir) > -WALL_GRAZE {
         // a face the lines graze is no face to push the tyre along
         normal = -dir;
     }

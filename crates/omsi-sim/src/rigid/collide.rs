@@ -2,7 +2,10 @@
 //! and what a hit tells the scripts ([`Impact`]).
 
 use super::body::RigidBody;
-use super::params::{CRASH_SPEED, RESTITUTION, SCRAPE_FRICTION};
+use super::params::{
+    BOUNCE_SPEED, CLEARANCE, CRASH_SPEED, INSIDE_DEPTH, INSIDE_FRAMES, INSIDE_REACH, RESTITUTION,
+    SCRAPE_FRICTION,
+};
 use crate::collision::Obb;
 use glam::{DVec3, Vec3};
 
@@ -59,8 +62,8 @@ impl RigidBody {
                     continue;
                 }
                 let Some(c) = me.contact(o) else { continue };
-                let rel = (glam::DVec2::new(self.velocity.x as f64, self.velocity.y as f64) - o.velocity).length() + self.omega.z.abs() as f64 * 6.0;
-                if c.depth > 0.5 + rel * dt as f64 * 2.0 {
+                let rel = (glam::DVec2::new(self.velocity.x as f64, self.velocity.y as f64) - o.velocity).length() + self.omega.z.abs() as f64 * INSIDE_REACH;
+                if c.depth > INSIDE_DEPTH + rel * dt as f64 * INSIDE_FRAMES {
                     continue;
                 }
                 if deepest.map(|d| c.depth > d.1.depth).unwrap_or(true) {
@@ -111,13 +114,13 @@ impl RigidBody {
             // out of the obstacle along the shortest way, a millimetre clear - out of a moving
             // one only as far as the body itself ran into it this frame: a standing car is not
             // ploughed through, and one that drives into the bus does not drag it along
-            let out = if o.mass > 0.0 { (c.depth as f32).min((-vn).max(0.0) * dt + 0.001) } else { c.depth as f32 + 0.001 };
+            let out = if o.mass > 0.0 { (c.depth as f32).min((-vn).max(0.0) * dt + CLEARANCE) } else { c.depth as f32 + CLEARANCE };
             self.position += (n * out).as_dvec3();
             if vn_full >= 0.0 {
                 continue;
             }
             // a gentle push is dead, a real blow gives a little back
-            let e = if -vn_full > 1.0 { RESTITUTION } else { 0.0 };
+            let e = if -vn_full > BOUNCE_SPEED { RESTITUTION } else { 0.0 };
             let j = -(1.0 + e) * vn.min(0.0) / k_n;
             let mut p = n * j;
             let vt = v_c - n * vn;

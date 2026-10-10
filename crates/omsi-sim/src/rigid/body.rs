@@ -4,7 +4,11 @@
 
 use super::collide::Impact;
 use super::ground::GroundProbe;
-use super::params::{BUMP, DEFAULT_INERTIA_INV, OMSI_FRAME, TYRE_C, TYRE_K, TYRE_OVER_SPRING};
+use super::params::{
+    BODY_DAMPING, BUMP, DEFAULT_COG_HEIGHT, DEFAULT_DAMPER, DEFAULT_INERTIA_INV, DEFAULT_MAX_FORCE,
+    DEFAULT_SPRING, DRY_GRIP, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MAX_STEER, OMSI_FRAME,
+    ROLLING_COEFFICIENT, TIP_OVER, TRACK_SHARE, TYRE_C, TYRE_K, TYRE_OVER_SPRING,
+};
 use super::suspension::wheel_rest_loads;
 use super::train::{step_train, BodyInputs};
 use super::tyre::Substep;
@@ -15,7 +19,7 @@ use omsi_vehicle::Vehicle;
 
 /// What is left of the body's pitch and roll rate after `dt` seconds of OMSI's damping.
 pub(super) fn body_damping(body_freq: f32, dt: f32) -> f32 {
-    let x0 = 1.5 * body_freq * OMSI_FRAME;
+    let x0 = BODY_DAMPING * body_freq * OMSI_FRAME;
     if x0 <= 1e-6 || dt <= 0.0 {
         return 1.0;
     }
@@ -118,7 +122,7 @@ impl RigidBody {
         // 300, twice as fast, and every uneven patch rocked it like a boat.
         let inertia = Vec3::new((moi[0] * scale).max(100.0), (moi[2] * scale).max(100.0), (moi[1] * scale).max(100.0));
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
-        let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(1.0) };
+        let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(DEFAULT_COG_HEIGHT) };
         let cog = Vec3::new(cog_xy.0, cog_xy.1, cog_z);
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let mut wheels = Vec::new();
@@ -126,13 +130,13 @@ impl RigidBody {
         for (ai, a) in def.axles.iter().enumerate() {
             let r = (a.wheel_diameter / 2.0).max(0.15);
             let z = hub_heights.get(ai).copied().flatten().unwrap_or(r);
-            let k = if a.spring > 0.0 { a.spring * 1000.0 } else { 150_000.0 };
-            let c = if a.damper > 0.0 { a.damper * 1000.0 } else { 12_000.0 };
-            let max_force = if a.max_force > 0.0 { a.max_force * 1000.0 } else { 200_000.0 };
+            let k = if a.spring > 0.0 { a.spring * 1000.0 } else { DEFAULT_SPRING * 1000.0 };
+            let c = if a.damper > 0.0 { a.damper * 1000.0 } else { DEFAULT_DAMPER * 1000.0 };
+            let max_force = if a.max_force > 0.0 { a.max_force * 1000.0 } else { DEFAULT_MAX_FORCE * 1000.0 };
             // where the tyres stand across (the middle of the band between the two widths)
             // and where the strut pushes the body (the outer width)
             let outer = (a.max_width / 2.0).max(0.3);
-            let inner = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * 0.85 };
+            let inner = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * TRACK_SHARE };
             let tyre_k = TYRE_K.max(k * TYRE_OVER_SPRING);
             let tyre_c = TYRE_C * (tyre_k / TYRE_K).sqrt();
             for side in [-1.0f32, 1.0] {
@@ -146,13 +150,13 @@ impl RigidBody {
             w.rest_load = loads.get(*a).copied().unwrap_or(0.0);
         }
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(10.0, 60.0);
+        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
         // a file without a usable `[inv_min_turnradius]` still steers its front axle as far
         // as the old default lock
         let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 { def.inv_min_turn_radius } else { max_steer_deg.to_radians().tan() / s };
-        let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { 150.0 }).sum();
+        let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { DEFAULT_SPRING }).sum();
         let body_freq = (springs / (mass / 1000.0)).max(0.0).sqrt();
-        RigidBody { mass, inertia, cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg, rot_pnt_long: def.rot_pnt_long, inv_min_turn_radius, body_freq, holding: true, rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { 0.008 * mass * 9.81 }, accel_body: Vec3::ZERO, friction: 0.85, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true }
+        RigidBody { mass, inertia, cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg, rot_pnt_long: def.rot_pnt_long, inv_min_turn_radius, body_freq, holding: true, rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { ROLLING_COEFFICIENT * mass * GRAVITY }, accel_body: Vec3::ZERO, friction: DRY_GRIP, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true }
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading
@@ -170,7 +174,7 @@ impl RigidBody {
             w.touch = None;
         }
         // standing: the ground holds the body up against gravity
-        self.accel_body = Vec3::new(0.0, 0.0, 9.81);
+        self.accel_body = Vec3::new(0.0, 0.0, GRAVITY);
         for w in self.wheels.iter_mut() {
             w.ground_seen = false;
             w.walls.clear();
@@ -201,7 +205,7 @@ impl RigidBody {
     /// to the right (#953, #1073).
     pub fn axle_steer(&self, i: usize) -> f32 {
         let Some(w) = self.wheels.get(i) else { return 0.0 };
-        ((w.attach.y - self.rot_pnt_long) * self.kappa).atan().clamp(-1.05, 1.05)
+        ((w.attach.y - self.rot_pnt_long) * self.kappa).atan().clamp(-MAX_STEER, MAX_STEER)
     }
 
     /// Forward speed (m/s) in the body frame.
@@ -286,10 +290,10 @@ impl RigidBody {
             // scrub ate the drive, 60 % steering left a twentieth of the push and full lock
             // none ("the engine revs but the bus gets slower the more I steer")
             let across = (1.0 - w.attach.x * kappa).max(0.2);
-            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across).atan().clamp(-1.05, 1.05);
+            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across).atan().clamp(-MAX_STEER, MAX_STEER);
             w.steered = w.steer != 0.0;
         }
-        self.steer_deg = ((front - self.rot_pnt_long) * kappa).atan().clamp(-1.05, 1.05).to_degrees();
+        self.steer_deg = ((front - self.rot_pnt_long) * kappa).atan().clamp(-MAX_STEER, MAX_STEER).to_degrees();
         self.wheel_impacts.clear();
     }
 
@@ -298,7 +302,7 @@ impl RigidBody {
         let (rot, body_fwd, towed, force, torque) = (s.rot, s.body_fwd, s.towed, s.force, s.torque);
         let along = force.dot(body_fwd);
         let acc = (force - body_fwd * along) / self.mass + body_fwd * (along / (self.mass + towed));
-        *accel_sum += rot.inverse().mul_vec3(acc - Vec3::new(0.0, 0.0, -9.81));
+        *accel_sum += rot.inverse().mul_vec3(acc - Vec3::new(0.0, 0.0, -GRAVITY));
         self.velocity += acc * h;
         self.position += (self.velocity * h).as_dvec3();
         let iw = self.inertia * self.omega;
@@ -314,7 +318,7 @@ impl RigidBody {
         self.accel_body = accel_sum / substeps as f32;
         // rotation keeps the body from tipping over completely (safety net for bad ground)
         let up = self.orientation.mul_vec3(Vec3::Z);
-        if up.z < 0.3 {
+        if up.z < TIP_OVER {
             let (heading, _, _) = self.heading_pitch_bank();
             self.orientation = Quat::from_rotation_z((-heading).to_radians() as f32);
             self.omega = Vec3::ZERO;

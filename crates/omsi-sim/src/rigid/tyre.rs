@@ -5,7 +5,11 @@
 use super::body::RigidBody;
 use super::collide::Impact;
 use super::ground::{track_walls, tread_step, tyre_line, GroundProbe};
-use super::params::{CLIMB, STANDING, WALL_HEIGHT};
+use super::params::{
+    AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
+    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, KAPPA_ARM_MIN, MASS_PER_FRONT_AREA, PITCH_SPEED,
+    REHOLD_SPEED, STANDING, WALL_HEIGHT,
+};
 use super::toggles::omsi_suspension;
 use super::wheel::{sign, TyreFrame};
 use glam::{Quat, Vec2, Vec3};
@@ -73,13 +77,13 @@ impl RigidBody {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn prepare(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], air: bool, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Substep {
         let rot = self.orientation;
-        let mut force = Vec3::new(0.0, 0.0, -9.81 * self.mass);
+        let mut force = Vec3::new(0.0, 0.0, -GRAVITY * self.mass);
         // the air: ½ ρ cw A v² (cw 0.6, the front a bus's or a car's by the mass). Without it
         // a bus rolling downhill without its brakes ran on to any speed
         if air {
             let v = self.velocity;
-            let area = (self.mass / 2200.0).clamp(2.0, 8.5);
-            force -= v * v.length() * (0.5 * 1.2 * 0.6 * area);
+            let area = (self.mass / MASS_PER_FRONT_AREA).clamp(FRONT_AREA_MIN, FRONT_AREA_MAX);
+            force -= v * v.length() * (0.5 * AIR_DENSITY * DRAG_COEFFICIENT * area);
         }
         let mut torque = Vec3::ZERO; // body frame
         // the towed mass moves with the body along its length
@@ -96,7 +100,7 @@ impl RigidBody {
             let w = &self.wheels[i];
             let TyreFrame { fwd_h, hub, .. } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
-            let z_top = if w.ground_seen { w.ground_z + (CLIMB * r) as f64 } else { hub.z + 0.05 };
+            let z_top = if w.ground_seen { w.ground_z + (CLIMB * r) as f64 } else { hub.z + HUB_REACH };
             let wall_top = hub.z + WALL_HEIGHT;
             // faces are looked for as far ahead as the hub moves in a substep, so that
             // the first touch is already answered before the tyre is in the face
@@ -104,7 +108,7 @@ impl RigidBody {
             let look = Vec2::new(v_hub.dot(fwd_h).abs(), v_hub.dot(Vec3::new(fwd_h.y, -fwd_h.x, 0.0)).abs()) * h;
             let line = tyre_line(probe, hub, fwd_h, r, z_top, wall_top, look.x);
             let ground = match line.ground {
-                None if w.ground_seen => tyre_line(probe, hub, fwd_h, r, hub.z + 0.05, wall_top, look.x).ground,
+                None if w.ground_seen => tyre_line(probe, hub, fwd_h, r, hub.z + HUB_REACH, wall_top, look.x).ground,
                 g => g,
             };
             // across the tread: a kerb under part of it (see `tread_step`)
@@ -167,7 +171,7 @@ impl RigidBody {
                 r: r_world,
                 fwd: body_fwd,
                 right: Vec3::ZERO,
-                base: body_fwd * (-9.81 * d.mass * body_fwd.z),
+                base: body_fwd * (-GRAVITY * d.mass * body_fwd.z),
                 drive: drive * share,
                 brake: d.brake.max(0.0) * share,
                 grip: d.load,
@@ -230,7 +234,7 @@ impl RigidBody {
         // gravity's height over the road: OMSI 2 takes the tyres' forces at the hubs,
         // their radius more ((drive - brake) x d/2 besides [schwerpunkt] x
         // the pull), and not while the bus stands with its brakes holding.
-        if self.velocity.dot(body_fwd).abs() > 0.2 {
+        if self.velocity.dot(body_fwd).abs() > PITCH_SPEED {
             let r = self.wheels.iter().map(|w| w.radius).sum::<f32>() / self.wheels.len().max(1) as f32;
             torque.x += long_sum * r;
         }
@@ -248,7 +252,7 @@ impl RigidBody {
         let w = self.omega + (torque - self.omega.cross(self.inertia * self.omega)) / self.inertia * h;
         let lat: Vec<usize> = (0..contacts.len()).filter(|&k| contacts[k].lateral && contacts[k].grip > 0.0).collect();
         // (following its wheels: hardly any speed across the body)
-        let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < 0.5 && self.velocity.dot(body_fwd).abs() > 1.0;
+        let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
         let arms: Vec<(Vec3, f32)> = lat
             .iter()
             .map(|&k| {
@@ -269,7 +273,7 @@ impl RigidBody {
         // no wheel spinning or locked
         let grip_all: f32 = lat.iter().map(|&k| self.friction * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
-        let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(0.5)).abs();
+        let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(KAPPA_ARM_MIN)).abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: OMSI 2 drops the holding state there)
         let airborne = omsi_suspension() && self.wheels.iter().any(|w| !w.on_ground);
@@ -278,7 +282,7 @@ impl RigidBody {
         }
         // (holding, a tyre may pass several times its grip for the moment it takes
         // the body to follow a quick turn of the wheel: OMSI sets the yaw rate outright)
-        let reach = if self.holding { 8.0 } else { 1.0 };
+        let reach = if self.holding { HOLD_REACH } else { 1.0 };
         let j = vec![0.0f32; lat.len()];
         Lateral { lat, arms, j, v, w, reach, gripped, slipping, m, mt, joint_p: Vec3::ZERO, joint_l: Vec3::ZERO, jointed: false }
     }
@@ -311,7 +315,7 @@ impl RigidBody {
             *force += contacts[k].right * (j[q] / h);
             *torque += arms[q].0 * (j[q] / h);
         }
-        if !self.holding && !slipping && lat.iter().all(|&k| (v + rot.mul_vec3(w).cross(contacts[k].r)).dot(contacts[k].right).abs() < 0.1) {
+        if !self.holding && !slipping && lat.iter().all(|&k| (v + rot.mul_vec3(w).cross(contacts[k].r)).dot(contacts[k].right).abs() < REHOLD_SPEED) {
             self.holding = true;
         }
         // the bend's pull rolls the body out of it ([schwerpunkt] x mass x

@@ -4,7 +4,12 @@
 
 use super::body::RigidBody;
 use super::ground::GroundProbe;
-use super::params::{BUMP, CLIMB, DROOP, UNSPRUNG, WALL_C, WALL_K};
+use super::params::{
+    BUMP, BUMP_LOAD_MAX, BUMP_STIFFNESS, BUMP_TRAVEL, CLIMB, DAMPER_RATE_MAX, DROOP, DROOP_REACH,
+    ENVELOPE_SLOPE, GRAVITY, MIN_LOAD_SHARE, MIN_WHEEL_MASS, OMSI_PROBE_HEIGHT, REBOUND_LOAD_MAX,
+    RISE_MIN_SPEED, RISE_SPARE, STEP_LOAD_MAX, TYRE_CLOSING_MAX, TYRE_LOAD_MAX, UNSPRUNG, WALL_C,
+    WALL_K,
+};
 use super::toggles::{no_wheel_slip, omsi_suspension};
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
@@ -16,7 +21,7 @@ use omsi_vehicle::Vehicle;
 pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
     let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
     let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    let g = 9.81;
+    let g = GRAVITY;
     let n = (def.axles.len() * 2).max(1) as f32;
     let sy: f32 = def.axles.iter().map(|a| 2.0 * a.long).sum();
     let syy: f32 = def.axles.iter().map(|a| 2.0 * a.long * a.long).sum();
@@ -28,7 +33,7 @@ pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
     } else {
         (mass * g / n, 0.0)
     };
-    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * 0.2)).collect()
+    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * MIN_LOAD_SHARE)).collect()
 }
 
 impl RigidBody {
@@ -85,7 +90,7 @@ impl RigidBody {
                 // radius instead, a mod whose tyre mesh is larger than that radius stood
                 // with its wheels drawn sunk a few centimetres into the road.
                 let plane0 = position + rot.mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog).as_dvec3();
-                let under = probe(plane0.x, plane0.y, top).below.or_else(|| probe(plane0.x, plane0.y, plane0.z + 3.0).below);
+                let under = probe(plane0.x, plane0.y, top).below.or_else(|| probe(plane0.x, plane0.y, plane0.z + OMSI_PROBE_HEIGHT).below);
                 let t = under.map(|g| (g - plane0.z) as f32);
                 if let Some(g) = under {
                     w.ground_z = g;
@@ -110,7 +115,7 @@ impl RigidBody {
                 w.load = n.max(0.0);
                 (if on { n.max(0.0) } else { 0.0 }, if on { n.max(0.0) } else { 0.0 }, n)
             } else {
-                let m_w = (w.rest_load / 9.81 * UNSPRUNG).max(40.0);
+                let m_w = (w.rest_load / GRAVITY * UNSPRUNG).max(MIN_WHEEL_MASS);
                 let k = w.spring * w.spring_factor.max(0.05);
                 // How far the ground under the tyre can rise within a substep: a tyre rolls up
                 // a step along its envelope, never steeper than 2.4 (see CLIMB). A reading
@@ -119,7 +124,7 @@ impl RigidBody {
                 // climbed at that pace - taken at once it struck the wheel with 260 kN and
                 // threw it into its arch.
                 let v_along = (self.velocity + omega_world.cross((hub - self.position).as_vec3())).dot(fwd_h).abs();
-                let max_rise = (v_along.max(0.5) * 2.4 + 0.3) * h;
+                let max_rise = (v_along.max(RISE_MIN_SPEED) * ENVELOPE_SLOPE + RISE_SPARE) * h;
                 let need = found[i].map(|(need, _, _)| if w.ground_seen { need.min(w.ground_z + r as f64 + max_rise as f64) } else { need });
                 let touch = need.map(|need| ((need - hub0.z) / up.z.max(0.3) as f64) as f32);
                 if let Some(need) = need {
@@ -128,12 +133,12 @@ impl RigidBody {
                 }
                 let (tyre_f, tyre_static) = match touch {
                     // (a wheel that cannot reach the ground at full droop hangs in the air)
-                    Some(t) if t >= -DROOP - 0.05 => {
+                    Some(t) if t >= -DROOP - DROOP_REACH => {
                         let pen = t - w.compression;
-                        let closing = w.touch.map(|p| ((t - p) / h).clamp(-3.0, 3.0)).unwrap_or(0.0) - w.compression_rate;
+                        let closing = w.touch.map(|p| ((t - p) / h).clamp(-TYRE_CLOSING_MAX, TYRE_CLOSING_MAX)).unwrap_or(0.0) - w.compression_rate;
                         let s = w.tyre_k * pen + w.rest_load;
                         if s > 0.0 {
-                            ((s + w.tyre_c * closing).clamp(0.0, w.max_force * 3.0), s)
+                            ((s + w.tyre_c * closing).clamp(0.0, w.max_force * TYRE_LOAD_MAX), s)
                         } else {
                             (0.0, 0.0)
                         }
@@ -149,9 +154,9 @@ impl RigidBody {
                 // (OMSI: spring and damper together never pass more than `achse_maxforce`;
                 // beyond it the bump stop, a rubber block of its own, takes over)
                 let c = w.compression;
-                let rate_c = w.compression_rate.clamp(-1.5, 1.5);
-                let bump = if c > BUMP { (w.spring * 10.0 * (c - BUMP)).min(w.max_force * 2.0) } else { 0.0 };
-                let n = (k * c.max(0.0) + w.damper * rate_c).clamp(-w.max_force * 0.5, w.max_force) + bump;
+                let rate_c = w.compression_rate.clamp(-DAMPER_RATE_MAX, DAMPER_RATE_MAX);
+                let bump = if c > BUMP { (w.spring * BUMP_STIFFNESS * (c - BUMP)).min(w.max_force * BUMP_LOAD_MAX) } else { 0.0 };
+                let n = (k * c.max(0.0) + w.damper * rate_c).clamp(-w.max_force * REBOUND_LOAD_MAX, w.max_force) + bump;
                 // the wheel moves against the body, which is itself accelerated by what holds
                 // it up (`accel_body.z`, 9.81 m/s² standing, 0 in the air: a wheel off a kerb
                 // drops, a wheel of a body in the air does not) - semi-implicit Euler, stable
@@ -161,8 +166,8 @@ impl RigidBody {
                 if w.compression < -DROOP {
                     w.compression = -DROOP;
                     w.compression_rate = w.compression_rate.max(0.0);
-                } else if w.compression > BUMP + 0.08 {
-                    w.compression = BUMP + 0.08;
+                } else if w.compression > BUMP + BUMP_TRAVEL {
+                    w.compression = BUMP + BUMP_TRAVEL;
                     w.compression_rate = w.compression_rate.min(0.0);
                 }
                 w.on_ground = tyre_f > 0.0;
@@ -203,7 +208,7 @@ impl RigidBody {
             // wheel's own mass.
             let normal = (Vec3::Z - fwd_h * slope).normalize();
             let along_up = normal.dot(up).max(0.3);
-            let carried = tyre_static.min(w.max_force * 2.0);
+            let carried = tyre_static.min(w.max_force * STEP_LOAD_MAX);
             let step = (normal - up * normal.dot(up)) * (carried / along_up);
             w.step_force += step.dot(fwd_h);
             let contact = hub + (fwd_h * contact_dx.clamp(-r, r)).as_dvec3() - DVec3::Z * r as f64;

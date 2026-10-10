@@ -2,7 +2,7 @@
 //! as OMSI keeps it.
 
 use super::ground::WallFace;
-use super::params::{DROOP, STANDING};
+use super::params::{DROOP, SLIP_MARGIN, STANDING};
 use super::toggles::no_wheel_slip;
 use super::tyre::Contact;
 use glam::{DVec3, Quat, Vec3};
@@ -95,7 +95,7 @@ impl RigidWheel {
         }
         if !self.slipping {
             let wanted = if c.v_long.abs() > STANDING { c.drive - c.brake * c.v_long.signum() } else { f_long_wanted };
-            if wanted.abs() > mu_n * 1.02 && mu_n > 0.0 && !no_slip {
+            if wanted.abs() > mu_n * SLIP_MARGIN && mu_n > 0.0 && !no_slip {
                 self.slipping = true;
                 self.locked = false;
                 self.spin = ground;
