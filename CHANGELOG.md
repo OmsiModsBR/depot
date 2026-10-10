@@ -43,6 +43,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   for the rigid body, the kinematic model, the AI and the coupled parts alike; it was written out four times. The
   physics traces gain an AI vehicle with a coupled section and a kinematic crash. No behaviour change: the
   traces are identical bit for bit.
+- omsi-sim: a vehicle's `physics` and `rigid` fields become `enum Dynamics` (its rigid body, or the simple model
+  renamed `KinematicModel`) next to the `VehicleMotion` the physics writes each frame; `VehicleInstance` gains
+  `physics_state()`/`set_physics_state()` (the offscreen run's save and restore) and `set_wheel_travel()` (the LAN's
+  copies). No behaviour change: the physics traces are identical bit for bit.
 - the smaller crates (geometry, map, vehicle, model, texture, content, cfg, scenery, script, launcher-core, o3d, audio example): comments cleaned of addresses, offsets and mentions of the reference
 - omsi-app: comments cleaned of addresses, offsets and mentions of the reference
 - omsi-sim: comments cleaned of addresses, offsets and mentions of the reference

@@ -2926,12 +2926,7 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
         glide(&mut rv.values, &pose.values, k);
     }
     // the wheels' travel (kneeling, bumps) as theirs
-    let mut it = rv.suspension.iter();
-    for axle in rv.vehicle.physics.wheels.iter_mut() {
-        for w in axle.iter_mut() {
-            w.suspension = it.next().copied().unwrap_or(0.0);
-        }
-    }
+    rv.vehicle.set_wheel_travel(rv.suspension.iter().copied());
     // the horn: pressed and let go as theirs (the scripts fire its sound events)
     let horn = pose.flags & omsi_net::FLAG_HORN != 0;
     if horn != rv.horn {

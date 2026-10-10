@@ -32,7 +32,7 @@ impl VehicleInstance {
     /// wheel's brake force: its own and its share of the vehicle's (the rolling resistance's
     /// share is the physics' own).
     pub(super) fn take_drive_inputs(&mut self) -> DriveInputs {
-        let c = self.physics.controls;
+        let c = self.controls;
         self.put(self.v_throttle, c.throttle);
         self.put(self.v_brake, c.brake);
         self.put(self.v_clutch, c.clutch);
@@ -90,9 +90,9 @@ impl VehicleInstance {
         self.put(self.v_n_wheel, rpm);
     }
 
-    /// `A_Trans_*` (m/s²), which the rest of the game reads as `physics.a_trans` too.
+    /// `A_Trans_*` (m/s²), which the rest of the game reads in the motion too.
     pub(super) fn show_a_trans(&mut self, a: Vec3) {
-        self.physics.a_trans = a;
+        self.motion.a_trans = a;
         self.put(self.v_accel[0], a.x);
         self.put(self.v_accel[1], a.y);
         self.put(self.v_accel[2], a.z);

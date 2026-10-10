@@ -629,8 +629,8 @@ impl AiBody {
         v.heading = self.heading;
         v.pitch = self.pitch_deg;
         v.bank = self.bank_deg;
-        v.physics.accel = Vec3::new(self.a_lat, self.a_long, 0.0);
-        for (axle, s) in v.physics.wheels.iter_mut().zip(&self.suspension) {
+        v.motion.accel = Vec3::new(self.a_lat, self.a_long, 0.0);
+        for (axle, s) in v.motion.wheels.iter_mut().zip(&self.suspension) {
             axle[0].suspension = s[0] + delta;
             axle[1].suspension = s[1] + delta;
         }
