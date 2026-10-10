@@ -104,6 +104,10 @@ that camera sees from the rear section.
 
 ## Articulated buses: a pusher's joint
 
+This is an experimental Project Depot extension on `feat/pusher-articulation`,
+not a feature of the released 0.2.17 packages. See the
+[integration record](integrations/PUSHER-ARTICULATION.md).
+
 OMSI 2 turns and pitches an articulated bus's joint about one point, the coupling (the ball
 joint). That is a puller's joint. A pusher's (JOST, Hübner) turns about the vertical through
 the ball, but pitches about a hinge on the front section, ahead of the ball: the floor plate,

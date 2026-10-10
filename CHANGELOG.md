@@ -3,6 +3,15 @@
 Depot releases are published manually after review; pushes to `main` do not
 automatically produce releases. See [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## Unreleased — experimental `feat/pusher-articulation`
+
+- Articulated buses can opt into a pusher joint using `[coupling_pitch_offset]`
+  in the rear section's `.bus`. Without the key or with invalid/zero offset,
+  the baseline puller behavior remains unchanged.
+- Selective backport from `a97595b1b254cf94abc27bb67844a8a1dfcee2ab`.
+- This feature is not in main or the published 0.2.17 packages.
+  See [integration record](docs/integrations/PUSHER-ARTICULATION.md).
+
 ## Project Depot 0.2.17 - 2026-10-09
 
 - Rebranding only, derived from openOMSI `v0.2.16` (2026-10-07), commit
@@ -81,16 +90,6 @@ Their original references are retained for attribution.
 ## 0.2.6 - 2026-10-06
 
 ### Bug Fixes & Improvements
-
-## Unreleased
-
-### Added
-
-* **Articulated buses: a pusher's joint** (`[coupling_pitch_offset]` in the rear section's `.bus`):
-  the joint turns about the ball but pitches about a hinge that far ahead of it on the front
-  section, as on the JOST and Hübner joints of pusher buses; the rear section's slope runs from the
-  hinge and the ball swings up or down with the pitch. Without the key the joint is as before. How
-  to fix a model's bellows and joint pieces for it: see docs/MODDING.md. (`vehicle.rs`)
 
 ## 0.2.5 - 2026-10-06
 
