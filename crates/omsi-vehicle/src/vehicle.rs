@@ -127,6 +127,11 @@ pub struct Vehicle {
     pub couple_back: Option<(String, bool)>,
     pub couple_front_open_for_sound: bool,
     pub coupling_front_character: Option<[f32; 4]>,
+    /// `[coupling_pitch_offset]` (this game's, on the rear section of an articulated bus):
+    /// how far ahead of the ball joint - along the section in front - the joint pitches. A
+    /// pusher's joint (JOST, Hübner) turns about the vertical through the ball but pitches
+    /// about a hinge on the front section; without it the two are the same point, as before.
+    pub coupling_pitch_offset: Option<f32>,
     pub control_cable_front: Vec<ControlCable>,
     pub control_cable_back: Vec<ControlCable>,
     pub rowdy_factor: Option<(f32, f32)>,
@@ -263,6 +268,13 @@ impl Vehicle {
         self.coupling_front.is_some() && !self.has_friendly_name
     }
 
+    /// The distance (m) from the ball joint at the front coupling to the axis the joint
+    /// pitches about, ahead along the section in front: a pusher's joint has one, a puller's
+    /// pitches at the ball (0, every file without `[coupling_pitch_offset]`).
+    pub fn pitch_offset(&self) -> f32 {
+        self.coupling_pitch_offset.filter(|d| d.is_finite() && *d > 0.0).unwrap_or(0.0)
+    }
+
     /// A rail vehicle: a car of a `.zug` runs on rails, which Omsi.exe stands end to end by
     /// their model bodies (its cars' declared coupling points need not be at the cars' ends).
     /// A road vehicle, a trailer or an articulated-bus rear section keeps its declared
@@ -383,6 +395,7 @@ impl Vehicle {
                 }
                 "couple_front_open_for_sound" => v.couple_front_open_for_sound = true,
                 "coupling_front_character" => v.coupling_front_character = Some(r.f32s::<4>()),
+                "coupling_pitch_offset" => v.coupling_pitch_offset = Some(r.f32()),
                 "control_cable_front" => v.control_cable_front.push(ControlCable { lines: (0..5).map(|_| r.str().to_string()).collect() }),
                 "control_cable_back" => v.control_cable_back.push(ControlCable { lines: (0..5).map(|_| r.str().to_string()).collect() }),
                 "rowdy_factor" => {
@@ -617,6 +630,21 @@ mod tests {
         let text = "[newachse]\nachse_long\n-2.9\nachse_antrieb\n0.2\n[newachse]\nachse_long\n2.9\nachse_antrieb\n0\n";
         let v = Vehicle::parse(&CfgFile::from_str("x.bus", text));
         assert_eq!(v.axles.iter().map(|a| a.driven).collect::<Vec<_>>(), vec![true, false]);
+    }
+
+    /// A rear section with `[coupling_pitch_offset]` has a pusher's joint (it pitches that
+    /// far ahead of the ball); without it, or with nothing ahead, it pitches at the ball.
+    #[test]
+    fn a_pitch_offset_makes_a_pushers_joint() {
+        let parse = |t: &str| Vehicle::parse(&CfgFile::from_str("x.bus", t));
+        let pusher = parse("[coupling_front]\n0\n4.16516\n0.45\n\n[coupling_pitch_offset]\n0.785\n\n[mass]\n7\n");
+        assert_eq!(pusher.coupling_pitch_offset, Some(0.785));
+        assert_eq!(pusher.pitch_offset(), 0.785);
+        assert_eq!(pusher.mass, 7.0);
+        assert!(pusher.unknown_keywords.is_empty());
+        assert_eq!(parse("[coupling_front]\n0\n4\n0.3\n").pitch_offset(), 0.0);
+        assert_eq!(parse("[coupling_pitch_offset]\n0\n").pitch_offset(), 0.0);
+        assert_eq!(parse("[coupling_pitch_offset]\n-0.5\n").pitch_offset(), 0.0);
     }
 
     #[test]

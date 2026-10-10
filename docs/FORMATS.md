@@ -626,7 +626,7 @@ rim the reflection running on away from the camera.
 ## Vehicles (.bus/.ovh) - unit `mc_roadvehicle`
 
 type friendlyname friendlyname_inv ai_veh_type coupling_back/front control_cable_back/front
-couple_back/front coupling_front_character boogies sinus rail_body_osc contact_shoe rowdy_factor
+couple_back/front coupling_front_character coupling_pitch_offset (experimental Depot extension) boogies sinus rail_body_osc contact_shoe rowdy_factor
 ai_brakeperformance add_camera_driver add_camera_pax view_schedule view_ticketselling set_camera_std
 set_camera_outside_center schwerpunkt rollwiderstand rot_pnt_long inv_min_turnradius ai_deltaheight
 newachse (achse_long achse_maxwidth achse_minwidth achse_raddurchmesser achse_feder achse_maxforce
@@ -879,6 +879,37 @@ the train, not a mesh index. The stock jackknife protection watches alpha and br
 47° while reversing, and the joint's plates turn with it. The bellows are `[smoothskin]`
 meshes whose `[setbone]` ids are **the bone mesh's position in the model's first LOD**, and
 they follow the joint's dummy meshes; the modelled pose is the straight one.
+
+The joint turns (alpha) and pitches (beta) about the coupling point - the ball - unless the
+rear section's `.bus` has `[coupling_pitch_offset]` (openOMSI, see MODDING.md): a pusher's
+joint, which pitches about a hinge that far ahead of the ball along the front section. The
+rear section's slope then runs from the hinge, and the ball rides the link between them: it
+swings up or down off the coupling point by about `offset · sin(beta)`. Without the key, or
+with 0, everything is as before.
+
+Behind the player's vehicle every road part - the rear section of an articulated bus, a
+lorry's trailer - is a body of its own on the same wheel physics as the front, as OMSI 2
+runs each section: its own `[mass]`, `[momentofintertia]`, `[schwerpunkt]` / `[cog]`,
+`[newachse]` springs, dampers and driven axles, `[rollwiderstand]`, and its own
+`Axle_Brakeforce_<n>_*` and `Axle_Springfactor_<n>_*` (numbered on after the front's axles).
+The part turns about its `[rot_pnt_long]` (else its axle farthest from the joint) and rests on
+its axles and on the joint, whose share the front section's axles carry. The joint holds the
+two bodies at the ball (at a pusher's hinge, see above) and follows
+`[coupling_front_character]`:
+
+```
+[coupling_front_character]
+52.5      most the joint turns either way about the vertical axis (alpha, degrees)
+-20       least and most it bends about the transverse axis (beta, degrees)
+20
+1         0: a lorry's hitch, free about every axis; anything else: an articulated bus's
+          turntable, the sections do not roll against each other, and alpha stops at its most
+```
+
+Without the keyword the joint is a turntable of 55° and ±15°. The air acts on the front
+section alone. The AI's vehicles, other players' over the LAN, trains on rails and every part
+with `OMSI_KINEMATIC_TRAILERS=1` (A/B) follow kinematically as before: hung on the coupling,
+pitched towards the ground under the axle, pulling and braking the front along its axis.
 
 The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToPrevVeh]`
 path points: the rear section's seats and exits are numbered after the front's, which is
