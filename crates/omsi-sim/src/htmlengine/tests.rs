@@ -937,3 +937,26 @@ fn departures_are_asked_by_stop_and_handed_back() {
     r.set_vars(&[], &[]);
     assert_eq!(r.text_of("o").as_deref(), Some("1:5|Hbf|1000"));
 }
+fn interp() -> Interp {
+    Interp::with_api(Dom::parse("<body></body>"), crate::htmltex::PageApi::Vehicle)
+}
+
+#[test]
+fn deeply_nested_script_is_an_error_not_a_stack_overflow() {
+    for open in ["(", "[", "!", "-", "{"] {
+        let src = format!("var a = {}1", open.repeat(20_000));
+        assert!(interp().run(&src).is_err(), "{open:?} nesting must be rejected");
+    }
+    let chain = format!("var a = 1{}", "+1".repeat(5_000));
+    assert!(interp().run(&chain).is_err());
+    assert!(interp().run("var a = ((((1)))) + [[2]];").is_ok());
+}
+
+#[test]
+fn deeply_nested_html_keeps_a_bounded_tree() {
+    let html = format!("<body>{}x{}</body>", "<div>".repeat(50_000), "</div>".repeat(50_000));
+    let dom = Dom::parse(&html);
+    assert!((0..dom.nodes.len()).all(|i| dom.depth_of(i) <= MAX_DOM_DEPTH));
+    let mut r = EngineRenderer::new(16, 16, &html);
+    assert!(r.poll_frame().is_some());
+}

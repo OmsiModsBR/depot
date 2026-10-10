@@ -185,7 +185,7 @@ impl Interp {
     }
 
     pub(crate) fn run(&mut self, src: &str) -> Result<(), String> {
-        let prog = Parser { t: lex(src)?, i: 0 }.program()?;
+        let prog = Parser { t: lex(src)?, i: 0, depth: 0 }.program()?;
         self.steps = 0;
         let env = self.global.clone();
         self.exec_block(&prog, &env).map(|_| ())
