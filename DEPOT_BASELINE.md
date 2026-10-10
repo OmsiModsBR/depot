@@ -38,8 +38,7 @@ Prefer small cherry-picks with source attribution (`git cherry-pick -x`).
 Review merge commits by their individual changes rather than importing their
 entire ancestry. Keep `Cargo.lock` pinned; dependency upgrades are separate work.
 
-Changes from the previous user fork, including Zanin's and other contributors'
-PRs, are not part of this import. Reapply them individually after comparing
+Changes from the previous user fork are not part of this import. Reapply them individually after comparing
 their patches with this exact baseline and testing their behavior.
 
 ## Scope of this import
