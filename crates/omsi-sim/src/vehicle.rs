@@ -3276,6 +3276,9 @@ pub struct TrailerPart {
     pivot: Option<DVec3>,
     /// Coupling → rear axle distance.
     length: f32,
+    /// How far ahead of the ball, on the part in front, the joint pitches (see
+    /// [`TrailerPart::pitch_offset`]).
+    pitch_offset: f32,
     coupling_front: Vec3,
     coupling_back: Vec3,
     axle_long: f32,
@@ -3627,6 +3630,7 @@ impl TrailerPart {
             reversed,
             text_textures: Vec::new(),
             skin_rest: Vec::new(),
+            pitch_offset: ty.def.pitch_offset(),
             ty,
         }
     }
@@ -3756,6 +3760,22 @@ impl TrailerPart {
     /// itself for the first trailer).
     pub fn coupling_point(&self, lead_pos: DVec3, lead_rot: Mat4) -> DVec3 {
         lead_pos + lead_rot.transform_point3(self.coupling_back).as_dvec3()
+    }
+
+    /// The distance (m) from the ball to the axis the joint pitches about, ahead on the part
+    /// in front (`[coupling_pitch_offset]` of this part; 0: a puller's joint, pitching at
+    /// the ball).
+    pub fn pitch_offset(&self) -> f32 {
+        self.pitch_offset
+    }
+
+    /// Where the joint pitches, in the world (`lead` as for [`Self::coupling_point`]): on the
+    /// part in front, `pitch_offset` ahead of the coupling towards its body; the coupling
+    /// point itself for a puller's joint.
+    pub fn pitch_hinge(&self, lead_pos: DVec3, lead_rot: Mat4) -> DVec3 {
+        let ahead = if self.coupling_back.y < 0.0 { 1.0 } else { -1.0 };
+        let p = self.coupling_back + Vec3::new(0.0, ahead * self.pitch_offset, 0.0);
+        lead_pos + lead_rot.transform_point3(p).as_dvec3()
     }
 
     /// The distance from the coupling to the axle the part turns about.
@@ -3926,12 +3946,35 @@ impl TrailerPart {
         // the slope between them (it was drawn level at the axle's height, and on a grade or
         // a crest the joint came apart by a hand's breadth or more). It leans as the vehicle
         // it is coupled to does.
-        let rise = c.z - (axle_z + self.coupling_front.z as f64);
-        self.pitch = (rise.atan2(self.length.max(0.5) as f64).to_degrees() as f32).clamp(-15.0, 15.0);
+        // A pusher's joint (`[coupling_pitch_offset]`) pitches about a hinge on the part in
+        // front, ahead of the ball it turns about: the slope runs from that hinge, which
+        // stands the hinge's offset further from the axle (less as the joint turns).
+        let d = self.pitch_offset as f64;
+        let hinge = self.pitch_hinge(lead_pos, lead_rot);
+        let run = if d > 0.0 {
+            let alpha = ((lead_heading - heading + 540.0) % 360.0) - 180.0;
+            self.length as f64 + d * alpha.to_radians().cos()
+        } else {
+            self.length as f64
+        };
+        let rise = hinge.z - (axle_z + self.coupling_front.z as f64);
+        self.pitch = (rise.atan2(run.max(0.5)).to_degrees() as f32).clamp(-15.0, 15.0);
         self.bank = main.bank;
-        // the trailer origin: coupling_front sits at c
+        // The ball rides the link between the hinge and this part, which pitches with this
+        // part and turns with the part in front: `d` behind the hinge at this part's pitch.
+        // At the pitch of the part in front that is the coupling point itself; anywhere else
+        // the ball has swung up or down about the hinge, by about d·sin(beta).
+        let ball = if d > 0.0 {
+            let back = (c - hinge).truncate();
+            let back = if back.length() > 1e-6 { back.normalize() } else { -dir };
+            let p = (self.pitch as f64).to_radians();
+            hinge + DVec3::new(back.x * p.cos() * d, back.y * p.cos() * d, -p.sin() * d)
+        } else {
+            c
+        };
+        // the trailer origin: coupling_front sits at the ball
         let rot = self.body_rotation();
-        self.position = c - rot.transform_point3(self.coupling_front).as_dvec3();
+        self.position = ball - rot.transform_point3(self.coupling_front).as_dvec3();
         // The wheels stand on the road under them, wherever the body above swings: the
         // travel of each wheel is the gap between its hub on the body and the ground under
         // it (Omsi.exe runs the section as a body on its own springs, each wheel's travel
@@ -4694,6 +4737,59 @@ mod tests {
                 assert!((offset.z + 2.8).abs() < 1e-5);
             }
         }
+    }
+
+    /// The front section pitched 4° nose up (nothing under the rear axle: it hangs level
+    /// with the coupling). A puller's joint pitches at the ball, which stays the coupling
+    /// point. A pusher's (`[coupling_pitch_offset]`) pitches `d` ahead of it on the front
+    /// section: the ball rides a link of length `d` that pitches with the rear section and
+    /// swings up off the coupling point by about d·sin(beta) - more for a longer link - while
+    /// the turn about the ball (alpha) is the puller's.
+    #[test]
+    fn a_pushers_joint_pitches_ahead_of_the_ball() {
+        let joint = |d: Option<f32>, heading: f64| {
+            let mut car = coupling_test_type(None);
+            Arc::get_mut(&mut car).unwrap().def.coupling_pitch_offset = d;
+            let mut v = VehicleInstance::new(coupling_test_type(None), VehicleHost::new(Default::default()));
+            v.pitch = 4.0;
+            v.attach_trailer_ex(car, false);
+            v.update_trailers(0.0);
+            v.heading = heading;
+            for _ in 0..30 {
+                v.update_trailers(0.0);
+            }
+            let t = &v.trailers[0];
+            let c = t.coupling_point(v.position, v.body_rotation());
+            let ball = t.position + t.body_rotation().transform_point3(t.couplings().1).as_dvec3();
+            let hinge = t.pitch_hinge(v.position, v.body_rotation());
+            let alpha = ((v.heading - t.heading + 540.0) % 360.0) - 180.0;
+            (c, ball, hinge, t.pitch as f64, alpha)
+        };
+        // a puller's: hinge and ball are the coupling point, the rear section stays level
+        let (c, ball, hinge, pitch, _) = joint(None, 0.0);
+        assert!((ball - c).length() < 1e-9 && (hinge - c).length() < 1e-9, "{ball:?} {hinge:?} {c:?}");
+        assert!(pitch.abs() < 1e-6, "{pitch}");
+        for d in [0.4f32, 0.785, 1.2] {
+            let (c, ball, hinge, pitch, _) = joint(Some(d), 0.0);
+            let d = d as f64;
+            // the hinge stands d ahead of the coupling, along the front section
+            assert!(((hinge - c).length() - d).abs() < 1e-6, "{hinge:?} {c:?}");
+            assert!(hinge.z > c.z && hinge.y > c.y, "{hinge:?} {c:?}");
+            // the link keeps its length, at the rear section's pitch
+            assert!(((ball - hinge).length() - d).abs() < 1e-6, "{ball:?} {hinge:?}");
+            let fall = (hinge.z - ball.z) / d;
+            assert!((fall - pitch.to_radians().sin()).abs() < 1e-6, "{fall} {pitch}");
+            // the rear section pitches less than the front; the ball has swung up off the
+            // coupling point by about d·sin(beta)
+            let beta = 4.0 - pitch;
+            assert!(pitch > 0.0 && beta > 0.0, "{pitch}");
+            let up = ball.z - c.z;
+            assert!(up > 0.0 && (up - d * beta.to_radians().sin()).abs() < 0.002 * d, "d {d}: up {up}, beta {beta}");
+        }
+        // the turn about the ball is the puller's
+        let (_, _, _, _, a0) = joint(None, 20.0);
+        let (_, _, _, _, a1) = joint(Some(0.785), 20.0);
+        assert!(a0.abs() > 1.0 && (a0 - a1).abs() < 1e-6, "{a0} {a1}");
     }
 
     fn synthetic_rail_consist() -> VehicleInstance {

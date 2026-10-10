@@ -4,6 +4,16 @@ Every push to `main` is released as `MAJOR.MINOR.COMMIT` (see
 [docs/VERSIONING.md](docs/VERSIONING.md)); the downloads are on the
 [Releases](https://github.com/openOMSI-Project/openOMSI/releases) page.
 
+## Unreleased
+
+### Added
+
+* **Articulated buses: a pusher's joint** (`[coupling_pitch_offset]` in the rear section's `.bus`):
+  the joint turns about the ball but pitches about a hinge that far ahead of it on the front
+  section, as on the JOST and Hübner joints of pusher buses; the rear section's slope runs from the
+  hinge and the ball swings up or down with the pitch. Without the key the joint is as before. How
+  to fix a model's bellows and joint pieces for it: see docs/MODDING.md. (`vehicle.rs`)
+
 ## 0.2.16 - 2026-10-07
 
 ### New

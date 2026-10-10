@@ -102,6 +102,94 @@ section in front: with mirrors 0 to 3 in the front section's `.bus`, a camera in
 section's `.bus` is number 4, and a screen in the cab showing `reflexion4.bmp` shows what
 that camera sees from the rear section.
 
+## Articulated buses: a pusher's joint
+
+OMSI 2 turns and pitches an articulated bus's joint about one point, the coupling (the ball
+joint). That is a puller's joint. A pusher's (JOST, Hübner) turns about the vertical through
+the ball, but pitches about a hinge on the front section, ahead of the ball: the floor plate,
+the ball and the bellows' middle ring ride a link that pitches with the rear section and turns
+with the front. Give the rear section's `.bus` the distance from the ball to that hinge, in
+metres, along the front section:
+
+```
+[coupling_pitch_offset]
+0.785
+```
+
+With it the joint is a pusher's; without it (or with 0) it is a puller's, exactly as before,
+so nothing changes for a bus that does not declare it. `articulation_<n>_alpha` and
+`articulation_<n>_beta` keep their meaning and sign; what changes is where the rear section
+hangs: its slope runs from the hinge, and the ball swings up or down off the coupling point by
+about `offset · sin(beta)` (7 cm at 5° for 0.785 m).
+
+**Measure the offset on the model.** It is not a fixed number - a joint may be longer or
+shorter than the usual 1.6 m between the two bodies. The ball is the `[coupling_back]` /
+`[coupling_front]` point; the hinge is where the piece over the ball (the floor plate) pivots.
+The Caio Millennium V O500UA: ball at y −4.43369 in the front model, floor plate pivoting at
+y −3.64873, so the offset is 0.785.
+
+### The joint's animations
+
+A model made for OMSI 2 imitates a pusher's pitch with fractions of beta about each piece's own
+centre. With the real hinge those pieces come off the rear section by up to `offset · sin(beta)`.
+To fix them, take `y_P` = the ball's y plus the offset in each model (front: −3.64873, rear:
+4.16516 + 0.785 = 4.95016 for the Millennium V), keep every factor's sign, and:
+
+| Piece | Front model | Rear model |
+|---|---|---|
+| Bellows ring between the bodies (fraction `f`) | alpha `f` about its own centre, **then** beta `f` about `y_P` | - |
+| Ring at the ball (follows the rear section) | alpha 1 about the ball, **then** beta 1 about `y_P` | - |
+| Piece on the link (floor plate, ball bracket) | beta 1 about `y_P`, no alpha | alpha −1 about the ball, no beta |
+| Piece fixed to a body | nothing | nothing |
+| Arm between the bodies | see below | see below |
+
+The order matters: the `[newanim]` blocks of a mesh act in the order of the file, and the hinge
+belongs to the front section, so the turn comes first and the pitch last. `[smoothskin]` bellows
+and `[animparent]` pieces follow their rings and need nothing.
+
+The Millennium V's ball ring (`Art_apoio4`), turn first, pitch about the hinge:
+
+```
+[newanim]
+origin_trans
+0
+-4.43385
+0.53512
+origin_rot_y
+-90
+anim_rot
+articulation_0_alpha
+1.005
+
+[newanim]
+origin_trans
+0
+-3.64873
+0.53512
+anim_rot
+articulation_0_beta
+1
+```
+
+`Art_apoio1` to `3` the same with their own centre and fraction (0.25, 0.5, 0.75) for alpha, and
+`-3.64873` with the same fraction for beta. The floor plate `Piso_Rotula` already pivots at the
+hinge: its beta goes from 0.5 (the OMSI 2 make-do) to 1.
+
+**Arms between the bodies.** An arm fixed to one body at `A` and reaching a point `F` that
+moves with the other end of the joint turns about `A` - not about `F`, which is the end that
+moves - by `k_alpha = |y_F − y_ball| / L` and `k_beta = f · |y_F − y_P| / L`, with `L` the
+arm's length, `y_F` measured with the joint straight and `f` the fraction of the ring `F` sits
+on (1 for the other body). The Millennium V's arm over the bellows (`Amort_art_apoio`, rear
+model) goes from the rear body's edge (y ≈ 3.375) to the middle ring (y ≈ 4.565, f 0.5):
+L ≈ 1.19, `k_alpha` ≈ 0.34, `k_beta` ≈ 0.16, both about the rear end. The roof damper
+(`Amort_Artic`) reaches the front body right by the hinge, so its `k_beta` is about 0: drop its
+beta. Check each sign by watching the joint pitch: an arm whose end leaves its ring has it the
+wrong way round.
+
+OMSI 2 ignores `[coupling_pitch_offset]` but reads the `model.cfg`: a model changed this way
+looks right only with the key. For a bus played in both, give the pusher variant its own
+`model.cfg`, used by its own pair of `.bus` files.
+
 ## Models
 
 - `.o3d` files with 32-bit indices (the long-index flag) are drawn with their full vertex
