@@ -157,9 +157,13 @@ pub(crate) struct Units {
     pub(crate) vh: f32,
 }
 
+/// Largest `font-size` in px; a bigger one would rasterize glyphs of hundreds of megabytes.
+pub(crate) const MAX_FONT_PX: f32 = 512.0;
+
 pub(crate) fn parse_len(v: &str, u: &Units) -> Option<Len> {
     let v = v.trim().to_ascii_lowercase();
-    let num = |suffix: &str| v.strip_suffix(suffix).and_then(|n| n.trim().parse::<f32>().ok());
+    // `inf`/`nan` parse as f32 but are never a usable length
+    let num = |suffix: &str| v.strip_suffix(suffix).and_then(|n| n.trim().parse::<f32>().ok()).filter(|n| n.is_finite());
     if v == "0" {
         return Some(Len::Px(0.0));
     }
@@ -184,7 +188,7 @@ pub(crate) fn parse_len(v: &str, u: &Units) -> Option<Len> {
     if let Some(n) = num("vh") {
         return Some(Len::Px(n * u.vh / 100.0));
     }
-    v.parse::<f32>().ok().map(Len::Px)
+    v.parse::<f32>().ok().filter(|n| n.is_finite()).map(Len::Px)
 }
 
 /// Split a value at spaces and at `/`, but not inside parentheses (`rgba(0, 0, 0, .5)`,
@@ -370,7 +374,10 @@ impl Style {
                 if let Some(px) = named {
                     self.font_px = px;
                 } else if let Some(l) = parse_len(val, &u) {
-                    self.font_px = l.px(parent_font).max(1.0);
+                    let px = l.px(parent_font);
+                    if px.is_finite() {
+                        self.font_px = px.clamp(1.0, MAX_FONT_PX);
+                    }
                 }
             }
             "font-weight" => {

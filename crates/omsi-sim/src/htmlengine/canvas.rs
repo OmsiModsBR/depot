@@ -122,7 +122,7 @@ impl Canvas {
 }
 
 /// A rasterised glyph: coverage bytes and where its top-left lies relative to the pen.
-struct GlyphBmp {
+pub(crate) struct GlyphBmp {
     w: u32,
     h: u32,
     ox: i32,
@@ -140,7 +140,10 @@ thread_local! {
     static GLYPHS: std::cell::RefCell<HashMap<GlyphKey, Option<Arc<GlyphBmp>>>> = std::cell::RefCell::new(HashMap::new());
 }
 
-fn glyph_bmp(font: &FontRef<'static>, bold: bool, id: ab_glyph::GlyphId, px: f32, sx: u8, sy: u8) -> Option<Arc<GlyphBmp>> {
+/// Most pixels one cached glyph bitmap may have.
+pub(crate) const MAX_GLYPH_PIXELS: usize = 1 << 20;
+
+pub(crate) fn glyph_bmp(font: &FontRef<'static>, bold: bool, id: ab_glyph::GlyphId, px: f32, sx: u8, sy: u8) -> Option<Arc<GlyphBmp>> {
     let key = (id.0, px.to_bits(), bold, sx, sy);
     GLYPHS.with(|g| {
         let mut g = g.borrow_mut();
@@ -152,16 +155,18 @@ fn glyph_bmp(font: &FontRef<'static>, bold: bool, id: ab_glyph::GlyphId, px: f32
         }
         let sc = PxScale::from(px);
         let glyph = id.with_scale_and_position(sc, point(sx as f32 / SUB, sy as f32 / SUB));
-        let bmp = font.outline_glyph(glyph).map(|o| {
+        let bmp = font.outline_glyph(glyph).and_then(|o| {
             let b = o.px_bounds();
             let (w, h) = (b.width().ceil() as u32 + 1, b.height().ceil() as u32 + 1);
-            let mut cov = vec![0u8; (w * h) as usize];
+            // refuse absurd glyphs (huge font sizes, non-finite bounds): checked size, at most 1 Mi pixels
+            let n = (w as usize).checked_mul(h as usize).filter(|&n| n <= MAX_GLYPH_PIXELS)?;
+            let mut cov = vec![0u8; n];
             o.draw(|gx, gy, c| {
                 if gx < w && gy < h {
                     cov[(gy * w + gx) as usize] = (c.clamp(0.0, 1.0) * 255.0).round() as u8;
                 }
             });
-            Arc::new(GlyphBmp { w, h, ox: b.min.x.floor() as i32, oy: b.min.y.floor() as i32, cov })
+            Some(Arc::new(GlyphBmp { w, h, ox: b.min.x.floor() as i32, oy: b.min.y.floor() as i32, cov }))
         });
         g.insert(key, bmp.clone());
         bmp

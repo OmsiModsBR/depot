@@ -1008,3 +1008,23 @@ fn nested_inline_blocks_lay_out_in_bounded_time() {
     assert!(r.poll_frame().is_some());
     assert!(start.elapsed().as_secs() < 10, "layout took {:?}", start.elapsed());
 }
+
+#[test]
+fn font_size_is_clamped_and_non_finite_lengths_are_rejected() {
+    let u = Units { font: 16.0, vw: 100.0, vh: 100.0 };
+    assert!(parse_len("infpx", &u).is_none());
+    assert!(parse_len("nanpx", &u).is_none());
+    assert!(parse_len("inf", &u).is_none());
+    for fs in ["60000px", "infpx", "1e30px", "999999em", "nanpx"] {
+        let html = format!("<body style='margin:0'><div style='font-size:{fs}'>Wg</div><h1 style='font-size:60000px'>x</h1></body>");
+        let mut r = EngineRenderer::new(32, 32, &html);
+        assert!(r.poll_frame().is_some(), "{fs} must render without exploding");
+    }
+    // a glyph bigger than the cap is refused instead of rasterized
+    with_fonts(|reg, _| {
+        let id = ab_glyph::Font::glyph_id(reg, 'W');
+        assert!(glyph_bmp(reg, false, id, 100_000.0, 0, 0).is_none());
+        assert!(glyph_bmp(reg, false, id, 24.0, 0, 0).is_some());
+    })
+    .unwrap();
+}
