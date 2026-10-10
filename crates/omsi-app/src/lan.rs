@@ -1987,19 +1987,19 @@ pub fn my_pose(
         heading: v.heading as f32,
         pitch: v.pitch,
         bank: v.bank,
-        speed_kmh: v.physics.velocity_kmh(),
-        steer_deg: v.physics.steer_deg,
+        speed_kmh: v.motion().velocity_kmh(),
+        steer_deg: v.motion().steer_deg,
         flags,
         head,
         interior: (v.interior_light() * 3.0).round() as u8,
         blinker,
         rpm,
-        throttle: v.physics.controls.throttle,
-        brake: v.physics.controls.brake,
+        throttle: v.controls().throttle,
+        brake: v.controls().brake,
         passengers: riders as u32,
         doors: table.doors.iter().map(|id| get(*id)).collect(),
         suspension: v
-            .physics
+            .motion()
             .wheels
             .iter()
             .flat_map(|a| a.iter().map(|w| w.suspension))
@@ -2381,7 +2381,7 @@ pub fn clear_spawn(
     let from = p.vehicle.position;
     p.vehicle.position = origin;
     p.vehicle.heading = heading;
-    if let Some(rb) = p.vehicle.rigid.as_mut() {
+    if let Some(rb) = p.vehicle.rigid_mut() {
         rb.place(origin, heading);
     }
     for t in p.vehicle.trailers.iter_mut() {
@@ -3280,7 +3280,7 @@ pub fn tick(
     if lan.role == Role::Client && !lan.spawn_settled {
         if let (Some(near), Some(p), Some(world)) = (lan.near.clone(), player.as_deref_mut(), world)
         {
-            if p.vehicle.physics.velocity_kmh().abs() < 1.0 {
+            if p.vehicle.motion().velocity_kmh().abs() < 1.0 {
                 clear_spawn(p, &near, world, traffic.map(|t| &t.net));
             } else {
                 log::info!(

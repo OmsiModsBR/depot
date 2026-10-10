@@ -32,6 +32,31 @@ pub struct WheelState {
     pub suspension: f32,
 }
 
+/// The vehicle's motion this frame, as the rest of the game reads it (the dashboard, the
+/// sounds, the passengers, the network ...), whichever model moves the vehicle: its rigid
+/// body, the kinematic model or the AI. Read-only: the physics writes it once a frame,
+/// together with the scripts' variables (see `VehicleInstance::motion`).
+#[derive(Debug, Clone, Copy)]
+pub struct VehicleMotion<'a> {
+    /// Longitudinal speed, m/s (forward positive).
+    pub speed: f32,
+    /// The front wheels' steering angle, degrees, positive = right.
+    pub steer_deg: f32,
+    /// The body's acceleration (m/s², x right, y forward, z up) as its model has it: the
+    /// rigid body's carries gravity, as an accelerometer reads it.
+    pub accel: Vec3,
+    /// What the scripts read as `A_Trans_*`: the acceleration without gravity.
+    pub a_trans: Vec3,
+    /// Per axle: (left, right) wheels.
+    pub wheels: &'a [[WheelState; 2]],
+}
+
+impl VehicleMotion<'_> {
+    pub fn velocity_kmh(&self) -> f32 {
+        self.speed * 3.6
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct VehiclePhysics {
     pub mass_kg: f32,

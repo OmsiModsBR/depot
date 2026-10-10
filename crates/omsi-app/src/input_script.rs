@@ -1875,7 +1875,7 @@ impl App {
             return;
         }
         self.input_away = false;
-        self.mouse_steer = (self.player.as_ref().map(|p| p.vehicle.physics.controls.steering).unwrap_or(0.0), 1.0);
+        self.mouse_steer = (self.player.as_ref().map(|p| p.vehicle.controls().steering).unwrap_or(0.0), 1.0);
     }
 
     pub(crate) fn close_game_menu(&mut self) {
@@ -3524,7 +3524,7 @@ impl App {
             return;
         };
         let (name, var) = if kind == "refuel" { ("veh_tank", "engine_tank_content") } else { ("veh_wash", "Dirt_Wiped") };
-        if p.vehicle.physics.velocity_kmh().abs() > 2.0 {
+        if p.vehicle.motion().velocity_kmh().abs() > 2.0 {
             self.pumping = None;
             self.service_msg = Some((if kind == "refuel" { "Refuelling stopped" } else { "Washing stopped" }.into(), 4.0));
             return;
@@ -3882,8 +3882,8 @@ impl App {
             #[cfg(windows)]
             self.reset_vr_pointer();
         }
-        self.mouse_steer = (self.player.as_ref().map(|p| p.vehicle.physics.controls.steering).unwrap_or(0.0), 1.0);
-        self.mouse_pedals = self.player.as_ref().map(|p| (p.vehicle.physics.controls.throttle, p.vehicle.physics.controls.brake)).unwrap_or((0.0, 0.0));
+        self.mouse_steer = (self.player.as_ref().map(|p| p.vehicle.controls().steering).unwrap_or(0.0), 1.0);
+        self.mouse_pedals = self.player.as_ref().map(|p| (p.vehicle.controls().throttle, p.vehicle.controls().brake)).unwrap_or((0.0, 0.0));
         if self.settings.mouse_steering != on {
             self.settings.mouse_steering = on;
             crate::game_lists::remember_setting("mouse_steering", if on { "1" } else { "0" });

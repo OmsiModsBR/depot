@@ -204,8 +204,8 @@ fn level_axes(rot: Mat4) -> (Vec3, Vec3) {
 /// A vehicle's tyres on the road this frame, its coupled parts' included. `key` tells the
 /// vehicle apart from the others (the tyres' keys are made from it).
 pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre>) {
-    let speed = v.physics.speed;
-    let heavy = heaviness(v.physics.mass_kg);
+    let speed = v.motion().speed;
+    let heavy = heaviness(v.mass_kg());
     let mut n = 0u64;
     // (every wheel keeps its number, whether it touches the road this frame or not)
     let mut part = |origin: DVec3, rot: Mat4, own_spray: bool, wheels: &mut dyn Iterator<Item = Option<Vec3>>, out: &mut Vec<Tyre>| {
@@ -227,7 +227,7 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
     };
     let rot = v.body_rotation();
     let own = has_own_tyre_spray(&v.particles);
-    match v.rigid.as_ref() {
+    match v.rigid() {
         // the player's: the wheels that stand on the road, where they touch it
         Some(rb) => part(
             v.position,
@@ -240,7 +240,7 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
         // placed over
         None => {
             let lift = v.ai_rest_offset().0;
-            part(v.position, rot, own, &mut v.physics.wheels.iter().flatten().map(|w| Some(Vec3::new(w.lat, w.long, -lift))), out)
+            part(v.position, rot, own, &mut v.motion().wheels.iter().flatten().map(|w| Some(Vec3::new(w.lat, w.long, -lift))), out)
         }
     }
     for t in &v.trailers {

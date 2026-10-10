@@ -111,7 +111,7 @@ impl RailDrive {
         v.position = pos;
         v.heading = heading;
         // the track steers: the wheel stays straight
-        let mut c = v.physics.controls;
+        let mut c = v.controls();
         c.steering = 0.0;
         v.set_controls(c);
         // the trail, and the coupled parts on it
@@ -248,11 +248,11 @@ pub(crate) fn frame(p: &mut Player, net: Option<&Network>, world: &World, dt: f3
     // A vehicle whose scripts give no drive to a driver (the stock trains are scripted for
     // the AI only) is driven by a plain traction and brake of its own: a locomotive's
     // pull (up to 300 kN, 4 MW) and 1.2 m/s² of brake at full pedal.
-    let c = p.vehicle.physics.controls;
+    let c = p.vehicle.controls();
     let scripted = p.vehicle.var("M_Wheel").is_some_and(|m| m.abs() > 1.0) || p.vehicle.var("Brakeforce").is_some_and(|b| b > 1.0);
     if !scripted {
-        let m = p.vehicle.physics.mass_kg.max(1000.0);
-        let v = p.vehicle.physics.speed;
+        let m = p.vehicle.mass_kg().max(1000.0);
+        let v = p.vehicle.motion().speed;
         let reverse = p.vehicle.var("rail_reverse").is_some_and(|r| r > 0.5);
         let pull = (c.throttle.clamp(0.0, 1.0) * 300_000.0).min(4.0e6 / v.abs().max(1.0)).min(0.15 * m * 9.81) * if reverse { -1.0 } else { 1.0 };
         let brake = c.brake.clamp(0.0, 1.0) * 1.2 * m;
@@ -263,7 +263,7 @@ pub(crate) fn frame(p: &mut Player, net: Option<&Network>, world: &World, dt: f3
         dv = if nv.abs() <= stop && c.throttle < 0.05 { -v } else { dv - stop * nv.signum() };
         p.vehicle.set_speed(v + dv);
     }
-    let ds = p.vehicle.physics.speed * dt;
+    let ds = p.vehicle.motion().speed * dt;
     let blinker = blinker_of(&p.vehicle);
     if let Some(mut r) = p.rail.take() {
         r.advance(p, net, world, ds, blinker);

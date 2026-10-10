@@ -53,7 +53,7 @@ pub(crate) fn ground_hit(w: &crate::scene::World, o: DVec3, d: DVec3, max: f64) 
 pub(crate) fn put_vehicle(v: &mut omsi_sim::VehicleInstance, at: DVec3, heading: f64) {
     v.position = at;
     v.heading = heading;
-    if let Some(rb) = v.rigid.as_mut() {
+    if let Some(rb) = v.rigid_mut() {
         rb.place(at, heading);
     }
     for t in v.trailers.iter_mut() {

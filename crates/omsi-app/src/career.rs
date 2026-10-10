@@ -161,7 +161,7 @@ impl Career {
     /// One simulation frame of the player's bus.
     pub fn tick(&mut self, dt: f32, bus: &VehicleInstance, riders: usize) {
         self.seconds += dt as f64;
-        let v = bus.physics.velocity_kmh() / 3.6;
+        let v = bus.motion().velocity_kmh() / 3.6;
         // (a jump no driving could make - the admin's teleport, the workshop, a host moving
         // the bus off an occupied spawn - is not distance driven)
         let mut step_km = 0.0;
@@ -208,7 +208,7 @@ impl Career {
             }
         }
         // see-sawing between throttle and brake
-        let c = bus.physics.controls;
+        let c = bus.controls();
         let pedal = if c.throttle > 0.2 { 1 } else if c.brake > 0.2 { -1 } else { self.pedal };
         if pedal != self.pedal && self.pedal != 0 {
             self.seesaw.push_back(self.seconds);

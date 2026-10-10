@@ -84,7 +84,7 @@ impl App {
         s.worst_dt = 0.0;
         let bus = self.player.as_ref().map(|p| {
             let v = &p.vehicle;
-            format!("bus at ({:.1}, {:.1}, {:.1}) heading {:.0}, {:.0} km/h", v.position.x, v.position.y, v.position.z, v.heading, v.physics.velocity_kmh())
+            format!("bus at ({:.1}, {:.1}, {:.1}) heading {:.0}, {:.0} km/h", v.position.x, v.position.y, v.position.z, v.heading, v.motion().velocity_kmh())
         });
         let cam = self.camera.as_ref().map(|c| format!("camera at ({:.0}, {:.0}, {:.0})", c.position.x, c.position.y, c.position.z));
         let traffic = self.traffic.as_ref().map(|t| t.cars.len()).unwrap_or(0);

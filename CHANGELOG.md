@@ -29,6 +29,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
 ### Changed
+- omsi-sim: the rest of the game reads a vehicle's motion through `VehicleInstance::motion()` (speed, steering,
+  accelerations, wheels: `VehicleMotion`), `controls()`, `mass_kg()` and `rigid()`/`rigid_mut()` instead of the
+  `physics` and `rigid` fields, so that the physics can change how it keeps them. No behaviour change: the
+  physics traces are identical bit for bit.
 - omsi-sim: the rigid body (`rigid.rs`) split into a module per stage under `rigid/` (`ground`, `suspension`,
   `wheel`, `tyre`, `body`, `collide`), with its calibration values named in `rigid/params.rs`, each marked with
   where it comes from, and the A/B switches `OMSI_TYRE_SUSPENSION`, `OMSI_NO_WHEEL_SLIP` and

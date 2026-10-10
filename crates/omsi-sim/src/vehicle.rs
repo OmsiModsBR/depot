@@ -3,7 +3,7 @@
 use crate::particles::ParticleSet;
 use crate::anim::{pivot_from_mesh, MeshAnimator};
 use crate::host::VehicleHost;
-use crate::physics::{Controls, VehiclePhysics};
+use crate::physics::{Controls, VehicleMotion, VehiclePhysics};
 use anyhow::{Context, Result};
 use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use hashbrown::HashMap;
@@ -1450,6 +1450,31 @@ impl VehicleInstance {
 
     pub fn set_controls(&mut self, c: Controls) {
         self.physics.controls = c;
+    }
+
+    /// The driver's inputs, as last set.
+    pub fn controls(&self) -> Controls {
+        self.physics.controls
+    }
+
+    /// The vehicle's motion this frame, whichever model moves it (see [`VehicleMotion`]).
+    pub fn motion(&self) -> VehicleMotion<'_> {
+        let p = &self.physics;
+        VehicleMotion { speed: p.speed, steer_deg: p.steer_deg, accel: p.accel, a_trans: p.a_trans, wheels: &p.wheels }
+    }
+
+    /// The vehicle's mass (kg, at least 500).
+    pub fn mass_kg(&self) -> f32 {
+        self.physics.mass_kg
+    }
+
+    /// The vehicle's rigid body, when it runs on one (the player's vehicle).
+    pub fn rigid(&self) -> Option<&crate::rigid::RigidBody> {
+        self.rigid.as_ref()
+    }
+
+    pub fn rigid_mut(&mut self) -> Option<&mut crate::rigid::RigidBody> {
+        self.rigid.as_mut()
     }
 
     fn get(&self, id: Option<omsi_script::VarId>) -> f32 {

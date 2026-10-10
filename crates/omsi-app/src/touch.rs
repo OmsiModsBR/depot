@@ -911,7 +911,7 @@ impl App {
 
     /// Paint the controls into `painter` (physical pixels).
     fn touch_paint(&mut self) {
-        let speed = self.player.as_ref().map(|p| p.vehicle.physics.velocity_kmh().abs());
+        let speed = self.player.as_ref().map(|p| p.vehicle.motion().velocity_kmh().abs());
         let lock_angle = touch_lock_angle(&self.settings);
         // (the buttons' backgrounds follow the interface's opacity; their icons stay solid)
         let panel_bg = PANEL_BG.alpha(crate::ui::backdrop(self.settings.ui_opacity));
