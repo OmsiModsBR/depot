@@ -110,6 +110,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
     env:
       CARGO_TERM_COLOR: always
       CARGO_PROFILE_RELEASE_DEBUG: 0
@@ -128,9 +131,13 @@ jobs:
       - name: Physics traces against the base
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          DELTA: ${{ contains(github.event.pull_request.labels.*.name, 'physics-delta') }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e
+          # the pull request's labels as they are now: a re-run replays the event that started
+          # the run, whose labels are those of that moment, so a label added since is not in it
+          DELTA=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq 'any(.labels[]; .name == "physics-delta")')
           scripts/physics-trace-diff.sh "$BASE_SHA" 2>&1 | tee physics-traces.log
           status=${PIPESTATUS[0]}
           {
