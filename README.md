@@ -4,7 +4,7 @@ Independent repository: https://github.com/OmsiModsBR/depot
 
 Initial version: **0.2.16** (historical baseline; no Depot release published yet).
 
-Historical source baseline: `v0.2.16` (`2026-10-07`), commit
+Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openOMSI): `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
 
 Maintenance policy: **stable base + selective upstream integration**.
