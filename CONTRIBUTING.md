@@ -11,6 +11,20 @@ Thanks for helping! A few rules keep the project healthy:
 * `cargo test --workspace` and `cargo build --release` must pass (CI checks all platforms).
 * Code style: `rustfmt` defaults, comments explain *why*.
 
+## Branches
+
+Every branch follows one of three prefixes, chosen by what it contains. Names after the
+prefix are short, lowercase and hyphenated (`feat/route-editor`, `fix/door-sound-loop`).
+
+| Prefix | Use it for | May contain |
+|---|---|---|
+| `feat/<feature-name>` | New features, or refactors of existing ones | Code, configuration, documentation and anything else the feature needs |
+| `fix/<branch-name>` | Only fixes for problems found in existing features | The fix and documentation; no new features or refactors |
+| `docs/<branch-name>` | Only documentation updates | Documentation; no code or configuration |
+
+A branch whose changes outgrow its prefix (a docs branch that needs a code change, a fix
+that turns into a refactor) is renamed, or the extra work moves to a branch of its own.
+
 ## Files and licences
 
 * **Contributions are MIT**, like the rest of the code and documentation. The few

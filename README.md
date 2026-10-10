@@ -188,6 +188,8 @@ depot/
 ## Contributing
 
 Issues and pull requests are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md).
+Branches are named `feat/`, `fix/` or `docs/` by what they contain - see
+[CONTRIBUTING.md](CONTRIBUTING.md#branches).
 
 ## License
 
