@@ -57,3 +57,35 @@ jobs:
           if ('${{ steps.tests.outcome }}' -ne 'success' -or '${{ steps.build.outcome }}' -ne 'success') {
             throw 'Workspace tests or build failed; inspect the original diagnostics. No release was published.'
           }
+
+  # Informational quality gates: they never fail the workflow. Each step reports its own
+  # outcome in the log and in the job summary; what is still pending is in docs/QUALITY.md.
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+      - name: System libraries for clippy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake pkg-config libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+      - name: rustfmt (informational)
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+      - name: clippy (informational)
+        continue-on-error: true
+        run: cargo clippy --locked --workspace --all-targets
+      - name: cargo audit and cargo deny (informational)
+        continue-on-error: true
+        run: |
+          cargo install --locked cargo-audit cargo-deny
+          cargo audit || echo "::warning::cargo audit reported findings"
+          cargo deny check || echo "::warning::cargo deny reported findings"

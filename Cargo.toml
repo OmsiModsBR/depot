@@ -72,6 +72,8 @@ opt-level = 3
 debug = 1
 codegen-units = 4
 lto = "thin"
+# integer overflow panics instead of wrapping silently (the parsers read untrusted content)
+overflow-checks = true
 
 [profile.dev]
 opt-level = 1
