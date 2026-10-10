@@ -51,6 +51,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Website: Markdown sanitised with DOMPurify, Content-Security-Policy, marked and DOMPurify vendored.
 - Release builds use `overflow-checks`.
 
+### Fixed
+- `omsi-plugin` test `panels_clicks_and_focus_through_omsi_ui` failed on Windows CI because the reload is detected by
+  modification time and the rewritten file could keep the old timestamp; the test now sets a newer one. The Lua
+  feature itself is unchanged (it stays in the crate; it is only unreachable from the client).
+
 ### Project
 - Identity and links point to OmsiModsBR/depot, omsimods.com.br and omsimods.com.br/discord; new logos and icons.
 - LICENSE keeps the upstream copyright and adds the Project Depot line.
