@@ -1,6 +1,6 @@
 # Architecture
 
-openOMSI mirrors the unit structure of the original Delphi program so that every subsystem
+Project Depot mirrors the unit structure of the original Delphi program so that every subsystem
 has an obvious counterpart, but replaces its architecture where the original was limited:
 64-bit, data loading and tessellation on a worker pool, a modern renderer, no global mutable
 state.
@@ -875,7 +875,7 @@ known; **money** - notes as well as coins, exact fare exact; **keys** - a releas
 what the press started, F12 yields to a bus binding, the blinker keys follow the lever;
 **clouds** drift on over midnight; **launcher** - decomposed accents composed (macOS file
 names), the METAR airport nearest the map, the Timetable page on the chosen map, saving for
-maps in archives, "Reset timetable". **(done)** Found to be content, not openOMSI: Novi
+maps in archives, "Reset timetable". **(done)** Found to be content, not Project Depot: Novi
 Sad's `.ttr` tracks jump between tiles (id 9277167 on tiles 441 and 167 in a row), a missing
 `IK218N` script, missing fonts. Still open: the frame rate at 2560×1080 with 4× MSAA in
 Enhanced on Novi Sad (~25-30 fps offscreen, GPU main pass ~12 ms), the "camera too far
