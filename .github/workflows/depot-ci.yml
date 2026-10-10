@@ -100,3 +100,93 @@ jobs:
           cargo install --locked cargo-audit cargo-deny
           cargo audit || echo "::warning::cargo audit reported findings"
           cargo deny check || echo "::warning::cargo deny reported findings"
+
+  # Blocking on pull requests: the vehicle physics of the change against its base, frame by
+  # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md). A change that only moves code
+  # leaves every trace identical. One meant to alter the physics carries the `physics-delta`
+  # label: the job then lists where the traces differ without failing, for the review to
+  # check against the change the pull request predicts.
+  physics-traces:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake pkg-config libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+      - name: Physics traces against the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DELTA: ${{ contains(github.event.pull_request.labels.*.name, 'physics-delta') }}
+        run: |
+          set +e
+          scripts/physics-trace-diff.sh "$BASE_SHA" 2>&1 | tee physics-traces.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Vehicle physics traces'
+            echo '```'
+            grep -A 400 '^physics-trace-diff:' physics-traces.log | head -n 400
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" = 1 ] && [ "$DELTA" = true ]; then
+            echo "::warning::The physics traces differ from the base (label physics-delta): check them against the predicted change."
+            exit 0
+          fi
+          exit "$status"
+
+  # Informational: how much of the rigid body's code (rigid.rs, rigid/train.rs) the physics
+  # scenarios and invariant tests reach - lines, regions and branches.
+  physics-coverage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      CARGO_TARGET_DIR: target/coverage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+          components: llvm-tools
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake pkg-config libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+      - name: Coverage of the rigid body
+        run: |
+          tests="--test physics_traces --test physics_invariants"
+          # branch coverage is still behind -Z on a stable toolchain; regions and lines without it
+          export RUSTC_BOOTSTRAP=1 RUSTFLAGS="-C instrument-coverage -Z coverage-options=branch"
+          if ! cargo test --locked -p omsi-sim --release $tests --no-run; then
+            echo "::warning::branch coverage is not available on this toolchain; measuring regions and lines"
+            export RUSTFLAGS="-C instrument-coverage"
+          fi
+          export LLVM_PROFILE_FILE="$PWD/target/coverage/prof/%p-%m.profraw"
+          cargo test --locked -p omsi-sim --release $tests --no-run --message-format=json \
+            | jq -r 'select(.profile.test == true) | .executable | select(. != null)' > test-binaries
+          cargo test --locked -p omsi-sim --release $tests
+          llvm="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin"
+          "$llvm/llvm-profdata" merge -sparse target/coverage/prof/*.profraw -o target/coverage/rigid.profdata
+          # (the first binary goes where llvm-cov takes it, the others as -object)
+          mapfile -t bins < test-binaries
+          objects=()
+          for b in "${bins[@]:1}"; do objects+=("-object=$b"); done
+          "$llvm/llvm-cov" report "${bins[0]}" "${objects[@]}" -instr-profile=target/coverage/rigid.profdata -show-branch-summary \
+            "$PWD/crates/omsi-sim/src/rigid.rs" "$PWD/crates/omsi-sim/src/rigid/train.rs" | tee coverage.txt
+          { echo '### Coverage of the rigid body by the physics scenarios'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
