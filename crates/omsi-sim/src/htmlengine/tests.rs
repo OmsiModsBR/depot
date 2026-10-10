@@ -977,3 +977,20 @@ fn self_referencing_array_does_not_deadlock() {
     it.run("var x = [1]; for (var i = 0; i < 40; i++) { x = [x, x]; } var s = String(x);").unwrap();
     assert!(get_var(&it, "s").len() <= MAX_JS_STR + 8);
 }
+
+#[test]
+fn js_array_and_string_growth_is_capped() {
+    // a huge index is a JS error and allocates nothing
+    assert!(interp().run("var a = []; a[4000000000] = 1;").is_err());
+    let mut it = interp();
+    it.run("var a = []; a[100] = 1; var n = a.length;").unwrap();
+    assert_eq!(get_var(&it, "n"), "101");
+    // strings stay bounded however they grow
+    let mut it = interp();
+    it.run("var s = 'x'; for (var i = 0; i < 40; i++) { s += s; } var n = s.length;").unwrap();
+    assert!(get_var(&it, "n").parse::<usize>().unwrap() <= MAX_JS_STR);
+    let mut it = interp();
+    it.run("var p = 'x'.padStart(1e12, 'ab'); var q = 'x'.padEnd(1e12); var r = 'ab'.repeat(1000); var n = p.length;").unwrap();
+    assert!(get_var(&it, "n").parse::<usize>().unwrap() <= MAX_JS_STR);
+    assert_eq!(get_var(&it, "r").len(), 2000);
+}

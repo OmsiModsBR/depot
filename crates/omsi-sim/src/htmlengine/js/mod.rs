@@ -139,6 +139,21 @@ pub(crate) fn fmt_num(n: f64) -> String {
 /// Longest string the JS engine builds from an array (`join`, `String(arr)`); anything past it is cut.
 pub(crate) const MAX_JS_STR: usize = 1 << 20;
 
+/// Highest element index a JS array may grow to (`a[4e9] = 1` would otherwise allocate gigabytes).
+pub(crate) const MAX_JS_ARR: usize = 1 << 18;
+
+/// Cut `s` to `MAX_JS_STR` bytes (on a char boundary), so repeated `s += s` cannot exhaust memory.
+pub(crate) fn cap_str(mut s: String) -> String {
+    if s.len() > MAX_JS_STR {
+        let mut end = MAX_JS_STR;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        s.truncate(end);
+    }
+    s
+}
+
 /// `arr.join(sep)` without holding the array's lock while recursing, with JS semantics for cycles
 /// (an array met again inside itself prints as empty) and a cap on the output length, so a
 /// self-referencing or doubly-nested array can neither deadlock the `Mutex` nor explode.
