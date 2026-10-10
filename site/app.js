@@ -1,34 +1,18 @@
-// openOMSI website: a small hash router that shows the overview, the download page and the
+// Project Depot temporary website: a small hash router that shows the overview, the download page and the
 // Markdown files of docs/ (copied next to this page by .github/workflows/pages.yml).
 const REPO = "OmsiModsBR/depot";
 const DOCS = [
   { file: "USER_GUIDE", title: "User guide", icon: "sports_esports" },
-  { file: "ANDROID", title: "Android & mobile", icon: "smartphone" },
   { file: "MODDING", title: "Modding beyond OMSI 2", icon: "handyman" },
   { file: "PBR", title: "PBR materials", icon: "texture" },
   { file: "BUILDING", title: "Building", icon: "build" },
   { file: "FORMATS", title: "Content formats", icon: "description" },
   { file: "ARCHITECTURE", title: "Architecture", icon: "account_tree" },
   { file: "ROUTES", title: "Routes", icon: "alt_route" },
-  { file: "PLUGINS", title: "Plugins", icon: "extension" },
-  { file: "SERVER", title: "Dedicated server", icon: "dns" },
   { file: "VERSIONING", title: "Versioning & releases", icon: "new_releases" },
 ];
 const PLATFORMS = [
   { key: "windows-x64", name: "Windows", icon: "desktop_windows", note: "64-bit (x64), Windows 10 or newer", os: "windows" },
-  { key: "windows-arm64", name: "Windows on ARM", icon: "desktop_windows", note: "ARM64 (Snapdragon laptops), Windows 11", os: "windows-arm" },
-  { key: "macos-arm64", name: "macOS (Apple silicon)", icon: "laptop_mac", note: "M1 or newer, macOS 11 or newer", os: "mac" },
-  { key: "macos-x64", name: "macOS (Intel)", icon: "laptop_mac", note: "Intel Macs, macOS 11 or newer", os: "mac-intel" },
-  { key: "linux-x64", name: "Linux", icon: "computer", note: "x86-64, Vulkan drivers", os: "linux" },
-  { key: "linux-arm64", name: "Linux on ARM", icon: "computer", note: "ARM64, Vulkan drivers", os: "linux-arm" },
-  { key: "android-arm64", ext: "apk", name: "Android", icon: "smartphone", note: "arm64 phones and tablets, Android 8.0+", os: "android" },
-];
-// The dedicated server: no window, for hosting a session (see the Dedicated server page).
-const SERVERS = [
-  { key: "server-windows-x64", name: "Server for Windows", icon: "dns", note: "x64, no window" },
-  { key: "server-windows-arm64", name: "Server for Windows on ARM", icon: "dns", note: "ARM64, no window" },
-  { key: "server-linux-x64", name: "Server for Linux", icon: "dns", note: "x86-64, no window" },
-  { key: "server-linux-arm64", name: "Server for Linux on ARM", icon: "dns", note: "ARM64 (Raspberry Pi 4/5, ARM VPS), no window" },
 ];
 
 // Which build fits the visitor, roughly: the one to put first and mark.
@@ -98,7 +82,7 @@ async function download() {
   // Each file by its exact name: matched by its ending alone, "-windows-x64.zip" was the
   // dedicated server's zip as well, and the Windows button downloaded the server.
   const card = p => {
-    const file = `openOMSI-${v}-${p.key}.${p.ext || "zip"}`;
+    const file = `depot-${v}-${p.key}.${p.ext || "zip"}`;
     const a = (rel.assets || []).find(a => a.name === file);
     const size = a ? ` · ${(a.size / 1048576).toFixed(0)} MB` : "";
     const mine = p.os && p.os === visitorOs();
@@ -108,9 +92,7 @@ async function download() {
           : `<p>Not in this release.</p>`}</div>`;
   };
   const games = [...PLATFORMS].sort((x, y) => (y.os === visitorOs()) - (x.os === visitorOs()));
-  grid.innerHTML = games.map(card).join("")
-    + `<h2 class="section-title" style="grid-column:1/-1">Dedicated server</h2>`
-    + SERVERS.map(card).join("");
+  grid.innerHTML = games.map(card).join("");
 }
 
 async function doc(name, anchor) {
@@ -129,7 +111,7 @@ async function doc(name, anchor) {
   const box = view.querySelector(".doc");
   box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${REPO}/blob/main/docs/${name}.md">
     <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + clean(marked.parse(md));
-  document.title = `${meta ? meta.title : name} · openOMSI`;
+  document.title = `${meta ? meta.title : name} · Project Depot`;
   // heading anchors
   box.querySelectorAll("h1, h2, h3, h4").forEach(h => {
     h.id = slug(h.textContent);
@@ -198,7 +180,7 @@ async function releases() {
   view.innerHTML = `<div class="content"><h1>Releases</h1>
     <p class="lead">Every version, newest first. The newest one is also on the <a href="#/download">Download</a> page.</p>
     <div id="rel-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = "Releases · openOMSI";
+  document.title = "Releases · Project Depot";
   const box = document.getElementById("rel-list");
   let list;
   try { list = await gh("releases?per_page=30"); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/releases">Releases on GitHub</a></p>`; return; }
@@ -227,7 +209,7 @@ async function issues(number) {
       <input id="iq" type="search" placeholder="Filter by title or label" value="${esc(issueQuery)}">
     </div>
     <div id="issue-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = "Issues · openOMSI";
+  document.title = "Issues · Project Depot";
   view.querySelectorAll(".tabs button").forEach(b => {
     b.classList.toggle("on", b.dataset.s === issueState);
     b.onclick = () => { issueState = b.dataset.s; issues(); };
@@ -258,7 +240,7 @@ async function issue(n) {
   let i, comments;
   try { [i, comments] = await Promise.all([gh(`issues/${n}`), gh(`issues/${n}/comments?per_page=100`)]); }
   catch (e) { box.innerHTML = `<p>${esc(e.message)}</p>`; return; }
-  document.title = `#${i.number} ${i.title} · openOMSI`;
+  document.title = `#${i.number} ${i.title} · Project Depot`;
   const post = (who, when, body) => `<div class="card elevation-1 comment"><div class="comment-head"><img src="${esc(who?.avatar_url)}&s=48" alt=""><b>${esc(who?.login)}</b><span class="muted">${ago(when)}</span></div><div class="doc">${md(body) || "<p class='muted'>No description.</p>"}</div></div>`;
   box.innerHTML = `<h1 class="issue-head">${esc(i.title)} <span class="muted">#${i.number}</span></h1>
     <p><span class="label" style="--lc:${i.state === "open" ? "#2da44e" : "#8250df"}">${i.state === "open" ? "Open" : "Closed"}</span> ${labelChips(i.labels)}</p>
@@ -272,7 +254,7 @@ function route() {
   const [path, anchor] = hash.split("#");
   document.querySelectorAll(".drawer a[data-route]").forEach(a => a.classList.toggle("active", a.dataset.route === path || (a.dataset.route === "/issues" && path.startsWith("/issues/"))));
   toggleDrawer(false);
-  document.title = "openOMSI";
+  document.title = "Project Depot";
   if (path.startsWith("/docs/")) return doc(path.slice(6), anchor);
   if (path === "/download") return download();
   if (path === "/releases") return releases();

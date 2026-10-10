@@ -1,7 +1,7 @@
-/* openOMSI website - Material Design 2 */
+/* Project Depot website - Material Design 2 */
 :root {
-  --primary: #f47f30;
-  --primary-dark: #d9661a;
+  --primary: #0a7f2e;
+  --primary-dark: #065f1f;
   --on-primary: #fff;
   --surface: #ffffff;
   --background: #f5f5f6;
@@ -10,13 +10,13 @@
   --secondary-text: rgba(0, 0, 0, .6);
   --divider: rgba(0, 0, 0, .12);
   --code-bg: #f1f2f4;
-  --warning-bg: #fff4e5;
-  --warning-fg: #8a4b0f;
+  --warning-bg: #eaf5ec;
+  --warning-fg: #065f1f;
   --hover: rgba(0, 0, 0, .05);
-  --selected: rgba(244, 127, 48, .12);
-  /* text in the brand colour: #d9661a is only 3.2:1 on white, this one 4.9:1 */
-  --link: #b8530f;
-  --accent-text: #b8530f;
+  --selected: rgba(10, 127, 46, .12);
+  /* text in the brand colour: #065f1f is only 3.2:1 on white, this one 4.9:1 */
+  --link: #0a7f2e;
+  --accent-text: #0a7f2e;
   --appbar: #ffffff;
   --appbar-fg: rgba(0, 0, 0, .87);
   --appbar-border: rgba(0, 0, 0, .12);
@@ -37,6 +37,9 @@
 /* dark: by the system setting unless the visitor picked light, or picked dark */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --primary: #3cc468;
+    --primary-dark: #2fa957;
+    --on-primary: #04210d;
     --surface: #24272c;
     --background: #181a1e;
     --on-surface: rgba(255, 255, 255, .87);
@@ -44,12 +47,12 @@
     --secondary-text: rgba(255, 255, 255, .64);
     --divider: rgba(255, 255, 255, .12);
     --code-bg: #2d3138;
-    --warning-bg: #3a2a18;
-    --warning-fg: #ffc48f;
+    --warning-bg: #1c2b20;
+    --warning-fg: #86efac;
     --hover: rgba(255, 255, 255, .06);
-    --selected: rgba(244, 127, 48, .16);
-    --link: #f8924d;
-    --accent-text: #f8924d;
+    --selected: rgba(10, 127, 46, .16);
+    --link: #4ade80;
+    --accent-text: #4ade80;
     --appbar: #1f2227;
     --appbar-fg: #fff;
     --appbar-border: transparent;
@@ -66,6 +69,9 @@
   }
 }
 :root[data-theme="dark"] {
+  --primary: #3cc468;
+  --primary-dark: #2fa957;
+  --on-primary: #04210d;
   --surface: #24272c;
   --background: #181a1e;
   --on-surface: rgba(255, 255, 255, .87);
@@ -73,12 +79,12 @@
   --secondary-text: rgba(255, 255, 255, .64);
   --divider: rgba(255, 255, 255, .12);
   --code-bg: #2d3138;
-  --warning-bg: #3a2a18;
-  --warning-fg: #ffc48f;
+  --warning-bg: #1c2b20;
+  --warning-fg: #86efac;
   --hover: rgba(255, 255, 255, .06);
-  --selected: rgba(244, 127, 48, .16);
-  --link: #f8924d;
-  --accent-text: #f8924d;
+  --selected: rgba(10, 127, 46, .16);
+  --link: #4ade80;
+  --accent-text: #4ade80;
   --appbar: #1f2227;
   --appbar-fg: #fff;
   --appbar-border: transparent;
@@ -168,7 +174,7 @@ main { margin-left: var(--drawer-w); padding-top: 64px; min-height: 100vh; displ
   display: inline-flex; align-items: center; gap: 6px; margin-top: 24px; padding: 4px 12px 4px 8px;
   border-radius: 16px; background: var(--chip-bg); font-size: 14px;
 }
-.chip-warn { margin-right: 8px; background: rgba(244,127,48,.22); }
+.chip-warn { margin-right: 8px; background: rgba(10,127,46,.22); }
 .chip .material-icons { font-size: 18px; color: var(--primary); }
 
 /* buttons */
@@ -283,4 +289,9 @@ h1 { line-height: 1.25; }
 .dl-mine { outline: 2px solid var(--primary); }
 .dl-mine { outline-offset: -2px; }
 .dl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dl-badge { white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1; padding: 5px 10px; border-radius: 999px; background: var(--primary); color: #fff; }
+.dl-badge { white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1; padding: 5px 10px; border-radius: 999px; background: var(--primary); color: var(--on-primary); }
+
+/* temporary-site notice under the app bar */
+.temp-banner { display: flex; align-items: center; gap: 10px; padding: 6px 16px; font-size: 14px; background: var(--primary); color: var(--on-primary); }
+.temp-banner a { color: inherit; text-decoration: underline; }
+.temp-banner .material-icons { font-size: 18px; }

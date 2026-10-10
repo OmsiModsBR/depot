@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>openOMSI</title>
-<meta name="description" content="openOMSI: OMSI 2 recreated from scratch in Rust, fully compatible with every map and mod.">
+<title>Project Depot</title>
+<meta name="description" content="Project Depot: an independent, selectively maintained OMSI 2-compatible runtime written in Rust. Temporary site.">
 <link rel="icon" type="image/png" href="assets/icon.png">
 <link rel="apple-touch-icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,6 +41,7 @@
   <div class="drawer-subheader">Project</div>
   <div class="drawer-section">
     <a href="https://omsimods.com.br/discord"><span class="material-icons">forum</span>Discord</a>
+    <a href="https://omsimods.com.br"><span class="material-icons">public</span>OmsiMods BR</a>
     <a href="https://github.com/OmsiModsBR/depot"><span class="material-icons">code</span>Source code</a>
     <a href="#/releases" data-route="/releases"><span class="material-icons">new_releases</span>Releases</a>
     <a href="#/issues" data-route="/issues"><span class="material-icons">bug_report</span>Issues</a>
@@ -49,10 +50,11 @@
 <div class="scrim" id="scrim"></div>
 
 <main id="main">
+  <div class="temp-banner" role="note"><span class="material-icons">info</span><span>Temporary site. The official Project Depot site will live at <a href="https://omsimods.com.br">omsimods.com.br</a>; addresses and content here may change.</span></div>
   <div id="view"></div>
   <footer class="footer">
-    Project Depot is an independent project, not affiliated with the makers of OMSI 2.
-    OMSI&nbsp;2 is required to play. · <a href="https://github.com/OmsiModsBR/depot/blob/main/LICENSE">MIT License</a>
+    Project Depot is an independent project by the OmsiModsBR Team, derived from <a href="https://github.com/openOMSI-org/openOMSI">openOMSI</a> (MIT) and not affiliated with the makers of OMSI 2.
+    OMSI&nbsp;2 is required to play. This is a temporary site. · <a href="https://github.com/OmsiModsBR/depot/blob/main/LICENSE">MIT License</a>
   </footer>
 </main>
 
@@ -60,7 +62,7 @@
   <section class="hero">
     <img class="hero-logo logo-on-dark" src="assets/logos/wordmark-on-dark.png" alt="Project Depot">
     <img class="hero-logo logo-on-light" src="assets/logos/wordmark-on-light.png" alt="Project Depot">
-    <p class="hero-text">OMSI&nbsp;2, recreated from scratch in Rust - with full compatibility for every map, bus and mod.</p>
+    <p class="hero-text">An independent OMSI&nbsp;2-compatible runtime in Rust. The goal is 1:1 compatibility with OMSI&nbsp;2 - a goal being worked on, not yet a finished result.</p>
     <div class="hero-actions">
       <a class="btn btn-contained" href="#/download"><span class="material-icons">download</span>Download</a>
       <a class="btn btn-outlined" href="#/docs/USER_GUIDE"><span class="material-icons">menu_book</span>Documentation</a>
@@ -75,29 +77,27 @@
       <span class="material-icons card-icon">warning</span>
       <div>
         <h3>You need the original OMSI&nbsp;2</h3>
-        <p>openOMSI contains <b>no game content</b>. It plays on the maps, vehicles and files of an installed
+        <p>Project Depot contains <b>no game content</b>. It plays on the maps, vehicles and files of an installed
         copy of OMSI&nbsp;2 and <b>does not start without one</b>.</p>
       </div>
     </div>
 
-    <h2 class="section-title">What is openOMSI?</h2>
-    <p class="lead">openOMSI is a project to recreate the bus simulator <b>OMSI&nbsp;2</b> from the ground up in
-    <b>Rust</b>. Every content format of the original - maps, splines, scenery objects, buses, scripts,
-    timetables, HOF files, fonts, weather, tickets, plugins - is supported and loaded
-    exactly as OMSI&nbsp;2.2.032 does, so existing maps and mods run unchanged. Underneath it is a new engine:
-    64-bit, multithreaded, with a modern renderer.</p>
+    <h2 class="section-title">What is Project Depot?</h2>
+    <p class="lead">Project Depot is an independent project of the OmsiModsBR Team, derived from a specific baseline of
+    <a href="https://github.com/openOMSI-org/openOMSI">openOMSI</a>, a recreation of the bus simulator <b>OMSI&nbsp;2</b>
+    in <b>Rust</b>. It aims at <b>1:1 behavioural compatibility with OMSI&nbsp;2</b> for existing maps, buses, scenery,
+    scripts and mods, with a stable base, few regressions and selective integration of upstream changes.
+    That is a development target, not a claim that it has been reached.</p>
 
     <div class="grid">
-      <div class="card elevation-1"><span class="material-icons card-icon">extension</span><h3>100% mod compatibility</h3><p>Maps, buses, AI vehicles, scenery and plugins from the community work as they are - no conversion.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">speed</span><h3>A modern engine</h3><p>64-bit, no 2&nbsp;GB limit, tile streaming and texture loading on worker threads, Metal / Vulkan / DirectX&nbsp;12.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">devices</span><h3>Windows, macOS, Linux, Android</h3><p>Native builds for every platform, released automatically for every change.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">smartphone</span><h3>On your phone</h3><p>The full game on Android: on-screen wheel or tilt steering, analog pedals, doors, gearbox and a cab panel - with the same maps, buses and mods. <a href="#/docs/ANDROID">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">texture</span><h3>PBR materials</h3><p>Normal, roughness, metalness and occlusion maps beside a texture give mods modern materials, and still work in OMSI&nbsp;2. <a href="#/docs/PBR">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">handyman</span><h3>No limits for modders</h3><p>Textures up to 16K, any number of interior lights per mesh, no 2&nbsp;GB limit - and OMSI&nbsp;2 content still works as it is. <a href="#/docs/MODDING">More</a></p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">groups</span><h3>Multiplayer</h3><p>LAN sessions and a dedicated server that simulates the whole map without a window.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">tune</span><h3>A real launcher</h3><p>Profiles, duties from the timetable, bus and livery preview, settings, one-click mod installs.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">code</span><h3>Lua plugins</h3><p>Write plugins in Lua: one text file in <code>plugins/</code>, reloaded as you save it, the same on every platform. <a href="#/docs/PLUGINS">Plugin docs</a>.</p></div>
-      <div class="card elevation-1"><span class="material-icons card-icon">description</span><h3>Open formats</h3><p>Every OMSI file format is written down - useful for modders and tool makers too.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">verified</span><h3>1:1 compatibility as the goal</h3><p>Behaviour is checked against OMSI&nbsp;2 case by case, with tests, before anything is called compatible.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">speed</span><h3>A modern foundation</h3><p>64-bit, multithreaded, with a renderer on wgpu (Metal / Vulkan / DirectX&nbsp;12 inherited from the baseline).</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">desktop_windows</span><h3>Windows x64 first</h3><p>Version 0.2.17 is published for Windows x64 only. Other platforms are not offered as Depot packages yet.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">fork_right</span><h3>Selective upstream</h3><p>Upstream changes are reviewed for licence, scope and regressions before they come in - never synchronised blindly.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">texture</span><h3>PBR materials</h3><p>Normal, roughness, metalness and occlusion maps beside a texture give mods modern materials. <a href="#/docs/PBR">More</a></p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">handyman</span><h3>For modders</h3><p>Content formats and modding notes are written down. <a href="#/docs/MODDING">More</a></p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">tune</span><h3>A launcher</h3><p>Profiles, duties from the timetable, bus and livery preview, settings and a Mods page.</p></div>
+      <div class="card elevation-1"><span class="material-icons card-icon">description</span><h3>Open source, MIT</h3><p>Code and history are public on GitHub, with the origin and licence of what comes from upstream recorded.</p></div>
     </div>
   </div>
 </template>
@@ -107,7 +107,7 @@
     <h1>Download</h1>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">construction</span>
-      <div><h3>Early release: expect bugs</h3><p>openOMSI is in an early stage of development. Things may be missing or broken, and may change between versions. Please report problems on the <a href="#/issues">Issues</a> page.</p></div>
+      <div><h3>Early release: expect bugs</h3><p>Project Depot is in an early stage of development. Things may be missing or broken, and may change between versions. Please report problems on the <a href="#/issues">Issues</a> page.</p></div>
     </div>
     <div class="card card-warning elevation-2">
       <span class="material-icons card-icon">warning</span>
@@ -117,14 +117,12 @@
     <div class="grid" id="dl-grid"></div>
     <h2 class="section-title">Installing</h2>
     <ul class="steps">
-      <li><b>Windows:</b> unpack the zip into a folder of your own (not <code>Program Files</code>) and run <code>openomsi.exe</code>. SmartScreen may warn about an unknown app: <i>More info</i> → <i>Run anyway</i>. Not sure which one? Almost every PC is <b>x64</b>; <b>ARM</b> is only for Snapdragon laptops.</li>
-      <li><b>macOS:</b> unpack and open <code>openOMSI.app</code>. The first time macOS may refuse an app from the internet: right-click → <i>Open</i> → <i>Open</i>, or run <code>xattr -dr com.apple.quarantine openOMSI.app</code> once. <b>Apple silicon</b> for M1 and newer, <b>Intel</b> for older Macs.</li>
-      <li><b>Linux:</b> unpack and run <code>./openomsi</code> (<code>chmod +x openomsi</code> if it does not start; Vulkan or OpenGL drivers needed).</li>
-      <li><b>Android:</b> install the <code>.apk</code>, allow access to all files, copy the whole OMSI&nbsp;2 folder to <code>openOMSI/OMSI 2</code> on the phone - see <a href="#/docs/ANDROID">Android</a>.</li>
-      <li><b>Dedicated server:</b> only for hosting a multiplayer session without playing on that machine - to play, take the game above. See <a href="#/docs/SERVER">Dedicated server</a>.</li>
-      <li>Mods go into the folder next to the game, or through the launcher's <b>Mods</b> page. The original OMSI&nbsp;2 folder is never changed.</li>
+      <li><b>Windows (x64):</b> unpack the zip into a folder of your own (not <code>Program Files</code>) and run <code>depot.exe</code> (or <code>depot-launcher.exe</code>). SmartScreen may warn about an unknown app: <i>More info</i> → <i>Run anyway</i>.</li>
+      <li>On the first start, point the launcher to your OMSI&nbsp;2 folder. Mods go into the folder next to the game, or through the launcher's <b>Mods</b> page. The original OMSI&nbsp;2 folder is never changed.</li>
+      <li>The program does not update itself: new versions are published on <a href="#/releases">Releases</a> and you download them yourself.</li>
+      <li>Other platforms and the dedicated server are not part of the current Depot release.</li>
     </ul>
-    <p>All versions: <a href="#/releases">Releases</a>. Versions are numbered <code>MAJOR.MINOR.COMMIT</code> - see <a href="#/docs/VERSIONING">Versioning</a>.</p>
+    <p>All versions: <a href="#/releases">Releases</a>. Version numbers and policy: see <a href="#/docs/VERSIONING">Versioning</a>.</p>
   </div>
 </template>
 
