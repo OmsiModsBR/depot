@@ -1065,7 +1065,7 @@ impl ApplicationHandler for App {
                             // menu at once)
                             if self.settings.head_tracking && self.headtrack.is_none() && self.headtrack_failed.is_none_or(|t| t.elapsed().as_secs_f32() > 5.0) {
                                 let hwnd = self.window.as_ref().and_then(|window| crate::controllers::window_handle(window));
-                                self.headtrack = crate::headtrack::HeadTracker::start(self.settings.head_tracking_port, hwnd);
+                                self.headtrack = crate::headtrack::HeadTracker::start(self.settings.head_tracking_port, &self.settings.head_tracking_bind, hwnd);
                                 self.headtrack_failed = self.headtrack.is_none().then(std::time::Instant::now);
                             }
                             if !self.settings.head_tracking {

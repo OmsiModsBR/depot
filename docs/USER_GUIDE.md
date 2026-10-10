@@ -160,6 +160,9 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
   *General* (language, the game's interface size, navigator,
   the version and the Releases link, and resetting every setting).
+  Head tracking from opentrack's UDP output (port 4242, `head_tracking_port`) listens on this
+  computer only (127.0.0.1); the datagrams carry no password. For opentrack on another machine
+  write `head_tracking_bind=any` (or one interface's address) in `settings.cfg`.
   (Discord Rich Presence is disabled until Depot has its own Discord application, see
   [removed/DISCORD_DISABLED.md](removed/DISCORD_DISABLED.md).)
   **Voice chat through GreenTeaSpeak** (on by default): in multiplayer, the other players
