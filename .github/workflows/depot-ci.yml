@@ -1,0 +1,59 @@
+name: Depot build and tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: depot-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-workspace:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      OPENOMSI_VERSION: 0.2.17
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      CARGO_PROFILE_RELEASE_STRIP: debuginfo
+      CARGO_BUILD_JOBS: 2
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+      - name: Toolchain and immutable baseline
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          cmake --version
+          $baseline = 'c85b2e0dda13d219fd12d0496c653d20cdb54145'
+          if ((git rev-parse depot-baseline-openomsi-0.2.16) -ne $baseline) { throw 'Baseline tag changed' }
+          if ((git merge-base $baseline HEAD) -ne $baseline) { throw 'Baseline ancestry changed' }
+      - name: Full workspace tests
+        id: tests
+        continue-on-error: true
+        run: cargo test --locked --workspace --release --no-fail-fast
+      - name: Full workspace release build
+        id: build
+        if: always()
+        continue-on-error: true
+        run: cargo build --locked --workspace --release
+      - name: Check results
+        if: always()
+        shell: pwsh
+        run: |
+          if ('${{ steps.tests.outcome }}' -ne 'success' -or '${{ steps.build.outcome }}' -ne 'success') {
+            throw 'Workspace tests or build failed; inspect the original diagnostics. No release was published.'
+          }

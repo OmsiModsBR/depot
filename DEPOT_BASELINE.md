@@ -14,6 +14,7 @@ Its initial policy is **stable base + selective upstream integration**.
 - Version: `0.2.16`
 - Historical release date: `2026-10-07`
 - Commit: `c85b2e0dda13d219fd12d0496c653d20cdb54145`
+- Immutable Depot baseline tag: `depot-baseline-openomsi-0.2.16`
 
 The Git history through this commit is retained for attribution and comparison.
 The original MIT license and copyright notices remain intact. GitHub fork
@@ -28,6 +29,10 @@ source filenames remain unchanged.
 Inherited GitHub workflows and Dependabot configuration are archived in
 `docs/upstream-automation/`; enabling Depot automation requires a separate review.
 The README is adapted to describe Depot's origin, goals and distribution names.
+See [PROJECT.md](PROJECT.md) and [UPSTREAM.md](UPSTREAM.md).
+A Depot-owned CI workflow builds and tests with read-only repository permissions;
+it does not publish releases, tags, websites or packages and uses no upstream secrets.
+See [baseline validation and limitations](docs/BASELINE-VALIDATION.md).
 
 ## Selective integration
 
@@ -46,3 +51,15 @@ their patches with this exact baseline and testing their behavior.
 No gameplay, renderer, physics, scripting or multiplayer feature is added.
 The baseline adaptation only records provenance, documents the integration
 policy, redirects the updater and archives inherited automation.
+
+## Depot 0.2.17 — rebranding only
+
+The first Depot release is simply a rebranding of the imported openOMSI 0.2.16
+baseline. It changes visible branding, executable/package/data-folder names,
+repository/update configuration and documentation. No gameplay, renderer,
+physics, simulation, scripting or multiplayer feature or fix is introduced.
+The MIT license and internal source identifiers are preserved.
+
+Physics/simulation evolutions and 1:1 compatibility are future goals, not claims
+about improvements in 0.2.17. Only Windows x64 game/launcher and dedicated-server
+packages are published. See [release notes](docs/releases/0.2.17.md).
