@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logos/pd-black.png" alt="Project Depot" width="640">
+</p>
+
 # Project Depot
 
 Independent repository: https://github.com/OmsiModsBR/depot
@@ -175,7 +179,7 @@ depot/
 │   ├── omsi-audio/ omsi-net/ omsi-plugin/ omsi-ui/   sound, multiplayer, plugins, UI toolkit
 ├── tools/             developer tools: omsi-check (format coverage)
 ├── scripts/           build scripts for every platform, version.sh, packaging files
-├── assets/            fonts, Material icons, app icons (assets/icons/app), logos (assets/logos)
+├── assets/            fonts, Material icons, app icons (assets/icons/app), Project Depot logos (assets/logos)
 ├── docs/              documentation (also published as the website)
 ├── site/              the GitHub Pages website
 └── docs/upstream-automation/ archived upstream CI recipes (inactive)
