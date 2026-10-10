@@ -292,14 +292,27 @@ impl Showroom {
                 // on their coupling, and stood visibly apart from how they stand in the game
                 // (without a ground, with their wheels over the floor by the springs' sag).
                 vehicle.ground = Some(Arc::new(|_: f64, _: f64| Some(0.0)));
+                // on full springs: the scripts lower the air springs' `Axle_Springfactor` as
+                // the bus is switched on (kneeling, levelling), and the bus stood knelt and
+                // leaning in the picture - an articulated one less than a single one, its rear
+                // section's springs untouched and holding it up through the joint
+                vehicle.springs_full = true;
                 load_coupled_parts(&root, &mut vehicle);
                 if !crate::rail_drive::is_rail(&vt.def) {
                     vehicle.enable_rigid_body();
                 }
-                // (placed at rest on loaded springs; the rear sections are hung on their joints
-                // at the first step and settle onto their wheels within a second or two)
-                for _ in 0..60 {
+                // Settled before it is shown: placed at rest on loaded springs, the bus still
+                // takes on the load its rear sections hang on the joint, and they settle onto
+                // their wheels. Two seconds left them moving in the picture: the steps go on
+                // until every body is still (or ten seconds have passed).
+                let still = |v: &omsi_sim::VehicleInstance| {
+                    v.rigid.iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity.length() < 0.002 && rb.omega.length() < 0.0005)
+                };
+                for i in 0..300 {
                     vehicle.update(1.0 / 30.0);
+                    if i >= 30 && still(&vehicle) {
+                        break;
+                    }
                 }
                 prefetch.prefetch(&vt, scheme);
                 for t in &vehicle.trailers {

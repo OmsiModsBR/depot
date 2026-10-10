@@ -975,6 +975,9 @@ pub struct VehicleInstance {
     /// Faces the wheels cannot climb stop the vehicle (see `RigidBody::wheel_walls`); the
     /// player's bus follows the setting for collisions with objects.
     pub wheel_walls: bool,
+    /// The springs as at full air whatever the scripts' `Axle_Springfactor_*` say (the
+    /// launcher's vehicle viewer shows the bus on full springs, not knelt or leaning).
+    pub springs_full: bool,
     /// What the radio plays, cut to what a text display shows (see `show_radio_text`):
     /// `None` leaves the scripts' own texts alone, an empty text is a radio that is off.
     pub radio_text: Option<String>,
@@ -1282,6 +1285,7 @@ impl VehicleInstance {
             collided: false,
             last_crash: 0.0,
             wheel_walls: true,
+            springs_full: false,
             radio_text: None,
             radio_frequency: None,
             crashes: 0,
@@ -1484,6 +1488,9 @@ impl VehicleInstance {
     }
 
     fn spring_factor(&self, axle: usize, side: usize) -> f32 {
+        if self.springs_full {
+            return 1.0;
+        }
         self.v_springfactor
             .get(axle)
             .and_then(|a| a[side])
