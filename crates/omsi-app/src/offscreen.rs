@@ -1745,16 +1745,14 @@ pub(crate) fn run_offscreen(
                         v0.host.clock.clone(),
                         v0.position,
                         v0.heading,
-                        v0.physics.clone(),
-                        v0.rigid.clone(),
+                        v0.physics_state(),
                     );
                     let restore = |v: &mut omsi_sim::VehicleInstance| {
                         v.state = start.0.clone();
                         v.host.clock = start.1.clone();
                         v.position = start.2;
                         v.heading = start.3;
-                        v.physics = start.4.clone();
-                        v.rigid = start.5.clone();
+                        v.set_physics_state(start.4.clone());
                     };
                     // One try: press, drag by `d`, hold, let go. Returns whether the script
                     // has the trigger, the variables while held and after letting go, and the

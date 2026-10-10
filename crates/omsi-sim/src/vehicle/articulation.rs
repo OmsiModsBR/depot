@@ -65,7 +65,7 @@ impl VehicleInstance {
             && self.trailers.iter().all(|t| !t.ty.def.is_rail() && !body_reversed(&t.ty.def, t.reversed) && !t.ty.def.axles.is_empty())
     }
 
-    /// One step of the vehicle's body (`lead`, taken out of `self.rigid`) and the bodies of the
+    /// One step of the vehicle's body (`lead`, taken out of its `Dynamics`) and the bodies of the
     /// parts coupled behind it - or of the body alone, the parts handing it what they hold
     /// along the joint (`rigid::CoupledPart`) as they follow.
     pub(super) fn step_bodies(&mut self, mut lead: RigidBody, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> crate::rigid::GroundProbe) -> RigidBody {

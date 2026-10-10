@@ -151,15 +151,15 @@ impl Trace {
             n64(v.heading),
             n32(v.pitch),
             n32(v.bank),
-            n32(v.physics.speed),
-            n32(v.physics.steer_deg),
-            v3(v.physics.accel),
-            v3(v.physics.a_trans),
+            n32(v.motion().speed),
+            n32(v.motion().steer_deg),
+            v3(v.motion().accel),
+            v3(v.motion().a_trans),
             v.crashes,
             n32(v.last_impact),
             v3(Vec3::from(v.host.coll_pos)),
         );
-        for (a, axle) in v.physics.wheels.iter().enumerate() {
+        for (a, axle) in v.motion().wheels.iter().enumerate() {
             for (s, w) in axle.iter().enumerate() {
                 let _ = writeln!(self.text, "    model_wheel {a} {s} rot {} rpm {} suspension {}", n32(w.rotation_deg), n32(w.rpm), n32(w.suspension));
             }
@@ -168,7 +168,7 @@ impl Trace {
             let value = v.var(name).map(n32).unwrap_or_else(|| "-".into());
             let _ = writeln!(self.text, "    var {name} {value}");
         }
-        if let Some(rb) = &v.rigid {
+        if let Some(rb) = v.rigid() {
             self.body(0, rb);
         }
         for (i, part) in v.trailers.iter().enumerate() {
@@ -852,7 +852,7 @@ mod scenarios {
         wall.id = 5;
         v.dynamic_boxes = vec![wall];
         frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
-        frames(&mut t, &mut v, &names, 420, 1.0 / 60.0, |v| Script { m_wheel: if v.physics.speed < 25.0 / 3.6 { 9000.0 } else { 0.0 }, ..Default::default() });
+        frames(&mut t, &mut v, &names, 420, 1.0 / 60.0, |v| Script { m_wheel: if v.motion().speed < 25.0 / 3.6 { 9000.0 } else { 0.0 }, ..Default::default() });
         frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, |_| Script { m_wheel: -6000.0, ..Default::default() });
         t.text
     }

@@ -1,14 +1,13 @@
-//! Road vehicle dynamics.
+//! What moves a road vehicle, and what the rest of the game reads of its motion.
 //!
-//! This is a deliberately simple first model (longitudinal forces + kinematic steering +
-//! ground following) that speaks the original script interface: the scripts provide
-//! `M_Wheel` (drive torque at the driven wheels, Nm), `Axle_Brakeforce_i_L/R` (N per wheel)
-//! and `Axle_Springfactor_*`; the engine provides `Velocity` (km/h), `n_Wheel` (rpm of the
-//! driven axle), `Wheel_RotationSpeed_i_*` (rpm), `Wheel_Rotation_i_*` (degrees),
-//! `Axle_Steering_i_*` (degrees), `Axle_Suspension_i_*` (m), `A_Trans_*` (m/s²), `Throttle`,
-//! `Brake`, `Clutch`. A rigid-body model with wheel contacts replaces it later.
+//! A vehicle moves by its [`Dynamics`]: the rigid body on its wheels of `crate::rigid` (the
+//! player's vehicle) or the [`KinematicModel`] (longitudinal forces, kinematic steering and
+//! the ground followed under the wheels). Either way the physics writes the frame's
+//! [`VehicleMotion`], which everything else reads, and hands the scripts their variables
+//! (`vehicle/physics_bridge.rs`). The driver's [`Controls`] go in.
 
-use glam::{DVec3, Vec3};
+use crate::rigid::RigidBody;
+use glam::Vec3;
 use omsi_vehicle::Vehicle;
 
 /// Driver inputs, all in `0..1` except steering in `-1..1` (positive = right).
@@ -34,10 +33,10 @@ pub struct WheelState {
 
 /// The vehicle's motion this frame, as the rest of the game reads it (the dashboard, the
 /// sounds, the passengers, the network ...), whichever model moves the vehicle: its rigid
-/// body, the kinematic model or the AI. Read-only: the physics writes it once a frame,
-/// together with the scripts' variables (see `VehicleInstance::motion`).
-#[derive(Debug, Clone, Copy)]
-pub struct VehicleMotion<'a> {
+/// body, the kinematic model or the AI. Read-only outside the physics: it writes it once a
+/// frame, together with the scripts' variables (see `VehicleInstance::motion`).
+#[derive(Debug, Clone)]
+pub struct VehicleMotion {
     /// Longitudinal speed, m/s (forward positive).
     pub speed: f32,
     /// The front wheels' steering angle, degrees, positive = right.
@@ -48,42 +47,13 @@ pub struct VehicleMotion<'a> {
     /// What the scripts read as `A_Trans_*`: the acceleration without gravity.
     pub a_trans: Vec3,
     /// Per axle: (left, right) wheels.
-    pub wheels: &'a [[WheelState; 2]],
-}
-
-impl VehicleMotion<'_> {
-    pub fn velocity_kmh(&self) -> f32 {
-        self.speed * 3.6
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct VehiclePhysics {
-    pub mass_kg: f32,
-    pub rolling_resistance: f32,
-    pub inv_min_turn_radius: f32,
-    pub rot_pnt_long: f32,
-    pub wheelbase: f32,
-    /// Per axle: (left, right) wheels.
     pub wheels: Vec<[WheelState; 2]>,
-    /// Longitudinal speed, m/s (forward positive).
-    pub speed: f32,
-    pub accel: Vec3,
-    /// The body's acceleration without gravity (m/s², x right, y forward, z up): what the
-    /// scripts read as `A_Trans_*`.
-    pub a_trans: Vec3,
-    /// Current steering angle of the front wheels, degrees, positive = right.
-    pub steer_deg: f32,
-    pub max_steer_deg: f32,
-    pub controls: Controls,
-    /// Steering wheel input rate for keyboard steering (fraction per second).
-    pub steer_rate: f32,
 }
 
-impl VehiclePhysics {
-    pub fn from_definition(def: &Vehicle) -> VehiclePhysics {
-        let mass_kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
-        let wheels: Vec<[WheelState; 2]> = def
+impl VehicleMotion {
+    /// Standing still on the wheels of `def`.
+    pub fn at_rest(def: &Vehicle) -> VehicleMotion {
+        let wheels = def
             .axles
             .iter()
             .map(|a| {
@@ -91,31 +61,75 @@ impl VehiclePhysics {
                 [mk(-a.max_width / 2.0), mk(a.max_width / 2.0)]
             })
             .collect();
+        VehicleMotion { speed: 0.0, steer_deg: 0.0, accel: Vec3::ZERO, a_trans: Vec3::ZERO, wheels }
+    }
+
+    pub fn velocity_kmh(&self) -> f32 {
+        self.speed * 3.6
+    }
+}
+
+/// What moves a vehicle. (A simplified body for the AI is to come as a third kind.)
+// (the rigid body unboxed: there is one a vehicle, and it moves out for its step and back
+// every frame, which a box would allocate anew)
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone)]
+pub enum Dynamics {
+    /// A rigid body on its wheels: the player's vehicle, and the one the launcher shows (see
+    /// `crate::rigid`).
+    Rigid(RigidBody),
+    /// The kinematic model: the player's vehicle with `--physics simple` or on rails, and the
+    /// copies the AI and other games drive (their pose is set from outside, the model is not
+    /// stepped).
+    Kinematic(KinematicModel),
+}
+
+/// The vehicle's mass from its `[mass]` (tonnes, or kilograms in a few files), at least 500 kg.
+pub fn mass_kg(def: &Vehicle) -> f32 {
+    let mass_kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
+    mass_kg.max(500.0)
+}
+
+/// A deliberately simple model: the forces along the vehicle (drive, brakes, rolling
+/// resistance), the front wheels' angle eased towards the driver's, and the heading turned by
+/// the curvature tan(angle) / wheelbase. The vehicle follows the ground under its wheels.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KinematicModel {
+    pub mass_kg: f32,
+    pub rolling_resistance: f32,
+    /// From the rearmost axle to the frontmost (m, at least 1).
+    pub wheelbase: f32,
+    pub max_steer_deg: f32,
+}
+
+impl KinematicModel {
+    pub fn from_definition(def: &Vehicle) -> KinematicModel {
+        let wheels = VehicleMotion::at_rest(def).wheels;
         let front = wheels.iter().map(|w| w[0].long).fold(f32::MIN, f32::max);
         let rear = wheels.iter().map(|w| w[0].long).fold(f32::MAX, f32::min);
         let wheelbase = (front - rear).abs().max(1.0);
         // inv_min_turnradius = tan(alpha_max) / s  →  alpha_max
         let s = (front - def.rot_pnt_long).abs().max(1.0);
         let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(10.0, 60.0);
-        VehiclePhysics { mass_kg: mass_kg.max(500.0), rolling_resistance: def.rolling_resistance, inv_min_turn_radius: def.inv_min_turn_radius, rot_pnt_long: def.rot_pnt_long, wheelbase, wheels, speed: 0.0, accel: Vec3::ZERO, a_trans: Vec3::ZERO, steer_deg: 0.0, max_steer_deg, controls: Controls::default(), steer_rate: 0.8 }
+        KinematicModel { mass_kg: mass_kg(def), rolling_resistance: def.rolling_resistance, wheelbase, max_steer_deg }
     }
 
-    /// Advance one step. `drive_torque` is `M_Wheel`, `brake_forces` the per-wheel brake
-    /// forces in the same order as `wheels`. Returns the displacement along the vehicle's
-    /// forward axis and the heading change in degrees.
-    pub fn step(&mut self, dt: f32, drive_torque: f32, brake_forces: &[f32]) -> (f32, f32) {
+    /// Advance `m` one step, the driver steering at `steering`. `drive_torque` is `M_Wheel`,
+    /// `brake_forces` the per-wheel brake forces in the same order as `m.wheels`. Returns the
+    /// displacement along the vehicle's forward axis and the heading change in degrees.
+    pub fn step(&self, m: &mut VehicleMotion, steering: f32, dt: f32, drive_torque: f32, brake_forces: &[f32]) -> (f32, f32) {
         let dt = dt.clamp(0.0, 0.1);
         // steering
-        let target = self.controls.steering.clamp(-1.0, 1.0) * self.max_steer_deg;
+        let target = steering.clamp(-1.0, 1.0) * self.max_steer_deg;
         let rate = self.max_steer_deg * 2.5 * dt;
-        self.steer_deg += (target - self.steer_deg).clamp(-rate, rate);
+        m.steer_deg += (target - m.steer_deg).clamp(-rate, rate);
 
         // forces along the forward axis
-        let driven_radius = self.wheels.iter().find(|w| w[0].driven).or(self.wheels.first()).map(|w| w[0].radius).unwrap_or(0.5);
+        let driven_radius = m.wheels.iter().find(|w| w[0].driven).or(m.wheels.first()).map(|w| w[0].radius).unwrap_or(0.5);
         let f_drive = drive_torque / driven_radius;
         let f_brake: f32 = brake_forces.iter().sum::<f32>().max(0.0);
         let f_roll = self.rolling_resistance.max(0.0);
-        let v = self.speed;
+        let v = m.speed;
         let resist = f_brake + f_roll;
         let mut f = f_drive;
         // resistances oppose motion; at rest they can only cancel the drive force
@@ -123,7 +137,7 @@ impl VehiclePhysics {
             f -= resist * v.signum();
         } else if f_drive.abs() <= resist {
             f = 0.0;
-            self.speed = 0.0;
+            m.speed = 0.0;
         } else {
             f -= resist * f_drive.signum();
         }
@@ -131,34 +145,34 @@ impl VehiclePhysics {
         let new_speed = v + a * dt;
         // resistances must not reverse the direction of travel
         if v.abs() > 0.05 && new_speed.signum() != v.signum() && f_drive.abs() <= resist {
-            self.speed = 0.0;
+            m.speed = 0.0;
         } else {
-            self.speed = new_speed;
+            m.speed = new_speed;
         }
-        self.accel = Vec3::new(0.0, a, 0.0);
-        let ds = self.speed * dt;
+        m.accel = Vec3::new(0.0, a, 0.0);
+        let ds = m.speed * dt;
 
         // kinematic turning about the rotation point
-        let curvature = self.steer_deg.to_radians().tan() / self.wheelbase;
+        let curvature = m.steer_deg.to_radians().tan() / self.wheelbase;
         let dheading = (ds * curvature).to_degrees();
 
         // wheels
-        for axle in self.wheels.iter_mut() {
+        for axle in m.wheels.iter_mut() {
             for w in axle.iter_mut() {
-                let omega = self.speed / w.radius; // rad/s
+                let omega = m.speed / w.radius; // rad/s
                 w.rpm = omega * 60.0 / std::f32::consts::TAU;
                 w.rotation_deg = (w.rotation_deg + omega.to_degrees() * dt).rem_euclid(360.0);
             }
         }
         (ds, dheading)
     }
+}
 
-    pub fn velocity_kmh(&self) -> f32 {
-        self.speed * 3.6
-    }
-
-    /// Ground height under the vehicle, used to follow the terrain.
-    pub fn place_on_ground(position: &mut DVec3, ground: f64) {
-        position.z = ground;
-    }
+/// A vehicle's physics as it stands - what moves it, its motion and the driver's controls -
+/// to be put back with `VehicleInstance::set_physics_state` (runs tried from the same start).
+#[derive(Debug, Clone)]
+pub struct PhysicsState {
+    pub(crate) dynamics: Dynamics,
+    pub(crate) motion: VehicleMotion,
+    pub(crate) controls: Controls,
 }

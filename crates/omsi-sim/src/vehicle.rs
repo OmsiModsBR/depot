@@ -3,7 +3,7 @@
 use crate::particles::ParticleSet;
 use crate::anim::{pivot_from_mesh, MeshAnimator};
 use crate::host::VehicleHost;
-use crate::physics::{Controls, VehicleMotion, VehiclePhysics};
+use crate::physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 use anyhow::{Context, Result};
 use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use hashbrown::HashMap;
@@ -942,7 +942,12 @@ pub struct VehicleInstance {
     /// Current mesh-space transforms, parallel to `ty.meshes`.
     pub mesh_transforms: Vec<Mat4>,
     pub mesh_props: Vec<MeshProps>,
-    pub physics: VehiclePhysics,
+    /// What moves the vehicle: its rigid body or the kinematic model.
+    pub(crate) dynamics: Dynamics,
+    /// The motion as the physics left it this frame (see `motion`).
+    pub(crate) motion: VehicleMotion,
+    /// The driver's inputs (see `set_controls`).
+    controls: Controls,
     /// `[texttexture]` states, parallel to `ty.model.text_textures`.
     pub text_textures: Vec<crate::texttex::TextTextureState>,
     pub html_textures: Vec<crate::htmltex::HtmlTexture>,
@@ -1001,8 +1006,6 @@ pub struct VehicleInstance {
     /// How dirty the body is (0..1). OMSI reports it to the model as `Dirt_Norm`, where
     /// it scales the alpha of the dirt overlay; the bus wash clears it.
     pub dirt: f32,
-    /// Rigid-body dynamics (player vehicles); None = simple kinematic model.
-    pub rigid: Option<crate::rigid::RigidBody>,
     /// The AI odometer at the last `update_ai` (the wheels roll the difference).
     ai_odometer: f32,
     /// Kilometres driven this session (the odometer's `kmcounter_*`).
@@ -1178,9 +1181,10 @@ impl VehicleInstance {
                 .collect::<Vec<_>>(),
         );
         let n = ty.meshes.len();
-        let physics = VehiclePhysics::from_definition(&ty.def);
+        let motion = VehicleMotion::at_rest(&ty.def);
+        let kinematic = KinematicModel::from_definition(&ty.def);
         let v = |name: &str| program.var(name);
-        let v_wheels = (0..physics.wheels.len())
+        let v_wheels = (0..motion.wheels.len())
             .map(|a| {
                 let side = |s: &str| {
                     [
@@ -1194,7 +1198,7 @@ impl VehicleInstance {
                 [side("L"), side("R")]
             })
             .collect();
-        let v_springfactor = (0..physics.wheels.len())
+        let v_springfactor = (0..motion.wheels.len())
             .map(|a| {
                 [
                     v(&format!("Axle_Springfactor_{a}_L")),
@@ -1204,7 +1208,7 @@ impl VehicleInstance {
             .collect();
         let rest_sag: Vec<(f32, f32)> = {
             let rb = crate::rigid::RigidBody::from_definition(&ty.def, &ty.hub_heights(0));
-            (0..physics.wheels.len())
+            (0..motion.wheels.len())
                 .map(|a| {
                     let w = &rb.wheels[a * 2];
                     (
@@ -1269,7 +1273,9 @@ impl VehicleInstance {
             animators,
             mesh_transforms: vec![Mat4::IDENTITY; n],
             mesh_props: vec![MeshProps::default(); n],
-            physics,
+            dynamics: Dynamics::Kinematic(kinematic),
+            motion,
+            controls: Controls::default(),
             text_textures: Vec::new(),
             html_textures,
             ground: None,
@@ -1287,7 +1293,6 @@ impl VehicleInstance {
             crashes: 0,
             last_impact: 0.0,
             dirt: 0.0,
-            rigid: None,
             ai_odometer: 0.0,
             seat: (0.0, 0.0, Vec3::ZERO),
             driven_km: 0.0,
@@ -1414,7 +1419,7 @@ impl VehicleInstance {
             return;
         }
         let seat = self.ty.def.cameras_driver.first().map(|c| c.pos).unwrap_or([0.0; 3]);
-        let (acc_z, omega) = match &self.rigid {
+        let (acc_z, omega) = match self.rigid() {
             Some(rb) => (rb.accel_body.z - 9.81, rb.omega),
             None => (0.0, Vec3::ZERO),
         };
@@ -1449,32 +1454,70 @@ impl VehicleInstance {
     }
 
     pub fn set_controls(&mut self, c: Controls) {
-        self.physics.controls = c;
+        self.controls = c;
     }
 
     /// The driver's inputs, as last set.
     pub fn controls(&self) -> Controls {
-        self.physics.controls
+        self.controls
     }
 
     /// The vehicle's motion this frame, whichever model moves it (see [`VehicleMotion`]).
-    pub fn motion(&self) -> VehicleMotion<'_> {
-        let p = &self.physics;
-        VehicleMotion { speed: p.speed, steer_deg: p.steer_deg, accel: p.accel, a_trans: p.a_trans, wheels: &p.wheels }
+    pub fn motion(&self) -> &VehicleMotion {
+        &self.motion
     }
 
     /// The vehicle's mass (kg, at least 500).
     pub fn mass_kg(&self) -> f32 {
-        self.physics.mass_kg
+        crate::physics::mass_kg(&self.ty.def)
     }
 
     /// The vehicle's rigid body, when it runs on one (the player's vehicle).
     pub fn rigid(&self) -> Option<&crate::rigid::RigidBody> {
-        self.rigid.as_ref()
+        match &self.dynamics {
+            Dynamics::Rigid(rb) => Some(rb),
+            Dynamics::Kinematic(_) => None,
+        }
     }
 
     pub fn rigid_mut(&mut self) -> Option<&mut crate::rigid::RigidBody> {
-        self.rigid.as_mut()
+        match &mut self.dynamics {
+            Dynamics::Rigid(rb) => Some(rb),
+            Dynamics::Kinematic(_) => None,
+        }
+    }
+
+    /// The rigid body taken out for its step (`step_rigid` puts it back), if the vehicle has one.
+    fn take_rigid(&mut self) -> Option<crate::rigid::RigidBody> {
+        match std::mem::replace(&mut self.dynamics, Dynamics::Kinematic(KinematicModel::default())) {
+            Dynamics::Rigid(rb) => Some(rb),
+            other => {
+                self.dynamics = other;
+                None
+            }
+        }
+    }
+
+    /// The vehicle's physics as it stands, to be put back with `set_physics_state`.
+    pub fn physics_state(&self) -> PhysicsState {
+        PhysicsState { dynamics: self.dynamics.clone(), motion: self.motion.clone(), controls: self.controls }
+    }
+
+    pub fn set_physics_state(&mut self, state: PhysicsState) {
+        self.dynamics = state.dynamics;
+        self.motion = state.motion;
+        self.controls = state.controls;
+    }
+
+    /// Each wheel's `Axle_Suspension` travel (m) for a copy another game drives, axle by axle
+    /// and left first; wheels past the end of `travel` hang at 0.
+    pub fn set_wheel_travel(&mut self, travel: impl IntoIterator<Item = f32>) {
+        let mut travel = travel.into_iter();
+        for axle in self.motion.wheels.iter_mut() {
+            for w in axle.iter_mut() {
+                w.suspension = travel.next().unwrap_or(0.0);
+            }
+        }
     }
 
     fn get(&self, id: Option<omsi_script::VarId>) -> f32 {
@@ -1497,7 +1540,7 @@ impl VehicleInstance {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
         rb.place(self.position, self.heading);
-        self.rigid = Some(rb);
+        self.dynamics = Dynamics::Rigid(rb);
     }
 
     /// The axle that steers: the frontmost, as the rigid body takes it (the simple model
@@ -1508,21 +1551,28 @@ impl VehicleInstance {
 
     /// Set the forward speed (m/s), for tests that need a run-up without the road.
     pub fn set_speed(&mut self, v: f32) {
-        self.physics.speed = v;
+        self.motion.speed = v;
+        let lead = match &mut self.dynamics {
+            Dynamics::Rigid(rb) => Some(rb),
+            Dynamics::Kinematic(_) => None,
+        };
         let parts = self.trailers.iter_mut().filter_map(|t| t.body.as_mut()).map(|b| &mut b.rb);
-        for rb in self.rigid.iter_mut().chain(parts) {
+        for rb in lead.into_iter().chain(parts) {
             rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
         }
     }
 
     fn step_physics(&mut self, dt: f32) {
-        let c = self.physics.controls;
+        let c = self.controls;
         let DriveInputs { m_wheel, brakes } = self.take_drive_inputs();
-        if self.rigid.is_some() {
-            self.step_rigid(dt, m_wheel, &brakes, c.steering);
-            return;
-        }
-        let (ds, dheading) = self.physics.step(dt, m_wheel, &brakes);
+        let k = match self.dynamics {
+            Dynamics::Kinematic(k) => k,
+            Dynamics::Rigid(_) => {
+                self.step_rigid(dt, m_wheel, &brakes, c.steering);
+                return;
+            }
+        };
+        let (ds, dheading) = k.step(&mut self.motion, c.steering, dt, m_wheel, &brakes);
         // move along the heading
         let prev = (self.position, self.heading);
         let h = self.heading.to_radians();
@@ -1549,9 +1599,9 @@ impl VehicleInstance {
                         && !(b.id >= 0 && self.knocked.contains(&b.id))
                 });
             if let Some(hit) = hit {
-                let v = self.physics.speed;
+                let v = self.motion.speed;
                 if v.abs() > crate::rigid::CRASH_SPEED {
-                    let e = 0.5 * self.physics.mass_kg * v * v;
+                    let e = 0.5 * k.mass_kg * v * v;
                     let rel = hit.center - self.position.truncate();
                     let body_h = body_heading(&self.ty.def, prev.1, false).to_radians();
                     let (sh, ch) = (body_h.sin(), body_h.cos());
@@ -1570,7 +1620,7 @@ impl VehicleInstance {
                 }
                 self.position = prev.0;
                 self.heading = prev.1;
-                self.physics.speed = 0.0;
+                self.motion.speed = 0.0;
             }
         }
         // ground under each wheel: height, terrain pitch and bank of the body
@@ -1578,10 +1628,10 @@ impl VehicleInstance {
         let (mut zf, mut zr, mut zl, mut zrr, mut nf, mut nr, mut nl, mut nrr) =
             (0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0);
         let (sh, ch) = (h.sin(), h.cos());
-        let wheelbase = self.physics.wheelbase as f64;
+        let wheelbase = k.wheelbase as f64;
         let mut track = 2.0f64;
         if let Some(g) = &self.ground {
-            for axle in &self.physics.wheels {
+            for axle in &self.motion.wheels {
                 for w in axle {
                     let (lat, long) = (w.lat as f64, w.long as f64);
                     track = track.max(w.lat.abs() as f64 * 2.0);
@@ -1631,16 +1681,16 @@ impl VehicleInstance {
             0.0
         };
         // dynamic body motion: nose dives when braking, leans out of curves
-        let a_long = self.physics.accel.y;
-        let curvature = self.physics.steer_deg.to_radians().tan() / self.physics.wheelbase;
-        let a_lat = self.physics.speed * self.physics.speed * curvature;
+        let a_long = self.motion.accel.y;
+        let curvature = self.motion.steer_deg.to_radians().tan() / k.wheelbase;
+        let a_lat = self.motion.speed * self.motion.speed * curvature;
         let pitch_target = pitch_terrain as f32 - a_long * 0.45;
         let bank_target = bank_terrain as f32 - a_lat * 0.6;
         let k = (dt / 0.35).min(1.0);
         self.pitch += (pitch_target - self.pitch) * k;
         self.bank += (bank_target - self.bank) * k;
         // suspension travel per wheel (m): weight transfer from the same accelerations
-        for (ai, axle) in self.physics.wheels.iter_mut().enumerate() {
+        for (ai, axle) in self.motion.wheels.iter_mut().enumerate() {
             let rest = self.rest_sag.get(ai).map(|r| r.0).unwrap_or(0.0);
             for w in axle.iter_mut() {
                 let front = if w.long > 0.0 { 1.0 } else { -1.0 };
@@ -1651,19 +1701,19 @@ impl VehicleInstance {
                 w.suspension += (target - w.suspension) * k;
             }
         }
-        self.show_velocity(script_speed(self.physics.velocity_kmh()));
-        self.show_n_wheel(driven_rpm(&self.physics.wheels, |w| w[0].driven, |w| w[0].rpm));
-        self.show_a_trans(self.physics.accel);
+        self.show_velocity(script_speed(self.motion.velocity_kmh()));
+        self.show_n_wheel(driven_rpm(&self.motion.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_a_trans(self.motion.accel);
         // Wheel_Rotation_* and Axle_Steering_* are radians in the original: the stock
         // model.cfg turns a wheel with anim_rot ... 57.29577951308232 (180/pi) and the
         // steering wheel with 1450 (SD200) or 1680 (SD202), roughly two and a half turns
         // from lock to lock. Positive is to the right, as here - checked by looking
         // straight down on the front wheel alone (OMSI_ONLY_MESH=SD_Rad_VL) and at the
         // steering wheel in the cab, which turn together with this sign.
-        let steer = self.physics.steer_deg.to_radians();
+        let steer = self.motion.steer_deg.to_radians();
         for ai in 0..self.v_wheels.len() {
             for si in 0..2 {
-                let ws = self.physics.wheels[ai][si].clone();
+                let ws = self.motion.wheels[ai][si].clone();
                 let shown = [ws.rotation_deg.to_radians(), ws.rpm, if ai == self.steered_axle() { steer } else { 0.0 }, ws.suspension];
                 self.show_wheel(ai, si, shown);
             }
@@ -1720,7 +1770,7 @@ impl VehicleInstance {
     }
 
     fn step_rigid(&mut self, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32) {
-        let mut rb = self.rigid.take().unwrap();
+        let mut rb = self.take_rigid().unwrap();
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -1855,9 +1905,9 @@ impl VehicleInstance {
         self.bank = bank;
         // script interface
         let speed = rb.forward_speed();
-        self.physics.speed = speed;
-        self.physics.steer_deg = rb.steer_deg;
-        self.physics.accel = rb.accel_body;
+        self.motion.speed = speed;
+        self.motion.steer_deg = rb.steer_deg;
+        self.motion.accel = rb.accel_body;
         self.show_velocity(script_speed(speed * 3.6));
         self.show_n_wheel(driven_rpm(&rb.wheels, |w| w.driven, |w| w.rpm));
         let a = self.body_a_trans(&rb, dt);
@@ -1867,7 +1917,7 @@ impl VehicleInstance {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
                     let shown = body_wheel_shown(&rb, ai * 2 + si, rw);
                     self.show_wheel(ai, si, shown);
-                    if let Some(ws) = self.physics.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
+                    if let Some(ws) = self.motion.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;
                         ws.suspension = shown[3];
@@ -1875,7 +1925,7 @@ impl VehicleInstance {
                 }
             }
         }
-        self.rigid = Some(rb);
+        self.dynamics = Dynamics::Rigid(rb);
     }
 
     /// The bus's total mileage, as OMSI writes it into a situation:
@@ -2004,7 +2054,7 @@ impl VehicleInstance {
     /// is signed, so rain wets the glass in `rain.osc` and dry weather dries it again.
     fn update_dirt(&mut self, dt: f32) {
         let rain = self.host.precip_rate.clamp(0.0, 1.0);
-        let speed = (self.physics.velocity_kmh().abs() / 50.0).min(2.0);
+        let speed = (self.motion.velocity_kmh().abs() / 50.0).min(2.0);
         // a dry duty adds a few percent, a wet one soils the bus in a couple of hours
         // a dry duty of a couple of hours shows; a wet one soils the bus in half an hour
         self.dirt = (self.dirt + dt * speed * (8.0e-5 + 1.2e-3 * rain)).clamp(0.0, 1.0);
@@ -2029,7 +2079,7 @@ impl VehicleInstance {
         self.set_engine_var("train_me_reverse", 0.0);
         // and for the tyres' grip
         let mu = road_grip(self.host.street_cond, self.host.temperature);
-        if let Some(rb) = self.rigid.as_mut() {
+        if let Some(rb) = self.rigid_mut() {
             rb.friction = mu;
         }
     }
@@ -2206,7 +2256,7 @@ impl VehicleInstance {
         }
         self.update_dirt(dt);
         // (signed, as OMSI adds it: reversing takes it back)
-        self.driven_km += (self.physics.velocity_kmh() as f64 / 3600.0) * dt as f64;
+        self.driven_km += (self.motion.velocity_kmh() as f64 / 3600.0) * dt as f64;
         self.update_engine_vars(dt);
         let p = self.ty.program.clone();
         self.vm.run_frame(&p, &mut self.state, &mut self.host);
@@ -2320,8 +2370,8 @@ impl VehicleInstance {
     ) {
         self.host.clock.advance(dt);
         self.set_engine_var("schedule_active", self.host.schedule_active);
-        self.physics.speed = ai.speed;
-        self.physics.steer_deg = ai.steer_deg;
+        self.motion.speed = ai.speed;
+        self.motion.steer_deg = ai.steer_deg;
         self.show_velocity(ai.speed * 3.6);
         // how far the vehicle rolled since the last frame (a reset or a jump counts as none;
         // backwards only for a vehicle that reverses)
@@ -2339,7 +2389,7 @@ impl VehicleInstance {
         let k = ai.steer_deg.to_radians().tan() / wheelbase;
         for ai_idx in 0..self.v_wheels.len() {
             for si in 0..2 {
-                let Some(ws) = self.physics.wheels.get_mut(ai_idx).map(|a| &mut a[si]) else {
+                let Some(ws) = self.motion.wheels.get_mut(ai_idx).map(|a| &mut a[si]) else {
                     continue;
                 };
                 let arm = ws.long - rot;
@@ -2362,8 +2412,8 @@ impl VehicleInstance {
                 self.show_wheel(ai_idx, si, shown);
             }
         }
-        self.show_n_wheel(driven_rpm(&self.physics.wheels, |w| w[0].driven, |w| w[0].rpm));
-        self.show_a_trans(self.physics.accel);
+        self.show_n_wheel(driven_rpm(&self.motion.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_a_trans(self.motion.accel);
         // `AI` is the engine's "this vehicle is driven by the AI" flag; the police and
         // ambulance script sounds the siren whenever `AI` is 0 and the car rolls, which is
         // why every spawn came with an ambulance nobody could see
@@ -2747,7 +2797,7 @@ impl VehicleInstance {
     /// (their `[coupling_back]` becomes the front coupling).
     pub fn attach_trailer_ex(&mut self, ty: Arc<VehicleType>, reversed: bool) {
         let first_axle =
-            self.physics.wheels.len() + self.trailers.iter().map(|t| t.axle_count).sum::<usize>();
+            self.motion.wheels.len() + self.trailers.iter().map(|t| t.axle_count).sum::<usize>();
         let (lead_ty, lead_reversed) = match self.trailers.last() {
             Some(t) => (t.ty.clone(), t.reversed),
             None => (self.ty.clone(), false),
@@ -3663,7 +3713,7 @@ impl VehicleInstance {
     /// AI copy stands `ai_rest_offset` above its plane.
     pub fn contact_plane(&self) -> [f32; 3] {
         let mut points: Vec<Vec3> = Vec::new();
-        if let Some(rb) = &self.rigid {
+        if let Some(rb) = self.rigid() {
             let standing = rb.wheels.iter().any(|w| w.on_ground);
             for w in rb.wheels.iter().filter(|w| w.on_ground || !standing) {
                 points.push(
@@ -3673,7 +3723,7 @@ impl VehicleInstance {
         } else {
             let rot = self.body_rotation();
             let inv = rot.inverse();
-            for w in self.physics.wheels.iter().flatten() {
+            for w in self.motion.wheels.iter().flatten() {
                 let p = self.position
                     + rot
                         .transform_vector3(Vec3::new(w.lat, w.long, 0.0))
@@ -3696,7 +3746,7 @@ impl VehicleInstance {
     /// plane it is placed `ai_rest_offset` over (the road its axles were set on), without
     /// asking the ground under every wheel again for the exhaust of every car on the map.
     fn particle_ground(&self) -> [f32; 3] {
-        if self.rigid.is_some() {
+        if self.rigid().is_some() {
             self.contact_plane()
         } else {
             [-self.ai_rest_offset().0, 0.0, 0.0]
@@ -3939,10 +3989,10 @@ mod tests {
                 v.step_physics(0.1);
                 if already_inside {
                     assert!((v.position.y - 0.2).abs() < 1e-6);
-                    assert_eq!(v.physics.speed, 2.0);
+                    assert_eq!(v.motion().speed, 2.0);
                 } else {
                     assert_eq!(v.position, DVec3::ZERO, "{bogies:?}");
-                    assert_eq!(v.physics.speed, 0.0);
+                    assert_eq!(v.motion().speed, 0.0);
                     let sign = if bogies == Some(-5.0) { -1.0 } else { 1.0 };
                     assert!((v.host.coll_pos[1] as f64 - sign * (y - 0.2)).abs() < 1e-5);
                 }
