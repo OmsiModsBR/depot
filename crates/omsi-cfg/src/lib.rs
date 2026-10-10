@@ -3,7 +3,7 @@
 //! Almost every OMSI content file (`.bus`, `.sco`, `.sli`, `.cfg`, `.hof`, `.map`, …) is a list
 //! of lines in which a *keyword* line such as `[mesh]` is followed by a fixed number of parameter
 //! lines.  Everything else is free text and ignored.  The rules, read off the loaders of
-//! OMSI 2.2.032 (every one compares the line it read with its keyword literals by plain
+//! OMSI 2 (every one compares the line it read with its keyword literals by plain
 //! string equality) and checked against the stock and installed content, are:
 //!
 //! * a keyword is recognised only when the whole line is `[name]`: an indented keyword
