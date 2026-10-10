@@ -28,3 +28,29 @@ with the real `depot --offscreen`. The picture checks run only with `OMSI_GOLDEN
 `SKIP` and pass otherwise (they have not been run on CI's adapters yet, so they are meant for the maintainer's machine, before and after each refactoring step); the root read-back and the window/offscreen `signal_aspects` check always run. The
 thumbnail comparison runs only when `tests/golden/offscreen_synthetic.txt` exists and was recorded on the same
 adapter; regenerate it with `OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.
+
+## Vehicle physics traces
+
+The refactor of the vehicle physics moves code in steps that must not change what the
+physics computes. Two jobs of the workflow guard it on pull requests:
+
+- `physics-traces` (blocking) runs `scripts/physics-trace-diff.sh` against the pull
+  request's base. The scenarios in `crates/omsi-sim/tests/physics_traces.rs` drive the rigid
+  body, a train of articulated sections and the vehicle with its script variables (standing,
+  on a grade, spinning on ice, locking the brakes, bends up to the full lock, humps, a kerb,
+  a wall face, crashes, frame times from 1/144 s to 0.3 s, inputs that are no number, air
+  springs) and write the whole state of every frame. The script runs them on both commits,
+  once as they are and once with each A/B switch (`OMSI_TYRE_SUSPENSION`,
+  `OMSI_NO_WHEEL_SLIP`, `OMSI_KINEMATIC_TRAILERS`) on, and compares the traces bit for bit;
+  it also runs the change twice and fails if two runs of the same commit differ. Both sides
+  are built and run on the same machine, so the comparison does not depend on how a
+  platform rounds `sin` or `sqrt`. A change meant to alter the physics carries the
+  `physics-delta` label (re-run the job after adding it): the job then lists the first
+  difference of each trace without failing, for the review to check against the predicted
+  change.
+- `physics-coverage` (informational) reports the lines, regions and branches of
+  `rigid.rs` and `rigid/train.rs` that those scenarios and `physics_invariants.rs` reach.
+
+Locally: `scripts/physics-trace-diff.sh [base-ref]` (default `origin/main`); the traces are
+kept in `target/physics-traces/`. Without `OMSI_PHYSICS_TRACE_DIR`, `cargo test` runs each
+scenario twice and checks that both runs agree.
