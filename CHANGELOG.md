@@ -7,6 +7,15 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Navigator map packages: the navigator and the city map can draw a surface (water, green, rivers, names),
+  icons, regions, street names and bus lines supplied by an optional per-map package
+  (`docs/MAP_PACKAGE.md`), also looked up in the content folder and used for offscreen pictures. New
+  settings `nav_surface` and `nav_light`. Source: maintainer (Leo, `lmonteirotech`), fork
+  lmonteirotech/openOMSI branch `feat/map-package` (commits `80fb1482`, `dbcb93f9`, `4c7a284d`,
+  `d898c8fb`), MIT. Example packages (OpenStreetMap/ODbL data) left out pending licence review. Not
+  validated against real OMSI 2 content; only build and automated tests were run.
+
+### Added
 - Outside camera (F3) gets an independent `outside_fov` setting, 20-120 vertical degrees or Auto. Auto
   preserves the 16:9 horizontal extent on ultrawide windows when no general override is set. Source:
   openOMSI `ea47e092ee6e0a2c472d2c7261ea7a7913e6ca9f` (MIT), selective backport authored by zane_thruston;
@@ -41,6 +50,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Android: `env.txt` is limited to an allow-list, no default signing password, unused permissions dropped.
 - Website: Markdown sanitised with DOMPurify, Content-Security-Policy, marked and DOMPurify vendored.
 - Release builds use `overflow-checks`.
+
+### Fixed
+- `omsi-plugin` test `panels_clicks_and_focus_through_omsi_ui` failed on Windows CI because the reload is detected by
+  modification time and the rewritten file could keep the old timestamp; the test now sets a newer one. The Lua
+  feature itself is unchanged (it stays in the crate; it is only unreachable from the client).
 
 ### Project
 - Identity and links point to OmsiModsBR/depot, omsimods.com.br and omsimods.com.br/discord; new logos and icons.

@@ -1500,6 +1500,8 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
     Some(match id {
         "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.navigator.as_ref().is_some_and(|n| n.enabled) },
         "nav_ai" => app.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_surface" => app.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
+        "nav_light" => app.navigator.as_ref().map_or(s.nav_light, |n| n.light),
         "shadows" => s.shadows,
         "head" => s.head_movement,
         "cam_smooth" => s.driverview_smooth,
@@ -1589,6 +1591,20 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_surface" => {
+            if let Some(n) = app.navigator.as_mut() {
+                n.show_surface = on;
+            }
+            app.settings.nav_surface = on;
+            Some(("nav_surface", bit))
+        }
+        "nav_light" => {
+            if let Some(n) = app.navigator.as_mut() {
+                n.light = on;
+            }
+            app.settings.nav_light = on;
+            Some(("nav_light", bit))
         }
         "shadows" => {
             app.settings.shadows = on;
@@ -2263,6 +2279,8 @@ fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_light", "Light map", "The map in a light look: light ground and white roads instead of the dark one"),
+        switch_row(app, "nav_surface", "Map surface", "Shows the map's own surface (water, green, rivers, place names) under the roads, when the map ships one"),
         switch_row(app, "nav_arrows", "Route arrows (as in OMSI 2)", "Shows OMSI 2's route arrows over the road"),
         pick("navigator_corner", "Corner", later),
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),

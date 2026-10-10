@@ -2680,6 +2680,8 @@ pub(crate) fn run_offscreen(
             let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
             nav.schedule = omsi_cfg::env::var_os("OMSI_NAV_SCHEDULE").is_some();
             nav.show_ai = settings.nav_ai;
+            nav.show_surface = settings.nav_surface;
+            nav.light = settings.nav_light;
             if omsi_cfg::env::var_os("OMSI_NAV_MAP").is_some() {
                 nav.toggle_map();
             }
@@ -2687,6 +2689,7 @@ pub(crate) fn run_offscreen(
                 nav.add_lanes(world.lanes.lock().clone());
             }
             nav.set_map(world.navigation_map());
+            nav.set_surface(crate::map_surface::MapSurface::open(&world.map_dir));
             let (line, terminus, stops, trip) = navigator::duty_parts(duty.as_ref());
             if let (Some((key, name)), Some(sch)) = (trip, schedule.as_ref()) {
                 let lanes = sch.trip_route_in(nav.map_net().unwrap(), &name);

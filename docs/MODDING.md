@@ -206,6 +206,15 @@ station), or `SndExt_Radio` (the station button, 0 = off) with `SndVol_Radio` (t
 its `magnitola_1` (`frequency@station`, `@` the line break) gets the map's frequency for the
 place in its first line and the station and song in its second.
 
+## A map's package: surface, icons, regions, bus lines
+
+A map may bring a pre-built picture of itself for the navigator and the city map: water, green
+areas, rivers and rail under the roads, icons for terminals and garages, the municipalities' names,
+the municipality and street the player is on, and a panel with the map's bus lines. Everything is
+made beforehand by the map's author and put in one folder, `Maps/<Map>/openomsi-realmap/`;
+openOMSI computes none of it and a map without the folder looks as it always did. Omsi.exe ignores
+the folder. The files, the formats and what each one switches on are in [MAP_PACKAGE.md](MAP_PACKAGE.md).
+
 ## What stays as in OMSI 2
 
 The following behave as in OMSI 2 so that existing content works unchanged:
