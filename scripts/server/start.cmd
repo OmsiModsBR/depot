@@ -1,4 +1,6 @@
 @echo off
+echo The dedicated server is disabled.
+exit /b 1
 rem Start the Project Depot dedicated server: start.cmd C:\path\to\OMSI2 [server.cfg]
 rem (the OMSI 2 folder: a complete original installation, as the players have it; mods
 rem go into this folder's Vehicles, maps, Sceneryobjects ... as in the game's content folder)

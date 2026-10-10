@@ -72,6 +72,8 @@ opt-level = 3
 debug = 1
 codegen-units = 4
 lto = "thin"
+# integer overflow panics instead of wrapping silently (the parsers read untrusted content)
+overflow-checks = true
 
 [profile.dev]
 opt-level = 1
@@ -84,6 +86,7 @@ debug = 0
 strip = "debuginfo"
 
 # (a patch that no longer matches the version wgpu asks for is dropped with only a warning;
-# the Security audit workflow fails when Cargo.lock lists one as unused)
+# check `cargo update --dry-run`/`cargo tree -i gpu-allocator` after a wgpu update; origin and
+# diff of the fork: docs/DEPENDENCY-PROVENANCE.md)
 [patch.crates-io]
 gpu-allocator = { git = "https://github.com/openOMSI-Project/gpu-allocator", rev = "6ad8a7eeb9c3e1dcd65656f718c593a0a1a3915d" }

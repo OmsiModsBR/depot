@@ -182,9 +182,6 @@ pub(crate) struct App {
     pub(crate) arrow_glance: bool,
     /// The next click on the city map puts the bus there (Esc → Move the bus on the map).
     pub(crate) teleport_pick: bool,
-    /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
-    pub(crate) discord: Option<crate::discord::Discord>,
-    pub(crate) discord_t: f32,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,
@@ -334,10 +331,6 @@ pub(crate) struct App {
     pub(crate) pumping: Option<(&'static str, f32)>,
     /// The server's notifications on the screen (`notify`), oldest first.
     pub(crate) notices: Vec<crate::ui::Notice>,
-    /// The look for a newer release during the session (cards over the navigator).
-    pub(crate) update_watch: crate::update_watch::UpdateWatch,
-    /// "Playing now" on the website (None: not counted, setting `presence`).
-    pub(crate) presence: Option<crate::presence::Presence>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::applog::LogState,
     /// The driver's personnel file and this session's statistics.

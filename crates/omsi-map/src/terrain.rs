@@ -17,7 +17,12 @@ pub enum TerrainError {
     Io(#[from] std::io::Error),
     #[error("terrain file too short: {0} bytes")]
     Short(usize),
+    #[error("terrain grid of {0} cells is past the limit")]
+    TooLarge(usize),
 }
+
+/// The largest grid accepted (OMSI itself writes 60).
+pub const MAX_CELLS: usize = 1024;
 
 impl Terrain {
     pub fn flat() -> Terrain {
@@ -32,6 +37,10 @@ impl Terrain {
         // (no cells: nothing to sample between; `sample` clamps into 0..cells)
         if cells == 0 {
             return Err(TerrainError::Short(bytes.len()));
+        }
+        // OMSI writes 60; past 2048 the `f32` clamps in `sample` stop working
+        if cells > MAX_CELLS {
+            return Err(TerrainError::TooLarge(cells));
         }
         let samples = cells + 1;
         // a damaged header must not overflow the size it asks for
@@ -75,7 +84,8 @@ impl Terrain {
         let n = self.cells as f32;
         let fx = (x / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
         let fy = (y / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
-        let (ix, iy) = (fx.floor() as usize, fy.floor() as usize);
+        let last = self.cells.saturating_sub(1);
+        let (ix, iy) = ((fx.floor() as usize).min(last), (fy.floor() as usize).min(last));
         let (u, v) = (fx - ix as f32, fy - iy as f32);
         let h00 = self.height_at(ix, iy);
         let h10 = self.height_at(ix + 1, iy);
@@ -93,8 +103,9 @@ impl Terrain {
         let n = self.cells as f32;
         let fx = (x / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
         let fy = (y / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
-        let ix = fx.floor() as usize;
-        let iy = fy.floor() as usize;
+        let last = self.cells.saturating_sub(1);
+        let ix = (fx.floor() as usize).min(last);
+        let iy = (fy.floor() as usize).min(last);
         let tx = fx - ix as f32;
         let ty = fy - iy as f32;
         let h00 = self.height_at(ix, iy);
@@ -147,5 +158,21 @@ mod damaged_tests {
     #[test]
     fn a_terrain_of_no_cells_is_refused() {
         assert!(super::Terrain::parse(&[0, 0, 0, 0, 0, 0, 0, 0]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_grid_is_rejected_and_sample_stays_in_range() {
+        let mut head = 2049u32.to_le_bytes().to_vec();
+        head.extend_from_slice(&[0; 16]);
+        assert!(matches!(Terrain::parse(&head), Err(TerrainError::TooLarge(2049))));
+        // a grid built in code past the f32 clamp precision must not index out of range
+        let t = Terrain { cells: 2100, heights: vec![1.0; 2101 * 2101] };
+        assert_eq!(t.sample(300.0, 300.0), 1.0);
+        assert_eq!(t.sample_bilinear(300.0, 300.0), 1.0);
     }
 }

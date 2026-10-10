@@ -310,10 +310,8 @@ fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &
 pub const SETTINGS_TABS: [&str; 6] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General"];
 
 /// What the tabs show of the launcher and ask of it (they see only the settings): the
-/// updater's state, "Check now", "Reset all settings", the Controls page at one of its tabs.
+/// "Reset all settings" and the Controls page at one of its tabs.
 struct Outside {
-    update: crate::updater::Status,
-    check_updates: bool,
     reset: bool,
     controls: Option<usize>,
 }
@@ -336,7 +334,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let body = Rect::new(body.x, bar.bottom() + 18.0, body.w, (body.bottom() - bar.bottom() - 18.0).max(0.0));
     let s = &mut l.state.settings;
     let dirty = &mut l.state.settings_dirty;
-    let mut out = Outside { update: l.update.status(), check_updates: false, reset: false, controls: None };
+    let mut out = Outside { reset: false, controls: None };
     // (two columns side by side; where they would be too narrow to read - a phone - one
     // under the other, each as high as it was the frame before)
     let stacked = body.w < 900.0;
@@ -359,9 +357,6 @@ pub fn settings(l: &mut Launcher, area: Rect) {
         });
         h
     });
-    if out.check_updates {
-        l.update.check();
-    }
     if out.reset {
         l.pages.confirm_reset = true;
     }
@@ -1086,7 +1081,7 @@ fn gameplay_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     [left, c.used()]
 }
 
-/// The language, what the screen shows besides the bus, online, the navigator, updates.
+/// The language, what the screen shows besides the bus, online, the navigator, the version.
 fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Interface & online");
     {
@@ -1108,16 +1103,6 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
         c.y += 14.0;
     }
     toggle_setting(ui, s, dirty, c.row(), "The launcher rests while a game runs (gives the graphics card to the game)", "launcher_rest");
-    toggle_setting(ui, s, dirty, c.row(), "Discord Rich Presence", "discord_status");
-    let help_height = ui.paragraph(
-        "Shows the launcher or your map, bus, line and multiplayer status in Discord.",
-        Vec2::new(c.inner.x + 12.0, c.y - 5.0),
-        c.inner.w - 24.0,
-        11.5,
-        omsi_ui::Weight::Regular,
-        TEXT_FAINT,
-    );
-    c.y += help_height + 3.0;
     toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
     let help_height = ui.paragraph(
         "Players near you are heard from where they stand, when GreenTeaSpeak runs with the Project Depot plugin and the server names a voice server.",
@@ -1184,30 +1169,15 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     }
     c.y += 74.0;
     let left = c.used();
-    // updates from the GitHub releases (see `crate::updater`)
-    let mut c = Col::new(ui, cols[1], "Updates");
-    toggle_setting(ui, s, dirty, c.row(), "Look for updates when the launcher starts", "update_check");
-    toggle_setting(ui, s, dirty, c.row(), "Install updates without asking", "update_auto");
-    toggle_setting(ui, s, dirty, c.row(), "Tell me about a new version during a session", "update_notify");
-    toggle_setting(ui, s, dirty, c.row(), "Count me in the website's \"playing now\" (anonymous)", "presence");
+    // this build's version and the project's release page (in-app updating is disabled, see
+    // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
+    let mut c = Col::new(ui, cols[1], "About");
     {
-        use crate::updater::Status;
         let r = c.row();
-        let busy = matches!(out.update, Status::Checking | Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_));
-        if ui.button("s-upd-check", Rect::new(r.x, r.y, 150.0, r.h), if busy { "Checking…" } else { "Check now" }, Some("refresh"), ButtonKind::Normal) && !busy {
-            out.check_updates = true;
-        }
-        let text = match &out.update {
-            Status::UpToDate if crate::updater::is_test_build(crate::updater::current_version()) => format!("{} is a test build: it is not updated", crate::updater::current_version()),
-            Status::UpToDate => format!("{} is the latest version", crate::updater::current_version()),
-            Status::Available(rel) => format!("{} is available", rel.version),
-            Status::Failed(_) => "The last check failed".to_string(),
-            _ => format!("This is Project Depot {}", crate::updater::current_version()),
-        };
-        ui.text_in(&text, Rect::new(r.x + 162.0, r.y, r.w - 162.0, r.h), 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
+        ui.text_in(&format!("This is Project Depot {}", crate::about::current_version()), r, 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
     }
-    if ui.button("s-upd-github", c.row(), "github.com/OmsiModsBR/depot", Some("open_in_new"), ButtonKind::Ghost) {
-        crate::updater::open_url(crate::updater::REPO_URL);
+    if ui.button("s-about-releases", c.row(), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
+        crate::about::open_url(crate::about::RELEASES_URL);
     }
     // every setting at once: here at the end, not first on the page where it was the
     // control one saw before any other
@@ -2331,7 +2301,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     if !l.state.mods_asked {
         l.state.load_mods();
     }
-    let body = l.page_title(area, "Mods", "A bus, a map, scenery, a whole OMSI folder - as a folder or a .zip, .7z or .rar. The original OMSI 2 folder is never written to.");
+    let body = l.page_title(area, "Mods", "A bus, a map, scenery, a whole OMSI folder - as a folder, or a .zip that the game reads in place from Archives. The original OMSI 2 folder is never written to.");
     let cols = 3;
     let cw = (body.w - GAP * 2.0 * (cols as f32 - 1.0)) / cols as f32;
     let colr = |k: usize| Rect::new(body.x + k as f32 * (cw + GAP * 2.0), body.y, cw, body.h);
@@ -2356,13 +2326,6 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         }
     }
     y += 52.0;
-    l.ui.label(Rect::new(inner.x, y, inner.w, 20.0), "Archive install mode");
-    y += 22.0;
-    let mut m = l.state.mod_mode;
-    if l.ui.segmented("mod-mode", Rect::new(inner.x, y, inner.w, 34.0), &mut m, &["Auto", "Unpacked", "Used in place"]) {
-        l.state.mod_mode = m;
-    }
-    y += 44.0;
     let drop = Rect::new(inner.x, y, inner.w, 110.0);
     let hot = l.pages.drop_hover;
     let t = l.ui.anim(id_of("drop"), if hot { 1.0 } else { 0.0 }, 0.1);
@@ -2384,16 +2347,15 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.ui.p().circle(p, 1.3, ACCENT.alpha(0.35 + 0.5 * t));
     }
     l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, ACCENT.alpha(0.6 + 0.4 * t));
-    l.ui.text_in("…or drop a mod folder or .zip, .7z or .rar onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
+    l.ui.text_in("…or drop a mod folder or .zip onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
     y += 122.0;
     if !l.state.mod_path.is_empty() {
         let p = l.state.mod_path.clone();
         y += l.ui.paragraph(&p, Vec2::new(inner.x, y), inner.w, 11.5, Weight::Regular, TEXT_FAINT);
         match l.state.mod_info.clone() {
             Some(Ok(i)) if i.is_archive => {
-                let fit = if i.fits { format!("fits ({} free)", fmt_bytes(i.free_bytes)) } else { format!("does not fit: needs {}, {} free", fmt_bytes(i.needed_bytes), fmt_bytes(i.free_bytes)) };
                 let place = if i.in_place_ok { "can be used in place".to_string() } else { i.in_place.clone() };
-                y += l.ui.paragraph(&format!("{} archive, {} files, {} unpacked - {fit}; {place}", fmt_bytes(i.archive_bytes), i.files, fmt_bytes(i.unpacked_bytes)), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.fits { TEXT_DIM } else { WARN });
+                y += l.ui.paragraph(&format!("{} archive, {} files - {place}", fmt_bytes(i.archive_bytes), i.files), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.in_place_ok { TEXT_DIM } else { WARN });
             }
             Some(Err(e)) => {
                 y += l.ui.paragraph(&e, Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, DANGER);
@@ -2736,7 +2698,6 @@ mod wizard_tests {
 #[cfg(test)]
 mod settings_tests {
     use super::*;
-    use crate::updater::Status;
 
     /// Every clickable thing of the settings page by the tab it is on (switches are named
     /// `set-<key>`). Taken from the page as it was before the tabs: nothing may go missing.
@@ -2802,9 +2763,9 @@ mod settings_tests {
             "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
         ];
         let general = vec![
-            "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
+            "s-lang", "set-machine_translation", "set-launcher_rest", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
-            "set-update_check", "set-update_auto", "set-update_notify", "set-presence", "s-upd-check", "s-upd-github", "s-reset",
+            "s-about-releases", "s-reset",
         ];
         vec![graphics, driving, camera, sound, gameplay, general]
     }
@@ -2819,7 +2780,7 @@ mod settings_tests {
     }
 
     fn outside() -> Outside {
-        Outside { update: Status::Idle, check_updates: false, reset: false, controls: None }
+        Outside { reset: false, controls: None }
     }
 
     /// One frame of tab `tab`, its two columns tall enough that nothing is cut off. The Sound

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 pub mod codepage;
 mod keywords;
 pub mod number;
+pub mod limits;
 pub mod vfs;
 pub mod install_search;
 pub use install_search::find_original_install;
@@ -360,6 +361,20 @@ impl<'a> CfgReader<'a> {
 
     pub fn usize(&mut self) -> usize {
         parse_i64(self.line()).max(0) as usize
+    }
+
+    /// A count of elements that follow (the number of entries of a list), safe to loop or
+    /// allocate over: never more than `max`, and never more than the lines left plus one
+    /// (every element takes a line; past the end only blank lines come, so a count of 10^11
+    /// in a three-line file is not 10^11 iterations). A count that had to be cut is logged.
+    pub fn count(&mut self, max: usize) -> usize {
+        let v = self.usize();
+        let left = self.file.lines.len().saturating_sub(self.pos).saturating_add(1);
+        let n = v.min(max).min(left);
+        if v > max {
+            log::warn!("{}: count {v} past the limit of {max}, cut", self.file.path.display());
+        }
+        n
     }
 
     /// `1`/`true` → true; anything else false.

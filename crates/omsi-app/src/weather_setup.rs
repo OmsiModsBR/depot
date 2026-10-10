@@ -577,6 +577,31 @@ pub(crate) fn fetch_metar(icao: &str) -> omsi_content::weather::Weather {
     }
 }
 
+/// The request for a station's METAR report. The code comes from a setting, a server or a
+/// file, so it must not be able to add a parameter or change the path (`EDDB&format=json`,
+/// `../x`, `#`): it has to look like a station code (2 to 8 letters or digits) and is
+/// percent-encoded anyway. The host is fixed; nothing else of the URL is variable.
+pub(crate) fn metar_url(icao: &str) -> Option<String> {
+    let code = icao.trim();
+    if !(2..=8).contains(&code.len()) || !code.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(format!("https://aviationweather.gov/api/data/metar?ids={}&format=raw", percent_encode(&code.to_ascii_uppercase())))
+}
+
+/// `text` with everything but unreserved characters (`A-Z a-z 0-9 - . _ ~`) as `%XX`.
+pub(crate) fn percent_encode(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
 /// The weather of an airport's METAR report, None when it cannot be had.
 pub(crate) fn try_metar(icao: &str) -> Option<omsi_content::weather::Weather> {
     // (Tegel, OMSI's Berlin default, closed in 2020: Berlin's airport now reports)
@@ -584,7 +609,10 @@ pub(crate) fn try_metar(icao: &str) -> Option<omsi_content::weather::Weather> {
         "EDDT" | "EDDI" | "" => "EDDB".to_string(),
         other => other.to_string(),
     };
-    let url = format!("https://aviationweather.gov/api/data/metar?ids={icao}&format=raw");
+    let Some(url) = metar_url(&icao) else {
+        log::warn!("current weather: {icao:?} is not a station code, no request made");
+        return None;
+    };
     let text = ureq::get(&url)
         .timeout(std::time::Duration::from_secs(6))
         .call()
@@ -633,4 +661,29 @@ pub(crate) fn from_report(s: &str) -> Option<omsi_content::weather::Weather> {
     let mut w = omsi_content::weather::from_metar(icao, raw);
     w.path = std::path::PathBuf::from(format!("metar:{icao}"));
     Some(w)
+}
+#[cfg(test)]
+mod metar_url_tests {
+    use super::*;
+
+    #[test]
+    fn a_station_code_becomes_one_fixed_request() {
+        assert_eq!(metar_url("eddb").unwrap(), "https://aviationweather.gov/api/data/metar?ids=EDDB&format=raw");
+        assert_eq!(metar_url(" KJFK ").unwrap(), "https://aviationweather.gov/api/data/metar?ids=KJFK&format=raw");
+        assert!(metar_url("K1A0").is_some());
+    }
+
+    #[test]
+    fn a_code_cannot_change_the_request() {
+        for bad in ["", "E", "EDDB&format=json", "EDDB,KJFK", "../x", "EDDB#", "EDDB?x=1", "ED DB", "EDDB\r\nHost: x", "%45DDB", "EDDBEDDBEDDB", "ÄÖÜ1"] {
+            assert!(metar_url(bad).is_none(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn percent_encoding_leaves_only_unreserved_characters() {
+        assert_eq!(percent_encode("EDDB"), "EDDB");
+        assert_eq!(percent_encode("a&b=c d/é"), "a%26b%3Dc%20d%2F%C3%A9");
+        assert_eq!(percent_encode("-._~"), "-._~");
+    }
 }

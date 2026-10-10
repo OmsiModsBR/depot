@@ -8,6 +8,10 @@ use omsi_script::SysVar;
 
 /// Load every plugin of every content root (`OMSI_NO_PLUGINS=1` leaves them out).
 pub(crate) fn load() -> Plugins {
+    // Plugins (native and Lua) are disabled in this client (docs/removed/MULTIPLAYER_DISABLED.md).
+    if true {
+        return Plugins::default();
+    }
     if omsi_cfg::env::var_os("OMSI_NO_PLUGINS").is_some() {
         return Plugins::default();
     }

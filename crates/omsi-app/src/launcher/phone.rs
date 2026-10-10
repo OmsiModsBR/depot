@@ -28,7 +28,8 @@ pub enum Tab {
     More,
 }
 
-const TABS: [(Tab, &str, &str); 4] = [(Tab::Play, "Play", "directions_bus"), (Tab::Online, "Online", "groups"), (Tab::Mods, "Mods", "extension"), (Tab::More, "More", "menu")];
+// (the Online tab is hidden: multiplayer is disabled in this version)
+const TABS: [(Tab, &str, &str); 3] = [(Tab::Play, "Play", "directions_bus"), (Tab::Mods, "Mods", "extension"), (Tab::More, "More", "menu")];
 
 /// A choice made on a sheet of its own.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1016,6 +1017,11 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
 
 fn online(l: &mut Launcher, body: Rect) {
     let inner = body.pad(12.0, 12.0);
+    // (multiplayer is disabled in this version: nothing to join, nothing is asked)
+    if true {
+        l.ui.paragraph("Multiplayer is disabled while its structure is redone. Single-player is unaffected.", Vec2::new(inner.x, inner.y), inner.w, 14.0, Weight::Regular, TEXT);
+        return;
+    }
     let official = omsi_net::official::ALIAS;
     l.state.ask_server(official, 15.0);
     // the official server, first and large

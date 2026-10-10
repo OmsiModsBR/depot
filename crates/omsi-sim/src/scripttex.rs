@@ -5,6 +5,11 @@
 use omsi_content::font::FontAtlas;
 use std::sync::Arc;
 
+/// Largest side, in texels, of a script texture. Real displays are a few hundred texels wide; the
+/// ceiling keeps `w * h * 4` far inside `u32`/`usize` and a hostile `model.cfg` from asking for gigabytes.
+/// (A shared `checked_texture_size` helper may replace this local check later.)
+pub const MAX_SCRIPT_TEXTURE_SIDE: u32 = 4096;
+
 pub struct ScriptTexture {
     pub width: u32,
     pub height: u32,
@@ -28,11 +33,15 @@ pub struct ScriptTexture {
 
 impl ScriptTexture {
     pub fn new(width: i32, height: i32) -> ScriptTexture {
-        let (w, h) = (width.max(1) as u32, height.max(1) as u32);
+        let side = |v: i32| (v.max(1) as u32).min(MAX_SCRIPT_TEXTURE_SIDE);
+        let (w, h) = (side(width), side(height));
+        if width > MAX_SCRIPT_TEXTURE_SIDE as i32 || height > MAX_SCRIPT_TEXTURE_SIDE as i32 {
+            log::warn!("scripttexture: size {width}x{height} above {MAX_SCRIPT_TEXTURE_SIDE}, using {w}x{h}");
+        }
         ScriptTexture {
             width: w,
             height: h,
-            rgba: vec![0; (w * h * 4) as usize],
+            rgba: vec![0; w as usize * h as usize * 4],
             dirty: true,
             locked: false,
             pending: None,
@@ -49,7 +58,7 @@ impl ScriptTexture {
         if (w, h) != (self.width, self.height) {
             self.width = w;
             self.height = h;
-            self.rgba = vec![0; (w * h * 4) as usize];
+            self.rgba = vec![0; w as usize * h as usize * 4];
             // (an image released at the old size must not go up at the new one)
             self.pending = None;
         }
@@ -89,7 +98,7 @@ impl ScriptTexture {
         if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
             return;
         }
-        let i = ((y as u32 * self.width + x as u32) * 4) as usize;
+        let i = (y as usize * self.width as usize + x as usize) * 4;
         self.rgba[i..i + 4].copy_from_slice(&c);
         self.dirty = true;
     }
@@ -98,14 +107,20 @@ impl ScriptTexture {
         if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
             return [0; 4];
         }
-        let i = ((y as u32 * self.width + x as u32) * 4) as usize;
+        let i = (y as usize * self.width as usize + x as usize) * 4;
         [self.rgba[i], self.rgba[i + 1], self.rgba[i + 2], self.rgba[i + 3]]
     }
 
     pub fn rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
         let c = self.color;
-        for y in y1.min(y2)..=y1.max(y2) {
-            for x in x1.min(x2)..=x1.max(x2) {
+        // clip to the texture first: the arguments come from the script and may span the whole i32 range
+        let (x0, x1) = (x1.min(x2).max(0), x1.max(x2).min(self.width as i32 - 1));
+        let (y0, y1) = (y1.min(y2).max(0), y1.max(y2).min(self.height as i32 - 1));
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
                 self.put(x, y, c);
             }
         }
@@ -125,11 +140,11 @@ impl ScriptTexture {
         let transparent = mode & 3 == 2;
         for ch in text.chars() {
             if ch.is_whitespace() {
-                cx += atlas.font.space_width() + atlas.font.gap + spacing;
+                cx = cx.saturating_add(atlas.font.space_width().saturating_add(atlas.font.gap).saturating_add(spacing));
                 continue;
             }
             let Some(g) = atlas.font.glyph(ch) else {
-                cx += atlas.font.gap.max(1) + spacing;
+                cx = cx.saturating_add(atlas.font.gap.max(1)).saturating_add(spacing);
                 continue;
             };
             let gw = (g.x1 - g.x0).max(0);
@@ -149,10 +164,11 @@ impl ScriptTexture {
                         continue;
                     }
                     let rgb = if from_font && si + 2 < atlas.color.len() { [atlas.color[si], atlas.color[si + 1], atlas.color[si + 2]] } else { [c[0], c[1], c[2]] };
-                    self.put(cx + gx, y + gy, [rgb[0], rgb[1], rgb[2], cov]);
+                    let (Some(px), Some(py)) = (cx.checked_add(gx), y.checked_add(gy)) else { continue };
+                    self.put(px, py, [rgb[0], rgb[1], rgb[2], cov]);
                 }
             }
-            cx += gw + atlas.font.gap + spacing;
+            cx = cx.saturating_add(gw).saturating_add(atlas.font.gap).saturating_add(spacing);
         }
     }
 
@@ -162,13 +178,18 @@ impl ScriptTexture {
     /// the picture stretched to fill it, so the mesh's UVs always cover the whole bitmap
     /// (a 256x64 bitmap into a 256x32 entry is not cut to its top half).
     pub fn load(&mut self, w: u32, h: u32, rgba: &[u8]) {
-        if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
+        if w == 0 || h == 0 || w > MAX_SCRIPT_TEXTURE_SIDE || h > MAX_SCRIPT_TEXTURE_SIDE {
+            log::warn!("scripttexture: STLoadTex picture {w}x{h} outside 1..={MAX_SCRIPT_TEXTURE_SIDE}, ignored");
+            return;
+        }
+        // both sides are at most 4096 here, so none of these products can overflow
+        if rgba.len() < w as usize * h as usize * 4 {
             return;
         }
         let (tw, th) = (w.next_power_of_two(), h.next_power_of_two());
         self.width = tw;
         self.height = th;
-        self.rgba = if (tw, th) == (w, h) { rgba[..(w * h * 4) as usize].to_vec() } else { resample(w, h, rgba, tw, th) };
+        self.rgba = if (tw, th) == (w, h) { rgba[..w as usize * h as usize * 4].to_vec() } else { resample(w, h, rgba, tw, th) };
         self.mipmaps = true;
         // the file replaces whatever was released at the old size
         self.pending = None;
@@ -178,7 +199,7 @@ impl ScriptTexture {
 
 /// Stretch an RGBA picture to another size, bilinearly (texel centres onto texel centres).
 fn resample(w: u32, h: u32, src: &[u8], tw: u32, th: u32) -> Vec<u8> {
-    let mut out = vec![0u8; (tw * th * 4) as usize];
+    let mut out = vec![0u8; tw as usize * th as usize * 4];
     let axis = |t: u32, n: u32, size: u32| -> (usize, usize, f32) {
         let f = ((t as f32 + 0.5) * n as f32 / size as f32 - 0.5).clamp(0.0, (n - 1) as f32);
         let i = f.floor() as usize;
@@ -192,7 +213,7 @@ fn resample(w: u32, h: u32, src: &[u8], tw: u32, th: u32) -> Vec<u8> {
             for c in 0..4 {
                 let top = px(x0, y0, c) * (1.0 - fx) + px(x1, y0, c) * fx;
                 let bot = px(x0, y1, c) * (1.0 - fx) + px(x1, y1, c) * fx;
-                out[((y * tw + x) * 4) as usize + c] = (top * (1.0 - fy) + bot * fy).round() as u8;
+                out[(y as usize * tw as usize + x as usize) * 4 + c] = (top * (1.0 - fy) + bot * fy).round() as u8;
             }
         }
     }
@@ -207,7 +228,45 @@ pub struct FontTable {
 
 #[cfg(test)]
 mod tests {
-    use super::ScriptTexture;
+    use super::{ScriptTexture, MAX_SCRIPT_TEXTURE_SIDE};
+
+    #[test]
+    fn a_huge_rect_is_clipped_to_the_texture() {
+        let mut t = ScriptTexture::new(4, 3);
+        t.color = [9, 8, 7, 6];
+        // ~4e18 iterations if it walked the argument range
+        t.rect(i32::MIN, i32::MIN, i32::MAX, i32::MAX);
+        assert!(t.rgba.chunks(4).all(|p| p == [9, 8, 7, 6]));
+        let mut t = ScriptTexture::new(4, 3);
+        t.color = [1, 1, 1, 1];
+        t.rect(2, 1, 100, 100);
+        assert_eq!(t.get(1, 1), [0; 4]);
+        assert_eq!(t.get(2, 1), [1; 4]);
+        assert_eq!(t.get(3, 2), [1; 4]);
+        t.rect(-50, -50, -10, 2);
+        t.rect(10, 0, 20, 2);
+        assert_eq!(t.get(0, 0), [0; 4]);
+    }
+
+    #[test]
+    fn hostile_texture_sizes_are_clamped_not_overflowed() {
+        // 65536 * 65536 * 4 wraps to 0 in u32; 30000 * 30000 * 4 is 3.6 GB
+        for (w, h) in [(65536, 65536), (30000, 30000), (i32::MAX, i32::MAX), (i32::MIN, 5), (0, 0)] {
+            let mut t = ScriptTexture::new(w, h);
+            assert!(t.width >= 1 && t.width <= MAX_SCRIPT_TEXTURE_SIDE && t.height >= 1 && t.height <= MAX_SCRIPT_TEXTURE_SIDE);
+            assert_eq!(t.rgba.len(), t.width as usize * t.height as usize * 4);
+            t.put(0, 0, [1, 2, 3, 4]);
+            assert_eq!(t.get(0, 0), [1, 2, 3, 4]);
+            t.renew();
+        }
+        let mut t = ScriptTexture::new(4, 4);
+        // a picture larger than the ceiling (16384^2 * 4 wraps to 0 in u32) is ignored
+        t.load(16384, 16384, &[0; 16]);
+        assert_eq!((t.width, t.height), (4, 4));
+        t.load(u32::MAX, 2, &[0; 16]);
+        assert_eq!((t.width, t.height), (4, 4));
+        assert_eq!(ScriptTexture::new(640, 480).rgba.len(), 640 * 480 * 4);
+    }
 
     #[test]
     fn a_loaded_bitmap_fills_the_texture_at_its_own_power_of_two_size() {

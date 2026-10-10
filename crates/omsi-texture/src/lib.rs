@@ -19,7 +19,19 @@ pub mod tga;
 mod format_tests;
 
 /// The widest and tallest texture any decoder accepts (what Direct3D 9 cards held).
-pub const MAX_DIMENSION: usize = 16384;
+pub const MAX_DIMENSION: usize = omsi_cfg::limits::MAX_TEXTURE_DIM as usize;
+
+/// `image::load_from_memory_with_format` with the width and height limited to
+/// [`MAX_DIMENSION`], checked from the header before the picture is allocated (a BMP, PNG or
+/// JPEG header can ask for 60 000 x 60 000).
+fn load_limited(bytes: &[u8], format: image::ImageFormat) -> image::ImageResult<image::DynamicImage> {
+    let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DIMENSION as u32);
+    limits.max_image_height = Some(MAX_DIMENSION as u32);
+    reader.limits(limits);
+    reader.decode()
+}
 
 pub mod pbr;
 pub use gpu::{gpu_options, set_gpu_options, GpuOptions, PixelFormat, TextureData};
@@ -129,14 +141,14 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
             _ => image::guess_format(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
         }
     };
-    let img = match image::load_from_memory_with_format(bytes, format) {
+    let img = match load_limited(bytes, format) {
         Ok(img) => img,
         // D3DX reads what GDI would: a palette bitmap that counts more colours than its bit
         // depth holds (the A21's and the Urbino's 4-bit `LCD-Innenanzeige.bmp` says 17) is
         // read with the colours it can use, and a 24-bit one that says BI_BITFIELDS (sky
         // packs' `Texture\skybox\night01.bmp`) as the plain 24-bit bitmap it is
         Err(e) if format == image::ImageFormat::Bmp => match bmp_clamped_palette(bytes).or_else(|| bmp24_bitfields(bytes)) {
-            Some(fixed) => image::load_from_memory_with_format(&fixed, format).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
+            Some(fixed) => load_limited(&fixed, format).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
             None => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
         },
         Err(e) => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
@@ -849,6 +861,20 @@ mod tests {
         let img = decode_bytes(&b, Path::new("night01.bmp")).unwrap();
         assert_eq!((img.width, img.height), (2, 2));
         assert_eq!(&img.rgba[..8], &[9, 8, 7, 255, 12, 11, 10, 255]);
+    }
+
+    /// A BMP whose header asks for a picture wider than any texture is refused from the header.
+    #[test]
+    fn oversized_bmp_is_refused() {
+        let mut b = b"BM".to_vec();
+        b.extend_from_slice(&[0; 12]);
+        b.extend_from_slice(&40u32.to_le_bytes());
+        b.extend_from_slice(&60_000i32.to_le_bytes());
+        b.extend_from_slice(&60_000i32.to_le_bytes());
+        b.extend_from_slice(&1u16.to_le_bytes());
+        b.extend_from_slice(&24u16.to_le_bytes());
+        b.extend_from_slice(&[0; 24]);
+        assert!(decode_bytes(&b, Path::new("huge.bmp")).is_err());
     }
 
     /// A TGA named `.png` (NEOMAN's `W_Bader_KR498_disp.png`, a 24-bit RLE TGA) decodes as TGA.

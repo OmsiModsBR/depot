@@ -1,6 +1,9 @@
 //! Installing mods as background jobs.
 //!
-//! A mod is a folder or a `.zip`. Installing it happens in four steps, each of which can be
+//! A mod is a folder or a `.zip`. **A `.zip` is never unpacked** (and `.rar` / `.7z` are not
+//! supported): it is put into `<content>/Archives/` as it is, and the game mounts every
+//! archive there as a content root (`omsi_cfg::vfs`), as the launcher's own lists do. A folder
+//! is copied into the content folder. Installing happens in four steps, each of which can be
 //! followed on the Mods page and cancelled:
 //!
 //! 1. **Plan** - from the archive's central directory (or the folder listing) alone, work
@@ -8,14 +11,18 @@
 //!    merged into the same folders of the content folder, a lone bus / map / object folder is
 //!    put under the right folder, and everything else (read-mes, screenshots) is left out.
 //!    A pack that only adds paints or textures to a bus that is not installed is kept aside
-//!    in `Mods/waiting` and installed by itself once the bus is there.
-//! 2. **Check** - the unpacked size of the planned files plus a margin must fit on the disk
-//!    of the content folder; otherwise the job stops with the numbers before anything is
+//!    in `Mods/waiting` and installed by itself once the bus is there. A `.zip` whose folders
+//!    are not where the game looks for them (a lone bus folder, say) is refused: it would
+//!    have to be unpacked.
+//! 2. **Check** - for a folder, the size of the planned files plus a margin must fit on the
+//!    disk of the content folder; otherwise the job stops with the numbers before anything is
 //!    written.
-//! 3. **Unpack / copy** into `<content>/.install-staging/<pid>-<job>`, on the same volume
+//! 3. **Copy** a folder into `<content>/.install-staging/<pid>-<job>`, on the same volume
 //!    as the content folder, with the free space watched while it runs. The files of a
 //!    folder in the Mods inbox are hard-linked there instead (no space, no time), so the
-//!    staging folder never holds the only copy of anything.
+//!    staging folder never holds the only copy of anything. A `.zip` is placed in `Archives`
+//!    instead - hard-linked when it is on the same disk, moved when it came through the Mods
+//!    inbox, else copied through the staging folder after the same free-space check.
 //! 4. **Move** into place: a new folder is renamed into the content folder in one step,
 //!    files for an existing folder are renamed over it one by one. Only then are the
 //!    linked inbox files removed from the inbox.
@@ -27,14 +34,8 @@
 //! Every path inside a source goes through `safe_rel` before it is planned, so no entry
 //! (`..\..\x` in a zip made on Windows included) can be written outside the staging folder.
 //!
-//! **In place** (`InstallMode::InPlace`): a `.zip` laid out like OMSI 2 is not unpacked at
-//! all. It is put into `<content>/Archives/` - hard-linked when it is on the same disk
-//! (no space, no time), moved when it came through the Mods inbox, else copied through the
-//! staging folder after the same free-space check - and the game mounts every archive
-//! there as a content root (`omsi_cfg::vfs`), as the launcher's own lists do. The plan is
-//! still made, for the report and to check that the archive's folders are where the game
-//! looks for them. `InstallMode::Auto` (the page's default) unpacks what fits on the disk
-//! and uses an archive in place when its unpacked size does not.
+//! `InstallMode` is kept for compatibility with the CLI and the page, but no longer changes
+//! anything: a `.zip` is always used in place and a folder is always copied.
 
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
@@ -59,12 +60,13 @@ pub const ARCHIVES: &str = "Archives";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum InstallMode {
-    /// Unpack (or copy) the files into the content folder.
+    /// Copy a folder's files into the content folder (the only way for a folder).
     #[default]
     Extract,
-    /// Put the archive into `<content>/Archives` and let the game read it as a content root.
+    /// Put the archive into `<content>/Archives` and let the game read it as a content root
+    /// (the only way for a `.zip`).
     InPlace,
-    /// Unpack when the unpacked files fit on the disk, else use the archive in place.
+    /// Kept for compatibility: the same as the source's only way (a `.zip` in place, a folder copied).
     Auto,
 }
 
@@ -724,8 +726,6 @@ fn kind_label(kind: &str) -> &'static str {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ArchiveKind {
     Zip,
-    SevenZip,
-    Rar,
 }
 
 fn archive_kind(path: &Path) -> Option<ArchiveKind> {
@@ -734,111 +734,8 @@ fn archive_kind(path: &Path) -> Option<ArchiveKind> {
     }
     match path.extension()?.to_string_lossy().to_ascii_lowercase().as_str() {
         "zip" => Some(ArchiveKind::Zip),
-        "7z" => Some(ArchiveKind::SevenZip),
-        "rar" => Some(ArchiveKind::Rar),
         _ => None,
     }
-}
-
-/// Expand formats the game cannot mount into the install job's own staging area. Header
-/// sizes are checked against the content volume before any data is written; the later
-/// install step hard-links these staged files into their final layout.
-fn unpack_archive(job: &Job, content: &Path, src: &Path, dest: &Path, kind: ArchiveKind) -> Result<()> {
-    let (files, bytes) = match kind {
-        ArchiveKind::SevenZip => {
-            let reader = sevenz_rust2::ArchiveReader::open(src, sevenz_rust2::Password::empty())
-                .with_context(|| format!("{} is not a readable 7z archive", src.display()))?;
-            let entries = &reader.archive().files;
-            let files = entries.iter().filter(|e| e.has_stream && !e.is_directory).count() as u64;
-            let bytes = entries.iter().filter(|e| e.has_stream && !e.is_directory).fold(0u64, |sum, e| sum.saturating_add(e.size));
-            (files, bytes)
-        }
-        ArchiveKind::Rar => {
-            let archive = unrar_rs::RarArchive::open(std::fs::File::open(src)?)
-                .with_context(|| format!("{} is not a readable RAR archive", src.display()))?;
-            let members: Vec<_> = archive.entries().collect();
-            if members.iter().any(|m| m.unpacked_size.is_none() && !m.is_directory) {
-                return Err(anyhow!("{} is a multi-volume RAR archive; add all parts and start with the first .rar file", src.display()));
-            }
-            let files = members.iter().filter(|m| !m.is_directory && !m.is_symlink && !m.is_hardlink).count() as u64;
-            let bytes = members.iter().filter(|m| !m.is_directory && !m.is_symlink && !m.is_hardlink).fold(0u64, |sum, m| sum.saturating_add(m.unpacked_size.unwrap_or(0)));
-            (files, bytes)
-        }
-        ArchiveKind::Zip => unreachable!(),
-    };
-    let free = free_space(content).unwrap_or(u64::MAX);
-    let needed = bytes.saturating_add(MIN_MARGIN);
-    job.set(|p| {
-        p.files_total = files;
-        p.bytes_total = bytes;
-        p.free_bytes = free;
-        p.needed_bytes = needed;
-    });
-    if needed > free {
-        return Err(anyhow!("not enough disk space to unpack {}: {} plus {} kept free needs {}, but only {} is free on {}", src.display(), gb(bytes), gb(MIN_MARGIN), gb(needed), gb(free), content.display()));
-    }
-    if job.cancelled() {
-        return Err(anyhow!(Cancelled));
-    }
-    std::fs::create_dir_all(dest).with_context(|| format!("creating {}", dest.display()))?;
-    match kind {
-        ArchiveKind::SevenZip => {
-            let mut done = 0u64;
-            sevenz_rust2::decompress_file_with_extract_fn(src, dest, |entry, reader, target| {
-                if job.cancelled() {
-                    return Err(sevenz_rust2::Error::Io(std::io::Error::new(std::io::ErrorKind::Interrupted, "cancelled"), "install cancelled".into()));
-                }
-                let wrote = sevenz_rust2::default_entry_extract_fn(entry, reader, target)?;
-                if wrote && entry.has_stream && !entry.is_directory {
-                    done += 1;
-                    job.files_done.store(done, Ordering::Relaxed);
-                    if free_space(content).is_some_and(|left| left < ABORT_BELOW) {
-                        return Err(sevenz_rust2::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "free disk space fell below 1 GB"), "install stopped".into()));
-                    }
-                }
-                Ok(wrote)
-            }).with_context(|| format!("unpacking {} (the archive may be damaged or encrypted)", src.display()))?;
-        }
-        ArchiveKind::Rar => {
-            let mut archive = unrar_rs::RarArchive::open(std::fs::File::open(src)?)
-                .with_context(|| format!("opening {}", src.display()))?;
-            let members: Vec<_> = archive.entries().collect();
-            for (index, member) in members.iter().enumerate() {
-                if job.cancelled() {
-                    return Err(anyhow!(Cancelled));
-                }
-                if member.is_directory || member.is_symlink || member.is_hardlink {
-                    continue;
-                }
-                let Some(rel) = safe_rel(&member.name) else {
-                    job.set(|p| p.warnings.push(format!("unsafe RAR path refused: {}", member.name)));
-                    continue;
-                };
-                let out = dest.join(&rel);
-                if let Some(parent) = out.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                let mut file = std::fs::File::create(&out)?;
-                let n = archive.by_index(index)?.copy_to(&mut file)
-                    .with_context(|| format!("unpacking {} from {}", rel, src.display()))?;
-                job.files_done.fetch_add(1, Ordering::Relaxed);
-                job.bytes_done.fetch_add(n, Ordering::Relaxed);
-                check_space(content)?;
-            }
-        }
-        ArchiveKind::Zip => unreachable!(),
-    }
-    if job.cancelled() {
-        return Err(anyhow!(Cancelled));
-    }
-    Ok(())
-}
-
-enum Source {
-    /// A folder's files as they are on disk, by `Entry::index` (the name in `Entry::rel`
-    /// may differ: `\` read as a separator).
-    Folder(Vec<PathBuf>),
-    Zip(zip::ZipArchive<std::io::BufReader<std::fs::File>>),
 }
 
 /// The files of a folder, with their paths on disk, and how many were left out because
@@ -948,25 +845,15 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     let src = job.source.clone();
     let archive = archive_kind(&src);
     let is_zip = archive == Some(ArchiveKind::Zip);
-    let staged_archive = matches!(archive, Some(ArchiveKind::SevenZip | ArchiveKind::Rar));
     if archive.is_none() && !src.is_dir() {
-        return Err(anyhow!("{} is neither a folder nor a supported mod archive (.zip, .7z, .rar)", src.display()));
+        return Err(anyhow!("{} is neither a folder nor a .zip: only folders and .zip archives (used in place, never unpacked) are supported; .rar and .7z are not", src.display()));
     }
     if src.starts_with(content) && !job.from_inbox && !src.starts_with(content.join("Mods")) {
         return Err(anyhow!("{} is already inside the content folder", src.display()));
     }
     // (the name becomes a folder name: `...zip` has the stem `..`)
     let source_name = if archive.is_some() { src.file_stem() } else { src.file_name() }.map(|s| s.to_string_lossy().to_string()).filter(|n| safe_rel(n).as_deref() == Some(n.as_str())).unwrap_or_else(|| "mod".into());
-    let (mut source, entries) = if staged_archive {
-        let unpacked = staging_dir(content, job.id).join("source");
-        job.state("unpacking", "checking the archive and unpacking it into staging");
-        unpack_archive(job, content, &src, &unpacked, archive.unwrap())?;
-        let (entries, paths, refused) = list_folder(&unpacked, job)?;
-        if refused > 0 {
-            job.set(|p| p.warnings.push(format!("{refused} file(s) whose names cannot be installed safely were left out")));
-        }
-        (Source::Folder(paths), entries)
-    } else if is_zip {
+    let (paths, entries) = if is_zip {
         job.state("planning", "reading the archive's table of contents");
         let f = std::fs::File::open(&src).with_context(|| format!("opening {}", src.display()))?;
         let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| format!("{} is not a readable zip archive", src.display()))?;
@@ -974,14 +861,16 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
         if !problems.is_empty() {
             return Err(anyhow!("{}: {}", src.display(), problems.join("; ")));
         }
-        (Source::Zip(z), entries)
+        // (a zip is never read past its table of contents: it is placed in Archives as it is)
+        drop(z);
+        (Vec::new(), entries)
     } else {
         job.state("planning", "listing the folder");
         let (entries, paths, refused) = list_folder(&src, job)?;
         if refused > 0 {
             job.set(|p| p.warnings.push(format!("{refused} file(s) whose names cannot be installed safely (a '..', '\\' or ':' in them) were left out")));
         }
-        (Source::Folder(paths), entries)
+        (paths, entries)
     };
     if entries.is_empty() {
         return Err(anyhow!("{} is empty", src.display()));
@@ -1005,7 +894,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     let total_bytes: u64 = plan.maps.iter().map(|m| m.bytes).sum();
     // an inbox folder's files are hard-linked into the staging folder (no space, and the
     // originals stay until the install is in place); everything else is written anew
-    let moving = (job.from_inbox && !is_zip) || staged_archive;
+    let moving = job.from_inbox && !is_zip;
     let needed = if moving { 0 } else { total_bytes + (total_bytes / 20).max(MIN_MARGIN) };
     let free = free_space(content).unwrap_or(u64::MAX);
     job.set(|p| {
@@ -1014,30 +903,12 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
         p.free_bytes = free;
         p.needed_bytes = needed;
     });
-    // unpack, or use the archive in place?
-    let layout = if is_zip { in_place_layout(&src, &plan) } else { Err(anyhow!("only a .zip archive can be used in place; this archive must be unpacked")) };
-    let mode = if staged_archive {
-        InstallMode::Extract
-    } else { match job.mode {
-        InstallMode::Auto if is_zip && needed > free => match &layout {
-            Ok(()) => {
-                let line = format!("{} unpacks to {}, which does not fit ({} free): using the archive in place instead", source_name, gb(total_bytes), gb(free));
-                job.set(|p| p.report.push(line.clone()));
-                InstallMode::InPlace
-            }
-            Err(e) => {
-                let line = format!("the archive cannot be used in place either: {e:#}");
-                job.set(|p| p.warnings.push(line.clone()));
-                InstallMode::Extract
-            }
-        },
-        InstallMode::Auto => InstallMode::Extract,
-        m => m,
-    }};
+    // a .zip is only ever used in place (the game mounts it from Archives); a folder is copied
+    let mode = if is_zip { InstallMode::InPlace } else { InstallMode::Extract };
+    let layout = if is_zip { in_place_layout(&src, &plan) } else { Ok(()) };
     job.set(|p| p.mode = mode);
     if mode == InstallMode::InPlace {
         layout?;
-        drop(source);
         return place_archive(job, content, &src, &plan);
     }
     if needed > free {
@@ -1055,7 +926,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     // 3. unpack / copy into the staging folder
     let staging = staging_dir(content, job.id);
     std::fs::create_dir_all(&staging).with_context(|| format!("creating {}", staging.display()))?;
-    job.state(if is_zip { "unpacking" } else if moving { "moving" } else { "copying" }, format!("{} files, {}", total_files, gb(total_bytes)));
+    job.state(if moving { "moving" } else { "copying" }, format!("{} files, {}", total_files, gb(total_bytes)));
     let mut buf = vec![0u8; 1 << 20];
     let mut since_check = 0u64;
     for (mi, m) in plan.maps.iter().enumerate() {
@@ -1075,51 +946,27 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
                 std::fs::remove_file(&out).with_context(|| format!("replacing {}", out.display()))?;
             }
             let e = &entries[*idx];
-            match &mut source {
-                Source::Zip(z) => {
-                    let mut f = z.by_index(e.index).with_context(|| format!("reading {} from the archive", e.rel))?;
-                    let mut w = std::fs::File::create(&out).with_context(|| format!("writing {}", out.display()))?;
-                    loop {
-                        let n = f.read(&mut buf).with_context(|| format!("unpacking {} (the archive may be damaged)", e.rel))?;
-                        if n == 0 {
-                            break;
-                        }
-                        w.write_all(&buf[..n]).with_context(|| format!("writing {}", out.display()))?;
-                        job.bytes_done.fetch_add(n as u64, Ordering::Relaxed);
-                        since_check += n as u64;
-                        if since_check > 64 << 20 {
-                            since_check = 0;
-                            if job.cancelled() {
-                                return Err(anyhow!(Cancelled));
-                            }
-                            check_space(content)?;
-                        }
+            let from = &paths[e.index];
+            if moving && std::fs::hard_link(from, &out).is_ok() {
+                job.linked.lock().unwrap().push(from.clone());
+                job.bytes_done.fetch_add(e.size, Ordering::Relaxed);
+            } else {
+                let mut r = std::fs::File::open(from).with_context(|| format!("reading {}", from.display()))?;
+                let mut w = std::fs::File::create(&out).with_context(|| format!("writing {}", out.display()))?;
+                loop {
+                    let n = r.read(&mut buf)?;
+                    if n == 0 {
+                        break;
                     }
-                }
-                Source::Folder(paths) => {
-                    let from = &paths[e.index];
-                    if moving && std::fs::hard_link(from, &out).is_ok() {
-                        job.linked.lock().unwrap().push(from.clone());
-                        job.bytes_done.fetch_add(e.size, Ordering::Relaxed);
-                    } else {
-                        let mut r = std::fs::File::open(from).with_context(|| format!("reading {}", from.display()))?;
-                        let mut w = std::fs::File::create(&out).with_context(|| format!("writing {}", out.display()))?;
-                        loop {
-                            let n = r.read(&mut buf)?;
-                            if n == 0 {
-                                break;
-                            }
-                            w.write_all(&buf[..n]).with_context(|| format!("writing {}", out.display()))?;
-                            job.bytes_done.fetch_add(n as u64, Ordering::Relaxed);
-                            since_check += n as u64;
-                            if since_check > 64 << 20 {
-                                since_check = 0;
-                                if job.cancelled() {
-                                    return Err(anyhow!(Cancelled));
-                                }
-                                check_space(content)?;
-                            }
+                    w.write_all(&buf[..n]).with_context(|| format!("writing {}", out.display()))?;
+                    job.bytes_done.fetch_add(n as u64, Ordering::Relaxed);
+                    since_check += n as u64;
+                    if since_check > 64 << 20 {
+                        since_check = 0;
+                        if job.cancelled() {
+                            return Err(anyhow!(Cancelled));
                         }
+                        check_space(content)?;
                     }
                 }
             }
@@ -1130,7 +977,6 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
             }
         }
     }
-    drop(source);
     if job.cancelled() {
         return Err(anyhow!(Cancelled));
     }
@@ -1293,7 +1139,7 @@ fn in_place_layout(src: &Path, plan: &Plan) -> Result<()> {
     if wrong.is_empty() {
         Ok(())
     } else {
-        Err(anyhow!("the archive is not laid out like an OMSI 2 folder, so it has to be unpacked: {}", wrong.join("; ")))
+        Err(anyhow!("the archive is not laid out like an OMSI 2 folder, and a .zip is only ever used in place from Archives (never unpacked): {}", wrong.join("; ")))
     }
 }
 
@@ -1424,34 +1270,10 @@ pub fn inspect(content: &Path, root: Option<&Path>, src: &Path) -> Result<Source
     let is_zip = archive == Some(ArchiveKind::Zip);
     let free = free_space(content).unwrap_or(u64::MAX);
     if archive.is_none() {
-        return Ok(SourceInfo { free_bytes: free, fits: true, in_place: "only a .zip archive can be used in place".into(), suggested: InstallMode::Extract, ..Default::default() });
+        return Ok(SourceInfo { free_bytes: free, fits: true, in_place: "only a .zip archive can be used (in place, from Archives); .rar and .7z are not supported".into(), suggested: InstallMode::Extract, ..Default::default() });
     }
     let job = Job { id: 0, source: src.to_path_buf(), mode: InstallMode::Auto, from_inbox: false, cancel: AtomicBool::new(false), progress: Mutex::new(Progress::default()), bytes_done: AtomicU64::new(0), files_done: AtomicU64::new(0), linked: Mutex::new(Vec::new()), stall_at: u64::MAX };
     let archive_bytes = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
-    if !is_zip {
-        let (files, unpacked) = match archive.unwrap() {
-            ArchiveKind::SevenZip => {
-                let a = sevenz_rust2::ArchiveReader::open(src, sevenz_rust2::Password::empty()).with_context(|| format!("{} is not a readable 7z archive", src.display()))?;
-                let entries = &a.archive().files;
-                (entries.iter().filter(|e| e.has_stream && !e.is_directory).count() as u64,
-                    entries.iter().filter(|e| e.has_stream && !e.is_directory).fold(0u64, |n, e| n.saturating_add(e.size)))
-            }
-            ArchiveKind::Rar => {
-                let a = unrar_rs::RarArchive::open(std::fs::File::open(src)?)
-                    .with_context(|| format!("{} is not a readable RAR archive", src.display()))?;
-                let members: Vec<_> = a.entries().collect();
-                let regular = members.iter().filter(|m| !m.is_directory && !m.is_symlink && !m.is_hardlink);
-                let entries: Vec<_> = regular.collect();
-                if entries.iter().any(|m| m.unpacked_size.is_none()) {
-                    return Err(anyhow!("multi-volume RAR archive; add all parts and start with the first .rar file"));
-                }
-                (entries.len() as u64, entries.iter().fold(0u64, |n, m| n.saturating_add(m.unpacked_size.unwrap_or(0))))
-            }
-            ArchiveKind::Zip => unreachable!(),
-        };
-        let needed = unpacked.saturating_add(MIN_MARGIN);
-        return Ok(SourceInfo { is_archive: true, is_zip: false, files, unpacked_bytes: unpacked, archive_bytes, needed_bytes: needed, free_bytes: free, fits: needed <= free, in_place: "7z and RAR archives must be unpacked".into(), in_place_ok: false, suggested: InstallMode::Extract });
-    }
     let f = std::fs::File::open(src).with_context(|| format!("opening {}", src.display()))?;
     let mut z = zip::ZipArchive::new(std::io::BufReader::with_capacity(ZIP_BUFFER, f)).with_context(|| format!("{} is not a readable zip archive", src.display()))?;
     let (entries, _) = list_zip(&mut z, &job)?;
@@ -1611,21 +1433,29 @@ mod tests {
     }
 
     #[test]
-    fn install_zip_moves_into_place_and_cleans_up() {
+    fn a_zip_is_never_unpacked() {
         let dir = tmp("zip");
         let content = dir.join("content");
         omsi_cfg::ensure_content_layout(&content).unwrap();
+        // a lone bus folder in a zip would have to be unpacked: it is refused instead
         let zip = dir.join("Foo Bus.zip");
         write_zip(&zip, &[("Foo/foo.bus", 100), ("Foo/Model/model.cfg", 2000), ("Foo/Texture/a.dds", 300_000), ("readme.txt", 10)]);
-        let p = run_blocking(content.clone(), None, zip.clone(), InstallMode::Extract, None, false);
-        assert_eq!(p.state, "done", "{p:?}");
-        assert_eq!(p.installed, vec!["Vehicles/Foo".to_string()]);
-        assert_eq!(std::fs::metadata(content.join("Vehicles/Foo/Texture/a.dds")).unwrap().len(), 300_000);
-        assert!(!content.join(STAGING).exists(), "staging removed");
-        // again: merged over the existing folder
-        let p = run_blocking(content.clone(), None, zip.clone(), InstallMode::Extract, None, false);
-        assert_eq!(p.state, "done", "{p:?}");
-        assert!(p.report.iter().any(|l| l.contains("3 existing file(s) replaced")), "{:?}", p.report);
+        for mode in [InstallMode::Extract, InstallMode::Auto, InstallMode::InPlace] {
+            let p = run_blocking(content.clone(), None, zip.clone(), mode, None, false);
+            assert_eq!(p.state, "failed", "{p:?}");
+            assert!(p.message.contains("never unpacked"), "{}", p.message);
+            assert!(!content.join("Vehicles/Foo").exists(), "nothing unpacked");
+            assert!(!content.join(ARCHIVES).join("Foo Bus.zip").exists());
+            assert!(!content.join(STAGING).exists(), "staging removed");
+        }
+        // .rar and .7z are not supported at all
+        for name in ["Pack.rar", "Pack.7z"] {
+            let src = dir.join(name);
+            std::fs::write(&src, b"not an archive the launcher reads").unwrap();
+            let p = run_blocking(content.clone(), None, src, InstallMode::Auto, None, false);
+            assert_eq!(p.state, "failed", "{p:?}");
+            assert!(p.message.contains("only folders and .zip"), "{}", p.message);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1652,16 +1482,16 @@ mod tests {
         // again: already there
         let p = run_blocking(content.clone(), None, zip.clone(), InstallMode::InPlace, None, false);
         assert_eq!(p.state, "done", "{p:?}");
-        // a lone bus folder cannot be read in place: explicit in-place fails, auto unpacks
+        // a lone bus folder cannot be read in place, and a zip is never unpacked: refused,
+        // whatever the mode asked for
         let lone = dir.join("Foo Bus.zip");
         write_zip(&lone, &[("Foo/foo.bus", 100), ("Foo/Texture/a.dds", 3000)]);
-        let p = run_blocking(content.clone(), None, lone.clone(), InstallMode::InPlace, None, false);
-        assert_eq!(p.state, "failed", "{p:?}");
-        assert!(p.message.contains("unpacked"), "{}", p.message);
-        let p = run_blocking(content.clone(), None, lone.clone(), InstallMode::Auto, None, false);
-        assert_eq!(p.state, "done", "{p:?}");
-        assert_eq!(p.mode, InstallMode::Extract);
-        assert!(content.join("Vehicles/Foo/foo.bus").exists());
+        for mode in [InstallMode::InPlace, InstallMode::Auto] {
+            let p = run_blocking(content.clone(), None, lone.clone(), mode, None, false);
+            assert_eq!(p.state, "failed", "{p:?}");
+            assert!(p.message.contains("never unpacked"), "{}", p.message);
+        }
+        assert!(!content.join("Vehicles/Foo/foo.bus").exists());
         // what the page is told before
         let info = inspect(&content, None, &zip).unwrap();
         assert!(info.is_zip && info.in_place_ok && info.unpacked_bytes == 2100, "{info:?}");
@@ -1675,9 +1505,13 @@ mod tests {
         let dir = tmp("plugins");
         let content = dir.join("content");
         omsi_cfg::ensure_content_layout(&content).unwrap();
-        let zip = dir.join("Pack.zip");
-        write_zip(&zip, &[("Vehicles/Foo/foo.bus", 10), ("Plugins/evil.dll", 100), ("Plugins/evil.opl", 10)]);
-        let p = run_blocking(content.clone(), None, zip, InstallMode::Extract, None, false);
+        let pack = dir.join("Pack");
+        for (name, size) in [("Vehicles/Foo/foo.bus", 10), ("Plugins/evil.dll", 100), ("Plugins/evil.opl", 10)] {
+            let f = pack.join(name);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(&f, vec![1u8; size]).unwrap();
+        }
+        let p = run_blocking(content.clone(), None, pack, InstallMode::Extract, None, false);
         assert_eq!(p.state, "done", "{p:?}");
         assert!(content.join("Vehicles/Foo/foo.bus").exists());
         assert!(!content.join("Plugins/evil.dll").exists(), "never where the game loads plugins");
@@ -1704,15 +1538,17 @@ mod tests {
         let dir = tmp("cancel");
         let content = dir.join("content");
         omsi_cfg::ensure_content_layout(&content).unwrap();
-        let zip = dir.join("Big.zip");
-        let files: Vec<(String, usize)> = (0..4).map(|i| (format!("Vehicles/Big/Texture/t{i}.dds"), 100)).collect();
-        let refs: Vec<(&str, usize)> = files.iter().map(|(n, s)| (n.as_str(), *s)).collect();
-        let mut with_bus = refs.clone();
-        with_bus.push(("Vehicles/Big/big.bus", 10));
-        write_zip(&zip, &with_bus);
+        let big = dir.join("Big");
+        let mut names: Vec<String> = (0..4).map(|i| format!("Vehicles/Big/Texture/t{i}.dds")).collect();
+        names.push("Vehicles/Big/big.bus".to_string());
+        for name in &names {
+            let f = big.join(name);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(&f, [1u8; 100]).unwrap();
+        }
         // Pause after a file is staged: a fast disk must not finish before the test
         // requests cancellation, and cancellation must clean up actual partial files.
-        let job = start_inner(content.clone(), None, zip, InstallMode::Extract, false, 1);
+        let job = start_inner(content.clone(), None, big, InstallMode::Extract, false, 1);
         wait_for(&job, 1);
         assert_eq!(job.snapshot().files_done, 1);
         assert!(staging_dir(&content, job.id).exists());
@@ -1868,28 +1704,28 @@ mod tests {
         let dir = tmp("zipslip");
         let content = dir.join("content");
         omsi_cfg::ensure_content_layout(&content).unwrap();
-        // files are unpacked into dir/content/.install-staging/<pid>-<job>/0: four levels up
-        // is `dir`, so this name would land in `dir/evil.txt`
+        // a name that climbs out of the archive is refused before anything is placed
         let zip = dir.join("Evil Map.zip");
         write_zip(&zip, &[("global.cfg", 10), ("..\\..\\..\\..\\evil.txt", 10), ("tile_0_0.map", 10)]);
-        let p = run_blocking(content.clone(), None, zip, InstallMode::Extract, None, false);
+        let p = run_blocking(content.clone(), None, zip, InstallMode::InPlace, None, false);
         assert_eq!(p.state, "failed", "{p:?}");
         assert!(p.message.contains("refused"), "{}", p.message);
-        assert!(!dir.join("evil.txt").exists(), "nothing written outside the staging folder");
-        assert!(!content.join("maps/Evil Map").exists());
+        assert!(!dir.join("evil.txt").exists());
+        assert!(!content.join(ARCHIVES).join("Evil Map.zip").exists());
         assert!(!content.join(STAGING).exists());
         // the same inside a bus folder
         let zip = dir.join("Evil Bus.zip");
         write_zip(&zip, &[("Vehicles/Foo/foo.bus", 10), ("Vehicles/Foo/..\\..\\..\\..\\evil.txt", 10)]);
-        let p = run_blocking(content.clone(), None, zip, InstallMode::Extract, None, false);
+        let p = run_blocking(content.clone(), None, zip, InstallMode::InPlace, None, false);
         assert_eq!(p.state, "failed", "{p:?}");
         assert!(!dir.join("evil.txt").exists());
-        // a zip made on Windows with `\` separators still installs
+        // a zip made on Windows with `\` separators is used in place as it is
         let zip = dir.join("Win Bus.zip");
         write_zip(&zip, &[("Vehicles\\Bar\\bar.bus", 10), ("Vehicles\\Bar\\Texture\\a.dds", 100)]);
-        let p = run_blocking(content.clone(), None, zip, InstallMode::Extract, None, false);
+        let p = run_blocking(content.clone(), None, zip, InstallMode::InPlace, None, false);
         assert_eq!(p.state, "done", "{p:?}");
-        assert_eq!(std::fs::metadata(content.join("Vehicles/Bar/Texture/a.dds")).unwrap().len(), 100);
+        assert!(content.join(ARCHIVES).join("Win Bus.zip").exists());
+        assert!(!content.join("Vehicles/Bar").exists(), "nothing unpacked");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

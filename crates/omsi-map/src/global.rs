@@ -222,7 +222,7 @@ impl GlobalCfg {
                     g.traffic_density_passenger.push((t, d));
                 }
                 "entrypoints" => {
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     for _ in 0..n {
                         let index = r.i32();
                         let object_id = r.i64();

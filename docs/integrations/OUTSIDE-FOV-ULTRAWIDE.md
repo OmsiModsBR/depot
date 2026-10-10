@@ -37,4 +37,4 @@ Visual/gameplay behavior on a physical ultrawide
 monitor is not certified by unit tests.
 
 This branch is not merged into main and is not part of released Depot 0.2.17.
-MIT, internal identifiers, updater destination and Depot branding are retained.
+MIT, internal identifiers and Depot branding are retained.
