@@ -960,3 +960,20 @@ fn deeply_nested_html_keeps_a_bounded_tree() {
     let mut r = EngineRenderer::new(16, 16, &html);
     assert!(r.poll_frame().is_some());
 }
+
+fn get_var(it: &Interp, n: &str) -> String {
+    to_str(&it.lookup(&it.global, n).unwrap())
+}
+
+#[test]
+fn self_referencing_array_does_not_deadlock() {
+    let mut it = interp();
+    it.run("var a = []; a[0] = a; a[1] = 5; var s = String(a); var t = a + ''; var j = a.join('-');").unwrap();
+    assert_eq!(get_var(&it, "s"), ",5");
+    assert_eq!(get_var(&it, "t"), ",5");
+    assert_eq!(get_var(&it, "j"), "-5");
+    // a doubly-nested array tree is cut by the length cap instead of exploding
+    let mut it = interp();
+    it.run("var x = [1]; for (var i = 0; i < 40; i++) { x = [x, x]; } var s = String(x);").unwrap();
+    assert!(get_var(&it, "s").len() <= MAX_JS_STR + 8);
+}

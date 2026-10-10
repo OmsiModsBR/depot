@@ -136,6 +136,46 @@ pub(crate) fn fmt_num(n: f64) -> String {
     }
 }
 
+/// Longest string the JS engine builds from an array (`join`, `String(arr)`); anything past it is cut.
+pub(crate) const MAX_JS_STR: usize = 1 << 20;
+
+/// `arr.join(sep)` without holding the array's lock while recursing, with JS semantics for cycles
+/// (an array met again inside itself prints as empty) and a cap on the output length, so a
+/// self-referencing or doubly-nested array can neither deadlock the `Mutex` nor explode.
+pub(crate) fn arr_join(a: &ArrRef, sep: &str) -> String {
+    let mut seen = Vec::new();
+    let mut budget = MAX_JS_STR;
+    join_inner(a, sep, &mut seen, &mut budget)
+}
+
+fn join_inner(a: &ArrRef, sep: &str, seen: &mut Vec<*const Mutex<Vec<Val>>>, budget: &mut usize) -> String {
+    let ptr = Arc::as_ptr(a);
+    if seen.contains(&ptr) {
+        return String::new();
+    }
+    // copy the items out so the lock is not held while the elements are converted
+    let items: Vec<Val> = a.lock().unwrap().clone();
+    seen.push(ptr);
+    let mut out = String::new();
+    for (i, v) in items.iter().enumerate() {
+        if *budget == 0 {
+            break;
+        }
+        if i > 0 {
+            out.push_str(sep);
+            *budget = budget.saturating_sub(sep.len());
+        }
+        let piece = match v {
+            Val::Arr(inner) => join_inner(inner, ",", seen, budget),
+            other => to_str(other),
+        };
+        *budget = budget.saturating_sub(piece.len());
+        out.push_str(&piece);
+    }
+    seen.pop();
+    out
+}
+
 pub(crate) fn to_str(v: &Val) -> String {
     match v {
         Val::Undef => "undefined".into(),
@@ -143,7 +183,7 @@ pub(crate) fn to_str(v: &Val) -> String {
         Val::Bool(b) => b.to_string(),
         Val::Num(n) => fmt_num(*n),
         Val::Str(s) => s.clone(),
-        Val::Arr(a) => a.lock().unwrap().iter().map(to_str).collect::<Vec<_>>().join(","),
+        Val::Arr(a) => arr_join(a, ","),
         Val::Obj(_) | Val::Elem(_) | Val::Style(_) | Val::ClassList(_) => "[object Object]".into(),
         Val::Func(_) | Val::Nat(_) => "function".into(),
     }

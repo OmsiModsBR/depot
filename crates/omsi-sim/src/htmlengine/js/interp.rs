@@ -642,7 +642,7 @@ impl Interp {
                 }
                 "join" => {
                     let sep = if args.is_empty() { ",".to_string() } else { arg_s(0) };
-                    Some(Val::Str(a.lock().unwrap().iter().map(to_str).collect::<Vec<_>>().join(&sep)))
+                    Some(Val::Str(arr_join(a, &sep)))
                 }
                 "forEach" | "map" | "filter" => {
                     let f = args.first().cloned().unwrap_or(Val::Undef);
