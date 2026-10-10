@@ -207,7 +207,8 @@ fn mirror_index(name: &str) -> Option<usize> {
     let n = name.trim().to_ascii_lowercase();
     let rest = n.strip_prefix("reflexion")?;
     let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    digits.parse().ok()
+    // (the index sizes three vectors: a name like `reflexion4000000000.bmp` is no camera)
+    digits.parse().ok().filter(|&i: &usize| i < omsi_cfg::limits::MAX_MIRRORS)
 }
 
 /// A light map that is white all over (the LED panels' `vmatrix_leer_led_LM.png`, one white
@@ -1314,7 +1315,7 @@ impl GpuCache {
             &Image {
                 width,
                 height,
-                rgba: vec![0; (width * height * 4) as usize],
+                rgba: vec![0; (width as usize).saturating_mul(height as usize).saturating_mul(4)],
                 has_alpha: true,
             },
             true,
@@ -7669,7 +7670,7 @@ impl World {
                                                 renderer,
                                                 scene,
                                                 // (black until the page first draws: a page far away starts later)
-                                                &Image { width: w, height: h, rgba: [0, 0, 0, 255].repeat((w * h) as usize), has_alpha: true },
+                                                &Image { width: w, height: h, rgba: [0, 0, 0, 255].repeat((w as usize).saturating_mul(h as usize)), has_alpha: true },
                                                 false,
                                             );
                                             let mat = renderer.add_material(scene, Some(tex), text_alpha(o3d_mats, slot, overrides), [1.0; 4], true);
@@ -10893,7 +10894,7 @@ fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&omsi_content::
     let px = pitch * 0.95;
     let top = (h as f32 - pitch * n) * 0.5;
     let rgb = if tt.full_color { [255u8; 3] } else { [tt.color[0] as u8, tt.color[1] as u8, tt.color[2] as u8] };
-    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    let mut rgba = vec![0u8; (w as usize).saturating_mul(h as usize).saturating_mul(4)];
     for (k, l) in lines.iter().enumerate() {
         if l.is_empty() {
             continue;
@@ -13438,6 +13439,13 @@ pub(crate) fn resolve_scenery_freetex_name<'a>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mirror_index_is_bounded() {
+        assert_eq!(mirror_index("Reflexion2.bmp"), Some(2));
+        assert_eq!(mirror_index("reflexion4000000000.bmp"), None);
+        assert_eq!(mirror_index("reflexion99999999999999999999.bmp"), None);
+    }
+
     /// A route helper's text in letters its font lacks breaks its lines at `@` as OMSI's
     /// own text textures do (#1553): two bands of letters, one above the other, no `@`.
     #[test]

@@ -119,7 +119,36 @@ pub(crate) fn parse_style_attr(s: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Deepest element nesting the DOM keeps; the layout, paint and text walks recurse over it.
+pub(crate) const MAX_DOM_DEPTH: usize = 128;
+
 impl Dom {
+    /// Number of ancestors of `idx` (the root has 0).
+    pub(crate) fn depth_of(&self, mut idx: usize) -> usize {
+        let mut d = 0;
+        while let Some(p) = self.nodes[idx].parent {
+            d += 1;
+            idx = p;
+            if d > self.nodes.len() {
+                break;
+            }
+        }
+        d
+    }
+
+    /// Levels in the subtree under `idx`, counting `idx` itself (iterative).
+    pub(crate) fn height_of(&self, idx: usize) -> usize {
+        let mut best = 0;
+        let mut todo = vec![(idx, 1usize)];
+        while let Some((n, d)) = todo.pop() {
+            best = best.max(d);
+            for &k in &self.nodes[n].kids {
+                todo.push((k, d + 1));
+            }
+        }
+        best
+    }
+
     pub(crate) fn parse(html: &str) -> Dom {
         let mut dom = Dom::default();
         dom.nodes.push(Node { tag: "#root".into(), ..Node::default() });
@@ -209,7 +238,8 @@ impl Dom {
                     i += html[i..].find('>').map(|e| e + 1).unwrap_or(html.len() - i);
                     continue;
                 }
-                if !self_closing && !VOID.contains(&name.as_str()) {
+                // past the depth cap further tags stay siblings: the tree (and every recursive walk over it) stays bounded
+                if !self_closing && !VOID.contains(&name.as_str()) && stack.len() < MAX_DOM_DEPTH {
                     stack.push(idx);
                 }
             } else {
@@ -285,6 +315,9 @@ impl Dom {
         if child == 0 || self.is_inside(parent, child) {
             return;
         }
+        if self.depth_of(parent) + 1 + self.height_of(child) > MAX_DOM_DEPTH {
+            return;
+        }
         self.detach(child);
         self.nodes[child].parent = Some(parent);
         self.nodes[parent].kids.push(child);
@@ -292,6 +325,14 @@ impl Dom {
     }
 
     pub(crate) fn copy_from(&mut self, src: &Dom, s: usize, parent: usize) {
+        let depth = self.depth_of(parent) + 1;
+        self.copy_from_at(src, s, parent, depth);
+    }
+
+    fn copy_from_at(&mut self, src: &Dom, s: usize, parent: usize, depth: usize) {
+        if depth > MAX_DOM_DEPTH {
+            return;
+        }
         let mut n = src.nodes[s].clone();
         n.parent = Some(parent);
         n.kids.clear();
@@ -299,7 +340,7 @@ impl Dom {
         self.nodes.push(n);
         self.nodes[parent].kids.push(idx);
         for &k in &src.nodes[s].kids {
-            self.copy_from(src, k, idx);
+            self.copy_from_at(src, k, idx, depth + 1);
         }
     }
 

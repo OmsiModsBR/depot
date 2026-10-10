@@ -141,9 +141,9 @@ impl Hof {
         for (i, l) in f.lines.iter().enumerate() {
             let w = l.trim_end();
             if w.eq_ignore_ascii_case("stringcount_terminus") {
-                h.string_count_terminus = f.lines.get(i + 1).map(|s| omsi_cfg::parse_i64(s).max(0) as usize).unwrap_or(0);
+                h.string_count_terminus = f.lines.get(i + 1).map(|s| (omsi_cfg::parse_i64(s).max(0) as usize).min(omsi_cfg::limits::MAX_HOF_STRINGS)).unwrap_or(0);
             } else if w.eq_ignore_ascii_case("stringcount_busstop") {
-                h.string_count_busstop = f.lines.get(i + 1).map(|s| omsi_cfg::parse_i64(s).max(0) as usize).unwrap_or(0);
+                h.string_count_busstop = f.lines.get(i + 1).map(|s| (omsi_cfg::parse_i64(s).max(0) as usize).min(omsi_cfg::limits::MAX_HOF_STRINGS)).unwrap_or(0);
             }
         }
         // the stock depot files are spreadsheet exports: every line ends in tabs, which the
@@ -154,7 +154,7 @@ impl Hof {
                 "name" => h.name = r.str().to_string(),
                 "servicetrip" => h.service_trip = r.str().to_string(),
                 "global_strings" => {
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     h.global_strings = (0..n).map(|_| r.str().to_string()).collect();
                 }
                 "addterminus" | "addterminus_allexit" => {
@@ -221,7 +221,7 @@ impl Hof {
                     // the list of the trip read last (0x7ea16f: DynArrayHigh of the trips);
                     // pushed as one more list, a trip without one (the IVU data routes of
                     // some depot files) gave every later trip the stops of the one before
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     let list: Vec<String> = (0..n).map(|_| r.str().to_string()).collect();
                     if let Some(last) = h.info_busstop_lists.last_mut() {
                         *last = list;
@@ -372,6 +372,15 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn huge_counts_in_a_hof_are_cut() {
+        let f = omsi_cfg::CfgFile::from_str("x.hof", "stringcount_terminus\n1000000000\n[addterminus]\n1\nid\n[global_strings]\n99999999999\na\n");
+        let h = Hof::parse(&f);
+        assert!(h.string_count_terminus <= omsi_cfg::limits::MAX_HOF_STRINGS);
+        assert!(h.global_strings.len() <= 3);
+        assert_eq!(h.termini[0].strings.len(), omsi_cfg::limits::MAX_HOF_STRINGS);
+    }
+
     #[test]
     fn a_depot_file_carries_a_line_by_its_trip_codes_or_names() {
         let trip = |code: &str, name: &str| InfoTrip { code: code.into(), name: name.into(), ..Default::default() };

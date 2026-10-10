@@ -238,7 +238,6 @@ pub struct State {
     pub mods_asked: bool,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
-    pub mod_mode: usize,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
     pub cmdline: String,
     pub join: (bool, String),
@@ -309,7 +308,6 @@ impl State {
             mods_asked: false,
             mod_info: None,
             mod_path: String::new(),
-            mod_mode: 0,
             ibis: None,
             cmdline: String::new(),
             join: (true, String::new()),
@@ -353,10 +351,6 @@ impl State {
     /// A game is about to start, starting (not in the list of games yet) or running.
     pub fn in_game(&self) -> bool {
         self.queued_launch.is_some() || self.launch_hold.is_some_and(|t| t.elapsed().as_secs_f32() < 15.0) || self.instances.iter().any(|i| i.running)
-    }
-
-    pub fn instances_ready(&self) -> bool {
-        self.stamp.is_some()
     }
 
     pub fn spawn_launch(&mut self, d: core::Duty) {
@@ -479,6 +473,10 @@ impl State {
     }
 
     pub fn check_join(&mut self) {
+        // (multiplayer is disabled: nothing is looked up)
+        if true {
+            return;
+        }
         if self.join_checked == self.choice.lan_addr {
             return;
         }
@@ -510,6 +508,10 @@ impl State {
 
     /// Ask a server about itself (its status and icon), at most every `every` seconds.
     pub fn ask_server(&mut self, address: &str, every: f32) {
+        // (multiplayer is disabled: no server is asked, nothing goes on the network)
+        if true {
+            return;
+        }
         if self.server_asked.get(address).map(|t| t.elapsed().as_secs_f32() < every).unwrap_or(false) {
             return;
         }
@@ -593,7 +595,8 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
-        let mode = ["auto", "extract", "inplace"][self.mod_mode.min(2)].to_string();
+        // (a .zip is only ever used in place, from Archives; a folder is copied)
+        let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
         self.spawn(move || Msg::ModInfo(core::inspect_mod(std::path::Path::new(&p2)).map_err(|e| format!("{e:#}"))));
@@ -616,11 +619,8 @@ impl State {
     /// The duty as the backend takes it.
     pub fn duty(&self) -> core::Duty {
         let c = &self.choice;
-        let lan = match c.lan_mode.as_str() {
-            "host" => "host".to_string(),
-            "join" => format!("join:{}", c.lan_addr.trim()),
-            _ => "off".to_string(),
-        };
+        // (multiplayer is disabled: a duty never hosts or joins)
+        let lan = "off".to_string();
         // Joining: the host's map, as its status gives it (a code's host is asked when the
         // code is typed). The game takes it from the host's welcome too, but only when that
         // comes before the map is loaded: through a tunnel it came later, the game started
@@ -1066,12 +1066,6 @@ impl State {
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
             Msg::ModInfo(r) => {
-                if let Ok(i) = &r {
-                    // a big archive that does not fit is used in place
-                    if !i.fits && i.in_place_ok && self.mod_mode == 1 {
-                        self.mod_mode = 2;
-                    }
-                }
                 self.mod_info = Some(r);
             }
             Msg::Installed(Ok(j)) => {

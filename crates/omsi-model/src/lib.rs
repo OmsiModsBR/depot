@@ -584,13 +584,13 @@ impl Model {
                 self.ctc_textures.push((a, b));
             }
             "scripttexture" => {
-                let w = r.i32();
-                let h = r.i32();
+                let w = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
+                let h = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
                 self.script_textures.push((w, h));
             }
             "htmltexture" => {
-                let width = r.i32();
-                let height = r.i32();
+                let width = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
+                let height = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
                 let path = r.str().to_string();
                 let script_index = self.script_textures.len();
                 self.script_textures.push((width, height));
@@ -599,8 +599,8 @@ impl Model {
             "texttexture" => {
                 let variable = r.str().to_string();
                 let font = r.str().to_string();
-                let width = r.i32();
-                let height = r.i32();
+                let width = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
+                let height = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
                 let full_color = r.bool();
                 let color = r.f32s::<3>();
                 self.text_textures.push(TextTexture { variable, font, width, height, full_color, color, orientation: 0, grid: 1 });
@@ -614,8 +614,8 @@ impl Model {
                 // and the destination display showed the temperature's 7-segment digits.
                 let variable = r.str().to_string();
                 let font = r.str().to_string();
-                let width = r.i32();
-                let height = r.i32();
+                let width = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
+                let height = omsi_cfg::limits::clamp_dynamic_dim(r.i32());
                 let full_color = r.bool();
                 let color = r.f32s::<3>();
                 let extra: Vec<String> = (0..2).map(|_| r.str().to_string()).collect();
@@ -1087,7 +1087,7 @@ pub fn parse_texchanges(file: &CfgFile) -> Vec<TexChangeMaster> {
                 out.push(TexChangeMaster { texture, variable, entries: Vec::new(), dir: dir.clone() });
             }
             "entries" => {
-                let n = r.usize();
+                let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                 let entries: Vec<String> = (0..n).map(|_| r.str().trim().to_string()).collect();
                 if let Some(m) = out.last_mut() {
                     m.entries = entries;
@@ -1116,6 +1116,19 @@ pub fn load_texchanges(base: &Path, files: &[String]) -> Vec<TexChangeMaster> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn dynamic_texture_sizes_and_list_counts_are_bounded() {
+        let m = super::Model::parse(&omsi_cfg::CfgFile::from_str(
+            "m.cfg",
+            "[htmltexture]\n65536\n65536\npage.html\n[texttexture]\nv\nf\n2147483647\n8\n1\n255\n255\n255\n[scripttexture]\n99999\n64\n",
+        ));
+        assert_eq!((m.html_textures[0].width, m.html_textures[0].height), (4096, 4096));
+        assert_eq!((m.text_textures[0].width, m.text_textures[0].height), (4096, 8));
+        assert_eq!(m.script_textures.last(), Some(&(4096, 64)));
+        let f = omsi_cfg::CfgFile::from_str("chtex_x.cfg", "[newtexchangemaster]\nx\nv\n[entries]\n99999999999\na\nb\n");
+        assert_eq!(super::parse_texchanges(&f)[0].entries.len(), 3);
+    }
 
     #[test]
     fn terrain_hole_meshes_are_independent_of_render_meshes() {

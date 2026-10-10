@@ -440,10 +440,9 @@ pub struct ModsStatus {
     pub jobs: Vec<install::Progress>,
 }
 
-/// Start installing the mod at `src` (a folder, .zip, .7z or .rar) into the content folder in the
-/// background; `mode` is "auto" (unpack, or use a .zip in place when it does not fit; .7z
-/// and .rar are always unpacked),
-/// "extract" or "inplace".
+/// Start installing the mod at `src` (a folder, or a .zip) into the content folder in the
+/// background. A folder is copied; a .zip is never unpacked, only put into `Archives` and read
+/// in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content = content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     if !src.exists() {
@@ -454,7 +453,7 @@ pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     Ok(job.snapshot())
 }
 
-/// How big the mod at `src` is unpacked, what is free, and whether it can be used in place.
+/// What the mod at `src` holds, what is free, and whether a .zip can be used in place.
 pub fn inspect_mod(src: &Path) -> Result<install::SourceInfo> {
     let content = content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     install::inspect(&content, root().ok().as_deref(), src)
@@ -475,7 +474,7 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
         .filter(|p| {
             let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
             !(name.starts_with('.') || name.eq_ignore_ascii_case("installed") || name.eq_ignore_ascii_case(install::WAITING) || name.eq_ignore_ascii_case(install::PLUGINS_HELD) || name.eq_ignore_ascii_case(install::UNINSTALLED) || name.eq_ignore_ascii_case("README.txt"))
-                && (p.is_dir() || p.extension().map(|x| ["zip", "7z", "rar"].iter().any(|ext| x.eq_ignore_ascii_case(ext))).unwrap_or(false))
+                && (p.is_dir() || p.extension().map(|x| x.eq_ignore_ascii_case("zip")).unwrap_or(false))
         })
         .collect();
     v.sort();
@@ -1938,8 +1937,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["vr_mirror_rate"] = json!(16);
     v["mirror_refresh"] = json!("full");
     v["vr_desktop_mirror"] = json!(true);
-    v["discord_status"] = json!(true);
-    v["discord_app_id"] = json!("");
     // positional voice through GreenTeaSpeak's openOMSI plugin in multiplayer
     v["voice_chat"] = json!(true);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
@@ -1967,12 +1964,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["steer_look_response"] = json!(0.25);
     v["head_idle"] = json!(0.0);
     v["head_idle_pace"] = json!(1.0);
-    // updates from the GitHub releases: looked for when the launcher starts (and during a
-    // session, said over the navigator), installed after asking (or at once); and whether
-    // the game is counted on the website's "playing now"
-    for (k, d) in [("update_check", json!(true)), ("update_auto", json!(false)), ("update_notify", json!(true)), ("presence", json!(true))] {
-        v[k] = d;
-    }
     let Some(t) = text else { return v };
     let mut version = 0;
     let mut graphics: Option<&str> = None;
@@ -2011,7 +2002,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
             "ctrl_off" => v[&k] = json!(val),
             "metar_station" => v[&k] = json!(val.chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()),
-            "discord_app_id" => v[&k] = json!(val),
             "resolution" | "window_size" => v["resolution"] = json!(resolution_text(val)),
             "graphics_api" => v[&k] = json!(match val.to_ascii_lowercase().as_str() { "vulkan" => "vulkan", "dx12" => "dx12", "gl" => "gl", _ => "auto" }),
             "shadow_casters" => v[&k] = json!(if val.eq_ignore_ascii_case("omsi") { "omsi" } else { "all" }),
@@ -2022,7 +2012,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
-            "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
+            "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.3)),
@@ -2041,7 +2031,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "seat_x" | "seat_y" | "seat_z" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
             "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
-            "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
+            "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
             "info_bar" => v[&k] = json!(b(val)),
             "windy_trees" => v[&k] = json!(b(val)),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
@@ -2298,7 +2288,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("precision_zoom", false),
     );
     let text = format!(
-        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nupdate_check={}\nupdate_auto={}\nupdate_notify={}\npresence={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
         match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
             "tickets" => "tickets",
             "off" => "off",
@@ -2316,10 +2306,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") { "omsi" } else { "all" },
         b("shadow_blobs", true),
         f("ctrl_deadzone", 0.0).clamp(0.0, 0.3),
-        b("update_check", true),
-        b("update_auto", false),
-        b("update_notify", true),
-        b("presence", true),
         b("reflections", true),
         f("mouse_sens", 1.0).clamp(0.1, 3.0),
         match v.get("graphics_api").and_then(|x| x.as_str()).unwrap_or("auto") {
@@ -2380,7 +2366,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
     let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
     let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", true), b("voice_chat", true), b("launcher_rest", true));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -2774,7 +2760,7 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
     #[cfg(not(target_os = "android"))]
     {
         if zip {
-            rfd::FileDialog::new().set_title("Choose a mod archive").add_filter("Mod archive", &["zip", "7z", "rar"]).pick_file()
+            rfd::FileDialog::new().set_title("Choose a mod archive").add_filter("Mod archive", &["zip"]).pick_file()
         } else {
             rfd::FileDialog::new().set_title("Choose the mod folder").pick_folder()
         }
@@ -2943,7 +2929,7 @@ mod tests {
     fn the_games_options_survive_a_save() {
         // what the pause menu's Options change, read back as they were set
         let mut v = settings_from_text(None);
-        for (k, x) in [("steer_look", json!(true)), ("discord_status", json!(false)), ("voice_chat", json!(false)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
+        for (k, x) in [("steer_look", json!(true)), ("voice_chat", json!(false)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
             v[k] = x;
         }
         let back = settings_from_text(Some(&settings_to_text(&v, None)));
@@ -2955,24 +2941,23 @@ mod tests {
         assert_eq!(settings_from_text(Some(&settings_to_text(&r, None)))["resolution"], json!("1280x800"));
         assert_eq!(resolution_text("1920 x 1080"), "1920x1080");
         assert_eq!(resolution_text("huge"), "auto");
-        for k in ["steer_look", "discord_status", "voice_chat", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
+        for k in ["steer_look", "voice_chat", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
             assert_eq!(back[k], v[k], "{k}");
         }
-        assert!(settings_from_text(None)["discord_status"].as_bool().unwrap());
         assert!(settings_from_text(None)["launcher_rest"].as_bool().unwrap());
         assert!(settings_from_text(None)["voice_chat"].as_bool().unwrap());
-        let prior = settings_from_text(Some("discord_status=1\ndiscord_status=0\n"));
-        assert!(!prior["discord_status"].as_bool().unwrap());
-        let mut enabled = prior;
-        enabled["discord_status"] = json!(true);
-        let saved = settings_to_text(&enabled, Some("discord_status=0\ndiscord_status=0\n"));
-        assert_eq!(saved.lines().filter(|line| line.starts_with("discord_status=")).count(), 1);
-        assert!(settings_from_text(Some(&saved))["discord_status"].as_bool().unwrap());
-        let custom_id = "discord_app_id=123456\n";
-        let values = settings_from_text(Some(custom_id));
-        assert_eq!(values["discord_app_id"], json!("123456"));
-        let saved = settings_to_text(&values, Some(custom_id));
-        assert_eq!(settings_from_text(Some(&saved))["discord_app_id"], json!("123456"));
+    }
+
+    #[test]
+    fn discord_settings_are_gone_and_old_ones_do_nothing() {
+        // Discord support is disabled (docs/removed/DISCORD_DISABLED.md): no key is offered,
+        // read or written, and an old line is not turned into a setting
+        let d = settings_from_text(None);
+        assert!(d.get("discord_status").is_none() && d.get("discord_app_id").is_none());
+        let v = settings_from_text(Some("discord_status=1\ndiscord_app_id=123456\n"));
+        assert!(v.get("discord_status").is_none() && v.get("discord_app_id").is_none());
+        let text = settings_to_text(&v, None);
+        assert!(!text.contains("discord_status") && !text.contains("discord_app_id"), "{text}");
     }
 
     #[test]
@@ -3068,14 +3053,14 @@ mod tests {
     }
 
     #[test]
-    fn update_settings_round_trip() {
-        // no file: look for updates, ask before installing
+    fn update_settings_are_gone_and_old_ones_do_nothing() {
+        // in-app updating is disabled: no update_* key is offered, read or written
         let d = settings_from_text(None);
-        assert_eq!((d["update_check"].clone(), d["update_auto"].clone()), (json!(true), json!(false)));
-        let v = settings_from_text(Some("update_check=0\nupdate_auto=1\n"));
-        assert_eq!((v["update_check"].clone(), v["update_auto"].clone()), (json!(false), json!(true)));
+        assert!(d.get("update_check").is_none() && d.get("update_auto").is_none() && d.get("update_notify").is_none());
+        let v = settings_from_text(Some("update_check=1\nupdate_auto=1\nupdate_notify=1\n"));
+        assert!(v.get("update_auto").is_none(), "an old update_auto must not turn into a setting");
         let text = settings_to_text(&v, None);
-        assert!(text.lines().any(|l| l == "update_check=0") && text.lines().any(|l| l == "update_auto=1"), "{text}");
+        assert!(!text.contains("update_"), "{text}");
     }
 
     #[test]

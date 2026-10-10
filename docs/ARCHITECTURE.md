@@ -1048,7 +1048,7 @@ Reverse engineered from Omsi.exe and put in place of our own guesses:
   tile version 12, strings from version 4 (0x792ee7, 0x794892).
 * **Touch wheel**: turns with the finger round its centre (120° of rim = full lock); the old
   drag across ran off the screen at about 0.4 of the lock to the left.
-* **Updates** (`updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the
+* **Updates** (DISABLED, see `docs/removed/UPDATER_DISABLED.md`; the code described here was removed; formerly `updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the
   platform's asset by `release.yml`'s names, SHA-256 from the asset's `digest`. A computer
   unpacks into `.openomsi-update` beside the program and swaps each top-level item (old one
   renamed `*.old-update`, all undone on a failure; `.openomsi-files` lists what an update

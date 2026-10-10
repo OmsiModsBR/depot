@@ -1,0 +1,2832 @@
+commit 8144f0db8e2f5365c5a4bfab7fb5e4e43ea5e28b
+Author: Claude <noreply@anthropic.com>
+Date:   Sat Oct 10 04:19:38 2026 +0000
+
+    feat!: disable the in-app updater entirely
+    
+    Product decision (supersedes backlog S6/S7/D3). Removes the update check,
+    download, install/replace, the update_check/update_auto/update_notify
+    settings, OMSI_NO_UPDATE/OMSI_UPDATE_URL, the launcher update dialog,
+    banner and Settings section, the navigator update card, the Android
+    PackageInstaller hand-over (INSTALL_STATUS handler, REQUEST_INSTALL_PACKAGES)
+    and the related translations and docs. The version and a static, validated
+    link to the repository's releases page (opened only on click) remain.
+    Registry: docs/removed/UPDATER_DISABLED.md.
+    
+    Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01FZQVQ3tmYW219vn9Z5vh6F
+
+diff --git a/.github/ISSUE_TEMPLATE/bug_report.yml b/.github/ISSUE_TEMPLATE/bug_report.yml
+index ee3f942..7acb5f0 100644
+--- a/.github/ISSUE_TEMPLATE/bug_report.yml
++++ b/.github/ISSUE_TEMPLATE/bug_report.yml
+@@ -9,7 +9,7 @@ body:
+ 
+         * **Write in English.** Issues in other languages are closed until they are translated - a translator such as DeepL or Google Translate is fine.
+         * **One problem per issue.** Several problems in one report get lost; open one issue for each.
+-        * **Use the latest release.** The launcher updates itself; many problems are already fixed in a newer build.
++        * **Use the latest release.** The program does not update itself: download the newest release first; many problems are already fixed in a newer build.
+         * **The game stopped on an error?** Use *Report on GitHub* in the launcher's error message - it fills in the error and the end of the log for you.
+ 
+   - type: checkboxes
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+index 42ad3de..5d136c1 100644
+--- a/.github/ISSUE_TEMPLATE/config.yml
++++ b/.github/ISSUE_TEMPLATE/config.yml
+@@ -5,7 +5,7 @@ contact_links:
+     about: How do I...? Setting up, mods, or a chat with other players - ask on our Discord server.
+   - name: Security problem
+     url: https://github.com/openOMSI-Project/openOMSI/security/advisories/new
+-    about: A vulnerability in the game, the server or the updater - report it privately, not as an issue (see SECURITY.md).
++    about: A vulnerability in the game, the server or the launcher - report it privately, not as an issue (see SECURITY.md).
+   - name: User guide
+     url: https://github.com/openOMSI-Project/openOMSI/blob/main/docs/USER_GUIDE.md
+     about: Settings, controls, multiplayer and common problems explained.
+diff --git a/DEPOT_BASELINE.md b/DEPOT_BASELINE.md
+index 67026d1..4ea7773 100644
+--- a/DEPOT_BASELINE.md
++++ b/DEPOT_BASELINE.md
+@@ -23,7 +23,7 @@ association is not required to preserve Git ancestry.
+ ## Independence
+ 
+ `origin` is the Depot repository. No upstream branch is tracked automatically.
+-The application updater targets Depot releases. Executables and packages use
++The application updater is disabled (docs/removed/UPDATER_DISABLED.md). Executables and packages use
+ the `depot` name; user-facing text uses Project Depot. Internal identifiers and
+ source filenames remain unchanged.
+ Inherited GitHub workflows and Dependabot configuration are archived in
+diff --git a/README.md b/README.md
+index 57df6c9..88ee325 100644
+--- a/README.md
++++ b/README.md
+@@ -55,10 +55,10 @@ Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus
+ and drive. Mods go into the folder next to the game (or through the launcher's **Mods**
+ page); the original installation is never written to.
+ 
+-From 0.1.7 on the launcher updates itself: when a newer release is out it asks at the start
+-and, with your yes, downloads it, replaces the program and starts again (on Android through
+-the system's installer). Settings → General → Updates switches the check off or installs without
+-asking.
++The program does not update itself: new versions are published on the
++[Releases](https://github.com/OmsiModsBR/depot/releases) page, and you download them yourself
++(in-app updating is disabled, see [docs/removed/UPDATER_DISABLED.md](docs/removed/UPDATER_DISABLED.md)).
++Settings → General → About shows the version you run and links to that page.
+ 
+ ## Installation
+ 
+@@ -69,7 +69,7 @@ brings no game content of its own; it plays the original's maps, buses and mods.
+ 1. **Download** the file for your system from
+    [Releases](https://github.com/OmsiModsBR/depot/releases) (table above) and unpack it
+    into a folder of its own that you can write to - your Documents, a games folder, or the
+-   OMSI 2 folder itself. Not `Program Files`: the launcher could not update itself there.
++   OMSI 2 folder itself. Not `Program Files`: the game writes its settings and logs next to itself.
+ 2. **Start it.**
+    * **Windows:** `depot.exe`. Windows SmartScreen may warn about an unknown app: *More
+      info* → *Run anyway*.
+diff --git a/SECURITY.md b/SECURITY.md
+index 65e6aa6..63863aa 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -13,8 +13,8 @@ you want.
+ 
+ ## Supported versions
+ 
+-Only the latest release. The game updates itself, so fixes are not backported to older
+-builds.
++Only the latest release. The game does not update itself (download new releases from the
++Releases page), and fixes are not backported to older builds.
+ 
+ ## What counts
+ 
+@@ -25,8 +25,8 @@ Examples of what we want to hear about:
+   from the host;
+ * **content files**: a map, vehicle, script or archive that makes the game read or write
+   files outside the game's folders, or run code, just by being loaded;
+-* the **launcher's updates and downloads**: anything that could make it install something
+-  that is not an openOMSI release;
++* the **launcher's downloads** (the machine-translation model, for example): anything that
++  could make it fetch or run something it should not;
+ * the crash reporter or the logs sending or showing more than they say (passwords, tokens,
+   personal paths beyond the user name).
+ 
+diff --git a/android/AndroidManifest.xml b/android/AndroidManifest.xml
+index 55c3580..47f7c0c 100644
+--- a/android/AndroidManifest.xml
++++ b/android/AndroidManifest.xml
+@@ -12,8 +12,6 @@
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+-    <!-- updates: the APK of a newer GitHub release handed to the system's installer -->
+-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+     <!-- the on-screen buttons' feedback -->
+     <uses-permission android:name="android.permission.VIBRATE" />
+     <!-- the copy of OMSI 2 and the mods on the shared storage, read by path -->
+diff --git a/android/java/org/openomsi/game/OmsiActivity.java b/android/java/org/openomsi/game/OmsiActivity.java
+index 9747dc9..beccaa9 100644
+--- a/android/java/org/openomsi/game/OmsiActivity.java
++++ b/android/java/org/openomsi/game/OmsiActivity.java
+@@ -2,9 +2,7 @@ package org.openomsi.game;
+ 
+ import android.Manifest;
+ import android.app.NativeActivity;
+-import android.app.PendingIntent;
+ import android.content.Intent;
+-import android.content.pm.PackageInstaller;
+ import android.content.pm.PackageManager;
+ import android.net.Uri;
+ import android.os.Build;
+@@ -16,32 +14,17 @@ import android.provider.Settings;
+ import android.view.View;
+ import android.view.WindowManager;
+ 
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.InputStream;
+-import java.io.OutputStream;
+ 
+ /**
+  * openOMSI's activity: the game itself is native code (libopenomsi_game.so, run by
+  * NativeActivity). This adds only what NativeActivity lacks: the whole screen without the
+  * system bars, the screen kept on while playing, access to the shared storage (where the
+- * copy of OMSI 2 and the mods are), the vibration of the on-screen buttons, and installing
+- * an update (the launcher downloads the APK from the GitHub release; the system's package
+- * installer asks the player and replaces the app).
++ * copy of OMSI 2 and the mods are) and the vibration of the on-screen buttons. (In-app
++ * updating is disabled: see docs/removed/UPDATER_DISABLED.md.)
+  */
+ public class OmsiActivity extends NativeActivity {
+     private boolean askedStorage = false;
+ 
+-    /** The package installer's answer, polled by the native side (see android.rs):
+-     * 0 nothing, 1 asking the player, 2 installed, 3 cancelled, 4 failed, 5 waiting for
+-     * "Install unknown apps", 6 that refused. */
+-    private static volatile int installStatus = 0;
+-    private static volatile String installMessage = "";
+-    private static final String ACTION_INSTALLED = "org.openomsi.game.INSTALL_STATUS";
+-    /** An APK waiting for the "Install unknown apps" permission. */
+-    private String pendingApk = null;
+-    private boolean askedInstallPermission = false;
+-
+     @Override
+     protected void onCreate(Bundle state) {
+         super.onCreate(state);
+@@ -54,35 +37,6 @@ public class OmsiActivity extends NativeActivity {
+         }
+         immersive();
+         askForStorage();
+-        // started by the package installer after an update: nothing more to do
+-        Intent i = getIntent();
+-        if (i != null && ACTION_INSTALLED.equals(i.getAction())) {
+-            installResult(i);
+-        }
+-    }
+-
+-    @Override
+-    protected void onNewIntent(Intent intent) {
+-        super.onNewIntent(intent);
+-        if (intent != null && ACTION_INSTALLED.equals(intent.getAction())) {
+-            installResult(intent);
+-        }
+-    }
+-
+-    @Override
+-    protected void onResume() {
+-        super.onResume();
+-        // back from "Install unknown apps"
+-        if (pendingApk != null && askedInstallPermission) {
+-            String apk = pendingApk;
+-            pendingApk = null;
+-            askedInstallPermission = false;
+-            if (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls()) {
+-                startInstall(apk);
+-            } else {
+-                installStatus = 6;
+-            }
+-        }
+     }
+ 
+     @Override
+@@ -151,115 +105,6 @@ public class OmsiActivity extends NativeActivity {
+         }
+     }
+ 
+-    public int getInstallStatus() {
+-        return installStatus;
+-    }
+-
+-    public String getInstallMessage() {
+-        return installMessage;
+-    }
+-
+-    /** Install the update `path` (called from the native side, any thread). */
+-    public void installApk(final String path) {
+-        installStatus = 1;
+-        installMessage = "";
+-        runOnUiThread(new Runnable() {
+-            @Override
+-            public void run() {
+-                startInstall(path);
+-            }
+-        });
+-    }
+-
+-    private void startInstall(String path) {
+-        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+-            // the player allows openOMSI to install apps first, then comes back here
+-            pendingApk = path;
+-            askedInstallPermission = true;
+-            installStatus = 5;
+-            try {
+-                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+-            } catch (Exception e) {
+-                pendingApk = null;
+-                installStatus = 6;
+-            }
+-            return;
+-        }
+-        PackageInstaller.Session session = null;
+-        try {
+-            PackageInstaller pi = getPackageManager().getPackageInstaller();
+-            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+-            params.setAppPackageName(getPackageName());
+-            int id = pi.createSession(params);
+-            session = pi.openSession(id);
+-            File f = new File(path);
+-            InputStream in = new FileInputStream(f);
+-            OutputStream out = session.openWrite("depot.apk", 0, f.length());
+-            byte[] buf = new byte[1 << 16];
+-            int n;
+-            while ((n = in.read(buf)) > 0) {
+-                out.write(buf, 0, n);
+-            }
+-            session.fsync(out);
+-            out.close();
+-            in.close();
+-            // the answer comes back to this activity (and, once installed, starts the new app)
+-            Intent answer = new Intent(this, OmsiActivity.class).setAction(ACTION_INSTALLED);
+-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+-            if (Build.VERSION.SDK_INT >= 31) {
+-                flags |= PendingIntent.FLAG_MUTABLE;
+-            }
+-            PendingIntent pending = PendingIntent.getActivity(this, 7, answer, flags);
+-            session.commit(pending.getIntentSender());
+-            session.close();
+-            installStatus = 1;
+-        } catch (Exception e) {
+-            if (session != null) {
+-                session.abandon();
+-            }
+-            installMessage = String.valueOf(e.getMessage());
+-            installStatus = 4;
+-        }
+-    }
+-
+-    @SuppressWarnings("deprecation")
+-    private void installResult(Intent intent) {
+-        int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
+-        switch (status) {
+-            case PackageInstaller.STATUS_PENDING_USER_ACTION: {
+-                // the system's "Do you want to update this app?"
+-                Intent confirm = (Intent) intent.getParcelableExtra(Intent.EXTRA_INTENT);
+-                if (confirm != null) {
+-                    try {
+-                        startActivity(confirm);
+-                        installStatus = 1;
+-                    } catch (Exception e) {
+-                        installMessage = String.valueOf(e.getMessage());
+-                        installStatus = 4;
+-                    }
+-                }
+-                break;
+-            }
+-            case PackageInstaller.STATUS_SUCCESS:
+-                installStatus = 2;
+-                break;
+-            case PackageInstaller.STATUS_FAILURE_ABORTED:
+-                installStatus = 3;
+-                break;
+-            case PackageInstaller.STATUS_FAILURE_CONFLICT:
+-            case PackageInstaller.STATUS_FAILURE_INCOMPATIBLE:
+-                // signed with another key than the installed app (a build of one's own)
+-                installMessage = "this Project Depot was installed from a build with another signature than the GitHub releases. Uninstall it once and install the APK from github.com/OmsiModsBR/depot - updates work from then on.";
+-                installStatus = 4;
+-                break;
+-            default: {
+-                String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+-                installMessage = msg != null ? msg : ("status " + status);
+-                installStatus = 4;
+-            }
+-        }
+-    }
+-
+     /** A web page in the browser (the release on GitHub). */
+     public void openUrl(String url) {
+         try {
+diff --git a/crates/omsi-app/locales/app.yml b/crates/omsi-app/locales/app.yml
+index f02bf00..7362b29 100644
+--- a/crates/omsi-app/locales/app.yml
++++ b/crates/omsi-app/locales/app.yml
+@@ -12231,27 +12231,6 @@ _version: 2
+   zh: "Alt"
+   hi: "Alt"
+   zh-tw: "Alt"
+-"Android asks whether to update Project Depot: press Update there. The app then starts again by itself.":
+-  ca: "Android pregunta si vols actualitzar Project Depot: prem Actualitza. L'aplicació es tornarà a iniciar automàticament."
+-  ru: "Android спросит, обновлять ли Project Depot: нажмите там «Обновить». Затем приложение запустится снова само."
+-  de: "Android fragt, ob Project Depot aktualisiert werden soll: Tippe dort auf „Aktualisieren“. Danach startet die App von selbst neu."
+-  fr: "Android demande s'il faut mettre à jour Project Depot : appuyez sur Mettre à jour. L'appli redémarre ensuite toute seule."
+-  uk: "Android запитає, чи оновити Project Depot: натисніть там «Оновити». Потім застосунок запуститься знову сам."
+-  be: "Android запытае, ці абнавіць Project Depot: націсніце там «Абнавіць». Потым праграма запусціцца зноў сама."
+-  kk: "Android Project Depot жаңартуды сұрайды: сол жерде Жаңарту түймесін басыңыз. Содан кейін қолданба өзі қайта іске қосылады."
+-  pl: "Android zapyta, czy zaktualizować Project Depot: naciśnij tam Aktualizuj. Aplikacja uruchomi się potem sama."
+-  cs: "Android se zeptá, zda aktualizovat Project Depot: stiskněte tam Aktualizovat. Aplikace se pak sama znovu spustí."
+-  hu: "Az Android megkérdezi, frissítsen-e az Project Depot: nyomd meg a Frissítés gombot. Az alkalmazás ezután magától újraindul."
+-  es: "Android pregunta si actualizar Project Depot: pulsa Actualizar. Después la app se inicia sola de nuevo."
+-  pt: "O Android pergunta se deseja atualizar o Project Depot: toque em Atualizar. Depois o app reinicia sozinho."
+-  pt-pt: "O Android pergunta se deseja atualizar o Project Depot: toque em Atualizar. Depois o app reinicia sozinho."
+-  it: "Android chiede se aggiornare Project Depot: premi Aggiorna. L'app poi riparte da sola."
+-  nl: "Android vraagt of Project Depot moet worden bijgewerkt: druk daar op Bijwerken. De app start daarna vanzelf opnieuw."
+-  tr: "Android Project Depot'nin güncellenip güncellenmeyeceğini sorar: orada Güncelle'ye basın. Uygulama sonra kendiliğinden yeniden başlar."
+-  ja: "AndroidがProject Depotを更新するか尋ねます:そこで「更新」を押してください。その後アプリは自動的に再起動します。"
+-  zh: "Android会询问是否更新Project Depot:请在那里点“更新”。之后应用会自动重新启动。"
+-  hi: "Android पूछेगा कि Project Depot अपडेट करना है या नहीं: वहाँ Update दबाएँ। फिर ऐप अपने आप दोबारा शुरू हो जाएगा।"
+-  zh-tw: "Android 會詢問是否更新 Project Depot：請在該處按「更新」。隨後應用程式會自行重新啟動。"
+ "Asking the server…":
+   ca: "Consultant el servidor…"
+   ru: "Запрос к серверу…"
+@@ -14349,48 +14328,6 @@ _version: 2
+   zh: "安装此文件夹"
+   hi: "यह फ़ोल्डर इंस्टॉल करें"
+   zh-tw: "安裝此資料夾"
+-"Install updates without asking":
+-  ca: "Instal·la les actualitzacions sense preguntar"
+-  ru: "Устанавливать обновления без запроса"
+-  de: "Updates ohne Nachfrage installieren"
+-  fr: "Installer les mises à jour sans demander"
+-  uk: "Встановлювати оновлення без запитів"
+-  be: "Усталёўваць абнаўленні без запытаў"
+-  kk: "Жаңартуларды сұрамай орнату"
+-  pl: "Instaluj aktualizacje bez pytania"
+-  cs: "Instalovat aktualizace bez ptaní"
+-  hu: "Frissítések telepítése kérdés nélkül"
+-  es: "Instalar actualizaciones sin preguntar"
+-  pt: "Instalar atualizações sem perguntar"
+-  pt-pt: "Instalar atualizações sem perguntar"
+-  it: "Installa gli aggiornamenti senza chiedere"
+-  nl: "Updates installeren zonder te vragen"
+-  tr: "Güncellemeleri sormadan kur"
+-  ja: "確認せずに更新をインストール"
+-  zh: "无需询问直接安装更新"
+-  hi: "बिना पूछे अपडेट इंस्टॉल करें"
+-  zh-tw: "不詢問直接安裝更新"
+-"Install updates without asking from now on":
+-  ca: "Instal·la les actualitzacions sense preguntar a partir d'ara"
+-  ru: "Отныне устанавливать обновления без запроса"
+-  de: "Ab jetzt Updates ohne Nachfrage installieren"
+-  fr: "Installer désormais les mises à jour sans demander"
+-  uk: "Відтепер встановлювати оновлення без запитів"
+-  be: "Адсюль усталёўваць абнаўленні без запытаў"
+-  kk: "Бұдан былай жаңартуларды сұрамай орнату"
+-  pl: "Odtąd instaluj aktualizacje bez pytania"
+-  cs: "Odteď instalovat aktualizace bez ptaní"
+-  hu: "Mostantól frissítések telepítése kérdés nélkül"
+-  es: "Instalar actualizaciones sin preguntar a partir de ahora"
+-  pt: "Instalar atualizações sem perguntar a partir de agora"
+-  pt-pt: "Instalar atualizações sem perguntar a partir de agora"
+-  it: "D'ora in poi installa gli aggiornamenti senza chiedere"
+-  nl: "Voortaan updates installeren zonder te vragen"
+-  tr: "Bundan sonra güncellemeleri sormadan kur"
+-  ja: "今後は確認せずに更新をインストール"
+-  zh: "今后无需询问直接安装更新"
+-  hi: "अब से बिना पूछे अपडेट इंस्टॉल करें"
+-  zh-tw: "今後不詢問直接安裝更新"
+ "Internal storage":
+   ca: "Emmagatzematge intern"
+   ru: "Внутренняя память"
+@@ -14757,27 +14694,6 @@ _version: 2
+   zh: "线路"
+   hi: "लाइनें"
+   zh-tw: "路線"
+-"Look for updates when the launcher starts":
+-  ca: "Cerca actualitzacions en iniciar el launcher"
+-  ru: "Проверять обновления при запуске лаунчера"
+-  de: "Beim Start des Launchers nach Updates suchen"
+-  fr: "Rechercher les mises à jour au lancement du lanceur"
+-  uk: "Шукати оновлення при запуску лаунчера"
+-  be: "Шукаць абнаўленні пры запуску лаўнчара"
+-  kk: "Лаунчер іске қосылғанда жаңартуларды іздеу"
+-  pl: "Szukaj aktualizacji przy starcie launchera"
+-  cs: "Hledat aktualizace při spuštění launcheru"
+-  hu: "Frissítések keresése a launcher indulásakor"
+-  es: "Buscar actualizaciones al iniciar el lanzador"
+-  pt: "Buscar atualizações ao iniciar o launcher"
+-  pt-pt: "Buscar atualizações ao iniciar o launcher"
+-  it: "Cerca aggiornamenti all'avvio del launcher"
+-  nl: "Bij het starten van de launcher naar updates zoeken"
+-  tr: "Başlatıcı açılırken güncellemeleri ara"
+-  ja: "ランチャー起動時に更新を確認"
+-  zh: "启动器启动时检查更新"
+-  hi: "लॉन्चर शुरू होने पर अपडेट खोजें"
+-  zh-tw: "啟動器啟動時檢查更新"
+ "Lun":
+   ca: "dl."
+   ru: "Пн"
+@@ -15240,27 +15156,6 @@ _version: 2
+   zh: "暂不"
+   hi: "अभी नहीं"
+   zh-tw: "稍後"
+-"Not updated":
+-  ca: "No s'ha actualitzat"
+-  ru: "Не обновлено"
+-  de: "Nicht aktualisiert"
+-  fr: "Non mis à jour"
+-  uk: "Не оновлено"
+-  be: "Не абноўлена"
+-  kk: "Жаңартылмады"
+-  pl: "Nie zaktualizowano"
+-  cs: "Neaktualizováno"
+-  hu: "Nincs frissítve"
+-  es: "No actualizado"
+-  pt: "Não atualizado"
+-  pt-pt: "Não atualizado"
+-  it: "Non aggiornato"
+-  nl: "Niet bijgewerkt"
+-  tr: "Güncellenmedi"
+-  ja: "未更新"
+-  zh: "未更新"
+-  hi: "अपडेट नहीं हुआ"
+-  zh-tw: "未更新"
+ "Nothing here":
+   ca: "Aquí no hi ha res"
+   ru: "Здесь ничего нет"
+@@ -18063,48 +17958,27 @@ _version: 2
+   zh: "上"
+   hi: "ऊपर"
+   zh-tw: "向上"
+-"Update now":
+-  ca: "Actualitza ara"
+-  ru: "Обновить сейчас"
+-  de: "Jetzt aktualisieren"
+-  fr: "Mettre à jour maintenant"
+-  uk: "Оновити зараз"
+-  be: "Абнавіць цяпер"
+-  kk: "Қазір жаңарту"
+-  pl: "Aktualizuj teraz"
+-  cs: "Aktualizovat teď"
+-  hu: "Frissítés most"
+-  es: "Actualizar ahora"
+-  pt: "Atualizar agora"
+-  pt-pt: "Atualizar agora"
+-  it: "Aggiorna ora"
+-  nl: "Nu bijwerken"
+-  tr: "Şimdi güncelle"
+-  ja: "今すぐ更新"
+-  zh: "立即更新"
+-  hi: "अभी अपडेट करें"
+-  zh-tw: "立即更新"
+-"Updates":
+-  ca: "Actualitzacions"
+-  ru: "Обновления"
+-  de: "Updates"
+-  fr: "Mises à jour"
+-  uk: "Оновлення"
+-  be: "Абнаўленні"
+-  kk: "Жаңартулар"
+-  pl: "Aktualizacje"
+-  cs: "Aktualizace"
+-  hu: "Frissítések"
+-  es: "Actualizaciones"
+-  pt: "Atualizações"
+-  pt-pt: "Atualizações"
+-  it: "Aggiornamenti"
+-  nl: "Updates"
+-  tr: "Güncellemeler"
+-  ja: "更新"
+-  zh: "更新"
+-  hi: "अपडेट"
+-  zh-tw: "更新項目"
++"About":
++  ca: "Quant a"
++  ru: "О программе"
++  de: "Info"
++  fr: "À propos"
++  uk: "Про програму"
++  be: "Пра праграму"
++  kk: "Бағдарлама туралы"
++  pl: "O programie"
++  cs: "O aplikaci"
++  hu: "Névjegy"
++  es: "Acerca de"
++  pt: "Sobre"
++  pt-pt: "Acerca de"
++  it: "Informazioni"
++  nl: "Over"
++  tr: "Hakkında"
++  ja: "情報"
++  zh: "关于"
++  hi: "जानकारी"
++  zh-tw: "關於"
+ "Use DirectX 12":
+   ca: "Utilitza DirectX 12"
+   ru: "Использовать DirectX 12"
+diff --git a/crates/omsi-app/src/about.rs b/crates/omsi-app/src/about.rs
+new file mode 100644
+index 0000000..f5b1bcf
+--- /dev/null
++++ b/crates/omsi-app/src/about.rs
+@@ -0,0 +1,69 @@
++//! This build's version and the project's release page.
++//!
++//! In-app updating is disabled (see docs/removed/UPDATER_DISABLED.md): nothing here checks
++//! for, downloads or installs a release. The only network-adjacent thing left is
++//! [`open_url`], which hands a link to the system's browser when the player clicks it, and
++//! only for a URL inside the project's own repository.
++
++/// The project on GitHub.
++pub const REPO_URL: &str = "https://github.com/OmsiModsBR/depot";
++/// Where the releases are listed (opened only by an explicit click).
++pub const RELEASES_URL: &str = "https://github.com/OmsiModsBR/depot/releases";
++
++/// This build's version.
++pub fn current_version() -> &'static str {
++    crate::startup::VERSION
++}
++
++/// Whether `url` is the project's repository or a page inside it: `https` only, the exact
++/// host `github.com`, the exact path prefix `/OmsiModsBR/depot`, then nothing, or `/`, `?`
++/// or `#`. Anything else (another repository whose name merely starts the same, a userinfo
++/// trick such as `https://github.com@evil/`, another scheme) is refused.
++pub fn is_depot_url(url: &str) -> bool {
++    let Some(rest) = url.strip_prefix(REPO_URL) else { return false };
++    rest.is_empty() || rest.starts_with(['/', '?', '#'])
++}
++
++/// Open a page of the project's repository in the system's browser (called only on a click).
++/// Other URLs are refused and logged.
++pub fn open_url(url: &str) {
++    if !is_depot_url(url) {
++        log::warn!("not opening {url}: only pages of {REPO_URL} are opened");
++        return;
++    }
++    #[cfg(target_os = "android")]
++    crate::android::open_url(url);
++    #[cfg(target_os = "macos")]
++    let _ = std::process::Command::new("open").arg(url).spawn();
++    #[cfg(target_os = "windows")]
++    let _ = std::process::Command::new("rundll32").arg("url.dll,FileProtocolHandler").arg(url).spawn();
++    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
++    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn only_the_projects_own_pages_are_opened() {
++        assert!(is_depot_url(REPO_URL));
++        assert!(is_depot_url(RELEASES_URL));
++        assert!(is_depot_url("https://github.com/OmsiModsBR/depot/issues/new?title=a&body=b"));
++        assert!(is_depot_url("https://github.com/OmsiModsBR/depot#readme"));
++        assert!(!is_depot_url("http://github.com/OmsiModsBR/depot"));
++        assert!(!is_depot_url("https://github.com/OmsiModsBR/depot-evil"));
++        assert!(!is_depot_url("https://github.com/OmsiModsBR/depotx/releases"));
++        assert!(!is_depot_url("https://github.com.evil.example/OmsiModsBR/depot"));
++        assert!(!is_depot_url("https://github.com@evil.example/OmsiModsBR/depot"));
++        assert!(!is_depot_url("file:///etc/passwd"));
++        assert!(!is_depot_url("javascript:alert(1)"));
++        assert!(!is_depot_url(""));
++    }
++
++    #[test]
++    fn the_release_link_is_inside_the_repository() {
++        assert!(RELEASES_URL.starts_with(REPO_URL));
++        assert!(!current_version().is_empty());
++    }
++}
+diff --git a/crates/omsi-app/src/android.rs b/crates/omsi-app/src/android.rs
+index 3cae680..6c003ce 100644
+--- a/crates/omsi-app/src/android.rs
++++ b/crates/omsi-app/src/android.rs
+@@ -62,7 +62,6 @@ fn android_main(app: AndroidApp) {
+         }
+     }
+     init_log();
+-    rescue_update();
+     // the content folder (mods, archives, screenshots): on the shared storage when the
+     // app may write there, else in the app's own folder on it
+     let shared = PathBuf::from(SHARED);
+@@ -109,56 +108,6 @@ fn android_main(app: AndroidApp) {
+     std::process::exit(0);
+ }
+ 
+-/// The file a start leaves in the app's folder until the launcher has drawn its first
+-/// picture (`started_ok`).
+-fn start_mark() -> Option<PathBuf> {
+-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join("start-pending"))
+-}
+-
+-/// A start after one that never got as far as the launcher's first picture (the graphics
+-/// driver hung or took the process down while the shaders were made - 0.2.4 to 0.2.10 on
+-/// the Galaxy S24/S25, #1708): the update is looked for at once, in the background, beside
+-/// whatever the start is doing, and a newer release is downloaded and handed to the
+-/// system's installer, which asks the player. The launcher's own check comes after its
+-/// first picture, and a build that cannot draw one could never be updated from within.
+-fn rescue_update() {
+-    let Some(mark) = start_mark() else { return };
+-    let stuck = mark.exists();
+-    let _ = std::fs::write(&mark, VERSION);
+-    if !stuck || omsi_cfg::env::var_os("OMSI_NO_UPDATE").is_some() {
+-        return;
+-    }
+-    log::warn!("the last start did not reach the launcher: looking for an update now");
+-    std::thread::spawn(|| {
+-        let r = match crate::updater::latest() {
+-            Ok(Some(r)) => r,
+-            Ok(None) => return log::info!("rescue update: this is the latest version"),
+-            Err(e) => return log::warn!("rescue update: {e:#}"),
+-        };
+-        log::warn!("rescue update: installing {}", r.version);
+-        let mut u = crate::updater::Updater::default();
+-        u.install(r);
+-        // (the installer's answer; on success the system ends this process)
+-        for _ in 0..1800 {
+-            std::thread::sleep(std::time::Duration::from_secs(1));
+-            u.poll();
+-            if let crate::updater::Status::Failed(e) = u.status() {
+-                return log::warn!("rescue update: {e}");
+-            }
+-        }
+-    });
+-}
+-
+-/// The launcher (or a game) has drawn a picture: this start went well.
+-fn started_ok() {
+-    static DONE: AtomicBool = AtomicBool::new(false);
+-    if !DONE.swap(true, Ordering::Relaxed) {
+-        if let Some(m) = start_mark() {
+-            let _ = std::fs::remove_file(m);
+-        }
+-    }
+-}
+-
+ /// The log to the system's (logcat) and to `game.log` in the app's data folder - a phone
+ /// has no terminal and the launcher and the game share one process, so without the file a
+ /// crash left the launcher's report empty (#229). The previous run's log is kept as
+@@ -431,14 +380,10 @@ impl ApplicationHandler for Shell {
+     }
+ 
+     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+-        let redraw = matches!(event, WindowEvent::RedrawRequested);
+         match self.game.as_mut() {
+             Some(g) => g.window_event(event_loop, id, event),
+             None => self.launcher().window_event(event_loop, id, event),
+         }
+-        if redraw {
+-            started_ok();
+-        }
+         self.switch(event_loop);
+     }
+ 
+@@ -642,30 +587,6 @@ fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JObject) ->
+     r.ok()
+ }
+ 
+-/// Hand the downloaded APK to the system's package installer (`OmsiActivity.installApk`):
+-/// the system asks the player, `install_status` tells what they answered.
+-pub(crate) fn install_apk(path: &std::path::Path) -> anyhow::Result<()> {
+-    let p = path.to_string_lossy().to_string();
+-    with_activity(|env, activity| {
+-        let s = env.new_string(&p)?;
+-        env.call_method(activity, "installApk", "(Ljava/lang/String;)V", &[(&s).into()])?;
+-        Ok(())
+-    })
+-    .ok_or_else(|| anyhow::anyhow!("the system's package installer could not be reached"))
+-}
+-
+-/// The package installer's answer so far: 0 nothing yet, 1 asking the player, 2 installed,
+-/// 3 cancelled, 4 failed (with the system's message), 5 waiting for "Install unknown apps",
+-/// 6 that permission refused.
+-pub(crate) fn install_status() -> Option<(i32, String)> {
+-    with_activity(|env, activity| {
+-        let code = env.call_method(activity, "getInstallStatus", "()I", &[])?.i()?;
+-        let msg = env.call_method(activity, "getInstallMessage", "()Ljava/lang/String;", &[])?.l()?;
+-        let msg: String = if msg.is_null() { String::new() } else { env.get_string(&jni::objects::JString::from(msg))?.into() };
+-        Ok((code, msg))
+-    })
+-}
+-
+ /// A web page in the phone's browser.
+ pub(crate) fn open_url(url: &str) {
+     let u = url.to_string();
+diff --git a/crates/omsi-app/src/app.rs b/crates/omsi-app/src/app.rs
+index e65c817..2f3092f 100644
+--- a/crates/omsi-app/src/app.rs
++++ b/crates/omsi-app/src/app.rs
+@@ -334,8 +334,6 @@ pub(crate) struct App {
+     pub(crate) pumping: Option<(&'static str, f32)>,
+     /// The server's notifications on the screen (`notify`), oldest first.
+     pub(crate) notices: Vec<crate::ui::Notice>,
+-    /// The look for a newer release during the session (cards over the navigator).
+-    pub(crate) update_watch: crate::update_watch::UpdateWatch,
+     /// "Playing now" on the website (None: not counted, setting `presence`).
+     pub(crate) presence: Option<crate::presence::Presence>,
+     /// What the log has said (see applog.rs).
+diff --git a/crates/omsi-app/src/app_events.rs b/crates/omsi-app/src/app_events.rs
+index 698980b..fb2e959 100644
+--- a/crates/omsi-app/src/app_events.rs
++++ b/crates/omsi-app/src/app_events.rs
+@@ -2261,7 +2261,6 @@ impl ApplicationHandler for App {
+                         }
+                     }
+                     self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
+-                    self.update_watch.tick(&mut self.notices);
+                     for n in self.notices.iter_mut() {
+                         n.left -= dt;
+                     }
+diff --git a/crates/omsi-app/src/launcher/dialogs.rs b/crates/omsi-app/src/launcher/dialogs.rs
+new file mode 100644
+index 0000000..9ba517d
+--- /dev/null
++++ b/crates/omsi-app/src/launcher/dialogs.rs
+@@ -0,0 +1,145 @@
++//! The launcher's dialogs over the page: the game's crash report and the server's
++//! disconnect message. (The update dialogs that used to live here are disabled, see
++//! docs/removed/UPDATER_DISABLED.md.)
++
++use super::theme::*;
++use super::ui::ButtonKind;
++use super::Launcher;
++use crate::about;
++use glam::Vec2;
++use omsi_ui::paint::Align;
++use omsi_ui::{Rect, Weight};
++
++/// The run went down while a Vulkan driver compiled the shaders: the LAST it said was a stage
++/// of that, and it drew with Vulkan (as the phone's shell decides it, `android.rs`). Any
++/// compile stage anywhere in the log said so of every silent end - a phone run out of memory
++/// 75 % into loading a map on OpenGL was told its Vulkan driver had failed (#848).
++pub(crate) fn died_compiling_on_vulkan(log: &str) -> bool {
++    let last = log.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
++    let compiling = last.contains("renderer: compiling") || last.contains("cloud noise made") || last.contains("opening graphics device") || last.contains("compiling renderer pipelines");
++    let vulkan = log.lines().any(|l| (l.contains("renderer: ") || l.contains("opening graphics device")) && l.contains("(Vulkan")) || log.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
++    compiling && vulkan
++}
++
++#[cfg(test)]
++mod hint_tests {
++    #[test]
++    fn only_a_run_that_died_compiling_on_vulkan_is_told_so() {
++        let compiled = "[t INFO r] opening graphics device: Mali (Vulkan, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n";
++        assert!(super::died_compiling_on_vulkan(compiled));
++        // compiled long ago, then ran out of memory loading
++        assert!(!super::died_compiling_on_vulkan(&format!("{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n")));
++        // on OpenGL it is never the Vulkan driver
++        assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
++    }
++}
++
++impl Launcher {
++    /// A game started from here was sent away by its server (kicked, banned) or turned away at
++    /// the door: the game is over, and this says so with the server's own message.
++    pub(super) fn draw_disconnect_dialog(&mut self) {
++        let Some(why) = self.state.disconnected.clone() else { return };
++        let size = self.ui.size;
++        let full = Rect::new(0.0, 0.0, size.x, size.y);
++        self.ui.solid(full);
++        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
++        let w = (size.x - 48.0).min(560.0);
++        let lead = omsi_ui::tr("The server ended your game. Its message:");
++        let th = self.ui.paragraph_height(&why, w - 48.0, 14.0, Weight::Regular).min(size.y * 0.4);
++        let h = (176.0 + th).min(size.y - 24.0);
++        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
++        self.ui.panel(r);
++        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
++        self.ui.icon("error", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, DANGER);
++        self.ui.text_in("Disconnected from the server", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
++        self.ui.paragraph(&lead, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
++        self.ui.push_clip(Rect::new(inner.x, inner.y + 66.0, inner.w, th + 4.0), 0.0);
++        self.ui.paragraph(&why, Vec2::new(inner.x, inner.y + 66.0), inner.w, 14.0, Weight::Bold, TEXT);
++        self.ui.pop_clip();
++        let by = inner.bottom() - 38.0;
++        if self.ui.button("disconnect-close", Rect::new(inner.right() - 110.0, by, 110.0, 38.0), "Close", None, ButtonKind::Primary) {
++            self.state.disconnected = None;
++        }
++    }
++
++    /// A game started from here ended on an error: what it said, and the ways to report it
++    /// (the end of its log copied, or a GitHub issue opened with it).
++    pub(super) fn draw_crash_dialog(&mut self) {
++        let Some((what, tail)) = self.state.crash.clone() else { return };
++        let size = self.ui.size;
++        let full = Rect::new(0.0, 0.0, size.x, size.y);
++        self.ui.solid(full);
++        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
++        let w = (size.x - 48.0).min(640.0);
++        let lost = what.contains("graphics device was lost");
++        let silent = what.contains("closed without a word");
++        let compiling = silent && died_compiling_on_vulkan(&tail);
++        let hint = if lost {
++            if cfg!(windows) {
++                "The graphics driver stopped the game. Updating the graphics driver usually helps; you can also let the game draw with DirectX 12 instead of Vulkan (the button below, or Settings → Graphics API)."
++            } else {
++                "The graphics driver stopped the game. Updating the graphics driver usually helps; Settings → Graphics API can switch to OpenGL."
++            }
++        } else if compiling {
++            "The Vulkan graphics driver stopped while compiling shaders. Starting the game again will switch to OpenGL (or change it in Settings → Graphics API)."
++        } else if silent {
++            "The system closed the game while it was running, typically because the device ran out of memory (RAM). Lowering texture resolution or reducing AI traffic in Settings helps prevent memory exhaustion."
++        } else {
++            "Copy the report (the end of the game's log), or open a GitHub issue with it: it tells what went wrong on this computer."
++        };
++        let text = format!("{what}\n\n{hint}");
++        let th = self.ui.paragraph_height(&text, w - 48.0, 13.0, Weight::Regular).min(size.y * 0.5);
++        let h = (140.0 + th).min(size.y - 24.0);
++        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
++        self.ui.panel(r);
++        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
++        self.ui.icon(if silent { "info" } else { "error" }, Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, if silent { WARN } else { DANGER });
++        let title_text = if silent { "The game was closed by the system" } else { "The game closed on an error" };
++        self.ui.text_in(title_text, Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
++        self.ui.push_clip(Rect::new(inner.x, inner.y + 40.0, inner.w, th + 4.0), 0.0);
++        self.ui.paragraph(&text, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
++        self.ui.pop_clip();
++        let by = inner.bottom() - 38.0;
++        if self.ui.button("crash-close", Rect::new(inner.right() - 110.0, by, 110.0, 38.0), "Close", None, ButtonKind::Normal) {
++            self.state.crash = None;
++        }
++        if self.ui.button("crash-copy", Rect::new(inner.right() - 270.0, by, 150.0, 38.0), "Copy report", Some("content_copy"), ButtonKind::Primary) {
++            self.ui.clipboard_out = Some(format!("Project Depot {} ({})\n{what}\n\n{tail}", about::current_version(), std::env::consts::OS));
++            self.state.set_status("The report is copied: paste it into a GitHub issue or a message.", false);
++        }
++        let api = self.state.settings.get("graphics_api").and_then(|v| v.as_str()).unwrap_or("auto").to_string();
++        if lost && cfg!(windows) && api != "dx12" && self.ui.button("crash-dx12", Rect::new(inner.x + 200.0, by, 170.0, 38.0), "Use DirectX 12", Some("monitor"), ButtonKind::Normal) {
++            self.state.settings["graphics_api"] = serde_json::json!("dx12");
++            self.state.settings_dirty = 0.3;
++            self.state.crash = None;
++            self.state.set_status("The game draws with DirectX 12 from the next start (Settings → Graphics API to change it back).", false);
++        }
++        if silent {
++            if self.ui.button("crash-settings", Rect::new(inner.x, by, 150.0, 38.0), "Settings", Some("tune"), ButtonKind::Ghost) {
++                self.state.crash = None;
++                self.go(super::Page::Settings);
++            }
++        } else if self.ui.button("crash-issue", Rect::new(inner.x, by, 190.0, 38.0), "Report on GitHub", Some("open_in_new"), ButtonKind::Ghost) {
++            let title = format!("Crash: {}", what.chars().take(80).collect::<String>());
++            let enc = |t: &str| t.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>();
++            // the end of the log goes with it, as much as a link holds (a report of the
++            // last line alone said where the game stopped, never what led there); the whole
++            // report is on the clipboard as well
++            // (the computer and the map always, see `crash_of`)
++            let (machine, end) = tail.split_once(&format!("\n{}\n", super::state::CRASH_TAIL_GAP)).unwrap_or(("", &tail));
++            let machine = if machine.is_empty() { String::new() } else { format!("The computer:\n```\n{machine}\n```\n\n") };
++            let body_with = |end: &str| format!("Project Depot {} on {}\n\n```\n{what}\n```\n\n{machine}The end of the log:\n```\n{end}\n```\n", about::current_version(), std::env::consts::OS);
++            let lines: Vec<&str> = end.lines().collect();
++            let mut shown = 0;
++            let body = loop {
++                let body = body_with(&lines[lines.len() - shown..].join("\n"));
++                if shown >= lines.len() || enc(&body).len() > 6500 {
++                    break if shown == 0 { body } else { body_with(&lines[lines.len() - shown.saturating_sub(1)..].join("\n")) };
++                }
++                shown += 1;
++            };
++            self.ui.clipboard_out = Some(format!("Project Depot {} ({})\n{what}\n\n{tail}", about::current_version(), std::env::consts::OS));
++            about::open_url(&format!("{}/issues/new?title={}&body={}", about::REPO_URL, enc(&title), enc(&body)));
++        }
++    }
++}
+diff --git a/crates/omsi-app/src/launcher/mod.rs b/crates/omsi-app/src/launcher/mod.rs
+index 398eb83..89d41b0 100644
+--- a/crates/omsi-app/src/launcher/mod.rs
++++ b/crates/omsi-app/src/launcher/mod.rs
+@@ -21,7 +21,7 @@ pub(crate) use state::crash_of;
+ mod theme;
+ mod timetable;
+ mod ui;
+-mod update;
++mod dialogs;
+ 
+ use glam::Vec2;
+ use omsi_launcher_lib as core;
+@@ -153,8 +153,6 @@ pub struct Launcher {
+     page_scroll: f32,
+     page_max: f32,
+     ime: bool,
+-    /// Updates from the GitHub releases (see `crate::updater`, `update.rs`).
+-    pub update: crate::updater::Updater,
+     #[cfg(not(target_os = "android"))]
+     discord: Option<crate::discord::Discord>,
+     #[cfg(not(target_os = "android"))]
+@@ -230,20 +228,12 @@ impl Launcher {
+         page_scroll: 0.0,
+         page_max: 0.0,
+         ime: false,
+-        update: Default::default(),
+         #[cfg(not(target_os = "android"))]
+         discord: None,
+         #[cfg(not(target_os = "android"))]
+         discord_next_try: Instant::now(),
+         gpu_rest_drop: None,
+     };
+-    // after an update: the files it set aside go, and the launcher says what happened
+-    #[cfg(not(target_os = "android"))]
+-    crate::updater::cleanup_after_update();
+-    if let Some(v) = crate::updater::just_updated() {
+-        log::info!("update: this start follows the update to {v}");
+-        app.update.updated = Some((v, Instant::now()));
+-    }
+     // no original installation found anywhere: the launcher still opens, on Setup, and says
+     // what it needs (only starting a session needs the game)
+     if omsi_cfg::missing_original_essentials(std::path::Path::new(&app.state.config.root)).len() > 0 {
+@@ -614,7 +604,6 @@ impl ApplicationHandler for Launcher {
+             self.state.update(dt);
+             #[cfg(not(target_os = "android"))]
+             self.update_discord();
+-            self.update_tick(event_loop);
+             self.check_exit(event_loop);
+             // A game may have ended on this tick: wake so `frame` opens the device again.
+             if !mobile::mobile() && self.renderer.is_none() && !self.state.in_game() {
+@@ -847,7 +836,6 @@ impl Launcher {
+         self.state.update(dt);
+         #[cfg(not(target_os = "android"))]
+         self.update_discord();
+-        self.update_tick(event_loop);
+         // the preview shows the chosen bus in the chosen light
+         let c = &self.state.choice;
+         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
+@@ -1067,16 +1055,15 @@ impl Launcher {
+         }
+         let size = self.ui.size;
+         let mobile = mobile::mobile();
+-        // the storage browser (or the update dialog) lies over the page: the page sees no
++        // the storage browser lies over the page: the page sees no
+         // finger meanwhile
+-        let dialog = self.update_dialog_open();
+-        let disconnected = !dialog && self.state.disconnected.is_some();
+-        let crash = !dialog && !disconnected && self.state.crash.is_some();
+-        let reset = !dialog && !crash && !disconnected && self.pages.confirm_reset;
+-        if self.browser.is_some() || dialog || crash || reset || disconnected {
++        let disconnected = self.state.disconnected.is_some();
++        let crash = !disconnected && self.state.crash.is_some();
++        let reset = !crash && !disconnected && self.pages.confirm_reset;
++        if self.browser.is_some() || crash || reset || disconnected {
+             self.pages.pads.cancel_feedback_test();
+         }
+-        let saved = (self.browser.is_some() || dialog || crash || reset || disconnected).then(|| {
++        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
+             let i = self.ui.input.clone();
+             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
+             self.ui.input.pressed = false;
+@@ -1125,12 +1112,9 @@ impl Launcher {
+         self.rail();
+         self.status_bar();
+         }
+-        self.draw_updated_notice();
+         if let Some(i) = saved {
+             self.ui.input = i;
+-            if dialog {
+-                self.draw_update_dialog();
+-            } else if disconnected {
++            if disconnected {
+                 self.draw_disconnect_dialog();
+             } else if crash {
+                 self.draw_crash_dialog();
+diff --git a/crates/omsi-app/src/launcher/pages.rs b/crates/omsi-app/src/launcher/pages.rs
+index 2bfa236..69f639c 100644
+--- a/crates/omsi-app/src/launcher/pages.rs
++++ b/crates/omsi-app/src/launcher/pages.rs
+@@ -310,10 +310,8 @@ fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &
+ pub const SETTINGS_TABS: [&str; 6] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General"];
+ 
+ /// What the tabs show of the launcher and ask of it (they see only the settings): the
+-/// updater's state, "Check now", "Reset all settings", the Controls page at one of its tabs.
++/// "Reset all settings" and the Controls page at one of its tabs.
+ struct Outside {
+-    update: crate::updater::Status,
+-    check_updates: bool,
+     reset: bool,
+     controls: Option<usize>,
+ }
+@@ -336,7 +334,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
+     let body = Rect::new(body.x, bar.bottom() + 18.0, body.w, (body.bottom() - bar.bottom() - 18.0).max(0.0));
+     let s = &mut l.state.settings;
+     let dirty = &mut l.state.settings_dirty;
+-    let mut out = Outside { update: l.update.status(), check_updates: false, reset: false, controls: None };
++    let mut out = Outside { reset: false, controls: None };
+     // (two columns side by side; where they would be too narrow to read - a phone - one
+     // under the other, each as high as it was the frame before)
+     let stacked = body.w < 900.0;
+@@ -359,9 +357,6 @@ pub fn settings(l: &mut Launcher, area: Rect) {
+         });
+         h
+     });
+-    if out.check_updates {
+-        l.update.check();
+-    }
+     if out.reset {
+         l.pages.confirm_reset = true;
+     }
+@@ -1081,7 +1076,7 @@ fn gameplay_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
+     [left, c.used()]
+ }
+ 
+-/// The language, what the screen shows besides the bus, online, the navigator, updates.
++/// The language, what the screen shows besides the bus, online, the navigator, the version.
+ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
+     let mut c = Col::new(ui, cols[0], "Interface & online");
+     {
+@@ -1179,30 +1174,16 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
+     }
+     c.y += 74.0;
+     let left = c.used();
+-    // updates from the GitHub releases (see `crate::updater`)
+-    let mut c = Col::new(ui, cols[1], "Updates");
+-    toggle_setting(ui, s, dirty, c.row(), "Look for updates when the launcher starts", "update_check");
+-    toggle_setting(ui, s, dirty, c.row(), "Install updates without asking", "update_auto");
+-    toggle_setting(ui, s, dirty, c.row(), "Tell me about a new version during a session", "update_notify");
++    // this build's version and the project's release page (in-app updating is disabled, see
++    // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
++    let mut c = Col::new(ui, cols[1], "About");
+     toggle_setting(ui, s, dirty, c.row(), "Count me in the website's \"playing now\" (anonymous)", "presence");
+     {
+-        use crate::updater::Status;
+         let r = c.row();
+-        let busy = matches!(out.update, Status::Checking | Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_));
+-        if ui.button("s-upd-check", Rect::new(r.x, r.y, 150.0, r.h), if busy { "Checking…" } else { "Check now" }, Some("refresh"), ButtonKind::Normal) && !busy {
+-            out.check_updates = true;
+-        }
+-        let text = match &out.update {
+-            Status::UpToDate if crate::updater::is_test_build(crate::updater::current_version()) => format!("{} is a test build: it is not updated", crate::updater::current_version()),
+-            Status::UpToDate => format!("{} is the latest version", crate::updater::current_version()),
+-            Status::Available(rel) => format!("{} is available", rel.version),
+-            Status::Failed(_) => "The last check failed".to_string(),
+-            _ => format!("This is Project Depot {}", crate::updater::current_version()),
+-        };
+-        ui.text_in(&text, Rect::new(r.x + 162.0, r.y, r.w - 162.0, r.h), 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
++        ui.text_in(&format!("This is Project Depot {}", crate::about::current_version()), r, 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
+     }
+-    if ui.button("s-upd-github", c.row(), "github.com/OmsiModsBR/depot", Some("open_in_new"), ButtonKind::Ghost) {
+-        crate::updater::open_url(crate::updater::REPO_URL);
++    if ui.button("s-about-releases", c.row(), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
++        crate::about::open_url(crate::about::RELEASES_URL);
+     }
+     // every setting at once: here at the end, not first on the page where it was the
+     // control one saw before any other
+@@ -2731,7 +2712,6 @@ mod wizard_tests {
+ #[cfg(test)]
+ mod settings_tests {
+     use super::*;
+-    use crate::updater::Status;
+ 
+     /// Every clickable thing of the settings page by the tab it is on (switches are named
+     /// `set-<key>`). Taken from the page as it was before the tabs: nothing may go missing.
+@@ -2798,7 +2778,7 @@ mod settings_tests {
+         let general = vec![
+             "s-lang", "set-machine_translation", "set-launcher_rest", "set-discord_status", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
+             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
+-            "set-update_check", "set-update_auto", "set-update_notify", "set-presence", "s-upd-check", "s-upd-github", "s-reset",
++            "set-presence", "s-about-releases", "s-reset",
+         ];
+         vec![graphics, driving, camera, sound, gameplay, general]
+     }
+@@ -2813,7 +2793,7 @@ mod settings_tests {
+     }
+ 
+     fn outside() -> Outside {
+-        Outside { update: Status::Idle, check_updates: false, reset: false, controls: None }
++        Outside { reset: false, controls: None }
+     }
+ 
+     /// One frame of tab `tab`, its two columns tall enough that nothing is cut off. The Sound
+diff --git a/crates/omsi-app/src/launcher/update.rs b/crates/omsi-app/src/launcher/update.rs
+deleted file mode 100644
+index 8f05f24..0000000
+--- a/crates/omsi-app/src/launcher/update.rs
++++ /dev/null
+@@ -1,334 +0,0 @@
+-//! The launcher's side of the updates (see `crate::updater`): the check when it starts,
+-//! the question, the progress, and the restart.
+-
+-use super::theme::*;
+-use super::ui::ButtonKind;
+-use super::Launcher;
+-use crate::updater::{self, Status};
+-use glam::Vec2;
+-use omsi_ui::paint::Align;
+-use omsi_ui::{Rect, Weight};
+-use winit::event_loop::ActiveEventLoop;
+-
+-impl Launcher {
+-    fn setting(&self, key: &str, default: bool) -> bool {
+-        self.state.settings.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
+-    }
+-
+-    /// Once a frame (drawn or not): look for an update when the launcher has started, install
+-    /// one when that is what the player chose, and on a computer hand over to the new
+-    /// launcher once it is in place.
+-    pub(super) fn update_tick(&mut self, event_loop: &ActiveEventLoop) {
+-        let looking = self.setting("update_check", true) && omsi_cfg::env::var_os("OMSI_NO_UPDATE").is_none();
+-        if !self.update.checked_once && self.started.elapsed().as_secs_f32() > 1.0 {
+-            if looking {
+-                self.update.check();
+-            } else {
+-                self.update.checked_once = true;
+-            }
+-        }
+-        // (a game started from here is a program of its own on a computer: nothing is put in
+-        // its place while it runs - once it ends, the update the game downloaded in the
+-        // background goes in, without a wait)
+-        let game_running = !omsi_launcher_lib::IN_PROCESS_GAMES && self.state.instances.iter().any(|i| i.running);
+-        if self.update.game_was_running && !game_running && looking {
+-            log::info!("update: the game has ended - looking for an update");
+-            self.update.dismissed_version = None;
+-            self.update.auto_started = false;
+-            if let Status::Failed(_) | Status::UpToDate = self.update.status() {
+-                self.update.dismiss();
+-            }
+-            self.update.check();
+-        }
+-        self.update.game_was_running = game_running;
+-        // and every half hour while the launcher stays open, not only when it starts
+-        let idle = matches!(self.update.status(), Status::Idle | Status::UpToDate) || (matches!(self.update.status(), Status::Failed(_)) && self.update.dismissed);
+-        if looking && idle && self.update.last_check.is_some_and(|t| t.elapsed() > std::time::Duration::from_secs(30 * 60)) {
+-            if let Status::Failed(_) | Status::UpToDate = self.update.status() {
+-                self.update.dismiss();
+-            }
+-            self.update.check();
+-        }
+-        self.update.poll();
+-        // (an offer put aside comes back for a newer version only)
+-        if let Status::Available(r) = self.update.status() {
+-            if self.update.dismissed && self.update.dismissed_version.as_deref() != Some(r.version.as_str()) {
+-                self.update.dismissed = false;
+-            } else if !self.update.dismissed && self.update.dismissed_version.as_deref() == Some(r.version.as_str()) {
+-                self.update.dismissed = true;
+-            }
+-        }
+-        match self.update.status() {
+-            // "install updates without asking" (not while a game runs)
+-            Status::Available(r) if self.setting("update_auto", false) && !self.update.dismissed && !self.update.auto_started && !game_running => {
+-                self.update.auto_started = true;
+-                log::info!("update: installing {} by itself (update_auto)", r.version);
+-                self.update.install(r);
+-            }
+-            Status::Restarting(r) => {
+-                if !self.update.relaunched {
+-                    self.update.relaunched = true;
+-                    match updater::install_place().and_then(|p| updater::relaunch(&p)) {
+-                        Ok(()) => {
+-                            log::info!("update: {} installed, the new launcher starts", r.version);
+-                            event_loop.exit();
+-                        }
+-                        Err(e) => self.state.set_status(format!("Project Depot {} is installed; start it again yourself ({e}).", r.version), true),
+-                    }
+-                }
+-            }
+-            _ => {}
+-        }
+-    }
+-
+-    /// Whether the update dialog lies over the page this frame.
+-    pub(super) fn update_dialog_open(&self) -> bool {
+-        // (the launcher rests while a game runs: the offer waits for the session's end)
+-        if self.update.game_was_running {
+-            return false;
+-        }
+-        match self.update.status() {
+-            Status::Available(_) | Status::Failed(_) => !self.update.dismissed,
+-            Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_) => true,
+-            _ => false,
+-        }
+-    }
+-
+-    /// The update dialog over the page.
+-    pub(super) fn draw_update_dialog(&mut self) {
+-        let status = self.update.status();
+-        let size = self.ui.size;
+-        let full = Rect::new(0.0, 0.0, size.x, size.y);
+-        self.ui.solid(full);
+-        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
+-        let w = (size.x - 48.0).min(560.0);
+-        let h = 250.0;
+-        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
+-        self.ui.panel(r);
+-        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
+-        let current = updater::current_version();
+-        let icon_at = Vec2::new(inner.x + 14.0, inner.y + 14.0);
+-        let title_r = Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0);
+-        let body_at = Vec2::new(inner.x, inner.y + 44.0);
+-        let buttons_y = inner.bottom() - 40.0;
+-        match status {
+-            Status::Available(rel) => {
+-                self.ui.icon("system_update", icon_at, 26.0, ACCENT);
+-                self.ui.text_in(&format!("Project Depot {} is available", rel.version), title_r, 18.0, Weight::Bold, TEXT, Align::Left);
+-                let text = if cfg!(target_os = "android") {
+-                    format!("You have {current}. Update now? The launcher downloads the new version ({}) from GitHub and Android installs it; Project Depot then starts again - your mods and settings stay as they are.", mb(rel.size))
+-                } else {
+-                    format!("You have {current}. Update now? The launcher downloads the new version ({}) from GitHub, puts it in place of this one and starts again - your mods and settings stay as they are.", mb(rel.size))
+-                };
+-                self.ui.paragraph(&text, body_at, inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-                let mut auto = self.setting("update_auto", false);
+-                if self.ui.toggle("upd-auto", Rect::new(inner.x, buttons_y - 44.0, inner.w, 30.0), &mut auto, "Install updates without asking from now on") {
+-                    self.state.settings["update_auto"] = serde_json::json!(auto);
+-                    self.state.settings_dirty = 0.3;
+-                }
+-                if self.ui.button("upd-now", Rect::new(inner.right() - 150.0, buttons_y, 150.0, 38.0), "Update now", Some("download"), ButtonKind::Primary) {
+-                    self.update.install(rel.clone());
+-                }
+-                if self.ui.button("upd-later", Rect::new(inner.right() - 270.0, buttons_y, 110.0, 38.0), "Not now", None, ButtonKind::Normal) {
+-                    self.update.dismiss();
+-                }
+-                if self.ui.button("upd-page", Rect::new(inner.x, buttons_y, 150.0, 38.0), "What's new", Some("open_in_new"), ButtonKind::Ghost) {
+-                    updater::open_url(&rel.page);
+-                }
+-            }
+-            Status::Downloading { release, done, total } => {
+-                self.ui.icon("download", icon_at, 26.0, ACCENT);
+-                self.ui.text_in(&format!("Downloading Project Depot {}", release.version), title_r, 18.0, Weight::Bold, TEXT, Align::Left);
+-                let frac = if total > 0 { done as f32 / total as f32 } else { 0.0 };
+-                self.ui.paragraph(&format!("{} of {} from github.com/{}", mb(done), mb(total), updater::REPO), body_at, inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-                self.ui.progress(Rect::new(inner.x, body_at.y + 40.0, inner.w, 10.0), frac, true);
+-            }
+-            Status::Installing(release) | Status::Restarting(release) => {
+-                self.ui.icon("install_desktop", icon_at, 26.0, ACCENT);
+-                self.ui.text_in(&format!("Installing Project Depot {}", release.version), title_r, 18.0, Weight::Bold, TEXT, Align::Left);
+-                self.ui.paragraph("The new version is put in place; the launcher starts again in a moment.", body_at, inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-                self.ui.progress(Rect::new(inner.x, body_at.y + 40.0, inner.w, 10.0), 1.0, true);
+-            }
+-            Status::WaitingForInstaller(release) => {
+-                self.ui.icon("install_mobile", icon_at, 26.0, ACCENT);
+-                self.ui.text_in(&format!("Installing Project Depot {}", release.version), title_r, 18.0, Weight::Bold, TEXT, Align::Left);
+-                self.ui.paragraph("Android asks whether to update Project Depot: press Update there. The app then starts again by itself.", body_at, inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-                self.ui.progress(Rect::new(inner.x, body_at.y + 60.0, inner.w, 10.0), 1.0, true);
+-            }
+-            Status::Failed(msg) => {
+-                self.ui.icon("error", icon_at, 26.0, DANGER);
+-                self.ui.text_in("Not updated", title_r, 18.0, Weight::Bold, TEXT, Align::Left);
+-                self.ui.paragraph(&msg, body_at, inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-                if self.ui.button("upd-close", Rect::new(inner.right() - 110.0, buttons_y, 110.0, 38.0), "Close", None, ButtonKind::Normal) {
+-                    self.update.dismiss();
+-                }
+-                if self.ui.button("upd-retry", Rect::new(inner.right() - 240.0, buttons_y, 120.0, 38.0), "Try again", Some("refresh"), ButtonKind::Normal) {
+-                    self.update.check();
+-                }
+-                if self.ui.button("upd-github", Rect::new(inner.x, buttons_y, 170.0, 38.0), "Open on GitHub", Some("open_in_new"), ButtonKind::Ghost) {
+-                    updater::open_url(&format!("{}/releases/latest", updater::REPO_URL));
+-                }
+-            }
+-            _ => {}
+-        }
+-    }
+-}
+-
+-impl Launcher {
+-    /// After an update: "Updated to openOMSI x" in the top right corner for a few seconds
+-    /// (it asks nothing and covers nothing that matters).
+-    pub(super) fn draw_updated_notice(&mut self) {
+-        let Some((v, at)) = self.update.updated.clone() else { return };
+-        let t = at.elapsed().as_secs_f32();
+-        if t > 9.0 {
+-            self.update.updated = None;
+-            return;
+-        }
+-        let fade = (t / 0.3).min(1.0).min((9.0 - t) / 0.6).clamp(0.0, 1.0);
+-        let text = format!("Updated to Project Depot {v}");
+-        let w = self.ui.width(&text, 13.5, Weight::Bold) + 60.0;
+-        let r = Rect::new(self.ui.size.x - w - 20.0, 18.0, w, 42.0);
+-        self.ui.p().rounded(r, 8.0, PANEL.alpha(0.97 * fade));
+-        self.ui.p().rounded_border(r, 8.0, 1.0, ACCENT.alpha(0.6 * fade));
+-        self.ui.icon("check_circle", Vec2::new(r.x + 22.0, r.center().y), 20.0, ACCENT.alpha(fade));
+-        self.ui.text_in(&text, Rect::new(r.x + 40.0, r.y, w - 48.0, r.h), 13.5, Weight::Bold, TEXT.alpha(fade), Align::Left);
+-    }
+-}
+-
+-/// The run went down while a Vulkan driver compiled the shaders: the LAST it said was a stage
+-/// of that, and it drew with Vulkan (as the phone's shell decides it, `android.rs`). Any
+-/// compile stage anywhere in the log said so of every silent end - a phone run out of memory
+-/// 75 % into loading a map on OpenGL was told its Vulkan driver had failed (#848).
+-pub(crate) fn died_compiling_on_vulkan(log: &str) -> bool {
+-    let last = log.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
+-    let compiling = last.contains("renderer: compiling") || last.contains("cloud noise made") || last.contains("opening graphics device") || last.contains("compiling renderer pipelines");
+-    let vulkan = log.lines().any(|l| (l.contains("renderer: ") || l.contains("opening graphics device")) && l.contains("(Vulkan")) || log.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
+-    compiling && vulkan
+-}
+-
+-#[cfg(test)]
+-mod hint_tests {
+-    #[test]
+-    fn only_a_run_that_died_compiling_on_vulkan_is_told_so() {
+-        let compiled = "[t INFO r] opening graphics device: Mali (Vulkan, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n";
+-        assert!(super::died_compiling_on_vulkan(compiled));
+-        // compiled long ago, then ran out of memory loading
+-        assert!(!super::died_compiling_on_vulkan(&format!("{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n")));
+-        // on OpenGL it is never the Vulkan driver
+-        assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
+-    }
+-}
+-
+-impl Launcher {
+-    /// A game started from here was sent away by its server (kicked, banned) or turned away at
+-    /// the door: the game is over, and this says so with the server's own message.
+-    pub(super) fn draw_disconnect_dialog(&mut self) {
+-        let Some(why) = self.state.disconnected.clone() else { return };
+-        let size = self.ui.size;
+-        let full = Rect::new(0.0, 0.0, size.x, size.y);
+-        self.ui.solid(full);
+-        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
+-        let w = (size.x - 48.0).min(560.0);
+-        let lead = omsi_ui::tr("The server ended your game. Its message:");
+-        let th = self.ui.paragraph_height(&why, w - 48.0, 14.0, Weight::Regular).min(size.y * 0.4);
+-        let h = (176.0 + th).min(size.y - 24.0);
+-        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
+-        self.ui.panel(r);
+-        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
+-        self.ui.icon("error", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, DANGER);
+-        self.ui.text_in("Disconnected from the server", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
+-        self.ui.paragraph(&lead, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-        self.ui.push_clip(Rect::new(inner.x, inner.y + 66.0, inner.w, th + 4.0), 0.0);
+-        self.ui.paragraph(&why, Vec2::new(inner.x, inner.y + 66.0), inner.w, 14.0, Weight::Bold, TEXT);
+-        self.ui.pop_clip();
+-        let by = inner.bottom() - 38.0;
+-        if self.ui.button("disconnect-close", Rect::new(inner.right() - 110.0, by, 110.0, 38.0), "Close", None, ButtonKind::Primary) {
+-            self.state.disconnected = None;
+-        }
+-    }
+-
+-    /// A game started from here ended on an error: what it said, and the ways to report it
+-    /// (the end of its log copied, or a GitHub issue opened with it).
+-    pub(super) fn draw_crash_dialog(&mut self) {
+-        let Some((what, tail)) = self.state.crash.clone() else { return };
+-        let size = self.ui.size;
+-        let full = Rect::new(0.0, 0.0, size.x, size.y);
+-        self.ui.solid(full);
+-        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
+-        let w = (size.x - 48.0).min(640.0);
+-        let lost = what.contains("graphics device was lost");
+-        let silent = what.contains("closed without a word");
+-        let compiling = silent && died_compiling_on_vulkan(&tail);
+-        let hint = if lost {
+-            if cfg!(windows) {
+-                "The graphics driver stopped the game. Updating the graphics driver usually helps; you can also let the game draw with DirectX 12 instead of Vulkan (the button below, or Settings → Graphics API)."
+-            } else {
+-                "The graphics driver stopped the game. Updating the graphics driver usually helps; Settings → Graphics API can switch to OpenGL."
+-            }
+-        } else if compiling {
+-            "The Vulkan graphics driver stopped while compiling shaders. Starting the game again will switch to OpenGL (or change it in Settings → Graphics API)."
+-        } else if silent {
+-            "The system closed the game while it was running, typically because the device ran out of memory (RAM). Lowering texture resolution or reducing AI traffic in Settings helps prevent memory exhaustion."
+-        } else {
+-            "Copy the report (the end of the game's log), or open a GitHub issue with it: it tells what went wrong on this computer."
+-        };
+-        let text = format!("{what}\n\n{hint}");
+-        let th = self.ui.paragraph_height(&text, w - 48.0, 13.0, Weight::Regular).min(size.y * 0.5);
+-        let h = (140.0 + th).min(size.y - 24.0);
+-        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
+-        self.ui.panel(r);
+-        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
+-        self.ui.icon(if silent { "info" } else { "error" }, Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, if silent { WARN } else { DANGER });
+-        let title_text = if silent { "The game was closed by the system" } else { "The game closed on an error" };
+-        self.ui.text_in(title_text, Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
+-        self.ui.push_clip(Rect::new(inner.x, inner.y + 40.0, inner.w, th + 4.0), 0.0);
+-        self.ui.paragraph(&text, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+-        self.ui.pop_clip();
+-        let by = inner.bottom() - 38.0;
+-        if self.ui.button("crash-close", Rect::new(inner.right() - 110.0, by, 110.0, 38.0), "Close", None, ButtonKind::Normal) {
+-            self.state.crash = None;
+-        }
+-        if self.ui.button("crash-copy", Rect::new(inner.right() - 270.0, by, 150.0, 38.0), "Copy report", Some("content_copy"), ButtonKind::Primary) {
+-            self.ui.clipboard_out = Some(format!("Project Depot {} ({})\n{what}\n\n{tail}", updater::current_version(), std::env::consts::OS));
+-            self.state.set_status("The report is copied: paste it into a GitHub issue or a message.", false);
+-        }
+-        let api = self.state.settings.get("graphics_api").and_then(|v| v.as_str()).unwrap_or("auto").to_string();
+-        if lost && cfg!(windows) && api != "dx12" && self.ui.button("crash-dx12", Rect::new(inner.x + 200.0, by, 170.0, 38.0), "Use DirectX 12", Some("monitor"), ButtonKind::Normal) {
+-            self.state.settings["graphics_api"] = serde_json::json!("dx12");
+-            self.state.settings_dirty = 0.3;
+-            self.state.crash = None;
+-            self.state.set_status("The game draws with DirectX 12 from the next start (Settings → Graphics API to change it back).", false);
+-        }
+-        if silent {
+-            if self.ui.button("crash-settings", Rect::new(inner.x, by, 150.0, 38.0), "Settings", Some("tune"), ButtonKind::Ghost) {
+-                self.state.crash = None;
+-                self.go(super::Page::Settings);
+-            }
+-        } else if self.ui.button("crash-issue", Rect::new(inner.x, by, 190.0, 38.0), "Report on GitHub", Some("open_in_new"), ButtonKind::Ghost) {
+-            let title = format!("Crash: {}", what.chars().take(80).collect::<String>());
+-            let enc = |t: &str| t.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>();
+-            // the end of the log goes with it, as much as a link holds (a report of the
+-            // last line alone said where the game stopped, never what led there); the whole
+-            // report is on the clipboard as well
+-            // (the computer and the map always, see `crash_of`)
+-            let (machine, end) = tail.split_once(&format!("\n{}\n", super::state::CRASH_TAIL_GAP)).unwrap_or(("", &tail));
+-            let machine = if machine.is_empty() { String::new() } else { format!("The computer:\n```\n{machine}\n```\n\n") };
+-            let body_with = |end: &str| format!("Project Depot {} on {}\n\n```\n{what}\n```\n\n{machine}The end of the log:\n```\n{end}\n```\n", updater::current_version(), std::env::consts::OS);
+-            let lines: Vec<&str> = end.lines().collect();
+-            let mut shown = 0;
+-            let body = loop {
+-                let body = body_with(&lines[lines.len() - shown..].join("\n"));
+-                if shown >= lines.len() || enc(&body).len() > 6500 {
+-                    break if shown == 0 { body } else { body_with(&lines[lines.len() - shown.saturating_sub(1)..].join("\n")) };
+-                }
+-                shown += 1;
+-            };
+-            self.ui.clipboard_out = Some(format!("Project Depot {} ({})\n{what}\n\n{tail}", updater::current_version(), std::env::consts::OS));
+-            updater::open_url(&format!("{}/issues/new?title={}&body={}", updater::REPO_URL, enc(&title), enc(&body)));
+-        }
+-    }
+-}
+-
+-fn mb(bytes: u64) -> String {
+-    format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+-}
+diff --git a/crates/omsi-app/src/lib.rs b/crates/omsi-app/src/lib.rs
+index 2872486..9203a5e 100644
+--- a/crates/omsi-app/src/lib.rs
++++ b/crates/omsi-app/src/lib.rs
+@@ -28,8 +28,7 @@ mod platform;
+ mod touch;
+ mod placing;
+ mod mt;
+-mod updater;
+-mod update_watch;
++mod about;
+ mod presence;
+ mod ambience;
+ mod camera_arm;
+@@ -602,7 +601,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
+         service_msg: clock_note.map(|m| (m, 10.0)),
+         pumping: None,
+         notices: Vec::new(),
+-        update_watch: crate::update_watch::UpdateWatch::new(),
+         // (a server counts its players by their own games, not itself)
+         presence: if is_server { None } else { crate::presence::Presence::start() },
+         log_state: Default::default(),
+diff --git a/crates/omsi-app/src/presence.rs b/crates/omsi-app/src/presence.rs
+index 97f16da..a27bced 100644
+--- a/crates/omsi-app/src/presence.rs
++++ b/crates/omsi-app/src/presence.rs
+@@ -108,10 +108,10 @@ impl Presence {
+                 let agent = ureq::AgentBuilder::new()
+                     .timeout_connect(Duration::from_secs(10))
+                     .timeout(Duration::from_secs(15))
+-                    .user_agent(&format!("depot/{}", crate::updater::current_version()))
++                    .user_agent(&format!("depot/{}", crate::about::current_version()))
+                     .build();
+                 let id = session_id();
+-                let hello = serde_json::json!({ "id": id, "v": crate::updater::current_version(), "os": system() });
++                let hello = serde_json::json!({ "id": id, "v": crate::about::current_version(), "os": system() });
+                 let mut said = false;
+                 let mut first = true;
+                 while !flag.load(Ordering::Relaxed) {
+diff --git a/crates/omsi-app/src/ui.rs b/crates/omsi-app/src/ui.rs
+index f1ce2f1..231d30a 100644
+--- a/crates/omsi-app/src/ui.rs
++++ b/crates/omsi-app/src/ui.rs
+@@ -267,8 +267,6 @@ pub enum NoticeKind {
+     Info,
+     Warn,
+     Alert,
+-    /// A new openOMSI version (`update_watch`).
+-    Update,
+ }
+ 
+ /// How many notifications show at once (the newest; an older one makes room).
+@@ -759,7 +757,6 @@ impl Ui {
+                     NoticeKind::Info => ([90, 160, 255], "Server"),
+                     NoticeKind::Warn => ([240, 170, 50], "Warning"),
+                     NoticeKind::Alert => ([235, 80, 70], "Alert"),
+-                    NoticeKind::Update => ([46, 160, 67], "Update"),
+                 };
+                 let rows = {
+                     let tc = &self.text;
+diff --git a/crates/omsi-app/src/update_watch.rs b/crates/omsi-app/src/update_watch.rs
+deleted file mode 100644
+index 1823509..0000000
+--- a/crates/omsi-app/src/update_watch.rs
++++ /dev/null
+@@ -1,101 +0,0 @@
+-//! The game's eye on the updates (see `crate::updater`): a minute into a session, and every
+-//! hour after, it asks GitHub for the latest release in the background. A newer one is
+-//! downloaded during the session (`Updater::prefetch`) and a card over the navigator says so;
+-//! the launcher installs the file already downloaded when the session ends (by itself with
+-//! "Install updates without asking", else it offers it), so nobody waits for a download.
+-//!
+-//! Settings: `update_check` (looking at all, as the launcher's), `update_notify` (the cards
+-//! over the navigator; the download goes on without them). `OMSI_NO_UPDATE=1` switches it
+-//! off, `OMSI_UPDATE_URL` points it elsewhere (and lets a development build try it: one
+-//! never replaces itself, so it is not asked otherwise).
+-
+-use crate::ui::{push_notice, Notice, NoticeKind};
+-use crate::updater::{self, Status, Updater};
+-use std::time::{Duration, Instant};
+-
+-/// When the first look is taken (the start of a session has enough to do), and how often after.
+-const FIRST_CHECK: Duration = Duration::from_secs(60);
+-const EVERY: Duration = Duration::from_secs(3600);
+-/// After a failed look or download: the next try.
+-const AFTER_FAILURE: Duration = Duration::from_secs(15 * 60);
+-
+-pub(crate) struct UpdateWatch {
+-    updater: Updater,
+-    enabled: bool,
+-    notify: bool,
+-    auto: bool,
+-    next_check: Instant,
+-    /// The version said (found / downloaded) over the navigator.
+-    told_found: Option<String>,
+-    told_ready: Option<String>,
+-}
+-
+-impl UpdateWatch {
+-    pub(crate) fn new() -> UpdateWatch {
+-        let text = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("settings.cfg")).ok();
+-        let s = omsi_launcher_lib::settings_from_text(text.as_deref());
+-        let on = |k: &str, d: bool| s.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
+-        let testing = omsi_cfg::env::var_os("OMSI_UPDATE_URL").is_some();
+-        let installable = testing || updater::install_place().is_ok() || cfg!(target_os = "android");
+-        let enabled = on("update_check", true)
+-            && omsi_cfg::env::var_os("OMSI_NO_UPDATE").is_none()
+-            && !updater::is_test_build(updater::current_version())
+-            && updater::asset_name(updater::current_version()).is_some()
+-            && installable;
+-        UpdateWatch {
+-            updater: Updater::default(),
+-            enabled,
+-            notify: on("update_notify", true),
+-            auto: on("update_auto", false),
+-            // (a test against OMSI_UPDATE_URL looks at once)
+-            next_check: Instant::now() + if testing { Duration::from_secs(3) } else { FIRST_CHECK },
+-            told_found: None,
+-            told_ready: None,
+-        }
+-    }
+-
+-    /// Once a frame: look when it is time, download what was found, and say it.
+-    pub(crate) fn tick(&mut self, notices: &mut Vec<Notice>) {
+-        if !self.enabled {
+-            return;
+-        }
+-        let now = Instant::now();
+-        match self.updater.status() {
+-            Status::Idle | Status::UpToDate if now >= self.next_check => {
+-                self.next_check = now + EVERY;
+-                self.updater.check();
+-            }
+-            Status::Available(r) => {
+-                if self.told_found.as_deref() != Some(r.version.as_str()) {
+-                    self.told_found = Some(r.version.clone());
+-                    log::info!("update: {} is out - downloading it in the background", r.version);
+-                    if self.notify {
+-                        let text = format!("Project Depot {} is out: it is downloaded in the background and installed when this session ends", r.version);
+-                        push_notice(notices, Notice { kind: NoticeKind::Update, text, left: 10.0, total: 10.0 });
+-                    }
+-                }
+-                self.updater.prefetch(r);
+-            }
+-            Status::Downloaded(r) if self.told_ready.as_deref() != Some(r.version.as_str()) => {
+-                self.told_ready = Some(r.version.clone());
+-                if self.notify {
+-                    // (a quick download: this card takes the place of "is out" still showing)
+-                    let found = format!("Project Depot {} is out", r.version);
+-                    notices.retain(|n| !(n.kind == NoticeKind::Update && n.text.starts_with(&found)));
+-                    let text = if cfg!(target_os = "android") || !self.auto {
+-                        format!("Project Depot {} is downloaded: the launcher offers it when this session ends", r.version)
+-                    } else {
+-                        format!("Project Depot {} is downloaded: it is installed when this session ends", r.version)
+-                    };
+-                    push_notice(notices, Notice { kind: NoticeKind::Update, text, left: 8.0, total: 8.0 });
+-                }
+-            }
+-            // (no card for a failure: it is tried again quietly, the log says why)
+-            Status::Failed(_) => {
+-                self.updater.dismiss();
+-                self.next_check = now + AFTER_FAILURE;
+-            }
+-            _ => {}
+-        }
+-    }
+-}
+diff --git a/crates/omsi-app/src/updater.rs b/crates/omsi-app/src/updater.rs
+deleted file mode 100644
+index 9e0238f..0000000
+--- a/crates/omsi-app/src/updater.rs
++++ /dev/null
+@@ -1,1051 +0,0 @@
+-//! Updates from Project Depot's GitHub releases (github.com/OmsiModsBR/depot).
+-//!
+-//! Every push to main publishes a release `v<MAJOR.MINOR.COMMIT>` with one archive per
+-//! platform (see .github/workflows/release.yml). The launcher asks the GitHub API for the
+-//! latest release when it starts (setting `update_check`), and when it is newer than this
+-//! build it offers it - or, with `update_auto`, installs it at once:
+-//!
+-//! * **Windows, macOS, Linux**: the archive is downloaded (and checked against the SHA-256
+-//!   GitHub lists for it), unpacked into `.openomsi-update` beside the program, and every
+-//!   program file it holds takes the place of the old one: the old one is renamed to
+-//!   `*.old-update` first (Windows lets a running .exe be renamed, not overwritten) and put
+-//!   back if anything fails. On macOS the running `.app` bundle is the one replaced,
+-//!   whatever the user named it. Files an earlier update installed that the new archive no
+-//!   longer has go as well (`.openomsi-files` lists them); nothing else in the folder - the
+-//!   mods, the content - is touched. Then the new launcher is started and this one ends; the
+-//!   next start deletes the `*.old-update` files.
+-//! * **Android**: the APK is downloaded and handed to the system's package installer
+-//!   (`OmsiActivity.installApk`, a PackageInstaller session). The system asks the player;
+-//!   Cancel comes back as an error here, Update replaces the app and starts it again.
+-//!
+-//! The network is not taken for granted: every request is tried again after a pause when it
+-//! fails (a timeout, a dropped connection, a 5xx), a download that breaks off goes on where it
+-//! stopped (an HTTP range) instead of starting over, and when the GitHub API does not answer
+-//! - or answers 403 because the address has used its 60 requests an hour - the check asks
+-//! github.com itself which release is the latest (`releases/latest` redirects to its tag) and
+-//! takes the file by its name, as `release.yml` names it.
+-//!
+-//! The game looks for an update too, in the background (`crate::update_watch`): it downloads it
+-//! during the session (`Updater::prefetch`) and says so over the navigator; the launcher then
+-//! installs the file already downloaded when the session ends.
+-//!
+-//! `OMSI_UPDATE_URL=<url or file:///…json>` points the check at another release description
+-//! (for testing: a file in the GitHub API's format whose asset URLs may be `file://` too),
+-//! `OMSI_NO_UPDATE=1` switches the check off. A development build (run from a cargo `target`
+-//! folder) checks, but never replaces itself. A pull request's test build (a version such as
+-//! `0.1.1313-pr1192`) is never offered a release: it would replace the build being tested.
+-
+-// (a phone installs through the system: the unpacking and swapping below are the computers')
+-#![cfg_attr(target_os = "android", allow(dead_code))]
+-
+-use std::io::{Read, Write};
+-use std::path::{Path, PathBuf};
+-use std::sync::{Arc, Mutex};
+-
+-/// The project on GitHub.
+-pub const REPO: &str = "OmsiModsBR/depot";
+-pub const REPO_URL: &str = "https://github.com/OmsiModsBR/depot";
+-const LATEST_API: &str = "https://api.github.com/repos/OmsiModsBR/depot/releases/latest";
+-
+-/// A release newer than this build, with the file for this platform.
+-#[derive(Clone, Debug, PartialEq)]
+-pub struct Release {
+-    pub version: String,
+-    /// The release's page on GitHub.
+-    pub page: String,
+-    pub notes: String,
+-    pub asset_name: String,
+-    pub asset_url: String,
+-    pub size: u64,
+-    /// `sha256:<hex>` as GitHub lists it for the asset (None for releases older than that).
+-    pub sha256: Option<String>,
+-}
+-
+-#[derive(Clone, Debug, PartialEq)]
+-pub enum Status {
+-    Idle,
+-    Checking,
+-    UpToDate,
+-    Available(Release),
+-    Downloading { release: Release, done: u64, total: u64 },
+-    /// Downloaded and checked, not installed (`Updater::prefetch`, the game's background
+-    /// download): `install` puts this file in place without fetching it again.
+-    Downloaded(Release),
+-    Installing(Release),
+-    /// Android: the system's installer has the APK and asks the player.
+-    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+-    WaitingForInstaller(Release),
+-    /// A computer: the new launcher is being started; this one ends.
+-    Restarting(Release),
+-    Failed(String),
+-}
+-
+-/// The launcher's updater: its state (shared with the worker thread), and whether the
+-/// player put the offer aside for this start.
+-pub struct Updater {
+-    status: Arc<Mutex<Status>>,
+-    pub dismissed: bool,
+-    /// Checked (or asked not to) once since the start.
+-    pub checked_once: bool,
+-    /// `update_auto` started the installation (once a start), and the new launcher was
+-    /// started.
+-    pub auto_started: bool,
+-    pub relaunched: bool,
+-    /// This start follows an update to this version (shown for a few seconds).
+-    pub updated: Option<(String, std::time::Instant)>,
+-    /// The last look for an update (the launcher looks again every half hour).
+-    pub last_check: Option<std::time::Instant>,
+-    /// The version the player put aside with "Not now": offered again only when a newer one
+-    /// comes, or when a session ends.
+-    pub dismissed_version: Option<String>,
+-    /// A game ran last frame (the launcher installs once it has ended).
+-    pub game_was_running: bool,
+-}
+-
+-impl Default for Updater {
+-    fn default() -> Self {
+-        Updater { status: Arc::new(Mutex::new(Status::Idle)), dismissed: false, checked_once: false, auto_started: false, relaunched: false, updated: None, last_check: None, dismissed_version: None, game_was_running: false }
+-    }
+-}
+-
+-fn lock(s: &Mutex<Status>) -> std::sync::MutexGuard<'_, Status> {
+-    s.lock().unwrap_or_else(|e| e.into_inner())
+-}
+-
+-impl Updater {
+-    pub fn status(&self) -> Status {
+-        lock(&self.status).clone()
+-    }
+-
+-    fn set(&self, s: Status) {
+-        *lock(&self.status) = s;
+-    }
+-
+-    /// Ask GitHub for the latest release (in the background).
+-    pub fn check(&mut self) {
+-        self.checked_once = true;
+-        self.last_check = Some(std::time::Instant::now());
+-        if matches!(self.status(), Status::Checking | Status::Downloading { .. } | Status::Downloaded(_) | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_)) {
+-            return;
+-        }
+-        self.dismissed = false;
+-        self.set(Status::Checking);
+-        let status = self.status.clone();
+-        std::thread::spawn(move || {
+-            let s = match latest() {
+-                Ok(Some(r)) => Status::Available(r),
+-                Ok(None) => Status::UpToDate,
+-                Err(e) => {
+-                    log::warn!("update check: {e:#}");
+-                    Status::Failed(format!("Could not check for updates: {e}"))
+-                }
+-            };
+-            log::info!("update check: {s:?}");
+-            *lock(&status) = s;
+-        });
+-    }
+-
+-    /// Download and install `r` (in the background).
+-    pub fn install(&mut self, r: Release) {
+-        if matches!(self.status(), Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_)) {
+-            return;
+-        }
+-        self.dismissed = false;
+-        self.set(if downloaded(&r) { Status::Installing(r.clone()) } else { Status::Downloading { release: r.clone(), done: 0, total: r.size } });
+-        let status = self.status.clone();
+-        std::thread::spawn(move || {
+-            let result = download_and_install(&r, &status);
+-            if let Err(e) = result {
+-                log::warn!("update to {}: {e:#}", r.version);
+-                *lock(&status) = Status::Failed(format!("Project Depot was not updated to {}: {e}", r.version));
+-            }
+-        });
+-    }
+-
+-    /// Download `r` without installing it (in the background, the game's way): the file
+-    /// waits in the data folder, checked, until `install` puts it in place.
+-    pub fn prefetch(&mut self, r: Release) {
+-        if matches!(self.status(), Status::Downloading { .. } | Status::Downloaded(_) | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_)) {
+-            return;
+-        }
+-        self.set(Status::Downloading { release: r.clone(), done: 0, total: r.size });
+-        let status = self.status.clone();
+-        std::thread::spawn(move || {
+-            let file = download_dir().join(&r.asset_name);
+-            match download(&r, &file, &status) {
+-                Ok(()) => {
+-                    log::info!("update {}: downloaded in the background ({})", r.version, file.display());
+-                    *lock(&status) = Status::Downloaded(r);
+-                }
+-                Err(e) => {
+-                    log::warn!("update {}: background download: {e:#}", r.version);
+-                    *lock(&status) = Status::Failed(format!("Project Depot {} could not be downloaded: {e}", r.version));
+-                }
+-            }
+-        });
+-    }
+-
+-    /// Android: what the system's installer answered (polled every frame while it has the
+-    /// APK). A computer: nothing to poll.
+-    pub fn poll(&mut self) {
+-        #[cfg(target_os = "android")]
+-        if let Status::WaitingForInstaller(r) = self.status() {
+-            match crate::android::install_status() {
+-                Some((3, _)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: the installation was cancelled.", r.version))),
+-                Some((4, msg)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: {}", r.version, if msg.is_empty() { "the system's installer refused the package." } else { msg.as_str() }))),
+-                Some((6, _)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: installing apps was not allowed for Project Depot (Settings → Apps → Project Depot → Install unknown apps).", r.version))),
+-                // (2, success: the system ends this process and starts the new app)
+-                _ => {}
+-            }
+-        }
+-    }
+-
+-    /// Forget a failure or an offer (the dialog's "Close" / "Not now").
+-    pub fn dismiss(&mut self) {
+-        self.dismissed = true;
+-        if let Status::Available(r) | Status::Downloaded(r) = self.status() {
+-            self.dismissed_version = Some(r.version);
+-        }
+-        if matches!(self.status(), Status::Failed(_) | Status::UpToDate) {
+-            self.set(Status::Idle);
+-        }
+-    }
+-}
+-
+-// --- versions ------------------------------------------------------------------------------
+-
+-/// This build's version.
+-pub fn current_version() -> &'static str {
+-    crate::startup::VERSION
+-}
+-
+-/// `0.1.7` / `v0.1.7` as numbers (missing parts are 0).
+-fn version_parts(v: &str) -> Vec<u64> {
+-    v.trim().trim_start_matches(['v', 'V']).split(['.', '-', '+']).map_while(|p| p.parse::<u64>().ok()).collect()
+-}
+-
+-/// A pull request's test build: `release.yml` gives it the version `<release>-pr<number>`.
+-pub fn is_test_build(version: &str) -> bool {
+-    version.contains("-pr")
+-}
+-
+-/// Whether `candidate` is a newer version than `current`.
+-pub fn newer(candidate: &str, current: &str) -> bool {
+-    let (mut a, mut b) = (version_parts(candidate), version_parts(current));
+-    let n = a.len().max(b.len());
+-    a.resize(n, 0);
+-    b.resize(n, 0);
+-    !a.is_empty() && a > b
+-}
+-
+-/// The release file for this platform, as `release.yml` names it.
+-pub fn asset_name(version: &str) -> Option<String> {
+-    let suffix = if cfg!(target_os = "android") {
+-        "android-arm64.apk"
+-    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+-        "windows-x64.zip"
+-    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+-        "windows-arm64.zip"
+-    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+-        "macos-arm64.zip"
+-    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+-        "macos-x64.zip"
+-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+-        "linux-x64.zip"
+-    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+-        "linux-arm64.zip"
+-    } else {
+-        return None;
+-    };
+-    Some(format!("depot-{version}-{suffix}"))
+-}
+-
+-// --- the release ----------------------------------------------------------------------------
+-
+-fn agent() -> ureq::Agent {
+-    // (a read waits 30 s at most - a stalled download goes on with a range request, so a
+-    // short wait costs nothing; the connection gets 20 s, enough for a slow line or a
+-    // resolver that tries IPv6 first)
+-    ureq::AgentBuilder::new()
+-        .timeout_connect(std::time::Duration::from_secs(20))
+-        .timeout_read(std::time::Duration::from_secs(30))
+-        .user_agent(&format!("depot/{} (updater)", current_version()))
+-        .build()
+-}
+-
+-/// How often a request is tried before it counts as failed, and the pauses between.
+-const TRIES: [u64; 3] = [0, 3, 10];
+-
+-/// Whether a failed request is worth another try: the network (a timeout, a dropped or
+-/// refused connection, a name not resolved for now) or the server's own trouble (429, 5xx).
+-fn transient(e: &ureq::Error) -> bool {
+-    match e {
+-        ureq::Error::Status(code, _) => *code == 429 || *code >= 500,
+-        ureq::Error::Transport(_) => true,
+-    }
+-}
+-
+-/// `f` until it works, at most `TRIES` times with the pauses between (only for failures
+-/// that may pass, see `transient`).
+-fn with_retries<T>(what: &str, mut f: impl FnMut() -> Result<T, ureq::Error>) -> Result<T, ureq::Error> {
+-    let mut last = None;
+-    for (k, pause) in TRIES.iter().enumerate() {
+-        if *pause > 0 {
+-            std::thread::sleep(std::time::Duration::from_secs(*pause));
+-        }
+-        match f() {
+-            Ok(v) => return Ok(v),
+-            Err(e) if transient(&e) && k + 1 < TRIES.len() => {
+-                log::info!("update: {what}: {} - trying again", short_error(&e));
+-                last = Some(e);
+-            }
+-            Err(e) => return Err(e),
+-        }
+-    }
+-    Err(last.expect("at least one try"))
+-}
+-
+-/// A URL's body: `file://` read from the disk (tests), anything else over HTTP(S).
+-fn fetch_text(url: &str) -> anyhow::Result<String> {
+-    if let Some(p) = url.strip_prefix("file://") {
+-        return Ok(std::fs::read_to_string(p)?);
+-    }
+-    let r = with_retries("asking GitHub", || agent().get(url).set("Accept", "application/vnd.github+json").call()).map_err(|e| anyhow::anyhow!("{}", short_error(&e)))?;
+-    Ok(r.into_string()?)
+-}
+-
+-fn short_error(e: &ureq::Error) -> String {
+-    match e {
+-        ureq::Error::Status(403 | 429, _) => "GitHub refused for now (too many requests from this address); it is tried again later".to_string(),
+-        ureq::Error::Status(code, _) => format!("the server answered {code}"),
+-        ureq::Error::Transport(t) => match t.kind() {
+-            ureq::ErrorKind::Dns => "the name github.com could not be looked up (no internet?)".to_string(),
+-            ureq::ErrorKind::ConnectionFailed => "no connection to GitHub (a firewall or a proxy?)".to_string(),
+-            ureq::ErrorKind::Io => format!("the connection to GitHub broke off or timed out ({})", t.message().unwrap_or("no answer")),
+-            k => format!("no connection ({k})"),
+-        },
+-    }
+-}
+-
+-/// The latest release when it is newer than this build and has a file for this platform.
+-pub fn latest() -> anyhow::Result<Option<Release>> {
+-    let url = omsi_cfg::env::var("OMSI_UPDATE_URL").unwrap_or_else(|_| LATEST_API.to_string());
+-    match fetch_text(&url).and_then(|t| Ok(serde_json::from_str::<serde_json::Value>(&t)?)) {
+-        Ok(v) => parse_release(&v, current_version()),
+-        // (the API: an address over its limit gets 403 for an hour, and some networks reach
+-        // github.com but not api.github.com - github.com says the latest tag as well)
+-        Err(e) if url == LATEST_API => {
+-            log::info!("update check: the GitHub API: {e:#} - asking github.com");
+-            latest_from_site().map_err(|e2| anyhow::anyhow!("{e} (and github.com: {e2})"))
+-        }
+-        Err(e) => Err(e),
+-    }
+-}
+-
+-/// The latest release as github.com's `releases/latest` redirect names it, with this
+-/// platform's file at the address `release.yml` publishes it (no SHA-256: GitHub's TLS is
+-/// all that vouches for it then, and the size is checked by the download itself).
+-fn latest_from_site() -> anyhow::Result<Option<Release>> {
+-    let page = format!("{REPO_URL}/releases/latest");
+-    let r = with_retries("asking github.com", || agent().head(&page).call()).map_err(|e| anyhow::anyhow!("{}", short_error(&e)))?;
+-    let tag = r.get_url().rsplit('/').next().unwrap_or("").to_string();
+-    if !tag.starts_with(['v', 'V']) {
+-        anyhow::bail!("github.com named no release ({})", r.get_url());
+-    }
+-    let version = tag.trim_start_matches(['v', 'V']).to_string();
+-    if is_test_build(current_version()) || !newer(&version, current_version()) {
+-        return Ok(None);
+-    }
+-    let Some(name) = asset_name(&version) else { return Ok(None) };
+-    let url = format!("{REPO_URL}/releases/download/{tag}/{name}");
+-    // (the files come a few minutes after the tag: not there yet, nothing to offer yet)
+-    let size = match with_retries("looking for the file", || agent().head(&url).call()) {
+-        Ok(r) => r.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0),
+-        Err(ureq::Error::Status(404, _)) => return Ok(None),
+-        Err(e) => anyhow::bail!("{}", short_error(&e)),
+-    };
+-    Ok(Some(Release { version, page: format!("{REPO_URL}/releases/tag/{tag}"), notes: String::new(), asset_name: name, asset_url: url, size, sha256: None }))
+-}
+-
+-/// A release described as the GitHub API does, when newer than `current`.
+-fn parse_release(v: &serde_json::Value, current: &str) -> anyhow::Result<Option<Release>> {
+-    let tag = v["tag_name"].as_str().ok_or_else(|| anyhow::anyhow!("the release has no tag"))?;
+-    let version = tag.trim_start_matches(['v', 'V']).to_string();
+-    if is_test_build(current) {
+-        log::info!("update check: {current} is a pull request's test build, {version} is not offered");
+-        return Ok(None);
+-    }
+-    if v["draft"].as_bool() == Some(true) || v["prerelease"].as_bool() == Some(true) || !newer(&version, current) {
+-        return Ok(None);
+-    }
+-    let Some(want) = asset_name(&version) else { return Ok(None) };
+-    let Some(a) = v["assets"].as_array().and_then(|a| a.iter().find(|a| a["name"].as_str() == Some(want.as_str()))) else {
+-        // (the release is still being built: its files come a few minutes after the tag)
+-        log::info!("update check: {version} has no {want} (yet)");
+-        return Ok(None);
+-    };
+-    Ok(Some(Release {
+-        version,
+-        page: v["html_url"].as_str().map(str::to_string).unwrap_or_else(|| format!("{REPO_URL}/releases/tag/{tag}")),
+-        notes: v["body"].as_str().unwrap_or("").to_string(),
+-        asset_name: want,
+-        asset_url: a["browser_download_url"].as_str().ok_or_else(|| anyhow::anyhow!("the release file has no address"))?.to_string(),
+-        size: a["size"].as_u64().unwrap_or(0),
+-        sha256: a["digest"].as_str().and_then(|d| d.strip_prefix("sha256:")).map(|h| h.to_ascii_lowercase()),
+-    }))
+-}
+-
+-/// Where downloads wait (the data folder: the program's own folder is only written when the
+-/// new files go in).
+-fn download_dir() -> PathBuf {
+-    let d = omsi_launcher_lib::data_dir().join("updates");
+-    let _ = std::fs::create_dir_all(&d);
+-    d
+-}
+-
+-/// The note beside a downloaded release file that says it is whole and checked (its size
+-/// and SHA-256), so that `install` can take it without fetching it again.
+-fn checked_note(file: &Path) -> PathBuf {
+-    file.with_extension("checked")
+-}
+-
+-/// Whether `r`'s file waits downloaded and checked in the data folder. A file fetched
+-/// without a SHA-256 to check it by (by github.com's way, see `latest_from_site`) is hashed
+-/// now when `r` brings one.
+-pub fn downloaded(r: &Release) -> bool {
+-    use sha2::Digest;
+-    let file = download_dir().join(&r.asset_name);
+-    let note = std::fs::read_to_string(checked_note(&file)).unwrap_or_default();
+-    let len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+-    let Some((n, sha)) = note.trim().split_once(' ') else { return false };
+-    if len == 0 || n.parse::<u64>().ok() != Some(len) || (r.size > 0 && r.size != len) {
+-        return false;
+-    }
+-    match (r.sha256.as_deref(), sha) {
+-        (None, _) => true,
+-        (Some(want), got) if got == want => true,
+-        (Some(want), "-") => {
+-            let Ok(mut f) = std::fs::File::open(&file) else { return false };
+-            let mut h = sha2::Sha256::new();
+-            if std::io::copy(&mut f, &mut h).is_err() {
+-                return false;
+-            }
+-            let got: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+-            got == want
+-        }
+-        _ => false,
+-    }
+-}
+-
+-/// Download the release file to `to`, with the progress in `status`, and check it. A break
+-/// in the middle (a timeout, a dropped connection) goes on from where it stopped, a few
+-/// times, before the download counts as failed.
+-fn download(r: &Release, to: &Path, status: &Mutex<Status>) -> anyhow::Result<()> {
+-    use sha2::Digest;
+-    if downloaded(r) {
+-        return Ok(());
+-    }
+-    let _ = std::fs::remove_file(checked_note(to));
+-    let part = to.with_extension("part");
+-    let mut hasher = sha2::Sha256::new();
+-    let mut out = std::fs::File::create(&part)?;
+-    let mut buf = vec![0u8; 256 * 1024];
+-    let mut done = 0u64;
+-    let mut total = r.size;
+-    // (a break costs a try; one that brought data in between gives the tries back)
+-    let mut breaks = 0;
+-    loop {
+-        let mut reader: Box<dyn Read> = if let Some(p) = r.asset_url.strip_prefix("file://") {
+-            let f = std::fs::File::open(p)?;
+-            total = f.metadata()?.len();
+-            Box::new(f)
+-        } else {
+-            let from = done;
+-            let resp = with_retries("downloading", || {
+-                let req = agent().get(&r.asset_url).set("Accept", "application/octet-stream");
+-                if from > 0 { req.set("Range", &format!("bytes={from}-")).call() } else { req.call() }
+-            })
+-            .map_err(|e| anyhow::anyhow!("{}", short_error(&e)))?;
+-            if done > 0 && resp.status() != 206 {
+-                // (the server sends the whole file again: start over)
+-                log::info!("update {}: the server does not continue a download; starting over", r.version);
+-                hasher = sha2::Sha256::new();
+-                out = std::fs::File::create(&part)?;
+-                done = 0;
+-            }
+-            if done == 0 {
+-                total = resp.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(r.size);
+-            }
+-            Box::new(resp.into_reader())
+-        };
+-        let before = done;
+-        let broke = loop {
+-            match reader.read(&mut buf) {
+-                Ok(0) => break None,
+-                Ok(n) => {
+-                    out.write_all(&buf[..n])?;
+-                    hasher.update(&buf[..n]);
+-                    done += n as u64;
+-                    *lock(status) = Status::Downloading { release: r.clone(), done, total: total.max(done) };
+-                }
+-                Err(e) => break Some(e),
+-            }
+-        };
+-        match broke {
+-            None if total == 0 || done >= total => break,
+-            // (ended early: the connection was cut without an error)
+-            None => {}
+-            Some(e) => log::info!("update {}: the download broke off at {} of {} bytes ({e}) - going on", r.version, done, total),
+-        }
+-        if done > before {
+-            breaks = 0;
+-        }
+-        breaks += 1;
+-        if breaks > 4 {
+-            anyhow::bail!("the download kept breaking off at {} of {} bytes - the connection to GitHub is too unsteady; it is tried again later", done, total);
+-        }
+-        if r.asset_url.starts_with("file://") {
+-            anyhow::bail!("the file ended at {} of {} bytes", done, total);
+-        }
+-        std::thread::sleep(std::time::Duration::from_secs(2));
+-    }
+-    out.flush()?;
+-    drop(out);
+-    if r.size > 0 && done != r.size {
+-        anyhow::bail!("the download stopped at {} of {} bytes", done, r.size);
+-    }
+-    if let Some(want) = &r.sha256 {
+-        let got: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+-        if &got != want {
+-            let _ = std::fs::remove_file(&part);
+-            anyhow::bail!("the downloaded file is damaged (SHA-256 {got}, GitHub lists {want})");
+-        }
+-    }
+-    std::fs::rename(&part, to)?;
+-    let _ = std::fs::write(checked_note(to), format!("{} {}", done, r.sha256.as_deref().unwrap_or("-")));
+-    Ok(())
+-}
+-
+-fn download_and_install(r: &Release, status: &Mutex<Status>) -> anyhow::Result<()> {
+-    // (on a computer: where it goes must be writable before 15 MB are fetched for nothing)
+-    #[cfg(not(target_os = "android"))]
+-    {
+-        let place = install_place()?;
+-        if !writable(&place.dir) {
+-            let admin = if cfg!(windows) { " (or start it once as administrator)" } else { "" };
+-            anyhow::bail!("the folder {} cannot be written. Put Project Depot in a folder of yours{admin} and update again", short_path(&place.dir));
+-        }
+-    }
+-    let file = download_dir().join(&r.asset_name);
+-    download(r, &file, status)?;
+-    log::info!("update {}: downloaded {}", r.version, file.display());
+-    *lock(status) = Status::Installing(r.clone());
+-    #[cfg(target_os = "android")]
+-    {
+-        crate::android::install_apk(&file)?;
+-        // (the new version is noted: the app that starts after the update says so)
+-        let _ = std::fs::write(download_dir().join("updating-to"), &r.version);
+-        *lock(status) = Status::WaitingForInstaller(r.clone());
+-        Ok(())
+-    }
+-    #[cfg(not(target_os = "android"))]
+-    {
+-        let place = install_place()?;
+-        install_archive(&file, &place)?;
+-        let _ = std::fs::write(download_dir().join("updating-to"), &r.version);
+-        let _ = std::fs::remove_file(&file);
+-        let _ = std::fs::remove_file(checked_note(&file));
+-        *lock(status) = Status::Restarting(r.clone());
+-        Ok(())
+-    }
+-}
+-
+-// --- installing on a computer -----------------------------------------------------------------
+-
+-/// Where this program is installed: its folder, and on macOS the `.app` bundle it runs in.
+-#[derive(Clone, Debug)]
+-pub struct Place {
+-    pub dir: PathBuf,
+-    pub bundle: Option<PathBuf>,
+-    pub exe: PathBuf,
+-}
+-
+-/// The installation this process runs from (refused for a development build).
+-pub fn install_place() -> anyhow::Result<Place> {
+-    // (taken once: on Linux `current_exe` follows the running file, so after the swap it
+-    // named `openomsi.old-update` - the old program, started again as "the new launcher" -
+-    // and after a second swap a deleted file that could not be started at all, #811)
+-    static EXE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+-    let exe = EXE
+-        .get_or_init(|| std::env::current_exe().ok().map(|e| program_path(&e.canonicalize().unwrap_or(e))))
+-        .clone()
+-        .ok_or_else(|| anyhow::anyhow!("the program's own path is not known"))?;
+-    if is_dev_build(&exe) {
+-        anyhow::bail!("this is a development build ({}); update it with git and cargo", short_path(&exe));
+-    }
+-    // (macOS runs an app opened straight from Downloads from a read-only copy elsewhere)
+-    if exe.to_string_lossy().contains("/AppTranslocation/") {
+-        anyhow::bail!("macOS runs Project Depot from a temporary read-only copy. Move depot.app into your Applications folder (or any folder), start it from there and update again");
+-    }
+-    let bundle = exe.ancestors().find(|p| p.extension().map(|e| e.eq_ignore_ascii_case("app")).unwrap_or(false)).map(Path::to_path_buf);
+-    let dir = bundle.as_deref().unwrap_or(&exe).parent().ok_or_else(|| anyhow::anyhow!("no folder around {}", exe.display()))?.to_path_buf();
+-    Ok(Place { dir, bundle, exe })
+-}
+-
+-/// The program's own path from what the system says the running file is: on Linux that
+-/// follows a rename (`openomsi.old-update`) and an unlinked file (`... (deleted)`), but the
+-/// program to start is the one at the original name.
+-fn program_path(exe: &Path) -> PathBuf {
+-    let mut s = exe.to_string_lossy().to_string();
+-    if let Some(t) = s.strip_suffix(" (deleted)") {
+-        s = t.to_string();
+-    }
+-    while let Some(t) = s.strip_suffix(OLD) {
+-        // (`openomsi.exe.2.old-update`: put aside beside an older one, see `aside_of`)
+-        s = match t.rsplit_once('.') {
+-            Some((head, n)) if !head.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => head.to_string(),
+-            _ => t.to_string(),
+-        };
+-    }
+-    if s == exe.to_string_lossy() {
+-        exe.to_path_buf()
+-    } else {
+-        PathBuf::from(s)
+-    }
+-}
+-
+-/// A path short enough for a dialog's line: its end, where the telling part is.
+-fn short_path(p: &Path) -> String {
+-    let s = p.display().to_string();
+-    let n = s.chars().count();
+-    if n <= 48 {
+-        s
+-    } else {
+-        format!("…{}", s.chars().skip(n - 46).collect::<String>())
+-    }
+-}
+-
+-/// Whether files can be put into `dir` (the check before anything is downloaded).
+-fn writable(dir: &Path) -> bool {
+-    let probe = dir.join(".depot-write-test");
+-    let ok = std::fs::write(&probe, b"").is_ok();
+-    let _ = std::fs::remove_file(&probe);
+-    ok
+-}
+-
+-/// Run from a cargo `target/<profile>` folder.
+-pub fn is_dev_build(exe: &Path) -> bool {
+-    let text = exe.to_string_lossy().to_ascii_lowercase();
+-    let parts: Vec<&str> = text.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+-    let profile = |s: &str| s == "release" || s == "debug";
+-    parts.windows(2).any(|w| w[0] == "target" && profile(w[1])) || parts.windows(3).any(|w| w[0] == "target" && profile(w[2]))
+-}
+-
+-const STAGING: &str = ".depot-update";
+-const MANIFEST: &str = ".depot-files";
+-const OLD: &str = ".old-update";
+-
+-fn old_of(p: &Path) -> PathBuf {
+-    let mut s = p.as_os_str().to_os_string();
+-    s.push(OLD);
+-    PathBuf::from(s)
+-}
+-
+-/// Where `target` is put aside: its `*.old-update`, or `*.<n>.old-update` while an earlier
+-/// one cannot be deleted - still loaded (the launcher's DirectX shader compiler,
+-/// `dxcompiler.dll`) or held by a virus scanner. Windows renames nothing onto a file that
+-/// is there, and the update failed with "cannot be replaced" (#1753).
+-fn aside_of(target: &Path) -> PathBuf {
+-    let first = old_of(target);
+-    remove_any(&first);
+-    if !first.exists() && !first.is_symlink() {
+-        return first;
+-    }
+-    for n in 2..100 {
+-        let mut s = target.as_os_str().to_os_string();
+-        s.push(format!(".{n}{OLD}"));
+-        let p = PathBuf::from(s);
+-        remove_any(&p);
+-        if !p.exists() && !p.is_symlink() {
+-            return p;
+-        }
+-    }
+-    first
+-}
+-
+-/// Unpack `zip` into `to` (a fresh folder), with the files' Unix modes and links.
+-fn unpack(zip: &Path, to: &Path) -> anyhow::Result<()> {
+-    let _ = std::fs::remove_dir_all(to);
+-    std::fs::create_dir_all(to)?;
+-    let mut a = zip::ZipArchive::new(std::fs::File::open(zip)?)?;
+-    for i in 0..a.len() {
+-        let mut e = a.by_index(i)?;
+-        let Some(rel) = e.enclosed_name() else { continue };
+-        // (macOS' resource forks, which ditto keeps beside the files)
+-        if rel.components().next().map(|c| c.as_os_str() == "__MACOSX").unwrap_or(false) || rel.file_name().map(|n| n.to_string_lossy().starts_with("._")).unwrap_or(false) {
+-            continue;
+-        }
+-        let out = to.join(&rel);
+-        if e.is_dir() {
+-            std::fs::create_dir_all(&out)?;
+-            continue;
+-        }
+-        if let Some(p) = out.parent() {
+-            std::fs::create_dir_all(p)?;
+-        }
+-        let mode = e.unix_mode();
+-        #[cfg(unix)]
+-        if let Some(m) = mode {
+-            if m & 0o170000 == 0o120000 {
+-                let mut target = String::new();
+-                e.read_to_string(&mut target)?;
+-                std::os::unix::fs::symlink(target, &out)?;
+-                continue;
+-            }
+-        }
+-        let mut f = std::fs::File::create(&out)?;
+-        std::io::copy(&mut e, &mut f)?;
+-        drop(f);
+-        #[cfg(unix)]
+-        if let Some(m) = mode {
+-            use std::os::unix::fs::PermissionsExt;
+-            std::fs::set_permissions(&out, std::fs::Permissions::from_mode(m & 0o7777))?;
+-        }
+-        #[cfg(not(unix))]
+-        let _ = mode;
+-    }
+-    Ok(())
+-}
+-
+-/// What the archive's top-level item `name` replaces in the installation.
+-fn target_of(name: &str, place: &Place) -> PathBuf {
+-    // (the macOS app, whatever the player named the one that runs)
+-    if name.to_ascii_lowercase().ends_with(".app") {
+-        if let Some(b) = &place.bundle {
+-            return b.clone();
+-        }
+-    }
+-    place.dir.join(name)
+-}
+-
+-/// Put the program files of the release archive `zip` into the installation at `place`.
+-pub fn install_archive(zip: &Path, place: &Place) -> anyhow::Result<()> {
+-    let staging = place.dir.join(STAGING);
+-    unpack(zip, &staging).map_err(|e| anyhow::anyhow!("could not unpack the update into {} ({e})", short_path(&place.dir)))?;
+-    let mut items: Vec<String> = std::fs::read_dir(&staging)?.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+-    items.sort();
+-    if items.is_empty() {
+-        anyhow::bail!("the update archive is empty");
+-    }
+-    // a program must be among them: a wrong archive must not replace anything
+-    let has_program = items.iter().any(|n| {
+-        let l = n.to_ascii_lowercase();
+-        l == "depot" || l == "depot.exe" || l.ends_with(".app")
+-    });
+-    if !has_program {
+-        anyhow::bail!("the update archive holds no Project Depot program");
+-    }
+-    // what an earlier update put here and this one no longer brings
+-    let before: Vec<String> = std::fs::read_to_string(place.dir.join(MANIFEST)).map(|t| t.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty() && !l.contains(['/', '\\']) && l != ".." && l != ".").collect()).unwrap_or_default();
+-    let gone: Vec<String> = before.into_iter().filter(|n| !items.iter().any(|i| i.eq_ignore_ascii_case(n))).collect();
+-    // swap: the old file aside, the new one in; undone completely on the first failure
+-    let mut moved: Vec<(PathBuf, Option<PathBuf>)> = Vec::new();
+-    let result = (|| -> anyhow::Result<()> {
+-        for name in &items {
+-            let target = target_of(name, place);
+-            let old = aside_of(&target);
+-            let had = target.exists() || target.is_symlink();
+-            if had {
+-                std::fs::rename(&target, &old).map_err(|e| anyhow::anyhow!("{} cannot be replaced ({e}) - is the folder writable?", short_path(&target)))?;
+-            }
+-            moved.push((target.clone(), had.then_some(old)));
+-            std::fs::rename(staging.join(name), &target).map_err(|e| anyhow::anyhow!("{} cannot be written ({e})", short_path(&target)))?;
+-        }
+-        for name in &gone {
+-            let target = place.dir.join(name);
+-            if target.exists() {
+-                let old = old_of(&target);
+-                remove_any(&old);
+-                std::fs::rename(&target, &old)?;
+-                moved.push((target, None));
+-            }
+-        }
+-        Ok(())
+-    })();
+-    if let Err(e) = result {
+-        // back as it was
+-        for (target, old) in moved.into_iter().rev() {
+-            match old {
+-                Some(old) => {
+-                    remove_any(&target);
+-                    let _ = std::fs::rename(&old, &target);
+-                }
+-                None => {
+-                    let o = old_of(&target);
+-                    if o.exists() {
+-                        let _ = std::fs::rename(&o, &target);
+-                    } else {
+-                        remove_any(&target);
+-                    }
+-                }
+-            }
+-        }
+-        let _ = std::fs::remove_dir_all(&staging);
+-        return Err(e);
+-    }
+-    let _ = std::fs::write(place.dir.join(MANIFEST), items.join("\n") + "\n");
+-    let _ = std::fs::remove_dir_all(&staging);
+-    log::info!("update: {} replaced in {}", items.join(", "), place.dir.display());
+-    Ok(())
+-}
+-
+-fn remove_any(p: &Path) {
+-    if p.is_dir() && !p.is_symlink() {
+-        let _ = std::fs::remove_dir_all(p);
+-    } else {
+-        let _ = std::fs::remove_file(p);
+-    }
+-}
+-
+-/// Start the new launcher (after `install_archive`): the program file at the same place -
+-/// on macOS inside the bundle, which makes it the app with its icon - with this process's
+-/// environment. (A script driving this launcher - `OMSI_LAUNCHER_INPUT` - is not handed on:
+-/// it was meant for this one.)
+-pub fn relaunch(place: &Place) -> anyhow::Result<()> {
+-    let mut cmd = std::process::Command::new(&place.exe);
+-    cmd.current_dir(&place.dir).env_remove("OMSI_LAUNCHER_INPUT");
+-    cmd.spawn()?;
+-    Ok(())
+-}
+-
+-/// At the start: the files an update set aside are no longer running - away with them
+-/// (tried for a while: on Windows the old program may take a moment to end).
+-pub fn cleanup_after_update() {
+-    let Ok(place) = install_place() else { return };
+-    std::thread::spawn(move || {
+-        for _ in 0..20 {
+-            let mut left = false;
+-            if let Ok(rd) = std::fs::read_dir(&place.dir) {
+-                for e in rd.flatten() {
+-                    let p = e.path();
+-                    if p.file_name().map(|n| n.to_string_lossy().ends_with(OLD)).unwrap_or(false) {
+-                        remove_any(&p);
+-                        left |= p.exists();
+-                    }
+-                }
+-            }
+-            let staging = place.dir.join(STAGING);
+-            if staging.exists() {
+-                remove_any(&staging);
+-            }
+-            if !left {
+-                return;
+-            }
+-            std::thread::sleep(std::time::Duration::from_millis(500));
+-        }
+-    });
+-}
+-
+-/// After an update: the version this start was updated to (once), for the launcher to say.
+-pub fn just_updated() -> Option<String> {
+-    let p = download_dir().join("updating-to");
+-    let v = std::fs::read_to_string(&p).ok()?.trim().to_string();
+-    if v.is_empty() {
+-        return None;
+-    }
+-    // (only when it is this build: a cancelled Android installation leaves the note)
+-    if !newer(&v, current_version()) {
+-        let _ = std::fs::remove_file(&p);
+-        // old APKs and archives go too
+-        if let Ok(rd) = std::fs::read_dir(download_dir()) {
+-            for e in rd.flatten() {
+-                let _ = std::fs::remove_file(e.path());
+-            }
+-        }
+-        return (v == current_version()).then_some(v);
+-    }
+-    None
+-}
+-
+-/// Open a web page in the system's browser.
+-pub fn open_url(url: &str) {
+-    #[cfg(target_os = "android")]
+-    crate::android::open_url(url);
+-    #[cfg(target_os = "macos")]
+-    let _ = std::process::Command::new("open").arg(url).spawn();
+-    #[cfg(target_os = "windows")]
+-    let _ = std::process::Command::new("rundll32").arg("url.dll,FileProtocolHandler").arg(url).spawn();
+-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use super::*;
+-
+-    #[test]
+-    fn versions_compare_by_number() {
+-        assert!(newer("0.1.8", "0.1.7"));
+-        assert!(newer("v0.1.10", "0.1.9"));
+-        assert!(newer("0.2.0", "0.1.99"));
+-        assert!(newer("1.0", "0.9.9"));
+-        assert!(!newer("0.1.7", "0.1.7"));
+-        assert!(!newer("v0.1.6", "0.1.7"));
+-        assert!(!newer("garbage", "0.1.7"));
+-    }
+-
+-    #[test]
+-    fn the_platform_file_of_a_github_release() {
+-        let name = asset_name("0.1.9").unwrap();
+-        let v = serde_json::json!({
+-            "tag_name": "v0.1.9", "html_url": "https://github.com/depot-Project/depot/releases/tag/v0.1.9", "body": "notes",
+-            "assets": [
+-                {"name": "depot-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
+-                {"name": name, "browser_download_url": "https://x/mine", "size": 42, "digest": "sha256:ABCDEF"}
+-            ]
+-        });
+-        let r = parse_release(&v, "0.1.7").unwrap().unwrap();
+-        assert_eq!((r.version.as_str(), r.asset_url.as_str(), r.size, r.sha256.as_deref()), ("0.1.9", "https://x/mine", 42, Some("abcdef")));
+-        // not newer, a draft, or without this platform's file: nothing to offer
+-        assert!(parse_release(&v, "0.1.9").unwrap().is_none());
+-        let mut d = v.clone();
+-        d["draft"] = serde_json::json!(true);
+-        assert!(parse_release(&d, "0.1.7").unwrap().is_none());
+-        let mut n = v.clone();
+-        n["assets"] = serde_json::json!([]);
+-        assert!(parse_release(&n, "0.1.7").unwrap().is_none());
+-        // a pull request's test build keeps itself, however new the release
+-        assert!(parse_release(&v, "0.1.7-pr12").unwrap().is_none());
+-        assert!(is_test_build("0.1.1313-pr1192") && !is_test_build("0.1.1313"));
+-    }
+-
+-    /// A server on this computer that cuts the first answer off half way (as a connection
+-    /// that times out does) and then answers range requests: the download goes on where it
+-    /// stopped, the file comes out whole and its SHA-256 checks.
+-    #[test]
+-    fn a_broken_download_goes_on_where_it_stopped() {
+-        use sha2::Digest;
+-        use std::io::{BufRead, BufReader};
+-        let data: Vec<u8> = (0..600_000u32).map(|i| (i * 7 + i / 13) as u8).collect();
+-        let sha: String = sha2::Sha256::digest(&data).iter().map(|b| format!("{b:02x}")).collect();
+-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+-        let port = listener.local_addr().unwrap().port();
+-        let served = data.clone();
+-        let ranges = Arc::new(Mutex::new(Vec::<u64>::new()));
+-        let seen = ranges.clone();
+-        std::thread::spawn(move || {
+-            for (n, conn) in listener.incoming().enumerate() {
+-                let Ok(mut c) = conn else { continue };
+-                let mut from = 0u64;
+-                let mut reader = BufReader::new(c.try_clone().unwrap());
+-                loop {
+-                    let mut line = String::new();
+-                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+-                        break;
+-                    }
+-                    if let Some(r) = line.to_ascii_lowercase().strip_prefix("range: bytes=") {
+-                        from = r.trim().trim_end_matches('-').parse().unwrap();
+-                    }
+-                }
+-                seen.lock().unwrap().push(from);
+-                let rest = &served[from as usize..];
+-                let head = if from > 0 {
+-                    format!("HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {from}-{}/{}\r\nConnection: close\r\n\r\n", rest.len(), served.len() - 1, served.len())
+-                } else {
+-                    format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", rest.len())
+-                };
+-                let _ = c.write_all(head.as_bytes());
+-                // (the first answer breaks off at 40 %)
+-                let send = if n == 0 { &rest[..rest.len() * 2 / 5] } else { rest };
+-                let _ = c.write_all(send);
+-            }
+-        });
+-        let r = Release {
+-            version: "9.9.9".into(),
+-            page: String::new(),
+-            notes: String::new(),
+-            asset_name: format!("depot-test-{}.zip", std::process::id()),
+-            asset_url: format!("http://127.0.0.1:{port}/file.zip"),
+-            size: data.len() as u64,
+-            sha256: Some(sha),
+-        };
+-        let to = std::env::temp_dir().join(&r.asset_name);
+-        let _ = std::fs::remove_file(&to);
+-        let status = Mutex::new(Status::Idle);
+-        download(&r, &to, &status).unwrap();
+-        assert_eq!(std::fs::read(&to).unwrap(), data);
+-        let r1 = ranges.lock().unwrap().clone();
+-        assert_eq!(r1.len(), 2, "one break, one range request: {r1:?}");
+-        assert_eq!(r1[1], (data.len() * 2 / 5) as u64);
+-        let _ = std::fs::remove_file(&to);
+-        let _ = std::fs::remove_file(checked_note(&to));
+-    }
+-
+-    #[test]
+-    fn the_program_path_survives_the_swap() {
+-        assert_eq!(program_path(Path::new("/home/me/depot/depot")), PathBuf::from("/home/me/depot/depot"));
+-        assert_eq!(program_path(Path::new("/home/me/depot/depot.old-update")), PathBuf::from("/home/me/depot/depot"));
+-        assert_eq!(program_path(Path::new("/home/me/depot/depot.old-update (deleted)")), PathBuf::from("/home/me/depot/depot"));
+-        assert_eq!(program_path(Path::new("C:\\Games\\depot\\depot.exe.old-update")), PathBuf::from("C:\\Games\\depot\\depot.exe"));
+-        assert_eq!(program_path(Path::new("C:\\Games\\depot\\depot.exe.2.old-update")), PathBuf::from("C:\\Games\\depot\\depot.exe"));
+-    }
+-
+-    #[test]
+-    fn development_builds_are_recognised() {
+-        assert!(is_dev_build(Path::new("/src/depot/target/release/depot")));
+-        assert!(is_dev_build(Path::new("C:\\src\\target\\x86_64-pc-windows-msvc\\release\\depot.exe")));
+-        assert!(!is_dev_build(Path::new("/Applications/depot.app/Contents/MacOS/depot")));
+-        assert!(!is_dev_build(Path::new("/home/me/Games/depot/depot")));
+-    }
+-
+-    /// The whole swap on a folder: the program files replaced, a file only the old version
+-    /// had removed, the player's things left alone, the old files set aside.
+-    #[test]
+-    fn an_archive_replaces_the_program_and_nothing_else() {
+-        let root = std::env::temp_dir().join(format!("omsi_update_{}", std::process::id()));
+-        let _ = std::fs::remove_dir_all(&root);
+-        let dir = root.join("install");
+-        std::fs::create_dir_all(dir.join("Vehicles/MyMod")).unwrap();
+-        std::fs::write(dir.join("depot"), "old game").unwrap();
+-        std::fs::write(dir.join("depot-launcher"), "old cli").unwrap();
+-        std::fs::write(dir.join("retired.dll"), "old").unwrap();
+-        std::fs::write(dir.join("Vehicles/MyMod/bus.bus"), "mod").unwrap();
+-        std::fs::write(dir.join(MANIFEST), "depot\ndepot-launcher\nretired.dll\n").unwrap();
+-        // the new release
+-        let zip_path = root.join("new.zip");
+-        {
+-            let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
+-            let o = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
+-            for (n, body) in [("depot", "new game"), ("depot-launcher", "new cli"), ("README.md", "readme")] {
+-                z.start_file(n, o).unwrap();
+-                z.write_all(body.as_bytes()).unwrap();
+-            }
+-            z.finish().unwrap();
+-        }
+-        let place = Place { dir: dir.clone(), bundle: None, exe: dir.join("depot") };
+-        install_archive(&zip_path, &place).unwrap();
+-        assert_eq!(std::fs::read_to_string(dir.join("depot")).unwrap(), "new game");
+-        assert_eq!(std::fs::read_to_string(dir.join("depot-launcher")).unwrap(), "new cli");
+-        assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "readme");
+-        assert!(!dir.join("retired.dll").exists());
+-        assert_eq!(std::fs::read_to_string(dir.join("Vehicles/MyMod/bus.bus")).unwrap(), "mod");
+-        assert_eq!(std::fs::read_to_string(dir.join("depot.old-update")).unwrap(), "old game");
+-        assert!(!dir.join(STAGING).exists());
+-        #[cfg(unix)]
+-        {
+-            use std::os::unix::fs::PermissionsExt;
+-            assert_eq!(std::fs::metadata(dir.join("depot")).unwrap().permissions().mode() & 0o777, 0o755);
+-        }
+-        // an archive without a program replaces nothing
+-        let bad = root.join("bad.zip");
+-        {
+-            let mut z = zip::ZipWriter::new(std::fs::File::create(&bad).unwrap());
+-            z.start_file("notes.txt", zip::write::SimpleFileOptions::default()).unwrap();
+-            z.write_all(b"x").unwrap();
+-            z.finish().unwrap();
+-        }
+-        assert!(install_archive(&bad, &place).is_err());
+-        assert_eq!(std::fs::read_to_string(dir.join("depot")).unwrap(), "new game");
+-        let _ = std::fs::remove_dir_all(&root);
+-    }
+-}
+diff --git a/crates/omsi-launcher-core/src/lib.rs b/crates/omsi-launcher-core/src/lib.rs
+index 45d1ee8..5796835 100644
+--- a/crates/omsi-launcher-core/src/lib.rs
++++ b/crates/omsi-launcher-core/src/lib.rs
+@@ -1967,12 +1967,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
+     v["steer_look_response"] = json!(0.25);
+     v["head_idle"] = json!(0.0);
+     v["head_idle_pace"] = json!(1.0);
+-    // updates from the GitHub releases: looked for when the launcher starts (and during a
+-    // session, said over the navigator), installed after asking (or at once); and whether
+-    // the game is counted on the website's "playing now"
+-    for (k, d) in [("update_check", json!(true)), ("update_auto", json!(false)), ("update_notify", json!(true)), ("presence", json!(true))] {
+-        v[k] = d;
+-    }
++    // whether the game is counted on the website's "playing now"
++    // (the update_* settings are gone: in-app updating is disabled, docs/removed/UPDATER_DISABLED.md)
++    v["presence"] = json!(true);
+     let Some(t) = text else { return v };
+     let mut version = 0;
+     let mut graphics: Option<&str> = None;
+@@ -2041,7 +2038,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
+             "seat_x" | "seat_y" | "seat_z" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
+             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
+             "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+-            "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
++            "nav_arrows" | "nav_ai" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "presence" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
+             "info_bar" => v[&k] = json!(b(val)),
+             "windy_trees" => v[&k] = json!(b(val)),
+             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
+@@ -2298,7 +2295,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
+         b("precision_zoom", false),
+     );
+     let text = format!(
+-        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nupdate_check={}\nupdate_auto={}\nupdate_notify={}\npresence={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
++        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\npresence={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+         match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
+             "tickets" => "tickets",
+             "off" => "off",
+@@ -2316,9 +2313,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
+         if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") { "omsi" } else { "all" },
+         b("shadow_blobs", true),
+         f("ctrl_deadzone", 0.0).clamp(0.0, 0.3),
+-        b("update_check", true),
+-        b("update_auto", false),
+-        b("update_notify", true),
+         b("presence", true),
+         b("reflections", true),
+         f("mouse_sens", 1.0).clamp(0.1, 3.0),
+@@ -3068,14 +3062,15 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn update_settings_round_trip() {
+-        // no file: look for updates, ask before installing
++    fn update_settings_are_gone_and_old_ones_do_nothing() {
++        // in-app updating is disabled: no update_* key is offered, read or written
+         let d = settings_from_text(None);
+-        assert_eq!((d["update_check"].clone(), d["update_auto"].clone()), (json!(true), json!(false)));
+-        let v = settings_from_text(Some("update_check=0\nupdate_auto=1\n"));
+-        assert_eq!((v["update_check"].clone(), v["update_auto"].clone()), (json!(false), json!(true)));
++        assert!(d.get("update_check").is_none() && d.get("update_auto").is_none() && d.get("update_notify").is_none());
++        let v = settings_from_text(Some("update_check=1\nupdate_auto=1\nupdate_notify=1\n"));
++        assert!(v.get("update_auto").is_none(), "an old update_auto must not turn into a setting");
+         let text = settings_to_text(&v, None);
+-        assert!(text.lines().any(|l| l == "update_check=0") && text.lines().any(|l| l == "update_auto=1"), "{text}");
++        assert!(!text.contains("update_"), "{text}");
++        assert!(text.lines().any(|l| l == "presence=1"), "{text}");
+     }
+ 
+     #[test]
+diff --git a/docs/ANDROID.md b/docs/ANDROID.md
+index a446a69..f20a5fc 100644
+--- a/docs/ANDROID.md
++++ b/docs/ANDROID.md
+@@ -108,13 +108,10 @@ installs over the previous one.
+ 
+ ## Updates
+ 
+-The launcher looks for a newer GitHub release when it starts (Settings → General → Updates) and offers
+-it; **Update now** downloads the APK and hands it to Android's package installer. The first
+-time Android asks to allow Project Depot to install apps. Then Android asks "Do you want to update
+-this app?": **Update** replaces Project Depot and starts it again, **Cancel** comes back to the
+-launcher as "not updated". The APK must be signed with the same key as the installed app
+-(release builds are).
++There are none inside the app: it does not check for, download or install new versions, and it
++no longer asks for the "install unknown apps" permission. Download a newer APK from the Releases
++page and install it over the old one yourself (it must be signed with the same key as the
++installed app; release builds are). See [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md).
+ 
+ `depot/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
+-environment (one `NAME=value` a line), for example `OMSI_UPDATE_URL=file:///sdcard/…/release.json`
+-to try an update from a local release description.
++environment (one `NAME=value` a line).
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 65903e3..f4a1068 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -1048,7 +1048,7 @@ Reverse engineered from Omsi.exe and put in place of our own guesses:
+   tile version 12, strings from version 4 (0x792ee7, 0x794892).
+ * **Touch wheel**: turns with the finger round its centre (120° of rim = full lock); the old
+   drag across ran off the screen at about 0.4 of the lock to the left.
+-* **Updates** (`updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the
++* **Updates** (DISABLED, see `docs/removed/UPDATER_DISABLED.md`; the code described here was removed; formerly `updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the
+   platform's asset by `release.yml`'s names, SHA-256 from the asset's `digest`. A computer
+   unpacks into `.openomsi-update` beside the program and swaps each top-level item (old one
+   renamed `*.old-update`, all undone on a failure; `.openomsi-files` lists what an update
+diff --git a/docs/USER_GUIDE.md b/docs/USER_GUIDE.md
+index f1d5ed7..10f1b8d 100644
+--- a/docs/USER_GUIDE.md
++++ b/docs/USER_GUIDE.md
+@@ -65,29 +65,11 @@ second (starter), **Shift+D** (drive), **.** (parking brake off), then throttle.
+ whole start-up by itself (main switch, ignition, starter, gearbox to neutral); `--autostart`
+ is the same thing for an offscreen run.
+ 
+-**Updates.** When the launcher starts it asks
+-[github.com/openOMSI-Project/openOMSI](https://github.com/openOMSI-Project/openOMSI) for the latest release
+-and, when there is a newer one, offers it: **Update now** downloads it (checked against the
+-SHA-256 GitHub lists), puts the new program in place of the old one and starts the launcher
+-again - on Windows `openomsi.exe` and `openomsi-launcher.exe`, on macOS the `openOMSI.app`
+-you started, on Linux the program files; mods, content and settings stay. On Android the
+-system's installer asks "Do you want to update this app?"; Update replaces openOMSI and starts
+-it again, Cancel leaves it as it was. Settings → General → Updates: look for updates at the start (on
+-by default), install without asking (off by default), Check now. A folder openOMSI cannot
+-write to (Program Files, an app opened straight from Downloads on macOS) is reported with
+-what to do. A download that breaks goes on where it stopped (up to four times), a request
+-that times out is tried again after 3 and 10 s, and when the GitHub API does not answer (or
+-says its hourly limit is reached) the latest tag is taken from github.com itself.
+-
+-The launcher also looks again every 30 minutes while it is open, and right after a game it
+-started ends. During a session the game looks a minute in and every hour after: a newer
+-version is downloaded in the background and a card over the navigator says so ("openOMSI
+-X is out"); when the session ends the launcher installs the file already downloaded (by
+-itself with "Install updates without asking", else it offers it), and never while a game
+-runs. "Tell me about a new version during a session" switches the cards off (the download
+-goes on). `OMSI_NO_UPDATE=1` switches the checks off; `OMSI_UPDATE_URL` points them at another
+-release description (GitHub's format; `file://` works, for testing - the game then looks after
+-3 s).
++**Updates.** There are none inside the program: it does not check for, download or install new
++versions (disabled on purpose, see [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md)).
++Settings → General → About shows the version you run and a link to the Releases page, which opens
++in your browser only when you click it. Download a new release yourself and unpack it over (or
++beside) the old one; mods, content and settings are not touched by that.
+ 
+ **Playing now.** While a session runs the game tells the project's counter (a Cloudflare
+ Worker, `services/presence/`) every ten minutes that it is being played, and says goodbye
+@@ -185,7 +167,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
+   mouse, wheel and pedals, with the way to the Controls page), *Camera* (the seat, the views,
+   head tracking, VR), *Sound*, *Gameplay* (passengers, traffic, collisions, the clock) and
+   *General* (language, the game's interface size, navigator, Discord Rich Presence,
+-  updates, and resetting every setting).
++  the version and the Releases link, and resetting every setting).
+   **Discord Rich Presence** shows the launcher while preparing a drive, then the map and
+   line above the vehicle type and tour while playing. The full vehicle name is in the logo's
+   tooltip. The launcher status returns when the game ends.
+diff --git a/docs/VERSIONING.md b/docs/VERSIONING.md
+index 9de8cfa..fec7811 100644
+--- a/docs/VERSIONING.md
++++ b/docs/VERSIONING.md
+@@ -72,7 +72,7 @@ A pull request's builds are test builds for anyone who wants to try the change:
+ 
+ * their version names the pull request, `<version>-pr<number>` (e.g. `0.1.1313-pr1192`),
+   in the launcher's side bar, `game.log` and crash reports;
+-* the updater never offers them a release, so a test build stays until it is deleted;
++* nothing in the program replaces them (in-app updating is disabled), so a test build stays until it is deleted;
+ * the Android one is an app of its own, *openOMSI PR #N* (`org.openomsi.game.pr`), that
+   installs beside the release and shares its `openOMSI` folder;
+ * [`.github/workflows/pr_builds.yml`](../.github/workflows/pr_builds.yml) comments on the

@@ -378,7 +378,7 @@ pub(crate) fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f6
 
 /// The application icon for the window (Windows and Linux; macOS takes the bundle's).
 pub(crate) fn window_icon() -> Option<winit::window::Icon> {
-    static PNG: &[u8] = include_bytes!("../../../assets/icons/app/openomsi-256.png");
+    static PNG: &[u8] = include_bytes!("../../../assets/icons/app/depot-256.png");
     let img = image::load_from_memory(PNG).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()

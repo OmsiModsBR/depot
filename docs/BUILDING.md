@@ -1,6 +1,6 @@
 # Building from source
 
-Releases for every commit are on the [Releases](https://github.com/openOMSI-Project/openOMSI/releases)
+Releases for every commit are on the [Releases](https://github.com/OmsiModsBR/depot/releases)
 page; build from source only to work on openOMSI itself.
 
 All scripts live in `scripts/`, run from any folder (paths with spaces are fine) and put the
@@ -49,12 +49,12 @@ Plain cargo works too: `cargo build --release -p omsi-app` builds `target/releas
 
 ## Icons
 
-The application icon is made from the logos in `assets/logos`:
-`assets/icons/app/openomsi.svg` (Windows/Linux) and `openomsi-macos.svg` (macOS, with the
-standard margin). `openomsi.ico` is embedded into the Windows executables at build time
-(`build.rs`, `winresource`), `openomsi.icns` goes into the macOS bundle, and
-`openomsi-256.png` is the window icon on Windows and Linux. To regenerate them after changing
-the SVGs (needs `cargo install resvg`):
+The application icon is made from the Project Depot logos in `assets/logos` (`pd-short-black.png` is
+the source of the icon): `assets/icons/app/depot.ico` is embedded into the Windows executables at
+build time (`build.rs`, `winresource`), `depot.icns` (standard margin, rounded) goes into the macOS
+bundle, `depot-256.png` is the window icon on Windows and Linux, and the Android launcher icons are
+in `android/res/mipmap-*`. To regenerate them after changing the source PNG (needs Python 3 with
+Pillow):
 
 ```sh
 scripts/make-icons.sh
