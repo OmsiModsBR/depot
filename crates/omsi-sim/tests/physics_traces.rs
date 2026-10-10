@@ -241,6 +241,7 @@ scenarios!(
     b4_kinematic_vehicle,
     b5_ai_vehicle_follows_a_lane,
     b6_kinematic_vehicle_crash,
+    b7_articulated_vehicle_bends_on_ice,
 );
 
 mod scenarios {
@@ -690,7 +691,7 @@ mod scenarios {
         t.text
     }
 
-    // -- B1..B6: the vehicle, through its script variables --
+    // -- B1..B7: the vehicle, through its script variables --
 
     const WHEEL_VARS: [&str; 6] = ["Wheel_Rotation", "Wheel_RotationSpeed", "Axle_Steering", "Axle_Suspension", "Axle_Brakeforce", "Axle_Springfactor"];
 
@@ -928,6 +929,27 @@ mod scenarios {
         frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 420, 1.0 / 60.0, |_| Script { m_wheel: 9000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, |_| Script { m_wheel: -6000.0, steering: -0.5, ..Default::default() });
+        t.text
+    }
+
+    /// B2's articulated bus on ice, into a bend at 13 km/h: the front section holds, and the
+    /// rear one, its one axle on its own turning line, holds or slides by the pull of the bend
+    /// its joint turns it on.
+    pub fn b7_articulated_vehicle_bends_on_ice() -> String {
+        let mut t = Trace::default();
+        let names = var_names(3);
+        let front = vehicle_type(section(&[(3.2, false), (-2.6, false)], 8.0), 3);
+        let rear = vehicle_type(section(&[(-0.4, true)], 7.2), 3);
+        let mut v = instance(front);
+        v.host.street_cond = 1.0;
+        v.host.temperature = -5.0;
+        v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
+        v.attach_trailer(rear);
+        v.enable_rigid_body();
+        let hold_13 = |steering: f32| move |v: &VehicleInstance| Script { m_wheel: if v.motion().speed < 13.0 / 3.6 { 3500.0 } else { 0.0 }, steering, ..Default::default() };
+        frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
+        frames(&mut t, &mut v, &names, 600, 1.0 / 60.0, hold_13(0.0));
+        frames(&mut t, &mut v, &names, 480, 1.0 / 60.0, hold_13(0.7));
         t.text
     }
 }
