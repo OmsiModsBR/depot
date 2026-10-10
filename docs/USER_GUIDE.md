@@ -505,6 +505,14 @@ made for the Sound Extension plugin: station button *n* plays the *n*-th station
 knob `SndVol_Radio` sets how loud). Switch the radio on in the cockpit as in OMSI; the
 screen says which station plays and the song when the stream names it.
 
+**Which station addresses play.** Only `https://` addresses of public hosts (also for the
+playlists and redirects a station names). Addresses of this computer or the local network
+(`localhost`, `127.x`, `10.x`, `192.168.x`, `169.254.x`, `.local` names, ...) and addresses with
+`user:password@` are refused, because a map's `radio.cfg` could otherwise make the game talk to
+your router or local services; the radio display says "blocked: ..." and `game.log` the reason.
+Plain `http://` stations are refused too unless you start the game with `OMSI_RADIO_ALLOW_HTTP=1`
+(the private ranges stay blocked even then).
+
 **Your stations.** `~/.openomsi/radio.cfg` (on Windows `C:\Users\<you>\.openomsi\radio.cfg`)
 is written with a few stations the first time the game starts. One station a line, the
 first line on the first button:

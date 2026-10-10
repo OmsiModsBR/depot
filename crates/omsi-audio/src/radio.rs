@@ -5,6 +5,7 @@
 //! the sound and kept as the status, and a connection that drops is made again.
 
 use crate::stream::StreamBuf;
+use crate::url_guard;
 use std::io::Read;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,9 +20,15 @@ use symphonia::core::probe::Hint;
 /// to fill a player's buffer) is simply read more slowly.
 const AHEAD: f32 = 8.0;
 
-/// Start playing `url` into a new buffer; `close()` on it ends the reader.
+/// Start playing `url` into a new buffer; `close()` on it ends the reader. An address that
+/// is not allowed (see `url_guard`: https only, a public host) plays nothing and says why.
 pub fn open(url: &str) -> Arc<StreamBuf> {
     let buf = Arc::new(StreamBuf::default());
+    if let Err(why) = url_guard::check_stream_url(url, url_guard::http_allowed()) {
+        log::warn!("radio {url}: not played: {why}");
+        buf.set_status(format!("blocked: {why}"));
+        return buf;
+    }
     let (b, url) = (buf.clone(), url.to_string());
     let spawned = std::thread::Builder::new()
         .name("radio".into())
@@ -37,6 +44,10 @@ fn run(buf: &StreamBuf, url: &str) {
         .timeout_connect(Duration::from_secs(8))
         .timeout_read(Duration::from_secs(15))
         .user_agent(concat!("depot/", env!("CARGO_PKG_VERSION")))
+        // (redirects are followed by `resolve`, which checks every hop; the resolver refuses
+        // names that point at a private address)
+        .redirects(0)
+        .resolver(url_guard::PublicOnly)
         .build();
     let mut wait = 2u64;
     while !buf.is_closed() {
@@ -65,8 +76,15 @@ fn run(buf: &StreamBuf, url: &str) {
 /// Where the sound is: `url` itself, or the first address of the playlist it names.
 fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
     let mut url = url.to_string();
-    for _ in 0..4 {
+    let allow_http = url_guard::http_allowed();
+    for _ in 0..8 {
+        url_guard::check_stream_url(&url, allow_http).map_err(|why| anyhow::anyhow!("{url}: {why}"))?;
         let resp = agent.get(&url).set("Icy-MetaData", "1").call()?;
+        if (300..400).contains(&resp.status()) {
+            let to = resp.header("location").ok_or_else(|| anyhow::anyhow!("a redirect without a location"))?;
+            url = absolute(&url, to);
+            continue;
+        }
         let ctype = resp.content_type().to_ascii_lowercase();
         let lower = url.to_ascii_lowercase();
         let playlist = ctype.contains("mpegurl")
@@ -90,6 +108,25 @@ fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
         url = next.to_string();
     }
     anyhow::bail!("playlists nested too deep")
+}
+
+/// A redirect's `Location` made absolute against the address it came from (an absolute
+/// address, a path on the same host, or a path relative to the old one).
+fn absolute(from: &str, to: &str) -> String {
+    let to = to.trim();
+    if to.contains("://") {
+        return to.to_string();
+    }
+    let Some((scheme, rest)) = from.split_once("://") else { return to.to_string() };
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let origin = format!("{scheme}://{}", &rest[..end]);
+    if let Some(path) = to.strip_prefix('/') {
+        // ("//host/path" names another host: left to the check, which sees no scheme)
+        if path.starts_with('/') { return to.to_string() }
+        return format!("{origin}/{path}");
+    }
+    let dir = rest[end..].split(['?', '#']).next().unwrap_or("").rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+    format!("{origin}{dir}/{to}")
 }
 
 fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
@@ -204,5 +241,30 @@ impl Read for IcyReader {
         let got = self.inner.read(&mut out[..want])?;
         self.left -= got;
         Ok(got)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_blocked_address_plays_nothing_and_says_why() {
+        for url in ["http://127.0.0.1:8080/a.mp3", "https://192.168.1.1/a.mp3", "file:///etc/passwd", "https://169.254.169.254/latest"] {
+            let buf = open(url);
+            let status = buf.status();
+            assert!(status.starts_with("blocked: "), "{url}: {status:?}");
+        }
+    }
+
+    #[test]
+    fn redirects_are_made_absolute() {
+        assert_eq!(absolute("https://a.example/x/y.m3u", "https://b.example/z"), "https://b.example/z");
+        assert_eq!(absolute("https://a.example/x/y.m3u?q=1", "/live"), "https://a.example/live");
+        assert_eq!(absolute("https://a.example:8443/x/y.m3u", "stream.mp3"), "https://a.example:8443/x/stream.mp3");
+        assert_eq!(absolute("https://a.example", "/live"), "https://a.example/live");
+        // a redirect to the inside stays visible to the check
+        assert!(url_guard::check_stream_url(&absolute("https://a.example/x", "http://127.0.0.1/admin"), true).is_err());
+        assert!(url_guard::check_stream_url(&absolute("https://a.example/x", "//127.0.0.1/admin"), true).is_err());
     }
 }
