@@ -307,6 +307,7 @@ impl Editor {
         let size = omsi_map::tile_size();
         let target = world.ground_terrain(at.x, at.y).unwrap_or(at.z);
         let mut changed = Vec::new();
+        let mut unreadable: Vec<String> = Vec::new();
         let mut edits = world.terrain_edits.lock();
         let (tx0, tx1) = (((at.x - r) / size).floor() as i32, ((at.x + r) / size).floor() as i32);
         let (ty0, ty1) = (((at.y - r) / size).floor() as i32, ((at.y + r) / size).floor() as i32);
@@ -314,7 +315,17 @@ impl Editor {
             for ty in ty0..=ty1 {
                 if !edits.contains_key(&(tx, ty)) {
                     let Some(src) = world.tile_source(tx, ty) else { continue };
-                    let t = omsi_map::Terrain::load(&crate::scene::tile_companion(&src, ".terrain")).unwrap_or_else(|_| omsi_map::Terrain::flat());
+                    let file = crate::scene::tile_companion(&src, ".terrain");
+                    let t = match load_ground(&file) {
+                        Ok(t) => t,
+                        // a file that cannot be read is not "no ground": leave the tile
+                        // alone, or Ctrl+S would write a flat one over the player's copy
+                        Err(e) => {
+                            log::warn!("map editor: tile ({tx}, {ty}) left unedited: {e}");
+                            unreadable.push(e);
+                            continue;
+                        }
+                    };
                     edits.insert((tx, ty), t);
                 }
                 let t = edits.get_mut(&(tx, ty)).unwrap();
@@ -328,7 +339,8 @@ impl Editor {
             Action::Ground(d) => format!("Ground lowered {:.2} m", -d),
             _ => format!("Ground flattened to {:.2} m", target),
         };
-        (format!("{what} (brush {:.1} m, {} tile(s)) - Ctrl+S saves", r, changed.len()), changed)
+        let warn = if unreadable.is_empty() { String::new() } else { format!(" - NOT EDITED, unreadable ground: {}", unreadable.join("; ")) };
+        (format!("{what} (brush {:.1} m, {} tile(s)) - Ctrl+S saves{warn}", r, changed.len()), changed)
     }
 
     /// Write every tile with edits as a copy under `content` (the map's own folder there),
@@ -369,7 +381,7 @@ impl Editor {
             }
             std::fs::create_dir_all(out.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
             let data = encode(&new_text, enc);
-            std::fs::write(&out, data).map_err(|e| format!("{}: {e}", out.display()))?;
+            write_with_backup(&out, &data).map_err(|e| format!("{}: {e}", out.display()))?;
             log::info!("object editor: {} objects of tile ({tx}, {ty}) changed, written to {}", n, out.display());
             written.push(out);
         }
@@ -385,12 +397,47 @@ impl Editor {
                 }
             }
             std::fs::create_dir_all(out.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-            std::fs::write(&out, t.to_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
+            write_with_backup(&out, &t.to_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
             log::info!("map editor: the ground of tile ({tx}, {ty}) written to {}", out.display());
             written.push(out);
         }
         Ok(written)
     }
+}
+
+/// The ground a tile starts from: its `.terrain` file, or a flat one when there is no such
+/// file. A file that exists but cannot be read is an error (never silently a flat ground).
+fn load_ground(file: &Path) -> Result<omsi_map::Terrain, String> {
+    match omsi_map::Terrain::load(file) {
+        Ok(t) => Ok(t),
+        Err(_) if !omsi_cfg::vfs::exists(file) => Ok(omsi_map::Terrain::flat()),
+        Err(e) => Err(format!("{}: {e}", file.display())),
+    }
+}
+
+/// Write `data` to `path` without ever leaving it half written: into `path.tmp`, flushed to
+/// disk, then renamed over `path`; the file it replaces is first copied to `path.bak`.
+fn write_with_backup(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let sibling = |suffix: &str| {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(suffix);
+        path.with_file_name(name)
+    };
+    if path.exists() {
+        std::fs::copy(path, sibling(".bak"))?;
+    }
+    let tmp = sibling(".tmp");
+    let result = (|| {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(data)?;
+        f.sync_all()?;
+        std::fs::rename(&tmp, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
 
 /// Shape one tile's ground (its origin `o`) about `at` within `r`: raise by `Ground`'s
@@ -626,6 +673,32 @@ pub fn action_for(code: winit::keyboard::KeyCode, shift: bool, ctrl: bool, yaw: 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_unreadable_ground_is_an_error_and_a_missing_one_is_flat() {
+        let dir = std::env::temp_dir().join(format!("depot-editor-ground-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("bad.map.terrain");
+        std::fs::write(&bad, [60u8, 0, 0, 0, 1, 2]).unwrap();
+        assert!(super::load_ground(&bad).is_err());
+        let flat = super::load_ground(&dir.join("none.map.terrain")).unwrap();
+        assert_eq!(flat, omsi_map::Terrain::flat());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn writes_are_atomic_and_keep_a_backup() {
+        let dir = std::env::temp_dir().join(format!("depot-editor-write-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("t.map.terrain");
+        super::write_with_backup(&f, b"one").unwrap();
+        assert!(!dir.join("t.map.terrain.bak").exists(), "nothing to back up the first time");
+        super::write_with_backup(&f, b"two").unwrap();
+        assert_eq!(std::fs::read(&f).unwrap(), b"two");
+        assert_eq!(std::fs::read(dir.join("t.map.terrain.bak")).unwrap(), b"one");
+        assert!(!dir.join("t.map.terrain.tmp").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     use super::*;
 
     #[test]
