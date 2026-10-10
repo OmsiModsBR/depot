@@ -181,7 +181,7 @@ pub struct SceneryObject {
 }
 
 fn read_list(r: &mut omsi_cfg::CfgReader, base: &Path) -> Vec<PathBuf> {
-    let n = r.usize();
+    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
     (0..n).map(|_| omsi_cfg::resolve_path(base, r.str())).filter(|p| !p.as_os_str().is_empty()).collect()
 }
 
@@ -270,7 +270,7 @@ impl SceneryObject {
             match k.as_str() {
                 "friendlyname" => o.friendly_name = r.str().to_string(),
                 "groups" => {
-                    let n = r.usize();
+                    let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
                     o.groups = (0..n).map(|_| r.str().to_string()).collect();
                 }
                 "onlyeditor" => o.only_editor = true,
