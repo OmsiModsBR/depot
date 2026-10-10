@@ -54,6 +54,18 @@ static MOUNTS: RwLock<Vec<Arc<ZipArchive>>> = RwLock::new(Vec::new());
 /// gigabytes).
 const MAX_ENTRY: u64 = 1 << 31;
 
+/// The longest entry name (bytes) that is indexed. Windows paths stop at 260 characters; a
+/// name past this is a crafted archive and would make the indexing cost grow with its square.
+const MAX_NAME_LEN: usize = 1024;
+
+/// The deepest entry path (components) that is indexed.
+const MAX_NAME_DEPTH: usize = 64;
+
+/// Whether an entry name is within the indexing caps (`/` separators already).
+fn name_within_caps(name: &str) -> bool {
+    name.len() <= MAX_NAME_LEN && name.split('/').filter(|c| !c.is_empty()).count() <= MAX_NAME_DEPTH
+}
+
 fn le16(b: &[u8], o: usize) -> u16 {
     u16::from_le_bytes([b[o], b[o + 1]])
 }
@@ -131,7 +143,9 @@ impl ZipArchive {
             return Err(bad(format!("{}: central directory out of range", path.display())));
         }
         let cd = archive.read_at(cd_offset, cd_size as usize)?;
+        // the count field is attacker-controlled: an entry takes at least 46 bytes
         let mut raw: Vec<(String, ZipEntry, bool)> = Vec::with_capacity((count as usize).min(cd.len() / 46));
+        let mut skipped_names = 0usize;
         let mut p = 0usize;
         while p + 46 <= cd.len() && le32(&cd, p) == 0x0201_4b50 {
             let flags = le16(&cd, p + 8);
@@ -176,8 +190,18 @@ impl ZipArchive {
             }
             p = end;
             let name = name.replace('\\', "/");
+            if !name_within_caps(&name) {
+                skipped_names += 1;
+                if skipped_names <= 5 {
+                    log::warn!("zip {}: entry name of {} bytes skipped (limit {MAX_NAME_LEN} bytes, {MAX_NAME_DEPTH} levels)", path.display(), name.len());
+                }
+                continue;
+            }
             let is_dir = name.ends_with('/');
             raw.push((name, ZipEntry { method, flags, crc, compressed, size, header }, is_dir));
+        }
+        if skipped_names > 5 {
+            log::warn!("zip {}: {skipped_names} over-long entry names skipped in total", path.display());
         }
         let mut archive = archive;
         archive.prefix = Self::content_prefix(raw.iter().map(|(n, _, _)| n.as_str()));
@@ -191,7 +215,10 @@ impl ZipArchive {
                 continue;
             }
             // the original spelling of every component, for listings
-            let rel: Vec<&str> = name[archive.prefix.len()..].split('/').filter(|c| !c.is_empty() && *c != ".").collect();
+            // (`to_lowercase` can change the byte length, e.g. U+212A Kelvin sign -> `k`, so the
+            // prefix length of the lower-case form may not be a char boundary of the original)
+            let rel_src = name.get(archive.prefix.len()..).unwrap_or(rel_lower.as_str());
+            let rel: Vec<&str> = rel_src.split('/').filter(|c| !c.is_empty() && *c != ".").collect();
             let lower_parts: Vec<&str> = rel_lower.split('/').collect();
             if rel.len() != lower_parts.len() {
                 continue;
@@ -224,6 +251,7 @@ impl ZipArchive {
         let is_content = |c: &str| crate::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(c));
         // folder (lower case) -> (spelling, lower-case names of its sub-folders)
         let mut children: HashMap<String, (String, Vec<String>)> = HashMap::new();
+        let mut child_seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
         for n in names {
             let parts: Vec<&str> = n.split('/').filter(|c| !c.is_empty()).collect();
             let folders = if n.ends_with('/') { parts.len() } else { parts.len().saturating_sub(1) };
@@ -234,7 +262,7 @@ impl ZipArchive {
                 let dir: String = parts[..k].iter().map(|c| format!("{c}/")).collect();
                 let e = children.entry(dir.to_lowercase()).or_insert_with(|| (dir.clone(), Vec::new()));
                 let child = parts[k].to_lowercase();
-                if !e.1.contains(&child) {
+                if child_seen.insert((dir.to_lowercase(), child.clone())) {
                     e.1.push(child);
                 }
             }
@@ -612,6 +640,26 @@ mod tests {
         out.extend_from_slice(&cd_offset.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
         std::fs::write(path, out).unwrap();
+    }
+
+    #[test]
+    fn kelvin_sign_and_long_names_do_not_panic() {
+        let dir = std::env::temp_dir().join(format!("omsi-cfg-zip-kelvin-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip = dir.join("k.zip");
+        let long = format!("k/maps/{}.cfg", "a".repeat(MAX_NAME_LEN));
+        let deep = format!("k/maps/{}x.cfg", "d/".repeat(MAX_NAME_DEPTH + 1));
+        let files: Vec<(&str, Vec<u8>, bool)> = vec![
+            ("k/maps/a/global.cfg", b"x".to_vec(), false),
+            ("\u{212A}/maps/b/global.cfg", b"y".to_vec(), false),
+            (long.as_str(), b"z".to_vec(), false),
+            (deep.as_str(), b"z".to_vec(), false),
+        ];
+        write_zip(&zip, &files);
+        let a = ZipArchive::open(&zip).unwrap();
+        assert_eq!(a.file_count(), 2, "over-cap names are skipped");
+        assert!(a.read("maps/a/global.cfg").is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
