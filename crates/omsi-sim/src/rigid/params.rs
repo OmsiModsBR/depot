@@ -92,9 +92,6 @@ pub(super) const GRIPPED_ALONG: f32 = 1.0;
 pub(super) const HOLD_REACH: f32 = 8.0;
 /// The tyres hold again once the sideways speed at every tyre is under this (m/s). *OMSI*
 pub(super) const REHOLD_SPEED: f32 = 0.1;
-/// Driving and braking pitch the body only above this speed (m/s): not while the bus
-/// stands with its brakes holding. *tuned*
-pub(super) const PITCH_SPEED: f32 = 0.2;
 
 // The ground under a tyre.
 
