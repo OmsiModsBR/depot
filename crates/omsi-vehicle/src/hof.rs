@@ -213,12 +213,11 @@ impl Hof {
                     let route = r.str().to_string();
                     let line = r.str().to_string();
                     h.info_trips.push(InfoTrip { code, name, route, line, extra: Vec::new() });
-                    // every trip has a stop list, empty until one follows (THof.LoadFromFile
-                    // 0x7ea142), so that the lists stay in step with the trips
+                    // every trip has a stop list, empty until one follows so that the lists stay in step with the trips
                     h.info_busstop_lists.push(Vec::new());
                 }
                 "infosystem_busstop_list" => {
-                    // the list of the trip read last (0x7ea16f: DynArrayHigh of the trips);
+                    // the list of the trip read last;
                     // pushed as one more list, a trip without one (the IVU data routes of
                     // some depot files) gave every later trip the stops of the one before
                     let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);

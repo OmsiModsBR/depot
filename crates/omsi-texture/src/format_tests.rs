@@ -1,5 +1,5 @@
-//! Every picture variant D3DX 9 reads for Omsi.exe (`D3DXCreateTextureFromFileExA` with
-//! `D3DFMT_UNKNOWN`, no colour key, 0x7f8630), written here as small files and decoded with
+//! Every picture variant D3DX 9 reads for OMSI (`D3DXCreateTextureFromFileExA` with
+//! `D3DFMT_UNKNOWN`, no colour key), written here as small files and decoded with
 //! [`crate::decode_bytes`]. The pixel each test looks at is the one D3DX hands over: the
 //! colour in R, G, B order and the alpha of the format it picks (255 where that format has
 //! no alpha: R8G8B8, X8R8G8B8, X1R5G5B5, R5G6B5, L8, JPEG).

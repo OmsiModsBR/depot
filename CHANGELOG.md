@@ -29,6 +29,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
 ### Changed
+- the smaller crates (geometry, map, vehicle, model, texture, content, cfg, scenery, script, launcher-core, o3d, audio example): comments cleaned of addresses, offsets and mentions of the reference
 - omsi-app: comments cleaned of addresses, offsets and mentions of the reference
 - omsi-sim: comments cleaned of addresses, offsets and mentions of the reference
   executable; they describe observable behaviour only. Comment text only, no code change.

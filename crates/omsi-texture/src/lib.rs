@@ -245,7 +245,7 @@ pub fn season_folder() -> Option<String> {
 }
 
 /// The folders a texture's variant is looked for in under the season `head`, best first,
-/// as Omsi.exe picks it (0x7f910c): in snow the snowy roads of `WinterSnowfall` when the
+/// as OMSI picks it: in snow the snowy roads of `WinterSnowfall` when the
 /// weather has snow on the road, else `WinterSnow`, and a texture with no snow picture
 /// takes its `Winter` one, else its `Fall` one; in winter `Winter`, else `Fall`. (With the
 /// one folder alone, a road whose snowy picture is in `WinterSnowfall` - the stock asphalt
@@ -694,7 +694,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// In snow a texture takes the variant Omsi.exe takes: the stock asphalt's snowy
+    /// In snow a texture takes the variant OMSI takes: the stock asphalt's snowy
     /// picture (`WinterSnowfall`) only with snow on the road, a texture without a snow
     /// picture its winter one, one without that its autumn one, else itself.
     #[test]

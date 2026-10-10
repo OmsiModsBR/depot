@@ -187,9 +187,8 @@ fn read_list(r: &mut omsi_cfg::CfgReader, base: &Path) -> Vec<PathBuf> {
 
 impl SceneryObject {
     /// Whether the map stores this object's height as it stands (not over the terrain):
-    /// Omsi.exe sets that flag (+0x194) at the end of loading the .sco for `[absheight]` and
-    /// for every object with a traffic path (0x7b8c66: the path ends `[path]` made, built by
-    /// 0x7ba0d0) - crossings, but also a road piece or an invisible AI-path object of a mod
+    /// OMSI sets that flag at the end of loading the .sco for `[absheight]` and
+    /// for every object with a traffic path (the path ends `[path]` made) - crossings, but also a road piece or an invisible AI-path object of a mod
     /// that has no `[splinehelper]`. Put on the terrain as well, such a road stood the
     /// height of the hill above (or under) the ground.
     pub fn absolute_height(&self) -> bool {
@@ -290,7 +289,7 @@ impl SceneryObject {
                 "collision_mesh" => o.collision_mesh = Some(r.str().to_string()),
                 "crossing_heightdeformation" => o.crossing_height_deformation = Some(r.str().to_string()),
                 "nocollision" => o.no_collision = true,
-                // (and `[fixed]` with it, as Omsi.exe sets both at 0x7b6823)
+                // (and `[fixed]` with it, as OMSI sets both)
                 "surface" => {
                     // A bare tag means true. Peek so an immediately following
                     // keyword (e.g. `[mesh]`) is not consumed as its optional value.

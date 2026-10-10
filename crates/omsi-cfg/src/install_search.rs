@@ -174,7 +174,7 @@ fn shallow_scan() -> Option<PathBuf> {
 }
 
 /// The folders a path the player gave may mean: what was typed or pasted (Windows' "Copy as
-/// path" puts quotes round it), the folder of a file named instead of its folder (`Omsi.exe`,
+/// path" puts quotes round it), the folder of a file named instead of its folder (the game's executable,
 /// or openOMSI's own program when openOMSI was unpacked into the OMSI folder), the folders
 /// above a subfolder chosen by mistake (`maps`, `Vehicles\MAN_SD200`), and an OMSI folder
 /// inside the one chosen.

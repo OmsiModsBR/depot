@@ -58,7 +58,7 @@ fn main() {
     }
 }
 
-/// The level computation before the Omsi.exe rebuild, for the comparison.
+/// The level computation before the OMSI rebuild, for the comparison.
 mod old {
     use glam::Vec3;
     use omsi_vehicle::SoundEntry;

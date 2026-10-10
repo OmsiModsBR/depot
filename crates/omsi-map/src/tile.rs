@@ -1,4 +1,4 @@
-//! `tile_x_y.map` (unit `mc_mapclass`, `TMapKachel.loadMapFile`) including Chrono patch files.
+//! `tile_x_y.map` files, including Chrono patch files.
 
 use omsi_cfg::CfgFile;
 use std::path::{Path, PathBuf};
@@ -57,8 +57,8 @@ pub struct MapSpline {
     pub skew_end: f64,
     /// Last numeric field: where the spline's textures start along it, the length of the
     /// chain before it (OMSI reads it from tile version 11 on and draws `v = v_scale *
-    /// (s + tex_offset)`, so a chain's textures run on across its joints; Omsi.exe
-    /// sub_79a8ec puts it into TSplineSegment+0x1a0).
+    /// (s + tex_offset)`, so a chain's textures run on across its joints; it
+    /// is kept with the spline segment).
     pub tex_offset: f64,
     /// The authored chain offset in tile version 11 and newer, including zero.
     /// Older records have none and their chain must be reconstructed from links.
@@ -154,7 +154,7 @@ pub struct Tile {
     pub unknown_keywords: Vec<(String, usize)>,
     /// The chrono patch whose terrain the tile has, when an active one brings its own: a
     /// chrono tile with `[terrain]` carries its `.terrain` beside it in the chrono folder,
-    /// and Omsi.exe, reading the patch with the same loader (0x77b39c -> 0x792188), loads
+    /// and OMSI, reading the patch with the same loader, loads
     /// that terrain over the tile's own. None: the tile's own file.
     pub terrain_from: Option<PathBuf>,
     /// The same for the water (`[water]` and its `.water` beside the patch).
@@ -204,7 +204,7 @@ fn auto_id(next: &mut usize) -> i64 {
 
 /// An object's labels (the strings the editor's "Labels" dialog edits: sign texts, line
 /// numbers, a tree's texture and size): a count, then exactly that many lines, as
-/// Omsi.exe reads them (0x7938b8). Trailing empty ones say nothing - the original pads
+/// OMSI reads them. Trailing empty ones say nothing - the original pads
 /// the list with empty strings to the object's own count anyway.
 fn read_labels(r: &mut omsi_cfg::CfgReader) -> (i32, Vec<String>) {
     let n = r.i32();
@@ -279,7 +279,7 @@ impl Tile {
         }
         let mut last = Last::None;
         // IDCodes of the records an [attachObj] may hang on, in file order ([object],
-        // [attachObj], [splineAttachement]: Omsi.exe's one list of the tile's objects)
+        // [attachObj], [splineAttachement]: OMSI's one list of the tile's objects)
         let mut records: Vec<i64> = Vec::new();
         // attachments whose parent was not written before them
         let mut forward: Vec<(usize, i64)> = Vec::new();
@@ -292,8 +292,8 @@ impl Tile {
                 "variable_terrain" => t.variable_terrain = true,
                 "variable_terrainlightmap" => t.variable_terrain_lightmap = true,
                 "object" | "attachobj" => {
-                    // The record's lines depend on the tile's [version] (TMapKachel.loadMapFile
-                    // 0x7929a0 / 0x7931a0): the detail level only from version 9 on, the
+                    // The record's lines depend on the tile's [version] (as OMSI loads
+                    // them): the detail level only from version 9 on, the
                     // IDCode from 6 on (older objects are numbered as they load), the parent
                     // of an [attachObj] by IDCode from 10 on - before, the index of the
                     // parent among the records of the tile so far - and its heading from 8 on.
@@ -315,7 +315,7 @@ impl Tile {
                         Some(usize::try_from(at).ok().and_then(|i| records.get(i).copied()).unwrap_or(i64::MIN))
                     };
                     // [object]: x y z (z relative to terrain unless [absheight]).
-                    // [attachObj]: the instance of the parent (0x793649: anything but "0" -
+                    // [attachObj]: the instance of the parent (anything but "0" -
                     // an object on a later object of a spline attachment row - is refused:
                     // "nicht mehr unterstützt"), then the index of the parent's
                     // [new_attachment] point; the point is the position.
@@ -328,7 +328,7 @@ impl Tile {
                     } else {
                         r.f64s::<3>()
                     };
-                    // (Omsi.exe 0x792ee7: pitch and bank only from tile version 12 on, the
+                    // (as OMSI reads it: pitch and bank only from tile version 12 on, the
                     // strings from version 4 on - an older tile's string count read as a
                     // bank tilted the object and lost its strings)
                     let heading = if attach && !has(t.version, 8) { 0.0 } else { r.f64() };
@@ -369,7 +369,7 @@ impl Tile {
                     }
                 }
                 "spline" | "spline_h" => {
-                    // (0x795530: the detail level from version 9 on, the IDCode from 6 on;
+                    // (the detail level from version 9 on, the IDCode from 6 on;
                     // before version 11 one line links the spline to the one written before
                     // it - -1 for none - instead of the IDs of both neighbours, before 5 there
                     // is no cant, before 14 no skew, before 11 no texture offset)
@@ -476,7 +476,7 @@ impl Tile {
                     let spline_index = r.i32();
                     let offset = r.f64s::<3>();
                     // (as for objects: pitch, bank and the tilt flag from version 12 on,
-                    // strings from version 4 on - Omsi.exe 0x794892..0x794bd7)
+                    // strings from version 4 on, as OMSI reads them)
                     let modern = t.version >= 12 || t.version == 0;
                     let rot = if modern { r.f64s::<3>() } else { [r.f64(), 0.0, 0.0] };
                     let interval = r.f64();
@@ -602,7 +602,7 @@ impl Tile {
                 _ => t.unknown_keywords.push((k, r.block_line())),
             }
         }
-        // Omsi.exe looks the parent up among the objects already read and drops an
+        // OMSI looks the parent up among the objects already read and drops an
         // attachment whose parent comes later; one whose parent is not in this file at all
         // may hang on the base tile of a chrono patch
         for (i, _) in forward.iter().rev().filter(|(_, p)| records.contains(p)) {
@@ -755,7 +755,7 @@ Object Nr. 3\n[splineAttachement_repeater]\n0\n12\n5\nSceneryobjects\\lamp.sco\n
     }
 
     /// Before tile version 12 an object has only its heading; the next line is already the
-    /// count of its strings (Omsi.exe 0x792ee7).
+    /// count of its strings (as OMSI reads it).
     #[test]
     fn old_tile_objects_have_only_a_heading() {
         let t = tile("[version]\n11\n\n[object]\n0\nSceneryobjects\\x.sco\n12\n10\n20\n0.5\n90\n2\nfirst\nsecond\n\n[object]\n0\nSceneryobjects\\y.sco\n13\n1\n2\n0\n45\n0\n");
@@ -777,7 +777,7 @@ Object Nr. 3\n[splineAttachement_repeater]\n0\n12\n5\nSceneryobjects\\lamp.sco\n
     }
 
     /// An `[attachObj]` on a later object of a spline attachment row, or on an object
-    /// written after it, is not loaded (Omsi.exe 0x793649, 0x7934f0).
+    /// written after it, is not loaded (as in OMSI).
     #[test]
     fn refused_attachments() {
         let t = tile("[version]\n14\n\n[attachObj]\n0\nSceneryobjects\\early.sco\n2\n1\n0\n0\n0\n0\n0\n0\n\n\
@@ -790,7 +790,7 @@ Object Nr. 3\n[splineAttachement_repeater]\n0\n12\n5\nSceneryobjects\\lamp.sco\n
         assert!(t.objects[0].rules.is_empty());
     }
 
-    /// Tiles older than version 11 write their records shorter (TMapKachel.loadMapFile):
+    /// Tiles older than version 11 write their records shorter:
     /// no detail level before 9, an `[attachObj]` names its parent by its place among the
     /// tile's records before 10 and has no heading before 8, a spline has one line linking
     /// it to the spline before it instead of both neighbours' IDs and no texture offset.

@@ -26,7 +26,7 @@ impl Driver {
         let mut t = String::from("-----------------------\r\nDriver File\r\n-----------------------\r\n\r\n");
         t.push_str("Created with Project Depot\r\n\r\n");
         t.push_str(&format!("[ident]\r\n{}\r\n{}\r\n{}\r\n{}\r\n\r\n", self.name, if self.sex.is_empty() { "M" } else { &self.sex }, self.birth_date, self.employ_date));
-        // served, late, early: the order of Omsi.exe's TDriver record (cnt_busstop_all,
+        // served, late, early: the order of OMSI's driver record (cnt_busstop_all,
         // cnt_busstop_late, cnt_busstop_early), which tools such as Busbetrieb-Simulator read
         t.push_str(&format!("[busstops]\r\n{}\r\n{}\r\n{}\r\n\r\n", self.bus_stops[0], self.bus_stops[2], self.bus_stops[1]));
         t.push_str(&format!("[hektom]\r\n{:.0}\r\n\r\n", self.hektom));
@@ -77,7 +77,7 @@ impl Driver {
         Ok(d)
     }
 
-    /// The `[rating]` block is OMSI's driver record from +0x40 on (the original,
+    /// The `[rating]` block is OMSI's driver record (the original,
     /// the original): the driving penalty P (0..1), passengers who stepped in
     /// without a complaint, tickets asked for, points for selling them (2 for the right
     /// change, 1 for the wrong), passengers who stepped in. Values that cannot be those (an

@@ -262,7 +262,7 @@ impl Single {
 /// one: `name` turned back into bytes in a code page it may have been read in wrongly
 /// (the zip OEM pages 437 and 852, Windows 1252 and 1250) and read again in the one it
 /// may have been written in (CP866, the Russian OEM page zip tools use, Windows 1251, 1250,
-/// 1252, and the double-byte pages of a Korean, Chinese or Japanese system, where Omsi.exe
+/// 1252, and the double-byte pages of a Korean, Chinese or Japanese system, where OMSI
 /// reads an .o3d's texture names in that page). ASCII names have no other spelling; `name`
 /// itself is not in the list.
 pub fn name_variants(name: &str) -> Vec<String> {

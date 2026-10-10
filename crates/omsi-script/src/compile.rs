@@ -71,7 +71,7 @@ impl Program {
     /// The string variable a `[texttexture]`'s first field names: either a script variable's
     /// name, or - as many vehicles write it, `[texttexture] 0 CN_REG ...` - the *number* of a
     /// built-in string (`program/stringvarlist_roadvehicle.txt`: 0 `ident`, 1 `number`, ...).
-    /// Omsi.exe reads a number as that index; taking `"0"` for a name finds nothing and leaves
+    /// OMSI reads a number as that index; taking `"0"` for a name finds nothing and leaves
     /// the text empty, so a plate written this way stays blank. The scenery objects' own
     /// `[texttexture]` are read the same way (`resolve_scenery_freetex_name`).
     pub fn text_texture_var(&self, field: &str) -> Option<StrVarId> {
@@ -551,7 +551,7 @@ impl<'a> Compiler<'a> {
                                     ifs.push((block.ops.len(), false));
                                     block.ops.push(Op::JumpIfZero(u32::MAX));
                                 } else {
-                                    // (code between blocks is never run - Omsi.exe reads only
+                                    // (code between blocks is never run - OMSI reads only
                                     // block headers there; the Procity's cockpit.osc has a
                                     // whole {if} {else} {endif} between two triggers)
                                     log::debug!("{}:{}: {{if}} outside block", f.path.display(), line_no);

@@ -198,7 +198,7 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(x) = num("aimaxcountscheduled") {
         v["ai_max_scheduled"] = json!((x as i64).max(0));
     }
-    // (the second line of [AIMaxCountRandom]: the people Omsi.exe makes)
+    // (the second line of [AIMaxCountRandom]: the people OMSI makes)
     if let Some(x) = o.values.get("aimaxcountrandom").and_then(|x| x.get(1)).and_then(|x| x.trim().parse::<i64>().ok()) {
         v["ai_max_humans"] = json!(x.max(1));
     }
@@ -745,7 +745,7 @@ pub struct VehicleInfo {
     #[serde(default)]
     pub missing_packs: Vec<String>,
     /// The fleet numbers of the bus's `[number]` list with the plate each comes with
-    /// (Omsi.exe's number combo in the vehicle dialog; empty: the bus has no list).
+    /// (OMSI's number combo in the vehicle dialog; empty: the bus has no list).
     #[serde(default)]
     pub numbers: Vec<(String, String)>,
 }
@@ -966,8 +966,8 @@ pub fn list_vehicles_progress(progress: impl Fn(&[VehicleInfo], usize, usize)) -
 /// the one of the same name in the OMSI folder), and the folders read besides its own.
 fn read_vehicle_folder(folder: &str, dirs: &[PathBuf], lang: &str) -> (Vec<VehicleInfo>, Vec<PathBuf>) {
     // Every file of the folder and of the folders in it, however deep: OMSI's bus list looks
-    // for `*.bus` and `*.ovh` under Vehicles to any depth (Omsi.exe 0x67bdf9, the search
-    // with depth 255) - `Vehicles\Pack\Variant\x.bus` was not listed here (#137). A file of
+    // for `*.bus` and `*.ovh` under Vehicles to any depth (the search
+    // goes 255 levels deep) - `Vehicles\Pack\Variant\x.bus` was not listed here (#137). A file of
     // the content folder hides the one at the same place in the installation.
     fn walk(d: &Path, rel: &str, depth: u32, out: &mut Vec<(String, PathBuf)>) {
         let mut list = omsi_cfg::vfs::list_dir(d).unwrap_or_default();

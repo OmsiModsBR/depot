@@ -226,7 +226,7 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
                     mesh.bones.push(Bone { name, weights });
                 }
             }
-            // any other byte is passed over, one at a time, as the exe's loader does
+            // any other byte is passed over, one at a time, as OMSI's loader does
             // (`mc_o3dfile`: the tag `case` has no else, the loop reads the next byte).
             // Protected v7 files (flags 3) have three junk bytes inside the transform and
             // a few more after it; refusing them lost the whole body of the MB Sprinter
