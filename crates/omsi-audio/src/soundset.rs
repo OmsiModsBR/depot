@@ -1,7 +1,7 @@
 //! Runtime for a sound configuration attached to an object with script variables.
 //!
-//! Everything here follows Omsi.exe's `TSound` update (0x750340, 2.2.032), which plays each
-//! entry through its own DirectSound buffer:
+//! Everything here follows the behaviour OMSI 2 shows when it plays each entry through its
+//! own DirectSound buffer:
 //!
 //! * volume = the entry's volume x every `[volcurve]` (linear between `[pnt]`s, held at the
 //!   ends), x `min(range / distance, 1)` for a `[3d]` sound, x `0.2 + Snd_OutsideVol` for an
@@ -53,12 +53,12 @@ pub struct SoundSet {
     dir: std::path::PathBuf,
     /// The listener sits in this vehicle's interior (see [`SoundSet::set_inside`]).
     inside: bool,
-    /// This set belongs to an AI vehicle or another player's (Omsi.exe's view 4).
+    /// This set belongs to an AI vehicle or another player's (view 4).
     ai: bool,
     /// The player's own vehicle moves with its listener; its 3D sounds still pan and fade,
     /// but frame timing must not turn their fixed cabin positions into Doppler pitch shifts.
     listener_vehicle: bool,
-    /// The camera is in a cab view (driver or passenger: Omsi.exe's camera modes 0 and 1),
+    /// The camera is in a cab view (driver or passenger: camera modes 0 and 1),
     /// set every frame on every sound set (see [`SoundSet::set_muffled`]).
     muffled: bool,
     /// The sound sets of the coupled parts (with the part's index among the vehicle's
@@ -68,7 +68,7 @@ pub struct SoundSet {
     pub parts: Vec<(usize, SoundSet)>,
 }
 
-/// The file a `(T.F.)` trigger names, as Omsi.exe opens it (0x74f2e8 through 0x7eed78): the
+/// The file a `(T.F.)` trigger names, as OMSI 2 opens it: the
 /// characters a Windows file name cannot have are `%` in it, the folders' `\` and a drive's
 /// `:` stay. The stock IBIS announces a stop by its name, and Spandau's "Falkenseer
 /// Ch/Stadtrandstr" is `Falkenseer Ch%Stadtrandstr.wav`: read as a folder, it was not found
@@ -94,10 +94,10 @@ fn warn_missing_once(trigger: &str, path: &Path) {
     }
 }
 
-/// A `[volcurve]` at `x`, as Omsi.exe's `TFuncClass` (0x7f061c) reads it: the first point's
+/// A `[volcurve]` at `x`, as OMSI 2 reads it: the first point's
 /// value left of it, the last one's from the last point on, and in between the straight
-/// line between the last point at or left of `x` and the first one right of it (0x7f07b4;
-/// two points at the same place give their mean).
+/// line between the last point at or left of `x` and the first one right of it
+/// (two points at the same place give their mean).
 fn curve(points: &[(f32, f32)], x: f32) -> f32 {
     let Some(&(x0, y0)) = points.first() else {
         return 1.0;
@@ -143,12 +143,12 @@ fn direct_sound_volume(v: f32, last: f32) -> (f32, bool) {
 const FREQ_MIN: f32 = 100.0;
 const FREQ_MAX: f32 = 200_000.0;
 
-/// What a `[volcurve] -1` reads on a triggered entry: Omsi.exe never starts its clock (it
+/// What a `[volcurve] -1` reads on a triggered entry: OMSI 2 never starts its clock (it
 /// is reset only while the conditions of an untriggered entry fail), so it reads
 /// `GetTickCount / 1000`, the seconds since Windows started - always past the last point.
 const TRIGGERED_ACTIVE: f32 = 1.0e6;
 
-/// One entry's state this frame, as the exe computes it.
+/// One entry's state this frame, as OMSI 2 shows it.
 struct Eval {
     /// What the voice is given (the distance attenuation is left to the mixer).
     gain: f32,
@@ -218,7 +218,7 @@ impl SoundSet {
 
     /// The camera is in a cab view (driver or passenger, of any vehicle): called every frame
     /// on every sound set. An AI vehicle is then heard at `0.2 + Snd_OutsideVol` of the
-    /// player's bus (`TSound` update 0x750a4d) - no filter, no other change.
+    /// player's bus - no filter, no other change.
     pub fn set_muffled(&mut self, muffled: bool) {
         self.muffled = muffled;
         for (_, p) in &mut self.parts {
@@ -254,8 +254,7 @@ impl SoundSet {
         }
     }
 
-    /// The view an entry's `[viewpoint]` is tested against (Omsi.exe sets it per vehicle,
-    /// 0x6ff86c and 0x700158): 2 for the player's bus while the camera is in a cab view, 1
+    /// The view an entry's `[viewpoint]` is tested against (set per vehicle): 2 for the player's bus while the camera is in a cab view, 1
     /// for it from outside, 4 for every other vehicle - an AI bus never plays its
     /// `[viewpoint] 1` sounds, which are the player's bus heard from the street.
     fn view_mask(&self) -> i32 {
@@ -279,7 +278,7 @@ impl SoundSet {
 
     /// Play the sound of a `(T.F.trigger)` event: the entry listening to `trigger` loads
     /// `file` (relative to the sound folder) into a new buffer and plays it as if its
-    /// trigger had fired (0x74f2e8).
+    /// trigger had fired.
     pub fn play_file_trigger(
         &mut self,
         engine: &AudioEngine,
@@ -318,10 +317,9 @@ impl SoundSet {
         Ctx { listener: engine.listener_position(), ..self.ctx_without_engine() }
     }
 
-    /// What a `[volcurve]` reads. The exe (`TSound` load, 0x74e408) looks the name up in the
-    /// vehicle's variables and, when it is none of them, stores `StrToInt(name)` as the
-    /// index; the update (0x750584) then reads a negative index from the sound's own
-    /// values: -1 = seconds since the sound became active (its conditions started to hold,
+    /// What a `[volcurve]` reads. The name is looked up in the vehicle's variables and,
+    /// when it is none of them, read as a whole number; a negative number then reads one of
+    /// the sound's own values: -1 = seconds since the sound became active (its conditions started to hold,
     /// GetTickCount/1000), -2 = how much a `[3d]` sound with a direction faces the listener
     /// (1 for a `[3d]` one without, 0 for one without `[3d]`), anything below is skipped
     /// with "Volume Variable not valid!". The LiAZ 5292's engine loops fade in with
@@ -382,8 +380,8 @@ impl SoundSet {
     }
 
     /// [`SoundSet::update`] with `at_fire(trigger, variable)`: a variable as it stood when
-    /// the trigger fired (None: as it is now). Omsi.exe starts a trigger's sounds in the
-    /// middle of the script (0x74f2e8), so the volume they start with is that of the moment:
+    /// the trigger fired (None: as it is now). OMSI 2 starts a trigger's sounds in the
+    /// middle of the script, so the volume they start with is that of the moment:
     /// the SD200's door hits read `doorSpeed_<n>`, which the door script reverses right
     /// after firing them - read at the frame's end they were silent (#676). From the next
     /// frame on the volume follows the curves as they stand, like every other entry's.
@@ -400,7 +398,7 @@ impl SoundSet {
         }
         let ctx = self.ctx(engine);
         for s in self.sounds.iter_mut() {
-            // How the exe plays an entry (`TSound` update, 2.2.032):
+            // How an entry is played:
             // * with a `[trigger]`: once each time the trigger fires, from the start, never
             //   looped (a `[loopsound]` too) and without looking at its conditions;
             // * without one: looped (from a random place in the clip) for as long as its
@@ -616,14 +614,14 @@ struct Ctx {
 }
 
 impl Ctx {
-    /// The `[viewpoint]` test (0x750462): the entry is heard when it names the view, names
+    /// The `[viewpoint]` test: the entry is heard when it names the view, names
     /// none, or is an outside sound of the player's bus heard from its cab while
     /// `Snd_OutsideVol` is over 0.01 (doors or a window open).
     fn view_lets_through(&self, vp: i32) -> bool {
         vp == 0 || vp & self.view != 0 || (vp & 2 == 0 && self.view == 2 && outside_vol() > 0.01)
     }
 
-    /// One entry this frame (`TSound` update 0x750340): its volume and pitch as DirectSound
+    /// One entry this frame: its volume and pitch as DirectSound
     /// takes them, and whether it can be started.
     fn eval(&self, s: &mut RuntimeSound, var: &dyn Fn(&str) -> Option<f32>, object_to_world: &Mat4) -> Eval {
         let def = &s.def;
@@ -694,7 +692,7 @@ impl Ctx {
             pitch: e.pitch.max(0.001),
             looping,
             position,
-            // (Omsi.exe shifts the frequency of a `[3d]` loop sound only: a `[sound]`
+            // (OMSI 2 shifts the frequency of a `[3d]` loop sound only: a `[sound]`
             // keeps its file's rate)
             doppler: self.doppler && s.def.is_loop,
             range: s.def.range,
@@ -704,7 +702,7 @@ impl Ctx {
     }
 }
 
-/// `Snd_OutsideVol` of the player's bus (bits of an f32): Omsi.exe's 0x859a04, 1 while the
+/// `Snd_OutsideVol` of the player's bus (bits of an f32): 1 while the
 /// player has no vehicle.
 static OUTSIDE_VOL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
 
@@ -839,7 +837,7 @@ mod tests {
     }
 
     /// The stock IBIS announces Spandau's "Falkenseer Ch/Stadtrandstr" with the file
-    /// `Falkenseer Ch%Stadtrandstr.wav`, as Omsi.exe's file triggers write `/` (#1096).
+    /// `Falkenseer Ch%Stadtrandstr.wav`, as OMSI 2's file triggers write `/` (#1096).
     #[test]
     fn a_file_trigger_writes_what_a_file_name_cannot_have_as_percent() {
         let file = r"..\..\Announcements\Spandau\Falkenseer Ch/Stadtrandstr.wav";
