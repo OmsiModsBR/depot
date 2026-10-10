@@ -2022,7 +2022,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "chat_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 3.0)),
             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
-            "outside_fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
+            "outside_fov" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "camera_collision" | "right_stick_look" | "pad_steer_linear" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "voice_chat" | "launcher_rest" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
@@ -3277,6 +3277,19 @@ mod tests {
         assert!(!now.iter().any(|l| l == "5 & 5N") && now.iter().any(|l| l == "130 & N30"), "{now:?}");
         assert!(names("1991-06-01").iter().any(|l| l == "5 & 5N") && !names("1991-06-02").iter().any(|l| l == "5 & 5N"));
         assert!(lines_on(&map, "someday").is_err());
+    }
+
+    #[test]
+    fn outside_fov_survives_launcher_save_and_rejects_nonfinite_values() {
+        assert_eq!(settings_from_text(None)["outside_fov"], json!(0.0));
+        let v = settings_from_text(Some("outside_fov=48\nfov=72\n"));
+        let saved = settings_from_text(Some(&settings_to_text(&v, None)));
+        assert_eq!(saved["outside_fov"], json!(48.0));
+        assert_eq!(saved["fov"], json!(72.0));
+        for invalid in ["NaN", "inf", "-1", "15", "garbage"] {
+            assert_eq!(settings_from_text(Some(&format!("outside_fov={invalid}\n")))["outside_fov"], json!(0.0));
+        }
+        assert_eq!(settings_from_text(Some("outside_fov=200\n"))["outside_fov"], json!(120.0));
     }
 
     #[test]

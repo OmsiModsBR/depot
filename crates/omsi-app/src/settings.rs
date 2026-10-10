@@ -839,6 +839,17 @@ mod tests {
         );
     }
     #[test]
+    fn outside_fov_round_trips_and_rejects_invalid_values() {
+        let s = super::Settings::from_text("outside_fov=48\nfov=72\n");
+        assert_eq!(s.outside_fov, 48.0);
+        assert_eq!(s.fov, 72.0);
+        assert_eq!(super::Settings::from_text(&s.to_text()), s);
+        for invalid in ["NaN", "inf", "-1", "15", "garbage"] {
+            assert_eq!(super::Settings::from_text(&format!("outside_fov={invalid}\n")).outside_fov, 0.0);
+        }
+        assert_eq!(super::Settings::from_text("outside_fov=200\n").outside_fov, 120.0);
+    }
+    #[test]
     fn triple_settings_round_trip_and_reject_nonfinite_geometry() {
         let s = super::Settings::from_text("triple_screen=1\ntriple_span=0\ntriple_width_mm=620\ntriple_distance_mm=700\ntriple_bezel_mm=18\ntriple_left_angle_deg=50\ntriple_right_angle_deg=40\ntriple_eye_height_mm=60\n");
         assert_eq!(super::Settings::from_text(&s.to_text()), s);

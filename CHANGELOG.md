@@ -3,6 +3,16 @@
 Depot releases are published manually after review; pushes to `main` do not
 automatically produce releases. See [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## Unreleased — experimental `feat/outside-fov-ultrawide`
+
+- Outside camera (F3) gets an independent `outside_fov` setting, 20–120
+  vertical degrees or Auto. Auto preserves the 16:9 horizontal extent on
+  ultrawide windows when no general override is set.
+- Selective backport from `ea47e092ee6e0a2c472d2c7261ea7a7913e6ca9f`;
+  no later upstream architecture or unrelated features were imported.
+- This feature is not in main or the published 0.2.17 packages.
+  See [integration record](docs/integrations/OUTSIDE-FOV-ULTRAWIDE.md).
+
 ## Project Depot 0.2.17 - 2026-10-09
 
 - Rebranding only, derived from openOMSI `v0.2.16` (2026-10-07), commit

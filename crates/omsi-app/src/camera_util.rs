@@ -492,5 +492,11 @@ mod outside_fov_tests {
         let uw = auto_outside_fov(21.0 / 9.0);
         assert!(uw < 60.0);
         assert!((wide(uw, 21.0 / 9.0) - wide(60.0, 16.0 / 9.0)).abs() < 1e-4);
+        let superwide = auto_outside_fov(32.0 / 9.0);
+        assert!(superwide < uw);
+        assert!((wide(superwide, 32.0 / 9.0) - wide(60.0, 16.0 / 9.0)).abs() < 1e-4);
+        for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0] {
+            assert_eq!(auto_outside_fov(invalid), 60.0);
+        }
     }
 }
