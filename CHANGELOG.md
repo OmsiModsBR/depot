@@ -70,6 +70,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
+  departure and the next arrival shared out by the distance covered) instead of standing still at the delay
+  it left the last stop with (upstream #1898). Behaviour taken from openOMSI commit `3c75499` (MIT,
+  turbo-devv), reimplemented; the existing test now expects the new value. Parity with the reference still
+  to be confirmed by observation.
 - Sound: an entry that is about to start playing starts at full volume. DirectSound refuses a request
   over 0 dB and keeps the buffer's last volume, so a `[volume]` over 1 that a curve or condition held at 0
   while silent started "audible" at gain 0 (hand brake, door-closing and indicator sounds; upstream #1851,
