@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod articulation;
+mod physics_bridge;
 
-/// Scripts often test a stopped bus with `!Velocity_Ground`, so do not expose tiny solver drift.
-fn script_speed(speed_kmh: f32) -> f32 {
-    if speed_kmh.abs() < 0.01 { 0.0 } else { speed_kmh }
-}
+use physics_bridge::{body_wheel_shown, driven_rpm, script_speed, DriveInputs, OmsiFrames};
+#[cfg(test)]
+use physics_bridge::scripts_acceleration;
 
 // A vehicle pack may contain many tiny trim meshes and only a few large body/interior
 // meshes. When the mesh vote is close, use capped triangle counts as a tie-breaker instead
@@ -1475,22 +1475,10 @@ impl VehicleInstance {
         self.rigid = Some(rb);
     }
 
-    /// `Axle_Springfactor_<axle>_<side>` as the scripts left it.
     /// The axle that steers: the frontmost, as the rigid body takes it (the simple model
     /// took the first listed, which is not always the front one).
     fn steered_axle(&self) -> usize {
         self.ty.def.axles.iter().enumerate().max_by(|a, b| a.1.long.total_cmp(&b.1.long)).map(|(i, _)| i).unwrap_or(0)
-    }
-
-    fn spring_factor(&self, axle: usize, side: usize) -> f32 {
-        if self.springs_full {
-            return 1.0;
-        }
-        self.v_springfactor
-            .get(axle)
-            .and_then(|a| a[side])
-            .map(|i| self.state.vars[i as usize])
-            .unwrap_or(1.0)
     }
 
     /// Set the forward speed (m/s), for tests that need a run-up without the road.
@@ -1504,29 +1492,7 @@ impl VehicleInstance {
 
     fn step_physics(&mut self, dt: f32) {
         let c = self.physics.controls;
-        self.put(self.v_throttle, c.throttle);
-        self.put(self.v_brake, c.brake);
-        self.put(self.v_clutch, c.clutch);
-        let m_wheel = self.get(self.v_m_wheel);
-        // each wheel: its own brake force, and its share of the vehicle's (the rolling
-        // resistance's share is the physics' own)
-        let n = (self.v_wheels.len() * 2).max(1) as f32;
-        let shared = self.get(self.v_brakeforce).max(0.0) / n;
-        let brakes: Vec<f32> = self
-            .v_wheels
-            .iter()
-            .flat_map(|a| a.iter().map(|w| self.get(w[4]).max(0.0) + shared))
-            .collect();
-        // Read, the brake forces go back to 0, as OMSI clears them every frame before
-        // the scripts run: a script sets them each frame it brakes. Kept,
-        // a mod that brakes only inside an {if} (a retarder, a stop brake, its own physics)
-        // stayed braked for good, and one that adds to its own value kept on growing.
-        self.put(self.v_brakeforce, 0.0);
-        for a in self.v_wheels.clone() {
-            for w in a {
-                self.put(w[4], 0.0);
-            }
-        }
+        let DriveInputs { m_wheel, brakes } = self.take_drive_inputs();
         if self.rigid.is_some() {
             self.step_rigid(dt, m_wheel, &brakes, c.steering);
             return;
@@ -1660,23 +1626,9 @@ impl VehicleInstance {
                 w.suspension += (target - w.suspension) * k;
             }
         }
-        let v = script_speed(self.physics.velocity_kmh());
-        self.put(self.v_velocity, v);
-        self.put(self.v_velocity_ground, v);
-        let n_wheel = self
-            .physics
-            .wheels
-            .iter()
-            .find(|w| w[0].driven)
-            .or(self.physics.wheels.first())
-            .map(|w| w[0].rpm)
-            .unwrap_or(0.0);
-        self.put(self.v_n_wheel, n_wheel);
-        let a = self.physics.accel;
-        self.physics.a_trans = a;
-        self.put(self.v_accel[0], a.x);
-        self.put(self.v_accel[1], a.y);
-        self.put(self.v_accel[2], a.z);
+        self.show_velocity(script_speed(self.physics.velocity_kmh()));
+        self.show_n_wheel(driven_rpm(&self.physics.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_a_trans(self.physics.accel);
         // Wheel_Rotation_* and Axle_Steering_* are radians in the original: the stock
         // model.cfg turns a wheel with anim_rot ... 57.29577951308232 (180/pi) and the
         // steering wheel with 1450 (SD200) or 1680 (SD202), roughly two and a half turns
@@ -1684,13 +1636,11 @@ impl VehicleInstance {
         // straight down on the front wheel alone (OMSI_ONLY_MESH=SD_Rad_VL) and at the
         // steering wheel in the cab, which turn together with this sign.
         let steer = self.physics.steer_deg.to_radians();
-        for (ai, axle) in self.v_wheels.clone().iter().enumerate() {
-            for (si, w) in axle.iter().enumerate() {
+        for ai in 0..self.v_wheels.len() {
+            for si in 0..2 {
                 let ws = self.physics.wheels[ai][si].clone();
-                self.put(w[0], ws.rotation_deg.to_radians());
-                self.put(w[1], ws.rpm);
-                self.put(w[2], if ai == self.steered_axle() { steer } else { 0.0 });
-                self.put(w[3], ws.suspension);
+                let shown = [ws.rotation_deg.to_radians(), ws.rpm, if ai == self.steered_axle() { steer } else { 0.0 }, ws.suspension];
+                self.show_wheel(ai, si, shown);
             }
         }
     }
@@ -1737,12 +1687,7 @@ impl VehicleInstance {
                         .map(|&a| (def.axles[a].wheel_diameter / 2.0).max(0.15))
                         .unwrap_or(0.5),
                     driven_load: driven.iter().map(|&a| wheel_load(a)).sum(),
-                    brake: t
-                        .v_brakes
-                        .iter()
-                        .map(|&id| self.get(id).max(0.0))
-                        .sum::<f32>()
-                        + def.rolling_resistance.max(0.0),
+                    brake: self.part_brakes(t).sum::<f32>() + def.rolling_resistance.max(0.0),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
                 }
             })
@@ -1888,53 +1833,19 @@ impl VehicleInstance {
         self.physics.speed = speed;
         self.physics.steer_deg = rb.steer_deg;
         self.physics.accel = rb.accel_body;
-        let v = script_speed(speed * 3.6);
-        self.put(self.v_velocity, v);
-        self.put(self.v_velocity_ground, v);
-        let n_wheel = rb
-            .wheels
-            .iter()
-            .find(|w| w.driven)
-            .or(rb.wheels.first())
-            .map(|w| w.rpm)
-            .unwrap_or(0.0);
-        self.put(self.v_n_wheel, n_wheel);
-        // `A_Trans_*` as OMSI has them: the change of the body's velocity
-        // over the frame, turned into the body frame - its acceleration, not what an
-        // accelerometer reads, so 0 standing or cruising. `accel_body` carries gravity's
-        // 9.81 m/s² (the wheels' springs need it), which as `A_Trans_Z` kept checks such
-        // as the NEOMAN ECAS's "|A_Trans_Z| < 3 while driving" from ever passing.
-        // (over OMSI's frames: the rattle scripts take its change from one frame to the next)
-        let a = self.a_trans.push(scripts_acceleration(rb.accel_body, rb.orientation), dt);
-        self.physics.a_trans = a;
-        self.put(self.v_accel[0], a.x);
-        self.put(self.v_accel[1], a.y);
-        self.put(self.v_accel[2], a.z);
-        for (ai, axle) in self.v_wheels.clone().iter().enumerate() {
-            for (si, w) in axle.iter().enumerate() {
+        self.show_velocity(script_speed(speed * 3.6));
+        self.show_n_wheel(driven_rpm(&rb.wheels, |w| w.driven, |w| w.rpm));
+        let a = self.body_a_trans(&rb, dt);
+        self.show_a_trans(a);
+        for ai in 0..self.v_wheels.len() {
+            for si in 0..2 {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
-                    self.put(w[0], rw.rotation_deg.to_radians());
-                    self.put(w[1], rw.rpm);
-                    // (each axle's own angle: OMSI turns every axle towards the centre of
-                    // the bend on the `[rot_pnt_long]` line - one angle for both sides)
-                    self.put(w[2], rb.axle_steer(ai * 2 + si));
-                    // `Axle_Suspension_*` is the wheel's travel *relative to the body*, and
-                    // the stock model.cfg moves the wheel down for a positive value
-                    // (`origin_rot_y -90` + `anim_trans`, checked with OMSI_DEBUG_ANIM on
-                    // the SD200's front wheel). A compressed spring means the body has
-                    // come down towards the wheel, i.e. the wheel sits *up* in its arch:
-                    // the value is minus the compression. Handing over the compression
-                    // itself pushed every wheel down by twice its travel - into the road
-                    // under braking, with the body riding high above the arches.
-                    // (never below where the spring is unloaded: OMSI hands over
-                    // -clamp(travel, 0, maxforce / k) - a wheel in the air stays
-                    // where it hangs at rest)
-                    let shown = -rw.compression.max(0.0);
-                    self.put(w[3], shown);
+                    let shown = body_wheel_shown(&rb, ai * 2 + si, rw);
+                    self.show_wheel(ai, si, shown);
                     if let Some(ws) = self.physics.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;
-                        ws.suspension = shown;
+                        ws.suspension = shown[3];
                     }
                 }
             }
@@ -2386,9 +2297,7 @@ impl VehicleInstance {
         self.set_engine_var("schedule_active", self.host.schedule_active);
         self.physics.speed = ai.speed;
         self.physics.steer_deg = ai.steer_deg;
-        let v_kmh = ai.speed * 3.6;
-        self.put(self.v_velocity, v_kmh);
-        self.put(self.v_velocity_ground, v_kmh);
+        self.show_velocity(ai.speed * 3.6);
         // how far the vehicle rolled since the last frame (a reset or a jump counts as none;
         // backwards only for a vehicle that reverses)
         let ds = ai.odometer - self.ai_odometer;
@@ -2403,8 +2312,8 @@ impl VehicleInstance {
         // centre, and every wheel rolls as far as its own track through the bend is long
         let (rot, wheelbase) = crate::ai_motion::rotation_point(&self.ty.def);
         let k = ai.steer_deg.to_radians().tan() / wheelbase;
-        for (ai_idx, axle) in self.v_wheels.clone().iter().enumerate() {
-            for (si, w) in axle.iter().enumerate() {
+        for ai_idx in 0..self.v_wheels.len() {
+            for si in 0..2 {
                 let Some(ws) = self.physics.wheels.get_mut(ai_idx).map(|a| &mut a[si]) else {
                     continue;
                 };
@@ -2422,30 +2331,14 @@ impl VehicleInstance {
                 ws.rotation_deg =
                     (ws.rotation_deg + (ds * travel / r).to_degrees()).rem_euclid(360.0);
                 ws.rpm = ai.speed * travel / (std::f32::consts::TAU * r) * 60.0;
-                let (rotation, rpm, suspension) =
-                    (ws.rotation_deg.to_radians(), ws.rpm, ws.suspension);
-                self.put(w[0], rotation);
-                self.put(w[1], rpm);
-                self.put(w[2], steer);
-                // the travel `AiBody` works out on its springs, about the static sag of an AI
-                // copy (`ai_rest_offset`, already in it)
-                self.put(w[3], suspension);
+                // (the suspension: the travel `AiBody` works out on its springs, about the
+                // static sag of an AI copy - `ai_rest_offset`, already in it)
+                let shown = [ws.rotation_deg.to_radians(), ws.rpm, steer, ws.suspension];
+                self.show_wheel(ai_idx, si, shown);
             }
         }
-        let n_wheel = self
-            .physics
-            .wheels
-            .iter()
-            .find(|w| w[0].driven)
-            .or(self.physics.wheels.first())
-            .map(|w| w[0].rpm)
-            .unwrap_or(0.0);
-        self.put(self.v_n_wheel, n_wheel);
-        let a = self.physics.accel;
-        self.physics.a_trans = a;
-        self.put(self.v_accel[0], a.x);
-        self.put(self.v_accel[1], a.y);
-        self.put(self.v_accel[2], a.z);
+        self.show_n_wheel(driven_rpm(&self.physics.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_a_trans(self.physics.accel);
         // `AI` is the engine's "this vehicle is driven by the AI" flag; the police and
         // ambulance script sounds the siren whenever `AI` is 0 and the car rolls, which is
         // why every spawn came with an ambulance nobody could see
@@ -3270,50 +3163,6 @@ pub struct TrailerPart {
     /// variables (`[scriptshare]`: the rear section of an articulated bus shows the
     /// number and the destination the front's scripts set).
     pub text_textures: Vec<crate::texttex::TextTextureState>,
-}
-
-/// OMSI's frames, a thirtieth of a second (`[maxFPS]` 30 in its options.cfg and every option
-/// preset but one): `A_Trans_*` is the body's velocity change over one of them,
-/// and the stock rattle scripts (`klappern.osc`: `Klappern_Vol` follows how much |A_Trans|
-/// changes from one frame to the next) were tuned on that. Taken over this game's frames -
-/// 60 to 150 a second - the change from frame to frame was a half to a fifth of OMSI's for
-/// the same jolt, and the buses kept quiet on rough roads (#772, #886). The value is the
-/// mean over each thirtieth, held until the next one is complete.
-#[derive(Debug, Clone, Copy, Default)]
-struct OmsiFrames {
-    sum: Vec3,
-    t: f32,
-    out: Vec3,
-}
-
-impl OmsiFrames {
-    const FRAME: f32 = 1.0 / 30.0;
-
-    fn push(&mut self, a: Vec3, dt: f32) -> Vec3 {
-        if !(dt > 0.0) || !a.is_finite() {
-            return self.out;
-        }
-        // (a frame as long as OMSI's or longer is one of OMSI's)
-        if dt >= Self::FRAME * 0.99 {
-            *self = OmsiFrames { out: a, ..Default::default() };
-            return a;
-        }
-        self.sum += a * dt;
-        self.t += dt;
-        if self.t >= Self::FRAME * 0.99 {
-            self.out = self.sum / self.t;
-            self.sum = Vec3::ZERO;
-            self.t = 0.0;
-        }
-        self.out
-    }
-}
-
-/// The body-frame acceleration the scripts see as `A_Trans_*` (as OMSI computes it: the
-/// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
-/// an accelerometer would read, less gravity's share in the body frame.
-fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
-    accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }
 
 /// A negative `[boogies]` swaps the rail body's ends relative to its path frame. This is

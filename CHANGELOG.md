@@ -34,6 +34,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   where it comes from, and the A/B switches `OMSI_TYRE_SUSPENSION`, `OMSI_NO_WHEEL_SLIP` and
   `OMSI_KINEMATIC_TRAILERS` read once a process in `rigid/toggles.rs`. No behaviour change: the physics traces
   are identical bit for bit.
+- omsi-sim: what the physics reads from the scripts (`M_Wheel`, the brake forces, the spring factors) and writes
+  back (`Velocity`, `n_Wheel`, `A_Trans_*`, `Wheel_*`, `Axle_*`) goes through one place, `vehicle/physics_bridge.rs`,
+  for the rigid body, the kinematic model, the AI and the coupled parts alike; it was written out four times. The
+  physics traces gain an AI vehicle with a coupled section and a kinematic crash. No behaviour change: the
+  traces are identical bit for bit.
 - the smaller crates (geometry, map, vehicle, model, texture, content, cfg, scenery, script, launcher-core, o3d, audio example): comments cleaned of addresses, offsets and mentions of the reference
 - omsi-app: comments cleaned of addresses, offsets and mentions of the reference
 - omsi-sim: comments cleaned of addresses, offsets and mentions of the reference
