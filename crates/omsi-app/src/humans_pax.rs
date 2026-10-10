@@ -2138,8 +2138,8 @@ impl Humans {
         if dt <= 0.0 || self.avatar_only {
             return;
         }
-        let a = v.physics.a_trans;
-        let k = self.comfort.step(dt, self.time * 1000.0, v.physics.speed, a.x, a.y);
+        let a = v.motion().a_trans;
+        let k = self.comfort.step(dt, self.time * 1000.0, v.motion().speed, a.x, a.y);
         if k <= 0.0 {
             return;
         }

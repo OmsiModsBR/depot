@@ -29,5 +29,5 @@ pub use clock::SimClock;
 pub use daylight::Daylight;
 pub use host::VehicleHost;
 pub use input::{engine_action, EngineAction, KeyboardAxes};
-pub use physics::{Controls, VehiclePhysics};
+pub use physics::{Controls, VehicleMotion, VehiclePhysics};
 pub use vehicle::{VehicleInstance, VehicleType};

@@ -18,7 +18,7 @@ pub(crate) fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -
 pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
     let mut lines = Vec::new();
     let throttle = v.var("throttle").unwrap_or(0.0) > 0.05;
-    let slow = v.physics.velocity_kmh().abs() < 3.0;
+    let slow = v.motion().velocity_kmh().abs() < 3.0;
     if !(throttle && slow) {
         return lines;
     }
@@ -115,8 +115,7 @@ pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str)
 /// `OMSI_DEBUG_PHYSICS`: one line with the player's pose, speed, wheel contacts and crashes.
 pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
     let wheels = v
-        .rigid
-        .as_ref()
+        .rigid()
         .map(|rb| {
             rb.wheels
                 .iter()
@@ -145,8 +144,7 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
     // the drift of the body: how far its travel departs from where it points (deg), and the
     // coupled parts' angles to it
     let slip = v
-        .rigid
-        .as_ref()
+        .rigid()
         .filter(|rb| rb.velocity.truncate().length() > 1.0)
         .map(|rb| {
             let d = (rb.velocity.x as f64).atan2(rb.velocity.y as f64).to_degrees() - v.heading;
@@ -166,7 +164,7 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
         v.heading,
         v.pitch,
         v.bank,
-        v.physics.velocity_kmh(),
+        v.motion().velocity_kmh(),
         v.crashes,
         v.last_impact / 1000.0,
         v.var("antrieb_getr_aktugang").or(v.var("gear")),

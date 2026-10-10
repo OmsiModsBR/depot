@@ -359,7 +359,7 @@ impl App {
             eye_yaw: self.camera.as_ref().map(|c| c.yaw).unwrap_or(face as f32),
             lag: DVec3::ZERO,
             // (only with the bus standing: at speed the eyes have to stay with it)
-            settle: if self.player.as_ref().is_some_and(|p| p.vehicle.physics.velocity_kmh().abs() < 3.0) { 1.0 } else { 0.0 },
+            settle: if self.player.as_ref().is_some_and(|p| p.vehicle.motion().velocity_kmh().abs() < 3.0) { 1.0 } else { 0.0 },
             view_before: if self.view == "foot" { "driver".into() } else { self.view.clone() },
             kind,
             face_seat: false,

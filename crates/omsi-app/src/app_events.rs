@@ -723,12 +723,12 @@ impl ApplicationHandler for App {
                 // (in every view of the bus - the wheel went slack outside and in the
                 // passenger view)
                 let driving = self.player.as_ref().filter(|_| matches!(self.view.as_str(), "driver" | "outside" | "pax") && !self.paused);
-                let kmh = driving.map(|p| p.vehicle.physics.velocity_kmh()).unwrap_or(0.0);
-                let wheel_bump = ctl.wheel_bump(driving.and_then(|p| p.vehicle.rigid.as_ref()), kmh, dt);
+                let kmh = driving.map(|p| p.vehicle.motion().velocity_kmh()).unwrap_or(0.0);
+                let wheel_bump = ctl.wheel_bump(driving.and_then(|p| p.vehicle.rigid()), kmh, dt);
                 ctl.feedback(crate::controllers::FfInput {
                     on: driving.is_some(),
                     kmh,
-                    lateral_accel: driving.and_then(|p| p.vehicle.rigid.as_ref()).map(|r| r.accel_body.x).unwrap_or(0.0),
+                    lateral_accel: driving.and_then(|p| p.vehicle.rigid()).map(|r| r.accel_body.x).unwrap_or(0.0),
                     wheel_bump,
                     wheel_bump_age: 0.0,
                     vib_amp: driving.and_then(|p| p.vehicle.var("FF_Vib_Amp")).unwrap_or(0.0),
@@ -737,7 +737,7 @@ impl ApplicationHandler for App {
                     // (`StreetCond`: 0 dry, 1 wet, 2 snow) and the engine
                     street_cond: driving.map(|p| p.vehicle.host.street_cond).unwrap_or(0.0),
                     engine_rpm: driving.and_then(|p| omsi_sim::startup::engine_rpm(&p.vehicle)).unwrap_or(0.0),
-                    engine_load: driving.map(|p| p.vehicle.physics.controls.throttle.clamp(0.0, 1.0)).unwrap_or(0.0),
+                    engine_load: driving.map(|p| p.vehicle.controls().throttle.clamp(0.0, 1.0)).unwrap_or(0.0),
                     micro: 0.0,
                     dt,
                 });
@@ -767,8 +767,8 @@ impl ApplicationHandler for App {
                     // degrees do nothing and the rest too much, #1653)
                     analog.steering = Some(x);
                 } else if let Some((x, p)) = stick {
-                    let now = p.vehicle.physics.controls.steering;
-                    let kmh = p.vehicle.physics.velocity_kmh() as f32;
+                    let now = p.vehicle.controls().steering;
+                    let kmh = p.vehicle.motion().velocity_kmh() as f32;
                     self.pad_kmh = crate::controllers::smooth_toward(self.pad_kmh, kmh, dt, 0.4);
                     let target = crate::controllers::gamepad_steering(x, self.pad_kmh);
                     self.pad_steer_target = crate::controllers::smooth_toward(self.pad_steer_target, target, dt, self.settings.pad_steer_smooth / 1000.0);
@@ -776,8 +776,8 @@ impl ApplicationHandler for App {
                     analog.steering = Some(now + (self.pad_steer_target - now).clamp(-step, step));
                 } else if let Some(p) = self.player.as_ref() {
                     // (the stick picks up from where the wheel is, at the bus's speed)
-                    self.pad_steer_target = p.vehicle.physics.controls.steering;
-                    self.pad_kmh = p.vehicle.physics.velocity_kmh() as f32;
+                    self.pad_steer_target = p.vehicle.controls().steering;
+                    self.pad_kmh = p.vehicle.motion().velocity_kmh() as f32;
                 }
                 // (in every view of the bus - driver, outside, passenger and the map camera -
                 // as in OMSI, where switching the camera leaves the mouse steering on: its
@@ -799,7 +799,7 @@ impl ApplicationHandler for App {
                     // (the speed the divisor takes, smoothed over 0.4 s: the bus's own speed
                     // trembles by fractions of a km/h from frame to frame on its springs and
                     // tyres, and at 30 km/h the wheel twitched with it by itself)
-                    let raw_kmh = self.player.as_ref().map(|p| p.vehicle.physics.velocity_kmh()).unwrap_or(0.0);
+                    let raw_kmh = self.player.as_ref().map(|p| p.vehicle.motion().velocity_kmh()).unwrap_or(0.0);
                     let k_v = 1.0 - (-dt / 0.4).exp();
                     self.mouse_kmh += (raw_kmh - self.mouse_kmh) * k_v;
                     let kmh = self.mouse_kmh;
@@ -832,7 +832,7 @@ impl ApplicationHandler for App {
                                 let _ = writeln!(f, "t,dt,cursor_x,kmh,target,steer,steer_deg");
                             }
                         }
-                        let deg = self.player.as_ref().map(|p| p.vehicle.physics.steer_deg).unwrap_or(0.0);
+                        let deg = self.player.as_ref().map(|p| p.vehicle.motion().steer_deg).unwrap_or(0.0);
                         if let Some(f) = g.as_mut() {
                             let _ = writeln!(f, "{:.3},{:.4},{:.1},{:.2},{:.4},{:.4},{:.3}", self.clock.run_time, dt, self.cursor.0, kmh, target, self.mouse_steer.0, deg);
                         }
@@ -966,7 +966,7 @@ impl ApplicationHandler for App {
                         // (at a standstill, as the setting says: it fades out over the first
                         // few km/h as the bus pulls away and comes back when it stands - it
                         // swayed on the road as well, #1325)
-                        let idle = idle * crate::head_idle::standstill(p.vehicle.physics.velocity_kmh().abs());
+                        let idle = idle * crate::head_idle::standstill(p.vehicle.motion().velocity_kmh().abs());
                         // (a switch under the cursor is a hand reaching for it, and a view that
                         // goes on sliding under the pointer is a view that misses what it was
                         // reaching for. Held, not reset: the camera stays where it is, which is
@@ -1081,7 +1081,7 @@ impl ApplicationHandler for App {
                             // Camera smoothing uses frame time, not the head physics' clamped step.
                             // Physical head tracking controls the view without an added automatic turn.
                             p.steer_look = if vr_on || tracked.is_some() { 0.0 } else {
-                                crate::player::steering_view_yaw(p.steer_look, p.vehicle.physics.controls.steering, dt,
+                                crate::player::steering_view_yaw(p.steer_look, p.vehicle.controls().steering, dt,
                                                                  self.settings.steer_look && self.view == "driver", self.settings.steer_look_angle, self.settings.steer_look_response)
                             };
                             let mut tracked_rot = None;
@@ -1584,10 +1584,10 @@ impl ApplicationHandler for App {
                         self.career.tick(dt, &p.vehicle, riders);
                     }
                     if crash > 0.0 {
-                        self.career.crashed(crash, p.vehicle.physics.velocity_kmh() / 3.6);
+                        self.career.crashed(crash, p.vehicle.motion().velocity_kmh() / 3.6);
                         self.service_msg = Some((format!("Crash: {:.0} kJ", crash / 1000.0), 6.0));
                         use omsi_plugin::InfoValue::Num;
-                        let args = vec![Num(crash as f64 / 1000.0), Num(p.vehicle.physics.velocity_kmh().abs() as f64)];
+                        let args = vec![Num(crash as f64 / 1000.0), Num(p.vehicle.motion().velocity_kmh().abs() as f64)];
                         crate::plugins::queue_event(&mut self.plugin_events, "crash", args);
                     }
                 }
@@ -2342,7 +2342,7 @@ impl ApplicationHandler for App {
                             players: self.lan.as_ref().map(|l| crate::lan::nav_players(&self.remotes, l.my_id)).unwrap_or_default(),
                             bus: at,
                             heading,
-                            speed_kmh: p.vehicle.physics.velocity_kmh(),
+                            speed_kmh: p.vehicle.motion().velocity_kmh(),
                             outside_temp,
                             inside_temp,
                             line,
@@ -3050,7 +3050,7 @@ impl ApplicationHandler for App {
                         let speed = self
                             .player
                             .as_ref()
-                            .map(|p| format!(" - {:.0} km/h", p.vehicle.physics.velocity_kmh()))
+                            .map(|p| format!(" - {:.0} km/h", p.vehicle.motion().velocity_kmh()))
                             .unwrap_or_default();
                         self.fps = self.frames as f32;
                         win.set_title(&format!(
@@ -3514,7 +3514,7 @@ fn info_line(clock: &omsi_sim::SimClock, player: Option<&Player>, duty: Option<&
     let t = clock.time;
     let mut parts = vec![format!("{:02}:{:02}:{:02}", ((t / 3600.0) as i64).rem_euclid(24), ((t % 3600.0) / 60.0) as i64, (t % 60.0) as i64)];
     if let Some(p) = player {
-        parts.push(format!("{:.0} km/h", p.vehicle.physics.velocity_kmh().abs()));
+        parts.push(format!("{:.0} km/h", p.vehicle.motion().velocity_kmh().abs()));
         parts.push(distance_driven(metres));
         // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
         // `kmcounter_*` the cockpit shows, whole kilometres and the metres of the fraction)

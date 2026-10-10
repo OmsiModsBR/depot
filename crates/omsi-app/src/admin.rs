@@ -312,7 +312,7 @@ pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
         let origin = glam::DVec3::new(at.x, at.y, z);
         p.vehicle.position = origin;
         p.vehicle.heading = heading;
-        if let Some(rb) = p.vehicle.rigid.as_mut() {
+        if let Some(rb) = p.vehicle.rigid_mut() {
             rb.place(origin, heading);
         }
         for t in p.vehicle.trailers.iter_mut() {

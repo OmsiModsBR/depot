@@ -182,7 +182,7 @@ impl TrailerPart {
         // coupling point in the world: on the leading part (the vehicle or the previous trailer)
         let (lead_pos, lead_rot, lead_heading) =
             lead.unwrap_or((main.position, main.body_rotation(), main.heading));
-        let sprung = main.rigid.is_some() && self.body.as_ref().is_some_and(|b| b.placed);
+        let sprung = main.rigid().is_some() && self.body.as_ref().is_some_and(|b| b.placed);
         if sprung {
             self.follow_body();
         } else {
@@ -220,7 +220,7 @@ impl TrailerPart {
         if !sprung {
             // wheels of this part
             let rpm =
-                main.physics.velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
+                main.motion().velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
                     * 60.0;
             // radians, like every `Wheel_Rotation_*` (the degrees written here before spun the
             // rear section's wheels 57 times too fast: a flicker instead of a rolling wheel)
@@ -286,7 +286,7 @@ impl TrailerPart {
         self.heading = heading;
         let new_pivot = c - DVec3::new(dir.x, dir.y, 0.0) * self.length as f64;
         let ds = (new_pivot - pivot).truncate().length() as f32;
-        self.odometer += ds * (main.physics.velocity_kmh().signum().max(0.0) * 2.0 - 1.0).max(-1.0);
+        self.odometer += ds * (main.motion().velocity_kmh().signum().max(0.0) * 2.0 - 1.0).max(-1.0);
         self.pivot = Some(new_pivot);
         // Its springs: an AI copy sits `[ai_deltaheight]` low like its tractor; a driven one
         // as far down as the scripts' `Axle_Springfactor` lets the load press it.
@@ -567,7 +567,7 @@ mod tests {
         let origin = DVec3::new(200.0, 50.0, 0.0);
         v.position = origin;
         v.heading = 180.0;
-        if let Some(rb) = v.rigid.as_mut() {
+        if let Some(rb) = v.rigid_mut() {
             rb.place(origin, 180.0);
         }
         v.trailers[0].realign();
@@ -588,7 +588,7 @@ mod tests {
             }
         };
         let (front, rear) = sections();
-        let loads = |v: &VehicleInstance| v.rigid.as_ref().expect("body").wheels.iter().map(|w| w.rest_load).collect::<Vec<f32>>();
+        let loads = |v: &VehicleInstance| v.rigid().expect("body").wheels.iter().map(|w| w.rest_load).collect::<Vec<f32>>();
         let mut alone = VehicleInstance::new(front.clone(), VehicleHost::new(Default::default()));
         alone.contact = Some(flat());
         alone.enable_rigid_body();

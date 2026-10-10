@@ -3164,7 +3164,7 @@ impl Humans {
             )
         };
         if let (Some(b), Some(cabin)) = (bus, self.player_cabin.clone()) {
-            let speed = b.physics.velocity_kmh() as f64 / 3.6;
+            let speed = b.motion().velocity_kmh() as f64 / 3.6;
             let (entry_open, exit_open) =
                 Self::doors_open(b, cabin.entries.len(), cabin.exits.len());
             let (half, centre) = bb_of(b);
@@ -3372,7 +3372,7 @@ impl Humans {
             pos: v.position,
             rot: v.body_rotation(),
             heading: v.heading,
-            speed: v.physics.velocity_kmh() as f64 / 3.6,
+            speed: v.motion().velocity_kmh() as f64 / 3.6,
             interior: v.interior_light(),
             air: CabinAir::of(v),
             half: DVec2::new(bb[0] as f64 * 0.5, bb[1] as f64 * 0.5),
@@ -3480,7 +3480,7 @@ impl Humans {
                 pos: v.position,
                 rot: v.body_rotation(),
                 heading: v.heading,
-                speed: v.physics.velocity_kmh() as f64 / 3.6,
+                speed: v.motion().velocity_kmh() as f64 / 3.6,
                 interior: v.interior_light(),
                 air: CabinAir::of(v),
                 half: DVec2::new(bb[0] as f64 * 0.5, bb[1] as f64 * 0.5),
@@ -3710,7 +3710,7 @@ impl Humans {
     /// People the moving bus has just knocked down. OMSI counts them in the driver's
     /// personnel file; they are only counted once and then walk away.
     pub fn run_over(&mut self, bus: &VehicleInstance) -> u32 {
-        let moving = bus.physics.velocity_kmh().abs() >= 5.0;
+        let moving = bus.motion().velocity_kmh().abs() >= 5.0;
         let Some(bb) = bus.ty.def.bounding_box.filter(|_| moving) else {
             self.under_bus.clear();
             return 0;

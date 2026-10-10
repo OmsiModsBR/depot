@@ -6885,7 +6885,7 @@ impl Traffic {
                 // bulldozer
                 let h = c.vehicle.heading.to_radians();
                 let v = glam::DVec2::new(h.sin(), h.cos()) * c.state.speed as f64;
-                let (mass, id) = (c.vehicle.physics.mass_kg, c.id);
+                let (mass, id) = (c.vehicle.mass_kg(), c.id);
                 let rear = c.vehicle.trailers.iter().filter_map(move |t| {
                     t.ty.def.bounding_box.map(|bb| {
                         omsi_sim::collision::Obb::from_box(bb, t.position, t.body_heading())

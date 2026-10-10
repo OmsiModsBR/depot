@@ -1389,8 +1389,8 @@ impl Player {
     /// stood in for it.)
     pub(crate) fn move_head(&mut self, dt: f32, enabled: bool) {
         let dt = dt.clamp(0.0, 0.1);
-        let a = self.vehicle.physics.accel;
-        let omega = self.vehicle.rigid.as_ref().map(|rb| rb.omega).unwrap_or(Vec3::ZERO);
+        let a = self.vehicle.motion().accel;
+        let omega = self.vehicle.rigid().map(|rb| rb.omega).unwrap_or(Vec3::ZERO);
         let dw = omega - self.head_omega;
         self.head_omega = omega;
         if dt <= 0.0 {
@@ -1415,7 +1415,7 @@ impl Player {
         self.head.z = p;
         self.head_vel.z = v;
         if enabled {
-            let moving = self.vehicle.physics.speed.abs().min(1.0);
+            let moving = self.vehicle.motion().speed.abs().min(1.0);
             let kx = (-a.x * dt + dw.y * eye.z - dw.z * eye.y) * moving;
             let ky = (-a.y * dt - dw.x * eye.z + dw.z * eye.x) * moving;
             let (px, vx) = spring(self.head.x, self.head_vel.x, kx, 3000.0 / 100.0, 2000.0 / 100.0);
@@ -1464,7 +1464,7 @@ impl Player {
             return;
         }
         let gear = self.vehicle.var("antrieb_getr_aktugang").or_else(|| self.vehicle.var("antrieb_getr_gang")).unwrap_or(0.0);
-        let kmh = self.vehicle.physics.velocity_kmh().abs();
+        let kmh = self.vehicle.motion().velocity_kmh().abs();
         if gear.abs() > 0.5 && kmh < 12.0 {
             // it bites as the throttle goes down and only as far as the engine keeps its
             // revs (a clutch let go at once under full throttle stalled it all the same)
@@ -1519,7 +1519,7 @@ impl Player {
         }
         let Some(cur) = self.gate_gear() else { return };
         let Some(n) = ["engine_n", "antrieb_eng_n", "engine_rpm", "motor_n", "motor_rpm"].iter().find_map(|v| self.vehicle.var(v)) else { return };
-        let kmh = self.vehicle.physics.velocity_kmh().abs();
+        let kmh = self.vehicle.motion().velocity_kmh().abs();
         // the idle speed, from the engine running free at a standstill
         if n > 300.0 && kmh < 1.0 && throttle < 0.02 && (cur == 0 || self.axes.clutch > 0.9) {
             self.auto_shift_idle = if self.auto_shift_idle > 0.0 { self.auto_shift_idle + (n - self.auto_shift_idle) * (dt / 2.0).min(1.0) } else { n };
@@ -1546,7 +1546,7 @@ impl Player {
                 self.vehicle.trigger(&name);
             }
         }
-        self.axes.speed_kmh = self.vehicle.physics.velocity_kmh();
+        self.axes.speed_kmh = self.vehicle.motion().velocity_kmh();
         self.axes.lock_curvature = self.vehicle.ty.def.inv_min_turn_radius;
         self.axes.update(dt);
         let a = self.analog;
@@ -1585,10 +1585,10 @@ impl Player {
                     *g = Some((f, 0.0));
                 }
             }
-            if let (Some((f, t)), Some(rb)) = (g.as_mut(), self.vehicle.rigid.as_ref()) {
+            if let (Some((f, t)), Some(rb)) = (g.as_mut(), self.vehicle.rigid()) {
                 *t += dt as f64;
                 for (k, w) in rb.wheels.iter().enumerate() {
-                    let _ = writeln!(f, "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}", t, dt, rb.position.z, self.vehicle.physics.velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z);
+                    let _ = writeln!(f, "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}", t, dt, rb.position.z, self.vehicle.motion().velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z);
                 }
             }
         }
@@ -2923,7 +2923,7 @@ pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3
 /// back to it.
 pub(crate) fn keep_wheel(p: Option<&mut Player>) {
     if let Some(p) = p {
-        p.axes.steering = p.vehicle.physics.controls.steering;
+        p.axes.steering = p.vehicle.controls().steering;
         p.axes.centering = false;
     }
 }

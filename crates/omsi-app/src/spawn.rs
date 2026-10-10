@@ -370,7 +370,7 @@ pub(crate) fn spawn_player(
         }
         log::info!("spawn: the bus stands at height {:.2}", vehicle.position.z);
         vehicle.enable_rigid_body();
-        let rb = vehicle.rigid.as_ref().unwrap();
+        let rb = vehicle.rigid().unwrap();
         log::info!(
             "rigid body: mass {:.0} kg, inertia {:?}, cog {:.2} m, {} wheels, loads {:?}",
             rb.mass,

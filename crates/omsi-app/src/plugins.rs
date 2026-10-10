@@ -94,7 +94,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
     v.push(("version", Text(crate::startup::VERSION.to_string())));
     if let Some(p) = app.player.as_ref() {
         let veh = &p.vehicle;
-        v.push(("speed", Num(veh.physics.velocity_kmh().abs() as f64)));
+        v.push(("speed", Num(veh.motion().velocity_kmh().abs() as f64)));
         v.push(("delay", Num(veh.host.tt_delay as f64)));
         // Tile coordinates from global.cfg and metres within the tile (x east, y north).
         let ((tx, ty), (lx, ly)) = omsi_map::world_to_tile_local(veh.position.x, veh.position.y);

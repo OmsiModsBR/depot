@@ -308,7 +308,7 @@ impl Showroom {
                 // passed): a slow swing passes under the thresholds for a step or two as it
                 // turns, and a single still step stopped it short of where it comes to rest.
                 let still = |v: &omsi_sim::VehicleInstance| {
-                    v.rigid.iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity.length() < 0.002 && rb.omega.length() < 0.0005)
+                    v.rigid().into_iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity.length() < 0.002 && rb.omega.length() < 0.0005)
                 };
                 let mut still_for = 0;
                 for _ in 0..300 {
@@ -340,7 +340,7 @@ impl Showroom {
         let world = r.world;
         let mut vehicle = r.vehicle;
         // (a rigid body stands where it settled, on the floor at the origin)
-        if vehicle.rigid.is_none() {
+        if vehicle.rigid().is_none() {
             vehicle.position = DVec3::ZERO;
             vehicle.heading = 0.0;
         }

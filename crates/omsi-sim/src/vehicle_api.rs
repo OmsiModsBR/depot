@@ -613,8 +613,8 @@ impl VehicleInstance {
         let mut api = snapshot(&Inputs {
             var: &var,
             text: &text,
-            speed_kmh: self.physics.velocity_kmh(),
-            steer_deg: self.physics.steer_deg,
+            speed_kmh: self.motion().velocity_kmh(),
+            steer_deg: self.motion().steer_deg,
             heading: self.heading,
             pitch: self.pitch,
             bank: self.bank,

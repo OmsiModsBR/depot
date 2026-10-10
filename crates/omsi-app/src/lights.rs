@@ -752,5 +752,5 @@ fn cone_weather() -> (f32, f32) {
 /// meets (`Lighting::glass_wind`).
 pub fn vehicle_velocity(v: &omsi_sim::VehicleInstance) -> glam::Vec3 {
     let h = v.heading.to_radians();
-    glam::Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v.physics.speed
+    glam::Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v.motion().speed
 }

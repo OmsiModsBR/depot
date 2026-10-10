@@ -58,7 +58,7 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_millis(33));
         }
         if i < 5 || i % 30 == 0 || i + 1 == frames {
-            show(&v, &format!("frame {i} ({:.1} s) speed {:.1} km/h", i as f32 / 30.0, v.physics.velocity_kmh()));
+            show(&v, &format!("frame {i} ({:.1} s) speed {:.1} km/h", i as f32 / 30.0, v.motion().velocity_kmh()));
         }
     }
     println!("sound triggers: {:?}", v.host.fired_triggers.iter().collect::<std::collections::BTreeSet<_>>());

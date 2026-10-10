@@ -5057,7 +5057,7 @@ impl PlayerDuty {
         let served = self.advance(bus.position, day_time);
         if self.done
             && self.at_stop
-            && bus.physics.velocity_kmh().abs() < 0.36
+            && bus.motion().velocity_kmh().abs() < 0.36
             && Self::doors_open(bus)
         {
             self.served_terminus = self.trip().stops.last().and_then(|stop| stop.position);

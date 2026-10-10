@@ -5,7 +5,7 @@ use super::*;
 /// Position, heading, half extents and speed of the player's vehicle for the AI's
 /// obstacle checks.
 pub(crate) fn player_outline(p: &Player) -> traffic::PlayerBox {
-    vehicle_outline(&p.vehicle, p.vehicle.physics.speed)
+    vehicle_outline(&p.vehicle, p.vehicle.motion().speed)
 }
 
 /// `player_outline` of any vehicle moving at `speed` (m/s).
@@ -32,7 +32,7 @@ pub(crate) fn vehicle_outline(v: &omsi_sim::VehicleInstance, speed: f32) -> traf
 pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u32, traffic::PlayerBox)> {
     let mut out = Vec::new();
     let mut add = |v: &omsi_sim::VehicleInstance, base: u32, whole: bool| {
-        let speed = v.physics.speed;
+        let speed = v.motion().speed;
         if whole {
             out.push((base, vehicle_outline(v, speed)));
         }

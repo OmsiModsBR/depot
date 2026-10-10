@@ -675,7 +675,7 @@ pub(crate) fn run_offscreen(
             );
             let crash = std::mem::take(&mut player.vehicle.last_crash);
             if crash > 0.0 {
-                career.crashed(crash, player.vehicle.physics.velocity_kmh() / 3.6);
+                career.crashed(crash, player.vehicle.motion().velocity_kmh() / 3.6);
             }
             if i < drive_frames {
                 for (name, at) in &timed {
@@ -797,7 +797,7 @@ pub(crate) fn run_offscreen(
                         let d = (target - v.position).truncate();
                         let want = d.x.atan2(d.y).to_degrees();
                         let alpha = ((want - v.heading + 540.0).rem_euclid(360.0) - 180.0) as f32;
-                        let speed = v.physics.velocity_kmh();
+                        let speed = v.motion().velocity_kmh();
                         controls.steering = (alpha / 30.0).clamp(-1.0, 1.0);
                         controls.throttle = ((kmh - speed) / 10.0).clamp(0.0, 1.0);
                         controls.brake = ((speed - kmh - 3.0) / 10.0).clamp(0.0, 1.0);
@@ -839,7 +839,7 @@ pub(crate) fn run_offscreen(
                     let under = crate::scene::drive_probe(&world.terrains, &world.surfaces, at.x, at.y, at.z + 1.5).below;
                     let lost = under.is_none_or(|g| at.z < g - 0.6);
                     if i % 15 == 0 || lost {
-                        log::info!("autopilot t={t_s:.1} at ({:.1}, {:.1}, {:.2}) heading {:.0} {:.0} km/h, ground under {:?}{}", at.x, at.y, at.z, player.vehicle.heading, player.vehicle.physics.velocity_kmh(), under.map(|g| (g * 100.0).round() / 100.0), if lost { " FELL" } else { "" });
+                        log::info!("autopilot t={t_s:.1} at ({:.1}, {:.1}, {:.2}) heading {:.0} {:.0} km/h, ground under {:?}{}", at.x, at.y, at.z, player.vehicle.heading, player.vehicle.motion().velocity_kmh(), under.map(|g| (g * 100.0).round() / 100.0), if lost { " FELL" } else { "" });
                     }
                 }
                 // the driver's hands follow the wheel frame by frame (as in the window), so
@@ -859,13 +859,13 @@ pub(crate) fn run_offscreen(
                             let _ = writeln!(f, "t,x,y,z,vz,kmh,wheel,compression,rate,load,ground_z,on_ground");
                         }
                     }
-                    if let (Some(f), Some(rb)) = (f.as_mut(), player.vehicle.rigid.as_ref()) {
+                    if let (Some(f), Some(rb)) = (f.as_mut(), player.vehicle.rigid()) {
                         for (k, w) in rb.wheels.iter().enumerate() {
                             let _ = writeln!(
                                 f,
                                 "{:.4},{:.2},{:.2},{:.4},{:.3},{:.1},{k},{:.4},{:.3},{:.0},{:.4},{}",
                                 t_s, rb.position.x, rb.position.y, rb.position.z, rb.velocity.z,
-                                player.vehicle.physics.velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z, w.on_ground as u8
+                                player.vehicle.motion().velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z, w.on_ground as u8
                             );
                         }
                     }
@@ -882,7 +882,7 @@ pub(crate) fn run_offscreen(
                     }
                     if (t_s % 1.0) < dt {
                         if let Some((p, d)) = wheel_worst.take() {
-                            log::info!("wheel trace t={t_s:.0}: deepest tyre {d:+.3} m at ({:.1}, {:.1}, {:.2}), {:.0} km/h", p.x, p.y, p.z, player.vehicle.physics.velocity_kmh());
+                            log::info!("wheel trace t={t_s:.0}: deepest tyre {d:+.3} m at ({:.1}, {:.1}, {:.2}), {:.0} km/h", p.x, p.y, p.z, player.vehicle.motion().velocity_kmh());
                         }
                     }
                 }
@@ -1576,13 +1576,13 @@ pub(crate) fn run_offscreen(
                     }
                 }
             }
-            if let Some(rb) = &player.vehicle.rigid {
+            if let Some(rb) = player.vehicle.rigid() {
                 log::info!("rigid: pos ({:.1}, {:.1}, {:.2}) heading {:.1} pitch {:.2} bank {:.2} v {:?} compressions {:?}", player.vehicle.position.x, player.vehicle.position.y, player.vehicle.position.z, player.vehicle.heading, player.vehicle.pitch, player.vehicle.bank, rb.velocity, rb.wheels.iter().map(|w| (w.compression * 1000.0).round() / 1000.0).collect::<Vec<_>>());
             }
             log::info!(
                 "drove {:.1} m in {secs} s, now {:.1} km/h, engine_n={:?} M_Wheel={:?} gear={:?}",
                 (player.vehicle.position - start).length(),
-                player.vehicle.physics.velocity_kmh(),
+                player.vehicle.motion().velocity_kmh(),
                 player.vehicle.var("engine_n"),
                 player.vehicle.var("M_Wheel"),
                 player.vehicle.var("antrieb_getr_aktugang")
@@ -1948,7 +1948,7 @@ pub(crate) fn run_offscreen(
                 (0..2).map(|i| p.vehicle.var(&format!("PAX_Exit{i}_Open")).unwrap_or(0.0)).collect::<Vec<_>>(),
                 (0..2).map(|i| p.vehicle.var(&format!("PAX_Exit{i}_Req")).unwrap_or(0.0)).collect::<Vec<_>>(),
                 p.vehicle.var("haltewunsch"),
-                p.vehicle.physics.velocity_kmh()
+                p.vehicle.motion().velocity_kmh()
             );
             if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
                 for (id, pos, rot, name) in world.bus_stops.lock().iter() {
@@ -2648,7 +2648,7 @@ pub(crate) fn run_offscreen(
             ),
             format!(
                 "{:.0} km/h   {}",
-                p.vehicle.physics.velocity_kmh().abs(),
+                p.vehicle.motion().velocity_kmh().abs(),
                 p.vehicle.ty.def.type_name
             ),
         ];
@@ -2702,7 +2702,7 @@ pub(crate) fn run_offscreen(
                 players: lan_off.as_ref().map(|l| lan::nav_players(&remotes_off, l.my_id)).unwrap_or_default(),
                 bus: p.vehicle.position,
                 heading: p.vehicle.heading,
-                speed_kmh: p.vehicle.physics.velocity_kmh(),
+                speed_kmh: p.vehicle.motion().velocity_kmh(),
                 outside_temp,
                 inside_temp,
                 line,
