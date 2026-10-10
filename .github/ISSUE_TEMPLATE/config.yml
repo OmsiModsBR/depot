@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and help
-    url: https://discord.gg/VG2EKVafYG
+    url: https://omsimods.com.br/discord
     about: How do I...? Setting up, mods, or a chat with other players - ask on our Discord server.
   - name: Security problem
     url: https://github.com/OmsiModsBR/depot/security/advisories/new

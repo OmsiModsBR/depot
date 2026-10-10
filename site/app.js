@@ -295,21 +295,3 @@ window.addEventListener("hashchange", route);
   show();
 })();
 route();
-
-// Donate: the button opens its menu upwards; a click elsewhere, Escape or a choice closes it
-(() => {
-  const button = document.getElementById("donate-button");
-  const menu = document.getElementById("donate-menu");
-  if (!button || !menu) return;
-  const open = on => {
-    menu.hidden = !on;
-    button.setAttribute("aria-expanded", on ? "true" : "false");
-    if (on) menu.querySelector("a").focus();
-  };
-  button.addEventListener("click", e => { e.stopPropagation(); open(menu.hidden); });
-  menu.addEventListener("click", e => { if (e.target.closest("a")) open(false); });
-  document.addEventListener("click", e => { if (!menu.hidden && !e.target.closest("#donate")) open(false); });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !menu.hidden) { open(false); button.focus(); }
-  });
-})();
