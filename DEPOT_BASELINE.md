@@ -14,6 +14,7 @@ Its initial policy is **stable base + selective upstream integration**.
 - Version: `0.2.16`
 - Historical release date: `2026-10-07`
 - Commit: `c85b2e0dda13d219fd12d0496c653d20cdb54145`
+- Immutable Depot baseline tag: `depot-baseline-openomsi-0.2.16`
 
 The Git history through this commit is retained for attribution and comparison.
 The original MIT license and copyright notices remain intact. GitHub fork
@@ -28,6 +29,9 @@ source filenames remain unchanged.
 Inherited GitHub workflows and Dependabot configuration are archived in
 `docs/upstream-automation/`; enabling Depot automation requires a separate review.
 The README is adapted to describe Depot's origin, goals and distribution names.
+See [PROJECT.md](PROJECT.md) and [UPSTREAM.md](UPSTREAM.md).
+A Depot-owned CI workflow builds and tests with read-only repository permissions;
+it does not publish releases, tags, websites or packages and uses no upstream secrets.
 
 ## Selective integration
 
