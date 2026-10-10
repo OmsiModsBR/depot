@@ -2798,13 +2798,14 @@ impl Humans {
         if self.stops.get(&id)?.taken.iter().all(|t| *t) || !self.pool_room() {
             return None;
         }
-        let k = self.take_spot(id)?;
-        let sp = self.stops[&id].spots[k].clone();
+        let (k, beside) = self.take_spot(id)?;
+        let sp = beside.clone().unwrap_or_else(|| self.stops[&id].spots[k].clone());
         let (dest, line) = self.draw_dest(id);
         let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
         let mut pax = Pax::new(walk, self.rand_f());
         pax.stop = Some(id);
         pax.spot = Some(k);
+        pax.beside = beside;
         pax.pos = sp.pos;
         pax.yaw = sp.face.to_radians();
         pax.dest = dest;
@@ -5792,7 +5793,12 @@ impl Humans {
             if let Some(t) = self.stops.get_mut(&stop).unwrap().taken.get_mut(spot) {
                 *t = true;
             }
-            if sp.height != 0.0 {
+            // (the host stood them beside their place - somebody of a neighbouring stop had
+            // it -: they stay where they stand, on foot)
+            let feet = sp.pos - DVec3::Z * sp.height as f64;
+            if (pax.pos - feet).truncate().length() > 0.3 {
+                pax.beside = Some(WaitSpot { pos: pax.pos, face: sp.face, height: 0.0 });
+            } else if sp.height != 0.0 {
                 pax.seat_h = sp.height;
                 pax.pos = sp.pos - DVec3::Z * seatheight as f64;
                 pax.pax_state = 2.0;
@@ -6817,5 +6823,21 @@ mod population_limit_tests {
         // nothing new: nothing added
         assert_eq!(merge_spots(&mut spots, &mut taken, vec![spot(5.0)]), 0);
         assert_eq!(spots.len(), 5);
+    }
+
+    #[test]
+    fn beside_a_shared_place_by_turns_along_the_kerb_on_foot() {
+        // a seat 0.45 m up, the stop heading north (+y)
+        let seat = WaitSpot { pos: DVec3::new(10.0, 20.0, 1.45), face: 90.0, height: 0.45 };
+        let at = |n| beside_place(&seat, 0.0, n);
+        for (n, dy) in [(1, 0.7), (2, -0.7), (3, 1.4), (4, -1.4)] {
+            let b = at(n);
+            assert!((b.pos - DVec3::new(10.0, 20.0 + dy, 1.0)).length() < 1e-6, "step {n}: {:?}", b.pos);
+            assert_eq!(b.height, 0.0, "on foot");
+            assert_eq!(b.face, 90.0);
+        }
+        // heading east: along +x
+        let b = beside_place(&seat, 90.0, 1);
+        assert!((b.pos - DVec3::new(10.7, 20.0, 1.0)).length() < 1e-6);
     }
 }
