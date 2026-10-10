@@ -20,12 +20,15 @@ from pathlib import Path
 PUBLISHED = ["USER_GUIDE", "MODDING", "PBR", "BUILDING", "FORMATS", "ARCHITECTURE", "ROUTES", "VERSIONING"]
 
 OUT = re.compile(
-    r"\bLAN\b|lan-(?:host|join|name|store|world)|OMSI_(?:NO_)?LAN|OMSI_(?:NO_BRIDGE|NO_VAR_SYNC|DEBUG_VAR_SYNC)"
+    r"\bLAN\b|other players|lan-(?:host|join|name|store|world)|OMSI_(?:NO_)?LAN|OMSI_(?:NO_BRIDGE|NO_VAR_SYNC|DEBUG_VAR_SYNC)"
     r"|multi-?player|dedicated server|\bSERVER\.md|server package|session code|UPnP|Hamachi|ZeroTier|Tailscale"
     r"|GreenTeaSpeak|NativeActivity|\\bJNI\\b|\bandroid\b|\bAPK\b|\bmacOS\b|\bmac\b|\bApple\b|\bLinux\b|\bARM64\b|\barm64\b|aarch64"
     r"|build-(?:macos|linux|android|server)|\.icns|\bWine\b|\bwayland\b|\bxcode\b|\bopenomsi-server\b",
     re.I,
 )
+
+# Sections dropped whole: only headings that are entirely about an unsupported topic.
+SECTION_OUT = re.compile(r"^(?:LAN play|Android|Dedicated server)\b", re.I)
 
 FENCE = re.compile(r"^\s*```")
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
@@ -44,7 +47,7 @@ def split_sections(lines):
             level = len(m.group(1))
             if skip_level is not None and level <= skip_level:
                 skip_level = None
-            if skip_level is None and OUT.search(m.group(2)):
+            if skip_level is None and SECTION_OUT.search(m.group(2)):
                 skip_level = level
         if skip_level is None:
             out.append(ln)
@@ -98,11 +101,26 @@ def trim_sentences(block):
     prefix = marker.group(0) if marker else ""
     parts = SPLIT.split(text[len(prefix):])
     res = ""
+    dropped = False
     for k in range(0, len(parts), 2):
-        s = parts[k]
+        sent = parts[k]
         sep = parts[k + 1] if k + 1 < len(parts) else ""
-        if not OUT.search(s):
-            res += s + sep
+        if OUT.search(sent):
+            # Keep the clauses of a long "a; b; c" sentence that are about supported things.
+            clauses = re.split(r"(?<=;)(\s+)", sent)
+            kept = [(clauses[i], clauses[i + 1] if i + 1 < len(clauses) else "")
+                    for i in range(0, len(clauses), 2) if not OUT.search(clauses[i])]
+            if kept and len(clauses) > 1:
+                sent = "".join(c + w for c, w in kept).rstrip()
+                if not sent.endswith((".", "!", "?", ")", "*", "`")):
+                    sent = sent.rstrip(";,") + "."
+                res += sent + sep
+            dropped = True
+            continue
+        if dropped and re.fullmatch(r"\*\*\([^)]*\)\*\*\.?", sent.strip()):
+            continue  # an orphaned tag such as "**(done)**" after a dropped sentence
+        dropped = False
+        res += sent + sep
     res = res.strip()
     return (prefix + res).split("\n") if res else []
 
@@ -116,6 +134,8 @@ LITERAL = [
     (r"\* \*\*Online\*\* - `ui\.rs`", "* **Interface** - `ui.rs`"),
     (r"shadows, online interface,", "shadows, interface,"),
     (r", other players' buses\.", "."),
+    (r"`log`, `join`, `settings`", "`log`, `settings`"),
+    (r"controls, controllers, multiplayer that lasts, phones, more builds", "controls, controllers"),
     (r"`OMSI_DEBUG_LAN`, ", ""),
     (r", a peer,", ","),
     (r", install mods and play over LAN\.", " and install mods."),
