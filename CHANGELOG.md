@@ -105,6 +105,15 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Vehicle physics: driving and braking pitch the body as OMSI 2 does. The extra lever of the tyres' pull
+  (the wheel radius, taken at the hubs on top of the centre of gravity's height) is now the radius of the
+  first axle's wheels, where it was the mean radius of all of them, and the pitch from it acts whenever the
+  bus moves or its drive beats the brakes, where it waited for 0.2 m/s: a bus pulling away pitches from the
+  first frame the drive overcomes the brakes, and one braking to a stop until it stands. It still stays off
+  while the bus stands with its brakes holding. The tuned constant `PITCH_SPEED` is gone. New trace
+  scenario T16 (a bus on smaller wheels in front than behind). The physics traces differ in 15 of the 26
+  scenarios, each from the frame where the old and the new pitch lever first differ; the largest change of
+  pitch is 0.2°, and the handling report is unchanged.
 - Vehicle physics: the tyres take the road's grip of the frame they drive in. The grip (`road_grip` of
   `StreetCond` and the air temperature) was set after the physics' step, so a road that froze over or dried
   took hold one frame late, and an articulated bus's rear sections copied the late value. It is now set at

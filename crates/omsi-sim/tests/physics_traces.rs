@@ -235,6 +235,7 @@ scenarios!(
     t13_frame_times_vary,
     t14_inputs_that_are_no_number,
     t15_spring_factor_varies,
+    t16_wheels_of_two_sizes,
     b1_vehicle_with_script_variables,
     b2_articulated_vehicle,
     b3_vehicle_crash,
@@ -382,7 +383,7 @@ mod scenarios {
         ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * r
     }
 
-    // -- T1..T15: the rigid body and the train --
+    // -- T1..T16: the rigid body and the train --
 
     pub fn t01_parked_on_the_flat() -> String {
         let mut t = Trace::default();
@@ -688,6 +689,21 @@ mod scenarios {
             rb.wheels.iter_mut().take(2).for_each(|w| w.spring_factor = sf);
             run(&mut t, &mut rb, 1, 1.0 / 60.0, &flat, |rb| (hold(rb, 30.0 / 3.6), 0.0, 0.1));
         }
+        t.text
+    }
+
+    /// The bus on smaller wheels in front (0.8 m) than behind (1.0 m): rolling at 30 km/h it
+    /// drives on, then brakes to a stop.
+    pub fn t16_wheels_of_two_sizes() -> String {
+        let mut t = Trace::default();
+        let mut def = bus();
+        def.axles[0].wheel_diameter = 0.8;
+        def.axles[1].wheel_diameter = 1.0;
+        let mut rb = placed(&def);
+        run(&mut t, &mut rb, 60, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
+        launch(&mut rb, 30.0 / 3.6);
+        run(&mut t, &mut rb, 120, 1.0 / 60.0, &flat, |_| (6000.0, 0.0, 0.0));
+        run(&mut t, &mut rb, 240, 1.0 / 60.0, &flat, |_| (0.0, 20_000.0, 0.0));
         t.text
     }
 
