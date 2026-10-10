@@ -81,6 +81,14 @@ impl VehicleInstance {
         lead.wheel_walls = self.wheel_walls;
         if !self.part_bodies_wanted() {
             lead.coupled = self.coupled_parts();
+            if self.rest_loads_for != 0 {
+                // the parts that were carried by the bodies are gone: the wheels carry their own again
+                let loads = crate::rigid::wheel_rest_loads(&self.ty.def);
+                for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
+                    w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
+                }
+                self.rest_loads_for = 0;
+            }
             lead.step(dt, m_wheel, brakes, steer, probe);
             return lead;
         }
@@ -98,7 +106,8 @@ impl VehicleInstance {
             bodies.push(p.rb);
             meta.push((p.placed, p.vars));
         }
-        if created {
+        if created || self.rest_loads_for != self.trailers.len() {
+            self.rest_loads_for = self.trailers.len();
             // the joints carry part of each part behind (from the front: each load the part in
             // front of it takes on its axles)
             let loads = crate::rigid::wheel_rest_loads(&self.ty.def);
@@ -595,6 +604,34 @@ mod tests {
         assert!(gap(&v) < 0.02, "{}", gap(&v));
         assert!((v.trailers[0].heading - 180.0).abs() < 0.5, "{}", v.trailers[0].heading);
         assert!(v.trailers[0].position.y > 50.0, "{:?}", v.trailers[0].position);
+    }
+
+    /// Uncoupled, the front section carries its own weight on its own wheels again, not the
+    /// share the joint took of the part that is gone.
+    #[test]
+    fn an_uncoupled_part_leaves_no_load_on_the_wheels() {
+        let run = |v: &mut VehicleInstance| {
+            for _ in 0..12 {
+                v.step_physics(1.0 / 60.0);
+                v.update_visuals(1.0 / 60.0);
+            }
+        };
+        let (front, rear) = sections();
+        let loads = |v: &VehicleInstance| v.rigid.as_ref().expect("body").wheels.iter().map(|w| w.rest_load).collect::<Vec<f32>>();
+        let mut alone = VehicleInstance::new(front.clone(), VehicleHost::new(Default::default()));
+        alone.contact = Some(flat());
+        alone.enable_rigid_body();
+        run(&mut alone);
+        let own = loads(&alone);
+        let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+        v.contact = Some(flat());
+        v.attach_trailer(rear);
+        v.enable_rigid_body();
+        run(&mut v);
+        assert!(loads(&v).iter().zip(&own).any(|(a, b)| a > b), "the joint should carry load: {:?} vs {own:?}", loads(&v));
+        assert!(v.detach_last_trailer().is_some());
+        run(&mut v);
+        assert_eq!(loads(&v), own);
     }
 
     /// The stock GN92 weaving at 30 km/h on its own physics: the rear section's body follows

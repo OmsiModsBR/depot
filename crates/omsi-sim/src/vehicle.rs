@@ -954,6 +954,8 @@ pub struct VehicleInstance {
     pub contact: Option<std::sync::Arc<dyn crate::rigid::Ground>>,
     /// Vehicles coupled behind this one.
     pub trailers: Vec<TrailerPart>,
+    /// How many coupled parts the lead body's rest loads were worked out for (`step_bodies`).
+    pub(crate) rest_loads_for: usize,
     /// The vehicle's `[smoke]` particle systems (see `crate::particles`).
     pub particles: ParticleSet,
     /// How far each `[light_enh_2]` of the model (in order) has come on: its fading variable
@@ -1273,6 +1275,7 @@ impl VehicleInstance {
             html_textures,
             ground: None,
             trailers: Vec::new(),
+            rest_loads_for: 0,
             skin_rest: Vec::new(),
             collision: None,
             dynamic_boxes: Vec::new(),
