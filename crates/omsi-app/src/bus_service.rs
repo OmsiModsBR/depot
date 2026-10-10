@@ -113,8 +113,8 @@ pub struct BusService {
     /// The timetable still carries the route on as tiles bring their lanes: at the end of
     /// what it has, it waits for more.
     pub route_open: bool,
-    /// The terminus of its trip, the name the waiting people read off it (Omsi.exe's bus
-    /// +0x7bc) to see whether it goes their way.
+    /// The terminus of its trip, the name the waiting people read off it (OMSI's bus
+    /// terminus field) to see whether it goes their way.
     pub terminus: String,
     /// How far the front stop was last frame (m; infinite when not measured yet).
     near_d: f32,
@@ -149,7 +149,7 @@ fn boarding_time(id: u64) -> f32 {
 }
 
 /// An early bus waits at its stop until this long before its departure, a train at its
-/// station until `EARLY_LEAVE_RAIL` before (Omsi.exe 0x7d9bdc: it stands while it is more
+/// station until `EARLY_LEAVE_RAIL` before (as in OMSI: it stands while it is more
 /// than 20 s, a train 120 s, early). Capped at 40 s, the buses no longer waited for their
 /// times at the stops where a timetable holds them all for a connection (#1012).
 const EARLY_LEAVE: f64 = 20.0;
@@ -171,8 +171,8 @@ fn early_wait(depart: f64, now: f64, layover: bool, rail: bool) -> f64 {
 /// On a layover, the doors open this long before the departure.
 const LAYOVER_BOARDING: f64 = 45.0;
 /// Pull into the bay over this distance before the stop: the stop's docking distance,
-/// 30 m unless its object strings say otherwise (Omsi.exe 0x620058, string 4; the bus
-/// moves over once it is that near, 0x7dac5e).
+/// 30 m unless its object strings say otherwise (OMSI reads it from string 4; the bus
+/// moves over once it is that near).
 const BAY_REACH: f32 = 30.0;
 /// Pulling out: at least this long after the doors were told to close (s), at most this
 /// long waiting for the script to say they are shut.
@@ -180,8 +180,8 @@ const CLOSE_MIN: f32 = 1.5;
 const CLOSE_MAX: f32 = 12.0;
 /// Brake for the stop from this far.
 const STOP_REACH: f32 = 80.0;
-/// This near its stop a timetable bus settles whether it stops there at all (Omsi.exe
-/// 0x7da5b5: 50 m): not when nobody aboard wants to get off and nobody waits there,
+/// This near its stop a timetable bus settles whether it stops there at all (in OMSI,
+/// 50 m): not when nobody aboard wants to get off and nobody waits there,
 /// unless it is the trip's first or last stop or the bus is more than `EARLY_STOP` early.
 const SKIP_DECIDE: f32 = 50.0;
 const EARLY_STOP: f64 = 120.0;
@@ -276,7 +276,7 @@ impl BusService {
     }
 
     /// Standing at a stop (boarding, waiting or pulling out).
-    /// Whether its engine runs (`AI_Engine`): Omsi.exe (0x7d9128) switches a timetable
+    /// Whether its engine runs (`AI_Engine`): OMSI switches a timetable
     /// bus's engine off six seconds after it came to a stop it is to leave more than a
     /// minute later, and on again twenty seconds before it leaves. The buses took their
     /// breaks at the termini with the engines running (#1404).
@@ -306,7 +306,7 @@ impl BusService {
     }
 
     /// Somebody is still at the doors: keep them open for `secs` more - for somebody
-    /// coming from stop `stop` only while the bus serves that stop (Omsi.exe 0x7d9f1d: the
+    /// coming from stop `stop` only while the bus serves that stop (as in OMSI: the
     /// person's stop is the bus's), not a stop it stands next to.
     pub fn hold(&mut self, stop: Option<i64>, secs: f32) {
         let here = stop.is_none_or(|s| self.stops.front().is_some_and(|f| f.id == s));
@@ -567,8 +567,8 @@ impl BusService {
     }
 }
 
-/// How far before a station's point a vehicle stops with its origin, as Omsi.exe measures
-/// the way to the station (0x7da4e3): from the origin of the vehicle that leads, less half
+/// How far before a station's point a vehicle stops with its origin, as OMSI measures
+/// the way to the station: from the origin of the vehicle that leads, less half
 /// its length for a train (its front comes to rest at the station, not its middle - the
 /// S-Bahn stopped with half a car past the end of the platform), plus the holding point
 /// offset of its `[ai_brakeperformance]` ("to correct unprecise braking").

@@ -1,19 +1,18 @@
-//! Passengers, as Omsi.exe runs them.
+//! Passengers, as OMSI runs them.
 //!
-//! A passenger is one of the original's `THumanBeingInst`s with a *task* (+0x6c5, named by
-//! sub_62465c) and a *movement state* (+0x6c4). Every frame the human's tick (sub_62a6a0)
+//! A passenger is a person with a *task* and a *movement state*. Every frame the human's tick
 //! first moves the person by the state - straight at a target (1), along the vehicle's
 //! `paths.cfg` network from point to point (5), standing (0, 3, 7) or turning on the spot
 //! (9) - and then lets the task look at the world and switch the state or the task
-//! (sub_62e42c sets up a new task):
+//! (changing the task sets up the new one):
 //!
 //! * `WaitingForBus` (1): at a waiting place of the stop. A bus of theirs listed at the stop
-//!   - within 60 m, facing the stop's way (sub_61f238) - that still rolls faster than 2 m/s,
+//!   - within 60 m, facing the stop's way - that still rolls faster than 2 m/s,
 //!   or stands in the stop's box, sends them to the stop's gather point (task 2).
 //! * task 2 (no name): walking to the gather point, 0.7 m short of it. When the bus stands
-//!   (under 3 m/s) in the box, a free place in it is reserved (sub_7e910c: a random free
+//!   (under 3 m/s) in the box, a free place in it is reserved (a random free
 //!   `[passpos]`, seat or standing place - no free place, nobody gets on), the ticket is
-//!   decided (sub_5ce4e0) and they walk to the bus (3).
+//!   decided and they walk to the bus (3).
 //! * `WalkingToBus` (3): to the nearest entry that is open or has a button (and sells
 //!   tickets when they buy one), 0.5 m outside the bus side until they are level with it;
 //!   a shut door is asked for (`PAX_Entry<n>_Req`) and waited at 0.7 m. In the doorway
@@ -30,12 +29,12 @@
 //!   stands at a stop - and on along the pavement as a pedestrian.
 //! * `WalkingToBusstop` (6): back to a waiting place of the stop, then waiting again.
 //!
-//! People do not avoid each other: somebody within 0.6 m in front stops them (sub_626860),
+//! People do not avoid each other: somebody within 0.6 m in front stops them,
 //! a person facing them makes them turn aside once, and that is all.
 
 use super::*;
 
-/// Omsi.exe's tasks (+0x6c5).
+/// OMSI's tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Task {
     Nothing,
@@ -68,7 +67,7 @@ impl Task {
 /// at the stop (`Pax::door_since`).
 const DOOR_GIVE_UP: f64 = 25.0;
 
-/// The ticket a passenger has (+0x61c): nothing to do, a ticket to stamp, one to buy.
+/// The ticket a passenger has: nothing to do, a ticket to stamp, one to buy.
 pub(super) const TICKET_NONE: u8 = 0;
 pub(super) const TICKET_STAMP: u8 = 2;
 pub(super) const TICKET_BUY: u8 = 3;
@@ -77,49 +76,49 @@ pub(super) const TICKET_BUY: u8 = 3;
 #[derive(Debug, Clone)]
 pub(super) struct Pax {
     pub task: Task,
-    /// Movement state +0x6c4: 0 stand, 1 to the target, 2 0.7 m short of it, 3 there, 5
+    /// Movement state: 0 stand, 1 to the target, 2 0.7 m short of it, 3 there, 5
     /// along the paths, 6 0.7 m short of the path's end, 7 at the path's end, 9 turning on
     /// the spot.
     pub st: u8,
-    /// Inside a bus (+0x5ef clear): `pos` and `yaw` are in its frame.
+    /// Inside a bus: `pos` and `yaw` are in its frame.
     pub inside: Option<BusId>,
     /// Where the feet are (the world, or the bus frame), and the heading (radians, 0 =
     /// forward, clockwise from above: Direct3D's yaw).
     pub pos: DVec3,
     pub yaw: f64,
-    /// The bus dealt with (+0x6b4), the stop (+0x6bc), the waiting place there (+0x618).
+    /// The bus dealt with, the stop, the waiting place there.
     pub bus: Option<BusId>,
     pub stop: Option<i64>,
     pub spot: Option<usize>,
     /// Where they stand when somebody of a neighbouring stop has their waiting place: that
     /// place moved along the kerb, on foot (see `take_spot`); `None` at the place itself.
     pub beside: Option<WaitSpot>,
-    /// What state 1 walks to (+0x5bd) and whether it is a point of the bus (`bus`) or of
-    /// the world; the heading to turn to there (+0x5d4).
+    /// What state 1 walks to and whether it is a point of the bus (`bus`) or of
+    /// the world; the heading to turn to there.
     pub target: DVec3,
     pub target_bus: bool,
     pub target_yaw: f64,
-    /// The path point walked from / to (+0x5e4) and the one at the end (+0x5e0).
+    /// The path point walked from / to and the one at the end.
     pub pt: Option<usize>,
     pub pt_target: Option<usize>,
-    /// Stop 0.7 m short of the target (+0x5ec).
+    /// Stop 0.7 m short of the target.
     pub short: bool,
     /// Since when (`time`) the person has stood at the shut door of the bus they want
     /// (`DOOR_GIVE_UP`), and the bus they then left standing: not walked to again before it
     /// opens a door.
     pub door_since: Option<f64>,
     pub shunned: Option<BusId>,
-    /// Walking to a door from outside (+0x5d0): keep 0.5 m off the bus side
-    /// (`clamp_x`, +0x5cc) unless the door is open (+0x5d1) and they are level with it;
-    /// a door on the left (+0x5d2).
+    /// Walking to a door from outside: keep 0.5 m off the bus side
+    /// (`clamp_x`) unless the door is open and they are level with it;
+    /// a door on the left.
     pub clamp: bool,
     pub clamp_open: bool,
     pub clamp_left: bool,
     pub clamp_x: f64,
-    /// Destination (+0x5f4), the stop's line record it matched (+0x5f8), the stop the line
-    /// leaves the known route at (+0x5fc) and whether it was passed (+0x600), the way on
-    /// from there (+0x604, m), the distance to ride (+0x5f0, km) and the odometer at boarding
-    /// (+0x60c, km).
+    /// Destination, the stop's line record it matched, the stop the line
+    /// leaves the known route at and whether it was passed, the way on
+    /// from there (m), the distance to ride (km) and the odometer at boarding
+    /// (km).
     pub dest: Option<String>,
     pub line: Option<usize>,
     pub alt: Option<String>,
@@ -131,45 +130,44 @@ pub(super) struct Pax {
     /// to get off. The stop and its request distance are settled when that leg begins.
     pub stop_request_random: f64,
     pub stop_request_at: Option<(i64, f64)>,
-    /// The place reserved in the bus (+0x610).
+    /// The place reserved in the bus.
     pub seat: Option<usize>,
-    /// +0x61c, the ticket (1-based, +0x61d) and its price (+0x620), what was paid (+0x624),
-    /// the change was wrong (+0x628), the cash desk was free (+0x629), the ticket sale
-    /// step (+0x6c6).
+    /// The ticket kind, the ticket (1-based) and its price, what was paid,
+    /// whether the change was wrong, whether the cash desk was free, and the ticket sale
+    /// step.
     pub ticket: u8,
     pub ticket_id: u8,
     pub price: f32,
     pub paid: f32,
     pub bad_change: bool,
     pub sub: u8,
-    /// The entry or exit asked for (+0x640).
+    /// The entry or exit asked for.
     pub door: Option<usize>,
     /// The validator they stamp at (an index into the cabin's: a bus may have several).
     pub stamper: Option<usize>,
-    /// `HeightOfSeat` (+0x648) and `PAX_State` (+0x64c: 0 stand, 1 walk, 2 sit).
+    /// `HeightOfSeat` and `PAX_State` (0 stand, 1 walk, 2 sit).
     pub seat_h: f32,
     pub pax_state: f32,
-    /// A countdown in seconds (+0x650) and one in metres walked (+0x654).
+    /// A countdown in seconds and one in metres walked.
     pub timer: f32,
     pub dist_timer: f32,
-    /// The angles ease (+0x660); talking to the driver (+0x662); the right hand reaches
-    /// (+0x665) for `reach_at` (+0x67c, bus frame); the head turns to the driver (+0x666).
+    /// The angles ease; talking to the driver; the right hand reaches
+    /// for `reach_at` (bus frame); the head turns to the driver.
     pub smooth: bool,
     pub talking: bool,
     pub reach: bool,
     pub look_driver: bool,
     pub reach_at: Vec3,
-    /// The room height of the link walked (+0x668), its step sounds (+0x694), the link
-    /// (+0x698).
+    /// The room height of the link walked, its step sounds.
     pub room: f32,
     pub step_pack: Option<usize>,
     pub link: Option<usize>,
-    /// Speed wanted (+0x6a0), speed (+0x6a4), walking pace (+0x6ac).
+    /// Speed wanted, speed, walking pace.
     pub speed_des: f32,
     pub speed: f32,
     pub walk_speed: f32,
-    /// Somebody in the way (+0x6c7: 1 behind, 2 in front facing them, 3 in front going
-    /// the same way or busy) and on which sides there is room (+0x6c8, +0x6c9).
+    /// Somebody in the way (1 behind, 2 in front facing them, 3 in front going
+    /// the same way or busy) and on which sides there is room.
     pub block: u8,
     /// Seconds held up by somebody in front inside a bus, and seconds left passing them
     /// (see `pax_move`).
@@ -177,13 +175,13 @@ pub(super) struct Pax {
     pub squeeze: f32,
     pub free_r: bool,
     pub free_l: bool,
-    /// How badly the ride has gone (+0x62c, 0..1; see `ride_comfort`), the complaint said
-    /// so far (+0x630: 1 TooBad_A, 2 TooBad_B, 3 TooBad_C - and off at the next stop) and
-    /// where each one comes (+0x634, +0x638, +0x63c; drawn once, 0 not yet).
+    /// How badly the ride has gone (0..1; see `ride_comfort`), the complaint said
+    /// so far (1 TooBad_A, 2 TooBad_B, 3 TooBad_C - and off at the next stop) and
+    /// where each one comes (drawn once, 0 not yet).
     pub discomfort: f32,
     pub complaint: u8,
     pub bad_at: [f32; 3],
-    /// Distance moved this frame (+0x644, `LastMovedDist`).
+    /// Distance moved this frame (`LastMovedDist`).
     pub moved: f32,
 }
 
@@ -291,17 +289,17 @@ impl RequestStop {
     }
 }
 
-/// The room height outside a vehicle (+0x668 = 50).
+/// The room height outside a vehicle (50).
 pub(super) const OUTSIDE_ROOM: f32 = 50.0;
 
-/// A waiting place of a stop (a `[passpos]` of an object near it, sub_620c0c).
+/// A waiting place of a stop (a `[passpos]` of an object near it).
 #[derive(Debug, Clone)]
 pub(super) struct WaitSpot {
     /// The `[passpos]` point (world): the feet, or a seated person's hip.
     pub pos: DVec3,
     /// Heading (degrees, the world's).
     pub face: f64,
-    /// Seat height (+0x20); a seat when not 0.
+    /// Seat height; a seat when not 0.
     pub height: f32,
 }
 
@@ -315,40 +313,40 @@ pub(super) fn beside_place(sp: &WaitSpot, heading: f64, n: usize) -> WaitSpot {
     WaitSpot { pos: sp.pos - DVec3::Z * sp.height as f64 + along * (0.7 * steps), face: sp.face, height: 0.0 }
 }
 
-/// What Omsi.exe keeps of a bus stop for the people (the station record, sub_620058).
+/// What OMSI keeps of a bus stop for the people (the station record).
 pub(super) struct PaxStop {
     pub name: String,
     /// Its name in the timetable (empty without one), where the passengers' destinations
-    /// come from: the object's label is the stop's name to Omsi.exe, but a map whose
+    /// come from: the object's label is the stop's name to OMSI, but a map whose
     /// labels and `Busstops.cfg` disagree - a stop renamed, or the two files written in
     /// different code pages - had riders whose stop never came, and who rode on for good.
     pub alias: String,
     pub pos: DVec3,
     /// The object's heading (degrees).
     pub heading: f64,
-    /// Where people gather when a bus comes (+0x48): a metre to the side and a metre
+    /// Where people gather when a bus comes: a metre to the side and a metre
     /// along the stop.
     pub gather: DVec3,
     pub spots: Vec<WaitSpot>,
-    /// Which places are taken (+0xa8).
+    /// Which places are taken.
     pub taken: Vec<bool>,
-    /// pass_enter_max / _min (+0x70, +0x74) and the length (+0x7c, 30 by default).
+    /// pass_enter_max / _min and the length (30 by default).
     pub enter_max: f32,
     pub enter_min: f32,
     pub length: f32,
     /// The pavement next to it (where those getting off walk on).
     pub lane: Option<(usize, f32)>,
-    /// In range of the player last time and now (+0x24, +0x25), the refill clock (+0x28,
-    /// ms), people wanted and there (+0x30, +0x34), the stop's factor (+0x38), first fill
-    /// done (+0xa5 clear).
+    /// In range of the player last time and now, the refill clock
+    /// (ms), people wanted and there, the stop's factor, first fill
+    /// done.
     pub was_near: bool,
     pub near: bool,
     pub clock_ms: f32,
     pub want: usize,
     pub factor: f32,
-    /// The buses listed here this frame (+0x80): (bus, standing in the stop's box).
+    /// The buses listed here this frame: (bus, standing in the stop's box).
     pub buses: Vec<(BusId, bool)>,
-    /// The destinations (+0xb0): stop name, weight; and the line records (+0xac): the
+    /// The destinations: stop name, weight; and the line records: the
     /// stop name and the termini of the buses that go there.
     pub dests: Vec<(String, f32)>,
     pub lines: Vec<(String, HashSet<String>)>,
@@ -363,20 +361,19 @@ impl PaxStop {
     }
 }
 
-/// How the player's bus is driven, as Omsi.exe watches it for the riders (0x7d5124,
-/// 0x7d65d4 - 0x7d6b7f): the longitudinal acceleration eased over a tenth of a second, the
-/// lateral one over a second (both weighed down below 1 m/s), and the swings of the first
-/// between +0.2 and -0.2 m/s² (a jerky right foot).
+/// How the player's bus is driven, as OMSI watches it for the riders: the longitudinal acceleration eased over a tenth of a
+/// second, the lateral one over a second (both weighed down below 1 m/s), and the swings
+/// of the first between +0.2 and -0.2 m/s² (a jerky right foot).
 #[derive(Debug, Clone, Default)]
 pub(super) struct RideComfort {
-    /// +0x780 and +0x784 (m/s²).
+    /// The eased longitudinal and lateral accelerations (m/s²).
     fast_long: f32,
     slow_lat: f32,
-    /// The last swing went up (+0x79c), when (+0x794, ms) and how many came in a row (+0x798).
+    /// The last swing went up, when (ms) and how many came in a row.
     up: bool,
     swing_ms: f64,
     swings: u32,
-    /// The last hard bend or braking (+0x790, ms).
+    /// The last hard bend or braking (ms).
     hard_ms: f64,
 }
 
@@ -427,7 +424,7 @@ impl RideComfort {
     }
 }
 
-/// Where a rider's complaints about the driving come (the human's constructor, 0x625a3f):
+/// Where a rider's complaints about the driving come (the human's constructor):
 /// the first below 0.1, the second from 0.2 to 0.4, the third (and off at the next stop)
 /// from 0.5 to 0.8, for `r` three draws from 0..1.
 pub(super) fn bad_ride_thresholds(r: [f32; 3]) -> [f32; 3] {
@@ -436,7 +433,7 @@ pub(super) fn bad_ride_thresholds(r: [f32; 3]) -> [f32; 3] {
 }
 
 /// The complaint a rider says as the ride's toll `x` reaches their next threshold
-/// (0x7d6a22 - 0x7d6b7f; the worst first, each only once): 1, 2, 3 or none.
+/// (the worst first, each only once): 1, 2, 3 or none.
 pub(super) fn bad_ride_complaint(x: f32, said: u8, at: [f32; 3]) -> Option<u8> {
     if at[2] <= x && said < 3 {
         Some(3)
@@ -449,8 +446,8 @@ pub(super) fn bad_ride_complaint(x: f32, said: u8, at: [f32; 3]) -> Option<u8> {
     }
 }
 
-/// What the stops say about a bus this frame (sub_61f238): the stop ahead it is pulling
-/// in to (+0x7a0), the stops within 60 m (+0x7a4), and whether it empties (+0x7c5).
+/// What the stops say about a bus this frame: the stop ahead it is pulling
+/// in to, the stops within 60 m, and whether it empties.
 #[derive(Debug, Clone, Default)]
 pub(super) struct BusAtStops {
     pub next: Option<i64>,
@@ -495,7 +492,7 @@ impl DutyTrip {
 /// Whom a bus takes on at the stops (see `at_stop` and `fit`).
 #[derive(Debug, Clone)]
 pub(super) enum Takes {
-    /// Those whose line record lists its terminus, as in Omsi.exe: a timetable bus.
+    /// Those whose line record lists its terminus, as in OMSI: a timetable bus.
     Terminus,
     /// The player's bus on a duty: those as well whom its trip takes where they are going,
     /// however the bus's depot file spells the terminus. `next` is the stop of the trip the
@@ -506,7 +503,7 @@ pub(super) enum Takes {
     Nobody,
 }
 
-/// What a bus near a stop does there (sub_61f238 from 0x61f3e3).
+/// What a bus near a stop does there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum AtStop {
     /// Everybody gets off and nobody on: the bus shows no destination (it is not in
@@ -540,12 +537,12 @@ pub(super) fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &T
 /// Why somebody waiting takes a bus (`fit`); the better first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Fit {
-    /// Its terminus is on their line record (sub_61c33c: Omsi.exe's only test).
+    /// Its terminus is on their line record (OMSI's only test).
     Terminus,
     /// The player's duty takes them where they are going: its trip's terminus is on the
     /// record, or their destination is a later stop of the trip than theirs.
     Duty,
-    /// They have no line record: the first bus listed (sub_61c33c).
+    /// They have no line record: the first bus listed.
     Any,
 }
 
@@ -558,7 +555,7 @@ pub(super) fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option
 /// Whether a bus showing `terminus` and taking `takes` is the bus of somebody waiting at stop
 /// `id` for `dest`, whose line record there lists `termini`; why.
 ///
-/// Omsi.exe compares the names alone: the destination the bus's depot file gives it with
+/// OMSI compares the names alone: the destination the bus's depot file gives it with
 /// the timetable's termini. A depot file that spells them another way (another case, a
 /// shortened name, the terminus of another variant of the line, a file made for another
 /// map) left the people at every stop of a duty waiting for another bus. The duty knows
@@ -585,7 +582,7 @@ pub(super) fn fit(id: i64, stop: &PaxStop, dest: Option<&str>, termini: &HashSet
 }
 
 /// A point of the cabin's path network with its links in the file's order: the point at
-/// the other end, the points reached through it (sub_72410c), the link's index, its room
+/// the other end, the points reached through it, the link's index, its room
 /// height and step sounds.
 #[derive(Debug, Clone)]
 pub(super) struct RouteLink {
@@ -595,7 +592,7 @@ pub(super) struct RouteLink {
     pub walk_back: bool,
 }
 
-/// The routing tables of a path network as sub_72410c builds them after loading: from
+/// The routing tables of a path network as OMSI builds them after loading: from
 /// every point a depth-first walk, each point reached noting every point visited so far as
 /// reached through its link back to where it came from. A one-way link a -> b is walked
 /// back only from b.
@@ -637,7 +634,7 @@ pub(super) fn build_routes(n: usize, links: &[(i32, i32, bool)]) -> Vec<Vec<Rout
     adj
 }
 
-/// Whether passenger `x` keeps timetable bus `bus` at its stop (Omsi.exe 0x7d9e8b): on the
+/// Whether passenger `x` keeps timetable bus `bus` at its stop (as in OMSI): on the
 /// way out of it (`Some(None)`, at whatever stop), or walking up to its doors from stop `s`
 /// (`Some(Some(s))`: only while the bus serves that stop). Anybody else, not.
 pub(super) fn holds_bus(x: &Pax, bus: BusId) -> Option<Option<i64>> {
@@ -651,14 +648,14 @@ pub(super) fn holds_bus(x: &Pax, bus: BusId) -> Option<Option<i64>> {
     }
 }
 
-/// sub_7f3a24: the distance with the height difference weighed by `w` (5 everywhere).
+/// The distance with the height difference weighed by `w` (5 everywhere).
 fn weighted_dist(a: Vec3, b: Vec3, w: f32) -> f32 {
     let d = a - b;
     Vec3::new(d.x, d.y, d.z * w).length()
 }
 
 impl Cabin {
-    /// sub_72506c: the point of `list` nearest `p` (height weighed by 5). `level`: only
+    /// The point of `list` nearest `p` (height weighed by 5). `level`: only
     /// points at most 2 m below `p` and not above it. `open`/`flags` (entries): a shut
     /// door counts only with a button; `avoid`: a passenger buying a ticket skips
     /// `{noticketsale}` doors. Nothing found: the first of the list, or the search again
@@ -730,7 +727,7 @@ impl Cabin {
         }
     }
 
-    /// sub_723fac: the next point from `from` towards `to` and the link taken.
+    /// The next point from `from` towards `to` and the link taken.
     pub(super) fn route_next(&self, from: usize, to: usize) -> Option<(usize, usize)> {
         let links = self.routes.get(from)?;
         links.iter().find(|l| l.reach.contains(&to)).map(|l| (l.to, l.link))
@@ -749,7 +746,7 @@ impl Cabin {
     }
 }
 
-/// A heading difference wrapped to -pi .. pi (sub_7f3780).
+/// A heading difference wrapped to -pi .. pi.
 fn wrap(a: f64) -> f64 {
     let mut a = a;
     let pi = std::f64::consts::PI;
@@ -782,7 +779,7 @@ impl Humans {
         }
     }
 
-    /// The stops as the buses see them this frame (sub_61f93c / sub_61f238), and the
+    /// The stops as the buses see them this frame, and the
     /// odometers of the buses.
     pub(super) fn register_buses(&mut self, buses: &[BusNow], dt: f32) -> HashMap<BusId, BusAtStops> {
         let mut out: HashMap<BusId, BusAtStops> = HashMap::new();
@@ -833,8 +830,8 @@ impl Humans {
                 if same_way && matches_trip {
                     reg.next = Some(*id);
                 }
-                // a bus not in service, or at its own terminus, empties and takes nobody
-                // (0x61f3e3); one in free drive only lets its riders off
+                // a bus not in service, or at its own terminus, empties and takes nobody;
+                // one in free drive only lets its riders off
                 match at_stop(*id, s, bn.terminus.as_deref(), &bn.takes) {
                     AtStop::Empties => {
                         reg.all_exit = true;
@@ -860,7 +857,7 @@ impl Humans {
         out
     }
 
-    /// sub_61c33c: the bus at stop `stop` person `i` gets into, and why: with a line record,
+    /// The bus at stop `stop` person `i` gets into, and why: with a line record,
     /// the nearest of the buses listed whose terminus goes there - else the nearest whose
     /// duty takes them there (`fit`); without, the first listed.
     pub(super) fn bus_for(&self, i: usize, stop: i64, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> Option<(BusId, Fit)> {
@@ -879,7 +876,7 @@ impl Humans {
         }
     }
 
-    /// Whether the bus stands in the stop's box (the flag of its entry, sub_61ee18).
+    /// Whether the bus stands in the stop's box (the flag of its entry).
     pub(super) fn in_stop_box(&self, stop: i64, bus: BusId) -> bool {
         self.stops.get(&stop).is_some_and(|s| s.buses.iter().any(|b| b.0 == bus && b.1))
     }
@@ -887,7 +884,7 @@ impl Humans {
         self.stops.get(&stop).is_some_and(|s| s.buses.iter().any(|b| b.0 == bus))
     }
 
-    /// sub_7e910c: a free place of the bus, at random (none free: nobody gets on). `off`:
+    /// A free place of the bus, at random (none free: nobody gets on). `off`:
     /// the places its scripts have switched off (#721), which nobody takes.
     pub(super) fn reserve_place(&mut self, bus: BusId, n: usize, off: &[bool]) -> Option<usize> {
         let seats = self.seats.entry(bus).or_insert_with(|| vec![false; n]);
@@ -903,8 +900,8 @@ impl Humans {
         Some(k)
     }
 
-    /// sub_5ce4e0: stamp (stamper_prop) or buy (ticketbuy_prop) at a bus that has a
-    /// validator / a cash desk, else nothing to do; the ticket bought (sub_5ce2dc).
+    /// Stamp (stamper_prop) or buy (ticketbuy_prop) at a bus that has a
+    /// validator / a cash desk, else nothing to do; the ticket bought.
     pub(super) fn decide_pax_ticket(&mut self, i: usize, bn: &BusNow) -> (u8, u8) {
         let Some(tp) = self.tickets.clone() else { return (TICKET_NONE, 0) };
         let mut r = self.rand_f() as f32;
@@ -937,7 +934,7 @@ impl Humans {
         }
     }
 
-    /// Everybody's passenger tick of this frame, in the order of the people (sub_6ffc7c).
+    /// Everybody's passenger tick of this frame, in the order of the people.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn pax_frame(
         &mut self,
@@ -1021,7 +1018,7 @@ impl Humans {
                 self.ai_requests.push((*id, DoorWants { entry_req: e.clone(), exit_req: x.clone(), entry_busy, exit_busy, places }));
             }
         }
-        // timetable buses wait while people still get on or off (0x7d9e8b - 0x7d9f5e):
+        // timetable buses wait while people still get on or off:
         // somebody of this bus walking in it to an exit, or walking up to its doors from
         // the stop the bus serves - the traffic checks the stop (`hold_boarding`). People
         // still on their way to the gather point do not hold it: they walk up to the doors
@@ -1051,7 +1048,7 @@ impl Humans {
         }
     }
 
-    /// One person's tick (sub_62a6a0 without the street walk).
+    /// One person's tick (without the street walk).
     #[allow(clippy::too_many_arguments)]
     pub(super) fn pax_tick(
         &mut self,
@@ -1068,7 +1065,7 @@ impl Humans {
         remove: &mut Vec<usize>,
     ) {
         let dt_ms = dt * 1000.0;
-        // sub_62a258: the bus is gone - nothing more to do with it
+        // the bus is gone - nothing more to do with it
         {
             let p = self.pax_mut(i).unwrap();
             if let Some(b) = p.bus {
@@ -1093,7 +1090,7 @@ impl Humans {
                 p.dist_timer -= p.moved;
             }
         }
-        // the toll of a bad ride eases off as the bus goes on (0x62d86c: 0.2 a kilometre)
+        // the toll of a bad ride eases off as the bus goes on (0.2 a kilometre)
         {
             let speed = self.pax(i).unwrap().inside.and_then(|b| bus_ix.get(&b)).map(|k| buses[*k].speed.abs() as f32);
             let p = self.pax_mut(i).unwrap();
@@ -1106,7 +1103,7 @@ impl Humans {
         self.pax_task(i, dt, world, buses, bus_ix, at_stops, player_bus, renderer, scene, taken_ticket, remove);
         // (got off: a pedestrian now)
         let Some(p) = self.pax(i).cloned() else { return };
-        // (0x62d75b) the stop they boarded at is forgotten once the bus has left it
+        // the stop they boarded at is forgotten once the bus has left it
         if matches!(p.task, Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus) {
             if let (Some(stop), Some(b)) = (p.stop, p.bus) {
                 if !at_stops.get(&b).is_some_and(|r| r.near.contains(&stop)) {
@@ -1143,7 +1140,7 @@ impl Humans {
         }
     }
 
-    /// The movement part of the tick (sub_62a6a0, 0x62ad0b - 0x62b966).
+    /// The movement part of the tick.
     pub(super) fn pax_move(&mut self, i: usize, dt: f32, dt_ms: f32, world: &World, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
         let p0 = self.pax(i).unwrap().clone();
         let bn_in = p0.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k]));
@@ -1151,7 +1148,7 @@ impl Humans {
         // the path point walked to is the target
         let mut target = p0.target;
         let mut target_bus = p0.target_bus;
-        // (kept as the target, +0x5bd: waiting short of the point, state 6, goes on facing
+        // (kept as the target: waiting short of the point, state 6, goes on facing
         // it - with the target of before kept instead, a seat or the stop's gather point in
         // another frame, the people waiting at a shut exit were lifted 40 m up in the bus
         // and stood stacked there for good, #709)
@@ -1165,7 +1162,7 @@ impl Humans {
                 }
             }
         }
-        // walking to a door from outside: keep off the bus side (0x62ad81)
+        // walking to a door from outside: keep off the bus side
         if p0.clamp && target_bus {
             if let Some(bn) = bn_t {
                 let level = if p0.clamp_open && p0.inside.is_none() {
@@ -1249,7 +1246,7 @@ impl Humans {
             }
             _ => {}
         }
-        // the people in the way (sub_626860)
+        // the people in the way
         let (mut block, free_r, free_l) = if st == 1 || st == 5 { self.pax_blockers(i, buses, bus_ix) } else { (0, true, true) };
         let p = self.pax_mut(i).unwrap();
         // Inside a bus, people going opposite ways along the aisle or the stairs stood face to
@@ -1304,8 +1301,8 @@ impl Humans {
             head_des = yaw_of(d.truncate());
         }
         if st == 0 {
-            // standing: still on the ground under the feet, as Omsi.exe asks for it every
-            // tick in every state but turning (0x62b852 -> 0x7aec3c, not when seated); the
+            // standing: still on the ground under the feet, as OMSI asks for it every
+            // tick in every state but turning (not when seated); the
             // waiting people stood at the height of their [passpos]'s object - a shelter
             // on the terrain - 25-35 cm down in the platform
             if p.inside.is_none() && p.pax_state != 2.0 {
@@ -1362,7 +1359,7 @@ impl Humans {
         let _ = dt;
     }
 
-    /// sub_626860: whether somebody within 0.6 m stands in the way.
+    /// Whether somebody within 0.6 m stands in the way.
     pub(super) fn pax_blockers(&self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> (u8, bool, bool) {
         let me = self.pax(i).unwrap();
         let Some((my_pos, my_head)) = self.pax_world(me, buses, bus_ix) else { return (0, true, true) };
@@ -1431,7 +1428,7 @@ impl Humans {
         (block, free_r, free_l)
     }
 
-    /// sub_62e42c: a new task and what it starts with.
+    /// A new task and what it starts with.
     pub(super) fn set_task(&mut self, i: usize, t: Task, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &World) {
         if self.pax(i).is_none_or(|p| p.task == t) {
             return;
@@ -1520,7 +1517,7 @@ impl Humans {
                 p.pt = bn.cabin.omsi_nearest(local, &all, false, false, None, None);
                 p.st = 5;
                 if !detailed {
-                    // a bus not the player's: at the place at once (sub_62a358 + task 7)
+                    // a bus not the player's: at the place at once (task 7)
                     self.set_task(i, Task::SittingInBus, buses, bus_ix, world);
                     return;
                 }
@@ -1559,7 +1556,7 @@ impl Humans {
                     p.pos = q.as_dvec3();
                 }
                 let here = p.pos.as_vec3();
-                // the nearest exit (sub_62a49c / sub_62a5a8), of the sections they are in
+                // the nearest exit, of the sections they are in
                 let exits = bn.cabin.in_group(exits, bn.cabin.group_at(start));
                 p.pt_target = bn.cabin.omsi_nearest(here, &exits, false, false, None, None);
                 p.door = p.pt_target.and_then(|t| exits.iter().position(|e| *e == Some(t)));
@@ -1585,7 +1582,7 @@ impl Humans {
                     p.door = None;
                     p.ride_km = r * 19.0 + 1.0;
                 }
-                // a free waiting place (sub_61fed0)
+                // a free waiting place
                 let (spot, beside) = match (stop, self.pax(i).unwrap().spot) {
                     (_, Some(k)) => (Some(k), self.pax(i).unwrap().beside.clone()),
                     (Some(s), None) => self.take_spot(s).map_or((None, None), |(k, b)| (Some(k), b)),
@@ -1604,7 +1601,7 @@ impl Humans {
                 p.target_bus = false;
                 match sp {
                     Some(sp) => {
-                        // a seat: in front of it, the hip at its height (0x62e5d1)
+                        // a seat: in front of it, the hip at its height
                         let mut tgt = sp.pos;
                         if sp.height != 0.0 {
                             tgt.z = tgt.z.min((sp.pos.z - sp.height as f64).max(stop_pos.map(|s| s.z).unwrap_or(tgt.z)));
@@ -1646,7 +1643,7 @@ impl Humans {
         }
     }
 
-    /// sub_625b98: the entry to walk to, every frame on the way (the nearest open one or
+    /// The entry to walk to, every frame on the way (the nearest open one or
     /// one with a button; one selling tickets for a buyer), and its index for the request.
     pub(super) fn choose_entry(&mut self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
         let p = self.pax(i).unwrap().clone();
@@ -1669,7 +1666,7 @@ impl Humans {
         p.door = pt.and_then(|t| list.iter().position(|e| *e == Some(t)));
     }
 
-    /// sub_62a628: along the paths to the place reserved.
+    /// Along the paths to the place reserved.
     pub(super) fn route_to_place(&mut self, i: usize, bn: &BusNow) {
         let all = bn.cabin.all_points();
         let seat = self.pax(i).unwrap().seat.and_then(|k| bn.cabin.seats.get(k)).map(|s| s.pos);
@@ -1687,14 +1684,14 @@ impl Humans {
         }
     }
 
-    /// sub_61c8d8: a free waiting place of the stop, at random.
+    /// A free waiting place of the stop, at random.
     pub(super) fn take_spot(&mut self, stop: i64) -> Option<(usize, Option<WaitSpot>)> {
         // Stops a few metres apart (both sides of a bus station's platform, a stop and its
         // copy for another line) find the same objects' places, and each kept its own list of
-        // who stands where (as Omsi.exe's 0x61c8d8 does), so two or three people stood in
+        // who stands where (as OMSI does), so two or three people stood in
         // one another. A place of the stop's own a few centimetres from a taken one (objects
         // placed twice) is not free. A place somebody of another stop stands on still is,
-        // as in Omsi.exe - each stop has as many people as its own places -, but the person
+        // as in OMSI - each stop has as many people as its own places -, but the person
         // stands beside it, along the kerb, where nobody does (`beside_place`); places
         // nobody stands on go first.
         let s = self.stops.get(&stop)?;
@@ -1735,7 +1732,7 @@ impl Humans {
         Some((k, beside))
     }
 
-    /// The task part of the tick (sub_62a6a0 from 0x62b984).
+    /// The task part of the tick.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn pax_task(
         &mut self,
@@ -1875,7 +1872,7 @@ impl Humans {
         }
     }
 
-    /// Task 3 (sub_62a6a0 case 3): to the door and in.
+    /// Task 3: to the door and in.
     pub(super) fn task_to_bus(&mut self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &World) {
         let p = self.pax(i).unwrap().clone();
         let Some(bn) = p.bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
@@ -2049,8 +2046,8 @@ impl Humans {
                 return;
             }
             if p.timer < 0.0 {
-                // the bus stands: the nearest exit that is open now (0x62d6b1 passes the
-                // exits' open states, +0x6e0: a shut door is skipped, none open gives the
+                // the bus stands: the nearest exit that is open now (OMSI passes the
+                // exits' open states: a shut door is skipped, none open gives the
                 // first). Without them the nearest door was taken again, open or shut, and
                 // people walked on to a shut front door with the others open (#493).
                 // Once a second: with the timer left run out, the way was found afresh every
@@ -2070,7 +2067,7 @@ impl Humans {
                 let any_open = open.iter().zip(&exits).any(|(o, e)| *o && e.is_some());
                 let target = bn.cabin.omsi_nearest(here, &exits, false, false, None, any_open.then_some(open.as_slice()));
                 if pp.st == 5 {
-                    // walking: on from the point walked to, towards the new door (Omsi.exe
+                    // walking: on from the point walked to, towards the new door (OMSI
                     // changes only the target and the door)
                     pp.pt_target = target;
                 } else if target != pp.pt_target || pp.st != 7 {
@@ -2105,7 +2102,7 @@ impl Humans {
         self.walk_street(i, w, h, stop, world, remove);
     }
 
-    /// sub_626818 / task 8: on as a pedestrian along the pavement from the stop - or gone
+    /// Task 8: on as a pedestrian along the pavement from the stop - or gone
     /// when there is none.
     pub(super) fn walk_street(&mut self, i: usize, at: DVec3, heading: f64, stop: Option<i64>, world: &World, remove: &mut Vec<usize>) {
         let _ = world;
@@ -2130,7 +2127,7 @@ impl Humans {
         }
     }
 
-    /// The riders of the player's bus feel how it is driven (0x7d6964 - 0x7d6b7f): every
+    /// The riders of the player's bus feel how it is driven: every
     /// jolt (`RideComfort::step`) takes the toll of the ride `(1 - x) * k` up for everybody
     /// walking or sitting in it, and whoever reaches a threshold says so (TooBad_A, _B, _C
     /// of the ticket pack's voices) - the third time getting off at the next stop. The
@@ -2176,7 +2173,7 @@ impl Humans {
         }
     }
 
-    /// The greeting or complaint stepping into the player's bus (0x62bf2d - 0x62c43c).
+    /// The greeting or complaint stepping into the player's bus.
     pub(super) fn greet_or_complain(&mut self, i: usize, bn: &BusNow) {
         let Some((whinge, chat)) = self.tickets.as_ref().map(|t| (t.whinge_prop, t.chattiness)) else { return };
         let air = bn.air;
@@ -2264,11 +2261,11 @@ impl Humans {
         }
     }
 
-    /// The ticket sale at the player's cash desk (case 4 with +0x61c = 3, 0x62c780 -
-    /// 0x62d104): the ticket asked for, the money on the desk, the ticket taken, the change
-    /// counted. The passenger asks again every 5 s (3 s after the second time) until the
+    /// The ticket sale at the player's cash desk (task 4 with a ticket to buy): the ticket
+    /// asked for, the money on the desk, the ticket taken, the change counted. The
+    /// passenger asks again every 5 s (3 s after the second time) until the
     /// driver gets it right; the counter of those requests (`pardons`, the original's
-    /// global at 0x859bc4) is shared by everybody at the desk.
+    /// global) is shared by everybody at the desk.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn desk_sale(
         &mut self,
@@ -2294,7 +2291,7 @@ impl Humans {
             .unwrap_or_default();
         let tol = self.money.as_ref().map(|m| m.smallest_value()).unwrap_or(0.01) / 2.0;
         let owed = p.paid - p.price;
-        // the change on the tray (sub_7e8900): enough of it, too much, too many coins
+        // the change on the tray: enough of it, too much, too many coins
         let change = |h: &mut Self| -> (bool, bool, bool) {
             if auto {
                 return (true, false, false);
@@ -2308,7 +2305,7 @@ impl Humans {
             let many = needed * (r + 1.5) <= count && count > 0.0;
             (enough && !too_much, too_much, many)
         };
-        // the ticket given (sub_7e8f14): right, or a wrong one
+        // the ticket given: right, or a wrong one
         let ticket = |h: &Self| -> (bool, bool) {
             if auto || h.give_ticket {
                 return (true, false);
@@ -2323,7 +2320,7 @@ impl Humans {
         let (ch_ok, too_much, many) = if p.sub == 7 { change(self) } else { (false, false, false) };
         let (tk_ok, wrong) = if p.sub == 5 { ticket(self) } else { (false, false) };
         if p.sub == 3 {
-            // the desk free (sub_7d1fec, +0x7a8): "Einmal ..., bitte"
+            // the desk free: "Einmal ..., bitte"
             if self.desk_busy.is_some_and(|d| d != self.people[i].id) {
                 return;
             }
@@ -2344,7 +2341,7 @@ impl Humans {
             if p.timer > 0.0 {
                 return;
             }
-            // the money on the desk (sub_7e8254)
+            // the money on the desk
             let point = bn.cabin.money_var.clone();
             let mut paid = value;
             if let Some(m) = self.money.as_mut() {
@@ -2432,7 +2429,7 @@ impl Humans {
             pp.ticket = TICKET_NONE;
             pp.pt = bn.cabin.sale.and_then(|s| s.0);
         } else if (p.sub == 5 || p.sub == 7) && (p.timer <= 0.0 || (too_much && self.pardons == 0)) {
-            // asking again (0x62ce80)
+            // asking again
             let n = self.pardons as u64;
             let r = self.rand() % (n + 2);
             self.pax_mut(i).unwrap().timer = if n < 2 { 5.0 } else { 3.0 };
@@ -2596,7 +2593,7 @@ mod tests {
     }
 
     /// Smooth driving upsets nobody; a hard stop, a fast bend and a jerky foot do, as in
-    /// Omsi.exe (#862).
+    /// OMSI (#862).
     #[test]
     fn the_riders_feel_hard_braking_fast_bends_and_a_jerky_foot() {
         let dt = 0.02;
@@ -2733,7 +2730,7 @@ mod tests {
         assert_eq!(fit(20, &test_stop("Am Teich", "Am Teich"), Some("Kirche"), &set(&["Waldweg"]), shown, &duty(0, false)), None);
         // another platform of the stop's name will do
         assert_eq!(fit(14, &test_stop("Bauernhof 2", "Bauernhof"), Some("Kirche"), &set(&["Waldweg"]), shown, &duty(0, false)), Some(Fit::Duty));
-        // the depot file's terminus on the record: the bus is theirs as in Omsi.exe
+        // the depot file's terminus on the record: the bus is theirs as in OMSI
         assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation Grundorf"]), shown, &duty(0, false)), Some(Fit::Terminus));
 
         // free drive: nobody waiting gets on, the riders get off at their stops
@@ -2754,7 +2751,7 @@ mod tests {
         assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), shown, &works), None);
         assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation Grundorf"]), shown, &works), Some(Fit::Terminus));
 
-        // a timetable bus: as in Omsi.exe, the terminus on the record or nothing
+        // a timetable bus: as in OMSI, the terminus on the record or nothing
         assert_eq!(at_stop(10, &here, Some("Endstation"), &Takes::Terminus), AtStop::Serves);
         assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), "Endstation", &Takes::Terminus), Some(Fit::Terminus));
         assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), "Endstation Grundorf", &Takes::Terminus), None);

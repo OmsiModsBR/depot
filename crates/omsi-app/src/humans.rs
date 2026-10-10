@@ -63,14 +63,14 @@ pub(crate) static LEFT_HAND: std::sync::atomic::AtomicBool = std::sync::atomic::
 
 /// How far outside the bus side somebody stands at a door (m).
 const DOOR_OUT: f32 = 0.5;
-/// Entries and exits with door variables of their own in Omsi.exe (`PAX_Entry0..7` ...).
+/// Entries and exits with door variables of their own in OMSI (`PAX_Entry0..7` ...).
 const OMSI_PAX_DOORS: usize = 8;
 /// Body radius for the crowd outside (m): shoulders and swinging arms. With the cabin's
 /// radius people on the pavement came within 0.46 m, and two walking past each other or a
 /// group crossing the road merged into one another in the picture.
 const BODY_OUTSIDE: f64 = 0.28;
-/// Stops within this distance of the player have their people (Omsi.exe: the stop's tile
-/// and the eight round the camera's, sub_61bf94).
+/// Stops within this distance of the player have their people (OMSI: the stop's tile
+/// and the eight round the camera's).
 const STOP_RANGE: f64 = 450.0;
 /// Pedestrians stroll within this distance of the player (m).
 const STROLL_RADIUS: f64 = 200.0;
@@ -200,11 +200,11 @@ struct Seat {
     floor: Vec3,
     rot: f32,
     seated: bool,
-    /// The `[passpos]`'s seat height (+0x20; 0: a standing place).
+    /// The `[passpos]`'s seat height (0: a standing place).
     height: f32,
-    /// Its number for the scripts (`GetHumanCountOnSeat`): Omsi.exe's place in the file
+    /// Its number for the scripts (`GetHumanCountOnSeat`): OMSI's place in the file
     /// among the `[passpos]` and `[drivpos]`, the sections behind counted on after those
-    /// in front (0x7d39a4 asks the next one for a number past its own places).
+    /// in front (each section asks the next one for a number past its own places).
     omsi_seat: usize,
     /// openOMSI's variables of the place (#721): the one that switches it on and off, and the
     /// one its occupancy is written into.
@@ -221,7 +221,7 @@ struct Cabin {
     links: Vec<(i32, i32, bool)>,
     /// Each link's footstep sounds: its section's `[stepsoundpack]` named by the link's
     /// `[next_stepsound]` (index into `step_packs`), none where the paths.cfg gives none -
-    /// Omsi.exe hears no steps there - and on the joint between two sections.
+    /// OMSI hears no steps there - and on the joint between two sections.
     link_pack: Vec<Option<usize>>,
     step_packs: Vec<Arc<[String]>>,
     entries: Vec<Door>,
@@ -240,15 +240,15 @@ struct Cabin {
     point_group: Vec<usize>,
     /// Each link's room height (`[next_roomheight]`; 2 m before any).
     link_room: Vec<f32>,
-    /// The routing tables of the path network (sub_72410c).
+    /// The routing tables of the path network.
     routes: Vec<Vec<RouteLink>>,
-    /// The validators and the cash desk: (path point, device). Omsi.exe keeps one of each,
-    /// the last of the file (cabin +0x14/+0x18, +0x28/+0x2c); every `[stamper]` of every
+    /// The validators and the cash desk: (path point, device). OMSI keeps one of each,
+    /// the last of the file; every `[stamper]` of every
     /// section is kept here, and a passenger stamps at the one nearest the door they came
     /// in by (`Cabin::nearest_stamper`, #722) - with one, that one.
     stampers: Vec<(Option<usize>, Vec3)>,
     sale: Option<(Option<usize>, Vec3)>,
-    /// Where the money goes (+0x38) and where the change is taken from (+0x58), with the
+    /// Where the money goes and where the change is taken from, with the
     /// money point's spread.
     money_point: Option<Vec3>,
     money_var: Option<(Vec3, [f32; 2], Option<String>)>,
@@ -443,7 +443,7 @@ impl Cabin {
                 // one's [linkToNextVeh] point (the frontmost aisle point when it has none). A
                 // trailer's hitch (`[coupling_front_character]` type 0, a lorry's coupling) is
                 // no bellows: walked through only where both cabins give those points, as
-                // Omsi.exe joins coupled cabins (0x7d172c) - joined at the aisle's ends, the
+                // OMSI joins coupled cabins - joined at the aisle's ends, the
                 // passengers of a bus walked through its back wall into the trailer behind
                 let hitch = def.coupling_front_character.is_some_and(|c| c[3] == 0.0);
                 let front = cab.link_to_next_veh.and_then(valid).or_else(|| if hitch { None } else { end(true) });
@@ -656,7 +656,7 @@ impl Cabin {
         })
     }
 
-    /// Every point of the path network (Omsi.exe's list +0xc of the paths).
+    /// Every point of the path network (OMSI's list of the paths' points).
     fn all_points(&self) -> Vec<Option<usize>> {
         (0..self.graph.points.len()).map(Some).collect()
     }
@@ -741,7 +741,7 @@ struct BusNow {
     accel: DVec2,
     /// The sections behind the front one (the cabin's parts after the first).
     trailers: Vec<PartFrame>,
-    /// The terminus it shows, by name (Omsi.exe's bus +0x7bc). None: "$allexit$" - the
+    /// The terminus it shows, by name (OMSI's bus terminus). None: "$allexit$" - the
     /// scripts' `target_index_int` names a hof terminus added with `[addterminus_allexit]`
     /// ("Nicht einsteigen", a works trip) - or none; no timetable target has it.
     terminus: Option<String>,
@@ -1325,11 +1325,11 @@ fn seg_cross(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<DVec2> {
 
 #[derive(Debug, Clone)]
 enum State {
-    /// A pedestrian strolling the pavements (Omsi.exe's task 8, `WalkStreet`).
+    /// A pedestrian strolling the pavements (OMSI's task 8, `WalkStreet`).
     Strolling(PedWalk),
     /// Moved by somebody else: an avatar, or one of a LAN host's people.
     Idle,
-    /// Task 8 without a path (+0x2f0 = -1): somebody who got off where no pavement is
+    /// Task 8 without a path: somebody who got off where no pavement is
     /// stands where they are until the player is gone.
     Standing,
     /// A passenger (see `humans_pax`).
@@ -1377,7 +1377,7 @@ pub struct Person {
     vel: DVec2,
     pace: f64,
     activity: Activity,
-    /// The animation: Omsi.exe's walk phase and joint angles (sub_626ae8).
+    /// The animation: OMSI's walk phase and joint angles.
     anim: OmsiAnim,
     state: State,
     /// Seconds in the current state.
@@ -1517,9 +1517,9 @@ pub struct Humans {
     player_next_stop: Option<RequestStop>,
     /// Which places of each bus are taken.
     seats: HashMap<BusId, Vec<bool>>,
-    /// The bus stops as Omsi.exe keeps them for the people (see `humans_pax`).
+    /// The bus stops as OMSI keeps them for the people (see `humans_pax`).
     stops: HashMap<i64, PaxStop>,
-    /// Kilometres each bus has driven (the odometer the riders read, +0x430).
+    /// Kilometres each bus has driven (the odometer the riders read).
     odometer: HashMap<BusId, f64>,
     /// The `PAX_Entry<n>_Req` / `PAX_Exit<n>_Req` of each bus this frame.
     pax_req: HashMap<BusId, (Vec<bool>, Vec<bool>)>,
@@ -1527,8 +1527,8 @@ pub struct Humans {
     pax_busy: HashMap<BusId, (Vec<bool>, Vec<bool>)>,
     /// The occupancy variables its places name, and whether somebody is on each (#721).
     pax_places: HashMap<BusId, Vec<(String, bool)>>,
-    /// Who is at the player's cash desk (+0x7a8), how often the driver has been asked
-    /// again (0x859bc4) and the most of that in this sale (0x859df4).
+    /// Who is at the player's cash desk, how often the driver has been asked
+    /// again and the most of that in this sale.
     desk_busy: Option<u32>,
     pardons: u8,
     pardon_max: u8,
@@ -1629,10 +1629,10 @@ pub struct Humans {
     /// The player has got up and left the wheel: a standing bus with a door open is left
     /// by its riders as at a terminus (see `ALL_OUT_STOP`).
     pub driver_away: bool,
-    /// Per bus stop, Omsi.exe's station targets (0x61cb18, `Schedule::stop_targets`): the
+    /// Per bus stop, OMSI's station targets (`Schedule::stop_targets`): the
     /// stops the trips go on to, each with the termini of those trips. A person waiting there
     /// wants one of them and boards only a bus showing one of its termini; at a stop no trip
-    /// goes on from, anybody takes the first bus (0x61c33c).
+    /// goes on from, anybody takes the first bus.
     pub stop_targets: Option<HashMap<i64, Vec<(String, HashSet<String>)>>>,
     /// Per bus stop, the destinations of the trips due there soon (`Schedule::
     /// due_destinations`, made anew every game minute): the people turning up draw theirs
@@ -1651,10 +1651,10 @@ pub struct Humans {
     stamped: Vec<BusId>,
     /// Pedestrians to keep strolling near the player (scaled by `density`).
     pub pedestrians: usize,
-    /// Omsi.exe's people (`[AIMaxCountRandom]`'s second line, the `ai_max_humans` setting):
-    /// it makes that many at the start (0x709274) and draws everybody waiting at a stop,
+    /// OMSI's people (`[AIMaxCountRandom]`'s second line, the `ai_max_humans` setting):
+    /// it makes that many at the start and draws everybody waiting at a stop,
     /// walking the pavements or riding from them - never more; at most half of them walk
-    /// the pavements (0x62463c). Here people are made as they are wanted, so they are
+    /// the pavements. Here people are made as they are wanted, so they are
     /// counted against it instead.
     pub max_people: usize,
     stroll_timer: f32,
@@ -1940,7 +1940,7 @@ impl Humans {
 
     /// The map's tiles changed: a stop gone with its tile takes the people waiting there
     /// with it; a stop nobody waits at is set up again with what its tiles hold now (its
-    /// waiting places come with the objects round it, sub_620c0c).
+    /// waiting places come with the objects round it).
     fn tiles_changed(&mut self, world: &World) {
         let present: HashSet<i64> = world.bus_stops.lock().iter().map(|s| s.0).collect();
         let bound = |st: &State| -> Option<i64> {
@@ -2099,7 +2099,7 @@ impl Humans {
     }
 
     /// Room in the pool for one more person; when it is full somebody walking the street out
-    /// of sight is taken for it, as Omsi.exe takes a task-8 person for a stop (0x61bd44).
+    /// of sight is taken for it, as OMSI takes a task-8 person for a stop.
     fn pool_room(&mut self) -> bool {
         if self.pool_used() < bounded_people_limit(self.max_people) {
             return true;
@@ -2380,8 +2380,8 @@ impl Humans {
             let inst = renderer.add_instance(scene, id, position, Mat4::IDENTITY, mats);
             meshes.push((id, inst));
         }
-        // walking pace 1.1 m/s +- 0.2, as Omsi.exe draws it for everybody (0x625758:
-        // sub_7f08b0(0.2, 1.1)); `[walk_param]` holds the stride, not a speed
+        // walking pace 1.1 m/s +- 0.2, as OMSI draws it for everybody;
+        // `[walk_param]` holds the stride, not a speed
         let pace = 1.1 + (self.rand_f() * 2.0 - 1.0) * 0.2;
         let age = ty.def.age.map(|a| a as f32).unwrap_or(40.0);
         let id = self.next_id;
@@ -2546,7 +2546,7 @@ impl Humans {
         self.started = true;
     }
 
-    /// A stop as Omsi.exe sets it up (sub_620058, sub_620c0c, sub_61c604): its waiting
+    /// A stop as OMSI sets it up: its waiting
     /// places are the `[passpos]` of every object near it - within 10 m to the platform's
     /// side and from 10 m behind to the stop's length ahead of it -, the gather point a
     /// metre to the kerb and a metre ahead, the destinations of the trips leaving it.
@@ -2572,15 +2572,15 @@ impl Humans {
                 }
                 continue;
             };
-            // (sub_7f0db8 / sub_7f0d3c: the stop less the object)
+            // (the stop less the object)
             let v = pos - *opos;
-            // (Omsi.exe looks at every object of the stop's tile and the ones round it; the
+            // (OMSI looks at every object of the stop's tile and the ones round it; the
             // region below reaches the stop's length ahead, which a long bus station stop
             // takes past 40 m)
             if v.length() > reach {
                 continue;
             }
-            // (0x7efb08 with -heading: in the stop's frame)
+            // (turned by -heading: in the stop's frame)
             let lat = h.cos() * v.x - h.sin() * v.y;
             let along = h.cos() * v.y + h.sin() * v.x;
             if !(-along < 10.0 && -along > -(length as f64).max(10.0) && -lat < xmax && -lat > xmin) {
@@ -2592,7 +2592,7 @@ impl Humans {
             spots.push(WaitSpot { pos: *p, face: *face, height: *height });
         }
         drop(objects);
-        // the gather point (+0x48): (1, 0, 1) or (-1, 0, 1) through the stop's turn
+        // the gather point: (1, 0, 1) or (-1, 0, 1) through the stop's turn
         let x = if (side == 1) == left { 1.0 } else { -1.0 };
         let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
         let g = pos.truncate() + right * x + fwd * 1.0;
@@ -2647,7 +2647,7 @@ impl Humans {
         }
     }
 
-    /// The stops near the player fill with people (sub_61bf94, every frame): a stop coming
+    /// The stops near the player fill with people (every frame): a stop coming
     /// into range gets its people at once, one in range another one every 10..15 s while
     /// it has fewer than it should - its pass_enter mean times its own random factor
     /// times the passenger density, at most one per waiting place. A stop going out of
@@ -2690,7 +2690,7 @@ impl Humans {
             };
             if !near {
                 if changed {
-                    // (sub_61be80) the people waiting there go
+                    // the people waiting there go
                     for i in (0..self.people.len()).rev() {
                         let here = matches!(&self.people[i].state, State::Pax(p) if p.stop == Some(id) && p.inside.is_none() && matches!(p.task, Task::WaitingForBus | Task::WalkingToBusstop));
                         if here {
@@ -2722,7 +2722,7 @@ impl Humans {
             let want = {
                 let s = &self.stops[&id];
                 let mean = (s.enter_max + s.enter_min) / 2.0;
-                // (0x61bf94: with a timetable, times the share of the trips due there - at a
+                // (with a timetable, times the share of the trips due there - at a
                 // stop no trip leaves from, nobody)
                 let none_due = self.due_dests.as_ref().is_some_and(|d| d.get(&id).is_none_or(|set| set.is_empty()));
                 let served = if self.stop_targets.is_some() && (s.lines.is_empty() || none_due) { 0.0 } else { 1.0 };
@@ -2757,7 +2757,7 @@ impl Humans {
         }
     }
 
-    /// A destination drawn from stop `id`'s (sub_61baa8): by weight; none when the weights
+    /// A destination drawn from stop `id`'s: by weight; none when the weights
     /// leave the draw over. Also the stop's line record it matched.
     fn draw_dest(&mut self, id: i64) -> (Option<String>, Option<usize>) {
         let mut r = self.rand_f() as f32;
@@ -2792,8 +2792,8 @@ impl Humans {
         (dest, line)
     }
 
-    /// A person put at a free waiting place of stop `id` (sub_626044) with a destination
-    /// drawn from the stop's (sub_61baa8); they settle there as task 6 does.
+    /// A person put at a free waiting place of stop `id` with a destination
+    /// drawn from the stop's; they settle there as task 6 does.
     fn spawn_waiting(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, id: i64) -> Option<usize> {
         if self.stops.get(&id)?.taken.iter().all(|t| *t) || !self.pool_room() {
             return None;
@@ -2862,7 +2862,7 @@ impl Humans {
         let crowd = (lanes.len() as f32 / 120.0).clamp(0.6, 3.0);
         let target =
             (self.pedestrians as f32 * crowd * self.density.clamp(0.0, 3.0)).round() as usize;
-        // (0x62463c: walking the pavements only while fewer than half the pool do, and never
+        // (walking the pavements only while fewer than half the pool do, and never
         // past the pool)
         let target = target.min(self.max_people / 2).min((self.max_people + self.people.iter().filter(|p| matches!(p.state, State::Strolling(_))).count()).saturating_sub(self.pool_used()));
         let have = self
@@ -2986,8 +2986,8 @@ impl Humans {
     }
 
     /// Whether entry or exit `i` (`kind` "Entry" or "Exit") has variables of its own: one of
-    /// Omsi.exe's eight, or one past them whose `PAX_<kind><i>_Open` the script reports (#719).
-    /// The others open with the eighth, as in Omsi.exe (0x62d31e reads the open state of door
+    /// OMSI's eight, or one past them whose `PAX_<kind><i>_Open` the script reports (#719).
+    /// The others open with the eighth, as in OMSI (which reads the open state of door
     /// min(i, 7)), and ask through its `_Req` ([`Humans::write_door_requests`]).
     fn own_pax_door(v: &VehicleInstance, kind: &str, i: usize) -> bool {
         i < OMSI_PAX_DOORS || (i < omsi_sim::vehicle::PAX_DOORS && Self::script_reports(v, &format!("PAX_{kind}{i}_Open")))
@@ -2996,7 +2996,7 @@ impl Humans {
     /// The passengers' requests into the bus's `PAX_Entry<n>_Req` / `PAX_Exit<n>_Req`, and
     /// who stands in its doorways into their `_Busy` (#720): an entry or exit without
     /// variables of its own asks through the eighth's ([`Humans::own_pax_door`]), where
-    /// Omsi.exe drops them (its request arrays have eight slots). Past the eighth they were
+    /// OMSI drops them (its request arrays have eight slots). Past the eighth they were
     /// written to no variable at all.
     pub(crate) fn write_door_requests(v: &mut VehicleInstance, doors: &DoorWants) {
         for (kind, flags, what) in [
@@ -3182,8 +3182,8 @@ impl Humans {
                 _ => None,
             };
             // On a duty the people its trip takes where they are going get on. In free drive
-            // the bus takes whom its destination display takes, as Omsi.exe's buses do
-            // (sub_61c33c): those whose line record lists the terminus shown, and those
+            // the bus takes whom its destination display takes, as OMSI's buses do:
+            // those whose line record lists the terminus shown, and those
             // without one. (Nobody got on in free drive since 0.2.0, #1627: the bus stood at
             // Grundorf's and Spandau's stops with its line set and its doors open.)
             let takes = match &self.duty {
@@ -3724,7 +3724,7 @@ impl Humans {
         let mut inside: hashbrown::HashSet<u32> = hashbrown::HashSet::new();
         let mut knocked = Vec::new();
         for (i, p) in self.people.iter().enumerate() {
-            // (sub_62a6a0 at 0x62dc6c: the people waiting at a stop and those on the pavements)
+            // (the people waiting at a stop and those on the pavements)
             let counts = match &p.state {
                 State::Pax(x) => x.task == Task::WaitingForBus,
                 State::Strolling(_) | State::Standing => true,
@@ -3744,7 +3744,7 @@ impl Humans {
         self.under_bus = inside;
         let mut gone = Vec::new();
         for &i in knocked.iter().rev() {
-            // a waiting passenger knocked down leaves the stop and walks off (sub_626818)
+            // a waiting passenger knocked down leaves the stop and walks off
             if let State::Pax(x) = &self.people[i].state {
                 let (at, h, stop) = (x.pos, x.yaw.to_degrees(), x.stop);
                 self.release(i);
@@ -3855,8 +3855,8 @@ impl Humans {
         Self::write_door_requests(b, &doors);
     }
 
-    /// Who wants a timetable bus to stop, as Omsi.exe asks before it lets one pull in
-    /// (0x7da91f): the AI buses with somebody aboard on the way to a door to get off
+    /// Who wants a timetable bus to stop, as OMSI asks before it lets one pull in:
+    /// the AI buses with somebody aboard on the way to a door to get off
     /// (task 5), and the stops where somebody is waiting for a bus or walking to one
     /// (tasks 1 to 3).
     pub fn stop_wishes(&self) -> (HashSet<u64>, HashSet<i64>) {
@@ -3925,7 +3925,7 @@ impl Humans {
         let Some(cabin) = self.player_cabin.as_ref() else {
             return Vec::new();
         };
-        // (the link each walker is on, +0x698)
+        // (the link each walker is on)
         let mut out = vec![0u32; cabin.links.len()];
         for p in &self.people {
             if let State::Pax(x) = &p.state {
@@ -4125,7 +4125,7 @@ impl Humans {
         let buses = buses;
         self.last_buses = buses.clone();
         let bus_ix: HashMap<BusId, usize> = buses.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
-        // the stops: which buses stand at them (sub_61f93c), who waits there (sub_61bf94)
+        // the stops: which buses stand at them, who waits there
         let at_stops = self.register_buses(&buses, dt);
         self.claim_waiting();
         self.ride_comfort(dt, bus, &buses, &bus_ix, world);
@@ -4133,7 +4133,7 @@ impl Humans {
             self.stops_tick(dt, world, renderer, scene);
         }
         stage!("stops");
-        // the passengers (sub_6ffc7c)
+        // the passengers
         let mut taken_ticket = false;
         let mut remove: Vec<usize> = Vec::new();
         self.pax_frame(dt, world, &buses, &bus_ix, &at_stops, bus, renderer, scene, &mut taken_ticket, &mut remove);
@@ -4802,7 +4802,7 @@ impl Humans {
         }
     }
 
-    /// Everybody's animation this frame (sub_626ae8): the passengers from what their task
+    /// Everybody's animation this frame: the passengers from what their task
     /// says (`PAX_State`, speed, the room height, the seat, the hand and the head), the
     /// pedestrians from their walk.
     fn animate(&mut self, dt: f32, world: &World, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
@@ -5407,7 +5407,7 @@ impl Humans {
         self.last_buses.iter().any(|b| b.id == bus)
     }
 
-    /// The player's (or another player's) body on foot, animated as Omsi.exe animates its
+    /// The player's (or another player's) body on foot, animated as OMSI animates its
     /// people: sitting on a seat (its hip on the `[passpos]`), walking or standing.
     fn animate_avatar(&mut self, i: usize, dt: f32, world: &World, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
         let id = self.people[i].id;
@@ -5772,14 +5772,14 @@ impl Humans {
             return false;
         }
         // ours from now on: waiting at that place, for the bus that stands there (the first
-        // listed, as Omsi.exe takes it without a line record)
+        // listed, as OMSI takes it without a line record)
         let sp = self.stops[&stop].spots.get(spot).cloned();
         let seatheight = self.people[i].ty.def.seat_height;
         let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
         let mut pax = Pax::new(walk, self.rand_f());
         pax.task = Task::WaitingForBus;
         pax.stop = Some(stop);
-        // what a waiting person of ours has (sub_626044 and task 6): a destination drawn
+        // what a waiting person of ours has (as in task 6): a destination drawn
         // from the stop (both sides load the same map) and a distance to ride without one;
         // with neither they would get off again at once (#813)
         let (dest, line) = self.draw_dest(stop);
@@ -6085,7 +6085,7 @@ mod tests {
             cabin.exits[1].inside
         );
         // the seat in the rear is reached from the front door through the joint, along the
-        // routing tables Omsi.exe builds over the joined network
+        // routing tables OMSI builds over the joined network
         let seat = &cabin.seats[1];
         assert!((seat.pos.y + 10.3).abs() < 1e-4);
         let all: Vec<Option<usize>> = (0..cabin.graph.points.len()).map(Some).collect();
@@ -6414,7 +6414,7 @@ mod tests {
         for avoid in [false, true] {
             assert_eq!(hitched.omsi_nearest(near_bus_door, &entries, avoid, false, Some(&flags), Some(&[false, false])), Some(3));
         }
-        // (one group: the list's first, as Omsi.exe)
+        // (one group: the list's first, as OMSI)
         assert_eq!(jointed.omsi_nearest(here, &[None, Some(3)], false, false, None, Some(&[false, false])), None);
         // a trailer of its own nobody can get into, or out of again, has its places off
         assert_eq!(places_off(&v, &hitched), [false, false]);
@@ -6428,7 +6428,7 @@ mod tests {
     }
 
     /// #722: a validator by each door - every `[stamper]` is kept, and a passenger stamps at
-    /// the one nearest where they came in (Omsi.exe kept the file's last one only).
+    /// the one nearest where they came in (OMSI kept the file's last one only).
     #[test]
     fn passengers_stamp_at_the_validator_nearest_their_door() {
         let dir = std::env::temp_dir().join(format!("omsi-stampers-{}", std::process::id()));
@@ -6451,10 +6451,10 @@ mod tests {
         assert_eq!(cabin.nearest_stamper(Vec3::new(0.0, -4.0, 0.5)), Some(1), "in by the rear door");
     }
 
-    /// #719: a five-door bus with two paths a door has ten entries. Past Omsi.exe's eight,
+    /// #719: a five-door bus with two paths a door has ten entries. Past OMSI's eight,
     /// an entry whose `PAX_Entry<n>_Open` the script gives is a door of its own, and its
     /// people ask through its `PAX_Entry<n>_Req`; one the script does not know opens with
-    /// the eighth, as in Omsi.exe, and asks through it (Omsi.exe drops that request).
+    /// the eighth, as in OMSI, and asks through it (OMSI drops that request).
     #[test]
     fn doors_past_the_eighth_have_variables_of_their_own_or_go_with_the_eighth() {
         let bus = |name: &str, vars: &str| {

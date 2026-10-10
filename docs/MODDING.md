@@ -1,13 +1,13 @@
 # Modding beyond OMSI 2
 
-openOMSI reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 2 works
+Project Depot reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 2 works
 without changes. It also lifts limits OMSI 2 put on modders. Everything on this page is an
 addition. A file that uses it still loads in OMSI 2, which ignores what it does not know.
 
 ## Interior lights: more than four per mesh
 
 OMSI 2 lights a mesh with at most four `[interiorlight]` lamps, the four numbers of its
-`[illumination_interior]`. openOMSI takes as many as you list, up to 63 per mesh. Write the
+`[illumination_interior]`. Project Depot takes as many as you list, up to 63 per mesh. Write the
 extra lamp numbers on the lines right after the first four; a blank line ends the list:
 
 ```
@@ -36,7 +36,7 @@ OMSI 2 reads the first four and skips the rest. A model may declare any number o
 
 - Textures up to 16384 × 16384 pixels load: DDS (DXT1/3/5, uncompressed), TGA, BMP, PNG and
   JPG. Where the graphics card cannot take that size, the texture is halved until it fits.
-- There is no 2 GB address-space limit: openOMSI is a 64-bit program.
+- There is no 2 GB address-space limit: Project Depot is a 64-bit program.
 - A texture keeps its full resolution within 150 m of the camera, so a bus's own 4K
   textures always stay sharp. Far scenery gives up detail only when the texture memory
   (`texture_memory` in the settings, or `OMSI_TEXTURE_MEMORY`, in MB) runs out, as OMSI's
@@ -204,15 +204,15 @@ looks right only with the key. For a bus played in both, give the pusher variant
 ## Passenger doors: sixteen entries and sixteen exits
 
 OMSI 2 has the door variables of eight `[entry]` and eight `[exit]` paths a vehicle
-(`PAX_Entry0_Open` to `PAX_Entry7_Open`, the same with `_Req` and for `PAX_Exit`). openOMSI
+(`PAX_Entry0_Open` to `PAX_Entry7_Open`, the same with `_Req` and for `PAX_Exit`). Project Depot
 has them for sixteen of each: `PAX_Entry8_Open` ... `PAX_Entry15_Open`, `PAX_Entry8_Req` ...
 and the same for the exits. An entry or exit past the eighth is a door of its own once the
 script sets its `_Open` variable (or lists it in a varlist); then its passengers wait for that
 variable and ask for the door through its own `_Req`. Without it, it opens with the eighth, as
-in OMSI 2. Its passengers' requests then go through the eighth's `_Req` in openOMSI, while
+in OMSI 2. Its passengers' requests then go through the eighth's `_Req` in Project Depot, while
 OMSI 2 loses them (its request arrays have eight slots).
 
-openOMSI also tells the script who stands in a doorway: `PAX_Entry<n>_Busy` and
+Project Depot also tells the script who stands in a doorway: `PAX_Entry<n>_Busy` and
 `PAX_Exit<n>_Busy` (n 0 to 15) are 1 while somebody is on the door's threshold or in the
 opening between it and the step outside - what a door's light barrier sees - and 0 otherwise;
 the people queueing outside a shut door, in the aisle or on the deck above do not count. A
@@ -222,7 +222,7 @@ eighth without variables of its own reports through the eighth's. OMSI 2 does no
 
 ## Passenger places switched by the script
 
-OMSI 2's `[passpos]` places are all there all the time. In openOMSI a `[passpos]` may name a
+OMSI 2's `[passpos]` places are all there all the time. In Project Depot a `[passpos]` may name a
 script variable on the line straight after its five values: while that variable is 0 no
 passenger takes the place (whoever sits there already stays until they get off), so a bus
 can have two seating layouts and switch between them with a setvar. A second name on the
@@ -247,7 +247,7 @@ list, and OMSI 2 passes over the lines.
 
 ## Ticket validators: one by every door
 
-OMSI 2 uses one `[stamper]` of a `passengercabin.cfg`, the last one written. openOMSI keeps
+OMSI 2 uses one `[stamper]` of a `passengercabin.cfg`, the last one written. Project Depot keeps
 every `[stamper]` of every section, and a passenger with a ticket to stamp uses the one
 nearest the door they came in by. Write one `[stamper]` block per validator (path point,
 then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
@@ -290,7 +290,7 @@ coordinates on the globe: many maps shorten and bend their routes.
 
 **A bus's display.** A radio script that wants the station and the song in its display
 declares the string variable `Snd_Radio_Text` (in a `[stringvarnamelist]` file of the bus)
-and shows it in a text texture: openOMSI writes the text there, ten characters, a longer
+and shows it in a text texture: Project Depot writes the text there, ten characters, a longer
 text running through, while the radio plays. The variables the radio itself sets are those
 of OMSI's radio plugins - `Snd_Radio` (1 while a cassette or the radio plays: the first
 station), or `SndExt_Radio` (the station button, 0 = off) with `SndVol_Radio` (the volume,
@@ -318,7 +318,7 @@ A map may bring a pre-built picture of itself for the navigator and the city map
 areas, rivers and rail under the roads, icons for terminals and garages, the municipalities' names,
 the municipality and street the player is on, and a panel with the map's bus lines. Everything is
 made beforehand by the map's author and put in one folder, `Maps/<Map>/openomsi-realmap/`;
-openOMSI computes none of it and a map without the folder looks as it always did. Omsi.exe ignores
+Project Depot computes none of it and a map without the folder looks as it always did. Omsi.exe ignores
 the folder. The files, the formats and what each one switches on are in [MAP_PACKAGE.md](MAP_PACKAGE.md).
 
 ## What stays as in OMSI 2

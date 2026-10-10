@@ -110,7 +110,7 @@ pub(crate) struct App {
     pub(crate) buttons_held: (bool, bool),
     /// The middle button held (looks round; the right button zooms).
     pub(crate) mmb_held: bool,
-    /// The right button (or both) held: OMSI's mouse zoom (0x82c5f8) - moving the mouse up
+    /// The right button (or both) held: OMSI's mouse zoom - moving the mouse up
     /// widens the view in the bus or takes the outside camera further away, by the value at
     /// the press over 500 pixels: (the cursor's height then, the zoom or distance then).
     pub(crate) both_drag: Option<(f32, f32)>,

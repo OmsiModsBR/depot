@@ -1,4 +1,4 @@
-//! Game controllers on Windows through DirectInput 8, as Omsi.exe reads them: every device
+//! Game controllers on Windows through DirectInput 8, as OMSI reads them: every device
 //! Windows lists as a game controller (wheels with their makers' drivers, pedals, joysticks,
 //! button boxes - the system's newer Windows.Gaming.Input misses many of them), the eight
 //! axes in the slots `gamectrler.cfg` numbers (X, Y, Z, Rx, Ry, Rz, the two sliders), up to

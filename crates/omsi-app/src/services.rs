@@ -78,7 +78,7 @@ pub(crate) fn run_services(
         }
     }
     if args.repair {
-        // (Omsi.exe, 0x70dc7c: no time, or none in 0 .. 100000 minutes - a bus without
+        // (OMSI: no time, or none in 0 .. 100000 minutes - a bus without
         // `malfunction_gettime`, most of them - is repaired at once, with no team to wait
         // for; `malfunction_reset` runs either way, #1048)
         match v.repair_minutes().filter(|m| *m > 0.0 && *m < 100000.0) {

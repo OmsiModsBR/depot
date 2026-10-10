@@ -295,3 +295,22 @@ h1 { line-height: 1.25; }
 .temp-banner { display: flex; align-items: center; gap: 10px; padding: 6px 16px; font-size: 14px; background: var(--primary); color: var(--on-primary); }
 .temp-banner a { color: inherit; text-decoration: underline; }
 .temp-banner .material-icons { font-size: 18px; }
+
+/* language selector (EN / PT-BR) in the app bar */
+.lang { display: inline-flex; border: 1px solid var(--outline); border-radius: 16px; overflow: hidden; margin-right: 4px; }
+.lang button { border: 0; background: none; color: var(--appbar-fg); font: 500 13px/1 Roboto, system-ui, sans-serif; padding: 8px 10px; cursor: pointer; }
+.lang button:hover { background: var(--hover); }
+.lang button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+.lang button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 480px) {
+  .appbar { gap: 2px; padding: 0 6px; }
+  .appbar > * { flex-shrink: 0; }
+  .icon-btn { width: 40px; height: 40px; }
+  .brand img { height: 20px; margin-left: 2px; }
+  .lang { margin-right: 2px; }
+  .lang button { padding: 7px 8px; font-size: 12px; }
+  .appbar a[href*="discord"] { display: none; } /* Discord stays in the menu and on the front page */
+}
+@media (max-width: 360px) {
+  .appbar a[href*="github.com"] { display: none; } /* Source code stays in the menu */
+}

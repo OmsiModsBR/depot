@@ -91,7 +91,7 @@ pub struct TripTimes {
     pub stops: Vec<bool>,
     /// `[profile_otherstopping]` per station (0 when not given): 1 and 4 stop whoever
     /// wants to get on or off, 2 is passed, 3 is served when the bus would be more than 20 s
-    /// early (Omsi.exe 0x7da6f0 .. 0x7da8bf; see `bus_service::BusService::must_serve`).
+    /// early (as in OMSI; see `bus_service::BusService::must_serve`).
     pub kinds: Vec<u8>,
     /// Seconds from the departure to the arrival at the last station.
     pub duration: f64,
@@ -362,8 +362,8 @@ fn bay_offset(lat: f32) -> f32 {
     lat
 }
 
-/// Where a timetable bus stands across its lane at a stop, as Omsi.exe puts it
-/// (0x7dac5e..0x7dae81): its kerb-side flank 0.3 m past the `[busstop]` box's centre -
+/// Where a timetable bus stands across its lane at a stop, as OMSI puts it:
+/// its kerb-side flank 0.3 m past the `[busstop]` box's centre -
 /// `lat` less its `[boundingbox]` lateral centre and half width plus 0.3 on the right (the other way round
 /// where traffic keeps left), from the box's offset `lat` off the path (right positive);
 /// a railway vehicle keeps to its track. OMSI clamps it only to the room beside other
@@ -544,7 +544,7 @@ pub struct Schedule {
 const TOUR_LAYOVER_MAX: f64 = 30.0 * 60.0;
 
 /// A tour's bus takes its next trip on only from one of the trip's first lanes (or a short
-/// way onto one of them): Omsi.exe starts every trip at its beginning.
+/// way onto one of them): OMSI starts every trip at its beginning.
 const TOUR_ENTRY_LANES: usize = 4;
 
 /// Where on the next trip's route `section` the tour's bus standing on `lane` takes it on:
@@ -1002,7 +1002,7 @@ impl Schedule {
 
     /// The clock was set to another time (by hand, the menu, Ctrl+Shift+Page Up/Down): every
     /// timetable bus goes, and at the next tick each trip under way at the new time is put
-    /// out where its timetable has it then, as when the game starts - as Omsi.exe does when
+    /// out where its timetable has it then, as when the game starts - as OMSI does when
     /// the time is changed. They stayed where they were, the whole timetable running hours
     /// early or late: buses queued at stops, waiting there for their time (#1607, #1455).
     pub fn restart(&mut self, world: &World, traffic: &mut Traffic, renderer: &Renderer, scene: &mut Scene, day_time: f64) {
@@ -1494,7 +1494,7 @@ impl Schedule {
                     let pool = self.pool(&root, world, &group);
                     pool.get((h % pool.len().max(1) as u64) as usize).cloned()?
                 };
-                // The group names no depot file, so Omsi.exe leaves the bus's selected-hof
+                // The group names no depot file, so OMSI leaves the bus's selected-hof
                 // index at 0: it runs with the depot of its own folder (see [`pool_depot`]).
                 // Without one such a bus got no `SetLineTo`, no `AI_target_index` and no
                 // `ai_scheduled_settarget` trigger at all - and a mod bus that switches its
@@ -1503,7 +1503,7 @@ impl Schedule {
                 (ty, Vec::new(), hof)
             }
         };
-        // A depot bus as Omsi.exe makes it (0x70a174): the fleet number of its ailists line;
+        // A depot bus as OMSI makes it: the fleet number of its ailists line;
         // the plate of that line, else - unless the bus's plates are free - the plate the bus
         // gives the number ([registration_list] / [registration_automatic]); and the repaint
         // that line names, else the model's own paint (the first repaint when the default
@@ -1892,13 +1892,13 @@ impl Schedule {
     }
 
     /// How many due departures are still waiting to be put on the road.
-    /// Omsi.exe's station targets (0x61cb18): per bus stop, the stops the timetable's trips
+    /// OMSI's station targets: per bus stop, the stops the timetable's trips
     /// go on to from there, each with the termini of the trips that do. A passenger waiting
     /// at the stop wants one of these targets and boards a bus whose terminus is among its
-    /// termini (0x61c33c); the names compare exactly.
+    /// termini; the names compare exactly.
     /// Per bus stop, the destinations of the trips due there within the next
     /// [`PAX_SPAWN_AHEAD`] (today's departures, the stations they stop at after it): what
-    /// the people turning up there now draw their destination from. Omsi.exe spawns
+    /// the people turning up there now draw their destination from. OMSI spawns
     /// people for a trip up to a quarter of an hour before it is due at their stop (pionsix's
     /// tests, #1436); the destinations of every trip of the map, whatever its hour or day,
     /// had people waiting at 2 a.m. for the six o'clock bus and at a school's stop for hours
@@ -2463,8 +2463,8 @@ impl Schedule {
         let t_route = t_spawn.elapsed();
         if let Some(ci) = onto {
             // a train whose next trip runs the other way (its `[trainreverse]` is not how the
-            // train stands) is turned round where it stands, as Omsi.exe turns it when the
-            // trip begins (0x613a98): its last car leads, on the way back. (It drove off
+            // train stands) is turned round where it stands, as OMSI turns it when the
+            // trip begins: its last car leads, on the way back. (It drove off
             // along the siding instead - past the end of the track - and another train
             // appeared for the trip.)
             let reverse = self.data.trips[self.departures[i].trip].train_reverse;
@@ -2611,7 +2611,7 @@ impl Schedule {
         };
         self.next_number += 1;
         let rail = traffic.net.lanes[section[start_index]].kind == omsi_sim::traffic::LaneKind::Rail;
-        // every further car of the train with the cars of its unit, as Omsi.exe creates
+        // every further car of the train with the cars of its unit, as OMSI creates
         // each car of a `.zug` (the first has its own with `create_car`): the ones before it
         // (towards the front of the train), the car, the ones behind it
         let rest: Option<Vec<(Arc<VehicleType>, bool)>> = train.as_ref().map(|cars| {
@@ -2979,7 +2979,7 @@ fn section_around(slots: &[Slot], at: usize) -> (usize, usize) {
 /// The depot file of a bus whose AI group names none (a plain `[aigroup_2]` pool): the one
 /// of the map's own depots where its vehicle folder has it (the group is the map author's
 /// shortcut for a fleet the `[aigroup_depot]` groups name with a depot), else the folder's
-/// first `.hof` - what Omsi.exe uses for such a bus, whose selected-hof index stays 0
+/// first `.hof` - what OMSI uses for such a bus, whose selected-hof index stays 0
 /// ("the hofs are loaded in the order the folder lists them", [`omsi_vehicle::hof::depot_files`]).
 ///
 /// A timetable bus is spawned with this depot file: with none it got no `SetLineTo`, no
@@ -3149,7 +3149,7 @@ pub struct BlindPick {
 }
 
 /// Turn a hand-cranked roller blind to the destination picked for it (`pick`, taken once
-/// done), as Omsi.exe's line and destination dialog sets the driven bus
+/// done), as OMSI's line and destination dialog sets the driven bus
 /// (Tform_setline.Button1Click: TRoadVehicleInst.virtual_10, the AI's way - `SetLineTo`,
 /// `AI_target_index`, the `ai_scheduled_settarget` trigger, from which the stock blinds take
 /// their place): written into the IBIS alone, a pick never reached an SD77's blind, and the
@@ -3419,7 +3419,7 @@ fn terminus_match_score(t: &omsi_vehicle::hof::Terminus, wanted: &str) -> u8 {
 }
 
 /// The depot file's terminus a trip's destination names. OMSI takes the first whose ident
-/// is the name (Omsi.exe TRoadVehicleInst.virtual_10: that row is `AI_target_index`); else
+/// is the name (that row is `AI_target_index`); else
 /// the best of the looser matches - the first of equals, not the last (a depot file whose
 /// codes are not in row order put the AI bus's matrix on another terminus's picture, #110).
 fn find_terminus(hof: &omsi_vehicle::Hof, wanted: &str) -> Option<usize> {
@@ -3633,7 +3633,7 @@ fn set_destination(
     player: bool,
 ) {
     let terminus = terminus.trim();
-    // Omsi.exe's `TRoadVehicleInst.virtual_10` runs for every trip a bus starts: the line
+    // OMSI's vehicle set-up runs for every trip a bus starts: the line
     // goes into `SetLineTo` and the script's `ai_scheduled_settarget` trigger runs even when
     // the depot file has no such terminus (`AI_target_index` then stays as it was) and even
     // for a bus whose group names no depot file at all. The mods' roller blinds and matrices
@@ -3646,7 +3646,7 @@ fn set_destination(
         }
         return;
     };
-    // (an AI bus shows the first row of the name, as Omsi.exe gives it; the player's IBIS
+    // (an AI bus shows the first row of the name, as OMSI gives it; the player's IBIS
     // the row its route leads to, as the typing does)
     let term_index = if player {
         trip_terminus(hof, line, terminus, stops).map(|(ti, _)| ti)
@@ -4658,7 +4658,7 @@ struct OnRoad {
     late: f64,
 }
 
-/// GetTTTerminusIndex as Omsi.exe answers it: the first depot terminus whose name is the
+/// GetTTTerminusIndex as OMSI answers it: the first depot terminus whose name is the
 /// trip's terminus (the second [trip] line), else -1.
 fn tt_terminus_index(hof: Option<&omsi_vehicle::hof::Hof>, terminus: &str) -> i32 {
     hof.and_then(|h| h.termini.iter().position(|t| t.texture_id == terminus)).map_or(-1, |i| i as i32)
@@ -5930,7 +5930,7 @@ pub(crate) mod tests {
         let mut v = ibis_test_vehicle();
         set_player_destination_directly(&mut v, Some(&hof), "41", "ul. Xutorskaya", &["Vokzal", "Shkola", "ul. Xutorskaya"]);
         assert_eq!((v.var("IBIS_TerminusCode"), v.var("IBIS_TerminusIndex")), (Some(124.0), Some(4.0)));
-        // an AI bus shows the first row of the name, as Omsi.exe's AI_target_index does
+        // an AI bus shows the first row of the name, as OMSI's AI_target_index does
         set_ai_destination(&mut v, Some(&hof), "41", "ul. Xutorskaya", &["Vokzal", "Shkola", "ul. Xutorskaya"]);
         assert_eq!(v.var("IBIS_TerminusIndex"), Some(1.0));
         // rows of one ident as well
@@ -5942,7 +5942,7 @@ pub(crate) mod tests {
     }
 
     /// An AI group that names no depot file, or a terminus its depot file has no row for:
-    /// Omsi.exe still puts the line into `SetLineTo` and runs `ai_scheduled_settarget`, which
+    /// OMSI still puts the line into `SetLineTo` and runs `ai_scheduled_settarget`, which
     /// is what the mods' roller blinds and matrices switch their destination picture on in.
     #[test]
     fn an_ai_bus_without_a_destination_still_gets_its_line_and_the_ai_trigger() {

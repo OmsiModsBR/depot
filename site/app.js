@@ -12,11 +12,11 @@ const DOCS = [
   { file: "VERSIONING", title: "Versioning & releases", icon: "new_releases" },
 ];
 const PLATFORMS = [
-  { key: "windows-x64", name: "Windows", icon: "desktop_windows", note: "64-bit (x64), Windows 10 or newer", os: "windows" },
+  { key: "windows-x64", name: "plat.windows", icon: "desktop_windows", note: "plat.windows.note", os: "windows" },
 ];
 // The dedicated server was only published with 0.2.17 and is discontinued (see docs/removed/MULTIPLAYER_DISABLED.md).
 const SERVERS = [
-  { key: "server-windows-x64", name: "Dedicated server (discontinued)", icon: "dns", note: "Windows x64, no window. Only in 0.2.17; no longer built or supported" },
+  { key: "server-windows-x64", name: "plat.server", icon: "dns", note: "plat.server.note" },
 ];
 
 // Which build fits the visitor, roughly: the one to put first and mark.
@@ -33,8 +33,11 @@ const view = document.getElementById("view");
 const drawer = document.getElementById("drawer");
 const scrim = document.getElementById("scrim");
 
-document.getElementById("doc-links").innerHTML = DOCS.map(d =>
-  `<a href="#/docs/${d.file}" data-route="/docs/${d.file}"><span class="material-icons">${d.icon}</span>${d.title}</a>`).join("");
+function drawDocLinks() {
+  document.getElementById("doc-links").innerHTML = DOCS.map(d =>
+    `<a href="#/docs/${d.file}" data-route="/docs/${d.file}"><span class="material-icons">${d.icon}</span>${t("doc." + d.file)}</a>`).join("");
+}
+drawDocLinks();
 
 function toggleDrawer(open) {
   drawer.classList.toggle("open", open);
@@ -63,13 +66,14 @@ function slug(text) {
 function showTemplate(id) {
   view.innerHTML = "";
   view.appendChild(document.getElementById(id).content.cloneNode(true));
+  applyLang(view);
 }
 
 async function home() {
   showTemplate("home");
   const rel = await latestRelease();
   const chip = document.querySelector("#version-chip span:last-child");
-  if (chip) chip.textContent = rel.tag_name ? `Latest: ${rel.tag_name.replace(/^v/, "")}` : "No release yet";
+  if (chip) chip.textContent = rel.tag_name ? t("chip.latest", rel.tag_name.replace(/^v/, "")) : t("chip.none");
 }
 
 async function download() {
@@ -78,11 +82,11 @@ async function download() {
   const grid = document.getElementById("dl-grid");
   const ver = document.getElementById("dl-version");
   if (!rel.tag_name) {
-    ver.textContent = "No release has been published yet.";
+    ver.textContent = t("dl.none");
     return;
   }
   const v = String(rel.tag_name).replace(/[^0-9A-Za-z._-]/g, "").replace(/^v/, "");
-  ver.innerHTML = `Latest version: <b>${v}</b> · ${new Date(rel.published_at).toLocaleDateString()}`;
+  ver.innerHTML = `${t("dl.latest", v)} · ${new Date(rel.published_at).toLocaleDateString(lang)}`;
   // Each file by its exact name: matched by its ending alone, "-windows-x64.zip" was the
   // dedicated server's zip as well, and the Windows button downloaded the server.
   const card = p => {
@@ -90,34 +94,34 @@ async function download() {
     const a = (rel.assets || []).find(a => a.name === file);
     const size = a ? ` · ${(a.size / 1048576).toFixed(0)} MB` : "";
     const mine = p.os && p.os === visitorOs();
-    return `<div class="card elevation-${mine ? 3 : 1} dl-card${mine ? " dl-mine" : ""}"><div class="dl-head"><span class="material-icons card-icon">${p.icon}</span>${mine ? `<span class="dl-badge">Your system</span>` : ""}</div>
-      <h3>${p.name}</h3><p>${p.note}${size}</p>
-      ${a ? `<a class="btn btn-contained" href="${esc(safeUrl(a.browser_download_url))}" download><span class="material-icons">download</span>Download</a>`
-          : `<p>Not in this release.</p>`}</div>`;
+    return `<div class="card elevation-${mine ? 3 : 1} dl-card${mine ? " dl-mine" : ""}"><div class="dl-head"><span class="material-icons card-icon">${p.icon}</span>${mine ? `<span class="dl-badge">${t("dl.mine")}</span>` : ""}</div>
+      <h3>${t(p.name)}</h3><p>${t(p.note)}${size}</p>
+      ${a ? `<a class="btn btn-contained" href="${esc(safeUrl(a.browser_download_url))}" download><span class="material-icons">download</span>${t("dl.download")}</a>`
+          : `<p>${t("dl.notin")}</p>`}</div>`;
   };
   const games = [...PLATFORMS].sort((x, y) => (y.os === visitorOs()) - (x.os === visitorOs()));
   grid.innerHTML = games.map(card).join("")
-    + `<h2 class="section-title" style="grid-column:1/-1">Dedicated server</h2>`
+    + `<h2 class="section-title" style="grid-column:1/-1">${t("dl.server")}</h2>`
     + SERVERS.map(card).join("");
 }
 
 async function doc(name, anchor) {
   const meta = DOCS.find(d => d.file === name);
-  if (!meta) { view.innerHTML = `<div class="content"><div class="doc"><h1>Not found</h1><p>There is no such document.</p></div></div>`; return; }
-  view.innerHTML = `<div class="content"><div class="doc"><div class="loading">Loading…</div></div></div>`;
+  if (!meta) { view.innerHTML = `<div class="content"><div class="doc"><h1>${t("doc.notfound")}</h1><p>${t("doc.nosuch")}</p></div></div>`; return; }
+  view.innerHTML = `<div class="content"><div class="doc"><div class="loading">${t("loading")}</div></div></div>`;
   let md;
   try {
     const r = await fetch(`docs/${name}.md`);
     if (!r.ok) throw new Error(r.status);
     md = await r.text();
   } catch {
-    view.querySelector(".doc").innerHTML = `<h1>Not found</h1><p>The document could not be loaded.</p>`;
+    view.querySelector(".doc").innerHTML = `<h1>${t("doc.notfound")}</h1><p>${t("doc.noload")}</p>`;
     return;
   }
   const box = view.querySelector(".doc");
   box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${REPO}/blob/main/docs/${name}.md">
-    <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + clean(marked.parse(md));
-  document.title = `${meta ? meta.title : name} · Project Depot`;
+    <span class="material-icons" style="font-size:18px">edit</span> ${t("doc.edit")}</a></div>${lang === "pt-BR" ? `<p class="muted">${t("doc.enonly")}</p>` : ""}` + clean(marked.parse(md));
+  document.title = `${t("doc." + name)} · Project Depot`;
   // heading anchors
   box.querySelectorAll("h1, h2, h3, h4").forEach(h => {
     h.id = slug(h.textContent);
@@ -145,7 +149,7 @@ const cache = {};
 async function gh(path) {
   if (cache[path]) return cache[path];
   const r = await fetch(`https://api.github.com/repos/${REPO}/${path}`, { headers: { Accept: "application/vnd.github+json" } });
-  if (!r.ok) throw new Error(r.status === 403 ? "GitHub's hourly request limit is reached - try again later." : `GitHub answered ${r.status}.`);
+  if (!r.ok) throw new Error(r.status === 403 ? t("api.limit") : t("api.status", r.status));
   return (cache[path] = await r.json());
 }
 // release asset links must be https on github.com (or the API's own download hosts)
@@ -174,31 +178,31 @@ function md(text) {
 function ago(date) {
   const s = (Date.now() - new Date(date)) / 1000;
   for (const [n, u] of [[31536000, "year"], [2592000, "month"], [86400, "day"], [3600, "hour"], [60, "minute"]]) {
-    if (s >= n) { const k = Math.floor(s / n); return `${k} ${u}${k > 1 ? "s" : ""} ago`; }
+    if (s >= n) return t("ago.n", Math.floor(s / n), u);
   }
-  return "just now";
+  return t("ago.now");
 }
 function labelChips(labels) {
   return (labels || []).map(l => `<span class="label" style="--lc:#${esc(l.color)}">${esc(l.name)}</span>`).join("");
 }
 
 async function releases() {
-  view.innerHTML = `<div class="content"><h1>Releases</h1>
-    <p class="lead">Every version, newest first. The newest one is also on the <a href="#/download">Download</a> page.</p>
-    <div id="rel-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = "Releases · Project Depot";
+  view.innerHTML = `<div class="content"><h1>${t("rel.h")}</h1>
+    <p class="lead">${t("rel.lead")}</p>
+    <div id="rel-list"><div class="loading">${t("loading")}</div></div></div>`;
+  document.title = `${t("rel.h")} · Project Depot`;
   const box = document.getElementById("rel-list");
   let list;
-  try { list = await gh("releases?per_page=30"); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/releases">Releases on GitHub</a></p>`; return; }
-  if (!list.length) { box.innerHTML = "<p>No release has been published yet.</p>"; return; }
+  try { list = await gh("releases?per_page=30"); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/releases">${t("rel.ongh")}</a></p>`; return; }
+  if (!list.length) { box.innerHTML = `<p>${t("rel.none")}</p>`; return; }
   box.innerHTML = list.map((r, i) => {
     const assets = (r.assets || []).map(a => `<a class="asset" href="${esc(safeUrl(a.browser_download_url))}"><span class="material-icons">download</span>${esc(a.name)} <small>${(a.size / 1048576).toFixed(0)} MB</small></a>`).join("");
     return `<details class="card elevation-1 release"${i === 0 ? " open" : ""}>
       <summary><span class="rel-tag">${esc(r.tag_name.replace(/^v/, ""))}</span>
-        ${i === 0 ? '<span class="label" style="--lc:#2da44e">Latest</span>' : ""}${r.prerelease ? '<span class="label" style="--lc:#bf8700">Pre-release</span>' : ""}
+        ${i === 0 ? `<span class="label" style="--lc:#2da44e">${t("rel.latest")}</span>` : ""}${r.prerelease ? `<span class="label" style="--lc:#bf8700">${t("rel.pre")}</span>` : ""}
         <span class="rel-name">${esc(r.name && r.name !== r.tag_name ? r.name : "")}</span>
-        <span class="spacer"></span><span class="muted">${new Date(r.published_at).toLocaleDateString()}</span></summary>
-      <div class="doc rel-body">${md(r.body) || "<p class='muted'>No notes.</p>"}</div>
+        <span class="spacer"></span><span class="muted">${new Date(r.published_at).toLocaleDateString(lang)}</span></summary>
+      <div class="doc rel-body">${md(r.body) || `<p class='muted'>${t("rel.nonotes")}</p>`}</div>
       ${assets ? `<div class="assets">${assets}</div>` : ""}
     </details>`;
   }).join("");
@@ -207,22 +211,22 @@ async function releases() {
 let issueState = "open", issueQuery = "";
 async function issues(number) {
   if (number) return issue(number);
-  view.innerHTML = `<div class="content"><h1>Issues</h1>
-    <p class="lead">Bugs and wishes. To report one, you need a GitHub account.</p>
-    <p class="issue-new"><a class="btn btn-contained" href="https://github.com/${REPO}/issues/new"><span class="material-icons">add</span>New issue</a></p>
+  view.innerHTML = `<div class="content"><h1>${t("iss.h")}</h1>
+    <p class="lead">${t("iss.lead")}</p>
+    <p class="issue-new"><a class="btn btn-contained" href="https://github.com/${REPO}/issues/new"><span class="material-icons">add</span>${t("iss.new")}</a></p>
     <div class="issue-bar">
-      <div class="tabs"><button data-s="open">Open</button><button data-s="closed">Closed</button><button data-s="all">All</button></div>
-      <input id="iq" type="search" placeholder="Filter by title or label" value="${esc(issueQuery)}">
+      <div class="tabs"><button data-s="open">${t("iss.open")}</button><button data-s="closed">${t("iss.closed")}</button><button data-s="all">${t("iss.all")}</button></div>
+      <input id="iq" type="search" placeholder="${t("iss.filter")}" value="${esc(issueQuery)}">
     </div>
-    <div id="issue-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = "Issues · Project Depot";
+    <div id="issue-list"><div class="loading">${t("loading")}</div></div></div>`;
+  document.title = `${t("iss.h")} · Project Depot`;
   view.querySelectorAll(".tabs button").forEach(b => {
     b.classList.toggle("on", b.dataset.s === issueState);
     b.onclick = () => { issueState = b.dataset.s; issues(); };
   });
   const box = document.getElementById("issue-list");
   let list;
-  try { list = await gh(`issues?state=${issueState}&per_page=100&sort=updated`); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/issues">Issues on GitHub</a></p>`; return; }
+  try { list = await gh(`issues?state=${issueState}&per_page=100&sort=updated`); } catch (e) { box.innerHTML = `<p>${esc(e.message)} <a href="https://github.com/${REPO}/issues">${t("iss.ongh")}</a></p>`; return; }
   // (the issues list also carries pull requests)
   list = list.filter(i => !i.pull_request);
   const draw = () => {
@@ -232,26 +236,26 @@ async function issues(number) {
       <a class="issue-row" href="#/issues/${i.number}">
         <span class="material-icons ${i.state === "open" ? "st-open" : "st-closed"}">${i.state === "open" ? "radio_button_unchecked" : "check_circle"}</span>
         <span class="issue-main"><span class="issue-title">${esc(i.title)}</span> ${labelChips(i.labels)}
-          <span class="muted">#${i.number} · ${esc(i.user?.login)} · updated ${ago(i.updated_at)}</span></span>
+          <span class="muted">#${i.number} · ${esc(i.user?.login)} · ${t("iss.updated", ago(i.updated_at))}</span></span>
         ${i.comments ? `<span class="muted cm"><span class="material-icons">chat_bubble_outline</span>${i.comments}</span>` : ""}
-      </a>`).join("")}</div>` : `<p class="muted">Nothing here.</p>`;
+      </a>`).join("")}</div>` : `<p class="muted">${t("iss.nothing")}</p>`;
   };
   document.getElementById("iq").oninput = e => { issueQuery = e.target.value; draw(); };
   draw();
 }
 
 async function issue(n) {
-  view.innerHTML = `<div class="content"><p><a href="#/issues"><span class="material-icons" style="font-size:18px;vertical-align:-3px">arrow_back</span> All issues</a></p><div id="issue-box"><div class="loading">Loading…</div></div></div>`;
+  view.innerHTML = `<div class="content"><p><a href="#/issues"><span class="material-icons" style="font-size:18px;vertical-align:-3px">arrow_back</span> ${t("iss.back")}</a></p><div id="issue-box"><div class="loading">${t("loading")}</div></div></div>`;
   const box = document.getElementById("issue-box");
   let i, comments;
   try { [i, comments] = await Promise.all([gh(`issues/${n}`), gh(`issues/${n}/comments?per_page=100`)]); }
   catch (e) { box.innerHTML = `<p>${esc(e.message)}</p>`; return; }
   document.title = `#${i.number} ${i.title} · Project Depot`;
-  const post = (who, when, body) => `<div class="card elevation-1 comment"><div class="comment-head"><img src="${esc(who?.avatar_url)}&s=48" alt=""><b>${esc(who?.login)}</b><span class="muted">${ago(when)}</span></div><div class="doc">${md(body) || "<p class='muted'>No description.</p>"}</div></div>`;
+  const post = (who, when, body) => `<div class="card elevation-1 comment"><div class="comment-head"><img src="${esc(who?.avatar_url)}&s=48" alt=""><b>${esc(who?.login)}</b><span class="muted">${ago(when)}</span></div><div class="doc">${md(body) || `<p class='muted'>${t("iss.nodesc")}</p>`}</div></div>`;
   box.innerHTML = `<h1 class="issue-head">${esc(i.title)} <span class="muted">#${i.number}</span></h1>
-    <p><span class="label" style="--lc:${i.state === "open" ? "#2da44e" : "#8250df"}">${i.state === "open" ? "Open" : "Closed"}</span> ${labelChips(i.labels)}</p>
+    <p><span class="label" style="--lc:${i.state === "open" ? "#2da44e" : "#8250df"}">${i.state === "open" ? t("iss.stopen") : t("iss.stclosed")}</span> ${labelChips(i.labels)}</p>
     ${post(i.user, i.created_at, i.body)}${comments.map(c => post(c.user, c.created_at, c.body)).join("")}
-    <p><a class="btn btn-outlined" href="${esc(i.html_url)}"><span class="material-icons">reply</span>Comment on GitHub</a></p>`;
+    <p><a class="btn btn-outlined" href="${esc(i.html_url)}"><span class="material-icons">reply</span>${t("iss.comment")}</a></p>`;
   window.scrollTo(0, 0);
 }
 
@@ -292,4 +296,18 @@ window.addEventListener("hashchange", route);
   };
   show();
 })();
+// Language: EN / PT-BR buttons in the app bar (the choice is kept in localStorage)
+(() => {
+  const bar = document.getElementById("lang-btns");
+  if (!bar) return;
+  bar.onclick = e => {
+    const b = e.target.closest("button[data-lang]");
+    if (!b) return;
+    setLang(b.dataset.lang);
+    applyLang();
+    drawDocLinks();
+    route();
+  };
+})();
+applyLang();
 route();
