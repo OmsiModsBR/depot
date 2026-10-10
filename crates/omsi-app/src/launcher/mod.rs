@@ -364,7 +364,7 @@ impl ApplicationHandler for Launcher {
         let asked = omsi_cfg::env::var("OMSI_LAUNCHER_SIZE").ok().and_then(|v| v.split_once('x').and_then(|(a, b)| Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?))));
         let (fit, at) = match asked {
             Some((iw, ih)) => (winit::dpi::LogicalSize::new(iw, ih), None),
-            None => crate::startup::fit_window(event_loop, 1440.0, 880.0),
+            None => crate::startup::fit_window(event_loop, 1440.0, 880.0, None),
         };
         let mut attrs = Window::default_attributes().with_title("Project Depot").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
         if !mobile::mobile() {
@@ -743,7 +743,12 @@ impl Launcher {
                     .ok();
             }
         }
-        if let Some(d) = self.state.queued_launch.take() {
+        if let Some(mut d) = self.state.queued_launch.take() {
+            // the game opens where the launcher is
+            d.monitor_at = self.window.as_ref().and_then(|w| {
+                let (p, s) = (w.outer_position().ok()?, w.inner_size());
+                Some((p.x + (s.width / 2) as i32, p.y + (s.height / 2) as i32))
+            });
             // The Controls page may still own the same DirectInput wheel non-exclusively.
             // Drop it before the child asks for exclusive foreground access for force feedback.
             self.pages.pads.release_io();
