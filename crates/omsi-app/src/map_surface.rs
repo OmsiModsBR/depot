@@ -130,6 +130,33 @@ pub struct Marker {
     pub width_px: f32,
 }
 
+/// Shelf packing of icon sizes into one sheet of at most 2048 x 2048 (safe on downlevel GPUs), one
+/// transparent pixel round each icon. Returns the sheet size and each icon's corner, or `None` for
+/// an icon that does not fit (it is left out with its markers).
+fn pack_icons(sizes: &[(u32, u32)]) -> (u32, u32, Vec<Option<(u32, u32)>>) {
+    const SHEET_MAX: u32 = 2048;
+    let mut pos = Vec::with_capacity(sizes.len());
+    let (mut x0, mut y0, mut row_h, mut w, mut h) = (1u32, 1u32, 0u32, 0u32, 0u32);
+    for &(iw, ih) in sizes {
+        if x0 + iw + 1 > SHEET_MAX {
+            x0 = 1;
+            y0 += row_h + 1;
+            row_h = 0;
+        }
+        if x0 + iw + 1 > SHEET_MAX || y0 + ih + 1 > SHEET_MAX {
+            log::warn!("map surface: icon sheet is full, an icon is left out");
+            pos.push(None);
+            continue;
+        }
+        pos.push(Some((x0, y0)));
+        w = w.max(x0 + iw + 1);
+        h = h.max(y0 + ih + 1);
+        row_h = row_h.max(ih);
+        x0 += iw + 1;
+    }
+    (w, h, pos)
+}
+
 /// The marker pictures packed side by side into one: its size and pixels (straight alpha) and,
 /// per picture, where it lies (texture coordinates) and its height over its width.
 pub struct IconSheet {
@@ -607,29 +634,33 @@ impl MapSurface {
             self.markers.clear();
             return;
         }
-        // side by side, one transparent pixel between them
-        let w: u32 = images.iter().map(|i| i.width + 2).sum();
-        let h: u32 = images.iter().map(|i| i.height).max().unwrap_or(0) + 2;
+        let sizes: Vec<(u32, u32)> = images.iter().map(|i| (i.width, i.height)).collect();
+        let (w, h, pos) = pack_icons(&sizes);
+        self.markers.retain(|m| pos.get(m.icon).is_some_and(Option::is_some));
+        if self.markers.is_empty() {
+            return;
+        }
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         let mut rects = Vec::with_capacity(images.len());
-        let mut x0 = 1u32;
-        for i in &images {
-            for row in 0..i.height {
-                let from = (row * i.width * 4) as usize;
-                let to = (((row + 1) * w + x0) * 4) as usize;
-                rgba[to..to + (i.width * 4) as usize]
-                    .copy_from_slice(&i.rgba[from..from + (i.width * 4) as usize]);
+        for (i, at) in images.iter().zip(&pos) {
+            let (x0, y0) = at.unwrap_or((0, 0));
+            if at.is_some() {
+                for row in 0..i.height {
+                    let from = (row * i.width * 4) as usize;
+                    let to = (((y0 + row) * w + x0) * 4) as usize;
+                    rgba[to..to + (i.width * 4) as usize]
+                        .copy_from_slice(&i.rgba[from..from + (i.width * 4) as usize]);
+                }
             }
             rects.push((
                 [
                     x0 as f32 / w as f32,
-                    1.0 / h as f32,
+                    y0 as f32 / h as f32,
                     (x0 + i.width) as f32 / w as f32,
-                    (1 + i.height) as f32 / h as f32,
+                    (y0 + i.height) as f32 / h as f32,
                 ],
                 i.height as f32 / i.width as f32,
             ));
-            x0 += i.width + 2;
         }
         self.sheet = Some(IconSheet { w, h, rgba, rects });
     }
@@ -1148,6 +1179,19 @@ mod tests {
             s.player_style(Some("76")).map(|p| p.0),
             Some(Color::hex(0x5588c7))
         );
+    }
+
+    #[test]
+    fn icon_sheet_never_exceeds_the_gpu_safe_size() {
+        let (w, h, pos) = pack_icons(&[(900, 900); 4]);
+        assert_eq!((w, h), (1803, 1803));
+        assert_eq!(pos[3], Some((902, 902)));
+        let (w, h, pos) = pack_icons(&[(1024, 1024), (1024, 1024)]);
+        assert!(w <= 2048 && h <= 2048, "{w}x{h}");
+        assert_eq!(pos, vec![Some((1, 1)), None], "the second does not fit and is left out");
+        let (w, h, pos) = pack_icons(&[(10, 6), (4, 4)]);
+        assert_eq!((w, h), (17, 8));
+        assert_eq!(pos, vec![Some((1, 1)), Some((12, 1))]);
     }
 
     #[test]
