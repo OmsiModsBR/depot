@@ -430,13 +430,22 @@ impl SoundSet {
             // start "audible" at that 0 (#1851, #1418).
             let looping = !triggered && !s.def.no_loop;
             let idle = s.voice.is_none_or(|id| !engine.is_playing(id));
-            if fired || rising || (looping && idle) {
+            let before = s.last_gain;
+            let reset = fired || rising || (looping && idle);
+            if reset {
                 s.last_gain = 1.0;
             }
-            let e = match fired_by {
+            let eval_now = |ctx: &Ctx, s: &mut RuntimeSound| match fired_by {
                 Some(t) => ctx.eval(s, &|n| at_fire(t, n).or_else(|| var(n)), object_to_world),
                 None => ctx.eval(s, var, object_to_world),
             };
+            let mut e = eval_now(&ctx, s);
+            // (a trigger that fires while an `[onlyone]` voice still plays, or an entry that is
+            // too quiet to start, keeps the buffer's gain: nothing is restarted)
+            if reset && triggered && (!e.audible || s.voice.is_some_and(|id| s.def.only_one && engine.is_playing(id))) {
+                s.last_gain = before;
+                e = eval_now(&ctx, s);
+            }
             if e.wrong_view {
                 // "Stopped Sound ... globalstop/wrongview"
                 if let Some(id) = s.voice.take() {
@@ -919,5 +928,24 @@ mod tests {
         // (the running voice is updated, not restarted: the remembered gain follows the curve)
         let g = set.sounds[0].last_gain;
         assert!((g - 0.5).abs() < 1.0e-3, "{g}");
+    }
+
+    /// A trigger that fires while an `[onlyone]` voice keeps playing does not restart it, so
+    /// the gain the buffer has is not put back to full.
+    #[test]
+    fn a_retrigger_of_a_playing_only_one_voice_keeps_its_gain() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 2.0,
+            only_one: true,
+            triggers: vec!["ev".into()],
+            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            ..Default::default()
+        });
+        step(&mut set, &engine, 0.4, &["ev".to_string()]);
+        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
+        // volume 2 now: over 0 dB, refused - the buffer keeps the 0.8 it plays at
+        step(&mut set, &engine, 1.0, &["ev".to_string()]);
+        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
     }
 }
