@@ -68,8 +68,8 @@ mod driver_head_look_tests {
 }
 
 /// The vehicle actions of the keys held whose `Inputs/keyboard.cfg` entry has the "held"
-/// flag ([`omsi_content::input::KEY_HOLD`], the key list's " *"), by scan code: Omsi.exe
-/// (0x6466b8) gives the vehicle their action again every frame the key stays down, not
+/// flag ([`omsi_content::input::KEY_HOLD`], the key list's " *"), by scan code: OMSI
+/// gives the vehicle their action again every frame the key stays down, not
 /// only when it goes down. The stock roller blind turns while Page Up / Page Down are held
 /// (`bus_rollband_up`, `_dn`: its line or destination moves by the frame's time on each
 /// call); fired once, it moved by a frame's worth and no more (#1098, #1145).
@@ -251,7 +251,7 @@ pub(crate) struct Player {
 /// The driving keys of a control preset (`drive_keys` in the settings):
 /// `omsi` - only the original layout of Inputs/keyboard.cfg (Shift + numpad), nothing extra;
 /// `simple` - W/S/A/D and Up/Down drive (plain Left/Right keep OMSI's interior camera
-/// switch, view_interiorcam_minus/plus, Omsi.exe 0x706278; A/D steer); `wasd` - W/S/A/D only;
+/// switch, view_interiorcam_minus/plus; A/D steer); `wasd` - W/S/A/D only;
 /// `arrows` - the arrow keys only (W/S/D keep their OMSI meaning: wipers, viewpoint, gear).
 pub(crate) fn fallback_action(code: KeyCode, preset: &str) -> Option<omsi_sim::EngineAction> {
     use omsi_sim::EngineAction as A;
@@ -780,7 +780,7 @@ impl Player {
             }
             return true;
         }
-        // a key whose press reached the script's own trigger releases as Omsi.exe does, with
+        // a key whose press reached the script's own trigger releases as OMSI does, with
         // `<name>_off` only: an alias's `_off` (parking_brake_mouse_off) would undo it (#420)
         if !pressed && self.vehicle.ty.program.trigger(name).is_some() {
             return true;
@@ -1379,12 +1379,12 @@ impl Player {
 
     /// The driver's head follows the bus's accelerations a little late, as a body does:
     /// forward when braking, out of a bend, down over a bump (OMSI's head movement).
-    /// The driver's head on its neck, as Omsi.exe moves the driver's view (0x7e2110): a mass
+    /// The driver's head on its neck, as OMSI moves the driver's view: a mass
     /// on a spring, thrown by what the body does where the eye is - up and down always
     /// (spring 3000/150, damper 2000/150 per second, a kick of the heave's acceleration and
     /// of the pitch and roll rates' change times the eye's lever), sideways and fore and aft
     /// with `[driverview_moving]` (3000/100 and 2000/100, and only once the bus is moving),
-    /// never further than 10 cm up or down (0x7e2256). (A lag of our own towards a point a
+    /// never further than 10 cm up or down. (A lag of our own towards a point a
     /// hundredth of the acceleration off - a third of what the original throws the head -
     /// stood in for it.)
     pub(crate) fn move_head(&mut self, dt: f32, enabled: bool) {
@@ -1540,7 +1540,7 @@ impl Player {
     pub(crate) fn tick(&mut self, dt: f32, audio: Option<&omsi_audio::AudioEngine>, inside: bool, listener_follows_bus: bool) {
         self.tick_startup(dt);
         self.tick_auto_drag(dt);
-        // (the script's trigger only, as Omsi.exe calls it: no alias, no log line a frame)
+        // (the script's trigger only, as OMSI calls it: no alias, no log line a frame)
         for name in self.held_repeat.due() {
             if self.vehicle.ty.program.trigger(&name).is_some() {
                 self.vehicle.trigger(&name);
@@ -1608,7 +1608,7 @@ impl Player {
             ss.set_muffled(inside);
             ss.set_listener_vehicle(listener_follows_bus);
             // how open the bus is to the outside (doors, driver's window) for every outside
-            // sound heard in it - this bus's own and the traffic's: Omsi.exe reads the
+            // sound heard in it - this bus's own and the traffic's: OMSI reads the
             // player's bus's `Snd_OutsideVol` whatever the camera does (0 when no script
             // writes it)
             omsi_audio::soundset::set_outside_open(Some(v.var("Snd_OutsideVol").unwrap_or(0.0)));
@@ -1818,8 +1818,8 @@ impl Player {
     /// The part of the bus under a ray, switch or not: `(name, operable)`. Without this the
     /// HUD stayed empty over everything that is not a switch, and there was no way to tell
     /// "this is not a control" from "the cursor is not hitting anything".
-    /// The flag beside it: a `[mouseevent]` mesh is under the ray, named or not - Omsi.exe
-    /// shows the hand cursor over any of them (0x6f34c0 @0x6f45b4).
+    /// The flag beside it: a `[mouseevent]` mesh is under the ray, named or not - OMSI
+    /// shows the hand cursor over any of them.
     pub(crate) fn hovered_part(&self, origin: DVec3, dir: Vec3, spread: f32) -> (Option<(String, bool)>, bool) {
         if let Some(i) = self.pick(origin, dir, spread) {
             let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
@@ -1989,7 +1989,7 @@ impl Player {
         self.vehicle.trigger(&format!("{ev}_off"));
     }
 
-    /// The left button let go while the right one is held: Omsi.exe sends no `_off`, so a
+    /// The left button let go while the right one is held: OMSI sends no `_off`, so a
     /// momentary switch stays where the hand left it (a pedal held down for the steering
     /// column's adjustment, #769) until it is clicked and let go again.
     pub(crate) fn release_keeping(&mut self) {
@@ -2461,9 +2461,8 @@ impl Player {
         self.vehicle.ty.def.cameras_pax.len() + self.vehicle.trailers.iter().map(|t| t.ty.def.cameras_pax.len()).sum::<usize>()
     }
 
-    /// How many driver cameras the bus has, its coupled parts' included: Omsi.exe's
-    /// interior-camera keys go on from the last of one part's into the next part's
-    /// (0x706278 @0x7067d1, @0x706a3c).
+    /// How many driver cameras the bus has, its coupled parts' included: OMSI's
+    /// interior-camera keys go on from the last of one part's into the next part's.
     pub(crate) fn driver_camera_count(&self) -> usize {
         self.vehicle.ty.def.cameras_driver.len() + self.vehicle.trailers.iter().map(|t| t.ty.def.cameras_driver.len()).sum::<usize>()
     }
@@ -2542,14 +2541,14 @@ impl Player {
         match cam {
             Some(c) => {
                 // inside: the head turns, the seat does not move. The camera hangs on the
-                // body as Omsi.exe hangs its driver's and passengers' cameras (0x7cf82c ->
-                // 0x7edfd0, the vehicle's own matrix): it pitches and rolls with the bus, the
+                // body as OMSI hangs its driver's and passengers' cameras:
+                // the vehicle's own matrix: it pitches and rolls with the bus, the
                 // look turned in the bus's frame. Kept level, the view stood still while the
                 // cab rocked about it - the "boat" (the body's own motion matches Omsi's).
                 let turned = omsi_vehicle::Camera { yaw: c.yaw + look.0 + if view == "driver" { self.steer_look } else { 0.0 }, pitch: (c.pitch + look.1).clamp(-89.0, 89.0), ..c.clone() };
                 let (eye, yaw, pitch, roll) = self.vehicle.camera_world_full(&turned);
                 let eye = if view == "driver" { eye + self.vehicle.body_rotation().transform_vector3(self.head_offset() + self.seat + EYE_NUDGE).as_dvec3() } else { eye };
-                // near 0.1 as in Omsi.exe (every view, 0x6f6aa7); with the reversed float
+                // near 0.1 as in OMSI (every view); with the reversed float
                 // depth buffer it costs no precision out at 6 km
                 Camera {
                     position: eye,
@@ -2929,7 +2928,7 @@ pub(crate) fn keep_wheel(p: Option<&mut Player>) {
     }
 }
 
-/// OMSI's mouse steering (Omsi.exe 0x6f4284..0x6f447b): the cursor's place across the whole
+/// OMSI's mouse steering: the cursor's place across the whole
 /// window is the steering from full left to full right lock, divided by the speed in tens of
 /// km/h once the bus is faster than 10 km/h (going backwards counts as standing). At 50 km/h
 /// the same movement of the hand turns the wheels a fifth as far: the wheel "gets heavier".
@@ -2942,7 +2941,7 @@ pub(crate) fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
 /// for `fade` seconds after the mouse steering was switched on they ease towards it (half
 /// the way every `fade`), then within ~60 ms - the cursor comes in bursts, and taken as it
 /// came the wheel moved in steps. Without `smooth` (#1092) they are where the cursor says at
-/// once, as Omsi.exe sets the curvature and the pedals from it every frame.
+/// once, as OMSI sets the curvature and the pedals from it every frame.
 pub(crate) fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
     if fade > 0.0 {
         (-std::f32::consts::LN_2 / fade * dt).exp()
