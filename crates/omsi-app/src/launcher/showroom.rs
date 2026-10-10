@@ -286,15 +286,19 @@ impl Showroom {
                         vehicle.set_var(&var, v);
                     }
                 }
-                // The floor under it (z = 0): the bus and its rear sections sit down on their
-                // springs as they do on a road. Without a ground the rear sections were hung
-                // level with their coupling while their wheels went up into the arches by the
-                // springs' sag (`Axle_Suspension`), and stood that far over the floor.
+                // On the floor (z = 0) and on the wheel physics the game drives it with: the
+                // bus and each rear section a body of its own on its springs (the multibody
+                // articulation). The rear sections followed kinematically here before, hung
+                // on their coupling, and stood visibly apart from how they stand in the game
+                // (without a ground, with their wheels over the floor by the springs' sag).
                 vehicle.ground = Some(Arc::new(|_: f64, _: f64| Some(0.0)));
                 load_coupled_parts(&root, &mut vehicle);
-                // (the simple physics eases its wheels into their travel over about a third of
-                // a second: settled after a second and a half)
-                for _ in 0..45 {
+                if !crate::rail_drive::is_rail(&vt.def) {
+                    vehicle.enable_rigid_body();
+                }
+                // (placed at rest on loaded springs; the rear sections are hung on their joints
+                // at the first step and settle onto their wheels within a second or two)
+                for _ in 0..60 {
                     vehicle.update(1.0 / 30.0);
                 }
                 prefetch.prefetch(&vt, scheme);
@@ -318,8 +322,11 @@ impl Showroom {
         add_floor(renderer, &mut scene);
         let world = r.world;
         let mut vehicle = r.vehicle;
-        vehicle.position = DVec3::ZERO;
-        vehicle.heading = 0.0;
+        // (a rigid body stands where it settled, on the floor at the origin)
+        if vehicle.rigid.is_none() {
+            vehicle.position = DVec3::ZERO;
+            vehicle.heading = 0.0;
+        }
         let render = world.add_vehicle(renderer, &mut scene, &r.vt, r.scheme);
         let trailers: Vec<scene::VehicleRender> = vehicle.trailers.iter().map(|t| world.add_vehicle_part(renderer, &mut scene, &t.ty, r.scheme.filter(|i| *i < t.ty.paint_schemes.len()), &render)).collect();
         vehicle.init_text_textures(&mut world.fonts.lock(), &|p| omsi_texture::decode_file(p).ok().map(|i| (i.width, i.height, i.rgba)));
