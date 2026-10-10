@@ -19,11 +19,11 @@ pub const AI_WEAR_LIFESPAN: f32 = 1.5e6;
 pub struct VehicleHost {
     /// The paint scheme the vehicle is made with (`Some(None)`: the model's own textures),
     /// set before it is made: `Colorscheme` and the scheme's `[setvar]`s are there for its
-    /// `{init}`, as Omsi.exe sets them when it makes the vehicle (0x70a174), before the
+    /// `{init}`, as OMSI sets them when it makes the vehicle, before the
     /// scripts start. None: not known yet (`apply_paint_vars` later).
     pub paint_scheme: Option<Option<usize>>,
     /// Fleet number and registration chosen by the vehicle dialog. They are copied to the
-    /// script's `number` / `ident` strings before `{init}`, like Omsi.exe does.
+    /// script's `number` / `ident` strings before `{init}`, like OMSI does.
     pub initial_number: Option<String>,
     pub initial_ident: Option<String>,
     /// A time of day a script wrote to `(S.S.Time)` this frame: the game's clock takes it.
@@ -189,7 +189,7 @@ impl VehicleHost {
         // weather update) every engine was cold, and the PAZ's carburettor engine, which
         // wants its choke below 0 °C, caught and died again on the key
         let (temperature, abs_humidity) = ambient_weather().unwrap_or((0.0, 0.0));
-        // `AutoClutch` is 1 unless OMSI's options say `[no_automaticClutch]` (the exe sets
+        // `AutoClutch` is 1 unless OMSI's options say `[no_automaticClutch]` (OMSI sets
         // 1.0 before reading them): the manual gearboxes of the Sprinters, the PAZ and the
         // LAZ work their clutch themselves then, and at 0 every gear a driver without a
         // clutch pedal put in was thrown out again at once
@@ -259,9 +259,9 @@ pub const PROVIDED_CALLBACKS: &[&str] = &[
     "getarrbusline", "getarrbusterminus", "getarrbustimediff",
 ];
 
-/// A number a script hands a callback, as Omsi.exe takes it: rounded to the nearest
-/// integer, a half to the even one (`fistp` under Delphi's control word; TRoadVehicleInst
-/// 0x7d28c4 and TComplMapObjInst 0x7bb10c convert every argument with sub_404c7c), not cut
+/// A number a script hands a callback, as OMSI takes it: rounded to the nearest
+/// integer, a half to the even one (`fistp` under Delphi's control word; vehicles and scenery objects
+/// convert every argument that way), not cut
 /// off - 1100.9999 out of float arithmetic is 1101.
 fn arg_i32(v: f32) -> i32 {
     v.round_ties_even() as i32
@@ -392,7 +392,7 @@ impl Host for VehicleHost {
             "textlength" => {
                 let font = arg_i32(stacks.pop());
                 let text = stacks.pop_str();
-                // as Omsi.exe measures it (0x5d6c00): the glyphs and the gaps between them
+                // as OMSI measures it: the glyphs and the gaps between them
                 let w = self.font_atlas(font).map(|a| a.font.text_width(&text) as f32).unwrap_or(0.0);
                 if debug_text() {
                     log::info!("TextLength(font {font} = {:?}, {text:?}) = {w}", self.font_atlas(font).map(|a| a.font.name.clone()));
@@ -756,7 +756,7 @@ mod tests {
         assert_eq!(host.html_departure_wants.first().map(String::as_str), Some("stop 4"));
     }
 
-    /// A callback's argument is rounded, as Omsi.exe's `fistp` does: 1100.9999 out of the
+    /// A callback's argument is rounded, as OMSI's `fistp` does: 1100.9999 out of the
     /// script's arithmetic names terminus 1101, not 1100.
     #[test]
     fn callback_arguments_are_rounded() {
