@@ -19,8 +19,8 @@ pub struct HeadPose {
 }
 
 impl HeadPose {
-    /// How far the head moved the eye, in the bus's frame (m; right, forward, up). Omsi.exe
-    /// (0x829860) moves its camera across by `-x` of the TrackIR pose, which opentrack fills
+    /// How far the head moved the eye, in the bus's frame (m; right, forward, up). OMSI
+    /// moves its camera across by `-x` of the TrackIR pose, which opentrack fills
     /// with its own x: a head moved to the right took the camera to the left (#1157).
     pub fn seat_offset(&self) -> glam::Vec3 {
         glam::Vec3::new(-self.pos[0], -self.pos[2], self.pos[1]).clamp(glam::Vec3::splat(-60.0), glam::Vec3::splat(60.0)) / 100.0

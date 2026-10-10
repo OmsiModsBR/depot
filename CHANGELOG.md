@@ -29,6 +29,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   (contribution confirmed MIT by the maintainer). See `docs/integrations/PUSHER-ARTICULATION.md`.
 
 ### Changed
+- omsi-app: comments cleaned of addresses, offsets and mentions of the reference
+  executable; they describe observable behaviour only. Comment text only, no code change.
 - Mixer, vehicle sound flags and player input/camera: comments cleaned of addresses and mentions of the reference
   executable; they describe observable behaviour only. Comment text only, no code change.
 - `omsi-audio` sound set: comments cleaned of references to addresses of the reference executable; they

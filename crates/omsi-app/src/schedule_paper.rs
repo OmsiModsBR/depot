@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-// Omsi.exe (0x7e72a0) writes the paper as one text with DrawTextW into the rectangle from
+// OMSI writes the paper as one text with DrawTextW into the rectangle from
 // (60, 90) to the bitmap's right edge, in its typewriter font (Courier New) bold at 16 pt.
 const PAPER_X: u32 = 60;
 const PAPER_TOP: u32 = 90;
@@ -189,7 +189,7 @@ fn gdi_line_height(ascent: f32, descent: f32) -> u32 {
 }
 
 /// `TT_Arr` and `TT_Dep` of the game's language (`Languages/<LANG>_basic.olf`), as
-/// Omsi.exe translates them for the paper: "Arrival " and "Depart." in English.
+/// OMSI translates them for the paper: "Arrival " and "Depart." in English.
 fn tt_labels() -> &'static (String, String) {
     static LABELS: OnceLock<(String, String)> = OnceLock::new();
     LABELS.get_or_init(|| {
@@ -211,7 +211,7 @@ fn tt_labels() -> &'static (String, String) {
     })
 }
 
-/// The rows of the paper as Omsi.exe makes them (0x7e72a0): every stop of the trip with
+/// The rows of the paper as OMSI makes them: every stop of the trip with
 /// its departure (a station the profile passes is left out), the last one as
 /// "<stop> <TT_Arr>" with its arrival, then one more row "<TT_Dep>" with the last stop's
 /// departure.
@@ -260,7 +260,7 @@ fn format_time(seconds: f64) -> String {
     format!("{:02}:{:02}", minute / 60, minute % 60)
 }
 
-/// The text Omsi.exe draws: the title, a rule of 67 '=', then the rows - each the label
+/// The text OMSI draws: the title, a rule of 67 '=', then the rows - each the label
 /// cut or filled with dots to 25 characters, a blank and the time; rows 25 to 48 stand
 /// beside the first 24, five blanks apart.
 fn paper_lines(title: &str, rows: &[PaperRow]) -> Vec<String> {

@@ -32,7 +32,7 @@ pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
 
 /// The next vehicle of a consist from one with definition `def` (turned round: `rev`),
 /// towards the back of the train or its front, and whether that one is turned round - as
-/// Omsi.exe builds a consist (0x70a174): towards the back a vehicle goes on with its
+/// OMSI builds a consist: towards the back a vehicle goes on with its
 /// `[couple_back]`, or with its `[couple_front]` when it is itself turned round (towards the
 /// front the other way about); the coupled one is turned round when the coupling says so,
 /// against the one it hangs on; a coupling back to its own file that turns nothing round
@@ -637,7 +637,7 @@ pub(crate) fn spawn_player(
     );
     // The sounds the scripts asked for while the bus was being set up ({init}, the state it
     // is put in - cold, ready, the situation's) are not played: the first frame played them
-    // all, an engine stopping as every session began (#1198). Omsi.exe puts a bus down silent.
+    // all, an engine stopping as every session began (#1198). OMSI puts a bus down silent.
     if !p.vehicle.host.fired_triggers.is_empty() {
         log::info!("spawn: sound triggers of the set-up left silent: {:?}", p.vehicle.host.fired_triggers);
     }

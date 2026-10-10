@@ -2409,9 +2409,9 @@ impl Navigator {
             prev_end = Some(h1);
             acc += len as f64;
         }
-        // The stop's helper: Omsi.exe puts `routearrows_busstop.sco` on the stop object
-        // itself, at its place and with its rotation (0x61fc04: the station record's
-        // position +0x3c and quaternion +0x54) - where and how the mapper set the stop down,
+        // The stop's helper: OMSI puts `routearrows_busstop.sco` on the stop object
+        // itself, at its place and with its rotation (the station record's
+        // position and quaternion) - where and how the mapper set the stop down,
         // not turned to the bus as it comes.
         for (k, (p, name, h, id)) in self.stop_spots.iter().enumerate() {
             let (p, h) = stop_pose(*id).unwrap_or((*p, *h));

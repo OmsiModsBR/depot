@@ -744,7 +744,7 @@ impl ApplicationHandler for App {
                 crate::game_controller_menu::frame(self);
                 // OMSI's mouse control: the cursor's place across steers, above the middle
                 // of the window is the throttle, below it the brake.
-                // Steering as Omsi.exe has it (0x6f4284..0x6f447b): the whole width of the
+                // Steering as OMSI has it: the whole width of the
                 // window is the full lock from left to right, divided by the speed in tens
                 // of km/h above 10 km/h - at 50 km/h the same hand movement turns the wheel a
                 // fifth as far, which is what makes the wheel feel heavier the faster the bus
@@ -781,7 +781,7 @@ impl ApplicationHandler for App {
                 }
                 // (in every view of the bus - driver, outside, passenger and the map camera -
                 // as in OMSI, where switching the camera leaves the mouse steering on: its
-                // mouse steering asks only for a player's vehicle, 0x6f4257; not on foot,
+                // mouse steering asks only for a player's vehicle; not on foot,
                 // #516)
                 let bus_view = self.mouse_steers_in_view();
                 // (the plugins' panels having the mouse hold the wheel and the pedals as
@@ -807,7 +807,7 @@ impl ApplicationHandler for App {
                     // (what the mouse added at the edge, up to the full lock)
                     self.mouse_edge = self.mouse_edge.clamp((-1.0 - base).min(0.0), (1.0 - base).max(0.0));
                     let target = (base + self.mouse_edge).clamp(-1.0, 1.0);
-                    // the pedals as Omsi.exe has them: from the middle of the window to its
+                    // the pedals as OMSI has them: from the middle of the window to its
                     // top edge the throttle, to the bottom one the brake, straight on
                     let y = (2.0 * self.cursor.1 / h.max(1.0) - 1.0).clamp(-1.0, 1.0);
                     let (pedal_t, pedal_b) = ((-y).max(0.0), y.max(0.0));
@@ -839,7 +839,7 @@ impl ApplicationHandler for App {
                     }
                     // the mouse owns the wheel (OMSI sets the curvature from it every frame):
                     // a steering key's leftover turn must not take over whenever the cursor
-                    // passes the middle - the wheel jumped there; and the pedals, which Omsi.exe
+                    // passes the middle - the wheel jumped there; and the pedals, which OMSI
                     // writes from the cursor every frame: a brake the keys held stayed on (#395)
                     if let Some(p) = self.player.as_mut() {
                         p.axes.steering = 0.0;
@@ -929,7 +929,7 @@ impl ApplicationHandler for App {
                     // (the tile's wheel surfaces - its roads, bridges and yards - not its
                     // terrain alone: the terrain comes first while the tile is placed, and a
                     // parked bus taken over after a restart fell through its yard onto the
-                    // ground below before the surfaces came, as Omsi.exe holds it, #1279)
+                    // ground below before the surfaces came, as OMSI holds it, #1279)
                     let ground_here = self.world.as_ref().is_none_or(|w| {
                         let at = p.vehicle.position;
                         let k = ((at.x / omsi_map::tile_size()).floor() as i32, (at.y / omsi_map::tile_size()).floor() as i32);
@@ -1518,8 +1518,8 @@ impl ApplicationHandler for App {
                             h.take_change_tray();
                         }
                         if std::mem::take(&mut h.stop_request) {
-                            // a passenger's request is the vehicle trigger Omsi.exe fires
-                            // (0x62e42c), not the cab's stop button `door_haltewunsch`,
+                            // a passenger's request is the vehicle trigger OMSI fires,
+                            // not the cab's stop button `door_haltewunsch`,
                             // whose switch and brake sounds some buses play
                             p.vehicle.trigger("int_haltewunsch");
                         }
