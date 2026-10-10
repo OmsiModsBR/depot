@@ -146,7 +146,7 @@ Documentation is available locally. The pages live in [`docs/`](docs):
 | [Plugins](docs/PLUGINS.md) | Lua plugins (API and examples), OMSI plugin DLLs and the 32-bit plugin host |
 | [Dedicated server](docs/SERVER.md) | disabled (historical) |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.COMMIT` scheme and the CI |
-| [Changelog](CHANGELOG.md) | what changed in each version |
+| [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |
 
 ## Building from source
 
