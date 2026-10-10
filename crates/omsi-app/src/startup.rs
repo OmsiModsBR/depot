@@ -353,8 +353,33 @@ pub(crate) fn under_gamescope() -> bool {
     std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some() || std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
 }
 
-pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64, h: f64) -> (winit::dpi::LogicalSize<f64>, Option<winit::dpi::PhysicalPosition<i32>>) {
-    let Some(m) = event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next()) else {
+/// The monitor whose area holds the desktop point `at` (`rects`: each monitor's top left
+/// and size in pixels, in the order of the system's list).
+pub(crate) fn monitor_holding(rects: &[((i32, i32), (u32, u32))], at: (i32, i32)) -> Option<usize> {
+    rects.iter().position(|&((x, y), (w, h))| at.0 >= x && at.1 >= y && (at.0 as i64) < x as i64 + w as i64 && (at.1 as i64) < y as i64 + h as i64)
+}
+
+/// `--monitor-at X,Y` as a point.
+pub(crate) fn parse_point(text: &str) -> Option<(i32, i32)> {
+    let (a, b) = text.split_once(',')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+/// The monitor a window opens on: the one that holds `prefer` (the launcher's, when it
+/// hands the game its place), else the primary one, else the first.
+pub(crate) fn window_monitor(event_loop: &winit::event_loop::ActiveEventLoop, prefer: Option<(i32, i32)>) -> Option<winit::monitor::MonitorHandle> {
+    if let Some(at) = prefer {
+        let monitors: Vec<_> = event_loop.available_monitors().collect();
+        let rects: Vec<_> = monitors.iter().map(|m| ((m.position().x, m.position().y), (m.size().width, m.size().height))).collect();
+        if let Some(i) = monitor_holding(&rects, at) {
+            return monitors.into_iter().nth(i);
+        }
+    }
+    event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next())
+}
+
+pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64, h: f64, prefer: Option<(i32, i32)>) -> (winit::dpi::LogicalSize<f64>, Option<winit::dpi::PhysicalPosition<i32>>) {
+    let Some(m) = window_monitor(event_loop, prefer) else {
         return (winit::dpi::LogicalSize::new(w, h), None);
     };
     let (screen, scale) = (m.size(), m.scale_factor().max(0.5));
@@ -486,5 +511,40 @@ mod window_tests {
         // a big screen keeps the size asked for
         let ((w, h), _) = super::fit_rect((1600.0, 900.0), (3840.0, 2160.0), 1.5);
         assert_eq!((w, h), (1600.0, 900.0));
+    }
+}
+
+#[cfg(test)]
+mod monitor_tests {
+    use super::*;
+
+    #[test]
+    fn the_monitor_holding_a_point_is_found_whatever_its_place() {
+        // a monitor left of the primary one, the primary one, one above it
+        let rects = [((-1920, 0), (1920, 1080)), ((0, 0), (2560, 1440)), ((0, -1080), (1920, 1080))];
+        assert_eq!(monitor_holding(&rects, (-100, 500)), Some(0));
+        assert_eq!(monitor_holding(&rects, (0, 0)), Some(1));
+        assert_eq!(monitor_holding(&rects, (2559, 1439)), Some(1));
+        assert_eq!(monitor_holding(&rects, (2560, 1439)), None);
+        assert_eq!(monitor_holding(&rects, (100, -1)), Some(2));
+        assert_eq!(monitor_holding(&rects, (5000, 5000)), None);
+        assert_eq!(monitor_holding(&[], (0, 0)), None);
+    }
+
+    #[test]
+    fn a_monitor_left_of_the_primary_one_gets_through_the_argument_parser() {
+        use clap::Parser;
+        for form in [vec!["depot", "--monitor-at=-1500,300"], vec!["depot", "--monitor-at", "-1500,300"]] {
+            let args = crate::cli::Args::try_parse_from(&form).unwrap_or_else(|e| panic!("{form:?}: {e}"));
+            assert_eq!(args.monitor_at.as_deref().and_then(parse_point), Some((-1500, 300)));
+        }
+    }
+
+    #[test]
+    fn the_monitor_point_is_read_from_the_command_line() {
+        assert_eq!(parse_point("-1500,300"), Some((-1500, 300)));
+        assert_eq!(parse_point(" 10 , 20 "), Some((10, 20)));
+        assert_eq!(parse_point("10"), None);
+        assert_eq!(parse_point("a,b"), None);
     }
 }

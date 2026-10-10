@@ -91,6 +91,9 @@ pub(super) struct Pax {
     pub bus: Option<BusId>,
     pub stop: Option<i64>,
     pub spot: Option<usize>,
+    /// Where they stand when somebody of a neighbouring stop has their waiting place: that
+    /// place moved along the kerb, on foot (see `take_spot`); `None` at the place itself.
+    pub beside: Option<WaitSpot>,
     /// What state 1 walks to (+0x5bd) and whether it is a point of the bus (`bus`) or of
     /// the world; the heading to turn to there (+0x5d4).
     pub target: DVec3,
@@ -195,6 +198,7 @@ impl Pax {
             bus: None,
             stop: None,
             spot: None,
+            beside: None,
             target: DVec3::ZERO,
             target_bus: false,
             target_yaw: 0.0,
@@ -299,6 +303,16 @@ pub(super) struct WaitSpot {
     pub face: f64,
     /// Seat height (+0x20); a seat when not 0.
     pub height: f32,
+}
+
+/// The `n`th place beside waiting place `sp` (somebody of a neighbouring stop has it):
+/// 0.7 m along the kerb of the stop (heading `heading`) a step, by turns ahead and behind -
+/// on foot, a seat's place too, facing as the place does.
+pub(super) fn beside_place(sp: &WaitSpot, heading: f64, n: usize) -> WaitSpot {
+    let h = heading.to_radians();
+    let along = DVec3::new(h.sin(), h.cos(), 0.0);
+    let steps = n.div_ceil(2) as f64 * if n % 2 == 1 { 1.0 } else { -1.0 };
+    WaitSpot { pos: sp.pos - DVec3::Z * sp.height as f64 + along * (0.7 * steps), face: sp.face, height: 0.0 }
 }
 
 /// What Omsi.exe keeps of a bus stop for the people (the station record, sub_620058).
@@ -1433,7 +1447,7 @@ impl Humans {
                     let p = self.pax(i).unwrap();
                     (p.stop, p.spot)
                 };
-                let sp = stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
+                let sp = self.pax(i).unwrap().beside.clone().or_else(|| stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned()));
                 let p = self.pax_mut(i).unwrap();
                 p.st = 0;
                 match sp {
@@ -1462,6 +1476,7 @@ impl Humans {
                 let gather = stop.and_then(|s| self.stops.get(&s)).map(|s| s.gather);
                 let p = self.pax_mut(i).unwrap();
                 p.spot = None;
+                p.beside = None;
                 if let Some(g) = gather {
                     p.target = g;
                 }
@@ -1477,7 +1492,9 @@ impl Humans {
                 if let (Some(s), Some(k)) = (stop, spot) {
                     self.free_spot(s, k);
                 }
-                self.pax_mut(i).unwrap().spot = None;
+                let p = self.pax_mut(i).unwrap();
+                p.spot = None;
+                p.beside = None;
                 self.choose_entry(i, buses, bus_ix);
                 let p = self.pax_mut(i).unwrap();
                 p.target_bus = true;
@@ -1569,12 +1586,12 @@ impl Humans {
                     p.ride_km = r * 19.0 + 1.0;
                 }
                 // a free waiting place (sub_61fed0)
-                let spot = match (stop, self.pax(i).unwrap().spot) {
-                    (_, Some(k)) => Some(k),
-                    (Some(s), None) => self.take_spot(s),
-                    _ => None,
+                let (spot, beside) = match (stop, self.pax(i).unwrap().spot) {
+                    (_, Some(k)) => (Some(k), self.pax(i).unwrap().beside.clone()),
+                    (Some(s), None) => self.take_spot(s).map_or((None, None), |(k, b)| (Some(k), b)),
+                    _ => (None, None),
                 };
-                let sp = stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
+                let sp = beside.clone().or_else(|| stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned()));
                 let stop_pos = stop.and_then(|s| self.stops.get(&s)).map(|s| s.pos);
                 // (no place free: at the stop's point - spread along the kerb by who they
                 // are, or everybody without a place stood in one another there)
@@ -1583,6 +1600,7 @@ impl Humans {
                 let stop_pos = stop_pos.map(|q| q + fwd * along);
                 let p = self.pax_mut(i).unwrap();
                 p.spot = spot;
+                p.beside = beside;
                 p.target_bus = false;
                 match sp {
                     Some(sp) => {
@@ -1670,34 +1688,51 @@ impl Humans {
     }
 
     /// sub_61c8d8: a free waiting place of the stop, at random.
-    pub(super) fn take_spot(&mut self, stop: i64) -> Option<usize> {
+    pub(super) fn take_spot(&mut self, stop: i64) -> Option<(usize, Option<WaitSpot>)> {
         // Stops a few metres apart (both sides of a bus station's platform, a stop and its
         // copy for another line) find the same objects' places, and each kept its own list of
         // who stands where (as Omsi.exe's 0x61c8d8 does), so two or three people stood in
-        // one another. A place somebody of another stop stands on is not free (nor one of the
-        // stop's own a few centimetres from a taken one: objects placed twice).
+        // one another. A place of the stop's own a few centimetres from a taken one (objects
+        // placed twice) is not free. A place somebody of another stop stands on still is,
+        // as in Omsi.exe - each stop has as many people as its own places -, but the person
+        // stands beside it, along the kerb, where nobody does (`beside_place`); places
+        // nobody stands on go first.
         let s = self.stops.get(&stop)?;
         let (pos, reach) = (s.pos, 40.0_f64.max(s.length as f64 + 15.0) * 2.0);
+        let own: Vec<DVec3> = s.spots.iter().zip(&s.taken).filter(|(_, t)| **t).map(|(sp, _)| sp.pos).collect();
+        // where the people of the stops round it stand (at their place, or beside it)
         let elsewhere: Vec<DVec3> = self
-            .stops
+            .people
             .iter()
-            .filter(|(_, o)| (o.pos - pos).length() < reach)
-            .flat_map(|(_, o)| o.spots.iter().zip(&o.taken).filter(|(_, t)| **t).map(|(sp, _)| sp.pos))
+            .filter_map(|p| match &p.state {
+                State::Pax(x) if x.stop != Some(stop) && x.inside.is_none() => {
+                    let o = self.stops.get(&x.stop?)?;
+                    if (o.pos - pos).length() >= reach {
+                        return None;
+                    }
+                    x.beside.as_ref().map(|b| b.pos).or_else(|| o.spots.get(x.spot?).map(|sp| sp.pos))
+                }
+                _ => None,
+            })
             .collect();
-        let s = self.stops.get(&stop)?;
-        let free: Vec<usize> = s
-            .taken
-            .iter()
-            .enumerate()
-            .filter(|(k, t)| !**t && !elsewhere.iter().any(|q| (*q - s.spots[*k].pos).truncate().length() < 0.4))
-            .map(|(k, _)| k)
-            .collect();
+        let near = |q: &DVec3, p: DVec3| (*q - p).truncate().length() < 0.4;
+        let free: Vec<usize> = s.taken.iter().enumerate().filter(|(k, t)| !**t && !own.iter().any(|q| near(q, s.spots[*k].pos))).map(|(k, _)| k).collect();
         if free.is_empty() {
             return None;
         }
-        let k = free[(self.rand() as usize) % free.len()];
-        self.stops.get_mut(&stop).unwrap().taken[k] = true;
-        Some(k)
+        let clear: Vec<usize> = free.iter().copied().filter(|k| !elsewhere.iter().any(|q| near(q, s.spots[*k].pos))).collect();
+        let pick = if clear.is_empty() { &free } else { &clear };
+        let k = pick[(self.rand() as usize) % pick.len()];
+        let s = self.stops.get_mut(&stop).unwrap();
+        s.taken[k] = true;
+        let beside = if clear.is_empty() {
+            (1..)
+                .map(|n| beside_place(&s.spots[k], s.heading, n))
+                .find(|b| !elsewhere.iter().any(|q| near(q, b.pos)))
+        } else {
+            None
+        };
+        Some((k, beside))
     }
 
     /// The task part of the tick (sub_62a6a0 from 0x62b984).

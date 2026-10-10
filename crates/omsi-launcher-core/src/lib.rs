@@ -2482,6 +2482,10 @@ pub struct Duty {
     /// A situation file to continue (the map's `laststn.osn`): nothing else of the duty.
     #[serde(default)]
     pub situation: Option<String>,
+    /// A point (pixels, desktop coordinates) inside the launcher's window: the game opens on
+    /// the monitor that holds it (`--monitor-at`).
+    #[serde(default)]
+    pub monitor_at: Option<(i32, i32)>,
 }
 
 /// The situation the game left on `map` last (`laststn.osn` in the map's folder: the
@@ -2580,6 +2584,14 @@ pub fn duty_args(d: &Duty) -> Result<Vec<String>> {
 
 // The installation is validated by duty_args; argument tests supply their own path.
 fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
+    let mut a = duty_args_without_monitor(d, root)?;
+    if let Some((x, y)) = d.monitor_at {
+        a.push(format!("--monitor-at={x},{y}"));
+    }
+    Ok(a)
+}
+
+fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
     if let Some(t) = d.tutorial {
         return Ok(vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into(), "--tutorial".into(), t.to_string()]);
     }
@@ -2983,6 +2995,19 @@ mod tests {
 
     /// A duty file written before the number plate field (or one that leaves it out) loads
     /// with no plate, and a plate the player typed is kept as it stands.
+    #[test]
+    fn the_game_is_told_the_monitor_of_the_launcher() {
+        let d = Duty { map: "maps/M/global.cfg".into(), bus: "Vehicles/B/B.bus".into(), time: "09:00".into(), ..Default::default() };
+        let plain = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+        assert!(!plain.iter().any(|x| x == "--monitor-at"), "{plain:?}");
+        let with = duty_args_for_root(&Duty { monitor_at: Some((-1500, 300)), ..d.clone() }, Path::new("test-omsi")).unwrap();
+        // (one token: a value starting with a minus sign is no option for the argument parser)
+        assert!(with.iter().any(|x| x == "--monitor-at=-1500,300"), "{with:?}");
+        let sit = Duty { situation: Some("a.osn".into()), monitor_at: Some((5, 6)), ..d };
+        let a = duty_args_for_root(&sit, Path::new("test-omsi")).unwrap();
+        assert!(a.iter().any(|x| x == "--monitor-at=5,6"), "{a:?}");
+    }
+
     #[test]
     fn a_picked_trip_starts_the_rest_of_the_tour() {
         let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:43".into(), line: Some("14".into()), tour: Some("1".into()), trip: Some("5".into()), whole_tour: true, ..Default::default() };

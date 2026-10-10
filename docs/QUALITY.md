@@ -21,6 +21,14 @@ of wrapping), because the parsers read untrusted content.
 
 When a row is cleared, switch its CI step from informational to blocking and update this table.
 
+## Offscreen golden
+
+`crates/omsi-app/tests/offscreen_golden.rs` renders a synthetic root (written by the test, no OMSI 2 content)
+with the real `depot --offscreen`. The picture checks run only with `OMSI_GOLDEN_RENDER=1` (or `OMSI_GOLDEN_BLESS=1`) and a graphics adapter (a software one is enough), and print
+`SKIP` and pass otherwise (they have not been run on CI's adapters yet, so they are meant for the maintainer's machine, before and after each refactoring step); the root read-back and the window/offscreen `signal_aspects` check always run. The
+thumbnail comparison runs only when `tests/golden/offscreen_synthetic.txt` exists and was recorded on the same
+adapter; regenerate it with `OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.
+
 ## Vehicle physics traces
 
 The refactor of the vehicle physics moves code in steps that must not change what the

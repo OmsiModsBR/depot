@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Golden test for the offscreen run (`crates/omsi-app/tests/offscreen_golden.rs`): runs `depot --offscreen` on a
+  synthetic root the test writes itself and checks that the picture is repeatable, shows the scene and matches a
+  stored thumbnail within a tolerance. It skips cleanly when the machine has no graphics adapter. It also records
+  that the window gives the player's rail to `signal_aspects` while the offscreen run gives none. Test only; no
+  behaviour change.
 - Navigator map packages: the navigator and the city map can draw a surface (water, green, rivers, names),
   icons, regions, street names and bus lines supplied by an optional per-map package
   (`docs/MAP_PACKAGE.md`), also looked up in the content folder and used for offscreen pictures. New
@@ -65,6 +70,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
   departure and the next arrival shared out by the distance covered) instead of standing still at the delay
   it left the last stop with (upstream #1898). Behaviour taken from openOMSI commit `3c75499` (MIT,

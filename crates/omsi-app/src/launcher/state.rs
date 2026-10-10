@@ -656,6 +656,7 @@ impl State {
             season: Some(c.season.clone()).filter(|s| s != "auto"),
             tutorial: None,
             situation: None,
+            monitor_at: None,
         }
     }
 
