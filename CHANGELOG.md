@@ -54,6 +54,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Sound: an entry that is about to start playing starts at full volume. DirectSound refuses a request
+  over 0 dB and keeps the buffer's last volume, so a `[volume]` over 1 that a curve or condition held at 0
+  while silent started "audible" at gain 0 (hand brake, door-closing and indicator sounds; upstream #1851,
+  #1852; may contribute to #1418, which still needs a reproduction with the reporter's `sound.cfg`).
+  Reimplemented from the behaviour described in openOMSI commit `ea26060` (MIT, turbo-devv); regression
+  tests added.
 - `omsi-plugin` test `panels_clicks_and_focus_through_omsi_ui` failed on Windows CI because the reload is detected by
   modification time and the rewritten file could keep the old timestamp; the test now sets a newer one. The Lua
   feature itself is unchanged (it stays in the crate; it is only unreachable from the client).

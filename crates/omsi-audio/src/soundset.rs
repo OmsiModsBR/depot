@@ -424,10 +424,28 @@ impl SoundSet {
                 None
             };
             let fired = fired_by.is_some();
-            let e = match fired_by {
+            // An entry that is about to start playing starts at full volume. DirectSound refuses
+            // a request over 0 dB and keeps the buffer's last volume, so a `[volume]` over 1
+            // that a curve or a condition held at 0 while the entry was silent would otherwise
+            // start "audible" at that 0 (#1851, #1418).
+            let looping = !triggered && !s.def.no_loop;
+            let idle = s.voice.is_none_or(|id| !engine.is_playing(id));
+            let before = s.last_gain;
+            let reset = fired || rising || (looping && idle);
+            if reset {
+                s.last_gain = 1.0;
+            }
+            let eval_now = |ctx: &Ctx, s: &mut RuntimeSound| match fired_by {
                 Some(t) => ctx.eval(s, &|n| at_fire(t, n).or_else(|| var(n)), object_to_world),
                 None => ctx.eval(s, var, object_to_world),
             };
+            let mut e = eval_now(&ctx, s);
+            // (a trigger that fires while an `[onlyone]` voice still plays, or an entry that is
+            // too quiet to start, keeps the buffer's gain: nothing is restarted)
+            if reset && triggered && (!e.audible || s.voice.is_some_and(|id| s.def.only_one && engine.is_playing(id))) {
+                s.last_gain = before;
+                e = eval_now(&ctx, s);
+            }
             if e.wrong_view {
                 // "Stopped Sound ... globalstop/wrongview"
                 if let Some(id) = s.voice.take() {
@@ -839,5 +857,95 @@ mod tests {
         // (the name as the script wrote it: a folder "Falkenseer Ch" that is not there)
         assert!(!omsi_cfg::resolve_path(&sound, file).is_file());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn tone() -> std::sync::Arc<crate::mixer::Clip> {
+        std::sync::Arc::new(crate::mixer::Clip { sample_rate: 8000, channels: 1, samples: vec![1000; 8000] })
+    }
+
+    /// The gain a running entry's voice has been given.
+    fn voice_gain(set: &SoundSet, engine: &AudioEngine) -> Option<f32> {
+        set.sounds[0].voice.and_then(|id| engine.voice_state(id)).map(|(p, _)| p.gain)
+    }
+
+    fn set_of(def: SoundEntry) -> SoundSet {
+        SoundSet { sounds: vec![RuntimeSound::new(def, Some(tone()))], master: 1.0, dir: Default::default(), inside: true, ai: false, listener_vehicle: true, muffled: false, parts: Vec::new() }
+    }
+
+    fn step(set: &mut SoundSet, engine: &AudioEngine, v: f32, fired: &[String]) {
+        let var = move |n: &str| (n == "v").then_some(v);
+        set.update_fired(engine, &var, &Mat4::IDENTITY, fired, &|_, _| None);
+    }
+
+    /// A `[loopsound]` with `[volume] 3` whose curve holds it at 0 starts, when the curve
+    /// lets go, at full gain - not at the 0 it was left at while silent (#1851, #1418).
+    #[test]
+    fn a_loop_over_full_volume_starts_at_full_gain_after_silence() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 3.0,
+            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            ..Default::default()
+        });
+        for _ in 0..3 {
+            step(&mut set, &engine, 0.0, &[]);
+        }
+        assert!(set.sounds[0].voice.is_none(), "silent while the curve is at 0");
+        step(&mut set, &engine, 1.0, &[]);
+        assert_eq!(voice_gain(&set, &engine), Some(1.0));
+    }
+
+    /// A triggered one-shot with `[volume] 2` and a curve that was low at rest plays at full
+    /// gain when its trigger fires.
+    #[test]
+    fn a_triggered_one_shot_with_volume_over_one_starts_at_full_gain() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 2.0,
+            triggers: vec!["ev_brake".into()],
+            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            ..Default::default()
+        });
+        // (a silent frame leaves the remembered gain at 0)
+        set.sounds[0].last_gain = 0.0;
+        step(&mut set, &engine, 1.0, &["ev_brake".to_string()]);
+        assert_eq!(voice_gain(&set, &engine), Some(1.0));
+    }
+
+    /// An entry that keeps playing keeps following its curve: the remembered gain is only
+    /// reset when a voice is about to start.
+    #[test]
+    fn an_entry_already_playing_keeps_following_its_curve() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 1.0,
+            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            ..Default::default()
+        });
+        step(&mut set, &engine, 1.0, &[]);
+        assert_eq!(voice_gain(&set, &engine), Some(1.0));
+        step(&mut set, &engine, 0.5, &[]);
+        // (the running voice is updated, not restarted: the remembered gain follows the curve)
+        let g = set.sounds[0].last_gain;
+        assert!((g - 0.5).abs() < 1.0e-3, "{g}");
+    }
+
+    /// A trigger that fires while an `[onlyone]` voice keeps playing does not restart it, so
+    /// the gain the buffer has is not put back to full.
+    #[test]
+    fn a_retrigger_of_a_playing_only_one_voice_keeps_its_gain() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 2.0,
+            only_one: true,
+            triggers: vec!["ev".into()],
+            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            ..Default::default()
+        });
+        step(&mut set, &engine, 0.4, &["ev".to_string()]);
+        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
+        // volume 2 now: over 0 dB, refused - the buffer keeps the 0.8 it plays at
+        step(&mut set, &engine, 1.0, &["ev".to_string()]);
+        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
     }
 }
