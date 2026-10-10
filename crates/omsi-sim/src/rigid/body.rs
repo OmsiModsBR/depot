@@ -7,7 +7,7 @@ use super::ground::GroundProbe;
 use super::params::{
     BODY_DAMPING, BUMP, DEFAULT_COG_HEIGHT, DEFAULT_DAMPER, DEFAULT_INERTIA_INV, DEFAULT_MAX_FORCE,
     DEFAULT_SPRING, DRY_GRIP, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MAX_STEER, OMSI_FRAME,
-    ROLLING_COEFFICIENT, TIP_OVER, TRACK_SHARE, TYRE_C, TYRE_K, TYRE_OVER_SPRING,
+    ROLLING_COEFFICIENT, TIP_OVER, TRACK_SHARE,
 };
 use super::suspension::wheel_rest_loads;
 use super::train::{step_train, BodyInputs};
@@ -137,11 +137,9 @@ impl RigidBody {
             // and where the strut pushes the body (the outer width)
             let outer = (a.max_width / 2.0).max(0.3);
             let inner = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * TRACK_SHARE };
-            let tyre_k = TYRE_K.max(k * TYRE_OVER_SPRING);
-            let tyre_c = TYRE_C * (tyre_k / TYRE_K).sqrt();
             for side in [-1.0f32, 1.0] {
                 let inertia_inv = if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV };
-                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0 });
+                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, spring: k, damper: c, max_force, spring_factor: 1.0, rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0 });
                 wheel_axle.push(ai);
             }
         }

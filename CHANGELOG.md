@@ -66,6 +66,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   validated against real articulated buses. See `docs/FORMATS.md`, `docs/MODDING.md`.
 
 ### Removed (reversible records in [docs/removed](docs/removed))
+- The vehicle physics' A/B switches `OMSI_TYRE_SUSPENSION`, `OMSI_NO_WHEEL_SLIP` and `OMSI_KINEMATIC_TRAILERS`,
+  with the older models they brought back for comparison: the suspension with a wheel mass, a tyre and bump
+  stops (and the kerb lift across the tread only it read), every wheel gripping, and the coupled parts
+  following kinematically behind the player's vehicle. What the game does by default is unchanged: the
+  physics traces are identical bit for bit. `docs/removed/PHYSICS_AB_SWITCHES_REMOVED.md`.
 - Wheel seating (`seat_wheels`): the drawn tyres of the rigid-body vehicle are no longer moved up or down
   onto the hub the physics has when the model's `Axle_Suspension` animation does not match the spring's
   travel. A model's 3D animation is shown as configured; the correction only ever applied to the front

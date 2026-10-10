@@ -337,8 +337,7 @@ fn a_step_asks_for_few_points() {
         run(&mut rb, 1.0, 0.0, 30_000.0, &probe);
         count.set(0);
         rb.step(1.0 / 60.0, 0.0, &[30_000.0; 4], 0.0, &probe);
-        // (and three across the tread, `tread_step`, and the point under the wheel
-        // OMSI's suspension stands on)
+        // (and the point under the wheel OMSI's suspension stands on)
         assert!(count.get() <= 4 * rb.wheels.len() * (LATTICE + 6), "{s}: {} probes", count.get());
     }
 }

@@ -1,11 +1,10 @@
 //! What the wheels stand on: the ground at a point ([`Ground`]) and what a tyre makes of it -
-//! the envelope laid over the road along its length ([`tyre_line`]), a kerb under part of
-//! its tread ([`tread_step`]) and the faces it cannot climb ([`WallFace`], [`track_walls`]).
+//! the envelope laid over the road along its length ([`tyre_line`]) and the faces it cannot
+//! climb ([`WallFace`], [`track_walls`]).
 
 use super::params::{
     EDGE, EDGE_HALVINGS, ENVELOPE, FACE_HALVINGS, FACE_SPAN, HALF_WIDTH, LATTICE, SIDE_REACH,
-    TREAD_HALVINGS, TREAD_STEP_MIN, TYRE_SAMPLES, WALL_BEFORE, WALL_BEHIND, WALL_FACING, WALL_GRAZE,
-    WALL_KEEP,
+    TYRE_SAMPLES, WALL_BEFORE, WALL_BEHIND, WALL_FACING, WALL_GRAZE, WALL_KEEP,
 };
 use glam::{DVec2, DVec3, Vec2, Vec3};
 
@@ -203,57 +202,6 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
     TyreLine { ground: best, faces: [ahead, behind], clear }
 }
 
-/// How much higher (or lower) the hub stands than the ground under the tread's middle line
-/// says, for a step running along under the tread (the tyre driving onto a kerb at a
-/// shallow angle, or with one shoulder over its edge). The lengthwise envelope of
-/// [`tyre_line`] sees only the middle line: the tyre stood wholly down or wholly up on the
-/// kerb and jumped its full height as the edge passed under the hub. Here the tread's width
-/// is looked at: with a share of it over the higher ground the hub rises by the step times
-/// that share (all of it once half the tread is up, as a tyre carries the load on the part
-/// that touches), and over lower ground at one shoulder it sinks likewise.
-pub(super) fn tread_step(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3, fwd_h: Vec3, r: f32, z_top: f64) -> f64 {
-    let w = (HALF_WIDTH * r) as f64;
-    let across = DVec3::new(fwd_h.y as f64, -fwd_h.x as f64, 0.0);
-    let g = |d: f64| {
-        let p = hub + across * d;
-        probe(p.x, p.y, z_top).below
-    };
-    let Some(gc) = g(0.0) else { return 0.0 };
-    let mut best = 0.0f64;
-    for side in [-1.0f64, 1.0] {
-        let Some(gs) = g(side * w) else { continue };
-        let h = gs - gc;
-        if h.abs() < TREAD_STEP_MIN {
-            continue;
-        }
-        // where across the tread the ground changes: halving between the middle and the
-        // shoulder
-        let (mut lo, mut hi) = (0.0, w);
-        for _ in 0..TREAD_HALVINGS {
-            let m = 0.5 * (lo + hi);
-            match g(side * m) {
-                Some(z) if (z - gs).abs() < (z - gc).abs() => hi = m,
-                Some(_) => lo = m,
-                None => break,
-            }
-        }
-        let e = 0.5 * (lo + hi);
-        // share of the tread on the other ground (from its edge to this shoulder)
-        let share = ((w - e) / (2.0 * w)).clamp(0.0, 0.5);
-        let t = share / 0.5;
-        let k = t * t * (3.0 - 2.0 * t);
-        // up: the shoulder over the kerb takes the load in proportion. (Down, with the
-        // middle still on the step and a shoulder hanging over its edge, the hub stays: seen
-        // from the other side once the edge passes the middle, it is the same share going
-        // the other way, so the tyre comes down from the kerb as smoothly as it went up.)
-        let delta = if h > 0.0 { h * k } else { 0.0 };
-        if delta.abs() > best.abs() {
-            best = delta;
-        }
-    }
-    best
-}
-
 /// The faces a tyre is up against after this step: those it was against that are still
 /// there and near, and new ones its samples (and a look to either side, `look` metres
 /// further than the tyre reaches) found.
@@ -344,36 +292,6 @@ mod tests {
     use super::super::params::{CLIMB, WALL_HEIGHT};
     use super::super::tests::ramp;
     use super::*;
-
-    /// A kerb running along under the tread lifts the hub by the share of the tread over
-    /// it, smoothly as the edge passes under the tyre - not all at once as the edge passes
-    /// the middle - and lets it down the same way from the other side.
-    #[test]
-    fn kerb_along_the_tread_lifts_smoothly() {
-        let r = 0.47f32;
-        let h = 0.15;
-        let mut last: Option<f64> = None;
-        let mut max_jump = 0.0f64;
-        for k in 0..=200 {
-            // the kerb's edge from 0.3 m right of the hub to 0.3 m left of it
-            let e = 0.3 - k as f64 * 0.003;
-            let probe = move |x: f64, _y: f64, top: f64| {
-                let z = if x > e { h } else { 0.0 };
-                if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
-            };
-            let hub = DVec3::new(0.0, 0.0, r as f64);
-            let z_top = (CLIMB * r) as f64;
-            let line = tyre_line(&probe, hub, Vec3::Y, r, z_top, hub.z + WALL_HEIGHT, 0.0);
-            let (need, _, _) = line.ground.expect("ground");
-            let need = need + tread_step(&probe, hub, Vec3::Y, r, z_top);
-            if let Some(l) = last {
-                max_jump = max_jump.max((need - l).abs());
-            }
-            last = Some(need);
-        }
-        assert!((last.unwrap() - (r as f64 + h)).abs() < 1e-3, "ends on the kerb: {:?}", last);
-        assert!(max_jump < 0.02, "a jump of {max_jump:.3} m");
-    }
 
     /// On a uniform grade of any steepness the tyre reports the grade itself and stands where
     /// the envelope touches the ramp, with no more probes than on the flat. The old comb read

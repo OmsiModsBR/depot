@@ -23,7 +23,7 @@
 //! The code follows the stages of a step: `ground` (what a tyre stands on), `suspension` (the
 //! static loads and each wheel on its strut), `wheel` (each wheel's own turning), `tyre` (the
 //! tyres' forces along and across), `body` (the body and its motion) and `collide` (hits
-//! against obstacles), with the constants in `params` and the A/B switches in `toggles`.
+//! against obstacles), with the constants in `params`.
 //! `train` runs the stages in order for one body or an articulated train ([`step_train`]).
 
 mod body;
@@ -31,7 +31,6 @@ mod collide;
 mod ground;
 mod params;
 mod suspension;
-pub(crate) mod toggles;
 mod train;
 mod tyre;
 mod wheel;

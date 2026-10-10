@@ -52,8 +52,8 @@ pub(super) const LOCK_DEG_MAX: f32 = 60.0;
 
 /// How far a wheel may hang below its unloaded position (m). *tuned*
 pub const DROOP: f32 = 0.15;
-/// Compression at which the bump stop takes over (m). A deflated air suspension rests on it.
-/// *tuned*
+/// The bump stop (m): the most a spring is pressed when its rate does not say
+/// (`achse_maxforce` over it), and where a deflated air suspension rests. *tuned*
 pub const BUMP: f32 = 0.24;
 /// The axle's spring (kN/m), damper (kN s/m) and the load its strut is built for (kN) when
 /// `achse_feder`, `achse_daempfer` or `achse_maxforce` is missing or zero. *fallback*
@@ -74,50 +74,6 @@ pub(super) const OMSI_PROBE_HEIGHT: f64 = 3.0;
 /// The most a tyre carries in the push that takes it up a kerb, in loads its strut is
 /// built for (`achse_maxforce`). *tuned*
 pub(super) const STEP_LOAD_MAX: f32 = 2.0;
-
-// The suspension with a wheel mass, a tyre and bump stops (`OMSI_TYRE_SUSPENSION=1`, A/B).
-
-/// The wheel between the road and the strut: its share of the corner's mass (axle, hub,
-/// brake, tyre - about an eighth on a bus), and the tyre's vertical stiffness (N/m) and
-/// damping (N s/m). Taken as massless, the wheel stood wherever the road put it: a bump
-/// shoved it into the arch within a substep, the strut's damper kicked the body into the
-/// air, and the wheel then dropped to its full droop at once - the bus hopped over a
-/// manhole cover with its wheels flicking in and out of the body. *tuned*
-pub(super) const UNSPRUNG: f32 = 0.12;
-pub(super) const TYRE_K: f32 = 900_000.0;
-pub(super) const TYRE_C: f32 = 3_000.0;
-/// The least mass of a wheel (kg). *tuned*
-pub(super) const MIN_WHEEL_MASS: f32 = 40.0;
-/// OMSI has no tyre between the road and the spring: `achse_feder` alone carries the body
-/// (force = feder x penetration - daempfer x speed). The
-/// tyre here is at least this many times as stiff as the spring, so that the two in series
-/// give the body 94 % of the file's spring rate instead of the 79 % a fixed 900 kN/m tyre
-/// left a bus with 240 kN/m springs - that softness was a good part of its sway. *tuned*
-pub(super) const TYRE_OVER_SPRING: f32 = 15.0;
-/// How fast (m/s) the ground under a tyre may rise as it rolls on: the envelope's steepest
-/// slope (see [`CLIMB`]) times the tyre's speed along (at least `RISE_MIN_SPEED`), and
-/// `RISE_SPARE` more. A reading that leaps higher (a kerb's edge caught for one substep) is
-/// climbed at that pace. *tuned*
-pub(super) const ENVELOPE_SLOPE: f32 = 2.4;
-pub(super) const RISE_MIN_SPEED: f32 = 0.5;
-pub(super) const RISE_SPARE: f32 = 0.3;
-/// How far (m) below its full droop a wheel still finds the ground. *tuned*
-pub(super) const DROOP_REACH: f32 = 0.05;
-/// The most the tyre's closing speed (m/s) counts for its damping. *tuned*
-pub(super) const TYRE_CLOSING_MAX: f32 = 3.0;
-/// The most a tyre pushes, in loads its strut is built for. *tuned*
-pub(super) const TYRE_LOAD_MAX: f32 = 3.0;
-/// The strut's damper is digressive: it takes no faster travel than this (m/s), so that a
-/// kerb struck at speed does not fire the body into the air. *tuned*
-pub(super) const DAMPER_RATE_MAX: f32 = 1.5;
-/// The bump stop, a rubber block: this many times as stiff as the spring, pushing at most
-/// this many loads the strut is built for. *tuned*
-pub(super) const BUMP_STIFFNESS: f32 = 10.0;
-pub(super) const BUMP_LOAD_MAX: f32 = 2.0;
-/// The most the strut pulls on the rebound, in loads it is built for. *tuned*
-pub(super) const REBOUND_LOAD_MAX: f32 = 0.5;
-/// How far (m) past the bump stop the wheel can be pressed. *tuned*
-pub(super) const BUMP_TRAVEL: f32 = 0.08;
 
 // The tyres.
 
@@ -177,10 +133,6 @@ pub const CLIMB: f32 = 0.8;
 pub(super) const HUB_REACH: f64 = 0.05;
 /// Half the width of a tyre, in radii (a 275 mm bus tyre on a 0.47 m radius). *physics*
 pub(super) const HALF_WIDTH: f32 = 0.3;
-/// A step across the tread lower than this (m) is no step. *tuned*
-pub(super) const TREAD_STEP_MIN: f64 = 0.02;
-/// Halvings that place a step across the tread (to a 32nd of half the width). *tuned*
-pub(super) const TREAD_HALVINGS: usize = 5;
 
 // Walls and crashes.
 

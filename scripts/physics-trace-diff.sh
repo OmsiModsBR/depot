@@ -2,10 +2,10 @@
 # The vehicle physics of two commits, compared frame by frame.
 #
 # Runs the scenarios of crates/omsi-sim/tests/physics_traces.rs - this checkout's copy of
-# the file, on both sides - on <base> and on the working tree, once with the physics' A/B
-# switches off and once with each of them on, and compares the traces. A change that only
-# moves code (the structural phases of the physics refactor) leaves them all identical,
-# to the bit; a change that is meant to alter the physics shows where it does.
+# the file, on both sides - on <base> and on the working tree, and compares the traces. A
+# change that only moves code (the structural phases of the physics refactor) leaves them
+# all identical, to the bit; a change that is meant to alter the physics shows where it
+# does.
 #
 #   scripts/physics-trace-diff.sh [base-ref]        (default: origin/main)
 #
@@ -20,8 +20,6 @@ base_ref=${1:-origin/main}
 root=$(git rev-parse --show-toplevel)
 out=${OUT:-$root/target/physics-traces}
 harness=crates/omsi-sim/tests/physics_traces.rs
-# (each switch is read once a process, so each takes a run of its own)
-modes=(default OMSI_TYRE_SUSPENSION OMSI_NO_WHEEL_SLIP OMSI_KINEMATIC_TRAILERS)
 
 base_sha=$(git -C "$root" rev-parse --verify "$base_ref^{commit}")
 tree=$(mktemp -d)
@@ -32,22 +30,18 @@ trap 'git -C "$root" worktree remove --force "$tree" >/dev/null 2>&1 || true; rm
 mkdir -p "$tree/$(dirname "$harness")"
 cp "$root/$harness" "$tree/$harness"
 
-# run <checkout> <target dir> <label>: the scenarios in every mode, into $out/<label>/<mode>
+# run <checkout> <target dir> <label>: the scenarios, into $out/<label>
 # (each checkout builds in a target directory of its own: cargo names the workspace's
 # crates the same in both and tells them apart by the files' times, so in one directory
 # the second checkout could run the first one's build)
 run() {
-    local dir=$1 target=$2 label=$3 mode
-    for mode in "${modes[@]}"; do
-        local switch=()
-        if [ "$mode" != default ]; then switch=("$mode=1"); fi
-        echo "== $label: $mode"
-        if ! (cd "$dir" && env ${switch[@]+"${switch[@]}"} OMSI_PHYSICS_TRACE_DIR="$out/$label/$mode" CARGO_TARGET_DIR="$target" \
-            cargo test --locked -p omsi-sim --release ${CARGO_FLAGS:-} --test physics_traces -q); then
-            echo "physics-trace-diff: the scenarios failed on $label ($mode)" >&2
-            exit 2
-        fi
-    done
+    local dir=$1 target=$2 label=$3
+    echo "== $label"
+    if ! (cd "$dir" && OMSI_PHYSICS_TRACE_DIR="$out/$label" CARGO_TARGET_DIR="$target" \
+        cargo test --locked -p omsi-sim --release ${CARGO_FLAGS:-} --test physics_traces -q); then
+        echo "physics-trace-diff: the scenarios failed on $label" >&2
+        exit 2
+    fi
 }
 
 # report <a> <b>: where each trace of <a> first differs from <b>'s; 0 when none does
@@ -82,7 +76,7 @@ if ! report "$out/head" "$out/head-again" >"$out/determinism.txt"; then
 fi
 traces=$(find "$out/head" -name '*.trace' | wc -l)
 if report "$out/base" "$out/head" >"$out/diff.txt"; then
-    echo "physics-trace-diff: all $traces traces identical to ${base_ref} (${base_sha:0:10}), in ${#modes[@]} modes"
+    echo "physics-trace-diff: all $traces traces identical to ${base_ref} (${base_sha:0:10})"
 else
     status=1
     echo "physics-trace-diff: the physics differ from ${base_ref} (${base_sha:0:10}):"
