@@ -381,7 +381,7 @@ openOMSI does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/p
 * **`openomsi_<key>`** in a `[varlist]` or `[stringvarlist]` reads the value `<key>` of
   `omsi.info()` (see above): numbers and booleans as variables, texts as string variables,
   while the player drives a bus. A plugin that reads the bus's place, its type or the map
-  out of Omsi.exe's memory at fixed addresses - which cannot work here - lists
+  out of the game's memory - which cannot work here - lists
   `openomsi_tile_x`, `openomsi_tile_pos_x`, `openomsi_heading`, `openomsi_map_path`... instead.
   OMSI has no variables of these names and skips them, so one `.opl` serves both games.
   Names are matched case-insensitively. Vehicle script variables take precedence over
