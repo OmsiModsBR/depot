@@ -46,6 +46,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   validated against real articulated buses. See `docs/FORMATS.md`, `docs/MODDING.md`.
 
 ### Removed (reversible records in [docs/removed](docs/removed))
+- Wheel seating (`seat_wheels`): the drawn tyres of the rigid-body vehicle are no longer moved up or down
+  onto the hub the physics has when the model's `Axle_Suspension` animation does not match the spring's
+  travel. A model's 3D animation is shown as configured; the correction only ever applied to the front
+  section of an articulated bus. `docs/removed/SEAT_WHEELS_REMOVED.md`.
 - In-app updater (check, download, install, `update_*` settings, flags, UI, Android install flow). The
   Settings "About" section shows the version and a link to the releases page. `docs/removed/UPDATER_DISABLED.md`.
 - Discord Rich Presence and its borrowed application ID, until Depot registers its own. The community
