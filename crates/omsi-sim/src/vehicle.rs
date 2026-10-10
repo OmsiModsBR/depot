@@ -1771,6 +1771,9 @@ impl VehicleInstance {
 
     fn step_rigid(&mut self, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32) {
         let mut rb = self.take_rigid().unwrap();
+        // the tyres' grip on the road as it is this frame (set after the step, it took hold a
+        // frame late: the first frame on a frozen road still had the dry road's grip)
+        rb.friction = road_grip(self.host.street_cond, self.host.temperature);
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -2077,11 +2080,6 @@ impl VehicleInstance {
         self.set_engine_var("train_frontcoupling", 0.0);
         self.set_engine_var("train_backcoupling", if self.trailers.is_empty() { 0.0 } else { 1.0 });
         self.set_engine_var("train_me_reverse", 0.0);
-        // and for the tyres' grip
-        let mu = road_grip(self.host.street_cond, self.host.temperature);
-        if let Some(rb) = self.rigid_mut() {
-            rb.friction = mu;
-        }
     }
 
     /// The engine's own vehicle variables that OMSI binds to fields of the vehicle
