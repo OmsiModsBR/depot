@@ -9,6 +9,8 @@ Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openO
 
 Maintenance policy: **stable base + selective upstream integration**.
 See [baseline provenance and integration policy](DEPOT_BASELINE.md).
+Build/test evidence and remaining limits are recorded in
+[baseline validation](docs/BASELINE-VALIDATION.md).
 
 > [!WARNING]
 > **Early release. Expect bugs.** Project Depot is in an early stage of development: things may be

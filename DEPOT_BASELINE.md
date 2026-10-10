@@ -32,6 +32,7 @@ The README is adapted to describe Depot's origin, goals and distribution names.
 See [PROJECT.md](PROJECT.md) and [UPSTREAM.md](UPSTREAM.md).
 A Depot-owned CI workflow builds and tests with read-only repository permissions;
 it does not publish releases, tags, websites or packages and uses no upstream secrets.
+See [baseline validation and limitations](docs/BASELINE-VALIDATION.md).
 
 ## Selective integration
 
