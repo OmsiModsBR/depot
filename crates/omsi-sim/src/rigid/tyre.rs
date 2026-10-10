@@ -48,7 +48,7 @@ pub(super) struct Substep {
 /// The tyres' hold across over a substep, solved as a constraint on each tyre: the body's
 /// velocities as they would be at the end of it (`w` in the body frame), the impulse of
 /// each tyre so far, and what a joint passed on to the body (`joint_p` world, `joint_l` body
-/// frame; see [`Joint`]).
+/// frame; see [`Joint`](super::Joint)).
 pub(super) struct Lateral {
     pub(super) lat: Vec<usize>,
     pub(super) arms: Vec<(Vec3, f32)>,
@@ -305,7 +305,7 @@ impl RigidBody {
         }
     }
 
-    /// The hold across (and a joint's pull, see [`Joint`]) as forces over the substep.
+    /// The hold across (and a joint's pull, see [`Joint`](super::Joint)) as forces over the substep.
     pub(super) fn lateral_end(&mut self, s: &mut Substep, l: &Lateral, h: f32) {
         let (rot, contacts, v_fwd) = (s.rot, &s.contacts, self.velocity.dot(s.body_fwd));
         let Lateral { lat, arms, j, v, w, gripped, slipping, m, .. } = l;

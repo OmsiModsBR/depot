@@ -47,7 +47,7 @@ pub struct RigidWheel {
     pub compression: f32,
     pub compression_rate: f32,
     /// The compression at which the tyre would just touch the ground, last substep (None
-    /// in the air or right after [`RigidBody::place`]).
+    /// in the air or right after [`RigidBody::place`](super::RigidBody::place)).
     pub touch: Option<f32>,
     pub on_ground: bool,
     pub rotation_deg: f32,
@@ -57,8 +57,8 @@ pub struct RigidWheel {
     /// World height of the ground the tyre stands on this step (the surface under the hub
     /// or the edge it is climbing).
     pub ground_z: f64,
-    /// `ground_z` came from the ground (not yet after [`RigidBody::place`]): steps up to
-    /// [`CLIMB`] radii over it are ground, higher ones walls.
+    /// `ground_z` came from the ground (not yet after [`RigidBody::place`](super::RigidBody::place)): steps up to
+    /// [`CLIMB`](super::CLIMB) radii over it are ground, higher ones walls.
     pub ground_seen: bool,
     /// Faces the tyre is up against.
     pub walls: Vec<WallFace>,

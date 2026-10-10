@@ -49,7 +49,8 @@ physics computes. Two jobs of the workflow guard it on pull requests:
   difference of each trace without failing, for the review to check against the predicted
   change.
 - `physics-coverage` (informational) reports the lines, regions and branches of
-  `rigid.rs` and `rigid/train.rs` that those scenarios and `physics_invariants.rs` reach.
+  the rigid body (`crates/omsi-sim/src/rigid/`, its tests aside) that those scenarios and
+  `physics_invariants.rs` reach.
 
 Locally: `scripts/physics-trace-diff.sh [base-ref]` (default `origin/main`); the traces are
 kept in `target/physics-traces/`. Without `OMSI_PHYSICS_TRACE_DIR`, `cargo test` runs each
