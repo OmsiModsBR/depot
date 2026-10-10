@@ -11156,7 +11156,7 @@ pub struct DynSlot {
 }
 
 /// Whether a `[matl_change]` variable at `x` shows the slot's `[matl_item]`: OMSI
-/// (0x5fd6xx) rounds the variable (to the nearest, ties to even) and shows item `n` for
+/// rounds the variable (to the nearest, ties to even) and shows item `n` for
 /// 1 <= n <= the items there are, the plain material otherwise - a lamp's variable at 2
 /// with one item is dark. A variable no script declares is registered by the model loader
 /// at 0 (the stock MANs' spare buttons, `*Noch nicht belegt*`, and a mod's door lamps

@@ -4487,7 +4487,7 @@ impl Traffic {
         let mut stop_at = if jn.inside { None } else { Some(entry) };
         let me_id = car.id;
         // (OMSI: a vehicle whose script sets `TrafficPriority` claims a crossing with
-        // priority 1000, above any vehicle type's, FUN_007d9128 - the AI ambulance as much
+        // priority 1000, above any vehicle type's - the AI ambulance as much
         // as the player; ours honoured it for the player's bus only)
         let prio = |c: &AiCar| c.vehicle.var("TrafficPriority").is_some_and(|v| v > 0.5);
         let me_prio = prio(car);
