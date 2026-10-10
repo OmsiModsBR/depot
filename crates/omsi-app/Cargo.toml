@@ -13,7 +13,7 @@ name = "openomsi_game"
 path = "src/lib.rs"
 
 [[bin]]
-name = "openomsi"
+name = "depot"
 path = "src/main.rs"
 
 [build-dependencies]

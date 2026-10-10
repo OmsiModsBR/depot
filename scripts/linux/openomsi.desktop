@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=openOMSI
+Name=Project Depot
 Comment=Bus simulator compatible with OMSI 2 maps and mods
-Exec=openomsi
-Icon=openomsi
+Exec=depot
+Icon=depot
 Categories=Game;Simulation;
 Terminal=false

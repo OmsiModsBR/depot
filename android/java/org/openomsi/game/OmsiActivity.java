@@ -194,7 +194,7 @@ public class OmsiActivity extends NativeActivity {
             session = pi.openSession(id);
             File f = new File(path);
             InputStream in = new FileInputStream(f);
-            OutputStream out = session.openWrite("openomsi.apk", 0, f.length());
+            OutputStream out = session.openWrite("depot.apk", 0, f.length());
             byte[] buf = new byte[1 << 16];
             int n;
             while ((n = in.read(buf)) > 0) {
@@ -249,7 +249,7 @@ public class OmsiActivity extends NativeActivity {
             case PackageInstaller.STATUS_FAILURE_CONFLICT:
             case PackageInstaller.STATUS_FAILURE_INCOMPATIBLE:
                 // signed with another key than the installed app (a build of one's own)
-                installMessage = "this openOMSI was installed from a build with another signature than the GitHub releases. Uninstall it once and install the APK from github.com/openOMSI-Project/openOMSI - updates work from then on.";
+                installMessage = "this Project Depot was installed from a build with another signature than the GitHub releases. Uninstall it once and install the APK from github.com/OmsiModsBR/depot - updates work from then on.";
                 installStatus = 4;
                 break;
             default: {

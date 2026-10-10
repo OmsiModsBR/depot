@@ -303,7 +303,7 @@ pub fn query(target: &str, with_icon: bool) -> Result<ServerInfo, String> {
     if bases.is_empty() {
         return Err("no address given".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(6)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(6)).user_agent("Project Depot").build();
     let mut err = String::new();
     let mut found = None;
     for base in bases {
@@ -313,7 +313,7 @@ pub fn query(target: &str, with_icon: bool) -> Result<ServerInfo, String> {
                     found = Some((base, i));
                     break;
                 }
-                None => err = "the answer is not an openOMSI server's".into(),
+                None => err = "the answer is not a Project Depot server's".into(),
             },
             Err(e) => {
                 if err.is_empty() {
@@ -529,7 +529,7 @@ fn serve(stream: TcpStream, target: SocketAddr, info: &Mutex<ServerInfo>, stop: 
             }
             _ => {
                 let i = info.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                let page = format!("<!doctype html><meta charset=utf-8><title>{0}</title><body style=\"font-family:sans-serif;background:#16181c;color:#eee;padding:40px\"><h1>{0}</h1><p>{1}</p><p>Map: {2} &middot; {3}/{4} players</p><p>Add this address in openOMSI &rarr; Multiplayer &rarr; Servers.</p>", html(&i.name), html(&i.motd), html(&i.map), i.players, i.max_players);
+                let page = format!("<!doctype html><meta charset=utf-8><title>{0}</title><body style=\"font-family:sans-serif;background:#16181c;color:#eee;padding:40px\"><h1>{0}</h1><p>{1}</p><p>Map: {2} &middot; {3}/{4} players</p><p>Add this address in Project Depot &rarr; Multiplayer &rarr; Servers.</p>", html(&i.name), html(&i.motd), html(&i.map), i.players, i.max_players);
                 ("200 OK", "text/html; charset=utf-8", page.into_bytes())
             }
         };

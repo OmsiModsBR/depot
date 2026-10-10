@@ -116,7 +116,7 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
         Some(cand)
     } else {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        let fallback = PathBuf::from(home).join(".openomsi").join("content");
+        let fallback = PathBuf::from(home).join(".depot").join("content");
         let _ = omsi_cfg::ensure_content_layout(&fallback);
         Some(fallback)
     }
@@ -128,13 +128,13 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
 /// there as well.
 pub(crate) fn save_fallback_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("content"))
+    Some(PathBuf::from(home).join(".depot").join("content"))
 }
 
 /// Where the last working installation was remembered.
 pub(crate) fn root_memo() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi-root"))
+    Some(PathBuf::from(home).join(".depot-root"))
 }
 
 /// Find the OMSI 2 installation without being told where it is.
@@ -150,7 +150,7 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     }
     // the folder the launcher was told about (Setup)
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openomsi/launcher.json")) {
+        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".depot/launcher.json")) {
             if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
                 first.push(r);
             }
@@ -323,13 +323,13 @@ pub(crate) fn window_renderer(
 /// box on Windows; the log and the terminal elsewhere).
 pub(crate) fn fatal_message(text: &str) {
     log::error!("{text}");
-    eprintln!("openOMSI: {text}");
+    eprintln!("Project Depot: {text}");
     #[cfg(windows)]
     {
         use windows::core::PCWSTR;
         use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
         let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
-        let (t, c) = (wide(text), wide("openOMSI"));
+        let (t, c) = (wide(text), wide("Project Depot"));
         unsafe {
             MessageBoxW(None, PCWSTR(t.as_ptr()), PCWSTR(c.as_ptr()), MB_OK | MB_ICONERROR);
         }

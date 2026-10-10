@@ -1115,7 +1115,7 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     c.y += help_height + 3.0;
     toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
     let help_height = ui.paragraph(
-        "Players near you are heard from where they stand, when GreenTeaSpeak runs with the openOMSI plugin and the server names a voice server.",
+        "Players near you are heard from where they stand, when GreenTeaSpeak runs with the Project Depot plugin and the server names a voice server.",
         Vec2::new(c.inner.x + 12.0, c.y - 5.0),
         c.inner.w - 24.0,
         11.5,
@@ -1197,11 +1197,11 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
             Status::UpToDate => format!("{} is the latest version", crate::updater::current_version()),
             Status::Available(rel) => format!("{} is available", rel.version),
             Status::Failed(_) => "The last check failed".to_string(),
-            _ => format!("This is openOMSI {}", crate::updater::current_version()),
+            _ => format!("This is Project Depot {}", crate::updater::current_version()),
         };
         ui.text_in(&text, Rect::new(r.x + 162.0, r.y, r.w - 162.0, r.h), 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
     }
-    if ui.button("s-upd-github", c.row(), "github.com/openOmsi-project/openOMSI", Some("open_in_new"), ButtonKind::Ghost) {
+    if ui.button("s-upd-github", c.row(), "github.com/OmsiModsBR/depot", Some("open_in_new"), ButtonKind::Ghost) {
         crate::updater::open_url(crate::updater::REPO_URL);
     }
     // every setting at once: here at the end, not first on the page where it was the
@@ -2522,19 +2522,19 @@ pub fn setup(l: &mut Launcher, area: Rect) {
     y += ROW + 10.0;
     if core::IN_PROCESS_GAMES {
         // (a phone: the game is this app itself)
-        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as openOMSI/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into openOMSI/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
+        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into depot/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
     } else {
         l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "Game binary");
-        if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "openomsi", Some("terminal")) {
+        if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "depot", Some("terminal")) {
             l.pages.setup_game = Some(game.clone());
         }
         if l.ui.button("browse-game", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-            if let Some(p) = core::pick_file("The openomsi program") {
+            if let Some(p) = core::pick_file("The depot program") {
                 l.pages.setup_game = Some(p.to_string_lossy().to_string());
             }
         }
         y += ROW + 16.0;
-        y += l.ui.paragraph("The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation). The game binary is the openomsi program; it is found by itself when it sits next to the launcher.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
+        y += l.ui.paragraph("The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation). The game binary is the depot program; it is found by itself when it sits next to the launcher.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
     }
     y += 12.0;
     if l.ui.button("cfg-save", Rect::new(inner.x, y, 180.0, 42.0), "Save", Some("save"), ButtonKind::Primary) {

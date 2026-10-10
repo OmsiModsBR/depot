@@ -324,7 +324,7 @@ pub(crate) fn build_situation(
         path: Default::default(),
         name: name.to_string(),
         description: format!(
-            "Saved by the openOMSI at {:02}:{:02}",
+            "Saved by Project Depot at {:02}:{:02}",
             (clock.time / 3600.0) as i32,
             ((clock.time % 3600.0) / 60.0) as i32
         ),
@@ -443,7 +443,7 @@ mod tests {
             }).collect(),
             ..Default::default()
         };
-        let mut args = Args::parse_from(["openomsi"]);
+        let mut args = Args::parse_from(["depot"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.situation_odometer_km, Some(12001.125));
         assert_eq!(args.situation_others[0].odometer_km, Some(12002.125));
@@ -476,7 +476,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["depot"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.paint.as_deref(), Some("1"));
         assert_eq!(args.situation_odometer_km, Some(10001.125));
@@ -503,7 +503,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["depot"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!((args.line.as_deref(), args.tour.as_deref(), args.trip.as_deref()), (Some("137"), Some("4"), Some("4")));
         assert!(args.whole_tour);
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn legacy_and_invalid_saved_stop_fields_keep_legacy_selection() {
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["depot"]);
         for fields in [
             vec!["109", "65104", "16"],
             vec!["109", "65104", "16", "-1"],
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn a_string_only_snapshot_is_a_resume() {
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["depot"]);
         assert!(!args.is_resuming());
         args.situation_strvars
             .push(("destination".into(), "Manual".into()));
@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn an_odometer_only_snapshot_is_a_resume() {
-        let mut args = Args::parse_from(["openomsi"]);
+        let mut args = Args::parse_from(["depot"]);
         args.situation_odometer_km = Some(75556.639);
         assert!(args.is_resuming());
     }

@@ -1,7 +1,7 @@
-# openOMSI on Android
+# Project Depot on Android
 
-openOMSI runs on Android phones and tablets (arm64, Android 8.0 or newer, a GPU with
-Vulkan 1.1; on a phone without Vulkan openOMSI tries OpenGL ES 3). It is the same game as on the computer: the same renderer, simulation, scripts,
+Project Depot runs on Android phones and tablets (arm64, Android 8.0 or newer, a GPU with
+Vulkan 1.1; on a phone without Vulkan Project Depot tries OpenGL ES 3). It is the same game as on the computer: the same renderer, simulation, scripts,
 maps, buses and mods. Only the way it is worked is new:
 
 - **one app, one window**: the launcher and the game share a window. Start is pressed in the
@@ -46,21 +46,21 @@ gives, so a mod bus is driven by them as by the keyboard.
 ## Installing the game on the phone
 
 1. Install the APK (allow installing from this source when Android asks).
-2. Start openOMSI and allow **access to all files** when Android asks (Settings → Apps →
-   openOMSI → Permissions → Files and media → Allow management of all files). The game reads
+2. Start Project Depot and allow **access to all files** when Android asks (Settings → Apps →
+   Project Depot → Permissions → Files and media → Allow management of all files). The game reads
    OMSI 2's thousands of files by path; without it only the app's own folder can be read.
 3. Copy the **whole OMSI 2 folder** of a PC installation (the one with `Omsi.exe`, `maps`,
-   `Vehicles`) onto the phone, e.g. to `openOMSI/OMSI 2` in the internal storage (by USB
-   cable, from a PC or a USB stick). openOMSI finds it by itself in `openOMSI/`,
+   `Vehicles`) onto the phone, e.g. to `depot/OMSI 2` in the internal storage (by USB
+   cable, from a PC or a USB stick). Project Depot finds it by itself in `depot/`,
    `Download/` or the top of the storage; anywhere else choose it in the launcher under
    **Setup → Browse → Use this folder → Save**.
-4. **Mods**: copy mod folders or .zip, .7z and .rar files into `openOMSI/Mods` (installed when the launcher
+4. **Mods**: copy mod folders or .zip, .7z and .rar files into `depot/Mods` (installed when the launcher
    opens), or install them from the launcher's **Mods** page (Choose a folder / Choose an
-   archive); .zip archives can also lie in `openOMSI/Archives` and are used in place. Maps and buses
+   archive); .zip archives can also lie in `depot/Archives` and are used in place. Maps and buses
    work exactly as on the computer.
 
 Settings, profiles and sessions are in the app's private folder; screenshots go to
-`openOMSI/Screenshots`. Every other folder in `openOMSI/` (and the OMSI 2 installation, wherever
+`depot/Screenshots`. Every other folder in `depot/` (and the OMSI 2 installation, wherever
 it lies) gets an empty `.nomedia` file, so that the gallery apps do not list the thousands of
 textures as photos - they are the game's content, deleting them leaves buses white. A gallery
 that listed them before may need a moment (or a restart of the phone) to forget them. The first start on a phone uses lighter graphics defaults (2x MSAA, no
@@ -68,7 +68,7 @@ ambient occlusion, a 1024 shadow map, 60 fps, a 900 m object distance); everythi
 changed on the launcher's Settings page. When the frame rate drops below 45 the 3D picture is
 drawn smaller, down to 0.6 of the screen, as on the computer.
 
-Logs: `adb logcat -s openOMSI`.
+Logs: `adb logcat -s "Project Depot"`.
 
 ## Building
 
@@ -77,7 +77,7 @@ rustup target add aarch64-linux-android
 # the Android SDK (command line tools), e.g. with Homebrew on a Mac:
 brew install --cask android-commandlinetools
 sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "platform-tools"
-scripts/build-android.sh            # → dist/android/openOMSI-<version>.apk
+scripts/build-android.sh            # → dist/android/depot-<version>.apk
 scripts/build-android.sh install    # ... and adb install it on the attached phone
 ```
 
@@ -98,7 +98,7 @@ the size of one).
 
 Every push to main builds the APK in GitHub Actions (`android` job of
 `.github/workflows/release.yml`) and attaches it to the release as
-`openOMSI-<version>-android-arm64.apk`. Set the repository secret `ANDROID_KEYSTORE_B64`
+`depot-<version>-android-arm64.apk`. Set the repository secret `ANDROID_KEYSTORE_B64`
 (`base64 < android/debug.keystore`) so that every release is signed with the same key and
 installs over the previous one.
 
@@ -106,12 +106,11 @@ installs over the previous one.
 
 The launcher looks for a newer GitHub release when it starts (Settings → General → Updates) and offers
 it; **Update now** downloads the APK and hands it to Android's package installer. The first
-time Android asks to allow openOMSI to install apps. Then Android asks "Do you want to update
-this app?": **Update** replaces openOMSI and starts it again, **Cancel** comes back to the
+time Android asks to allow Project Depot to install apps. Then Android asks "Do you want to update
+this app?": **Update** replaces Project Depot and starts it again, **Cancel** comes back to the
 launcher as "not updated". The APK must be signed with the same key as the installed app
 (release builds are).
 
-`openOMSI/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
+`depot/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
 environment (one `NAME=value` a line), for example `OMSI_UPDATE_URL=file:///sdcard/…/release.json`
 to try an update from a local release description.
-

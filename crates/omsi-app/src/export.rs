@@ -210,7 +210,7 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
         .collect();
     let nodes: Vec<serde_json::Value> = (0..meshes.len()).map(|i| serde_json::json!({ "mesh": i })).collect();
     let json = serde_json::json!({
-        "asset": { "version": "2.0", "generator": "openOMSI" },
+        "asset": { "version": "2.0", "generator": "Project Depot" },
         "scene": 0,
         "scenes": [{ "nodes": (0..nodes.len()).collect::<Vec<_>>() }],
         "nodes": nodes,

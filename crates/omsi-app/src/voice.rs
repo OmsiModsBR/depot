@@ -357,7 +357,7 @@ fn link_thread(addr: SocketAddr, key_file: Option<PathBuf>, out: Receiver<String
             Ok(w) => w,
             Err(_) => continue,
         };
-        let hello = json!({ "type": "hello", "game": "openOMSI", "protocol": 2, "key": key }).to_string() + "\n";
+        let hello = json!({ "type": "hello", "game": "Project Depot", "protocol": 2, "key": key }).to_string() + "\n";
         if writer.write_all(hello.as_bytes()).is_err() {
             if !idle(&out, RECONNECT) {
                 return;
@@ -385,7 +385,7 @@ fn link_thread(addr: SocketAddr, key_file: Option<PathBuf>, out: Receiver<String
                 }
             }
             if !welcomed && since.elapsed() > HELLO_TIMEOUT {
-                refused = Some("the openOMSI plugin in GreenTeaSpeak does not answer (an older version? install it again)".into());
+                refused = Some("the Project Depot plugin in GreenTeaSpeak does not answer (an older version? install it again)".into());
                 break 'link true;
             }
             // what the plugin says
@@ -612,7 +612,7 @@ impl Voice {
         if self.initiated.as_ref() != Some(&(server.clone(), nick.clone())) {
             let sent = self.send(json!({
                 "type": "initiate",
-                "game": "openOMSI",
+                "game": "Project Depot",
                 "protocol": 1,
                 "serverUid": server.server_uid,
                 "channel": server.channel,
@@ -725,7 +725,7 @@ impl Voice {
             }
             // (for the first seconds: a player who does not want to talk is not told so
             // all session long)
-            return (self.unlinked_t < HINT_SECS).then(|| "Voice: start GreenTeaSpeak with the openOMSI plugin to talk".into());
+            return (self.unlinked_t < HINT_SECS).then(|| "Voice: start GreenTeaSpeak with the Project Depot plugin to talk".into());
         }
         if let Some(p) = &self.status.problem {
             return Some(format!("Voice: {p}"));
@@ -879,14 +879,14 @@ mod tests {
         BufReader::new(conn.try_clone().unwrap()).read_line(&mut first).unwrap();
         let hello: Value = serde_json::from_str(&first).unwrap();
         assert_eq!(hello["type"], "hello");
-        conn.write_all(b"{\"type\":\"refused\",\"error\":\"another openOMSI game is already linked\"}\n").unwrap();
+        conn.write_all(b"{\"type\":\"refused\",\"error\":\"another Project Depot game is already linked\"}\n").unwrap();
         drop(conn);
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline && v.refused.is_none() {
             v.tick(0.01, ("Max", 1), None, &[]);
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert_eq!(v.hud_line().as_deref(), Some("Voice: another openOMSI game is already linked"));
+        assert_eq!(v.hud_line().as_deref(), Some("Voice: another Project Depot game is already linked"));
         assert!(!v.status.linked);
         let _ = std::fs::remove_dir_all(v.key.as_ref().unwrap().parent().unwrap());
     }

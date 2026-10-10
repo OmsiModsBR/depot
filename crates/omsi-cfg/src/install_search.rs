@@ -86,7 +86,7 @@ pub fn candidates() -> Vec<PathBuf> {
     if cfg!(target_os = "android") {
         for s in ["/storage/emulated/0", "/sdcard"] {
             let s = PathBuf::from(s);
-            bases.push(s.join("openOMSI"));
+            bases.push(s.join("depot"));
             bases.push(s.join("Download"));
             bases.push(s.join("Games"));
             bases.push(s);
@@ -215,9 +215,9 @@ mod tests {
 
     #[test]
     fn a_file_or_a_quoted_path_means_its_folder() {
-        let dir = std::env::temp_dir().join("openomsi-root-guess");
+        let dir = std::env::temp_dir().join("depot-root-guess");
         let _ = std::fs::create_dir_all(dir.join("maps"));
-        let exe = dir.join("openomsi.exe");
+        let exe = dir.join("depot.exe");
         std::fs::write(&exe, b"").unwrap();
         assert_eq!(root_guesses(&exe)[0], dir);
         let quoted = PathBuf::from(format!("\"{}\" ", dir.display()));
@@ -229,14 +229,14 @@ mod tests {
 
     #[test]
     fn openomsi_unpacked_into_the_omsi_folder_keeps_its_content_apart() {
-        let dir = std::env::temp_dir().join("openomsi-in-omsi");
+        let dir = std::env::temp_dir().join("depot-in-omsi");
         let _ = std::fs::create_dir_all(dir.join("maps"));
         std::fs::write(dir.join("Omsi.exe"), b"").unwrap();
         // a marker an older openOMSI left there does not make it "not the game"
         std::fs::write(dir.join(crate::CONTENT_MARKER), b"").unwrap();
-        assert_eq!(crate::content_folder_of(&dir), dir.join("openOMSI"));
+        assert_eq!(crate::content_folder_of(&dir), dir.join("depot"));
         assert!(!crate::missing_original_essentials(&dir).iter().any(|m| m.contains("content folder")));
-        let other = std::env::temp_dir().join("openomsi-plain");
+        let other = std::env::temp_dir().join("depot-plain");
         let _ = std::fs::create_dir_all(&other);
         assert_eq!(crate::content_folder_of(&other), other);
         let _ = std::fs::remove_dir_all(&dir);

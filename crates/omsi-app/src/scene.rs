@@ -2073,7 +2073,7 @@ mod surf_map_tests {
 
     #[test]
     fn surf_map_beside_a_texture_in_a_mounted_archive() {
-        let dir = std::env::temp_dir().join(format!("openomsi-surf-zip-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-surf-zip-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let zip_path = dir.join("roads.zip");
         let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
@@ -13549,7 +13549,7 @@ mod tests {
 
     #[test]
     fn vehicle_freetex_retries_paths_below_texture_component() {
-        let root = std::env::temp_dir().join("openomsi-freetex-path-test");
+        let root = std::env::temp_dir().join("depot-freetex-path-test");
         let vehicle_texture = root.join("Vehicles/TestBus/Texture");
         let wanted = vehicle_texture.join("mb_pmon/alerta_FalhaCambio.bmp");
         std::fs::create_dir_all(wanted.parent().unwrap()).unwrap();
@@ -14229,7 +14229,7 @@ mod tests {
     /// glow in its dome (#1159).
     #[test]
     fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
-        let dir = std::env::temp_dir().join("openomsi-light-enh-test");
+        let dir = std::env::temp_dir().join("depot-light-enh-test");
         std::fs::create_dir_all(dir.join("MAN_NL_NG/model")).unwrap();
         std::fs::create_dir_all(dir.join("MAN_NL_NG/Texture")).unwrap();
         std::fs::write(dir.join("MAN_NL_NG/Texture/D92_Haltewunsch.bmp"), b"BM").unwrap();
@@ -14261,7 +14261,7 @@ mod tests {
     /// does it in the object's own frame, wherever the map puts the object (#961).
     #[test]
     fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
-        let dir = std::env::temp_dir().join(format!("openomsi-deck-warp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-deck-warp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("global.cfg"), "[name]\nDeck\n").unwrap();
         std::fs::write(dir.join("deck.sco"), "[surface]\n[mesh]\ndeck.x\n[crossing_heightdeformation]\ndeck_def.x\n").unwrap();
@@ -14318,7 +14318,7 @@ mod tests {
 
     #[test]
     fn a_retexture_using_the_originals_model_shows_its_own_textures() {
-        let dir = std::env::temp_dir().join(format!("openomsi-retexture-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-retexture-{}", std::process::id()));
         for d in ["orig/model", "orig/texture", "retex/model", "retex/texture"] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
         }

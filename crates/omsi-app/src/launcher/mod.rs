@@ -342,7 +342,7 @@ impl Launcher {
             let renderer = match crate::startup::window_renderer(&mut self.instance, &window, showroom_options(&settings)) {
                 Ok(r) => r,
                 Err(e) => {
-                    crate::startup::fatal_message(&format!("openOMSI cannot draw on this computer: {e:#}"));
+                    crate::startup::fatal_message(&format!("Project Depot cannot draw on this computer: {e:#}"));
                     std::process::exit(1);
                 }
             };
@@ -384,7 +384,7 @@ impl ApplicationHandler for Launcher {
             Some((iw, ih)) => (winit::dpi::LogicalSize::new(iw, ih), None),
             None => crate::startup::fit_window(event_loop, 1440.0, 880.0),
         };
-        let mut attrs = Window::default_attributes().with_title("openOMSI").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
+        let mut attrs = Window::default_attributes().with_title("Project Depot").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
         if !mobile::mobile() {
             // (no bigger than the window fitted to the screen: a small one at 150 % has less)
             attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(1080.0f64.min(fit.width), 680.0f64.min(fit.height)));
@@ -398,7 +398,7 @@ impl ApplicationHandler for Launcher {
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
-                crate::startup::fatal_message(&format!("openOMSI cannot open its window: {e}"));
+                crate::startup::fatal_message(&format!("Project Depot cannot open its window: {e}"));
                 event_loop.exit();
                 return;
             }
@@ -407,7 +407,7 @@ impl ApplicationHandler for Launcher {
         let renderer = match crate::startup::window_renderer(&mut self.instance, &window, showroom_options(&settings)) {
             Ok(r) => r,
             Err(e) => {
-                crate::startup::fatal_message(&format!("openOMSI cannot draw on this computer: {e:#}"));
+                crate::startup::fatal_message(&format!("Project Depot cannot draw on this computer: {e:#}"));
                 event_loop.exit();
                 return;
             }
@@ -416,7 +416,7 @@ impl ApplicationHandler for Launcher {
         let surface = match SurfaceState::new_with(&self.instance, window.clone(), &renderer, size.width, size.height, true) {
             Ok(s) => s,
             Err(e) => {
-                crate::startup::fatal_message(&format!("openOMSI cannot draw into its window: {e:#}"));
+                crate::startup::fatal_message(&format!("Project Depot cannot draw into its window: {e:#}"));
                 event_loop.exit();
                 return;
             }
@@ -1288,7 +1288,7 @@ impl Launcher {
         self.ui.solid(rail);
         self.ui.p().rect(rail, RAIL);
         self.ui.p().rect(Rect::new(RAIL_W - 1.0, 0.0, 1.0, size.y), EDGE);
-        self.ui.text("openOMSI", Vec2::new(24.0, 46.0), 20.0, Weight::Bold, TEXT, Align::Left);
+        self.ui.text("Project Depot", Vec2::new(24.0, 46.0), 20.0, Weight::Bold, TEXT, Align::Left);
         self.ui.text(crate::startup::VERSION, Vec2::new(24.0, 64.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         let mut y = 96.0;
         let running = self.state.instances.iter().filter(|i| i.running).count();

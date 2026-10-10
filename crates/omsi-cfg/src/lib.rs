@@ -875,7 +875,7 @@ pub fn missing_original_essentials(root: &Path) -> Vec<String> {
     // that said the game was not there)
     let marked = root.join(CONTENT_MARKER).exists() || root.join(LEGACY_CONTENT_MARKER).exists();
     if marked && resolve_existing(root, &["Omsi.exe"]).is_none() {
-        return vec![format!("{} (this is the openOMSI content folder, not the original game)", root.display())];
+        return vec![format!("{} (this is the Project Depot content folder, not the original game)", root.display())];
     }
     ORIGINAL_ESSENTIALS
         .iter()
@@ -898,7 +898,7 @@ pub const CONTENT_FOLDERS: &[&str] = &[
 
 /// Marker file of an openOMSI content folder (so it is never mistaken for the OMSI 2
 /// installation itself).
-pub const CONTENT_MARKER: &str = ".openomsi-content";
+pub const CONTENT_MARKER: &str = ".depot-content";
 /// The marker of a content folder made before the project was called openOMSI.
 pub const LEGACY_CONTENT_MARKER: &str = ".omsi-rewrite-content";
 
@@ -911,7 +911,7 @@ pub fn migrate_legacy_data_dir() {
     let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from) else {
         return;
     };
-    for (old, new) in [(".omsi-rewrite", ".openomsi"), (".omsi-rewrite-root", ".openomsi-root")] {
+    for (old, new) in [(".omsi-rewrite", ".depot"), (".omsi-rewrite-root", ".depot-root")] {
         let (old, new) = (home.join(old), home.join(new));
         if old.exists() && !new.exists() {
             let _ = std::fs::rename(&old, &new);
@@ -930,7 +930,7 @@ pub fn drop_unusable_home() {
     }
     let Some(h) = std::env::var_os("HOME") else { return };
     let p = std::path::PathBuf::from(&h);
-    let usable = p.is_absolute() && p.is_dir() && std::fs::create_dir_all(p.join(".openomsi")).is_ok();
+    let usable = p.is_absolute() && p.is_dir() && std::fs::create_dir_all(p.join(".depot")).is_ok();
     if !usable && std::env::var_os("USERPROFILE").is_some() {
         std::env::remove_var("HOME");
     }
@@ -941,7 +941,7 @@ pub fn drop_unusable_home() {
 /// `openOMSI` folder inside it.
 pub fn content_folder_of(dir: &Path) -> PathBuf {
     if resolve_existing(dir, &["Omsi.exe"]).is_some() && resolve_existing(dir, &["maps"]).is_some() {
-        dir.join("openOMSI")
+        dir.join("depot")
     } else {
         dir.to_path_buf()
     }
@@ -976,7 +976,7 @@ fn holds_content(dir: &Path) -> bool {
 
 /// Check if a directory is writable by attempting to create and remove a probe file.
 pub fn is_writable(dir: &Path) -> bool {
-    let probe = dir.join(".openomsi-write-test");
+    let probe = dir.join(".depot-write-test");
     let ok = std::fs::write(&probe, b"x").is_ok();
     let _ = std::fs::remove_file(&probe);
     ok
@@ -998,7 +998,7 @@ pub fn ensure_content_layout(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir.join("Mods"))?;
     let marker = dir.join(CONTENT_MARKER);
     if !marker.exists() {
-        std::fs::write(&marker, "This folder holds openOMSI's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n")?;
+        std::fs::write(&marker, "This folder holds Project Depot's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n")?;
     }
     let readme = dir.join("Mods").join("README.txt");
     if !readme.exists() {
@@ -1022,7 +1022,7 @@ mod tests {
     #[test]
     fn applications_folder_is_no_content_folder() {
         assert!(is_programs_folder(Path::new("/Users/x/Applications")));
-        assert!(!is_programs_folder(Path::new("/Users/x/Games/openOMSI")));
+        assert!(!is_programs_folder(Path::new("/Users/x/Games/Project Depot")));
         // content an older version installed there stays in use
         let dir = std::env::temp_dir().join(format!("omsi-apps-{}", std::process::id())).join("Applications");
         std::fs::create_dir_all(dir.join("Mods")).unwrap();

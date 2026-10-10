@@ -31,7 +31,7 @@ fn original_root() -> Option<PathBuf> {
         return Some(PathBuf::from(r));
     }
     let home = std::env::var("HOME").ok()?;
-    let s = std::fs::read_to_string(Path::new(&home).join(".openomsi-root")).ok()?;
+    let s = std::fs::read_to_string(Path::new(&home).join(".depot-root")).ok()?;
     Some(PathBuf::from(s.trim()))
 }
 

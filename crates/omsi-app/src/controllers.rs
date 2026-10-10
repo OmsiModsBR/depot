@@ -1012,7 +1012,7 @@ impl HeldButtons {
 
 /// Save only to the writable openOMSI overlay. The original OMSI installation is read-only.
 pub(crate) fn save_cfg(devices: &[DeviceCfg]) -> Result<(), String> {
-    let dir = crate::startup::content_dir().ok_or("No writable openOMSI content folder was found")?.join("Inputs");
+    let dir = crate::startup::content_dir().ok_or("No writable Project Depot content folder was found")?.join("Inputs");
     save_cfg_to(&dir.join("gamectrler.cfg"), devices)?;
     omsi_cfg::content_changed();
     Ok(())
@@ -3009,7 +3009,7 @@ mod hot_reload_tests {
 
     #[test]
     fn hot_reload_save_replaces_existing_file_and_rejects_invalid_input() {
-        let dir = std::env::temp_dir().join(format!("openomsi-controllers-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-controllers-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("gamectrler.cfg");
         let mut cfg = vec![wheel()];

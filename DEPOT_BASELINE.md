@@ -18,8 +18,9 @@ association is not required to preserve Git ancestry.
 ## Independence
 
 `origin` is the Depot repository. No upstream branch is tracked automatically.
-The application updater targets Depot releases. Historical binary names and
-internal identifiers remain unchanged during this baseline task.
+The application updater targets Depot releases. Executables and packages use
+the `depot` name; user-facing text uses Project Depot. Internal identifiers and
+source filenames remain unchanged.
 Inherited GitHub workflows and Dependabot configuration are archived in
 `docs/upstream-automation/`; enabling Depot automation requires a separate review.
 The original README is retained below the Depot introduction as historical documentation.

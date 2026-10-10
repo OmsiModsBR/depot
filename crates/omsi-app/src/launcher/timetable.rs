@@ -41,7 +41,7 @@ pub struct TimetableView {
 
 /// Marks a `TTData` folder the launcher copied into the content folder (see `save_target`):
 /// the reset deletes such a copy, and only such a one.
-const COPY_MARK: &str = ".openomsi-ttdata-copy";
+const COPY_MARK: &str = ".depot-ttdata-copy";
 
 /// "h:mm" (or "h:mm:ss") from minutes after midnight.
 pub fn fmt_time(min: f32) -> String {
@@ -90,7 +90,7 @@ fn save_target(line: &Line, map_folder: &str, original_ttdata: &Path) -> Result<
                 std::fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
             }
         }
-        std::fs::write(dir.join(COPY_MARK), b"TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\n").map_err(|e| e.to_string())?;
+        std::fs::write(dir.join(COPY_MARK), b"TTData copied by the Project Depot launcher's timetable editor; its reset deletes this folder\n").map_err(|e| e.to_string())?;
     }
     Ok(dir.join(file))
 }

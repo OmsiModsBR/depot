@@ -180,7 +180,7 @@ pub fn run() -> Result<()> {
         default_hook(info);
     }));
     log::info!(
-        "openOMSI {VERSION}, build {BUILD}{}",
+        "Project Depot {VERSION}, build {BUILD}{}",
         if std::env::var_os("MallocLargeCache").is_some() {
             " (large allocations returned at once)"
         } else {
@@ -285,7 +285,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
                 if server_cfg.is_some() {
                     eprintln!("{text}");
                 } else {
-                    fatal_dialog("openOMSI cannot start", &text);
+                    fatal_dialog("Project Depot cannot start", &text);
                 }
                 if cfg!(target_os = "android") {
                     // (a phone's app is not ended from inside: back to the launcher)

@@ -259,7 +259,7 @@ impl Line {
     /// tour with its trips (a `Dep.: h:m:s` note above each, as the game's editor puts it).
     pub fn to_text(&self) -> String {
         let mut o = String::new();
-        o.push_str("-----------------------\r\nTime Table Line File\r\n-----------------------\r\n\r\nCreated with openOMSI\r\n\r\n");
+        o.push_str("-----------------------\r\nTime Table Line File\r\n-----------------------\r\n\r\nCreated with Project Depot\r\n\r\n");
         if self.user_allowed {
             o.push_str("[userallowed]\r\n\r\n");
         }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build openOMSI for Android (arm64) as dist/android/openOMSI-<version>.apk: the game and
+# Build Project Depot for Android (arm64) as dist/android/depot-<version>.apk: the game and
 # its launcher in one app (NativeActivity + libopenomsi_game.so, see
 # crates/omsi-app/src/android.rs). Needs Rust with the aarch64-linux-android target
 # (rustup target add aarch64-linux-android), the Android SDK (platform 34+, build-tools,
@@ -18,12 +18,12 @@ version="${OPENOMSI_VERSION:-$(sh scripts/version.sh 2>/dev/null || echo 0.0.0)}
 export OPENOMSI_VERSION="$version"
 # the version code: the commit count (each release one higher)
 code=$(git rev-list --count HEAD 2>/dev/null || echo 1)
-# a pull request's test build (OPENOMSI_PR=<number>) is an app of its own, "openOMSI PR #N":
+# a pull request's test build (OPENOMSI_PR=<number>) is an app of its own, "Project Depot PR #N":
 # it installs beside the release without replacing it or being refused for its signing key,
-# and shares the openOMSI folder (settings, content) with it
+# and shares the Project Depot folder (settings, content) with it
 package=org.openomsi.game
-label=openOMSI
-if [ -n "${OPENOMSI_PR:-}" ]; then package=org.openomsi.game.pr; label="openOMSI PR #$OPENOMSI_PR"; fi
+label="Project Depot"
+if [ -n "${OPENOMSI_PR:-}" ]; then package=org.openomsi.game.pr; label="Project Depot PR #$OPENOMSI_PR"; fi
 target=aarch64-linux-android
 build=android/build
 rm -rf "$build"
@@ -32,7 +32,7 @@ mkdir -p "$build/classes" "$build/apk/lib/arm64-v8a" dist/android
 # --- the native code
 cargo rustc --locked --profile android --target "$target" -p omsi-app --lib --crate-type cdylib
 so="target/$target/android/libopenomsi_game.so"
-cp "$so" "$build/apk/lib/arm64-v8a/"
+cp "$so" "$build/apk/lib/arm64-v8a/libdepot_game.so"
 # every symbol the library needs must be in the system's libraries (Android loads it with
 # BIND_NOW: one missing symbol and the app closes before its window opens)
 sysroot="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/aarch64-linux-android/$ANDROID_API"
@@ -42,7 +42,7 @@ for l in libc libm libdl liblog libandroid libOpenSLES libaaudio libvulkan; do
 done | sed 's/@.*//' | sort -u > "$build/provided.txt"
 missing=$(comm -23 "$build/needed.txt" "$build/provided.txt")
 if [ -n "$missing" ]; then
-    echo "libopenomsi_game.so needs symbols no system library of API $ANDROID_API has:" >&2
+    echo "libdepot_game.so needs symbols no system library of API $ANDROID_API has:" >&2
     echo "$missing" >&2
     exit 1
 fi
@@ -58,7 +58,7 @@ fi
     $(find "$build/classes" -name '*.class')
 
 # --- the package
-sed -e "s/@VERSION_CODE@/$code/" -e "s/@VERSION_NAME@/$version/" -e "s/android:label=\"openOMSI\"/android:label=\"$label\"/"     android/AndroidManifest.xml > "$build/AndroidManifest.xml"
+sed -e "s/@VERSION_CODE@/$code/" -e "s/@VERSION_NAME@/$version/" -e "s/android:label=\"Project Depot\"/android:label=\"$label\"/"     android/AndroidManifest.xml > "$build/AndroidManifest.xml"
 "$BUILD_TOOLS/aapt" package -f --rename-manifest-package "$package" -M "$build/AndroidManifest.xml" -S android/res -I "$ANDROID_JAR" -F "$build/unsigned.apk"
 ( cd "$build/apk" && "$BUILD_TOOLS/aapt" add ../unsigned.apk classes.dex lib/arm64-v8a/* >/dev/null )
 "$BUILD_TOOLS/zipalign" -f -p 4 "$build/unsigned.apk" "$build/aligned.apk"
@@ -71,13 +71,13 @@ fi
 if [ ! -f "$key" ]; then
     "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$key" -storepass android -keypass android \
         -alias openomsi -keyalg RSA -keysize 2048 -validity 10000 \
-        -dname "CN=openOMSI, O=openOMSI, C=DE" >/dev/null 2>&1
+        -dname "CN=Project Depot, O=Project Depot, C=DE" >/dev/null 2>&1
 fi
-apk="dist/android/openOMSI-$version.apk"
+apk="dist/android/depot-$version.apk"
 "$BUILD_TOOLS/apksigner" sign --ks "$key" --ks-pass pass:android --key-pass pass:android \
     --ks-key-alias openomsi --out "$apk" "$build/aligned.apk"
 rm -f "$apk.idsig"
-printf '\nopenOMSI %s for Android: %s (%s)\n' "$version" "$PWD/$apk" "$(du -h "$apk" | cut -f1)"
+printf '\nProject Depot %s for Android: %s (%s)\n' "$version" "$PWD/$apk" "$(du -h "$apk" | cut -f1)"
 if [ "${1:-}" = install ]; then
     "$ANDROID_HOME/platform-tools/adb" install -r "$apk"
 fi

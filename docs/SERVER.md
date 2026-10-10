@@ -3,11 +3,11 @@
 ## How it runs today
 
 ```
-openomsi --root /path/to/OMSI2 --server /opt/openomsi-server/server.cfg
+depot --root /path/to/OMSI2 --server /opt/depot-server/server.cfg
 ```
 
 (`scripts/build-server.sh` builds it on a Linux machine into `dist/server`, and `start.sh`
-there starts it; every release also has ready `openOMSI-<version>-server-linux-x64.zip` and
+there starts it; every release also has ready `depot-<version>-server-linux-x64.zip` and
 `-server-linux-arm64.zip`, and for Windows (10/11 and Windows Server 2016 or later)
 `-server-windows-x64.zip` and `-server-windows-arm64.zip`, started with
 `start.cmd C:\path\to\OMSI2`.) The server is the game binary hosting a session with no window, no sound and no
@@ -54,7 +54,7 @@ With `voice_channel` set, the players **talk** to each other through
 [GreenTeaSpeak](https://greenteaspeak.de) as SaltyChat lets FiveM players do: a player is
 heard from where they stand or sit, up to `voice_range` metres (20 by default), and through
 the bodywork - quieter - when one of the two is in a bus and the other is not. Each player
-runs GreenTeaSpeak 2 with the openOMSI plugin (`tools/greenteaspeak-plugin`, its README says
+runs GreenTeaSpeak 2 with the Project Depot plugin (`tools/greenteaspeak-plugin`, its README says
 how to install it) and is connected to the voice server whose unique id is
 `voice_server_uid` (the id in GreenTeaSpeak's server info panel; it is needed: without it
 there is no voice chat, so that a server cannot move its players about on whatever voice
@@ -68,7 +68,7 @@ name tag. With `voice_radio` on (the default), a driver is put on a map-wide **b
 automatically: hold the bindable *Multiplayer: bus radio* key (Controls; X by default) to
 transmit to every other driver on the map while proximity voice still reaches people next
 to the bus; their name tag shows "radio". A player hosting by code names the voice server in
-`~/.openomsi/voice.cfg` with the same keys. Settings → General → *Voice chat through
+`~/.depot/voice.cfg` with the same keys. Settings → General → *Voice chat through
 GreenTeaSpeak* switches it off. `voice_channel_password` is sent to every player who joins
 (their game needs it to enter the channel): it keeps strangers on the voice server out of
 the channel, not the server's own players. The settings together must fit a chat command

@@ -2463,7 +2463,7 @@ pub(crate) fn run_offscreen(
             &[],
             &camera,
             duty.as_ref(),
-            "openOMSI save",
+            "Project Depot save",
         );
         match sit.save(out) {
             Ok(()) => log::info!(

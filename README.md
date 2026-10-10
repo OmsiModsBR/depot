@@ -2,62 +2,40 @@
 
 Independent repository: https://github.com/OmsiModsBR/depot
 
-Historical baseline: openOMSI `v0.2.16` (`2026-10-07`), commit
+Initial version: **0.2.16** (historical baseline; no Depot release published yet).
+
+Historical source baseline: `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
 
 Maintenance policy: **stable base + selective upstream integration**.
 See [baseline provenance and integration policy](DEPOT_BASELINE.md).
 
-The documentation below is preserved from the historical source. Its branding,
-community links and service references describe openOMSI, not Depot releases.
-
----
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logos/openomsi-wordmark-light.svg">
-    <img alt="openOMSI" src="assets/logos/openomsi-wordmark-dark.svg" width="420">
-  </picture>
-</p>
-
-<p align="center">
-  <a href="https://github.com/openOMSI-Project/openOMSI/releases/latest"><img alt="Version" src="https://img.shields.io/github/v/release/openOMSI-Project/openOMSI?label=version&color=f47f30&style=for-the-badge"></a>
-  <a href="https://openomsi-project.github.io/openOMSI/"><img alt="Playing now" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fopenomsi.savvabestbrother.workers.dev%2Fbadge&label=playing%20now&style=for-the-badge&logo=steam&logoColor=white"></a>
-  <a href="https://github.com/openOMSI-Project/openOMSI/actions/workflows/release.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/openOMSI-Project/openOMSI/release.yml?branch=main&style=for-the-badge&label=build"></a>
-  <a href="https://openomsi-project.github.io/openOMSI/"><img alt="Docs" src="https://img.shields.io/badge/docs-website-2d3138?style=for-the-badge"></a>
-  <a href="https://discord.gg/VG2EKVafYG"><img alt="Discord" src="https://img.shields.io/badge/discord-join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white"></a>
-  <a href="https://buymeacoffee.com/usonskyyy"><img alt="Buy me a coffee" src="https://img.shields.io/badge/buy%20me%20a%20coffee-support-ffdd00?style=for-the-badge&logo=buymeacoffee&logoColor=black"></a>
-  <a href="https://ko-fi.com/usonance"><img alt="Ko-fi" src="https://img.shields.io/badge/ko--fi-support-29abe0?style=for-the-badge&logo=kofi&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/openOMSI-Project/openOMSI?style=for-the-badge"></a>
-</p>
-
 > [!WARNING]
-> **Early release. Expect bugs.** openOMSI is in an early stage of development: things may be
+> **Early release. Expect bugs.** Project Depot is in an early stage of development: things may be
 > missing, broken or change between versions. Please report problems in
-> [Issues](https://github.com/openOMSI-Project/openOMSI/issues) or on our
-> [Discord server](https://discord.gg/VG2EKVafYG).
+> [Issues](https://github.com/OmsiModsBR/depot/issues).
 
-**openOMSI** is a from-scratch recreation of the bus simulator **OMSI 2**, written in Rust:
+**Project Depot** is a from-scratch recreation of the bus simulator **OMSI 2**, written in Rust:
 64-bit, multithreaded, with a modern renderer (Metal / Vulkan / DirectX 12 through wgpu),
 and fully compatible with the existing maps, buses, scenery and mods.
 
 > [!IMPORTANT]
-> **openOMSI needs an original copy of OMSI 2.** It contains no game content of its own: it
+> **Project Depot needs an original copy of OMSI 2.** It contains no game content of its own: it
 > plays on the maps, vehicles and other files of an installed OMSI 2 and **will not start without one**.
 
 
 ## Download
 
-Every commit to `main` is built by GitHub Actions and published on the
-[**Releases**](https://github.com/openOMSI-Project/openOMSI/releases) page:
+Approved builds will be published on the
+[**Releases**](https://github.com/OmsiModsBR/depot/releases) page:
 
 | Platform | File |
 | --- | --- |
-| Windows x64 / ARM64 | `openOMSI-<version>-windows-x64.zip` / `-windows-arm64.zip` - run `openomsi.exe` |
-| macOS (Apple silicon / Intel) | `openOMSI-<version>-macos-arm64.zip` / `-macos-x64.zip` - open `openOMSI.app` |
-| Linux x64 / ARM64 | `openOMSI-<version>-linux-x64.zip` / `-linux-arm64.zip` - run `openomsi` |
-| Android (arm64, 8.0+) | `openOMSI-<version>-android-arm64.apk` - see [docs/ANDROID.md](docs/ANDROID.md) |
-| Dedicated server | `openOMSI-<version>-server-linux-x64.zip` (also `-linux-arm64`, `-windows-x64`, `-windows-arm64`) - see [docs/SERVER.md](docs/SERVER.md) |
+| Windows x64 / ARM64 | `depot-<version>-windows-x64.zip` / `-windows-arm64.zip` - run `depot.exe` |
+| macOS (Apple silicon / Intel) | `depot-<version>-macos-arm64.zip` / `-macos-x64.zip` - open `depot.app` |
+| Linux x64 / ARM64 | `depot-<version>-linux-x64.zip` / `-linux-arm64.zip` - run `depot` |
+| Android (arm64, 8.0+) | `depot-<version>-android-arm64.apk` - see [docs/ANDROID.md](docs/ANDROID.md) |
+| Dedicated server | `depot-<version>-server-linux-x64.zip` (also `-linux-arm64`, `-windows-x64`, `-windows-arm64`) - see [docs/SERVER.md](docs/SERVER.md) |
 
 Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus and a duty,
 and drive. Mods go into the folder next to the game (or through the launcher's **Mods**
@@ -71,20 +49,20 @@ asking.
 ## Installation
 
 **You need an installed OMSI 2** (Steam or retail, any version) with its stock content -
-the maps Grundorf and Berlin-Spandau and the stock buses (MAN SD200/SD202, NL). openOMSI
+the maps Grundorf and Berlin-Spandau and the stock buses (MAN SD200/SD202, NL). Project Depot
 brings no game content of its own; it plays the original's maps, buses and mods.
 
 1. **Download** the file for your system from
-   [Releases](https://github.com/openOMSI-Project/openOMSI/releases) (table above) and unpack it
+   [Releases](https://github.com/OmsiModsBR/depot/releases) (table above) and unpack it
    into a folder of its own that you can write to - your Documents, a games folder, or the
    OMSI 2 folder itself. Not `Program Files`: the launcher could not update itself there.
 2. **Start it.**
-   * **Windows:** `openomsi.exe`. Windows SmartScreen may warn about an unknown app: *More
+   * **Windows:** `depot.exe`. Windows SmartScreen may warn about an unknown app: *More
      info* → *Run anyway*.
-   * **macOS:** open `openOMSI.app`. The first time, macOS may refuse an app from the
+   * **macOS:** open `depot.app`. The first time, macOS may refuse an app from the
      internet: right-click → *Open* → *Open*, or run
-     `xattr -dr com.apple.quarantine /path/to/openOMSI.app` once.
-   * **Linux:** `./openomsi` (run `chmod +x openomsi` if it does not start). It needs a
+     `xattr -dr com.apple.quarantine /path/to/depot.app` once.
+   * **Linux:** `./depot` (run `chmod +x depot` if it does not start). It needs a
      Vulkan or OpenGL driver (Mesa: `mesa-vulkan-drivers`, or your GPU vendor's driver).
    * **Android:** see [docs/ANDROID.md](docs/ANDROID.md) - the OMSI 2 folder is copied onto the
      phone first.
@@ -107,7 +85,7 @@ to.
   graphics driver (NVIDIA, AMD or Intel's own, not the one Windows installs). On Windows you
   can also switch to DirectX 12: Settings → Graphics → Graphics API (the launcher offers it after such a
   crash).
-* **An older graphics card** (no Vulkan): openOMSI falls back to DirectX 12 and then OpenGL by
+* **An older graphics card** (no Vulkan): Project Depot falls back to DirectX 12 and then OpenGL by
   itself; Settings → Graphics → Graphics API chooses one.
 * **Stuck at a bridge or an invisible wall** on a mod map: Esc → Options → *Collisions with
   objects* switches collisions with the map's objects off (Settings has it too).
@@ -117,7 +95,7 @@ to.
 * **Keys do not do what you set:** Controls - the page shows which driving keys are in use;
   a key you change there takes effect at once.
 * **Anything else:** when the game ends on an error, the launcher shows it with *Copy report*
-  and *Report on GitHub*. The logs are in `~/.openomsi` (Windows: `C:\Users\<you>\.openomsi`),
+  and *Report on GitHub*. The logs are in `~/.depot` (Windows: `C:\Users\<you>\.depot`),
   `game.log` for the last game.
 
 ## Goals
@@ -132,8 +110,7 @@ to.
 
 ## Documentation
 
-The full documentation is on the website: **https://openomsi-project.github.io/openOMSI/**. The same
-pages live in [`docs/`](docs):
+Documentation is available locally. The pages live in [`docs/`](docs):
 
 | Document | What is in it |
 | --- | --- |
@@ -154,11 +131,11 @@ pages live in [`docs/`](docs):
 ## Building from source
 
 ```sh
-git clone https://github.com/openOMSI-Project/openOMSI.git && cd openOMSI
-scripts/build-macos.sh        # macOS   → dist/macos/openOMSI.app
-scripts\build-windows.cmd     # Windows → dist\windows\openomsi.exe
-scripts/build-linux.sh        # Linux   → dist/linux/openomsi
-scripts/build-android.sh      # Android → dist/android/openOMSI-<version>.apk
+git clone https://github.com/OmsiModsBR/depot.git && cd depot
+scripts/build-macos.sh        # macOS   → dist/macos/depot.app
+scripts\build-windows.cmd     # Windows → dist\windows\depot.exe
+scripts/build-linux.sh        # Linux   → dist/linux/depot
+scripts/build-android.sh      # Android → dist/android/depot-<version>.apk
 scripts/build-server.sh       # server  → dist/server
 ```
 
@@ -168,11 +145,11 @@ Needs the latest [Rust stable](https://rustup.rs) and the platform's C toolchain
 ## Repository layout
 
 ```
-openOMSI/
+depot/
 ├── VERSION            MAJOR.MINOR of the next release (edited by hand)
 ├── crates/            the engine, one crate per subsystem of the original
-│   ├── omsi-app/        the game binary `openomsi` (window, launcher, HUD, server mode)
-│   ├── omsi-launcher-core/  launcher data side + `openomsi-launcher` terminal tool
+│   ├── omsi-app/        the game binary `depot` (window, launcher, HUD, server mode)
+│   ├── omsi-launcher-core/  launcher data side + `depot-launcher` terminal tool
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)
 │   ├── omsi-o3d/ omsi-model/ omsi-texture/ omsi-geometry/   meshes, models, textures, splines
@@ -185,24 +162,14 @@ openOMSI/
 ├── assets/            fonts, Material icons, app icons (assets/icons/app), logos (assets/logos)
 ├── docs/              documentation (also published as the website)
 ├── site/              the GitHub Pages website
-└── .github/workflows/ CI: release builds for every commit, the website
+└── docs/upstream-automation/ archived upstream CI recipes (inactive)
 ```
 
 ## Contributing
 
 Issues and pull requests are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Support
-
-openOMSI is made in free time. If you enjoy it and want to help it along, you can buy me a
-coffee or support it on Ko-fi - thank you!
-
-<p>
-  <a href="https://buymeacoffee.com/usonskyyy"><img alt="Buy me a coffee" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48"></a>
-  <a href="https://ko-fi.com/usonance"><img alt="Support me on Ko-fi" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="48"></a>
-</p>
-
 ## License
 
-openOMSI is released under the [MIT License](LICENSE). OMSI and OMSI 2 are trademarks of their
-respective owners. openOMSI is an independent project and is not affiliated with them.
+Project Depot is released under the [MIT License](LICENSE). OMSI and OMSI 2 are trademarks of their
+respective owners. Project Depot is an independent project and is not affiliated with them.

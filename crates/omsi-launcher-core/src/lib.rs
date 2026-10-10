@@ -34,7 +34,7 @@ fn home() -> PathBuf {
 }
 
 pub fn data_dir() -> PathBuf {
-    let d = home().join(".openomsi");
+    let d = home().join(".depot");
     let _ = std::fs::create_dir_all(&d);
     d
 }
@@ -58,14 +58,14 @@ fn find_game(configured: &str) -> Option<PathBuf> {
     // old build after every update - the new pause menu "was not there" on macOS
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            cands.push(dir.join(if cfg!(windows) { "openomsi.exe" } else { "openomsi" }));
+            cands.push(dir.join(if cfg!(windows) { "depot.exe" } else { "depot" }));
         }
     }
     if !configured.trim().is_empty() {
         let c = PathBuf::from(configured.trim());
         // (only a game of today's name: the old `omsi` binary is not taken any more)
         let stem = c.file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-        if stem == "openomsi" {
+        if stem == "depot" {
             cands.push(c);
         }
     }
@@ -74,19 +74,19 @@ fn find_game(configured: &str) -> Option<PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         for a in exe.ancestors().skip(1).take(7) {
-            cands.push(a.join("openomsi"));
-            cands.push(a.join("openomsi.exe"));
-            cands.push(a.join("target").join("release").join("openomsi"));
-            cands.push(a.join("target").join("release").join("openomsi.exe"));
-            cands.push(a.join("Resources").join("openomsi"));
+            cands.push(a.join("depot"));
+            cands.push(a.join("depot.exe"));
+            cands.push(a.join("target").join("release").join("depot"));
+            cands.push(a.join("target").join("release").join("depot.exe"));
+            cands.push(a.join("Resources").join("depot"));
         }
     }
     if let Ok(cwd) = std::env::current_dir() {
         for a in cwd.ancestors().take(4) {
-            cands.push(a.join("target").join("release").join("openomsi"));
+            cands.push(a.join("target").join("release").join("depot"));
         }
     }
-    cands.push(data_dir().join("openomsi"));
+    cands.push(data_dir().join("depot"));
     cands.into_iter().find(|p| p.is_file())
 }
 
@@ -103,7 +103,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("OMSI_ROOT") {
         first.push(PathBuf::from(p));
     }
-    if let Ok(t) = std::fs::read_to_string(home().join(".openomsi-root")) {
+    if let Ok(t) = std::fs::read_to_string(home().join(".depot-root")) {
         first.push(PathBuf::from(t.trim()));
     }
     // searching the disk costs a moment: once per process is enough (until the settings
@@ -117,7 +117,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     let r = omsi_cfg::find_original_install(&first);
     if let Some(p) = &r {
         // the game finds it the same way next time
-        let _ = std::fs::write(home().join(".openomsi-root"), p.to_string_lossy().as_bytes());
+        let _ = std::fs::write(home().join(".depot-root"), p.to_string_lossy().as_bytes());
     }
     *g = Some((first, r.clone()));
     r
@@ -2224,7 +2224,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let n = |k: &str, d: i64| v.get(k).and_then(|x| x.as_i64().or_else(|| x.as_f64().or_else(|| x.as_str().and_then(|s| s.trim().parse::<f64>().ok())).map(|f| f as i64))).unwrap_or(d);
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=2\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# Project Depot settings (written by the launcher)\nversion=2\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -2924,7 +2924,7 @@ mod tests {
 
     #[test]
     fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
-        let root = std::env::temp_dir().join(format!("openomsi-packs-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("depot-packs-{}", std::process::id()));
         let obj = root.join("Sceneryobjects/X");
         let cfgs = root.join("Vehicles/B/model/Configuration Files");
         std::fs::create_dir_all(&obj).unwrap();

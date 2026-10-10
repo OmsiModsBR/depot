@@ -27,7 +27,7 @@
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
 
     <application
-        android:label="openOMSI"
+        android:label="Project Depot"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:largeHeap="true"
@@ -39,7 +39,7 @@
 
         <activity
             android:name=".OmsiActivity"
-            android:label="openOMSI"
+            android:label="Project Depot"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
@@ -47,7 +47,7 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
-            <meta-data android:name="android.app.lib_name" android:value="openomsi_game" />
+            <meta-data android:name="android.app.lib_name" android:value="depot_game" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

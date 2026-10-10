@@ -532,7 +532,7 @@ fn handle(stream: TcpStream, session: u64, ready: &Mutex<Option<Arc<(Manifest, V
 /// The session folder of this game (`~/.openomsi/lan-mods/<pid>`).
 fn sandbox_base() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("lan-mods"))
+    Some(PathBuf::from(home).join(".depot").join("lan-mods"))
 }
 
 static SANDBOX: Mutex<Option<PathBuf>> = Mutex::new(None);

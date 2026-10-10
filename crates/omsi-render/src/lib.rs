@@ -2353,7 +2353,7 @@ fn basic_pipelines() -> bool {
 /// (`~/.openomsi/gpu-fallback.cfg`, lines `adapter|msaa|basic`).
 fn fallback_path() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(std::path::PathBuf::from(home).join(".openomsi").join("gpu-fallback.cfg"))
+    Some(std::path::PathBuf::from(home).join(".depot").join("gpu-fallback.cfg"))
 }
 
 fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool)> {

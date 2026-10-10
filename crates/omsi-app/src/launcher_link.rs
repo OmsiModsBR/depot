@@ -12,14 +12,14 @@ pub(crate) fn find_launcher() -> Option<PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            cands.push(dir.join("openomsi-launcher"));
-            cands.push(dir.join("openomsi-launcher.exe"));
-            cands.push(dir.join("openOMSI.app/Contents/MacOS/openomsi-launcher"));
+            cands.push(dir.join("depot-launcher"));
+            cands.push(dir.join("depot-launcher.exe"));
+            cands.push(dir.join("depot.app/Contents/MacOS/depot-launcher"));
         }
     }
     if let Some(memo) = root_memo() {
         if let Some(home) = memo.parent() {
-            cands.push(home.join(".openomsi/openomsi-launcher"));
+            cands.push(home.join(".depot/depot-launcher"));
         }
     }
     cands.into_iter().find(|p| p.is_file())

@@ -6,7 +6,7 @@ use super::*;
 pub(crate) const DEFAULT_SIZE: &str = "1600x900";
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "openomsi", version = crate::startup::VERSION, about = "openOMSI")]
+#[command(name = "depot", version = crate::startup::VERSION, about = "Project Depot")]
 pub(crate) struct Args {
     /// OMSI 2 installation root (the folder that contains `maps`, `Vehicles`, …).
     /// Found by itself when left out: $OMSI_ROOT, the folder remembered from last time,

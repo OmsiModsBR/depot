@@ -1,4 +1,4 @@
-# Builds openOMSI for Windows and Linux (x64, ARM64), macOS (Apple silicon, Intel) and Android
+# Builds Project Depot for Windows and Linux (x64, ARM64), macOS (Apple silicon, Intel) and Android
 # (plus the dedicated server for Linux and Windows) on every push to
 # main and publishes them as the release v<MAJOR.MINOR.COMMIT>; see docs/VERSIONING.md.
 # Pull requests run the same builds without publishing.
@@ -37,7 +37,7 @@ jobs:
         env:
           PR: ${{ github.event.pull_request.number }}
         run: echo "version=$(sh scripts/version.sh)${PR:+-pr$PR}" >> "$GITHUB_OUTPUT"
-      - run: echo "### openOMSI ${{ steps.v.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+      - run: echo "### Project Depot ${{ steps.v.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
   windows:
     needs: version
@@ -99,19 +99,19 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $name = "openOMSI-$env:OPENOMSI_VERSION-windows-${{ matrix.arch }}"
+          $name = "depot-$env:OPENOMSI_VERSION-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force out | Out-Null
           Copy-Item README.md, LICENSE dist/windows/
           Compress-Archive -Path dist/windows/* -DestinationPath "out/$name.zip"
           # the dedicated server for Windows (Server 2016 and later): the same program
           # started with --server, and start.cmd
           New-Item -ItemType Directory -Force dist/server | Out-Null
-          Copy-Item dist/windows/openomsi.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, LICENSE dist/server/
+          Copy-Item dist/windows/depot.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, LICENSE dist/server/
           # (Steam's library: the x64 program does not start without it beside it)
           if (Test-Path dist/windows/steam_api64.dll) { Copy-Item dist/windows/steam_api64.dll dist/server/ }
           Copy-Item docs/SERVER.md dist/server/README.md
-          New-Item -ItemType File -Force dist/server/.openomsi-content | Out-Null
-          Compress-Archive -Path dist/server/* -DestinationPath "out/openOMSI-$env:OPENOMSI_VERSION-server-windows-${{ matrix.arch }}.zip"
+          New-Item -ItemType File -Force dist/server/.depot-content | Out-Null
+          Compress-Archive -Path dist/server/* -DestinationPath "out/depot-$env:OPENOMSI_VERSION-server-windows-${{ matrix.arch }}.zip"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -149,7 +149,7 @@ jobs:
         run: |
           mkdir -p out
           cp README.md LICENSE dist/macos/
-          cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.zip"
+          cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/depot-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.zip"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -218,8 +218,8 @@ jobs:
           mkdir -p out
           cp README.md LICENSE dist/linux/
           cp LICENSE dist/server/
-          (cd dist/linux && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-linux-${{ matrix.arch }}.zip" .)
-          (cd dist/server && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-server-linux-${{ matrix.arch }}.zip" .)
+          (cd dist/linux && zip -qr "../../out/depot-$OPENOMSI_VERSION-linux-${{ matrix.arch }}.zip" .)
+          (cd dist/server && zip -qr "../../out/depot-$OPENOMSI_VERSION-server-linux-${{ matrix.arch }}.zip" .)
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -260,10 +260,10 @@ jobs:
       - name: Package
         run: |
           mkdir -p out
-          cp "dist/android/openOMSI-$OPENOMSI_VERSION.apk" "out/openOMSI-$OPENOMSI_VERSION-android-arm64.apk"
-          # (and under a name of its own: releases/latest/download/openOMSI-android.apk is
+          cp "dist/android/depot-$OPENOMSI_VERSION.apk" "out/depot-$OPENOMSI_VERSION-android-arm64.apk"
+          # (and under a name of its own: releases/latest/download/depot-android.apk is
           # always the newest APK - for a phone whose installed build cannot update itself)
-          cp "dist/android/openOMSI-$OPENOMSI_VERSION.apk" "out/openOMSI-android.apk"
+          cp "dist/android/depot-$OPENOMSI_VERSION.apk" "out/depot-android.apk"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -305,9 +305,9 @@ jobs:
             echo "Small changes and fixes." > changes.md
           fi
           cat > notes.md <<NOTES
-          **openOMSI $VERSION**
+          **Project Depot $VERSION**
 
-          > **Early release, expect bugs.** openOMSI needs an original OMSI 2 installation to run; it contains no game content.
+          > **Early release, expect bugs.** Project Depot needs an original OMSI 2 installation to run; it contains no game content.
 
           NOTES
           cat changes.md >> notes.md
@@ -317,15 +317,15 @@ jobs:
 
           | Platform | Download |
           | --- | --- |
-          | Windows x64 | \`openOMSI-$VERSION-windows-x64.zip\` |
-          | Windows ARM64 | \`openOMSI-$VERSION-windows-arm64.zip\` |
-          | macOS (Apple silicon) | \`openOMSI-$VERSION-macos-arm64.zip\` |
-          | macOS (Intel) | \`openOMSI-$VERSION-macos-x64.zip\` |
-          | Linux x64 | \`openOMSI-$VERSION-linux-x64.zip\` |
-          | Linux ARM64 | \`openOMSI-$VERSION-linux-arm64.zip\` |
-          | Android (arm64, 8.0+) | \`openOMSI-$VERSION-android-arm64.apk\` |
-          | Dedicated server, Linux | \`openOMSI-$VERSION-server-linux-x64.zip\`, \`openOMSI-$VERSION-server-linux-arm64.zip\` |
-          | Dedicated server, Windows | \`openOMSI-$VERSION-server-windows-x64.zip\`, \`openOMSI-$VERSION-server-windows-arm64.zip\` |
+          | Windows x64 | \`depot-$VERSION-windows-x64.zip\` |
+          | Windows ARM64 | \`depot-$VERSION-windows-arm64.zip\` |
+          | macOS (Apple silicon) | \`depot-$VERSION-macos-arm64.zip\` |
+          | macOS (Intel) | \`depot-$VERSION-macos-x64.zip\` |
+          | Linux x64 | \`depot-$VERSION-linux-x64.zip\` |
+          | Linux ARM64 | \`depot-$VERSION-linux-arm64.zip\` |
+          | Android (arm64, 8.0+) | \`depot-$VERSION-android-arm64.apk\` |
+          | Dedicated server, Linux | \`depot-$VERSION-server-linux-x64.zip\`, \`depot-$VERSION-server-linux-arm64.zip\` |
+          | Dedicated server, Windows | \`depot-$VERSION-server-windows-x64.zip\`, \`depot-$VERSION-server-windows-arm64.zip\` |
           NOTES
           git tag -f "v$VERSION" "$GITHUB_SHA"
           git push -f origin "v$VERSION"
@@ -333,10 +333,10 @@ jobs:
             # the same version built again (main was rewritten and pushed once more): the
             # release stays, with this build's files and notes
             gh release upload "v$VERSION" out/*.zip out/*.apk --clobber
-            gh release edit "v$VERSION" --title "openOMSI $VERSION" --notes-file notes.md
+            gh release edit "v$VERSION" --title "Project Depot $VERSION" --notes-file notes.md
           else
             gh release create "v$VERSION" out/*.zip out/*.apk \
               --verify-tag \
-              --title "openOMSI $VERSION" \
+              --title "Project Depot $VERSION" \
               --notes-file notes.md
           fi

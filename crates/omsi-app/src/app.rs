@@ -435,7 +435,7 @@ impl App {
             .unwrap_or((1600, 900));
         let (fit, at) = crate::startup::fit_window(event_loop, lw as f64, lh as f64);
         let mut attrs = Window::default_attributes()
-            .with_title("openOMSI")
+            .with_title("Project Depot")
             .with_inner_size(fit)
             .with_window_icon(crate::startup::window_icon());
         if let Some(at) = at {
@@ -1103,7 +1103,7 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
     for (f, what) in &files {
         by_addon.entry(addon(f)).or_default().push(format!("{what}: {f}"));
     }
-    let mut text = format!("openOMSI: content this map uses that is not installed\nmap: {}\n\n", w.map_dir.display());
+    let mut text = format!("Project Depot: content this map uses that is not installed\nmap: {}\n\n", w.map_dir.display());
     for (a, list) in &by_addon {
         text.push_str(&format!("{a} ({} files)\n", list.len()));
         for l in list {

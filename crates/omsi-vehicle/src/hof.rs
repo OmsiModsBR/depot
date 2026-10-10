@@ -402,7 +402,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("openomsi-shared-hof-{stamp}"));
+        let root = std::env::temp_dir().join(format!("depot-shared-hof-{stamp}"));
         let bus = root.join("Vehicles/TestBus");
         let shared = root.join("HOFs");
         std::fs::create_dir_all(&bus).unwrap();

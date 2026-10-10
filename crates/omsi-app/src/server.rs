@@ -53,11 +53,11 @@ pub(crate) struct ServerCfg {
 }
 
 pub(crate) const DEFAULT_CFG: &str = "\
-# openOMSI dedicated server
+# Project Depot dedicated server
 # (key = value; lines starting with # are comments)
 
 # shown in the players' server list and when they join
-name = openOMSI server
+name = Project Depot server
 motd = Welcome! Drive safely.
 
 # the map (relative to the OMSI 2 folder), the start date (YYYY-MM-DD, empty: today),
@@ -112,7 +112,7 @@ vehicles =
 share_positions = 0
 
 # voice chat: the players hear each other where they stand, through GreenTeaSpeak and its
-# openOMSI plugin (as SaltyChat does for FiveM). voice_server_uid is the voice server's unique
+# Project Depot plugin (as SaltyChat does for FiveM). voice_server_uid is the voice server's unique
 # id (its info panel; needed: without it there is no voice chat), voice_channel the in-game
 # channel's id or name (empty: no voice chat), voice_range how far a player is heard (m).
 # voice_radio (1/0): drivers get a bindable map-wide bus radio on top of proximity voice.
@@ -147,7 +147,7 @@ impl ServerCfg {
         let dir = path.parent().unwrap_or(Path::new("."));
         let icon = std::fs::read(dir.join("server-icon.png")).ok().filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024).unwrap_or_default();
         Ok(ServerCfg {
-            name: get("name", "openOMSI server"),
+            name: get("name", "Project Depot server"),
             motd: get("motd", ""),
             map: get("map", "maps/Berlin-Spandau/global.cfg"),
             date: kv.get("date").cloned().filter(|v| !v.is_empty()),

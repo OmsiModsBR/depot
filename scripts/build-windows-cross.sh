@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build openOMSI for Windows x64 on macOS or Linux (cross-compiled with MinGW) into
+# Build Project Depot for Windows x64 on macOS or Linux (cross-compiled with MinGW) into
 # dist/windows. On Windows itself use scripts\build-windows.cmd.
 # Needs: brew install mingw-w64 (or apt install mingw-w64); rustup target add x86_64-pc-windows-gnu
 set -eu
@@ -17,5 +17,5 @@ export AR_x86_64_pc_windows_gnu=x86_64-w64-mingw32-ar
 export CARGO_PROFILE_RELEASE_DEBUG=0
 cargo build --locked --release --target x86_64-pc-windows-gnu -p omsi-app -p omsi-launcher-core
 mkdir -p dist/windows   # (the folder is also the content folder: mods stay)
-cp target/x86_64-pc-windows-gnu/release/openomsi.exe target/x86_64-pc-windows-gnu/release/openomsi-launcher.exe assets/steam_redist/steam_api64.dll dist/windows/
-printf '\nopenOMSI %s built in dist/windows\n' "$OPENOMSI_VERSION"
+cp target/x86_64-pc-windows-gnu/release/depot.exe target/x86_64-pc-windows-gnu/release/depot-launcher.exe assets/steam_redist/steam_api64.dll dist/windows/
+printf '\nProject Depot %s built in dist/windows\n' "$OPENOMSI_VERSION"

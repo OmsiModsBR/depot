@@ -62,8 +62,8 @@ impl Presence {
             state.push_str(" · Multiplayer");
         }
         let large_text = match bus {
-            Some((_, full)) => format!("openOMSI · {map} · {full}"),
-            None => format!("openOMSI · {map}"),
+            Some((_, full)) => format!("Project Depot · {map} · {full}"),
+            None => format!("Project Depot · {map}"),
         };
         Some(Self {
             details,
@@ -76,7 +76,7 @@ impl Presence {
         (enabled && !launching && !game_running).then(|| Self {
             details: "In launcher".into(),
             state: "Preparing a drive".into(),
-            large_text: "openOMSI".into(),
+            large_text: "Project Depot".into(),
         })
     }
 }
@@ -654,7 +654,7 @@ mod tests {
             Some(Presence {
                 details: "Map · Line 5".into(),
                 state: "Bus · Tour 2 · Multiplayer".into(),
-                large_text: "openOMSI · Map · Full bus name".into(),
+                large_text: "Project Depot · Map · Full bus name".into(),
             })
         );
         assert_eq!(
@@ -817,7 +817,7 @@ mod tests {
         let wanted = Arc::new(Mutex::new(Some(Presence {
             details: "Map".into(),
             state: "On foot".into(),
-            large_text: "openOMSI".into(),
+            large_text: "Project Depot".into(),
         })));
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
@@ -851,7 +851,7 @@ mod tests {
         let p = Presence {
             details: "🚌".repeat(130),
             state: "line".into(),
-            large_text: "openOMSI".into(),
+            large_text: "Project Depot".into(),
         };
         let a = activity(&p, 1234, true);
         assert_eq!(a["details"].as_str().unwrap().chars().count(), 120);

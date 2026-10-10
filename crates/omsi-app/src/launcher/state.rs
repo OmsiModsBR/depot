@@ -1279,12 +1279,12 @@ pub fn root_problem(root: &str) -> String {
         "The original OMSI 2 was not found automatically: choose its folder (the one with Omsi.exe, maps and Vehicles in it) under Setup and press Save.".to_string()
     } else if !p.exists() {
         format!("{root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.")
-    } else if missing.iter().any(|m| m.contains("content folder")) || p.join("openomsi.exe").exists() || p.join("openomsi").is_file() {
-        format!("{root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
+    } else if missing.iter().any(|m| m.contains("content folder")) || p.join("depot.exe").exists() || p.join("depot").is_file() {
+        format!("{root} is Project Depot's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
     } else if missing.is_empty() {
         String::new()
     } else {
-        format!("{root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
+        format!("{root} is not a complete OMSI 2 - it lacks {}. Project Depot plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
     }
 }
 
@@ -1360,7 +1360,7 @@ pub const CRASH_TAIL_GAP: &str = "…";
 mod disconnect_tests {
     #[test]
     fn the_servers_word_is_read_back_from_the_log_of_this_run() {
-        let dir = std::env::temp_dir().join(format!("openomsi-disc-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-disc-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("game.log");
         let left = crate::lan::LEFT_SERVER;
@@ -1423,7 +1423,7 @@ mod launch_tests {
 mod crash_tests {
     #[test]
     fn a_panic_is_found_and_a_clean_end_is_not() {
-        let dir = std::env::temp_dir().join("openomsi-crash-test");
+        let dir = std::env::temp_dir().join("depot-crash-test");
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join("game.log");
         std::fs::write(&p, "[t INFO x] loading\n[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
@@ -1444,7 +1444,7 @@ mod crash_tests {
     /// error alone, not the records after it (#1187).
     #[test]
     fn the_report_has_the_computer_and_a_clean_title() {
-        let dir = std::env::temp_dir().join(format!("openomsi-crash-machine-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("depot-crash-machine-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join("game.log");
         let mut log = String::from("[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");

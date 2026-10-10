@@ -11,9 +11,9 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// What a player types for the official server.
-pub const ALIAS: &str = "openomsi";
+pub const ALIAS: &str = "depot";
 /// Its name in the launcher's list.
-pub const NAME: &str = "openOMSI | Official Server";
+pub const NAME: &str = "Project Depot | Official Server";
 /// The relay topic its address is posted under.
 const TOPIC: &str = "openomsi-official-server-7f3a9c";
 const RELAY: &str = "https://ntfy.sh";
@@ -73,7 +73,7 @@ pub fn resolve() -> Result<String, String> {
     if PUBLIC_KEY == [0; 32] {
         return Err("this build does not know the official server".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("Project Depot").build();
     let body = agent
         .get(&format!("{RELAY}/{TOPIC}/json?poll=1&since=1h"))
         .call()
@@ -105,7 +105,7 @@ pub fn announce(url: &str, pkcs8: &[u8]) -> Result<(), String> {
     let pair = ring::signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(pkcs8).map_err(|e| format!("the official key: {e}"))?;
     let text = signed_text(url, now());
     let sig = pair.sign(text.as_bytes());
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("Project Depot").build();
     agent
         .post(&format!("{RELAY}/{TOPIC}"))
         .set("Cache", "yes")

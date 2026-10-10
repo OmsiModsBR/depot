@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build openOMSI for Linux x86_64 into dist/linux (the game, which is also the launcher
+# Build Project Depot for Linux x86_64 into dist/linux (the game, which is also the launcher
 # window, and the launcher's terminal tools). Needs Rust and, on Debian/Ubuntu:
 #   sudo apt install build-essential pkg-config libasound2-dev libudev-dev libgtk-3-dev \
 #     libxkbcommon-dev libwayland-dev libssl-dev
@@ -11,9 +11,9 @@ export OPENOMSI_VERSION="${OPENOMSI_VERSION:-$(sh scripts/version.sh 2>/dev/null
 cargo build --locked --release -p omsi-app -p omsi-launcher-core
 out=dist/linux
 mkdir -p "$out"   # (the folder is also the content folder: mods stay)
-cp target/release/openomsi target/release/openomsi-launcher "$out/"
-cp assets/icons/app/openomsi-256.png "$out/openomsi.png"
+cp target/release/depot target/release/depot-launcher "$out/"
+cp assets/icons/app/openomsi-256.png "$out/depot.png"
 # (Steam's library, x86-64 only: an ARM build has no Steam, see crates/omsi-app/build.rs)
 [ "$(uname -m)" = x86_64 ] && cp assets/steam_redist/libsteam_api.so "$out/"
-cp scripts/linux/openomsi.desktop "$out/"
-printf '\nopenOMSI %s built in %s\n' "$OPENOMSI_VERSION" "$out"
+cp scripts/linux/openomsi.desktop "$out/depot.desktop"
+printf '\nProject Depot %s built in %s\n' "$OPENOMSI_VERSION" "$out"

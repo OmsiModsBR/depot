@@ -1930,7 +1930,7 @@ impl Ui {
         self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, EDGE);
         // the game's name and version, as at the top of the launcher's rail
         let bx = 24.0 * s + cut;
-        let name_w = self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, WHITE, bx, 34.0 * s);
+        let name_w = self.put(r, scene, "Project Depot", (20.0 * s) as u32 | BOLD, WHITE, bx, 34.0 * s);
         self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, MUTED, bx, 54.0 * s);
         // what state the game is in, a small amber tag beside the name
         let tag = if f.paused { "PAUSED" } else { "MENU" };

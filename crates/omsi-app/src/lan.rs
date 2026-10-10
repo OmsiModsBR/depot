@@ -649,7 +649,7 @@ pub struct Frame<'a> {
 
 pub(crate) fn data_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi"))
+    Some(PathBuf::from(home).join(".depot"))
 }
 
 /// The status file of this game process.
@@ -3755,7 +3755,7 @@ mod tests {
     #[test]
     fn a_hosts_natural_weather_or_cycle_is_taken_without_a_file() {
         use clap::Parser;
-        let args = crate::cli::Args::parse_from(["openomsi"]);
+        let args = crate::cli::Args::parse_from(["depot"]);
         for w in ["natural", "Natural", "cycle"] {
             assert_eq!(host_weather(&args, w), Ok(Some(w.to_string())), "{w}");
         }

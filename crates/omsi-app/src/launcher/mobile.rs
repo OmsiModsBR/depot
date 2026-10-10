@@ -122,7 +122,7 @@ impl Browser {
             }
             Err(e) => {
                 self.error = Some(if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    "This folder cannot be read. Allow openOMSI access to all files (Android settings → Apps → openOMSI → Permissions → Files).".to_string()
+                    "This folder cannot be read. Allow Project Depot access to all files (Android settings → Apps → Project Depot → Permissions → Files).".to_string()
                 } else {
                     format!("{e}")
                 });

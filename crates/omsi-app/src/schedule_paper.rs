@@ -69,8 +69,8 @@ fn cache_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("cannot locate the openOMSI user data folder"))?;
-    Ok(home.join(".openomsi").join("cache").join("schedules"))
+        .ok_or_else(|| anyhow!("cannot locate the Project Depot user data folder"))?;
+    Ok(home.join(".depot").join("cache").join("schedules"))
 }
 
 fn set_filename(vehicle: &mut VehicleInstance, value: &str) {
@@ -169,7 +169,7 @@ fn typewriter_font(lines: &[String]) -> Option<FontAtlas> {
     }
     Some(FontAtlas::new(
         Font {
-            name: "openOMSI timetable".into(),
+            name: "Project Depot timetable".into(),
             height: line_height as i32,
             gap: 0,
             chars,

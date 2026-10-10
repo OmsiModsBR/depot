@@ -109,7 +109,7 @@ pub(crate) fn save_stations(list: &[(String, String)]) -> std::io::Result<()> {
 
 fn config_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("radio.cfg"))
+    Some(PathBuf::from(home).join(".depot").join("radio.cfg"))
 }
 
 /// The stream addresses an OMSI radio plugin keeps in its text files under `plugins`
@@ -480,7 +480,7 @@ impl Radio {
     /// Shift+R: the next station of the list on every button.
     pub fn next_station(&mut self) -> String {
         if self.stations.is_empty() {
-            return "No radio stations (see ~/.openomsi/radio.cfg)".into();
+            return "No radio stations (see ~/.depot/radio.cfg)".into();
         }
         self.offset = (self.offset + 1) % self.stations.len();
         match &self.playing {

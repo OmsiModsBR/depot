@@ -157,7 +157,7 @@ impl Updater {
             let result = download_and_install(&r, &status);
             if let Err(e) = result {
                 log::warn!("update to {}: {e:#}", r.version);
-                *lock(&status) = Status::Failed(format!("openOMSI was not updated to {}: {e}", r.version));
+                *lock(&status) = Status::Failed(format!("Project Depot was not updated to {}: {e}", r.version));
             }
         });
     }
@@ -179,7 +179,7 @@ impl Updater {
                 }
                 Err(e) => {
                     log::warn!("update {}: background download: {e:#}", r.version);
-                    *lock(&status) = Status::Failed(format!("openOMSI {} could not be downloaded: {e}", r.version));
+                    *lock(&status) = Status::Failed(format!("Project Depot {} could not be downloaded: {e}", r.version));
                 }
             }
         });
@@ -191,9 +191,9 @@ impl Updater {
         #[cfg(target_os = "android")]
         if let Status::WaitingForInstaller(r) = self.status() {
             match crate::android::install_status() {
-                Some((3, _)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: the installation was cancelled.", r.version))),
-                Some((4, msg)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: {}", r.version, if msg.is_empty() { "the system's installer refused the package." } else { msg.as_str() }))),
-                Some((6, _)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: installing apps was not allowed for openOMSI (Settings → Apps → openOMSI → Install unknown apps).", r.version))),
+                Some((3, _)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: the installation was cancelled.", r.version))),
+                Some((4, msg)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: {}", r.version, if msg.is_empty() { "the system's installer refused the package." } else { msg.as_str() }))),
+                Some((6, _)) => self.set(Status::Failed(format!("Project Depot was not updated to {}: installing apps was not allowed for Project Depot (Settings → Apps → Project Depot → Install unknown apps).", r.version))),
                 // (2, success: the system ends this process and starts the new app)
                 _ => {}
             }
@@ -257,7 +257,7 @@ pub fn asset_name(version: &str) -> Option<String> {
     } else {
         return None;
     };
-    Some(format!("openOMSI-{version}-{suffix}"))
+    Some(format!("depot-{version}-{suffix}"))
 }
 
 // --- the release ----------------------------------------------------------------------------
@@ -269,7 +269,7 @@ fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(20))
         .timeout_read(std::time::Duration::from_secs(30))
-        .user_agent(&format!("openOMSI/{} (updater)", current_version()))
+        .user_agent(&format!("depot/{} (updater)", current_version()))
         .build()
 }
 
@@ -533,7 +533,7 @@ fn download_and_install(r: &Release, status: &Mutex<Status>) -> anyhow::Result<(
         let place = install_place()?;
         if !writable(&place.dir) {
             let admin = if cfg!(windows) { " (or start it once as administrator)" } else { "" };
-            anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours{admin} and update again", short_path(&place.dir));
+            anyhow::bail!("the folder {} cannot be written. Put Project Depot in a folder of yours{admin} and update again", short_path(&place.dir));
         }
     }
     let file = download_dir().join(&r.asset_name);
@@ -585,7 +585,7 @@ pub fn install_place() -> anyhow::Result<Place> {
     }
     // (macOS runs an app opened straight from Downloads from a read-only copy elsewhere)
     if exe.to_string_lossy().contains("/AppTranslocation/") {
-        anyhow::bail!("macOS runs openOMSI from a temporary read-only copy. Move openOMSI.app into your Applications folder (or any folder), start it from there and update again");
+        anyhow::bail!("macOS runs Project Depot from a temporary read-only copy. Move depot.app into your Applications folder (or any folder), start it from there and update again");
     }
     let bundle = exe.ancestors().find(|p| p.extension().map(|e| e.eq_ignore_ascii_case("app")).unwrap_or(false)).map(Path::to_path_buf);
     let dir = bundle.as_deref().unwrap_or(&exe).parent().ok_or_else(|| anyhow::anyhow!("no folder around {}", exe.display()))?.to_path_buf();
@@ -627,7 +627,7 @@ fn short_path(p: &Path) -> String {
 
 /// Whether files can be put into `dir` (the check before anything is downloaded).
 fn writable(dir: &Path) -> bool {
-    let probe = dir.join(".openomsi-write-test");
+    let probe = dir.join(".depot-write-test");
     let ok = std::fs::write(&probe, b"").is_ok();
     let _ = std::fs::remove_file(&probe);
     ok
@@ -641,8 +641,8 @@ pub fn is_dev_build(exe: &Path) -> bool {
     parts.windows(2).any(|w| w[0] == "target" && profile(w[1])) || parts.windows(3).any(|w| w[0] == "target" && profile(w[2]))
 }
 
-const STAGING: &str = ".openomsi-update";
-const MANIFEST: &str = ".openomsi-files";
+const STAGING: &str = ".depot-update";
+const MANIFEST: &str = ".depot-files";
 const OLD: &str = ".old-update";
 
 fn old_of(p: &Path) -> PathBuf {
@@ -740,10 +740,10 @@ pub fn install_archive(zip: &Path, place: &Place) -> anyhow::Result<()> {
     // a program must be among them: a wrong archive must not replace anything
     let has_program = items.iter().any(|n| {
         let l = n.to_ascii_lowercase();
-        l == "openomsi" || l == "openomsi.exe" || l.ends_with(".app")
+        l == "depot" || l == "depot.exe" || l.ends_with(".app")
     });
     if !has_program {
-        anyhow::bail!("the update archive holds no openOMSI program");
+        anyhow::bail!("the update archive holds no Project Depot program");
     }
     // what an earlier update put here and this one no longer brings
     let before: Vec<String> = std::fs::read_to_string(place.dir.join(MANIFEST)).map(|t| t.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty() && !l.contains(['/', '\\']) && l != ".." && l != ".").collect()).unwrap_or_default();
@@ -898,9 +898,9 @@ mod tests {
     fn the_platform_file_of_a_github_release() {
         let name = asset_name("0.1.9").unwrap();
         let v = serde_json::json!({
-            "tag_name": "v0.1.9", "html_url": "https://github.com/openOMSI-Project/openOMSI/releases/tag/v0.1.9", "body": "notes",
+            "tag_name": "v0.1.9", "html_url": "https://github.com/depot-Project/depot/releases/tag/v0.1.9", "body": "notes",
             "assets": [
-                {"name": "openOMSI-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
+                {"name": "depot-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
                 {"name": name, "browser_download_url": "https://x/mine", "size": 42, "digest": "sha256:ABCDEF"}
             ]
         });
@@ -964,7 +964,7 @@ mod tests {
             version: "9.9.9".into(),
             page: String::new(),
             notes: String::new(),
-            asset_name: format!("openOMSI-test-{}.zip", std::process::id()),
+            asset_name: format!("depot-test-{}.zip", std::process::id()),
             asset_url: format!("http://127.0.0.1:{port}/file.zip"),
             size: data.len() as u64,
             sha256: Some(sha),
@@ -983,19 +983,19 @@ mod tests {
 
     #[test]
     fn the_program_path_survives_the_swap() {
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi.old-update")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi.old-update (deleted)")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("C:\\Games\\openOMSI\\openomsi.exe.old-update")), PathBuf::from("C:\\Games\\openOMSI\\openomsi.exe"));
-        assert_eq!(program_path(Path::new("C:\\Games\\openOMSI\\openomsi.exe.2.old-update")), PathBuf::from("C:\\Games\\openOMSI\\openomsi.exe"));
+        assert_eq!(program_path(Path::new("/home/me/depot/depot")), PathBuf::from("/home/me/depot/depot"));
+        assert_eq!(program_path(Path::new("/home/me/depot/depot.old-update")), PathBuf::from("/home/me/depot/depot"));
+        assert_eq!(program_path(Path::new("/home/me/depot/depot.old-update (deleted)")), PathBuf::from("/home/me/depot/depot"));
+        assert_eq!(program_path(Path::new("C:\\Games\\depot\\depot.exe.old-update")), PathBuf::from("C:\\Games\\depot\\depot.exe"));
+        assert_eq!(program_path(Path::new("C:\\Games\\depot\\depot.exe.2.old-update")), PathBuf::from("C:\\Games\\depot\\depot.exe"));
     }
 
     #[test]
     fn development_builds_are_recognised() {
-        assert!(is_dev_build(Path::new("/src/openOMSI/target/release/openomsi")));
-        assert!(is_dev_build(Path::new("C:\\src\\target\\x86_64-pc-windows-msvc\\release\\openomsi.exe")));
-        assert!(!is_dev_build(Path::new("/Applications/openOMSI.app/Contents/MacOS/openomsi")));
-        assert!(!is_dev_build(Path::new("/home/me/Games/openOMSI/openomsi")));
+        assert!(is_dev_build(Path::new("/src/depot/target/release/depot")));
+        assert!(is_dev_build(Path::new("C:\\src\\target\\x86_64-pc-windows-msvc\\release\\depot.exe")));
+        assert!(!is_dev_build(Path::new("/Applications/depot.app/Contents/MacOS/depot")));
+        assert!(!is_dev_build(Path::new("/home/me/Games/depot/depot")));
     }
 
     /// The whole swap on a folder: the program files replaced, a file only the old version
@@ -1006,35 +1006,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("install");
         std::fs::create_dir_all(dir.join("Vehicles/MyMod")).unwrap();
-        std::fs::write(dir.join("openomsi"), "old game").unwrap();
-        std::fs::write(dir.join("openomsi-launcher"), "old cli").unwrap();
+        std::fs::write(dir.join("depot"), "old game").unwrap();
+        std::fs::write(dir.join("depot-launcher"), "old cli").unwrap();
         std::fs::write(dir.join("retired.dll"), "old").unwrap();
         std::fs::write(dir.join("Vehicles/MyMod/bus.bus"), "mod").unwrap();
-        std::fs::write(dir.join(MANIFEST), "openomsi\nopenomsi-launcher\nretired.dll\n").unwrap();
+        std::fs::write(dir.join(MANIFEST), "depot\ndepot-launcher\nretired.dll\n").unwrap();
         // the new release
         let zip_path = root.join("new.zip");
         {
             let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
             let o = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
-            for (n, body) in [("openomsi", "new game"), ("openomsi-launcher", "new cli"), ("README.md", "readme")] {
+            for (n, body) in [("depot", "new game"), ("depot-launcher", "new cli"), ("README.md", "readme")] {
                 z.start_file(n, o).unwrap();
                 z.write_all(body.as_bytes()).unwrap();
             }
             z.finish().unwrap();
         }
-        let place = Place { dir: dir.clone(), bundle: None, exe: dir.join("openomsi") };
+        let place = Place { dir: dir.clone(), bundle: None, exe: dir.join("depot") };
         install_archive(&zip_path, &place).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi")).unwrap(), "new game");
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi-launcher")).unwrap(), "new cli");
+        assert_eq!(std::fs::read_to_string(dir.join("depot")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(dir.join("depot-launcher")).unwrap(), "new cli");
         assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "readme");
         assert!(!dir.join("retired.dll").exists());
         assert_eq!(std::fs::read_to_string(dir.join("Vehicles/MyMod/bus.bus")).unwrap(), "mod");
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi.old-update")).unwrap(), "old game");
+        assert_eq!(std::fs::read_to_string(dir.join("depot.old-update")).unwrap(), "old game");
         assert!(!dir.join(STAGING).exists());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(dir.join("openomsi")).unwrap().permissions().mode() & 0o777, 0o755);
+            assert_eq!(std::fs::metadata(dir.join("depot")).unwrap().permissions().mode() & 0o777, 0o755);
         }
         // an archive without a program replaces nothing
         let bad = root.join("bad.zip");
@@ -1045,7 +1045,7 @@ mod tests {
             z.finish().unwrap();
         }
         assert!(install_archive(&bad, &place).is_err());
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(dir.join("depot")).unwrap(), "new game");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

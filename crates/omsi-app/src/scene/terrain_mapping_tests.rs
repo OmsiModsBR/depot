@@ -7,7 +7,7 @@ struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "openomsi-terrain-mapping-{}-{}",
+            "depot-terrain-mapping-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

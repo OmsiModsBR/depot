@@ -24,7 +24,7 @@ impl Driver {
     /// Write the personnel file the way OMSI does (UTF-16 LE with a BOM, CR LF).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut t = String::from("-----------------------\r\nDriver File\r\n-----------------------\r\n\r\n");
-        t.push_str("Created with openOMSI\r\n\r\n");
+        t.push_str("Created with Project Depot\r\n\r\n");
         t.push_str(&format!("[ident]\r\n{}\r\n{}\r\n{}\r\n{}\r\n\r\n", self.name, if self.sex.is_empty() { "M" } else { &self.sex }, self.birth_date, self.employ_date));
         // served, late, early: the order of Omsi.exe's TDriver record (cnt_busstop_all,
         // cnt_busstop_late, cnt_busstop_early), which tools such as Busbetrieb-Simulator read

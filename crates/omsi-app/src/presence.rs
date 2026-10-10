@@ -108,7 +108,7 @@ impl Presence {
                 let agent = ureq::AgentBuilder::new()
                     .timeout_connect(Duration::from_secs(10))
                     .timeout(Duration::from_secs(15))
-                    .user_agent(&format!("openOMSI/{}", crate::updater::current_version()))
+                    .user_agent(&format!("depot/{}", crate::updater::current_version()))
                     .build();
                 let id = session_id();
                 let hello = serde_json::json!({ "id": id, "v": crate::updater::current_version(), "os": system() });
