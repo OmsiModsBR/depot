@@ -302,3 +302,15 @@ h1 { line-height: 1.25; }
 .lang button:hover { background: var(--hover); }
 .lang button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
 .lang button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 480px) {
+  .appbar { gap: 2px; padding: 0 6px; }
+  .appbar > * { flex-shrink: 0; }
+  .icon-btn { width: 40px; height: 40px; }
+  .brand img { height: 20px; margin-left: 2px; }
+  .lang { margin-right: 2px; }
+  .lang button { padding: 7px 8px; font-size: 12px; }
+  .appbar a[href*="discord"] { display: none; } /* Discord stays in the menu and on the front page */
+}
+@media (max-width: 360px) {
+  .appbar a[href*="github.com"] { display: none; } /* Source code stays in the menu */
+}
