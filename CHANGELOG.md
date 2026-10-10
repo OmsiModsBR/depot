@@ -78,7 +78,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   on a flat floor at z = 0 and on the same wheel physics as the game (the bus and each rear section a rigid
   body on its own springs) with the springs held at full air (`Axle_Springfactor` 1, new
   `VehicleInstance::springs_full`: the scripts' kneeling and levelling left the bus knelt and leaning in the
-  picture), and steps it until every body is still (at most 10 s) before showing it
+  picture), and steps it until every body has been still for 0.5 s (at most 10 s) before showing it
   (`crates/omsi-app/src/launcher/showroom.rs`).
 - The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's

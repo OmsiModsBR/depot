@@ -304,13 +304,17 @@ impl Showroom {
                 // Settled before it is shown: placed at rest on loaded springs, the bus still
                 // takes on the load its rear sections hang on the joint, and they settle onto
                 // their wheels. Two seconds left them moving in the picture: the steps go on
-                // until every body is still (or ten seconds have passed).
+                // until every body has been still for half a second (or ten seconds have
+                // passed): a slow swing passes under the thresholds for a step or two as it
+                // turns, and a single still step stopped it short of where it comes to rest.
                 let still = |v: &omsi_sim::VehicleInstance| {
                     v.rigid.iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity.length() < 0.002 && rb.omega.length() < 0.0005)
                 };
-                for i in 0..300 {
+                let mut still_for = 0;
+                for _ in 0..300 {
                     vehicle.update(1.0 / 30.0);
-                    if i >= 30 && still(&vehicle) {
+                    still_for = if still(&vehicle) { still_for + 1 } else { 0 };
+                    if still_for >= 15 {
                         break;
                     }
                 }
