@@ -3,7 +3,6 @@
 
 use super::ground::WallFace;
 use super::params::{DROOP, SLIP_MARGIN, STANDING};
-use super::toggles::no_wheel_slip;
 use super::tyre::Contact;
 use glam::{DVec3, Quat, Vec3};
 
@@ -32,9 +31,6 @@ pub struct RigidWheel {
     /// at the turning centre on the `[rot_pnt_long]` line, atan((long - rot_pnt_long) x
     /// curvature), so an axle behind that line steers the other way.
     pub steer: f32,
-    /// The tyre's vertical stiffness and damping (N/m, N s/m).
-    pub tyre_k: f32,
-    pub tyre_c: f32,
     /// Spring rate (N/m), damper rate (N s/m) and the load the strut is built for (N).
     pub spring: f32,
     pub damper: f32,
@@ -86,16 +82,9 @@ impl RigidWheel {
         let r = self.radius.max(0.05);
         let ground = c.v_long / r;
         let mu_n = friction * c.grip;
-        // (`OMSI_NO_WHEEL_SLIP=1`: every wheel grips, as before the wheels had a turning of
-        // their own - for comparison)
-        let no_slip = no_wheel_slip();
-        if no_slip {
-            self.slipping = false;
-            self.locked = false;
-        }
         if !self.slipping {
             let wanted = if c.v_long.abs() > STANDING { c.drive - c.brake * c.v_long.signum() } else { f_long_wanted };
-            if wanted.abs() > mu_n * SLIP_MARGIN && mu_n > 0.0 && !no_slip {
+            if wanted.abs() > mu_n * SLIP_MARGIN && mu_n > 0.0 {
                 self.slipping = true;
                 self.locked = false;
                 self.spin = ground;

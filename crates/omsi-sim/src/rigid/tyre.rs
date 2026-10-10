@@ -4,13 +4,12 @@
 
 use super::body::RigidBody;
 use super::collide::Impact;
-use super::ground::{track_walls, tread_step, tyre_line, GroundProbe};
+use super::ground::{track_walls, tyre_line, GroundProbe};
 use super::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
     GRIPPED_ALONG, HOLD_REACH, HUB_REACH, KAPPA_ARM_MIN, MASS_PER_FRONT_AREA, PITCH_SPEED,
     REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
-use super::toggles::omsi_suspension;
 use super::wheel::{sign, TyreFrame};
 use glam::{Quat, Vec2, Vec3};
 
@@ -90,12 +89,12 @@ impl RigidBody {
         let body_fwd = rot.mul_vec3(Vec3::Y);
         let towed: f32 = self.coupled.iter().map(|d| d.mass).sum();
         let (position, cog) = (self.position, self.cog);
-        // What each tyre finds under and around it: the hub height it needs, how steeply
-        // that rises as the wheel rolls on, and the faces it cannot climb. Steps up to
+        // What each tyre finds under and around it: how steeply the ground rises as the wheel
+        // rolls on, where the tyre touches it, and the faces it cannot climb. Steps up to
         // CLIMB radii over the ground it stood on are ground; the first step after
         // `place` (which knows no ground) takes anything up to the hub, and so does a
         // tyre that finds nothing lower, to lift a body set down a little too low.
-        let mut found: Vec<Option<(f64, f32, f32)>> = Vec::with_capacity(self.wheels.len());
+        let mut found: Vec<Option<(f32, f32)>> = Vec::with_capacity(self.wheels.len());
         for i in 0..self.wheels.len() {
             let w = &self.wheels[i];
             let TyreFrame { fwd_h, hub, .. } = TyreFrame::of(w, rot, position, cog);
@@ -111,10 +110,8 @@ impl RigidBody {
                 None if w.ground_seen => tyre_line(probe, hub, fwd_h, r, hub.z + HUB_REACH, wall_top, look.x).ground,
                 g => g,
             };
-            // across the tread: a kerb under part of it (see `tread_step`)
-            let ground = ground.map(|(need, slope, x)| (need + tread_step(probe, hub, fwd_h, r, z_top), slope, x));
             let walls = if self.wheel_walls { track_walls(probe, &w.walls, &line, hub, fwd_h, r, z_top, wall_top, look.y) } else { Vec::new() };
-            found.push(ground);
+            found.push(ground.map(|(_, slope, x)| (slope, x)));
             let w = &mut self.wheels[i];
             w.walls = walls;
             w.step_force = 0.0;
@@ -276,7 +273,7 @@ impl RigidBody {
         let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(KAPPA_ARM_MIN)).abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: OMSI 2 drops the holding state there)
-        let airborne = omsi_suspension() && self.wheels.iter().any(|w| !w.on_ground);
+        let airborne = self.wheels.iter().any(|w| !w.on_ground);
         if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne) {
             self.holding = false;
         }

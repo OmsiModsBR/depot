@@ -39,12 +39,10 @@ physics computes. Two jobs of the workflow guard it on pull requests:
   body, a train of articulated sections and the vehicle with its script variables (standing,
   on a grade, spinning on ice, locking the brakes, bends up to the full lock, humps, a kerb,
   a wall face, crashes, frame times from 1/144 s to 0.3 s, inputs that are no number, air
-  springs) and write the whole state of every frame. The script runs them on both commits,
-  once as they are and once with each A/B switch (`OMSI_TYRE_SUSPENSION`,
-  `OMSI_NO_WHEEL_SLIP`, `OMSI_KINEMATIC_TRAILERS`) on, and compares the traces bit for bit;
-  it also runs the change twice and fails if two runs of the same commit differ. Both sides
-  are built and run on the same machine, so the comparison does not depend on how a
-  platform rounds `sin` or `sqrt`. A change meant to alter the physics carries the
+  springs) and write the whole state of every frame. The script runs them on both commits
+  and compares the traces bit for bit; it also runs the change twice and fails if two runs of
+  the same commit differ. Both sides are built and run on the same machine, so the
+  comparison does not depend on how a platform rounds `sin` or `sqrt`. A change meant to alter the physics carries the
   `physics-delta` label (re-run the job after adding it): the job then lists the first
   difference of each trace without failing, for the review to check against the predicted
   change.

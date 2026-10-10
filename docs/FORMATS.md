@@ -903,9 +903,9 @@ two bodies at the ball (at a pusher's hinge, see above) and follows
 ```
 
 Without the keyword the joint is a turntable of 55° and ±15°. The air acts on the front
-section alone. The AI's vehicles, other players' over the LAN, trains on rails and every part
-with `OMSI_KINEMATIC_TRAILERS=1` (A/B) follow kinematically as before: hung on the coupling,
-pitched towards the ground under the axle, pulling and braking the front along its axis.
+section alone. The AI's vehicles, other players' over the LAN and trains on rails follow
+kinematically: hung on the coupling, pitched towards the ground under the axle, pulling and
+braking the front along its axis.
 
 The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToPrevVeh]`
 path points: the rear section's seats and exits are numbered after the front's, which is

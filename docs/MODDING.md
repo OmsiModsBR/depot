@@ -308,9 +308,8 @@ front section needs no driven axle), and `[coupling_front_character]` limits the
 that were never looked at before - a rear section's inertia copied from a solo bus, a
 `[coupling_front_character]` narrower than the model's joint - now show. Check them against
 the front section's: the GN92's rear section has 7.2 t and `150 40 150`, the front 8 t and
-`300 80 300`, and its joint `52.5 -20 20 1`. To compare with the old behaviour, start the game
-with `OMSI_KINEMATIC_TRAILERS=1`; `OMSI_DEBUG_TRAILER` logs the joint's gap and angles every
-step.
+`300 80 300`, and its joint `52.5 -20 20 1`. `OMSI_DEBUG_TRAILER` logs the joint's gap and
+angles every step.
 
 ## A map's package: surface, icons, regions, bus lines
 

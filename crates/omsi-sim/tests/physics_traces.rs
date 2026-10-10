@@ -11,10 +11,6 @@
 //! Numbers are written as `{:?}` writes them - the shortest decimal that reads back to
 //! the same bits, NaN with its bits -, so equal text is equal bits. The file uses only the
 //! crate's public API: the script copies it as it is into the commit it compares with.
-//!
-//! The A/B switches (`OMSI_TYRE_SUSPENSION`, `OMSI_NO_WHEEL_SLIP`,
-//! `OMSI_KINEMATIC_TRAILERS`) are read once a process: the script runs the whole set once
-//! with each of them on (T16).
 
 use glam::{DVec2, DVec3, Quat, Vec3};
 use omsi_model::Model;

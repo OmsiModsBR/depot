@@ -5,12 +5,10 @@
 //! (`crate::rigid::Joint`, `[coupling_front_character]`), as OMSI 2 runs each section: what
 //! the rear section weighs, brakes, drives and leans comes back to the front. The parts of the
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
-//! hung on their coupling and pitched towards the ground under their axle - and so do all of
-//! them with `OMSI_KINEMATIC_TRAILERS=1` (A/B).
+//! hung on their coupling and pitched towards the ground under their axle.
 
 use super::physics_bridge::PartWheelVars;
 use super::*;
-use crate::rigid::toggles::kinematic_trailers;
 use crate::rigid::{BodyInputs, Joint, RigidBody};
 
 /// A part's own body and the variables its wheels are written to.
@@ -60,7 +58,6 @@ impl VehicleInstance {
     /// parts the right way round behind a road vehicle, all of them or none.
     fn part_bodies_wanted(&self) -> bool {
         !self.trailers.is_empty()
-            && !kinematic_trailers()
             && !self.ty.def.is_rail()
             && self.trailers.iter().all(|t| !t.ty.def.is_rail() && !body_reversed(&t.ty.def, t.reversed) && !t.ty.def.axles.is_empty())
     }
