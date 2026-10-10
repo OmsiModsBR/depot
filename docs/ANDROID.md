@@ -89,7 +89,9 @@ scripts/build-android.sh install    # ... and adb install it on the attached pho
 17. The script builds the game library as a shared object (`cargo rustc --lib --crate-type
 cdylib --profile android`), compiles the one Java class (`android/java`, the activity: full
 screen, storage permission, vibration) with javac and d8, and packs, aligns and signs the APK
-with a debug key made on the first build (`android/debug.keystore`, not in git).
+with a debug key made on the first build (`android/debug.keystore`, not in git). Its password
+is never in the repository: set `ANDROID_KEYSTORE_PASSWORD`, or let the script make a random one
+on the first build (`android/debug.keystore.pass`, not in git).
 
 The touch controls can be looked at on the computer: `OMSI_TOUCH=1` shows them in the game
 window, and `OMSI_INPUT` drives them with `touch down|move|up x,y[,finger]` (logical pixels),
@@ -103,7 +105,7 @@ the size of one).
 Every push to main builds the APK in GitHub Actions (`android` job of
 `.github/workflows/release.yml`) and attaches it to the release as
 `depot-<version>-android-arm64.apk`. Set the repository secret `ANDROID_KEYSTORE_B64`
-(`base64 < android/debug.keystore`) so that every release is signed with the same key and
+(`base64 < android/debug.keystore`) and `ANDROID_KEYSTORE_PASSWORD` (the key's password) so that every release is signed with the same key and
 installs over the previous one.
 
 ## Updates
@@ -113,5 +115,8 @@ no longer asks for the "install unknown apps" permission. Download a newer APK f
 page and install it over the old one yourself (it must be signed with the same key as the
 installed app; release builds are). See [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md).
 
-`depot/env.txt` on the shared storage takes the `OMSI_*` switches a computer takes from its
-environment (one `NAME=value` a line).
+`depot/env.txt` on the shared storage takes a few `OMSI_*` switches a computer takes from its
+environment (one `NAME=value` a line): only the harmless rendering and diagnostic ones listed in
+`crates/omsi-app/src/env_file.rs` (for example `OMSI_NO_SHADOWS=1`, `OMSI_MAX_FPS=30`); paths,
+programs, URLs and input scripts are ignored, with a line in the log, because other apps can
+write to that folder.

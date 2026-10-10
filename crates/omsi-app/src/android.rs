@@ -74,17 +74,18 @@ fn android_main(app: AndroidApp) {
     std::env::set_var("OMSI_CONTENT", &content);
     let _ = std::fs::write(content.join("README.txt"), README);
     hide_from_gallery(&content);
-    // `depot/env.txt`: the OMSI_* switches a computer takes from its environment, one
-    // `NAME=value` a line (a phone has no environment to set; for looking into problems)
+    // `depot/env.txt`: a few harmless OMSI_* switches a computer takes from its environment,
+    // one `NAME=value` a line (a phone has no environment to set; for looking into problems).
+    // Only the allow-list of `env_file` is taken: the file is on shared storage that other apps
+    // can write.
     if let Ok(t) = std::fs::read_to_string(content.join("env.txt")) {
-        for line in t.lines() {
-            if let Some((k, v)) = line.trim().split_once('=') {
-                let k = k.trim();
-                if k.starts_with("OMSI_") && !k.contains(char::is_whitespace) {
-                    log::info!("env.txt: {k}");
-                    std::env::set_var(k, v.trim());
-                }
-            }
+        let mut skipped = Vec::new();
+        for (k, v) in crate::env_file::parse(&t, &mut skipped) {
+            log::info!("env.txt: {k}");
+            std::env::set_var(k, v);
+        }
+        if !skipped.is_empty() {
+            log::warn!("env.txt: not allowed, ignored: {}", skipped.join(", "));
         }
     }
     log::info!("home {:?}, content {}", std::env::var_os("HOME"), content.display());
