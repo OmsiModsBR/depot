@@ -16,7 +16,7 @@ pub struct VehiclePaths {
     pub links: Vec<(i32, i32, bool)>,
     /// Each link's `[stepsoundpack]` (index into `step_sound_packs`; -1 = no steps heard)
     /// and room height: the `[next_stepsound]` / `[next_roomheight]` in force where the
-    /// link is read. Omsi.exe (paths.cfg parser 0x724300) keeps both with the links, not
+    /// link is read. OMSI (reading paths.cfg) keeps both with the links, not
     /// the points, and starts the step sound at -1.
     pub link_step_sound: Vec<i32>,
     pub link_room_height: Vec<f32>,

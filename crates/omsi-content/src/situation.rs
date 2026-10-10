@@ -11,8 +11,8 @@ pub struct SituationVehicle {
     /// w; Direct3D frame, y up) and three more (0 for a standing vehicle). Nine slots.
     pub orientation: [f64; 9],
     pub tile: (i32, i32),
-    /// Total odometer kilometres, after the tile coordinates: Omsi.exe 0x64207E writes
-    /// the starting reading plus the distance driven, and 0x643DF3 restores it.
+    /// Total odometer kilometres, after the tile coordinates: OMSI writes
+    /// the starting reading plus the distance driven, and restores it.
     pub odometer_km: f64,
     pub paint: String,
     pub coupled_with: Option<i32>,

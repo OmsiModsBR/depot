@@ -9,12 +9,12 @@ pub struct PassPos {
     pub height: f32,
     pub rot: f32,
     /// The four `[interiorlight]`s (by index, -1 none) that light a person on this seat, as
-    /// Omsi.exe keeps them in the seat record (+0x24..+0x27, 0x5ce680): the first seat of
+    /// OMSI keeps them in the seat record: the first seat of
     /// the file, `[passpos]` or `[drivpos]`, has 0 1 2 3, every later one those of the seat
     /// before it, and an `[illumination_interior]` sets those of the seat written last.
     pub illumination: [i32; 4],
-    /// Where it stands in Omsi.exe's one list of `[passpos]` and `[drivpos]` (file order):
-    /// the seat number scripts ask `GetHumanCountOnSeat` about (0x7d39a4) - with the
+    /// Where it stands in OMSI's one list of `[passpos]` and `[drivpos]` (file order):
+    /// the seat number scripts ask `GetHumanCountOnSeat` about - with the
     /// driver's place first, as most cabins have it, the first `[passpos]` is seat 1.
     pub file_index: usize,
     /// openOMSI's (#721): a script variable that switches the `[passpos]` on and off - while
@@ -69,13 +69,13 @@ impl PassengerCabin {
     pub fn parse(f: &CfgFile) -> PassengerCabin {
         let mut c = PassengerCabin::default();
         let mut r = f.reader().disabled_blocks();
-        // the seat written last (driver's or not, and which): Omsi.exe keeps both kinds in
+        // the seat written last (driver's or not, and which): OMSI keeps both kinds in
         // one list, in the order of the file
         let mut last: Option<(bool, usize)> = None;
         while let Some(e) = r.next_entry(&["{noticketsale}", "{withbutton}"]) {
             let k = match e {
-                // a line of its own anywhere between the blocks, as Omsi.exe reads them
-                // (0x5ce952 - 0x5ce9bc): it marks the entry read last. Every stock cabin has
+                // a line of its own anywhere between the blocks, as OMSI reads them:
+                // it marks the entry read last. Every stock cabin has
                 // a blank line between the second entry's path point and its
                 // `{noticketsale}`, and read only straight after the path point, the flag
                 // was lost there - and so was a `{withbutton}` written the same way (#1156)
@@ -121,7 +121,7 @@ impl PassengerCabin {
                     let file_index = c.pass_positions.len() + c.driver_positions.len();
                     // (openOMSI's two variables of a `[passpos]`, #721: lines that follow at
                     // once - a blank line, the next block or a `{...}` flag ends them, so every
-                    // OMSI 2 file reads as before, and Omsi.exe passes over the lines)
+                    // OMSI 2 file reads as before, and OMSI passes over the lines)
                     let mut more = || {
                         let l = r.lines().get(r.pos())?.trim();
                         if k != "passpos" || l.is_empty() || l.starts_with('[') || l.starts_with('{') {

@@ -34,6 +34,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   where it comes from, and the A/B switches `OMSI_TYRE_SUSPENSION`, `OMSI_NO_WHEEL_SLIP` and
   `OMSI_KINEMATIC_TRAILERS` read once a process in `rigid/toggles.rs`. No behaviour change: the physics traces
   are identical bit for bit.
+- the smaller crates (geometry, map, vehicle, model, texture, content, cfg, scenery, script, launcher-core, o3d, audio example): comments cleaned of addresses, offsets and mentions of the reference
 - omsi-app: comments cleaned of addresses, offsets and mentions of the reference
 - omsi-sim: comments cleaned of addresses, offsets and mentions of the reference
   executable; they describe observable behaviour only. Comment text only, no code change.

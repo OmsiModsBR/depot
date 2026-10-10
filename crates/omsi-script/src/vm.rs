@@ -96,8 +96,8 @@ pub trait Host {
     /// `(M.V.name)`. Arguments are on the stacks; results are pushed by the callback.
     fn callback(&mut self, name: &str, id: NameId, stacks: &mut Stacks, state: &mut State);
     fn sound_trigger(&mut self, name: &str, id: NameId);
-    /// `(T.L.name)` with the variables as they stand at that point of the script: Omsi.exe
-    /// starts the sounds of a trigger right there (0x74f2e8 runs their update at once), so
+    /// `(T.L.name)` with the variables as they stand at that point of the script: OMSI
+    /// starts the sounds of a trigger right there (their update runs at once), so
     /// their volume curves read the values of that moment, not of the frame's end.
     fn sound_trigger_vars(&mut self, name: &str, id: NameId, _vars: &[f32]) {
         self.sound_trigger(name, id)
@@ -252,7 +252,7 @@ impl Vm {
                     self.run_block(p, b, state, host);
                 }
                 Op::Random => {
-                    // `Random(Abs(Round(x)))` in the exe: a whole number in [0, n). Scripts
+                    // `Random(Abs(Round(x)))` in OMSI: a whole number in [0, n). Scripts
                     // compare it (`3 random 1 =`), which a fraction never matches.
                     let r = self.rand01();
                     let s = &mut self.stacks;
@@ -333,7 +333,7 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
         Op::Div => {
             let a = s.pop();
             let b = s.pop();
-            // division by zero gives 0 (the exe compares the divisor with 0.0 and stores 0).
+            // division by zero gives 0 (OMSI compares the divisor with 0.0 and stores 0).
             // Clearing the whole stack instead killed the LiAZ 5292: its battery charges by
             // `Timegap V_generator /`, which is 0 with the engine off, and the zeroed stack
             // wrote a flat battery every frame, so the bus never had electrics.
@@ -419,7 +419,7 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
             s.push_str(v)
         }
         Op::StrRepeat => {
-            // Omsi.exe (op 0x21): the pattern repeated to fill `Round(n)` characters, cut
+            // OMSI (op 0x21): the pattern repeated to fill `Round(n)` characters, cut
             // there ("ab" 3 `$*` is "aba"); 1000 or more gives "ERROR"
             let n = s.pop();
             let pat = s.pop_str();
@@ -445,7 +445,7 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
             host.message(&v)
         }
         Op::StrRemoveSpaces => {
-            // Omsi.exe 0x7ef304: tabs, line breaks, spaces and quotes off both ends only -
+            // OMSI: tabs, line breaks, spaces and quotes off both ends only -
             // a Krueger++ bitmap "206 to jkkyz.bmp" lost its inner spaces and was not found
             let v = s
                 .pop_str()
@@ -532,7 +532,7 @@ fn b2f(b: bool) -> f32 {
 }
 
 /// Delphi's `Round` of a string function's count (ties to even, as the FPU rounds), none
-/// below 0: Omsi.exe rounds the counts of `$cutBegin`, `$cutEnd`, `$SetLength*` and `$*`.
+/// below 0: OMSI rounds the counts of `$cutBegin`, `$cutEnd`, `$SetLength*` and `$*`.
 fn omsi_round(v: f32) -> usize {
     let r = (v as f64).round_ties_even();
     if r.is_finite() && r > 0.0 { r.min(1e9) as usize } else { 0 }
@@ -600,7 +600,7 @@ fn set_length(s: &str, n: usize, align: Align) -> String {
     }
 }
 
-/// `$IntToStrEnh` as OMSI does it (op 0x1f at 0x5d59d5): the format's first character
+/// `$IntToStrEnh` as OMSI does it (op 0x1f): the format's first character
 /// pads, the rest is the width. A format of fewer than two characters gives "ERROR", width 0
 /// an empty text; the truncated number too long for the width is cut to width − 1
 /// characters and a `#`; the padding always goes in front, before a minus sign too

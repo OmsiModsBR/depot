@@ -45,7 +45,7 @@ pub struct PatchworkChain {
 }
 
 impl PatchworkChain {
-    /// Whether OMSI takes the chain (Omsi.exe sub_5ab908: as many weights and inverse flags
+    /// Whether OMSI takes the chain (as many weights and inverse flags
     /// as the chain has transitions, the flags only `0` and `1`; else it is left out).
     pub fn valid(&self) -> bool {
         let n = self.chain.len();
@@ -91,7 +91,7 @@ pub struct Spline {
     pub only_editor: bool,
     /// `[terrainholeprofile]`s with their `[terrainholeprofilepnt]`s (x across, height, and
     /// how far an end of the hole stands off the spline's end): the outline a spline laid
-    /// with `[spline_terrain_align]` cuts out of the ground. None given, Omsi.exe makes them
+    /// with `[spline_terrain_align]` cuts out of the ground. None given, OMSI makes them
     /// from the drawn profiles (see `omsi_geometry::terrain_hole_profiles`).
     pub terrain_hole_profiles: Vec<Vec<[f32; 3]>>,
     pub unknown_keywords: Vec<(String, usize)>,
@@ -113,7 +113,7 @@ impl Spline {
                     s.textures.push(SplineTexture { file: r.str().to_string(), ..Default::default() });
                 }
                 "scaletexbylength" => {
-                    // (a flag of the last texture, Omsi.exe 0x5ac01f)
+                    // (a flag of the last texture)
                     s.scale_tex_by_length = true;
                     if let Some(t) = s.textures.last_mut() {
                         t.scale_by_length = true;
@@ -165,7 +165,7 @@ impl Spline {
                 "third_rail" => s.third_rail.push(ThirdRail { values: r.f32s::<6>() }),
                 "halfcantwidth" => s.half_cant_width = Some(r.f32()),
                 "onlyeditor" => s.only_editor = true,
-                // (a point goes to the last profile begun, Omsi.exe 0x5ad923: none begun, it
+                // (a point goes to the last profile begun: none begun, it
                 // is dropped)
                 "terrainholeprofile" => s.terrain_hole_profiles.push(Vec::new()),
                 "terrainholeprofilepnt" => {

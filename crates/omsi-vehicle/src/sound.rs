@@ -148,8 +148,8 @@ impl SoundCfg {
                 }
                 "loopsound" => {
                     // file, sample rate, pitch variable, its reference value, volume: the
-                    // exe's loader stores the fifth line where `[sound]` keeps
-                    // its volume (+0x6c) - 0.05 to 1.4 in the stock files
+                    // OMSI's loader stores the fifth line where `[sound]` keeps
+                    // its volume - 0.05 to 1.4 in the stock files
                     let file = r.str().to_string();
                     let sample_rate = r.f32();
                     let pitch_variable = r.str().to_string();

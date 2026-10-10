@@ -32,8 +32,8 @@ pub struct AiTypGroup {
 }
 
 /// One vehicle of a depot's type group: an `[aigroup_depot_typgroup_2]` line is its fleet
-/// number, plate, repaint and first and last day (YYYYMMDD), tab-separated (Omsi.exe
-/// 0x780a58 splits it at each tab with 0x7ef900, empty fields kept); an
+/// number, plate, repaint and first and last day (YYYYMMDD), tab-separated (OMSI
+/// splits it at each tab, empty fields kept); an
 /// `[aigroup_depot_typgroup]` line is the number alone, which also names the repaint.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DepotEntry {
@@ -65,9 +65,9 @@ impl DepotEntry {
 pub struct AiLists {
     pub groups: Vec<AiGroup>,
     /// The default group (index into `groups`): the `[ailist]` header's second number, the
-    /// "NotInGroup" group it makes for -1, else the first group (Omsi.exe 0x78093c sets 0,
-    /// 0x780a58 reads the header). A map without `unsched_vehgroups.txt` takes its random
-    /// traffic from this group alone (0x785f98: the one group it makes then has no name,
+    /// "NotInGroup" group it makes for -1, else the first group (OMSI sets 0
+    /// when it reads the header). A map without `unsched_vehgroups.txt` takes its random
+    /// traffic from this group alone (the one group it makes then has no name,
     /// and a nameless group is the default group).
     pub default_group: usize,
 }
@@ -362,7 +362,7 @@ pub fn date_code(date: &str) -> Option<i32> {
 }
 
 /// Whether a depot vehicle is in service on `date` (YYYYMMDD): from its first day, if it has
-/// one, to its last, if it has one (0x781a15, 0x781a47).
+/// one, to its last, if it has one.
 pub fn typgroup_entry_valid(entry: &DepotEntry, date: i32) -> bool {
     entry.from.is_none_or(|f| f <= date) && entry.to.is_none_or(|t| t >= date)
 }
