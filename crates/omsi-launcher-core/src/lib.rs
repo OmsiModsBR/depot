@@ -3286,6 +3286,12 @@ mod tests {
         let saved = settings_from_text(Some(&settings_to_text(&v, None)));
         assert_eq!(saved["outside_fov"], json!(48.0));
         assert_eq!(saved["fov"], json!(72.0));
+        let mut changed = v.clone();
+        changed["outside_fov"] = json!(80.0);
+        let updated = settings_to_text(&changed, Some("outside_fov=48\nfov=72\nunknown_camera_key=keep\n"));
+        assert_eq!(settings_from_text(Some(&updated))["outside_fov"], json!(80.0));
+        assert_eq!(updated.matches("outside_fov=").count(), 1);
+        assert!(updated.contains("unknown_camera_key=keep"));
         for invalid in ["NaN", "inf", "-1", "15", "garbage"] {
             assert_eq!(settings_from_text(Some(&format!("outside_fov={invalid}\n")))["outside_fov"], json!(0.0));
         }

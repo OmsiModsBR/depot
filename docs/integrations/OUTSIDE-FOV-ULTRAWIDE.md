@@ -14,7 +14,8 @@ merged. Only the outside-camera feature was cherry-picked with provenance.
 The later desktop-defaults formatting commit was not needed.
 
 The camera hunk was adapted from the newer split `app_events/frame/view_camera.rs`
-to the baseline's existing `app_events.rs`. Existing desktop defaults were
+to the baseline's existing `app_events.rs`, using its direct `surface` field
+instead of the newer graphics wrapper `gfx.surface`. Existing desktop defaults were
 preserved and only `outside_fov: 0.0` added. No architecture refactor was imported.
 Launcher parsing rejects nonfinite values consistently with game settings.
 
@@ -25,8 +26,14 @@ on wider windows. Window aspect is read every frame; zoom remains applied after
 the selected FOV. The game options and launcher Camera tab expose this setting.
 
 Regression checks cover 16:9, 4:3, 21:9, 32:9, invalid aspects, settings
-round trips, invalid values and launcher persistence. Validation results will
-be recorded after execution. Visual/gameplay behavior on a physical ultrawide
+round trips, invalid values and launcher persistence, including preservation of
+unknown settings and replacement without duplicate keys. The affected-crate
+test suites passed: 661 tests, zero failures, eight ignored (616 game tests
+and 45 launcher-core tests). Tests used Rust 1.99.0, Windows x64, a separate
+target directory, one build job, and an unoptimized dev profile without debug
+symbols. `cargo check --locked --workspace --all-targets -j1` also passed
+in the same profile. This is not a new optimized distribution build.
+Visual/gameplay behavior on a physical ultrawide
 monitor is not certified by unit tests.
 
 This branch is not merged into main and is not part of released Depot 0.2.17.

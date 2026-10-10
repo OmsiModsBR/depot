@@ -1178,7 +1178,7 @@ impl ApplicationHandler for App {
                                 } else if fov_setting >= 20.0 {
                                     fov_setting.min(120.0)
                                 } else {
-                                    let aspect = self.gfx.surface.as_ref().map(|s| s.config.width as f32 / s.config.height.max(1) as f32).unwrap_or(16.0 / 9.0);
+                                    let aspect = self.surface.as_ref().map(|s| s.config.width as f32 / s.config.height.max(1) as f32).unwrap_or(16.0 / 9.0);
                                     crate::camera_util::auto_outside_fov(aspect)
                                 }
                             });
