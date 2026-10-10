@@ -21,8 +21,8 @@ pub struct Daylight {
     /// The daylight by the sun's altitude (1 day … 0 night, a ramp from +6 to -6 degrees):
     /// what the street lamps and the lit windows switch by.
     pub brightness: f32,
-    /// The mean of envir.cfg's light A at this altitude (0..1, as Omsi.exe keeps it at
-    /// weather +0xac): the day's part of the `Envir_Brightness` vehicle variable, see
+    /// The mean of envir.cfg's light A at this altitude (0..1, as OMSI keeps it):
+    /// the day's part of the `Envir_Brightness` vehicle variable, see
     /// [`Daylight::envir_brightness`].
     pub light_a: f32,
     /// Sun azimuth in radians, clockwise from north.
@@ -92,7 +92,7 @@ pub fn moon_position(clock: &SimClock, place: &SunPlace) -> (f64, f64, f64) {
 
 /// Where the map lies and how its clocks run, from its `timezone.txt` (OMSI
 /// the original: `[timezone]` hours east of UTC, `[location]` latitude and longitude,
-/// `[DST]` periods). Without the file the exe keeps Spandau: 52.505 N, 13.2782 E, UTC+1.
+/// `[DST]` periods). Without the file OMSI keeps Spandau: 52.505 N, 13.2782 E, UTC+1.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SunPlace {
     pub latitude: f64,
@@ -221,8 +221,8 @@ impl Daylight {
             ratio(b, stops(&stock.light_color_b, stock.twilight_start_end, alt)),
             ratio(c, stops(&stock.light_color_c, stock.twilight_start_end, alt)),
         ];
-        // the street lamps come on below a light value of 0.6, as Omsi.exe switches them
-        // (FUN_006ff1bc), the same value at which a scenery object's NightlightA does
+        // the street lamps come on below a light value of 0.6, as OMSI switches them,
+        // the same value at which a scenery object's NightlightA does
         let brightness = ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
         let light_a = ((a.x + a.y + a.z) / 3.0).clamp(0.0, 1.0);
         let here = place();
@@ -254,9 +254,9 @@ impl Daylight {
 }
 
 impl Daylight {
-    /// The `Envir_Brightness` vehicle variable as Omsi.exe sets it for every road vehicle
-    /// (0x7d8735): the mean of the light the tile's light map throws on the vehicle (its
-    /// colour at the vehicle's place while the lamps are on, 0x61378c) plus the mean of
+    /// The `Envir_Brightness` vehicle variable as OMSI sets it for every road vehicle:
+    /// the mean of the light the tile's light map throws on the vehicle (its
+    /// colour at the vehicle's place while the lamps are on) plus the mean of
     /// light A, at most 1. The stock buses scale their windows' alpha by it (`[alphascale]
     /// Envir_Brightness` on Fenster_braun.tga and the like): by the sun's ramp alone it was
     /// 0 at every night, and a bus under the street lamps had no glass at all (#624).

@@ -2,15 +2,15 @@
 //! OMSI runs them (TRauch / TRauchInst: the original emits, the original sets a particle
 //! off, the original moves it). An emitter keeps at most 100 particles. A particle leaves along
 //! the emitter's direction at its speed plus a random spread; every frame its velocity is
-//! multiplied by the brake factor raised to 20 times the frame's seconds (Omsi.exe keeps
-//! 20 ln(brake) per emitter, 0x5a145c, and takes e to that times dt, 0x5a238c: the factor
+//! multiplied by the brake factor raised to 20 times the frame's seconds (OMSI keeps
+//! 20 ln(brake) per emitter and takes e to that times dt: the factor
 //! is per twentieth of a second, whatever the frame rate) and gravity pulls it down (a
 //! negative factor makes it rise); it grows from its start size by `size_grow` a second, and
 //! its alpha goes linearly from the initial value at birth to the final one at the end of
-//! its life (0x5a183c). Its picture is turned by a random angle (0x5a1d54).
+//! its life. Its picture is turned by a random angle.
 //!
-//! Nothing stops one at the ground: Omsi.exe lets it fall on through the road until its
-//! life is over (0x5a238c moves it and tests nothing but its age). Each particle remembers
+//! Nothing stops one at the ground: OMSI lets it fall on through the road until its
+//! life is over (it is moved and nothing but its age is tested). Each particle remembers
 //! the height of the ground under the place it was set off from, though - the plane its
 //! owner stands on - so that the renderer can let it fade out into the road instead of
 //! being cut off by it in a straight line (see `omsi_render::SmokeParticle::ground`).
@@ -21,10 +21,10 @@ use std::sync::RwLock;
 
 /// Particles an emitter keeps at most (OMSI's 100).
 pub const MAX_PER_EMITTER: usize = 100;
-/// How many times a second a particle's brake factor slows it (Omsi.exe 0x5a145c keeps
+/// How many times a second a particle's brake factor slows it (OMSI keeps
 /// 20 ln(brake), of a brake no lower than 0.1).
 const BRAKE_RATE: f32 = 20.0;
-/// The lowest brake factor Omsi.exe takes (0x5a145c).
+/// The lowest brake factor OMSI takes.
 const BRAKE_MIN: f32 = 0.1;
 
 /// Where the camera is: emitters farther than their `calc_dist` send no new particles.
@@ -52,7 +52,7 @@ pub struct Particle {
     pub brake: f32,
     pub gravity: f32,
     /// The angle its picture is turned by about the line of sight (radians, 0..2 pi; drawn
-    /// so by Omsi.exe, 0x5a1d54 -> 0x5a2b5c).
+    /// so by OMSI).
     pub spin: f32,
     /// World z of the ground under where it was set off (the plane its owner stands on;
     /// minus infinity where it has none).
@@ -318,8 +318,8 @@ mod tests {
         ps[0].clone()
     }
 
-    /// Omsi.exe brakes a particle by its factor every twentieth of a second (0x5a145c keeps
-    /// 20 ln(brake), 0x5a238c takes e to that times dt), whatever the frame rate.
+    /// OMSI brakes a particle by its factor every twentieth of a second (it keeps
+    /// 20 ln(brake) and takes e to that times dt), whatever the frame rate.
     #[test]
     fn a_brake_factor_is_per_twentieth_of_a_second() {
         let mut def = smoke(0.0);
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(o.particles().next().unwrap().0.ground, 33.0);
     }
 
-    /// Every puff's picture is turned its own way (Omsi.exe 0x5a1d54: a random angle).
+    /// Every puff's picture is turned its own way (a random angle).
     #[test]
     fn every_puff_is_turned_its_own_way() {
         let mut s = ParticleSet::new(vec![smoke(60.0)], 9);

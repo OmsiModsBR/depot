@@ -30,6 +30,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Changed
 - the smaller crates (geometry, map, vehicle, model, texture, content, cfg, scenery, script, launcher-core, o3d, audio example): comments cleaned of addresses, offsets and mentions of the reference
+- omsi-sim: comments cleaned of addresses, offsets and mentions of the reference
   executable; they describe observable behaviour only. Comment text only, no code change.
 - Mixer, vehicle sound flags and player input/camera: comments cleaned of addresses and mentions of the reference
   executable; they describe observable behaviour only. Comment text only, no code change.
