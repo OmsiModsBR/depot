@@ -73,6 +73,8 @@ const BODY_OUTSIDE: f64 = 0.28;
 /// and the eight round the camera's).
 const STOP_RANGE: f64 = 450.0;
 /// Pedestrians stroll within this distance of the player (m).
+/// Seconds a vehicle standing on a crossing holds back the people about to cross it.
+const STANDING_VEHICLE_HOLD: f32 = 8.0;
 const STROLL_RADIUS: f64 = 200.0;
 /// How far in front of a seat's hip point somebody stands to sit down - where the feet
 /// stay while seated (m).
@@ -4585,10 +4587,14 @@ impl Humans {
                 if dist > 90.0 {
                     continue;
                 }
-                if dist < half + 1.5 {
+                let speed = v.length();
+                // a vehicle standing there (a bus at its stop with the doors open) holds
+                // people only for a moment: they walk round it, the bodies keep them out of
+                // it. Held for as long as it stood, the people who had got off a bus stopped
+                // at a crossing queued side by side at the kerb until it drove away.
+                if dist < half + 1.5 && (speed >= 0.5 || held < STANDING_VEHICLE_HOLD) {
                     return Err("a vehicle stands on the crossing");
                 }
-                let speed = v.length();
                 if speed < 0.5 {
                     continue;
                 }
@@ -6014,6 +6020,25 @@ mod tests {
         let turn = ped.next_leg(&net, n, 1, 7).unwrap();
         assert_eq!(turn.lane, 1);
         assert!(turn.a > turn.b);
+    }
+
+    #[test]
+    fn a_vehicle_standing_on_a_crossing_holds_people_only_for_a_moment() {
+        let mut net = Network::default();
+        net.lanes.push(lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 8.0, 0.0)], LaneKind::Sidewalk));
+        net.lanes.push(lane(vec![DVec3::new(-30.0, 4.0, 0.0), DVec3::new(30.0, 4.0, 0.0)], LaneKind::Street));
+        net.link(1.5);
+        let mut ped = PedNet::build(&net);
+        let h = Humans::new(Path::new("/nonexistent"));
+        let next = Leg { lane: 0, a: 0.0, b: 8.0 };
+        let stopped = [(DVec2::new(0.0, 4.0), DVec2::ZERO, 6.0)];
+        let mut held = |s: f32| h.may_cross(Some(&mut ped), &net, &next, None, &stopped, 1.4, s);
+        assert!(held(0.0).is_err());
+        assert!(held(2.0).is_err());
+        assert!(held(30.0).is_ok());
+        // one driving across is waited for however long they have stood
+        let moving = [(DVec2::new(-8.0, 4.0), DVec2::new(8.0, 0.0), 2.0)];
+        assert!(h.may_cross(Some(&mut ped), &net, &next, None, &moving, 1.4, 30.0).is_err());
     }
 
     #[test]
