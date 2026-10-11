@@ -1,6 +1,6 @@
 # Macro-refatoração do depot (rascunho)
 
-Rascunho de 10/10/2026, revisto em 11/10/2026 sobre o `main` em `0a38bf4`.
+Rascunho de 10/10/2026, fechado para as trilhas 0 e 1 em 11/10/2026.
 
 ## Resumo
 
@@ -346,10 +346,41 @@ Quebrar a refatoração por crate funciona bem para 19 dos 21 crates. Não basta
 
 Em vez de fases em sequência, quatro trilhas que podem andar juntas, cada uma com seu portão. Todas as branches são `feat/<nome>`.
 
-1. **Trilha 0: caracterização, que já pode começar.** B0 (traço de estado do offscreen no CI), teste de ida e volta do `settings.cfg` entre jogo e launcher, e o golden do offscreen rodado nas máquinas do mantenedor como referência. São só arquivos novos de teste e não conflitam com nada. Portão: B0 rodando no CI e verde nos PRs de paridade e triagem.
-2. **Trilha 1: crates frios, em paralelo à trilha 0.** Por crate: `cargo fmt -p`, clippy limpo e `-D warnings` (A3, A4) nos crates de formato, `omsi-audio`, `omsi-ui` e `omsi-geometry`. Depois C1 (`omsi-render/src/lib.rs` em módulos), o maior ganho de legibilidade num crate com 10 commits em todo o histórico, e a extração de `omsi-html` de `omsi-sim/src/htmlengine`. Portão: crates de formato com `-D warnings`, nenhum arquivo de `omsi-render` acima de 3.000 linhas e golden igual nos modos `vanilla` e `enhanced`.
+1. **Trilha 0: caracterização, que já pode começar.** Adaptador gráfico por software (lavapipe) no CI, B0 (traço de estado do offscreen) e teste de ida e volta do `settings.cfg` entre jogo e launcher. São arquivos novos de teste e de CI e não conflitam com nada. Portão: golden e B0 rodando no CI em todo PR e verdes nos PRs de paridade e triagem.
+2. **Trilha 1: crates frios, em paralelo à trilha 0.** `cargo fmt -p` por crate, com `fmt --check` bloqueante nos crates já formatados; limpeza do clippy nos crates de formato, `omsi-audio`, `omsi-ui` e `omsi-geometry`, com o clippy ainda informativo no CI; C1 (`omsi-render/src/lib.rs` em módulos), o maior ganho de legibilidade num crate com 10 commits em todo o histórico; e a extração de `omsi-html` de `omsi-sim/src/htmlengine`. Portão: crates de formato formatados e sem avisos do clippy, nenhum arquivo de `omsi-render` acima de 3.000 linhas, golden igual no lavapipe, e traços da física idênticos depois da extração do `omsi-html`.
 3. **Trilha 2: grupos mornos do `omsi-app`, depois do portão 0.** A1 (features `lan`, `server` e `plugins`), que toca muitos arquivos mas com trechos pequenos; C3 (`input_script.rs` por assunto); D2 (registro de `OMSI_*`), primeiro nos outros crates e depois por módulo; imports explícitos no lugar dos globs; e a divisão do restante de `vehicle.rs` em `omsi-sim`. Portão: `omsi-net` e `omsi-plugin` fora do `cargo tree` do jogo, job `--all-features` rodando, `input_script.rs` abaixo de 500 linhas e toda `OMSI_*` declarada.
 4. **Trilha 3: áreas quentes, por janelas.** Frente B (`Session::step`), C2 (`App` em sub-structs), D1 e D3 (um só `Settings` e o launcher-core tipado), E1 e E2. Cada uma entra numa janela curta e anunciada: a unidade é reservada, os PRs de paridade e triagem naqueles arquivos são mesclados ou portados antes, e a janela termina com o main integrável. O perfil por escopo (`enum Stage`) sai primeiro, porque a fase de performance do mapa depende dele. Portão: traço B0 idêntico em cada PR, `run_offscreen` abaixo de 400 linhas, `omsi-gameplay` compilando e testando sem `wgpu`, e `omsi-app` abaixo de 50 mil linhas na configuração padrão.
+
+## Preparação para implementação: trilhas 0 e 1
+
+Decidido pelo mantenedor em 11/10/2026: as trilhas 0 e 1 vêm primeiro, e a implementação é feita por agentes, um PR por vez na fila normal. A reserva das unidades fica na [issue #61](https://github.com/OmsiModsBR/depot/issues/61).
+
+### Como cada PR é feito
+
+1. Reservar a unidade na issue #61 (arquivos e branch) e conferir os PRs abertos que tocam esses arquivos. Se houver um, esperar ou deixar o arquivo de fora.
+2. Abrir a branch `feat/<nome>` a partir do main e fazer só o que o item pede, sem mudar comportamento.
+3. Provar a equivalência com o que o item indica: traços da física, golden no lavapipe, B0 (depois de T0.2) e os testes do workspace.
+4. Abrir o PR, levar o CI ao verde, e depois do merge atualizar a issue e as branches abertas que tocavam os arquivos movidos.
+
+### Trilha 0
+
+| Item | Branch | O que entra | Pronto quando |
+| --- | --- | --- | --- |
+| T0.1 | `feat/ci-lavapipe` | Job novo em `depot-ci.yml` que instala o Vulkan por software (`mesa-vulkan-drivers`) no runner e roda `OMSI_GOLDEN_RENDER=1 cargo test -p omsi-app --test offscreen_golden`. O golden passa a ser abençoado também nesse adaptador, com o nome dele no arquivo de referência, para não brigar com o das máquinas com GPU. Começa informativo | O job passa em três execuções seguidas no mesmo commit; depois disso vira bloqueante |
+| T0.2 | `feat/offscreen-traco-estado` | Opção de teste que grava, por frame, posição e velocidade do jogador, contagem e posições dos carros de IA, aspectos dos sinais e o estado do duty; um teste `offscreen_state_trace.rs` sobre a raiz sintética; `scripts/offscreen-trace-diff.sh [base]` no mesmo formato do `physics-trace-diff.sh`; job `offscreen-traces` que compara base e PR, com um rótulo para mudanças de comportamento intencionais | Dois PRs de paridade seguidos passam pelo job sem falso alarme |
+| T0.3 | `feat/settings-ida-volta` | Teste que escreve um `settings.cfg` pelo jogo e o lê pelo launcher-core, e o contrário. As diferenças de padrão que existem hoje entram numa lista de divergências conhecidas no próprio teste, sem corrigi-las aqui (cada uma vira um PR `fix/` ou espera a D1) | O teste roda no CI e a lista de divergências está documentada |
+
+### Trilha 1
+
+| Item | Branch | O que entra | Pronto quando |
+| --- | --- | --- | --- |
+| T1.1 | `feat/fmt-formatos` | `cargo fmt -p` nos crates de formato (`omsi-cfg`, `-o3d`, `-model`, `-map`, `-vehicle`, `-scenery`, `-texture`, `-timetable`, `-content`, `-script`), em até três PRs de no máximo quatro crates cada. O passo de fmt do CI ganha uma lista de crates formatados com `--check` bloqueante; o resto continua informativo | Lista no CI cobrindo esses crates |
+| T1.2 | `feat/fmt-runtime-frio` | O mesmo para `omsi-audio`, `omsi-ui`, `omsi-geometry` e `tools/omsi-check` | Idem |
+| T1.3 | `feat/clippy-formatos` | Correção dos avisos do clippy nesses crates, um PR por crate ou grupo pequeno. O CI continua com o clippy informativo, por decisão do mantenedor; o `-D warnings` fica para depois | Zero avisos nesses crates no relatório do CI |
+| T1.4 | `feat/render-modulos-*` | C1 em cinco PRs, nesta ordem: `cargo fmt -p omsi-render`; tipos sem lógica (`camera`, `targets`, `material`); `gpu` e `lighting`; `pipelines`; `passes` e as etapas de `new_on` e `render_inner`. Cada PR só move código | Golden idêntico no lavapipe a cada PR; nenhum arquivo acima de 3.000 linhas no fim |
+| T1.5 | `feat/omsi-html-*` | Em três PRs. Primeiro, os tipos que o motor HTML usa de fora (`ApiValue` de `vehicle_api.rs`, o trait `HtmlRenderer`, `PointerKind` e `rebase_css_urls` de `htmltex.rs`) vão para dentro de `htmlengine`, com reexportação nos lugares antigos. Depois, o crate `omsi-html` recebe os arquivos, e `omsi-sim` passa a depender dele e a reexportá-lo como `htmlengine`. Por último, os testes que montam um snapshot de veículo (`snapshot`, `environment`) ficam em `omsi-sim` como testes de integração, e o resto vai com o crate | `omsi-html` compila sem `omsi-sim`; traços da física e testes iguais |
+
+T0.1 vem antes de T1.4, porque o golden no lavapipe é a prova de cada PR do renderer. Os outros itens não dependem entre si e podem ir na ordem da tabela.
 
 O que se espera no fim, em números medidos hoje: o `omsi-app` compilado no jogo padrão cai de 124,8 mil para menos de 50 mil linhas, com cerca de 10,7 mil atrás das features da Frente A1 e 50 mil movidas para crates próprios. O código de LAN continua no repositório e conta à parte até virar o crate opcional `omsi-lan-game`. O maior arquivo cai de 15.830 para menos de 3.000 linhas, e as 40 funções acima de 300 linhas ficam reduzidas às que são parsers ou tabelas por natureza (`tokenize`, `handle_keyword`, `parse_objects`).
 
@@ -359,18 +390,23 @@ Nenhuma destas decisões bloqueia a paridade nem a triagem. A recomendação vem
 
 | Decisão | Recomendação | Alternativa | Por quê |
 | --- | --- | --- | --- |
-| Unidade de divisão da refatoração | Crate nos crates frios, grupo de módulos no `omsi-app` | Só por crate | O `omsi-app` tem 55% do código e metade dos commits; como uma unidade só, travaria todo mundo |
+| Ordem de implementação | **Decidido (11/10/2026):** trilhas 0 e 1 primeiro | — | — |
+| Quem implementa | **Decidido (11/10/2026):** agentes, um PR por vez | — | — |
+| Placa de vídeo no CI | **Decidido (11/10/2026):** adaptador por software (lavapipe) no runner | — | Golden e B0 rodam em todo PR |
+| Largura do rustfmt (A2) | **Decidido (11/10/2026):** 100 colunas | — | É o que o CONTRIBUTING promete |
+| Clippy nos crates limpos | **Decidido (11/10/2026):** continua informativo por enquanto | — | — |
+| `omsi-html` na trilha 1 | **Decidido (11/10/2026):** sim | — | — |
+| Reserva das unidades | **Decidido (11/10/2026):** issue no GitHub, criada como a #61 | — | Todos os colaboradores acompanham o GitHub |
+| Multiplayer, servidor e plugins (A1) | **Decidido (10/10/2026):** ficam no repositório, fora da compilação do jogo | — | Serão reaproveitados e readaptados mais tarde |
+| Unidade de divisão da refatoração | Crate nos crates frios, grupo de módulos no `omsi-app` | Só por crate | O `omsi-app` tem 55% do código e metade dos commits |
 | Prioridade entre refatoração e correções | A refatoração cede | Janelas de congelamento longas | Paridade e triagem são as fases ativas do mapa |
 | Formatação (A2) | Por crate, com `scripts/fmt-merge.sh` para os quentes | Um commit único | O commit único quebra toda branch aberta |
-| Onde fica a reserva de unidades | Issue fixada no GitHub | Arquivo fora do repositório | Todos os colaboradores acompanham o GitHub |
 | Quem porta branches abertas depois de uma movimentação | Quem moveu, ou a rotina diária | O dono de cada branch | Quem moveu sabe para onde cada trecho foi |
-| Multiplayer, servidor e plugins (A1) | **Decidido (10/10/2026):** ficam no repositório, fora da compilação do jogo | Nenhuma; apagar foi descartado | Serão reaproveitados e readaptados mais tarde |
-| Granularidade das features (A1) | Três: `lan`, `server` (implica `lan`) e `plugins` | Uma só, `online` | Plugins não dependem de rede; separar permite readaptar um sem o outro |
-| CI do código guardado (A1) | Job `cargo check --workspace --all-features`, informativo no começo e bloqueante depois | Não compilar o código guardado | Sem o job, o código guardado quebra a cada refatoração do app |
-| Largura do rustfmt (A2) | Padrão de 100 colunas | `max_width = 140` num `rustfmt.toml` | É o que o CONTRIBUTING já promete |
-| `signal_aspects` no offscreen (B6) | Passar o trilho do jogador, igual à janela | Manter `None` | O offscreen deve reproduzir o jogo; a diferença só afeta trens do jogador em roteiros |
-| Onde mora o `Settings` compartilhado (D1) | Em `omsi-launcher-core` | Crate novo `omsi-settings` | O launcher-core já é dependência do app; um crate a menos para manter |
-| Crate `omsi-world` (E2) | Decidir na trilha 3 | Criar junto com `omsi-gameplay` | Depende de quanto do `World` o gameplay ainda precisar depois de E1 |
+| Granularidade das features (A1) | Três: `lan`, `server` (implica `lan`) e `plugins` | Uma só, `online` | Plugins não dependem de rede |
+| CI do código guardado (A1) | Job `cargo check --workspace --all-features` | Não compilar o código guardado | Sem o job, o código guardado quebra a cada refatoração do app |
+| `signal_aspects` no offscreen (B6) | Passar o trilho do jogador, igual à janela | Manter `None` | O offscreen deve reproduzir o jogo |
+| Onde mora o `Settings` compartilhado (D1) | Em `omsi-launcher-core` | Crate novo `omsi-settings` | Um crate a menos para manter |
+| Crate `omsi-world` (E2) | Decidir na trilha 3 | Criar junto com `omsi-gameplay` | Depende do que o gameplay ainda precisar depois de E1 |
 | Renomear `omsi-*` para `depot-*` | Não por enquanto | Renomear crates e identificadores | Custa um PR grande e não melhora a legibilidade |
 
 ## Riscos e critério de sucesso
