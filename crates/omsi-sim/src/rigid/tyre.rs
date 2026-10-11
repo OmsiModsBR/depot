@@ -7,8 +7,7 @@ use super::collide::Impact;
 use super::ground::{track_walls, tyre_line, GroundProbe};
 use super::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
-    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, KAPPA_ARM_MIN, MASS_PER_FRONT_AREA, PITCH_SPEED,
-    REHOLD_SPEED, STANDING, WALL_HEIGHT,
+    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
 use super::wheel::{sign, TyreFrame};
 use glam::{Quat, Vec2, Vec3};
@@ -228,11 +227,14 @@ impl RigidBody {
             torque += rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(f_world));
         }
         // Driving and braking pitch the body about a lever longer than the centre of
-        // gravity's height over the road: OMSI 2 takes the tyres' forces at the hubs,
-        // their radius more ((drive - brake) x d/2 besides [schwerpunkt] x
-        // the pull), and not while the bus stands with its brakes holding.
-        if self.velocity.dot(body_fwd).abs() > PITCH_SPEED {
-            let r = self.wheels.iter().map(|w| w.radius).sum::<f32>() / self.wheels.len().max(1) as f32;
+        // gravity's height over the road: OMSI 2 takes the tyres' forces at the hubs, the
+        // radius of the first axle's wheels more ((drive - brake) x d/2 besides
+        // [schwerpunkt] x the pull), and only while the bus moves or its drive beats the
+        // brakes: not while it stands with its brakes holding. (Standing is a speed of
+        // exactly zero in OMSI; here it is every tyre standing, see `standing`.)
+        let held = standing.len() == contacts.len() && contacts.iter().map(|c| c.drive).sum::<f32>().abs() <= contacts.iter().map(|c| c.brake).sum::<f32>();
+        if !held {
+            let r = self.wheels.first().map_or(0.0, |w| w.radius);
             torque.x += long_sum * r;
         }
         Substep { rot, body_fwd, towed, force, torque, contacts }
@@ -267,10 +269,11 @@ impl RigidBody {
             })
             .collect();
         // holding: the bend's pull against the grip of all tyres, and
-        // no wheel spinning or locked
+        // no wheel spinning or locked (the bend the body turns on this slice: the steering's
+        // for the front section, its joint's for a section behind)
         let grip_all: f32 = lat.iter().map(|&k| self.friction * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
-        let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(KAPPA_ARM_MIN)).abs();
+        let kappa = self.kappa.abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: OMSI 2 drops the holding state there)
         let airborne = self.wheels.iter().any(|w| !w.on_ground);

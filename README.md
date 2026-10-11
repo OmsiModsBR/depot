@@ -6,7 +6,7 @@
 
 Independent repository: https://github.com/OmsiModsBR/depot
 
-Current Depot release: **[0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17)** — rebranding only, based on openOMSI 0.2.16.
+Current Depot release: **[0.2.52](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52)** (2026-10-10), based on openOMSI 0.2.16. The previous release, [0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17), was rebranding only.
 
 Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openOMSI): `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
@@ -33,11 +33,14 @@ Alongside that goal, **evolutions to the simulator's physics and simulation are
 a development priority**, while preserving compatibility and a stable base through
 selective upstream integration.
 
-**Depot 0.2.17 is simply the project's rebranding release.** It changes branding,
-distribution names and Depot-specific repository/update configuration; it adds
-no gameplay, renderer, physics, simulation, scripting or multiplayer features.
-Physics/simulation evolutions and 1:1 compatibility remain development goals,
-not improvements delivered by this release. See the [release notes](docs/releases/0.2.17.md).
+**Depot 0.2.17 was simply the project's rebranding release** (no gameplay, renderer, physics,
+simulation, scripting or multiplayer changes; see its [release notes](docs/releases/0.2.17.md)).
+**Depot 0.2.52 is the first release with behaviour changes**: articulated buses and trailers as separate
+bodies, a refactored vehicle physics with three model changes, an independent outside-view field of
+view, navigator map packages, a pusher joint, timetable and sound fixes, and more. Some of these are
+validated only by automated tests, and the physics changes are not shown to match OMSI 2 yet. 1:1
+compatibility remains a development goal, not an achieved result. See the
+[release notes](docs/releases/0.2.52.md) and the [changelog](CHANGELOG.md).
 
 > [!IMPORTANT]
 > **Project Depot needs an original copy of OMSI 2.** It contains no game content of its own: it
@@ -46,15 +49,15 @@ not improvements delivered by this release. See the [release notes](docs/release
 
 ## Download
 
-The first rebranding release is available on the
-[**0.2.17 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17):
+The current release is available on the
+[**0.2.52 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52):
 
 | Platform | File |
 | --- | --- |
-| Windows x64 | `depot-0.2.17-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
+| Windows x64 | `depot-0.2.52-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
 | Dedicated server | **discontinued** - no longer built on any architecture, see [docs/SERVER.md](docs/SERVER.md) |
 
-ARM64, Linux, macOS and Android packages are not included in Depot 0.2.17.
+ARM64, Linux, macOS and Android packages are not included in Depot 0.2.52.
 Inherited platform support and build instructions do not imply published Depot packages.
 
 Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus and a duty,

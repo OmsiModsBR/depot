@@ -6,6 +6,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.52 - 2026-10-10
+
+Release notes: [docs/releases/0.2.52.md](docs/releases/0.2.52.md).
+
 ### Added
 - Golden test for the offscreen run (`crates/omsi-app/tests/offscreen_golden.rs`): runs `depot --offscreen` on a
   synthetic root the test writes itself and checks that the picture is repeatable, shows the scene and matches a
@@ -105,6 +111,20 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Release builds use `overflow-checks`.
 
 ### Fixed
+- Vehicle physics: driving and braking pitch the body as OMSI 2 does. The extra lever of the tyres' pull
+  (the wheel radius, taken at the hubs on top of the centre of gravity's height) is now the radius of the
+  first axle's wheels, where it was the mean radius of all of them, and the pitch from it acts whenever the
+  bus moves or its drive beats the brakes, where it waited for 0.2 m/s: a bus pulling away pitches from the
+  first frame the drive overcomes the brakes, and one braking to a stop until it stands. It still stays off
+  while the bus stands with its brakes holding. The tuned constant `PITCH_SPEED` is gone. New trace
+  scenario T16 (a bus on smaller wheels in front than behind). The physics traces differ in 15 of the 26
+  scenarios, each from the frame where the old and the new pitch lever first differ; the largest change of
+  pitch is 0.2°, and the handling report is unchanged.
+- Vehicle physics: the tyres take the road's grip of the frame they drive in. The grip (`road_grip` of
+  `StreetCond` and the air temperature) was set after the physics' step, so a road that froze over or dried
+  took hold one frame late, and an articulated bus's rear sections copied the late value. It is now set at
+  the start of the rigid body's step. The physics traces differ only there: the scenario whose road freezes
+  over and thaws is bit for bit the old code with the weather changed a frame earlier.
 - Vehicle viewer in the launcher: the rear sections of an articulated bus no longer stand with their wheels
   above the floor. The viewer gave the bus no ground and ran its rear sections kinematically, hung level with
   their coupling while their wheels went up into the arches by the springs' sag. The viewer now puts the bus
@@ -113,6 +133,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `VehicleInstance::springs_full`: the scripts' kneeling and levelling left the bus knelt and leaning in the
   picture), and steps it until every body has been still for 0.5 s (at most 10 s) before showing it
   (`crates/omsi-app/src/launcher/showroom.rs`).
+- Vehicle physics: the rear section of an articulated bus loses its tyres' hold to a bend too fast for their
+  grip, as the front section does. The test (the bend's pull against the grip of all of a body's tyres) worked
+  the bend out again from the steering angle of the body's front axle; a rear section with its one axle on its
+  own turning line has no angle there, so the test never saw its bend, and on ice its tyres went on passing up
+  to several times their grip. It now takes the curvature the body turns on in the slice (the steering's for
+  the front section, its joint's for a section behind); the constant `KAPPA_ARM_MIN`, which only the old
+  reckoning used, is gone. New trace scenario B7 (an articulated bus into a bend on ice at 13 km/h): the
+  physics traces differ only there, from the first frame the rear section's bend outgrows its grip.
 - The game opens on the monitor the launcher is on (upstream #2025: after 0.2.2 it always opened on the primary monitor). The launcher passes a point of its window as `--monitor-at X,Y`; without it, or when no monitor holds the point, the primary monitor is used as before. Independent implementation; the start-up window code is otherwise unchanged.
 - Timetable: the delay shown on the way between two stops follows where the bus is (the last stop's
   departure and the next arrival shared out by the distance covered) instead of standing still at the delay

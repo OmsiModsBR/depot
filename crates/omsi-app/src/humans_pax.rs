@@ -66,6 +66,8 @@ impl Task {
 /// Seconds a person stands at a shut door of the bus they want before going back to wait
 /// at the stop (`Pax::door_since`).
 const DOOR_GIVE_UP: f64 = 25.0;
+/// The chance a boarding passenger takes a standing place although a seat is free.
+pub(super) const STAND_CHANCE: f64 = 0.05;
 
 /// The ticket a passenger has: nothing to do, a ticket to stamp, one to buy.
 pub(super) const TICKET_NONE: u8 = 0;
@@ -884,14 +886,20 @@ impl Humans {
         self.stops.get(&stop).is_some_and(|s| s.buses.iter().any(|b| b.0 == bus))
     }
 
-    /// A free place of the bus, at random (none free: nobody gets on). `off`:
-    /// the places its scripts have switched off (#721), which nobody takes.
-    pub(super) fn reserve_place(&mut self, bus: BusId, n: usize, off: &[bool]) -> Option<usize> {
+    /// A free place of the bus (none free: nobody gets on). `off`: the places its scripts
+    /// have switched off (#721), which nobody takes. A free seat comes first: a standing
+    /// place is taken only with the chance `STAND_CHANCE`, or once no seat is free (so a few
+    /// riders stand beside empty seats, but not a crowd of them). Within the kind chosen the
+    /// pick is at random. (Behaviour first seen in openOMSI #2063, MIT; written afresh.)
+    pub(super) fn reserve_place(&mut self, bus: BusId, places: &[Seat], off: &[bool]) -> Option<usize> {
+        let n = places.len();
         let seats = self.seats.entry(bus).or_insert_with(|| vec![false; n]);
         if seats.len() < n {
             seats.resize(n, false);
         }
-        let free: Vec<usize> = (0..n).filter(|k| !seats[*k] && !off.get(*k).copied().unwrap_or(false)).collect();
+        let (sit, stand): (Vec<usize>, Vec<usize>) =
+            (0..n).filter(|k| !seats[*k] && !off.get(*k).copied().unwrap_or(false)).partition(|k| places[*k].seated);
+        let free = if sit.is_empty() || (!stand.is_empty() && self.rand_f() < STAND_CHANCE) { stand } else { sit };
         if free.is_empty() {
             return None;
         }
@@ -1785,7 +1793,7 @@ impl Humans {
                 let Some(stop) = p.stop else { return };
                 if let Some(bn) = bn {
                     if bn.speed.abs() < 3.0 && self.in_stop_box(stop, bn.id) {
-                        if let Some(k) = self.reserve_place(bn.id, bn.cabin.seats.len(), &bn.places_off) {
+                        if let Some(k) = self.reserve_place(bn.id, &bn.cabin.seats, &bn.places_off) {
                             let (tk, id) = self.decide_pax_ticket(i, bn);
                             let price = self.tickets.as_ref().and_then(|t| t.tickets.get(id.saturating_sub(1) as usize)).map(|t| t.value).unwrap_or(0.0);
                             let pp = self.pax_mut(i).unwrap();

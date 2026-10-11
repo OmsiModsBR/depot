@@ -5,10 +5,10 @@
 
 # Dedicated server
 
-Depot 0.2.17 is a rebranding-only release of the openOMSI 0.2.16 baseline,
+Depot 0.2.17 was a rebranding-only release of the openOMSI 0.2.16 baseline,
 with no new multiplayer, physics or simulation functionality. Its only published
-server package is `depot-0.2.17-server-windows-x64.zip`. Linux and ARM64 build
-instructions below describe inherited capabilities, not packages in this release.
+server package was `depot-0.2.17-server-windows-x64.zip`. Linux and ARM64 build
+instructions below describe inherited capabilities, not packages in this release. Depot 0.2.52 publishes no server package.
 
 ## How it runs today
 

@@ -235,12 +235,14 @@ scenarios!(
     t13_frame_times_vary,
     t14_inputs_that_are_no_number,
     t15_spring_factor_varies,
+    t16_wheels_of_two_sizes,
     b1_vehicle_with_script_variables,
     b2_articulated_vehicle,
     b3_vehicle_crash,
     b4_kinematic_vehicle,
     b5_ai_vehicle_follows_a_lane,
     b6_kinematic_vehicle_crash,
+    b7_articulated_vehicle_bends_on_ice,
 );
 
 mod scenarios {
@@ -381,7 +383,7 @@ mod scenarios {
         ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * r
     }
 
-    // -- T1..T15: the rigid body and the train --
+    // -- T1..T16: the rigid body and the train --
 
     pub fn t01_parked_on_the_flat() -> String {
         let mut t = Trace::default();
@@ -690,7 +692,22 @@ mod scenarios {
         t.text
     }
 
-    // -- B1..B6: the vehicle, through its script variables --
+    /// The bus on smaller wheels in front (0.8 m) than behind (1.0 m): rolling at 30 km/h it
+    /// drives on, then brakes to a stop.
+    pub fn t16_wheels_of_two_sizes() -> String {
+        let mut t = Trace::default();
+        let mut def = bus();
+        def.axles[0].wheel_diameter = 0.8;
+        def.axles[1].wheel_diameter = 1.0;
+        let mut rb = placed(&def);
+        run(&mut t, &mut rb, 60, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
+        launch(&mut rb, 30.0 / 3.6);
+        run(&mut t, &mut rb, 120, 1.0 / 60.0, &flat, |_| (6000.0, 0.0, 0.0));
+        run(&mut t, &mut rb, 240, 1.0 / 60.0, &flat, |_| (0.0, 20_000.0, 0.0));
+        t.text
+    }
+
+    // -- B1..B7: the vehicle, through its script variables --
 
     const WHEEL_VARS: [&str; 6] = ["Wheel_Rotation", "Wheel_RotationSpeed", "Axle_Steering", "Axle_Suspension", "Axle_Brakeforce", "Axle_Springfactor"];
 
@@ -787,7 +804,7 @@ mod scenarios {
         frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 360, 1.0 / 60.0, drive(7000.0, 0.0));
         frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, drive(3000.0, 0.3));
-        // the road freezes over: the grip follows a frame later
+        // the road freezes over: the grip follows in the same frame
         v.host.street_cond = 1.0;
         v.host.temperature = -5.0;
         frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, drive(9000.0, -0.2));
@@ -928,6 +945,27 @@ mod scenarios {
         frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 420, 1.0 / 60.0, |_| Script { m_wheel: 9000.0, ..Default::default() });
         frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, |_| Script { m_wheel: -6000.0, steering: -0.5, ..Default::default() });
+        t.text
+    }
+
+    /// B2's articulated bus on ice, into a bend at 13 km/h: the front section holds, and the
+    /// rear one, its one axle on its own turning line, holds or slides by the pull of the bend
+    /// its joint turns it on.
+    pub fn b7_articulated_vehicle_bends_on_ice() -> String {
+        let mut t = Trace::default();
+        let names = var_names(3);
+        let front = vehicle_type(section(&[(3.2, false), (-2.6, false)], 8.0), 3);
+        let rear = vehicle_type(section(&[(-0.4, true)], 7.2), 3);
+        let mut v = instance(front);
+        v.host.street_cond = 1.0;
+        v.host.temperature = -5.0;
+        v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
+        v.attach_trailer(rear);
+        v.enable_rigid_body();
+        let hold_13 = |steering: f32| move |v: &VehicleInstance| Script { m_wheel: if v.motion().speed < 13.0 / 3.6 { 3500.0 } else { 0.0 }, steering, ..Default::default() };
+        frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script { brakeforce: 20_000.0, ..Default::default() });
+        frames(&mut t, &mut v, &names, 600, 1.0 / 60.0, hold_13(0.0));
+        frames(&mut t, &mut v, &names, 480, 1.0 / 60.0, hold_13(0.7));
         t.text
     }
 }

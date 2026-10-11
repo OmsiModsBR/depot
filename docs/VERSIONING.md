@@ -7,6 +7,10 @@ reviewed and published manually; a push to `main` does not publish anything.
 Inherited workflows are archived in `docs/upstream-automation/`, not active
 under `.github/workflows/`. No automatic upstream synchronization is enabled.
 
+**Depot 0.2.52 is the current release** (2026-10-10, tag `v0.2.52`), the first with
+behaviour changes since the rebranding. Depot release numbers are Depot's own count and do not
+mean the same openOMSI version was imported. See [release notes](releases/0.2.52.md).
+
 **Depot 0.2.17 is a rebranding-only release of the openOMSI 0.2.16 baseline.**
 The version increment does not indicate new physics, simulation, renderer,
 scripting, gameplay or multiplayer functionality. See [release notes](releases/0.2.17.md).

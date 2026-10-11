@@ -87,17 +87,11 @@ pub(super) const SLIP_MARGIN: f32 = 1.02;
 /// along over the second: holding, the tyres then take no roll. *tuned*
 pub(super) const GRIPPED_ACROSS: f32 = 0.5;
 pub(super) const GRIPPED_ALONG: f32 = 1.0;
-/// The shortest lever (m) from the turning line to the front axle that the bend's curvature
-/// is measured over. *tuned*
-pub(super) const KAPPA_ARM_MIN: f32 = 0.5;
 /// While the tyres hold, each may pass this many times its grip for the moment it takes the
 /// body to follow a quick turn of the wheel (OMSI sets the yaw rate outright). *tuned*
 pub(super) const HOLD_REACH: f32 = 8.0;
 /// The tyres hold again once the sideways speed at every tyre is under this (m/s). *OMSI*
 pub(super) const REHOLD_SPEED: f32 = 0.1;
-/// Driving and braking pitch the body only above this speed (m/s): not while the bus
-/// stands with its brakes holding. *tuned*
-pub(super) const PITCH_SPEED: f32 = 0.2;
 
 // The ground under a tyre.
 

@@ -143,7 +143,7 @@ LITERAL = [
     (r", on the computer and on Android alike", ""),
     (r"scripting, gameplay or multiplayer functionality", "scripting or gameplay functionality"),
     (r"The only published packages for this release are Windows x64 game/launcher and\s+dedicated server, named `depot-0\.2\.17-windows-x64\.zip` and\s+`depot-0\.2\.17-server-windows-x64\.zip`\.",
-     "The only published package for this release is the Windows x64 game/launcher, `depot-0.2.17-windows-x64.zip`."),
+     "The only published package of 0.2.17 was the Windows x64 game/launcher, `depot-0.2.17-windows-x64.zip`; 0.2.52 also publishes only a Windows x64 package."),
     (r"2\. builds Windows x64 and ARM64.*?builds;", "2. builds Windows x64 (MSVC);"),
     (r"3\. creates the release `v<version>` \(tag on that commit\) with the archives.*?from the commits\.",
      "3. creates the release `v<version>` (tag on that commit) with the Windows x64 archive and release notes generated from the commits."),
