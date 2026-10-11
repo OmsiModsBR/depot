@@ -1,18 +1,18 @@
 # Macro-refatoração do depot (rascunho)
 
-Rascunho de 10/10/2026, revisto no mesmo dia sobre o `main` em `a4750f1`.
+Rascunho de 10/10/2026, revisto em 11/10/2026 sobre o `main` em `0a38bf4`.
 
 ## Resumo
 
 O depot já tem as redes de segurança que o plano pedia, mas a estrutura do código ainda não mudou fora da física. Desde o rascunho entraram o CI próprio, o teste golden do offscreen, o harness de traços da física e a divisão de `rigid.rs` em módulos. Enquanto isso, o `omsi-app` continua com 124,8 mil das 227,8 mil linhas de Rust (55%), e as três funções gigantes estão do mesmo tamanho.
 
-Escopo desta revisão: `main` em `a4750f1` (PR #32), comparado com o rascunho original (`a521843`). As medidas de tamanho são de `0ee5f9b` (PR #27); os PRs #28 a #32 mexeram só na física e no site, e a contagem que mudou foi a de variáveis `OMSI_*` (297 em 79 arquivos, depois da remoção dos switches A/B). Só leitura de código. Contagens de função são aproximadas (casamento de chaves).
+Escopo desta revisão: `main` em `0a38bf4` (PR #60), comparado com o rascunho original (`a521843`) e alinhado ao mapa do projeto de 11/10/2026. As medidas de tamanho são de `0ee5f9b` (PR #27); os PRs seguintes mexeram pouco fora da física, e a contagem que mudou foi a de variáveis `OMSI_*` (297 em 79 arquivos). Só leitura de código. Contagens de função são aproximadas (casamento de chaves).
 
 Recomendações revistas, na ordem em que devem acontecer:
 
-1. **A física vem antes de tudo.** Por decisão do mantenedor, nenhuma destas frentes começa antes de o plano de refatoração da física terminar (Fases 0 a 4); a ordem acima vale a partir daí.
+1. **A física terminou, e a refatoração anda em paralelo à paridade e à triagem.** O plano de física concluiu as Fases 0 a 4. Por decisão do mantenedor (11/10/2026), a refatoração não espera as fases 1 e 2 do mapa do projeto: ela se divide em unidades (crate ou grupo de módulos), cede a qualquer correção aberta e só move código em PRs curtos.
 2. **Tirar o código desligado da compilação do jogo, sem apagá-lo.** Multiplayer, servidor dedicado, voz e plugins estão inalcançáveis desde o PR #1, mas cerca de 23 mil linhas continuam compiladas (`omsi-net`, `omsi-plugin` e 10,7 mil linhas do app). Por decisão do mantenedor, esse código fica no repositório para ser readaptado mais tarde; o plano o põe atrás de features de Cargo desligadas por padrão.
-3. **Fazer o commit único de rustfmt** e tornar o `fmt --check` bloqueante. Com o golden e os traços da física, um commit mecânico fica verificável.
+3. **Formatar crate por crate** e tornar o `fmt --check` bloqueante nos crates já formatados. Um commit único de rustfmt quebraria toda branch aberta de paridade e triagem.
 4. **Unificar o passo de simulação** entre janela e offscreen num `Session::step`. A divergência conhecida (`signal_aspects`) já está fixada por teste.
 5. **Quebrar `omsi-render/src/lib.rs` e as funções gigantes** em módulos e etapas nomeadas, sem mudar ordem nem lógica.
 6. **Registrar as 297 variáveis `OMSI_*`** num registro tipado, partindo do padrão que já existe no código: a lista `ALLOWED` de `env_file.rs`. O outro modelo, `rigid/toggles.rs`, saiu com os switches A/B no PR #32.
@@ -113,7 +113,7 @@ O ganho é que o binário do jogo deixa de compilar cerca de 23 mil linhas, o cl
 ### A2. Formatação
 
 1. Decidir a largura. Há cerca de 2.500 linhas acima de 140 colunas; se o estilo largo for desejado, um `rustfmt.toml` com `max_width = 140` e `use_small_heuristics = "Max"` reduz o diff. Recomendação: aceitar o padrão de 100 colunas, que é o que o CONTRIBUTING já promete.
-2. Um PR só com `cargo fmt --all`, sem nenhuma outra mudança, logo depois de A1. O rustfmt segue as declarações `mod` sem avaliar `cfg`, então os módulos atrás das features também saem formatados.
+2. Um PR de `cargo fmt -p <crate>` por crate, sem nenhuma outra mudança, começando pelos crates frios e deixando por último os quentes (`omsi-app`, `omsi-launcher-core`, `omsi-sim`). Esses entram num momento sem PRs abertos neles, ou com o `scripts/fmt-merge.sh` descrito nas regras de trabalho em paralelo. O rustfmt segue as declarações `mod` sem avaliar `cfg`, então os módulos atrás das features também saem formatados.
 3. Adicionar `.git-blame-ignore-revs` com o hash desse commit.
 4. Tirar o `continue-on-error` do passo de fmt em `depot-ci.yml` e atualizar a linha em `docs/QUALITY.md`.
 
@@ -292,75 +292,92 @@ O código de LAN do app (`lan.rs`, `lan_world.rs`, `lan_mods.rs`, `voice.rs`, `a
 
 Dentro de `omsi-render` não é preciso crate novo: a Frente C1 resolve com módulos. O alvo de tamanho para o `omsi-app` depois de A1 e E2 é ficar abaixo de 50 mil linhas, com janela, laço de eventos, UI, menus e a cola entre os crates.
 
-## Pré-requisito: o plano de física concluído
+## Alinhamento com o mapa do projeto
 
-Decisão do mantenedor (10/10/2026): a refatoração da física termina antes de esta refatoração geral começar. Nenhuma das Frentes A a E abre PR enquanto o plano de refatoração da física estiver em andamento.
+O mapa do projeto (11/10/2026) põe a refatoração como fase 3, depois da paridade (fase 1) e da triagem (fase 2), com duas regras: testes de caracterização primeiro e nenhuma mudança de comportamento. Por decisão do mantenedor (11/10/2026), a refatoração passa a correr em paralelo às fases 1 e 2, sem impedir os outros colaboradores de continuar mudando o código. O pré-requisito anterior está cumprido: o plano de física concluiu as Fases 0 a 4, e a Fase 5 (física da IA) está pausada.
 
-### Onde o plano de física está
+O que este plano assume do mapa:
 
-| Fase da física | Conteúdo | Status |
-| --- | --- | --- |
-| 0 | Harness de traços bit a bit, invariantes, jobs `physics-traces` e `physics-coverage` | Concluída (PR #16) |
-| 1 | `rigid.rs` dividido em módulos, `params.rs`, `TyreFrame` | Concluída (PR #27) |
-| 2 | Snapshot `VehicleMotion`, `physics_bridge`, enum `Dynamics` e remoção dos três switches A/B | Concluída (PRs #29, #30, #31 e #32) |
-| 3 | PRs `fix/` com deltas previstos nos traços (L6 e L8) | A fazer |
-| 4 | Mudanças de modelo só por decisão (a de L9 já foi tomada) | A fazer |
+- **Premissa 1:1 com o OMSI 2.** Refatoração é só estrutura. Todo PR deste plano deixa o comportamento igual, provado por traço ou teste, e qualquer diferença encontrada vira um PR `fix/` separado, como o B6.
+- **Fluxo de uma mudança.** Branch curta com um escopo, PR, CI e merge de um PR por vez, com o main sempre integrável. Os PRs de refatoração entram nessa mesma fila, sem fila própria.
+- **Fase 4, performance.** Ela começa medindo com `OMSI_PROFILE`. O perfil por escopo (`enum Stage`, da Frente B) é o instrumento dessa medição, então deve sair antes dela.
+- **Fontes proibidas e redação.** Nada muda: vale a regra que os PRs #15 a #24 já seguem.
 
-"Concluído" aqui significa as Fases 0 a 4. A Fase 5 do plano de física (estudo de um corpo rígido simplificado para a IA) é um estudo, não uma refatoração; ela fica como decisão pendente (ver adiante).
+Duas diferenças entre o mapa e as decisões já registradas, para corrigir no mapa:
 
-### Por que essa ordem funciona
+- O mapa diz que a remoção definitiva de rede e plugins "ainda é decisão em aberto". Ela foi tomada em 10/10/2026: o código fica no repositório e sai só da compilação do jogo (A1).
+- O mapa mostra branches `claude/*`, mas o CONTRIBUTING pede `feat/`, `fix/` e `docs/`. Este plano usa `feat/` para refatoração.
 
-- **Sem conflitos com branches de física.** O commit único de rustfmt (A2) toca quase todos os arquivos, incluindo `omsi-sim`. Feito antes, ele quebraria toda branch de física aberta.
-- **O passo único (Frente B) nasce sobre a interface nova.** A Fase 2 da física criou o `VehicleMotion` (PR #29), o snapshot do movimento que o resto do jogo deve ler, e o `physics_bridge` (PR #30). O `Session::step` e o tráfego (`player_outline`, `own_outlines`) passam a consumir esse snapshot em vez de campos soltos de `VehicleInstance`.
-- **`vehicle.rs` chega menor e com fronteira clara.** Hoje ele tem 5.821 linhas, com carregamento de tipo e pinturas (`VehicleType::load`, `load_paint_schemes`), a instância com scripts, gatilhos e serviços de garagem (`trigger`, `refuel`, `wash`, `repair`), texturas de texto e esqueleto, e o caminho para a física. Depois da Fase 2 da física, a divisão do restante entra na Frente C como `vehicle/{ty, paint, script, services, text, skin}.rs`, no mesmo formato de `rigid/`.
-- **O harness de traços vale para tudo.** O job `physics-traces` é bloqueante e roda em qualquer PR; toda movimentação em `omsi-sim` feita pelas Frentes A, D e E (extrair `omsi-html`, migrar flags) ganha a mesma prova de equivalência sem custo.
+## Refatoração em paralelo à paridade e à triagem
 
-### O que pode ser feito enquanto a física anda
+### Onde as fases ativas mexem
 
-Só trabalho que não abre PR de código: tomar as decisões pendentes deste documento, detalhar o B0 (traço de estado do offscreen) e rodar o golden do offscreen na máquina do mantenedor para ter a referência de imagem pronta quando as frentes começarem. Adiantar o B0 como código não conflitaria com a física (toca só `omsi-app` e um teste novo), mas seria uma exceção à regra e precisa de decisão.
+Medido no histórico do main (216 commits desde 07/10/2026, incluindo os PRs de paridade, triagem e física):
 
-## Plano em fases
+| Crate | Linhas | Commits que o tocaram | Risco de conflito |
+| --- | --- | --- | --- |
+| `omsi-app` | 124,8 mil | 72 | alto |
+| `omsi-sim` | 34,4 mil | 39 | médio: a física terminou, mas `vehicle.rs` teve 15 |
+| `omsi-launcher-core` | 6,0 mil | 20 | alto: `lib.rs` é o arquivo mais tocado do repositório (19) |
+| `omsi-render` | 20,0 mil | 10 | baixo |
+| `omsi-audio`, `omsi-ui`, `omsi-geometry` | 8,5 mil | 3 a 8 cada | baixo |
+| Crates de formato (`omsi-cfg`, `-vehicle`, `-texture`, `-map`, `-content`, `-model`, `-scenery`, `-o3d`, `-script`, `-timetable`) | \~21 mil | 2 a 7 cada | baixo |
+| `omsi-net`, `omsi-plugin` | 12,5 mil | 3 e 4 | nenhum: desligados |
 
-Seis etapas em sequência. A primeira é o plano de física, que bloqueia todas as outras; dentro de cada fase seguinte, os itens podem ir em PRs paralelos desde que não toquem os mesmos arquivos. Todas as branches seguem o padrão `feat/<nome>` do CONTRIBUTING, porque refatoração conta como feature.
+Dentro do `omsi-app`, os commits se concentram no laço de frame (`app_events.rs`, `app.rs`, `lib.rs`, `offscreen.rs`: 54), no gameplay (`humans.rs`, `traffic.rs`, `schedule.rs` e vizinhos: 52) e no `launcher/` (47). HUD e menus (23), mundo (21), entrada (20), LAN (19) e settings (11) são mornos.
 
-1. **Pré-requisito: plano de física, Fases 3 e 4.** Fases 0 a 2 concluídas (PRs #16, #27 e #29 a #32).
-   - Portão: Fase 4 da física fechada e nenhuma branch de física aberta.
-2. **Fase 0: limpeza e guarda-corpos.** A1 (código desligado fora da compilação do jogo, em quatro PRs), A2 (rustfmt num commit só, depois de A1), A4 (`[workspace.lints]`) e B0 (traço de estado do offscreen no CI).
-   - Já feito: CI com build e testes bloqueantes (PR #1), golden do offscreen (PR #14).
-   - Portão: `fmt --check` bloqueante; `omsi-net` e `omsi-plugin` fora do `cargo tree` do jogo padrão; job `--all-features` rodando; traço B0 rodando no CI.
-3. **Fase 1: legibilidade mecânica.** Imports explícitos no lugar dos 17 globs do `lib.rs` e dos 33 `use super::*`; perfil por escopo com `enum Stage`; renomear `omsi_launcher_lib`; tirar o `#[path]` de `humans.rs`; registro de flags (D2); clippy limpo nos crates de formato (A3).
-   - Portão: nenhum glob fora de testes; toda `OMSI_*` declarada; `docs/ENVIRONMENT.md` gerado; crates de formato com `-D warnings`.
-4. **Fase 2: um passo de simulação.** C3 (`input_script.rs` dividido por assunto, movimentação pura) primeiro; depois B1 a B5, consumindo o `VehicleMotion` da física; C2 (`App` em sub-structs) e `window_event` despachando por tipo de evento; B6 (`signal_aspects`) como PR `fix/` separado.
-   - Portão: traço B0 idêntico em B1 a B5; `run_offscreen` abaixo de 400 linhas; nenhuma função de `app_events.rs` acima de 400.
-5. **Fase 3: renderer, veículo e configuração.** C1 (`omsi-render/src/lib.rs` em módulos, `new_on` e `render_inner` em etapas); divisão do restante de `vehicle.rs`; D1 (um só `Settings`); D3 (launcher-core tipado).
-   - Portão: nenhum arquivo de `omsi-render` acima de 3.000 linhas; golden igual nos modos `vanilla` e `enhanced`; teste de ida e volta do `settings.cfg` entre jogo e launcher.
-6. **Fase 4: separar e dividir.** E1 (pedidos em vez de chamadas ao renderer) e E2 (`omsi-html`, `omsi-input`, `omsi-launcher`, `omsi-gameplay`).
-   - Portão: `omsi-gameplay` compila e testa sem `wgpu`; `omsi-app` abaixo de 50 mil linhas na configuração padrão.
+A conclusão: os alvos que mais melhoram a legibilidade (o `omsi-render` e os crates de formato) são frios e podem começar já. As áreas quentes são exatamente onde paridade e triagem corrigem bugs, e elas precisam de outro tratamento.
+
+### Unidade de divisão: crate onde der, grupo de módulos no `omsi-app`
+
+Quebrar a refatoração por crate funciona bem para 19 dos 21 crates. Não basta para o `omsi-app`, que tem 55% do código e metade dos commits: como unidade única, ele travaria todo mundo. A proposta é usar o crate como unidade nos crates frios e o grupo de módulos dentro do `omsi-app` (laço de frame, gameplay, launcher, mundo, entrada, settings, LAN, HUD e menus). Cada unidade tem um responsável por vez e uma lista fechada de arquivos.
+
+### Regras para não travar os outros colaboradores
+
+1. **A refatoração cede.** Se há um PR de paridade ou triagem aberto num arquivo, a unidade que contém esse arquivo espera ou o deixa de fora. Correção de bug nunca espera refatoração.
+2. **Só PRs de movimentação curtos.** Cada PR move ou renomeia sem mudar lógica, toca uma unidade, fica aberto no máximo um dia útil e entra na fila assim que o CI passa. Um PR que precisaria de dias aberto é dividido.
+3. **Reserva visível.** Uma issue fixada no GitHub ("Refatoração: unidades em andamento") lista cada unidade reservada, seus arquivos e o PR. Quem vai mexer num arquivo reservado olha a issue, e quem refatora confere os PRs abertos antes de reservar. Ela fica no GitHub porque é o lugar que todos os colaboradores já acompanham.
+4. **Quem move porta.** Depois de cada PR de movimentação, quem o fez atualiza as branches abertas que tocavam aqueles arquivos (merge do main e resolução do conflito), em vez de deixar o conflito para o colaborador. A rotina diária de revisão já faz o merge do main nos PRs abertos e pode assumir essa parte.
+5. **Fachada antes de mover, nas áreas quentes.** No laço de frame, no gameplay e no `omsi-launcher-core`, a mudança entra primeiro como código novo ao lado do antigo: um módulo novo, com o antigo delegando para ele. A remoção do caminho antigo vem num PR curto depois, num momento sem PRs abertos naqueles arquivos.
+6. **Formatação por crate, não num commit só.** O CI passa a exigir `fmt --check` só nos crates já formatados. Para os crates quentes, um script `scripts/fmt-merge.sh` aplica na branch do colaborador a receita que evita o conflito: merge do commit anterior ao fmt, `cargo fmt` na própria branch e merge do commit de fmt com `-s ours`.
+7. **Configuração de git recomendada no CONTRIBUTING.** `merge.conflictStyle = zdiff3`, `rerere.enabled = true` e um `diff.renameLimit` alto fazem o git seguir arquivos movidos e lembrar resoluções repetidas.
+
+## Plano em trilhas
+
+Em vez de fases em sequência, quatro trilhas que podem andar juntas, cada uma com seu portão. Todas as branches são `feat/<nome>`.
+
+1. **Trilha 0: caracterização, que já pode começar.** B0 (traço de estado do offscreen no CI), teste de ida e volta do `settings.cfg` entre jogo e launcher, e o golden do offscreen rodado nas máquinas do mantenedor como referência. São só arquivos novos de teste e não conflitam com nada. Portão: B0 rodando no CI e verde nos PRs de paridade e triagem.
+2. **Trilha 1: crates frios, em paralelo à trilha 0.** Por crate: `cargo fmt -p`, clippy limpo e `-D warnings` (A3, A4) nos crates de formato, `omsi-audio`, `omsi-ui` e `omsi-geometry`. Depois C1 (`omsi-render/src/lib.rs` em módulos), o maior ganho de legibilidade num crate com 10 commits em todo o histórico, e a extração de `omsi-html` de `omsi-sim/src/htmlengine`. Portão: crates de formato com `-D warnings`, nenhum arquivo de `omsi-render` acima de 3.000 linhas e golden igual nos modos `vanilla` e `enhanced`.
+3. **Trilha 2: grupos mornos do `omsi-app`, depois do portão 0.** A1 (features `lan`, `server` e `plugins`), que toca muitos arquivos mas com trechos pequenos; C3 (`input_script.rs` por assunto); D2 (registro de `OMSI_*`), primeiro nos outros crates e depois por módulo; imports explícitos no lugar dos globs; e a divisão do restante de `vehicle.rs` em `omsi-sim`. Portão: `omsi-net` e `omsi-plugin` fora do `cargo tree` do jogo, job `--all-features` rodando, `input_script.rs` abaixo de 500 linhas e toda `OMSI_*` declarada.
+4. **Trilha 3: áreas quentes, por janelas.** Frente B (`Session::step`), C2 (`App` em sub-structs), D1 e D3 (um só `Settings` e o launcher-core tipado), E1 e E2. Cada uma entra numa janela curta e anunciada: a unidade é reservada, os PRs de paridade e triagem naqueles arquivos são mesclados ou portados antes, e a janela termina com o main integrável. O perfil por escopo (`enum Stage`) sai primeiro, porque a fase de performance do mapa depende dele. Portão: traço B0 idêntico em cada PR, `run_offscreen` abaixo de 400 linhas, `omsi-gameplay` compilando e testando sem `wgpu`, e `omsi-app` abaixo de 50 mil linhas na configuração padrão.
 
 O que se espera no fim, em números medidos hoje: o `omsi-app` compilado no jogo padrão cai de 124,8 mil para menos de 50 mil linhas, com cerca de 10,7 mil atrás das features da Frente A1 e 50 mil movidas para crates próprios. O código de LAN continua no repositório e conta à parte até virar o crate opcional `omsi-lan-game`. O maior arquivo cai de 15.830 para menos de 3.000 linhas, e as 40 funções acima de 300 linhas ficam reduzidas às que são parsers ou tabelas por natureza (`tokenize`, `handle_keyword`, `parse_objects`).
 
 ## Decisões pendentes
 
-Nenhuma destas decisões bloqueia o trabalho de física, então todas podem ser tomadas enquanto ele anda. A recomendação vem primeiro em cada linha.
+Nenhuma destas decisões bloqueia a paridade nem a triagem. A recomendação vem primeiro em cada linha.
 
 | Decisão | Recomendação | Alternativa | Por quê |
 | --- | --- | --- | --- |
+| Unidade de divisão da refatoração | Crate nos crates frios, grupo de módulos no `omsi-app` | Só por crate | O `omsi-app` tem 55% do código e metade dos commits; como uma unidade só, travaria todo mundo |
+| Prioridade entre refatoração e correções | A refatoração cede | Janelas de congelamento longas | Paridade e triagem são as fases ativas do mapa |
+| Formatação (A2) | Por crate, com `scripts/fmt-merge.sh` para os quentes | Um commit único | O commit único quebra toda branch aberta |
+| Onde fica a reserva de unidades | Issue fixada no GitHub | Arquivo fora do repositório | Todos os colaboradores acompanham o GitHub |
+| Quem porta branches abertas depois de uma movimentação | Quem moveu, ou a rotina diária | O dono de cada branch | Quem moveu sabe para onde cada trecho foi |
 | Multiplayer, servidor e plugins (A1) | **Decidido (10/10/2026):** ficam no repositório, fora da compilação do jogo | Nenhuma; apagar foi descartado | Serão reaproveitados e readaptados mais tarde |
 | Granularidade das features (A1) | Três: `lan`, `server` (implica `lan`) e `plugins` | Uma só, `online` | Plugins não dependem de rede; separar permite readaptar um sem o outro |
-| CI do código guardado (A1) | Job `cargo check --workspace --all-features`, informativo no começo e bloqueante depois | Não compilar o código guardado | Sem o job, o código guardado quebra a cada refatoração do app, e a readaptação começaria consertando o build |
-| Largura do rustfmt (A2) | Padrão de 100 colunas | `max_width = 140` num `rustfmt.toml` | É o que o CONTRIBUTING já promete; o diff é único de qualquer jeito |
+| CI do código guardado (A1) | Job `cargo check --workspace --all-features`, informativo no começo e bloqueante depois | Não compilar o código guardado | Sem o job, o código guardado quebra a cada refatoração do app |
+| Largura do rustfmt (A2) | Padrão de 100 colunas | `max_width = 140` num `rustfmt.toml` | É o que o CONTRIBUTING já promete |
 | `signal_aspects` no offscreen (B6) | Passar o trilho do jogador, igual à janela | Manter `None` | O offscreen deve reproduzir o jogo; a diferença só afeta trens do jogador em roteiros |
-| Fase 5 da física (corpo rígido da IA) | Fora do pré-requisito | Esperar também o estudo | É um estudo sem data; esperar por ele adiaria a refatoração geral sem ganho de estabilidade |
-| B0 antes de a física terminar | Esperar, como o resto | Adiantar como exceção | Respeita a ordem decidida; o B0 leva pouco tempo quando a Fase 0 começar |
 | Onde mora o `Settings` compartilhado (D1) | Em `omsi-launcher-core` | Crate novo `omsi-settings` | O launcher-core já é dependência do app; um crate a menos para manter |
-| Crate `omsi-world` (E2) | Decidir só na Fase 4 | Criar junto com `omsi-gameplay` | Depende de quanto do `World` o gameplay ainda precisar depois de E1 |
-| Renomear `omsi-*` para `depot-*` | Não por enquanto | Renomear crates e identificadores | Custa um PR grande e não melhora a legibilidade; pode ser feito no fim, se o time quiser |
+| Crate `omsi-world` (E2) | Decidir na trilha 3 | Criar junto com `omsi-gameplay` | Depende de quanto do `World` o gameplay ainda precisar depois de E1 |
+| Renomear `omsi-*` para `depot-*` | Não por enquanto | Renomear crates e identificadores | Custa um PR grande e não melhora a legibilidade |
 
 ## Riscos e critério de sucesso
 
 - **Regressão silenciosa de comportamento.** Muitos testes pulam sem `OMSI_ROOT`, e as imagens do golden ainda não rodam no CI. Mitigação: o traço de estado B0 no CI, os traços da física (bloqueantes) e `omsi-check` antes e depois de cada fase, como o CONTRIBUTING já pede.
 - **Golden dependente de máquina.** As imagens só batem no mesmo adaptador gráfico. Mitigação: o B0 compara estado, não pixels, e roda em qualquer máquina; o golden fica para as Frentes C1 e o render.
-- **Espera longa pela física.** Com o plano de física bloqueando tudo, o código desligado ainda compilado e a falta de formatação continuam custando em cada PR até lá. A física já fechou as Fases 0 a 2; faltam as Fases 3 e 4. Mitigação: deixar as decisões tomadas e os PRs da Fase 0 desenhados para começarem no dia seguinte ao fim da física.
+- **Conflito com paridade e triagem.** As áreas quentes da refatoração são as mesmas onde os bugs são corrigidos. Mitigação: as regras de trabalho em paralelo (a refatoração cede, PRs curtos, reserva visível, quem move porta) e as áreas quentes só por janelas anunciadas.
 - **Branches paralelas.** Sem upstream, o conflito que importa é entre branches do próprio depot. Cada movimentação grande (A2, C1, E2) é anunciada e mergeada rápido, num momento sem branches longas abertas; o `CHANGELOG.md`, que já conflita em quase todo merge, pode passar a usar fragmentos por PR.
 - **PRs grandes demais para revisar.** Cada extração é um PR de movimentação pura, sem mudar lógica, seguido de PRs de ajuste.
 - **Redação.** Comentários e documentos criados pela refatoração descrevem comportamento observável, sem identificadores do executável original, como fizeram os PRs #15 a #24.
