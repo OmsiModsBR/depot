@@ -1855,21 +1855,17 @@ fn terrain_ground(src: &MeshData, slots: &[usize], pos: DVec3, xf: Mat4, origin:
     ground
 }
 
-/// Whether a lower-case group name holds a vegetation word at the start or the end of a word of
-/// its own ("Trees LQ", "Nadelbäume"), not in the middle of another one ("German Street Side"
-/// holds "tree"). Lamp posts, signs, traffic lights and fences in such groups swayed like trees.
+/// Whether a lower-case group name holds a vegetation word. Words that only contain one
+/// ("German Street Side" holds "tree", "Bushaltestelle" - a bus stop - "bush", "Implants"
+/// "plant") are taken out first: lamp posts, signs, traffic lights and fences in such groups
+/// swayed like trees. Compounds and plurals ("OakTrees", "Laubbaumgruppe") still count.
 fn group_has_word(group: &str, word: &str) -> bool {
-    // "Bushaltestelle" (bus stop) starts with "bush"
-    if group.contains("bushalte") {
-        return false;
+    const NOT_PLANTS: [&str; 3] = ["street", "bushalte", "implant"];
+    let mut g = group.to_string();
+    for n in NOT_PLANTS {
+        g = g.replace(n, " ");
     }
-    group.match_indices(word).any(|(at, _)| {
-        let end = at + word.len();
-        let before = group[..at].chars().next_back().is_none_or(|c| !c.is_alphabetic());
-        let after = group[end..].chars().next().is_none_or(|c| !c.is_alphabetic());
-        // the start of a word ("shrubbery", "pflanzen"), or its end ("laubbaum")
-        before || after
-    })
+    g.contains(word)
 }
 
 /// Two crossed unit quads (1 m wide, 1 m tall, centred at x=0, standing on z=0).
@@ -13902,7 +13898,7 @@ mod tests {
         for g in ["German Street Side", "Streets", "Bushaltestelle", "Implants"] {
             assert!(vegetation_give_of(&sco(g)).is_none(), "{g}");
         }
-        for g in ["Trees LQ", "Deciduous", "Shrubbery", "Arbors", "Plants", "Nadelbäume", "Pflanzen", "Busch"] {
+        for g in ["Trees LQ", "Deciduous", "Shrubbery", "Arbors", "Plants", "Nadelbäume", "Pflanzen", "Busch", "OakTrees", "Laubbaumgruppe"] {
             assert!(vegetation_give_of(&sco(g)).is_some(), "{g}");
         }
     }
