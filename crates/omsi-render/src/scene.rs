@@ -9,29 +9,6 @@ pub type TextureId = usize;
 
 pub type MaterialId = usize;
 
-pub struct GpuMesh {
-    pub(crate) vertex_buf: wgpu::Buffer,
-    pub(crate) index_buf: wgpu::Buffer,
-    /// Where the mesh lies in its page's buffers (pages hold many meshes); `page` is its
-    /// page in the scene's list, `u32::MAX` for a page of its own.
-    pub(crate) page: u32,
-    pub(crate) base_vertex: i32,
-    pub(crate) first_index: u32,
-    pub(crate) vertex_offset: u64,
-    pub(crate) vertex_bytes: u64,
-    pub(crate) index_bytes: u64,
-    /// Which mesh this is (a page's range handed to another mesh is another): what the ray
-    /// tracer's structures are kept by, with the mesh's place.
-    pub(crate) gen: u64,
-    pub ranges: Vec<(u32, u32, u32)>,
-    pub bounds_center: Vec3,
-    pub bounds_radius: f32,
-    /// Back faces are culled (a content mesh, see `MeshData::one_sided`).
-    pub one_sided: bool,
-    /// Source asset for the optional draw-cost audit.
-    pub source: Option<String>,
-}
-
 #[derive(Clone, Copy, Default)]
 pub(crate) struct InstanceBounds {
     pub(crate) centre: Vec3,
@@ -290,16 +267,6 @@ pub struct Scene {
     /// with one shows its snow as the map made it, as OMSI 2 shows snow, and gets no snow
     /// laid over it (register them before making their materials).
     pub snow_textures: std::collections::HashSet<TextureId>,
-}
-
-/// `MaterialUniform::ambient`'s w: 1 for a material whose texture is a season's snow
-/// picture (`Scene::snow_textures`).
-pub(crate) fn snow_texture_flag(scene: &Scene, texture: Option<TextureId>) -> f32 {
-    if texture.is_some_and(|t| scene.snow_textures.contains(&t)) {
-        1.0
-    } else {
-        0.0
-    }
 }
 
 impl Scene {
@@ -914,6 +881,159 @@ impl Renderer {
         }
         i.visible = visible;
         if changed {
+            Self::mark_changed(scene, instance);
+        }
+    }
+
+    /// Hide an instance for good (its tile was unloaded); `recycle_instance` reuses it.
+    pub fn remove_instance(&self, scene: &mut Scene, instance: usize) {
+        if instance >= scene.instances.len() {
+            return;
+        }
+        self.set_params(scene, instance, &[], false, &[]);
+        scene.instances[instance].lod = (0.0, f32::MAX);
+        scene.instances[instance].interior_lamps = 0;
+    }
+
+    /// Cut the scene's arrays down to these lengths (their tails are freed slots nothing
+    /// refers to any more); the per-draw buffers are rebuilt when instances went.
+    pub fn truncate(
+        &self,
+        scene: &mut Scene,
+        meshes: usize,
+        textures: usize,
+        materials: usize,
+        instances: usize,
+    ) {
+        fn cut<T>(v: &mut Vec<T>, n: usize) {
+            if n < v.len() {
+                v.truncate(n);
+                if v.capacity() > v.len() * 2 + 64 {
+                    v.shrink_to_fit();
+                }
+            }
+        }
+        cut(&mut scene.meshes, meshes);
+        scene.bounds_known.truncate(meshes);
+        cut(&mut scene.textures, textures);
+        cut(&mut scene.materials, materials);
+        // hidden (freed) instances may still name a cut mesh or material: slot 0 instead,
+        // they are not drawn and whoever takes them over sets their own
+        let (nm, nt) = (scene.meshes.len(), scene.materials.len());
+        scene.bounds_users_stale = true;
+        for inst in scene.instances.iter_mut() {
+            if inst.mesh >= nm {
+                debug_assert!(!inst.visible, "a drawn instance lost its mesh");
+                inst.mesh = 0;
+                inst.visible = false;
+            }
+            for m in inst.materials.iter_mut() {
+                if *m >= nt {
+                    *m = 0;
+                }
+            }
+        }
+        if instances < scene.instances.len() {
+            cut(&mut scene.instances, instances);
+            scene.changed.retain(|i| *i < instances);
+            scene.changed_mark.truncate(instances);
+            scene.uploaded_instances = scene.uploaded_instances.min(instances);
+            scene.dirty = true;
+        }
+    }
+
+    /// Move the instance just added into the removed instance `into`, which must have as many
+    /// material slots (its per-draw entries are rewritten in place). Returns the id the
+    /// instance has now.
+    pub fn recycle_instance(&self, scene: &mut Scene, new: usize, into: usize) -> usize {
+        if new + 1 != scene.instances.len() || into >= new || new < scene.uploaded_instances {
+            return new;
+        }
+        if scene.instances[into].slot_alpha.len() != scene.instances[new].slot_alpha.len() {
+            return new;
+        }
+        let mut inst = scene.instances.pop().unwrap();
+        inst.base = scene.instances[into].base;
+        scene.instances[into] = inst;
+        scene.bounds_users_stale = true;
+        Self::mark_changed(scene, into);
+        into
+    }
+
+    /// Material slots of an instance (what `recycle_instance` must match).
+    pub fn instance_slots(&self, scene: &Scene, instance: usize) -> usize {
+        scene
+            .instances
+            .get(instance)
+            .map(|i| i.slot_alpha.len())
+            .unwrap_or(0)
+    }
+
+    pub fn new_scene(&self) -> Scene {
+        Scene {
+            meshes: Vec::new(),
+            textures: Vec::new(),
+            glass_slot: None,
+            materials: Vec::new(),
+            instances: Vec::new(),
+            render_origin: DVec3::ZERO,
+            lights: Vec::new(),
+            interior_lights: Vec::new(),
+            interior_free: Vec::new(),
+            coronas: Vec::new(),
+            model_buf: None,
+            params_buf: None,
+            light_buf: None,
+            grid_buf: None,
+            corona_buf: None,
+            corona_count: 0,
+            smoke: Vec::new(),
+            smoke_buf: None,
+            smoke_count: 0,
+            corona_runs: Vec::new(),
+            draw_buf: None,
+            camera_bind_group: None,
+            shadow_bind_group: None,
+            sky_bind_group: None,
+            overlays: Vec::new(),
+            premultiplied: Default::default(),
+            transposed: Default::default(),
+            overlay_res: Vec::new(),
+            dirty: true,
+            changed: Vec::new(),
+            mesh_pages: Vec::new(),
+            changed_mark: Vec::new(),
+            origin_moved: false,
+            cache_bounds: omsi_cfg::env::var_os("OMSI_NO_BOUNDS_CACHE").is_none(),
+            bounds_meshes: Vec::new(),
+            bounds_known: Vec::new(),
+            bounds_users: Vec::new(),
+            bounds_users_stale: true,
+            bounds_rescan: false,
+            bounds_dirty: false,
+            block_bounds: Vec::new(),
+            block_dirty: Vec::new(),
+            block_cursor: 0,
+            uploaded_instances: 0,
+            uploaded_entries: 0,
+            cpu_models: Vec::new(),
+            cpu_params: Vec::new(),
+            last_grid: Vec::new(),
+            lamp_shadow_last: Vec::new(),
+            last_lights: Vec::new(),
+            bind_groups: HashMap::new(),
+            looks: hashbrown::HashMap::new(),
+            pbr_maps: HashMap::new(),
+            snow_textures: Default::default(),
+        }
+    }
+
+    /// Draw instance `instance` with mesh `mesh` from now on (a vehicle's skinned mesh gets
+    /// a copy of its own).
+    pub fn set_instance_mesh(&self, scene: &mut Scene, instance: usize, mesh: MeshId) {
+        if scene.instances[instance].mesh != mesh {
+            scene.instances[instance].mesh = mesh;
+            scene.bounds_users_stale = true;
             Self::mark_changed(scene, instance);
         }
     }

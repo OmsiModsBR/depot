@@ -1727,4 +1727,133 @@ impl Renderer {
         buf.unmap();
         Ok(out)
     }
+
+    /// A texture the scene can be rendered into (`render_to_texture`), e.g. a rear-view mirror.
+    pub fn add_render_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
+        let (width, height) = fit_size(
+            width.max(1),
+            height.max(1),
+            self.device.limits().max_texture_dimension_2d,
+        );
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("render target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        // (its depth buffer is the pass's own, see `msaa_targets`)
+        let bytes = texture_bytes(self.format, width, height, 1);
+        scene.textures.push(GpuTexture {
+            texture,
+            view,
+            size: (width, height),
+            bytes,
+            gen: next_gen(),
+        });
+        scene.textures.len() - 1
+    }
+
+    /// Render the scene from `camera` into a texture made by `add_render_texture`.
+    /// `aspect`: the projection's width over height (OMSI draws its mirrors 1.6 wide into
+    /// square textures, and their meshes show the middle of that).
+    pub fn render_to_texture(
+        &mut self,
+        scene: &mut Scene,
+        id: TextureId,
+        camera: &Camera,
+        lighting: &Lighting,
+        aspect: f32,
+    ) {
+        let Some(t) = scene.textures.get(id) else {
+            return;
+        };
+        let view = t.view.clone();
+        let (w, h) = t.size;
+        self.texture_aspect = Some(aspect);
+        self.render_inner(
+            scene,
+            &view,
+            w,
+            h,
+            camera,
+            lighting,
+            false,
+            Some(id),
+            None,
+            false,
+        );
+        self.texture_aspect = None;
+    }
+
+    /// Sky gradient textures (day, twilight, night); without them the sky is the clear colour.
+    pub fn set_sky_textures(&self, scene: &mut Scene, textures: [TextureId; 3]) {
+        self.set_sky_textures_clouds(scene, textures, None)
+    }
+
+    /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
+    pub fn set_sky_textures_clouds(
+        &self,
+        scene: &mut Scene,
+        textures: [TextureId; 3],
+        clouds: Option<TextureId>,
+    ) {
+        let views: Vec<&wgpu::TextureView> =
+            textures.iter().map(|t| &scene.textures[*t].view).collect();
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky"),
+            layout: &self.sky_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(views[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(views[1]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(views[2]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(match clouds {
+                        Some(c) => &scene.textures[c].view,
+                        None => &self.black_texture.view,
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(&self.cloud_shape_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(&self.cloud_detail_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::Sampler(&self.cloud_sampler),
+                },
+            ],
+        });
+        scene.sky_bind_group = Some(bg);
+    }
 }
