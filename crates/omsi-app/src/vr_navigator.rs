@@ -253,7 +253,7 @@ impl crate::App {
             paused_before: self.paused,
             mouse_drive_before: self.mouse_drive,
         });
-        if self.lan.is_none() {
+        if self.online.lan.is_none() {
             self.paused = true;
         }
         self.mouse_drive = false;

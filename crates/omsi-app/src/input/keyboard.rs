@@ -181,7 +181,7 @@ impl App {
             // LAN chat: its keys (`chat_open`, '/' or '`', and `chat_toggle`, V, in keyboard.cfg's
             // [game]: the player can move them, #130) open the line and show or hide the
             // chat, and while the line is open the keys are its own
-            if let Some(l) = self.lan.as_mut() {
+            if let Some(l) = self.online.lan.as_mut() {
                 let held = |a: KeyCode, b: KeyCode| self.keys.contains(&a) || self.keys.contains(&b);
                 let chord = omsi_content::input::chord(
                     held(KeyCode::ShiftLeft, KeyCode::ShiftRight),
@@ -195,7 +195,7 @@ impl App {
                         .find(|b| b.scan_code == scan && b.matches(chord) && b.action.to_ascii_lowercase().starts_with("chat_"))
                         .map(|b| b.action.clone()))
                 };
-                if lan::chat_key(l, &mut self.remotes, code, pressed, repeat, bound.as_deref()) {
+                if lan::chat_key(l, &mut self.online.remotes, code, pressed, repeat, bound.as_deref()) {
                     return;
                 }
             }
@@ -271,7 +271,7 @@ impl App {
             if let (true, Some(t)) = (pressed, self.tutorial.as_mut()) {
                 let ctrl = self.keys.contains(&KeyCode::ControlLeft) || self.keys.contains(&KeyCode::ControlRight);
                 match code {
-                    KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::PageDown if !t.hidden && self.lan.is_none() => {
+                    KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::PageDown if !t.hidden && self.online.lan.is_none() => {
                         t.next();
                         return;
                     }

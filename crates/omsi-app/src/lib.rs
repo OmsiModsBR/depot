@@ -555,7 +555,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         teleport_pick: false,
         #[cfg(steam)]
         steam: None,
-        voice: None,
         headtrack: None,
         headtrack_failed: None,
         headtrack_scale_last: None,
@@ -576,16 +575,12 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         tutorial: None,
         ego: false,
         on_foot: None,
-        remote_walkers: Vec::new(),
         in_cab: false,
-        inside_remote: None,
-        is_admin: false,
         safe_pose: None,
         safe_age: 0.0,
         wheel_acc: 0.0,
         editor_drag: false,
         editor_sync_t: 0.0,
-        remote_added: Default::default(),
         placing: None,
         admin_list: None,
         list_kind: None,
@@ -636,8 +631,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         metar_next: 0.0,
         cursor_kind: 0,
         settings,
-        lan: None,
-        remotes: Default::default(),
+        online: Default::default(),
         spikes: 0,
         worst_ms: 0.0,
         governor: (0.0, 0, 0.0),
@@ -649,8 +643,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         cpu_mark: None,
         touch: touch::Touch::new(),
     };
-    app.lan = lan;
-    app.remotes = lan_game;
+    app.online.lan = lan;
+    app.online.remotes = lan_game;
     // mouse steering as the player left it (the wheel eases to the cursor for a second)
     if app.settings.mouse_steering {
         app.mouse_drive = true;

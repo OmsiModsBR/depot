@@ -147,12 +147,12 @@ impl ApplicationHandler for App {
                     && event.text.as_deref() == Some("/")
                     && event.physical_key != PhysicalKey::Code(KeyCode::NumpadDivide)
                     && self.game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("chat_open") && b.scan_code == 53 && b.chord() == 0)
-                    && self.lan.is_some()
-                    && !lan::chat_open(&self.remotes)
+                    && self.online.lan.is_some()
+                    && !lan::chat_open(&self.online.remotes)
                 {
-                    self.remotes.chat.open();
+                    self.online.remotes.chat.open();
                     if let PhysicalKey::Code(code) = event.physical_key {
-                        lan::chat_swallow(&mut self.remotes, code);
+                        lan::chat_swallow(&mut self.online.remotes, code);
                     }
                     return;
                 }
@@ -160,9 +160,9 @@ impl ApplicationHandler for App {
                 if let (Some(text), true, true) = (
                     event.text.as_deref(),
                     event.state == ElementState::Pressed,
-                    lan::chat_open(&self.remotes),
+                    lan::chat_open(&self.online.remotes),
                 ) {
-                    lan::chat_type(&mut self.remotes, text);
+                    lan::chat_type(&mut self.online.remotes, text);
                 }
                 // (the Lua plugins' `key` event; a key held down repeats nothing)
                 #[cfg(feature = "plugins")]
@@ -355,7 +355,7 @@ impl ApplicationHandler for App {
                     || (self.view == "foot" && self.foot_bus() == Some(crate::humans::BusId::Player));
                 // standing or sitting in another player's bus: that bus is drawn and heard
                 // from inside (its interior meshes, not the outside ones over them)
-                self.inside_remote = match self.foot_bus() {
+                self.online.inside_remote = match self.foot_bus() {
                     Some(crate::humans::BusId::Ai(x)) if self.view == "foot" => crate::humans::remote_bus_player(x),
                     _ => None,
                 };
@@ -514,7 +514,7 @@ impl ApplicationHandler for App {
                 if !self.drive_start(event_loop) {
                     // the session goes on while the map loads: a big map's first area took
                     // longer than the host waits for a silent player
-                    if let Some(l) = self.lan.as_mut() {
+                    if let Some(l) = self.online.lan.as_mut() {
                         let planned = omsi_net::Pose {
                             bus: self.args.bus.clone().unwrap_or_default().replace('\\', "/"),
                             ..Default::default()
@@ -587,7 +587,7 @@ impl ApplicationHandler for App {
                             .map(|p| traffic::vehicle_bodies(&p.vehicle))
                             .unwrap_or_default();
                         t.keep_clear.extend(
-                            self.remotes
+                            self.online.remotes
                                 .remotes
                                 .values()
                                 .flat_map(|r| traffic::vehicle_bodies(r.vehicle())),
@@ -618,7 +618,7 @@ impl ApplicationHandler for App {
                     t.night = daylight.brightness < 0.75 || gloomy;
                     t.daylight = Some(daylight);
                     let __t2 = Instant::now();
-                    t.others = lan_outlines(&self.remotes);
+                    t.others = lan_outlines(&self.online.remotes);
                     t.others.extend(own_outlines(self.player.as_ref(), &self.placed));
                     if !self.paused {
                         t.player_priority = self.player.as_ref().and_then(|p| p.vehicle.var("TrafficPriority")).is_some_and(|v| v > 0.5);
@@ -1469,7 +1469,7 @@ impl ApplicationHandler for App {
                         ).widened(sight));
                     }
                     // (the other LAN players' buses, for their riders to sit in)
-                    h.set_remote_buses(self.remotes.remotes.iter().map(|(id, r)| (*id, r.vehicle())));
+                    h.set_remote_buses(self.online.remotes.remotes.iter().map(|(id, r)| (*id, r.vehicle())));
                     // (and the vehicles the player placed and left, with their riders)
                     h.set_placed_buses(self.placed.iter().map(|q| (q.uid, &q.vehicle)));
                     h.set_player_next_stop(
@@ -1645,7 +1645,7 @@ impl ApplicationHandler for App {
                         if let Some(t) = self.traffic.as_mut() {
                             others.extend(t.cars.iter_mut().map(|c| (c.id, "ai", &mut c.vehicle)));
                         }
-                        others.extend(self.remotes.remotes.iter_mut().map(|(id, r)| ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())));
+                        others.extend(self.online.remotes.remotes.iter_mut().map(|(id, r)| ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())));
                         let mut io = crate::plugins::Io { vehicle: self.player.as_mut().map(|p| &mut p.vehicle), others, dt, message: None, info, commands: Vec::new(), keys, events };
                         plugins.frame(&mut io);
                         let commands = std::mem::take(&mut io.commands);
@@ -2035,7 +2035,7 @@ impl ApplicationHandler for App {
                     if let Some(t) = self.traffic.as_ref() {
                         vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
                     }
-                    vehicles.extend(self.remotes.remotes.values().map(|r| r.vehicle()));
+                    vehicles.extend(self.online.remotes.remotes.values().map(|r| r.vehicle()));
                     let __tc = Instant::now();
                     lights::collect(w, scene, &daylight, cam.position, &vehicles);
                     *self.profile.entry("lights.collect").or_default() += __tc.elapsed().as_secs_f64();
@@ -2067,7 +2067,7 @@ impl ApplicationHandler for App {
                         // rear section is a coupled part with its own [boundingbox] (#777)
                         let boxed = crate::rain::vehicle_boxes;
                         let mut buses: Vec<(glam::DVec3, f64, [f32; 6])> = self.player.as_ref().map(|p| boxed(&p.vehicle)).unwrap_or_default();
-                        buses.extend(self.remotes.remotes.values().flat_map(|rv| boxed(rv.vehicle())));
+                        buses.extend(self.online.remotes.remotes.values().flat_map(|rv| boxed(rv.vehicle())));
                         if let Some(t) = self.traffic.as_ref() {
                             buses.extend(t.cars.iter().filter(|c| c.is_bus() && (c.vehicle.position - cam.position).length() < 40.0).flat_map(|c| boxed(&c.vehicle)));
                         }
@@ -2093,7 +2093,7 @@ impl ApplicationHandler for App {
                             if let Some(t) = self.traffic.as_ref() {
                                 vehicles.extend(t.cars.iter().map(|c| (c.id.wrapping_add(1), &c.vehicle)));
                             }
-                            vehicles.extend(self.remotes.remotes.iter().map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())));
+                            vehicles.extend(self.online.remotes.remotes.iter().map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())));
                             self.spray.frame(
                                 if self.paused { 0.0 } else { dt },
                                 &vehicles,
@@ -2261,9 +2261,9 @@ impl ApplicationHandler for App {
                         n.left -= dt;
                     }
                     self.notices.retain(|n| n.left > 0.0);
-                    if let Some(lan) = self.lan.as_ref() {
-                        lines.extend(lan::hud_lines(lan, &self.remotes, self.player.as_ref()));
-                        lines.extend(self.voice.as_ref().and_then(|v| v.hud_line()));
+                    if let Some(lan) = self.online.lan.as_ref() {
+                        lines.extend(lan::hud_lines(lan, &self.online.remotes, self.player.as_ref()));
+                        lines.extend(self.online.voice.as_ref().and_then(|v| v.hud_line()));
                     }
                     if let Some(h) = self.humans.as_ref() {
                         if let Some(hint) = h.hint() {
@@ -2353,7 +2353,7 @@ impl ApplicationHandler for App {
                         };
                         let frame = navigator::NavFrame {
                             traffic: self.traffic.as_ref(),
-                            players: self.lan.as_ref().map(|l| crate::lan::nav_players(&self.remotes, l.my_id)).unwrap_or_default(),
+                            players: self.online.lan.as_ref().map(|l| crate::lan::nav_players(&self.online.remotes, l.my_id)).unwrap_or_default(),
                             bus: at,
                             heading,
                             speed_kmh: p.vehicle.motion().velocity_kmh(),
@@ -2442,15 +2442,15 @@ impl ApplicationHandler for App {
                     if let (Some(ui), Some(s)) = (self.ui.as_mut(), self.surface.as_ref()) {
                         let scale = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
                         let (w, h) = (hud[2], hud[3]);
-                        self.remotes.chat.disabled = !self.settings.chat;
-                        let chat = (self.lan.is_some() && self.settings.chat).then(|| ui::ChatView {
-                            lines: &self.remotes.chat.lines,
-                            typing: self.remotes.chat.typing.as_deref(),
-                            error: self.remotes.chat.error(),
+                        self.online.remotes.chat.disabled = !self.settings.chat;
+                        let chat = (self.online.lan.is_some() && self.settings.chat).then(|| ui::ChatView {
+                            lines: &self.online.remotes.chat.lines,
+                            typing: self.online.remotes.chat.typing.as_deref(),
+                            error: self.online.remotes.chat.error(),
                         });
-                        ui.chat.hidden = self.remotes.chat.hidden;
+                        ui.chat.hidden = self.online.remotes.chat.hidden;
                         let mut tags = if self.settings.name_tags {
-                            let voice = self.voice.as_ref();
+                            let voice = self.online.voice.as_ref();
                             let speaks = |name: &str, id: u32| voice.is_some_and(|v| v.speaks(name, id));
                             let on_radio = |name: &str, id: u32| voice.is_some_and(|v| v.on_radio(name, id));
                             let rig = (self.settings.triple.enabled
@@ -2466,7 +2466,7 @@ impl ApplicationHandler for App {
                                 .as_ref()
                                 .map(|c| {
                                     lan::name_tags(
-                                        &self.remotes,
+                                        &self.online.remotes,
                                         c,
                                         s.config.width as f32,
                                         h,
@@ -2577,7 +2577,7 @@ impl ApplicationHandler for App {
                     .ok()
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(self.wetness);
-                lighting.inside = match self.inside_remote.and_then(|id| self.remotes.remotes.get(&id)) {
+                lighting.inside = match self.online.inside_remote.and_then(|id| self.online.remotes.remotes.get(&id)) {
                     // (in another player's bus: its box is the one the camera is in)
                     Some(rv) => rv.vehicle().ty.def.bounding_box.map(|bb| (rv.vehicle().position, rv.vehicle().heading, bb)),
                     None => self.player.as_ref().and_then(|p| {
@@ -2591,7 +2591,7 @@ impl ApplicationHandler for App {
                 let puddle_surface = lighting.inside.and_then(|(o, _, _)| self.world.as_ref().and_then(|w| w.puddle_surface(o)));
                 lighting.puddle_ground = puddle_surface.map(|(h, _)| h);
                 lighting.puddle_normal = puddle_surface.map_or(glam::Vec3::Z, |(_, n)| n);
-                let puddle_vehicle = self.inside_remote.and_then(|id| self.remotes.remotes.get(&id)).map(|rv| rv.vehicle())
+                let puddle_vehicle = self.online.inside_remote.and_then(|id| self.online.remotes.remotes.get(&id)).map(|rv| rv.vehicle())
                     .or_else(|| self.player.as_ref().map(|p| &p.vehicle));
                 lighting.puddle_parts = puddle_vehicle.into_iter().flat_map(|v| &v.trailers)
                     .filter_map(|t| t.ty.def.bounding_box.map(|bb| (t.position, t.heading, bb))).take(3).collect();
@@ -3146,7 +3146,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         // the server sent us away (kick, ban): the game ends, the launcher says why
-        if self.lan.as_ref().and_then(crate::lan::turned_away).is_some() {
+        if self.online.lan.as_ref().and_then(crate::lan::turned_away).is_some() {
             self.finish_session();
             crate::platform::exit(event_loop);
             return;
@@ -3175,7 +3175,7 @@ impl ApplicationHandler for App {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         crate::game_lists::flush_settings(true);
         self.finish_session();
-        if let Some(lan) = self.lan.take() {
+        if let Some(lan) = self.online.lan.take() {
             // dropping the session says goodbye (BYE) to the host or the players
             drop(lan);
             log::info!("LAN: left the session");
@@ -3234,7 +3234,7 @@ impl App {
         }
         // the wheel over the chat (or while typing) scrolls its history
         if let Some(ui) = self.ui.as_mut() {
-            if self.lan.is_some() && (ui.chat.hovered || lan::chat_open(&self.remotes)) {
+            if self.online.lan.is_some() && (ui.chat.hovered || lan::chat_open(&self.online.remotes)) {
                 // Ctrl + the wheel makes the chat larger or smaller (kept for the next game)
                 if self.keys.contains(&KeyCode::ControlLeft) || self.keys.contains(&KeyCode::ControlRight) {
                     let to = ((self.settings.chat_size + amount.signum() * 0.1) * 10.0).round() / 10.0;
@@ -3242,7 +3242,7 @@ impl App {
                     crate::game_lists::remember_setting("chat_size", &self.settings.chat_size.to_string());
                     return;
                 }
-                ui.chat.wheel(self.remotes.chat.lines.len(), amount);
+                ui.chat.wheel(self.online.remotes.chat.lines.len(), amount);
                 return;
             }
         }
