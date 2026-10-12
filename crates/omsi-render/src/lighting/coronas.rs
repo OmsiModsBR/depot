@@ -2,9 +2,8 @@
 
 use super::model::{Corona, GpuCorona, SmokeParticle};
 use crate::assets::upload_texture;
-use crate::render::point_in_vehicle_box;
 use crate::renderer::Renderer;
-use crate::scene::Scene;
+use crate::scene::{point_in_vehicle_box, Scene};
 use glam::DVec3;
 
 /// How high over its ground a smoke puff of half width `size` fades out into it (m): a fifth
