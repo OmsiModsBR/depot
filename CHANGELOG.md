@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `vehicle_path` and `human_path`, which check a content path that came from another machine, move from
+  `omsi-net` to `omsi_content::remote_path`; `omsi-net` re-exports them, and the game's driver and walker
+  figures no longer need the network crate for it. The first step of building the game without
+  multiplayer and plugins. Code moved as is; no behaviour change.
 - `cargo fmt` (rustfmt defaults, 100 columns) on `omsi-cfg`, `omsi-o3d`, `omsi-model`, `omsi-map`, `omsi-vehicle`,
   `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content`, `omsi-script`, `omsi-audio`, `omsi-ui`,
   `omsi-geometry`, `tools/omsi-check` and `omsi-render`; CI's new `rustfmt (formatted crates)` step checks them

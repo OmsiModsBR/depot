@@ -399,7 +399,7 @@ impl DriverFigure {
         hum: &str,
         pick: u64,
     ) -> Option<DriverFigure> {
-        let named = omsi_net::human_path(hum)
+        let named = omsi_content::remote_path::human_path(hum)
             .map(|rel| omsi_cfg::resolve_path(&world.root, &rel))
             .filter(|p| omsi_cfg::vfs::exists(p))
             .and_then(|p| cached_type(&p));

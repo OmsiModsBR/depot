@@ -3257,6 +3257,7 @@ dependencies = [
  "flate2",
  "libc",
  "log",
+ "omsi-content",
  "ring",
  "sha2",
  "tungstenite",
