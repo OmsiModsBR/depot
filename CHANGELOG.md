@@ -12,6 +12,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`
   compares a commit with its base, and the CI job `offscreen-traces` (informational for now) runs it on pull
   requests on the software Vulkan adapter. Test and CI only; no behaviour change.
+- Round-trip test of `settings.cfg` between the game and the launcher
+  (`crates/omsi-app/src/settings/round_trip.rs`): writes the file from one side and reads it
+  from the other, in both directions, for the defaults, one value per key and values at the
+  edges of the ranges. The differences found at the edges are listed in the test, not fixed;
+  see docs/QUALITY.md. The game's test-only `Settings::to_text` now writes every field.
+  Test only; no behaviour change.
 - CI job `offscreen-golden` (informational for now): the offscreen golden runs on every push and pull
   request on the software Vulkan adapter (lavapipe), with `OMSI_GOLDEN_REQUIRE=1` so a missing adapter or a
   missing golden for it fails instead of skipping. Golden files are now kept per adapter in
