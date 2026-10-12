@@ -8,6 +8,7 @@ pub mod input;
 pub mod language;
 pub mod money;
 pub mod options;
+pub mod remote_path;
 pub mod situation;
 pub mod tickets;
 pub mod weather;
