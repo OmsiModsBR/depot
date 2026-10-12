@@ -1484,7 +1484,7 @@ impl Player {
     pub(crate) fn gate_gear(&self) -> Option<i32> {
         let program = &self.vehicle.ty.program;
         program.trigger("kw_s_1")?;
-        let v = crate::input_script::gate_gear_var(program).and_then(|v| self.vehicle.var(&v));
+        let v = crate::actions::gate_gear_var(program).and_then(|v| self.vehicle.var(&v));
         Some(v.unwrap_or(0.0).round() as i32)
     }
 

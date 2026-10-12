@@ -2529,7 +2529,7 @@ fn options_pages(app: &App) -> Vec<Page> {
 
 fn vehicle_pages(app: &App) -> Vec<Page> {
     let has = app.player.is_some();
-    let server = crate::input_script::on_server(&app.args);
+    let server = crate::input::on_server(&app.args);
     let mut display: Vec<(String, String)> = Vec::new();
     if has {
         display.push(opens("Destination display", "Change the current destination", "dest"));
