@@ -1855,6 +1855,23 @@ fn terrain_ground(src: &MeshData, slots: &[usize], pos: DVec3, xf: Mat4, origin:
     ground
 }
 
+/// Whether a lower-case group name holds a vegetation word at the start or the end of a word of
+/// its own ("Trees LQ", "Nadelbäume"), not in the middle of another one ("German Street Side"
+/// holds "tree"). Lamp posts, signs, traffic lights and fences in such groups swayed like trees.
+fn group_has_word(group: &str, word: &str) -> bool {
+    // "Bushaltestelle" (bus stop) starts with "bush"
+    if group.contains("bushalte") {
+        return false;
+    }
+    group.match_indices(word).any(|(at, _)| {
+        let end = at + word.len();
+        let before = group[..at].chars().next_back().is_none_or(|c| !c.is_alphabetic());
+        let after = group[end..].chars().next().is_none_or(|c| !c.is_alphabetic());
+        // the start of a word ("shrubbery", "pflanzen"), or its end ("laubbaum")
+        before || after
+    })
+}
+
 /// Two crossed unit quads (1 m wide, 1 m tall, centred at x=0, standing on z=0).
 /// Windy trees: whether a scenery object is a plant whose leaves the wind moves - by its
 /// `[groups]` (the stock "Trees LQ", "Deciduous", "Shrubbery", "Arbors", "Plants" and their
@@ -1877,7 +1894,7 @@ fn vegetation_give_of(sco: &omsi_scenery::sco::SceneryObject) -> Option<f32> {
     let plant = if groups.is_empty() {
         stem.split(|c: char| !c.is_alphabetic()).any(|w| NAME_WORDS.contains(&w))
     } else {
-        groups.iter().any(|g| GROUP_WORDS.iter().any(|w| g.contains(w)))
+        groups.iter().any(|g| GROUP_WORDS.iter().any(|w| group_has_word(g, w)))
     };
     plant.then(|| vegetation_give(&[&stem, &groups.join(" ")]))
 }
@@ -13875,6 +13892,19 @@ mod tests {
         assert!(vegetation_give_of(&sco("[groups]\n2\nThüringer Wald\nGebäude\n[mesh]\nhaus.o3d\n")).is_none());
         assert!(vegetation_give_of(&sco("[groups]\n2\nThüringer Wald\nBäume\n[mesh]\nbaum.o3d\n")).is_some());
         assert!(vegetation_give_of(&sco("[groups]\n1\nHedges\n[mesh]\nh.o3d\n")).is_some());
+    }
+
+    /// A group name that only holds a vegetation word inside another word ("German Street
+    /// Side") does not make poles, signs and fences sway; real plant groups still do.
+    #[test]
+    fn a_street_group_is_no_plant() {
+        let sco = |group: &str| SceneryObject::parse(&omsi_cfg::CfgFile::from_str("x.sco", &format!("[groups]\n1\n{group}\n[mesh]\nx.o3d\n")));
+        for g in ["German Street Side", "Streets", "Bushaltestelle", "Implants"] {
+            assert!(vegetation_give_of(&sco(g)).is_none(), "{g}");
+        }
+        for g in ["Trees LQ", "Deciduous", "Shrubbery", "Arbors", "Plants", "Nadelbäume", "Pflanzen", "Busch"] {
+            assert!(vegetation_give_of(&sco(g)).is_some(), "{g}");
+        }
     }
 
     /// A bus bay's lines made as a plain object (NCCR's `Parkbox(bus).sco`: a flat mesh 5 mm
