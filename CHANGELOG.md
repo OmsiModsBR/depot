@@ -11,6 +11,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content`, `omsi-script`, `omsi-audio`, `omsi-ui`,
   `omsi-geometry` and `tools/omsi-check`; CI's new `rustfmt (formatted crates)` step checks them
   and blocks. Formatting only; no behaviour change.
+- The clippy warnings of the ten format crates are fixed (manual `div_ceil` and `is_multiple_of`, index loops,
+  needless conversions and borrows, complex types named, doc lists). No behaviour change.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,

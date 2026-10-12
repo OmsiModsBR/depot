@@ -72,7 +72,7 @@ impl Terrain {
     }
 
     pub fn load(path: &Path) -> Result<Terrain, TerrainError> {
-        Ok(Self::parse(&omsi_cfg::vfs::read(path)?)?)
+        Self::parse(&omsi_cfg::vfs::read(path)?)
     }
 
     pub fn samples(&self) -> usize {

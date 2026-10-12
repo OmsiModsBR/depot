@@ -494,7 +494,7 @@ fn same_file(a: &Path, b: &Path) -> bool {
 
 /// Of the vehicle files of one vehicle folder (every content root's copy together), the
 /// ones offered for driving, loaded and in the given order: those with a `[friendlyname]`
-/// - OMSI's own rule - that no other file of the folder couples behind itself. The second
+/// (OMSI's own rule) that no other file of the folder couples behind itself. The second
 /// part keeps a rear section out of the list even when a mod copied the front section's
 /// name into it: a coupled part only ever comes with its front.
 pub fn offered_vehicles(files: &[PathBuf]) -> Vec<(PathBuf, Vehicle)> {
@@ -631,9 +631,8 @@ impl Vehicle {
             return Vec::new();
         };
         // (read once per bus: the AI asks it for every bus it puts on the road)
-        static CACHE: std::sync::OnceLock<
-            std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Vec<(String, String)>>>,
-        > = std::sync::OnceLock::new();
+        type Numbers = std::sync::Mutex<std::collections::HashMap<PathBuf, Vec<(String, String)>>>;
+        static CACHE: std::sync::OnceLock<Numbers> = std::sync::OnceLock::new();
         let key = self.path.clone();
         if let Some(v) = CACHE
             .get_or_init(Default::default)
@@ -651,13 +650,13 @@ impl Vehicle {
     }
 
     fn read_numbers_with_plates(&self, list: &str) -> Vec<(String, String)> {
-        let Ok(numbers) = CfgFile::read(&omsi_cfg::resolve_path(self.dir(), list)) else {
+        let Ok(numbers) = CfgFile::read(omsi_cfg::resolve_path(self.dir(), list)) else {
             return Vec::new();
         };
         let plates = self
             .registration_list
             .as_ref()
-            .and_then(|(f, _, _)| CfgFile::read(&omsi_cfg::resolve_path(self.dir(), f)).ok());
+            .and_then(|(f, _, _)| CfgFile::read(omsi_cfg::resolve_path(self.dir(), f)).ok());
         numbers
             .lines
             .iter()

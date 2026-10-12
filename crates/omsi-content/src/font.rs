@@ -301,12 +301,15 @@ impl FontAtlas {
         align: TextAlign,
     ) -> Vec<u8> {
         let mut out = vec![0u8; (w * h * 4) as usize];
-        let glyph_h = self.font.height.max(1) as i32;
+        let glyph_h = self.font.height.max(1);
         let y0 = (h as i32 - glyph_h) / 2;
         self.render_unscaled_at(text, w, h, full_color, rgb, align, y0, &mut out);
         out
     }
 
+    // (the picture's size, colours and alignment, where to draw and what into: kept as
+    // arguments, as `render_unscaled` passes them on)
+    #[allow(clippy::too_many_arguments)]
     fn render_unscaled_at(
         &self,
         text: &str,
@@ -318,7 +321,7 @@ impl FontAtlas {
         y0: i32,
         out: &mut [u8],
     ) {
-        let glyph_h = self.font.height.max(1) as i32;
+        let glyph_h = self.font.height.max(1);
         let mut x = align.offset(w as i32, self.text_width(text), self.font.gap);
         for ch in text.chars() {
             if ch.is_whitespace() {

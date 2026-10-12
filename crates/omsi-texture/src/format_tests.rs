@@ -20,6 +20,7 @@ fn dec(bytes: &[u8], name: &str) -> Image {
 
 /// A bitmap with a header of `hdr` bytes (40, 52, 56, 108, 124), the given masks (written
 /// after a 40-byte header, inside a longer one), palette and pixel rows (as stored).
+#[allow(clippy::too_many_arguments)]
 fn bmp(
     hdr: u32,
     w: i32,
@@ -224,7 +225,7 @@ fn tga(
     b[2] = img_type;
     if let Some((cbpp, entries)) = cmap {
         b[1] = 1;
-        let n = entries.len() / ((cbpp as usize + 7) / 8);
+        let n = entries.len() / (cbpp as usize).div_ceil(8);
         b[5..7].copy_from_slice(&(n as u16).to_le_bytes());
         b[7] = cbpp;
     }

@@ -315,8 +315,8 @@ pub fn season_folder() -> Option<String> {
 /// as OMSI picks it: in snow the snowy roads of `WinterSnowfall` when the
 /// weather has snow on the road, else `WinterSnow`, and a texture with no snow picture
 /// takes its `Winter` one, else its `Fall` one; in winter `Winter`, else `Fall`. (With the
-/// one folder alone, a road whose snowy picture is in `WinterSnowfall` - the stock asphalt
-/// - stayed bare under the heaviest snowfall, and a texture with only a winter picture
+/// one folder alone, a road whose snowy picture is in `WinterSnowfall` (the stock asphalt)
+/// stayed bare under the heaviest snowfall, and a texture with only a winter picture
 /// stayed green in the snow.)
 pub fn season_chain(head: &str) -> Vec<String> {
     let chain: &[&str] = match head.to_ascii_lowercase().as_str() {
@@ -341,8 +341,9 @@ pub fn find_texture(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     // cost three quarters of a minute to put the Spandau fleet on the GPU.
     // (a miss is kept only while the content stays as it was: a paint installed while the
     // game runs is found)
-    static MEMO: std::sync::OnceLock<Mutex<HashMap<String, (u64, Option<PathBuf>)>>> =
-        std::sync::OnceLock::new();
+    // (content generation, the file found)
+    type Memo = Mutex<HashMap<String, (u64, Option<PathBuf>)>>;
+    static MEMO: std::sync::OnceLock<Memo> = std::sync::OnceLock::new();
     let generation = omsi_cfg::content_generation();
     let key = {
         let mut k = String::with_capacity(256);
@@ -388,9 +389,9 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
             })
             .map(|f| f.to_ascii_lowercase())
     })?;
-    static INDEX: std::sync::OnceLock<
-        Mutex<HashMap<String, (u64, Arc<HashMap<String, Vec<PathBuf>>>)>>,
-    > = std::sync::OnceLock::new();
+    // (content generation, the folder's files by lower-case name)
+    type Index = Mutex<HashMap<String, (u64, Arc<HashMap<String, Vec<PathBuf>>>)>>;
+    static INDEX: std::sync::OnceLock<Index> = std::sync::OnceLock::new();
     let generation = omsi_cfg::content_generation();
     let index = {
         let mut all = INDEX.get_or_init(|| Mutex::new(HashMap::new())).lock();
