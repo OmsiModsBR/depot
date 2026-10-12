@@ -2987,12 +2987,17 @@ fn section_around(slots: &[Slot], at: usize) -> (usize, usize) {
 /// its destination picture on in that trigger (the HK roller blinds, the LED matrices)
 /// drove with a blank display instead of its destination.
 fn pool_depot(dir: &Path, map_depots: &[&str]) -> Option<omsi_vehicle::Hof> {
-    omsi_vehicle::hof::depot_like(dir, map_depots).or_else(|| {
-        let files = omsi_vehicle::hof::depot_files(dir);
-        // (the first file that loads: one unreadable depot must not leave the bus without
-        // the displays and the stops of the rest)
-        files.iter().find_map(|p| omsi_vehicle::Hof::load(p).ok())
-    })
+    omsi_vehicle::hof::depot_like(dir, map_depots).or_else(|| first_depot(dir))
+}
+
+/// The first depot file of a vehicle folder that loads: the one OMSI runs a bus with when
+/// no depot file of the folder is the one asked for (its selected-hof index stays 0).
+fn first_depot(dir: &Path) -> Option<omsi_vehicle::Hof> {
+    // (the first file that loads: one unreadable depot must not leave the bus without
+    // the displays and the stops of the rest)
+    omsi_vehicle::hof::depot_files(dir)
+        .iter()
+        .find_map(|p| omsi_vehicle::Hof::load(p).ok())
 }
 
 /// The depot file an `[aigroup_depot]` names for a vehicle: a file of that name next to the
@@ -3015,14 +3020,20 @@ fn depot_file(
         // a mod bus brings only the depot of the map it was made on: the map's depot as
         // another vehicle folder has it (`omsi_vehicle::hof::depot_anywhere`)
         found = omsi_vehicle::hof::depot_anywhere(name);
+        // a depot the map names that exists nowhere (Transcol's groups name garages, its
+        // buses carry only Transcol.hof): OMSI then runs the bus with the first depot file
+        // of its own folder, as a plain group's bus (#58); with none the sign stayed blank
+        if found.is_none() {
+            found = first_depot(dir);
+        }
         match &found {
             Some(h) => log::info!(
                 "{} has no depot file '{name}'; using {}",
                 dir.display(),
                 h.path.display()
             ),
-            None => log::debug!(
-                "no depot file '{name}' next to {} or in any vehicle folder",
+            None => log::warn!(
+                "no depot file '{name}' next to {} or in any vehicle folder, and none of its own: its buses show no destination",
                 dir.display()
             ),
         }
@@ -6292,6 +6303,36 @@ pub(crate) mod tests {
         d.update(&mut v, 542.0);
         assert_eq!(v.host.schedule_active, 0.0);
         assert_eq!(v.var("schedule_active"), Some(0.0));
+    }
+
+    /// #58: Transcol's `[aigroup_depot]` groups name garages ("Satelite", "PS14") that no
+    /// folder has a depot file of; its AI buses carry only Transcol.hof. OMSI runs such a bus
+    /// with the first depot file of its own folder; without one the sign stayed blank.
+    #[test]
+    fn a_depot_group_naming_a_missing_depot_uses_the_buses_own() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("depot-missing-hof-{stamp}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let hof = |name: &str, terminus: &str| {
+            format!("[name]\n{name}\n\nstringcount_terminus\n1\n\n[addterminus]\n804\n{terminus}\n{terminus}\n")
+        };
+        std::fs::write(dir.join("Transcol.hof"), hof("Transcol", "804 T.Laranjeiras")).unwrap();
+        // (a later file of the folder: OMSI's index 0 is the first one)
+        std::fs::write(dir.join("Zona Norte.hof"), hof("Zona Norte", "804 Zona Norte")).unwrap();
+        let missing = format!("Satelite {stamp}");
+        let mut cache = HashMap::new();
+        let h = super::depot_file(&mut cache, &dir, &missing).expect("the bus's own depot");
+        assert_eq!(h.name, "Transcol");
+        assert!(super::find_terminus(&h, "804 T.Laranjeiras").is_some());
+        // a depot file of the name the group gives still wins
+        let named = format!("Unimar AR {stamp}");
+        std::fs::write(dir.join(format!("{named}.hof")), hof(&named, "804 Unimar")).unwrap();
+        let h = super::depot_file(&mut cache, &dir, &named).expect("the named depot");
+        assert_eq!(h.name, named);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

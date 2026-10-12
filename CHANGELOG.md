@@ -46,6 +46,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `crates/omsi-app/tests/golden/offscreen_synthetic/`. Test and CI only; no behaviour change.
 
 ### Fixed
+- AI buses of a depot group whose depot file exists nowhere (Mapa Transcol's garages, whose buses carry
+  only `Transcol.hof`) drove with a blank destination sign. They now run with the first depot file of their
+  own folder, as a plain group's buses do, and a bus with no depot file at all is logged as a warning (#58).
 - The offscreen golden's synthetic root kept the box next to the map, where the game does not look for
   scenery objects, so the picture showed only ground and sky and the "box is in the picture" check failed
   on any adapter. The box now sits in `Sceneryobjects/Golden/` with its mesh in `model/` and its texture in
