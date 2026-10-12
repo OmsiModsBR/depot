@@ -6916,6 +6916,12 @@ impl Traffic {
         Some((ctl.state(li), ctl.remaining(li)))
     }
 
+    /// The state of every light of every controller, controller by controller
+    /// (`OMSI_STATE_TRACE`).
+    pub fn controller_states(&self) -> Vec<Vec<i32>> {
+        self.lights.iter().map(|ctl| (0..ctl.lights.len()).map(|li| ctl.state(li)).collect()).collect()
+    }
+
     /// Seconds until light `li` of controller `c` lets traffic go (0 while it does).
     pub fn light_until_go(&self, c: usize, li: usize) -> Option<f32> {
         self.lights.get(c)?.time_until_go(li)

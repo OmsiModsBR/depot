@@ -196,6 +196,60 @@ jobs:
           fi
           exit "$status"
 
+  # Informational for now: the offscreen run's state against the base, frame by frame
+  # (scripts/offscreen-trace-diff.sh, docs/QUALITY.md) on the software Vulkan adapter. A change
+  # that only moves code leaves the trace identical. One meant to alter the behaviour carries
+  # the `offscreen-delta` label: the job then lists where the traces differ without failing.
+  # It becomes blocking once two parity pull requests in a row passed it without a false alarm.
+  offscreen-traces:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+      - name: System libraries and the software Vulkan adapter
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake pkg-config libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev mesa-vulkan-drivers libvulkan1
+      - name: Offscreen state traces against the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # only the software adapter (see offscreen-golden)
+          VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)
+          export VK_DRIVER_FILES VK_ICD_FILENAMES="$VK_DRIVER_FILES"
+          set +e
+          # the pull request's labels as they are now (see physics-traces)
+          DELTA=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq 'any(.labels[]; .name == "offscreen-delta")')
+          scripts/offscreen-trace-diff.sh "$BASE_SHA" 2>&1 | tee offscreen-traces.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Offscreen state traces'
+            echo '```'
+            grep -A 400 '^offscreen-trace-diff:' offscreen-traces.log | head -n 400
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" = 1 ] && [ "$DELTA" = true ]; then
+            echo "::warning::The offscreen state traces differ from the base (label offscreen-delta): check them against the predicted change."
+            exit 0
+          fi
+          exit "$status"
+
   # Informational: how much of the rigid body's code (rigid/, its tests aside) the physics
   # scenarios and invariant tests reach - lines, regions and branches.
   physics-coverage:

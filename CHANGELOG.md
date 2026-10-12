@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
+  for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it
+  on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`
+  compares a commit with its base, and the CI job `offscreen-traces` (informational for now) runs it on pull
+  requests on the software Vulkan adapter. Test and CI only; no behaviour change.
 - CI job `offscreen-golden` (informational for now): the offscreen golden runs on every push and pull
   request on the software Vulkan adapter (lavapipe), with `OMSI_GOLDEN_REQUIRE=1` so a missing adapter or a
   missing golden for it fails instead of skipping. Golden files are now kept per adapter in
