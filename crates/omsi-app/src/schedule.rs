@@ -4717,6 +4717,7 @@ impl PlayerDuty {
     /// The stops the bus passed without stopping since the last call: how many, the stop it
     /// was due at and the one it is at now (numbers in the trip, from 1). Lua plugins get
     /// it as the `stops_skipped` event.
+    #[cfg_attr(not(feature = "plugins"), allow(dead_code))]
     pub fn take_skipped(&mut self) -> Option<(usize, usize, usize)> {
         self.skipped.take()
     }

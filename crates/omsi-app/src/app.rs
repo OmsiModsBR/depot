@@ -161,11 +161,14 @@ pub(crate) struct App {
     /// chosen line is shown lit; with the mouse only the line under it is.
     pub(crate) menu_kbd: bool,
     /// Keys pressed (true) and let go since the Lua plugins' last frame.
+    #[cfg(feature = "plugins")]
     pub(crate) plugin_keys: Vec<(String, bool)>,
     /// What happened since the Lua plugins' last frame: crashes, people knocked down,
     /// stops skipped (see `plugins::queue_event`).
+    #[cfg(feature = "plugins")]
     pub(crate) plugin_events: Vec<omsi_plugin::GameEvent>,
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
+    #[cfg(feature = "plugins")]
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Seconds Ctrl+Shift+Page Up/Down has been held (the clock runs faster the longer).
     pub(crate) clock_hold: f32,
@@ -377,6 +380,7 @@ pub(crate) struct App {
     /// for the CPU time a frame costs (the wall time says little on a busy machine).
     pub(crate) cpu_mark: Option<(f64, Instant, u32)>,
     /// The OMSI plugins (`plugins/*.opl`), loaded with the first frame.
+    #[cfg(feature = "plugins")]
     pub(crate) plugins: Option<omsi_plugin::Plugins>,
     /// The on-screen controls of a phone (see `touch.rs`).
     pub(crate) touch: crate::touch::Touch,

@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The plugin code (`plugins.rs`, `plugin_ui.rs` and the `omsi-plugin` crate) moves behind a new
+  `plugins` feature of `omsi-app`, off by default, so the game no longer builds it. Plugins were already
+  switched off since the first Depot release; `--features plugins` builds them again. Nothing is
+  deleted, and the game behaves as before.
 - `omsi-app/src/input_script.rs` held 4,900 lines, most of them the game's key, mouse and menu handling; it now
   keeps only the `OMSI_INPUT` script (330 lines). The rest moves to files named for what they do:
   `input/keyboard.rs`, `input/mouse.rs`, `input/menus.rs` and `input/editor_input.rs`, `actions.rs` (game

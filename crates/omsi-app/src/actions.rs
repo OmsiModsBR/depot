@@ -130,6 +130,7 @@ impl App {
             crate::app::report_missing_content(&w, &mut none);
         }
         // PluginFinalize, as OMSI calls it on the way out
+        #[cfg(feature = "plugins")]
         if let Some(mut p) = self.plugins.take() {
             p.finalize();
         }

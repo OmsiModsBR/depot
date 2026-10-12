@@ -17,6 +17,7 @@ O pacote `depot-*-server-*` não é mais gerado em nenhuma arquitetura. (O fonte
 **Página Multiplayer e aba Online ocultas.** Saíram das listas `PAGES` (launcher) e `TABS` (modo telefone); o aviso interno continua só como rede de segurança. `build-server.sh` e os scripts de start do servidor saem com erro logo na primeira linha: o build do servidor nem começa.
 
 **Plugins (nativos e Lua) inativados.** `plugins::load()` devolve sempre vazio; nada em `Plugins/` é carregado. `docs/PLUGINS.md` avisa.
+Desde a trilha 2 da refatoração, o código de plugins (`plugins.rs`, `plugin_ui.rs` e o crate `omsi-plugin`) fica atrás da feature `plugins` do `omsi-app`, desligada por padrão, e não entra mais no binário do jogo. Para compilar com ele: `cargo build -p omsi-app --features plugins`. O `omsi-plugin` continua membro do workspace e é testado por conta própria.
 
 **Links corrigidos para o projeto certo.** `SECURITY.md`, templates de issue (`.github/ISSUE_TEMPLATE`), `site/` (`REPO` e links), `docs/USER_GUIDE.md`, `docs/BUILDING.md`
 passam de `openOMSI-Project/openOMSI` para `OmsiModsBR/depot`. O endereço do site (`docs/VERSIONING.md`, `SECURITY.md`) é https://omsimods.com.br
