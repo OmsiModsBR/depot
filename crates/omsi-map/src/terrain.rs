@@ -26,7 +26,10 @@ pub const MAX_CELLS: usize = 1024;
 
 impl Terrain {
     pub fn flat() -> Terrain {
-        Terrain { cells: TERRAIN_SAMPLES - 1, heights: vec![0.0; TERRAIN_SAMPLES * TERRAIN_SAMPLES] }
+        Terrain {
+            cells: TERRAIN_SAMPLES - 1,
+            heights: vec![0.0; TERRAIN_SAMPLES * TERRAIN_SAMPLES],
+        }
     }
 
     pub fn parse(bytes: &[u8]) -> Result<Terrain, TerrainError> {
@@ -44,11 +47,17 @@ impl Terrain {
         }
         let samples = cells + 1;
         // a damaged header must not overflow the size it asks for
-        let need = samples.checked_mul(samples).and_then(|n| n.checked_mul(4)).and_then(|n| n.checked_add(4));
+        let need = samples
+            .checked_mul(samples)
+            .and_then(|n| n.checked_mul(4))
+            .and_then(|n| n.checked_add(4));
         let Some(need) = need.filter(|n| bytes.len() >= *n) else {
             return Err(TerrainError::Short(bytes.len()));
         };
-        let heights = bytes[4..need].chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        let heights = bytes[4..need]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
         Ok(Terrain { cells, heights })
     }
 
@@ -85,7 +94,10 @@ impl Terrain {
         let fx = (x / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
         let fy = (y / crate::tile_size() as f32 * n).clamp(0.0, n - 1e-4);
         let last = self.cells.saturating_sub(1);
-        let (ix, iy) = ((fx.floor() as usize).min(last), (fy.floor() as usize).min(last));
+        let (ix, iy) = (
+            (fx.floor() as usize).min(last),
+            (fy.floor() as usize).min(last),
+        );
         let (u, v) = (fx - ix as f32, fy - iy as f32);
         let h00 = self.height_at(ix, iy);
         let h10 = self.height_at(ix + 1, iy);
@@ -129,7 +141,10 @@ impl Water {
             return Water::default();
         }
         let count = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-        let values = bytes[4..].chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        let values = bytes[4..]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
         Water { count, values }
     }
 }
@@ -169,9 +184,15 @@ mod size_tests {
     fn oversized_grid_is_rejected_and_sample_stays_in_range() {
         let mut head = 2049u32.to_le_bytes().to_vec();
         head.extend_from_slice(&[0; 16]);
-        assert!(matches!(Terrain::parse(&head), Err(TerrainError::TooLarge(2049))));
+        assert!(matches!(
+            Terrain::parse(&head),
+            Err(TerrainError::TooLarge(2049))
+        ));
         // a grid built in code past the f32 clamp precision must not index out of range
-        let t = Terrain { cells: 2100, heights: vec![1.0; 2101 * 2101] };
+        let t = Terrain {
+            cells: 2100,
+            heights: vec![1.0; 2101 * 2101],
+        };
         assert_eq!(t.sample(300.0, 300.0), 1.0);
         assert_eq!(t.sample_bilinear(300.0, 300.0), 1.0);
     }

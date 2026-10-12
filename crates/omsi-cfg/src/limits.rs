@@ -27,7 +27,9 @@ pub fn checked_texture_size(width: i64, height: i64, max_dim: u32) -> Option<(u3
     if width < 1 || height < 1 || width > max || height > max {
         return None;
     }
-    let bytes = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    let bytes = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
     Some((width as u32, height as u32, bytes))
 }
 
@@ -43,7 +45,10 @@ mod tests {
 
     #[test]
     fn texture_sizes() {
-        assert_eq!(checked_texture_size(512, 256, MAX_TEXTURE_DIM), Some((512, 256, 512 * 256 * 4)));
+        assert_eq!(
+            checked_texture_size(512, 256, MAX_TEXTURE_DIM),
+            Some((512, 256, 512 * 256 * 4))
+        );
         assert_eq!(checked_texture_size(0, 8, MAX_TEXTURE_DIM), None);
         assert_eq!(checked_texture_size(65_536, 65_536, MAX_TEXTURE_DIM), None);
         assert_eq!(checked_texture_size(i64::MAX, 2, MAX_TEXTURE_DIM), None);
