@@ -24,7 +24,10 @@ pub const MAX_DIMENSION: usize = omsi_cfg::limits::MAX_TEXTURE_DIM as usize;
 /// `image::load_from_memory_with_format` with the width and height limited to
 /// [`MAX_DIMENSION`], checked from the header before the picture is allocated (a BMP, PNG or
 /// JPEG header can ask for 60 000 x 60 000).
-fn load_limited(bytes: &[u8], format: image::ImageFormat) -> image::ImageResult<image::DynamicImage> {
+fn load_limited(
+    bytes: &[u8],
+    format: image::ImageFormat,
+) -> image::ImageResult<image::DynamicImage> {
     let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_DIMENSION as u32);
@@ -48,7 +51,12 @@ pub struct Image {
 
 impl Image {
     pub fn solid(rgba: [u8; 4]) -> Image {
-        Image { width: 1, height: 1, rgba: rgba.to_vec(), has_alpha: rgba[3] != 255 }
+        Image {
+            width: 1,
+            height: 1,
+            rgba: rgba.to_vec(),
+            has_alpha: rgba[3] != 255,
+        }
     }
 
     /// A `[matl_bumpmap]` texture as the renderer samples it: every stock and mod bump map
@@ -56,8 +64,24 @@ impl Image {
     /// bump-mapped environment stage), so the height goes into the alpha channel, which
     /// stays linear in an sRGB texture; the colour is left white.
     pub fn bump_height_map(&self) -> Image {
-        let rgba = self.rgba.chunks_exact(4).flat_map(|p| [255, 255, 255, ((p[0] as u32 * 77 + p[1] as u32 * 150 + p[2] as u32 * 29) >> 8) as u8]).collect();
-        Image { width: self.width, height: self.height, rgba, has_alpha: true }
+        let rgba = self
+            .rgba
+            .chunks_exact(4)
+            .flat_map(|p| {
+                [
+                    255,
+                    255,
+                    255,
+                    ((p[0] as u32 * 77 + p[1] as u32 * 150 + p[2] as u32 * 29) >> 8) as u8,
+                ]
+            })
+            .collect();
+        Image {
+            width: self.width,
+            height: self.height,
+            rgba,
+            has_alpha: true,
+        }
     }
 }
 
@@ -106,19 +130,27 @@ pub const EXTENSIONS: [&str; 5] = ["dds", "bmp", "tga", "jpg", "png"];
 
 /// Decode an image file into RGBA8.
 pub fn decode_file(path: &Path) -> Result<Image, TextureError> {
-    let bytes = omsi_cfg::vfs::read(path).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?;
+    let bytes = omsi_cfg::vfs::read(path)
+        .map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?;
     decode_bytes(&bytes, path)
 }
 
 pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
     // The original loads by content (D3DX), so files are often misnamed: a `.dds` that is a
     // BMP is common. Sniff the signatures first and fall back to the extension (TGA has none).
     if bytes.starts_with(b"DDS ") {
         return dds::decode(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e));
     }
     let is_tga_ext = matches!(ext.as_str(), "tga");
-    let looks_tga = bytes.len() > 18 && (1..=3).contains(&(bytes[2] & 7)) && bytes[2] & 0xF0 == 0 && matches!(bytes[16], 8 | 15 | 16 | 24 | 32);
+    let looks_tga = bytes.len() > 18
+        && (1..=3).contains(&(bytes[2] & 7))
+        && bytes[2] & 0xF0 == 0
+        && matches!(bytes[16], 8 | 15 | 16 | 24 | 32);
     if is_tga_ext && looks_tga && !bytes.starts_with(b"BM") && !bytes.starts_with(&[0xFF, 0xD8]) {
         return tga::decode(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e));
     }
@@ -135,10 +167,13 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
         match ext.as_str() {
             "dds" => image::ImageFormat::Dds,
             "bmp" => image::ImageFormat::Bmp,
-            "tga" => return tga::decode(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e)),
+            "tga" => {
+                return tga::decode(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e))
+            }
             "jpg" | "jpeg" => image::ImageFormat::Jpeg,
             "png" => image::ImageFormat::Png,
-            _ => image::guess_format(bytes).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
+            _ => image::guess_format(bytes)
+                .map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
         }
     };
     let img = match load_limited(bytes, format) {
@@ -147,10 +182,13 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
         // depth holds (the A21's and the Urbino's 4-bit `LCD-Innenanzeige.bmp` says 17) is
         // read with the colours it can use, and a 24-bit one that says BI_BITFIELDS (sky
         // packs' `Texture\skybox\night01.bmp`) as the plain 24-bit bitmap it is
-        Err(e) if format == image::ImageFormat::Bmp => match bmp_clamped_palette(bytes).or_else(|| bmp24_bitfields(bytes)) {
-            Some(fixed) => load_limited(&fixed, format).map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
-            None => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
-        },
+        Err(e) if format == image::ImageFormat::Bmp => {
+            match bmp_clamped_palette(bytes).or_else(|| bmp24_bitfields(bytes)) {
+                Some(fixed) => load_limited(&fixed, format)
+                    .map_err(|e| TextureError::Decode(path.to_path_buf(), e.to_string()))?,
+                None => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
+            }
+        }
         Err(e) => return Err(TextureError::Decode(path.to_path_buf(), e.to_string())),
     };
     let mut has_alpha = img.color().has_alpha();
@@ -160,14 +198,27 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
     if format == image::ImageFormat::Bmp && !has_alpha {
         has_alpha = bmp32_alpha(bytes, width, height, &mut rgba);
     }
-    Ok(Image { width, height, rgba, has_alpha })
+    Ok(Image {
+        width,
+        height,
+        rgba,
+        has_alpha,
+    })
 }
 
 /// A copy of a palette bitmap whose colour count (`biClrUsed`, `biClrImportant`) is cut to
 /// what its bit depth can index; None when there is nothing to cut.
 fn bmp_clamped_palette(bytes: &[u8]) -> Option<Vec<u8>> {
-    let u16_at = |o: usize| bytes.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
-    let u32_at = |o: usize| bytes.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let u16_at = |o: usize| {
+        bytes
+            .get(o..o + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+    };
+    let u32_at = |o: usize| {
+        bytes
+            .get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
     let bits = u16_at(28)? as u32;
     if !(1..=8).contains(&bits) {
         return None;
@@ -188,8 +239,12 @@ fn bmp_clamped_palette(bytes: &[u8]) -> Option<Vec<u8>> {
 /// the `image` crate refuses the file. The masks after a 40-byte header stay where they are
 /// (the pixel offset already points past them). None when the bitmap is not one of those.
 fn bmp24_bitfields(bytes: &[u8]) -> Option<Vec<u8>> {
-    let bits = bytes.get(28..30).map(|b| u16::from_le_bytes([b[0], b[1]]))?;
-    let compression = bytes.get(30..34).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))?;
+    let bits = bytes
+        .get(28..30)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))?;
+    let compression = bytes
+        .get(30..34)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))?;
     if bits != 24 || compression != 3 {
         return None;
     }
@@ -205,15 +260,27 @@ fn bmp24_bitfields(bytes: &[u8]) -> Option<Vec<u8>> {
 /// scheme are 32-bit bitmaps named `.dds`), and their fourth byte is the reflection mask
 /// of the paint. Returns whether the alpha was taken over.
 fn bmp32_alpha(bytes: &[u8], width: u32, height: u32, rgba: &mut [u8]) -> bool {
-    let u32_at = |o: usize| bytes.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
-    let (Some(offset), Some(raw_h), Some(compression)) = (u32_at(10), u32_at(22), u32_at(30)) else { return false };
-    let bpp = bytes.get(28..30).map(|b| u16::from_le_bytes([b[0], b[1]])).unwrap_or(0);
+    let u32_at = |o: usize| {
+        bytes
+            .get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let (Some(offset), Some(raw_h), Some(compression)) = (u32_at(10), u32_at(22), u32_at(30))
+    else {
+        return false;
+    };
+    let bpp = bytes
+        .get(28..30)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .unwrap_or(0);
     if bpp != 32 || compression != 0 {
         return false;
     }
     let (w, h) = (width as usize, height as usize);
     let offset = offset as usize;
-    let Some(pixels) = bytes.get(offset..offset + w * h * 4) else { return false };
+    let Some(pixels) = bytes.get(offset..offset + w * h * 4) else {
+        return false;
+    };
     if !pixels.chunks_exact(4).any(|p| p[3] != 0) {
         return false;
     }
@@ -263,7 +330,9 @@ pub fn season_chain(head: &str) -> Vec<String> {
 
 /// The folders of the current season (see [`season_chain`]), none in summer.
 pub fn season_folders() -> Vec<String> {
-    season_folder().map(|f| season_chain(&f)).unwrap_or_default()
+    season_folder()
+        .map(|f| season_chain(&f))
+        .unwrap_or_default()
 }
 
 pub fn find_texture(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
@@ -272,7 +341,8 @@ pub fn find_texture(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     // cost three quarters of a minute to put the Spandau fleet on the GPU.
     // (a miss is kept only while the content stays as it was: a paint installed while the
     // game runs is found)
-    static MEMO: std::sync::OnceLock<Mutex<HashMap<String, (u64, Option<PathBuf>)>>> = std::sync::OnceLock::new();
+    static MEMO: std::sync::OnceLock<Mutex<HashMap<String, (u64, Option<PathBuf>)>>> =
+        std::sync::OnceLock::new();
     let generation = omsi_cfg::content_generation();
     let key = {
         let mut k = String::with_capacity(256);
@@ -299,7 +369,8 @@ pub fn find_texture(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
 }
 
 fn find_texture_uncached(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
-    find_texture_in_season(name, dirs, season_folder().as_deref()).or_else(|| find_texture_elsewhere(name, dirs))
+    find_texture_in_season(name, dirs, season_folder().as_deref())
+        .or_else(|| find_texture_elsewhere(name, dirs))
 }
 
 /// A spline's or object's texture missing from its folders: the nearest same-named file under `Splines`/`Sceneryobjects`.
@@ -310,9 +381,16 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     }
     let first = dirs.first()?;
     let top = first.ancestors().find_map(|a| {
-        a.file_name().and_then(|f| f.to_str()).filter(|f| f.eq_ignore_ascii_case("Splines") || f.eq_ignore_ascii_case("Sceneryobjects")).map(|f| f.to_ascii_lowercase())
+        a.file_name()
+            .and_then(|f| f.to_str())
+            .filter(|f| {
+                f.eq_ignore_ascii_case("Splines") || f.eq_ignore_ascii_case("Sceneryobjects")
+            })
+            .map(|f| f.to_ascii_lowercase())
     })?;
-    static INDEX: std::sync::OnceLock<Mutex<HashMap<String, (u64, Arc<HashMap<String, Vec<PathBuf>>>)>>> = std::sync::OnceLock::new();
+    static INDEX: std::sync::OnceLock<
+        Mutex<HashMap<String, (u64, Arc<HashMap<String, Vec<PathBuf>>>)>>,
+    > = std::sync::OnceLock::new();
     let generation = omsi_cfg::content_generation();
     let index = {
         let mut all = INDEX.get_or_init(|| Mutex::new(HashMap::new())).lock();
@@ -325,19 +403,53 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
             }
         }
     };
-    let key = |p: &Path| p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase());
+    let key = |p: &Path| {
+        p.file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())
+    };
     let want = Path::new(name);
-    if !want.extension().and_then(|x| x.to_str()).is_some_and(|x| ["dds", "bmp", "jpg", "jpeg", "png", "tga"].iter().any(|t| x.eq_ignore_ascii_case(t))) {
+    if !want.extension().and_then(|x| x.to_str()).is_some_and(|x| {
+        ["dds", "bmp", "jpg", "jpeg", "png", "tga"]
+            .iter()
+            .any(|t| x.eq_ignore_ascii_case(t))
+    }) {
         return None;
     }
     let candidates = index.get(&key(want)?)?;
-    let shared = |p: &Path| p.components().zip(first.components()).take_while(|(a, b)| a == b).count();
-    let in_texture = |p: &Path| p.parent().and_then(|d| d.file_name()).and_then(|f| f.to_str()).is_some_and(|f| f.eq_ignore_ascii_case("texture"));
-    let same_ext = |p: &Path| p.extension().zip(want.extension()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b));
-    let found = candidates.iter().max_by_key(|p| (in_texture(p), shared(p), same_ext(p)))?.clone();
-    static SAID: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-    if SAID.get_or_init(Default::default).lock().insert(name.to_ascii_lowercase()) {
-        log::info!("texture {name} is not in its folders ({}); taken from {}", first.display(), found.display());
+    let shared = |p: &Path| {
+        p.components()
+            .zip(first.components())
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let in_texture = |p: &Path| {
+        p.parent()
+            .and_then(|d| d.file_name())
+            .and_then(|f| f.to_str())
+            .is_some_and(|f| f.eq_ignore_ascii_case("texture"))
+    };
+    let same_ext = |p: &Path| {
+        p.extension()
+            .zip(want.extension())
+            .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))
+    };
+    let found = candidates
+        .iter()
+        .max_by_key(|p| (in_texture(p), shared(p), same_ext(p)))?
+        .clone();
+    static SAID: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    if SAID
+        .get_or_init(Default::default)
+        .lock()
+        .insert(name.to_ascii_lowercase())
+    {
+        log::info!(
+            "texture {name} is not in its folders ({}); taken from {}",
+            first.display(),
+            found.display()
+        );
     }
     Some(found)
 }
@@ -348,17 +460,25 @@ fn texture_index(top: &str) -> HashMap<String, Vec<PathBuf>> {
     let mut stack: Vec<PathBuf> = omsi_cfg::content_roots()
         .into_iter()
         .filter_map(|r| {
-            let (name, _) = omsi_cfg::vfs::list_dir(&r)?.into_iter().find(|(n, d)| *d && n.to_str().is_some_and(|n| n.eq_ignore_ascii_case(top)))?;
+            let (name, _) = omsi_cfg::vfs::list_dir(&r)?
+                .into_iter()
+                .find(|(n, d)| *d && n.to_str().is_some_and(|n| n.eq_ignore_ascii_case(top)))?;
             Some(r.join(name))
         })
         .collect();
     while let Some(dir) = stack.pop() {
-        let Some(entries) = omsi_cfg::vfs::list_dir(&dir) else { continue };
+        let Some(entries) = omsi_cfg::vfs::list_dir(&dir) else {
+            continue;
+        };
         for (name, is_dir) in entries {
             let p = dir.join(name);
             if is_dir {
                 stack.push(p);
-            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["dds", "bmp", "jpg", "png", "tga"].iter().any(|t| x.eq_ignore_ascii_case(t))) {
+            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| {
+                ["dds", "bmp", "jpg", "png", "tga"]
+                    .iter()
+                    .any(|t| x.eq_ignore_ascii_case(t))
+            }) {
                 if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
                     out.entry(stem.to_ascii_lowercase()).or_default().push(p);
                 }
@@ -372,7 +492,9 @@ fn find_texture_in_season(name: &str, dirs: &[&Path], season: Option<&str>) -> O
     // a file named in full (a paint scheme's picture, resolved in its scheme's folder)
     let full = Path::new(name.trim());
     if full.is_absolute() {
-        if let (Some(parent), Some(file)) = (full.parent(), full.file_name().and_then(|f| f.to_str())) {
+        if let (Some(parent), Some(file)) =
+            (full.parent(), full.file_name().and_then(|f| f.to_str()))
+        {
             if let Some(found) = find_texture_in_dir(parent, file) {
                 return Some(found);
             }
@@ -390,7 +512,12 @@ fn find_texture_in_season(name: &str, dirs: &[&Path], season: Option<&str>) -> O
     let mut names: Vec<String> = Vec::new();
     for f in season.map(season_chain).unwrap_or_default() {
         match (stem_path.parent(), stem_path.file_name()) {
-            (Some(par), Some(file)) if !par.as_os_str().is_empty() => names.push(format!("{}/{}/{}", par.display(), f, file.to_string_lossy())),
+            (Some(par), Some(file)) if !par.as_os_str().is_empty() => names.push(format!(
+                "{}/{}/{}",
+                par.display(),
+                f,
+                file.to_string_lossy()
+            )),
             (_, Some(file)) => names.push(format!("{}/{}", f, file.to_string_lossy())),
             _ => {}
         }
@@ -399,8 +526,16 @@ fn find_texture_in_season(name: &str, dirs: &[&Path], season: Option<&str>) -> O
     // A name with folders in it that is not below any of the texture folders is taken from
     // the main folder, as OMSI does (`Splines\BS_ADDON_CreativeStreets\Gehwege\texture\
     // BS_Gehweg_Allgemein1.bmp` in a spline of another folder of that add-on).
-    let from_root: Vec<PathBuf> = if name.contains('/') { omsi_cfg::content_roots().into_iter().take(1).collect() } else { Vec::new() };
-    let dirs: Vec<&Path> = dirs.iter().copied().chain(from_root.iter().map(|p| p.as_path())).collect();
+    let from_root: Vec<PathBuf> = if name.contains('/') {
+        omsi_cfg::content_roots().into_iter().take(1).collect()
+    } else {
+        Vec::new()
+    };
+    let dirs: Vec<&Path> = dirs
+        .iter()
+        .copied()
+        .chain(from_root.iter().map(|p| p.as_path()))
+        .collect();
     // Keep the pack's directory priority, then prefer its seasonal variant.
     for dir in &dirs {
         for cand_name in &names {
@@ -415,7 +550,11 @@ fn find_texture_in_season(name: &str, dirs: &[&Path], season: Option<&str>) -> O
     let absolute = name.as_bytes().get(1) == Some(&b':') || name.starts_with('/');
     if absolute {
         let parts: Vec<&str> = name.split('/').filter(|p| !p.is_empty()).collect();
-        if let Some(i) = parts.iter().position(|p| omsi_cfg::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(p))) {
+        if let Some(i) = parts.iter().position(|p| {
+            omsi_cfg::CONTENT_FOLDERS
+                .iter()
+                .any(|f| f.eq_ignore_ascii_case(p))
+        }) {
             let rel = parts[i..].join("/");
             for root in omsi_cfg::content_roots() {
                 if let Some(found) = find_texture_in_dir(&root, &rel) {
@@ -478,9 +617,15 @@ pub fn cfg_path(requested: &str, found: &Path) -> Option<PathBuf> {
     let req = requested.trim().replace('\\', "/");
     let base = req.rsplit('/').next().unwrap_or(&req).to_string();
     let req_stem = Path::new(&base).with_extension("");
-    let found_name = found.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let found_name = found
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let found_stem = found.with_extension("");
-    let found_stem = found_stem.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let found_stem = found_stem
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let mut dirs: Vec<&Path> = Vec::new();
     if let Some(d) = found.parent() {
         dirs.push(d);
@@ -489,7 +634,12 @@ pub fn cfg_path(requested: &str, found: &Path) -> Option<PathBuf> {
         }
     }
     for (i, d) in dirs.iter().enumerate() {
-        let mut names = vec![format!("{base}.cfg"), format!("{found_name}.cfg"), format!("{}.cfg", req_stem.to_string_lossy()), format!("{found_stem}.cfg")];
+        let mut names = vec![
+            format!("{base}.cfg"),
+            format!("{found_name}.cfg"),
+            format!("{}.cfg", req_stem.to_string_lossy()),
+            format!("{found_stem}.cfg"),
+        ];
         if i > 0 {
             // the parent folder is only for a seasonal subfolder's texture
             names.truncate(1);
@@ -631,7 +781,17 @@ impl TextureCache {
 
     /// Bytes of the pictures held (decoded and prepared ones).
     pub fn held_bytes(&self) -> usize {
-        self.images.lock().values().map(|i| i.rgba.len()).sum::<usize>() + self.gpu.lock().values().map(|t| t.cpu_bytes()).sum::<usize>()
+        self.images
+            .lock()
+            .values()
+            .map(|i| i.rgba.len())
+            .sum::<usize>()
+            + self
+                .gpu
+                .lock()
+                .values()
+                .map(|t| t.cpu_bytes())
+                .sum::<usize>()
     }
 
     pub fn len(&self) -> usize {
@@ -704,19 +864,47 @@ mod tests {
         for f in ["WinterSnowfall", "WinterSnow", "Winter", "Fall"] {
             std::fs::create_dir_all(tex.join(f)).unwrap();
         }
-        for path in ["road.bmp", "WinterSnowfall/road.bmp", "walk.bmp", "WinterSnow/walk.bmp", "WinterSnowfall/walk.bmp", "hedge.bmp", "Winter/hedge.bmp", "Fall/hedge.bmp", "tree.bmp", "Fall/tree.bmp", "plain.bmp"] {
+        for path in [
+            "road.bmp",
+            "WinterSnowfall/road.bmp",
+            "walk.bmp",
+            "WinterSnow/walk.bmp",
+            "WinterSnowfall/walk.bmp",
+            "hedge.bmp",
+            "Winter/hedge.bmp",
+            "Fall/hedge.bmp",
+            "tree.bmp",
+            "Fall/tree.bmp",
+            "plain.bmp",
+        ] {
             std::fs::write(tex.join(path), b"lookup-only fixture").unwrap();
         }
         let dirs = [tex.as_path()];
-        let find = |name: &str, season: &str| find_texture_in_season(name, &dirs, Some(season)).unwrap();
+        let find =
+            |name: &str, season: &str| find_texture_in_season(name, &dirs, Some(season)).unwrap();
         // snow on the road
-        assert_eq!(find("road.bmp", "WinterSnowfall"), tex.join("WinterSnowfall/road.bmp"));
-        assert_eq!(find("walk.bmp", "WinterSnowfall"), tex.join("WinterSnowfall/walk.bmp"));
-        assert_eq!(find("hedge.bmp", "WinterSnowfall"), tex.join("Winter/hedge.bmp"));
+        assert_eq!(
+            find("road.bmp", "WinterSnowfall"),
+            tex.join("WinterSnowfall/road.bmp")
+        );
+        assert_eq!(
+            find("walk.bmp", "WinterSnowfall"),
+            tex.join("WinterSnowfall/walk.bmp")
+        );
+        assert_eq!(
+            find("hedge.bmp", "WinterSnowfall"),
+            tex.join("Winter/hedge.bmp")
+        );
         // snow, the roads clear
         assert_eq!(find("road.bmp", "WinterSnow"), tex.join("road.bmp"));
-        assert_eq!(find("walk.bmp", "WinterSnow"), tex.join("WinterSnow/walk.bmp"));
-        assert_eq!(find("hedge.bmp", "WinterSnow"), tex.join("Winter/hedge.bmp"));
+        assert_eq!(
+            find("walk.bmp", "WinterSnow"),
+            tex.join("WinterSnow/walk.bmp")
+        );
+        assert_eq!(
+            find("hedge.bmp", "WinterSnow"),
+            tex.join("Winter/hedge.bmp")
+        );
         assert_eq!(find("tree.bmp", "WinterSnow"), tex.join("Fall/tree.bmp"));
         assert_eq!(find("plain.bmp", "WinterSnow"), tex.join("plain.bmp"));
         // winter: its own picture, else the autumn one
@@ -746,12 +934,28 @@ mod tests {
         for ext in ["png", "jpg", "tga", "bmp"] {
             let name = format!("sign_{ext}.{ext}");
             let found = find_texture_uncached(&name, &[&local]).unwrap();
-            assert_eq!(found.extension().unwrap().to_string_lossy().to_ascii_lowercase(), "dds");
-            assert_eq!(find_texture_uncached(local.join(&name).to_str().unwrap(), &[]), Some(found));
+            assert_eq!(
+                found
+                    .extension()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_ascii_lowercase(),
+                "dds"
+            );
+            assert_eq!(
+                find_texture_uncached(local.join(&name).to_str().unwrap(), &[]),
+                Some(found)
+            );
         }
-        assert_eq!(find_texture_uncached("local_only.png", &[&local, &global]), Some(local.join("local_only.png")));
+        assert_eq!(
+            find_texture_uncached("local_only.png", &[&local, &global]),
+            Some(local.join("local_only.png"))
+        );
         // Without DDS, the requested format wins over the other fallback formats.
-        assert_eq!(find_texture_uncached("local_only.png", &[&local]), Some(local.join("local_only.png")));
+        assert_eq!(
+            find_texture_uncached("local_only.png", &[&local]),
+            Some(local.join("local_only.png"))
+        );
         assert_eq!(find_texture_uncached("missing.png", &[&local]), None);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -759,18 +963,27 @@ mod tests {
     #[test]
     fn a_spline_texture_missing_from_its_folders_comes_from_another_spline_folder() {
         let dir = std::env::temp_dir().join(format!("omsi-elsewhere-{}", std::process::id()));
-        let (own, other) = (dir.join("Splines/Pack/Roads/texture"), dir.join("Splines/Pack/Paths/texture"));
+        let (own, other) = (
+            dir.join("Splines/Pack/Roads/texture"),
+            dir.join("Splines/Pack/Paths/texture"),
+        );
         std::fs::create_dir_all(&own).unwrap();
         std::fs::create_dir_all(&other).unwrap();
         std::fs::write(other.join("gehweg.bmp"), b"x").unwrap();
         std::fs::write(other.join("0.png"), b"x").unwrap();
         omsi_cfg::add_content_root(dir.clone());
-        assert_eq!(find_texture_uncached("gehweg.bmp", &[&own]), Some(other.join("gehweg.bmp")));
+        assert_eq!(
+            find_texture_uncached("gehweg.bmp", &[&own]),
+            Some(other.join("gehweg.bmp"))
+        );
         assert_eq!(find_texture_uncached("0", &[&own]), None);
         // content installed while the game runs is indexed again
         std::fs::write(other.join("late.bmp"), b"x").unwrap();
         omsi_cfg::content_changed();
-        assert_eq!(find_texture_uncached("late.bmp", &[&own]), Some(other.join("late.bmp")));
+        assert_eq!(
+            find_texture_uncached("late.bmp", &[&own]),
+            Some(other.join("late.bmp"))
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -781,10 +994,20 @@ mod tests {
         std::fs::create_dir_all(dir.join("texture")).unwrap();
         std::fs::write(dir.join("texture").join("anz-oben.jpg"), b"x").unwrap();
         let tex = dir.join("texture");
-        assert_eq!(find_texture("anz-oben.jpg.", &[tex.as_path()]), Some(tex.join("anz-oben.jpg")));
-        let upper = find_texture("ANZ-OBEN.JPG .", &[tex.as_path()]).map(|p| p.to_string_lossy().to_lowercase());
-        assert_eq!(upper, Some(tex.join("anz-oben.jpg").to_string_lossy().to_lowercase()));
-        assert_eq!(find_texture("texture.\\anz-oben.bmp", &[dir.as_path()]), Some(tex.join("anz-oben.jpg")));
+        assert_eq!(
+            find_texture("anz-oben.jpg.", &[tex.as_path()]),
+            Some(tex.join("anz-oben.jpg"))
+        );
+        let upper = find_texture("ANZ-OBEN.JPG .", &[tex.as_path()])
+            .map(|p| p.to_string_lossy().to_lowercase());
+        assert_eq!(
+            upper,
+            Some(tex.join("anz-oben.jpg").to_string_lossy().to_lowercase())
+        );
+        assert_eq!(
+            find_texture("texture.\\anz-oben.bmp", &[dir.as_path()]),
+            Some(tex.join("anz-oben.jpg"))
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -798,7 +1021,10 @@ mod tests {
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::write(sub.join("x.bmp"), b"x").unwrap();
         assert_eq!(
-            find_texture("\\New Territories East\\Freetex_Lolipop\\x.bmp", &[tex.as_path()]),
+            find_texture(
+                "\\New Territories East\\Freetex_Lolipop\\x.bmp",
+                &[tex.as_path()]
+            ),
             Some(sub.join("x.bmp"))
         );
         std::fs::remove_dir_all(&dir).ok();
@@ -826,7 +1052,16 @@ mod tests {
     #[test]
     fn bmp32_alpha_like_d3dx() {
         // file rows are bottom-up: the first two pixels are the lower row of the image
-        let img = decode_bytes(&bmp32([[1, 2, 3, 10], [4, 5, 6, 20], [7, 8, 9, 30], [10, 11, 12, 40]]), Path::new("x.dds")).unwrap();
+        let img = decode_bytes(
+            &bmp32([
+                [1, 2, 3, 10],
+                [4, 5, 6, 20],
+                [7, 8, 9, 30],
+                [10, 11, 12, 40],
+            ]),
+            Path::new("x.dds"),
+        )
+        .unwrap();
         assert!(img.has_alpha);
         let alpha: Vec<u8> = img.rgba.chunks_exact(4).map(|p| p[3]).collect();
         assert_eq!(alpha, vec![30, 40, 10, 20]);
@@ -889,9 +1124,17 @@ mod tests {
 
     #[test]
     fn bump_height_in_alpha() {
-        let grey = Image { width: 3, height: 1, rgba: vec![0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 7], has_alpha: false };
+        let grey = Image {
+            width: 3,
+            height: 1,
+            rgba: vec![0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 7],
+            has_alpha: false,
+        };
         let h = grey.bump_height_map();
-        assert_eq!(h.rgba, vec![255, 255, 255, 0, 255, 255, 255, 127, 255, 255, 255, 255]);
+        assert_eq!(
+            h.rgba,
+            vec![255, 255, 255, 0, 255, 255, 255, 127, 255, 255, 255, 255]
+        );
         assert!(h.has_alpha);
         assert_eq!((h.width, h.height), (3, 1));
     }
