@@ -19,7 +19,8 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 
 /// Whether plain `http` stations are allowed (`OMSI_RADIO_ALLOW_HTTP=1`).
 pub fn http_allowed() -> bool {
-    omsi_cfg::env::var("OMSI_RADIO_ALLOW_HTTP").is_ok_and(|v| matches!(v.trim(), "1" | "true" | "yes"))
+    omsi_cfg::env::var("OMSI_RADIO_ALLOW_HTTP")
+        .is_ok_and(|v| matches!(v.trim(), "1" | "true" | "yes"))
 }
 
 /// Whether `ip` is an address on the public internet.
@@ -67,7 +68,9 @@ fn is_public_v4(a: Ipv4Addr) -> bool {
 
 /// The pieces of `scheme://authority/...` the check needs: (scheme lower-cased, host, rest).
 fn split(url: &str) -> Result<(String, &str), String> {
-    let (scheme, rest) = url.split_once("://").ok_or("not an address (no scheme://)")?;
+    let (scheme, rest) = url
+        .split_once("://")
+        .ok_or("not an address (no scheme://)")?;
     let scheme = scheme.to_ascii_lowercase();
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     Ok((scheme, &rest[..end]))
@@ -98,19 +101,45 @@ pub fn check_stream_url(url: &str, allow_http: bool) -> Result<(), String> {
         }
         h
     } else {
-        authority.rsplit_once(':').map(|(h, port)| if port.chars().all(|c| c.is_ascii_digit()) { h } else { authority }).unwrap_or(authority)
+        authority
+            .rsplit_once(':')
+            .map(|(h, port)| {
+                if port.chars().all(|c| c.is_ascii_digit()) {
+                    h
+                } else {
+                    authority
+                }
+            })
+            .unwrap_or(authority)
     };
     if host.is_empty() {
         return Err("the address has no host".into());
     }
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return if is_public_ip(ip) { Ok(()) } else { Err(format!("{ip} is not a public address")) };
+        return if is_public_ip(ip) {
+            Ok(())
+        } else {
+            Err(format!("{ip} is not a public address"))
+        };
     }
     let name = host.trim_end_matches('.').to_ascii_lowercase();
     if !name.contains('.') {
         return Err(format!("{host:?} is not a public host name"));
     }
-    if name == "localhost" || [".localhost", ".local", ".internal", ".lan", ".home", ".home.arpa", ".intranet", ".corp"].iter().any(|s| name.ends_with(s)) {
+    if name == "localhost"
+        || [
+            ".localhost",
+            ".local",
+            ".internal",
+            ".lan",
+            ".home",
+            ".home.arpa",
+            ".intranet",
+            ".corp",
+        ]
+        .iter()
+        .any(|s| name.ends_with(s))
+    {
         return Err(format!("{host:?} is not a public host name"));
     }
     // 2130706433, 0x7f.1, 127.1: numbers the system's resolver would read as an IPv4 address
@@ -118,7 +147,10 @@ pub fn check_stream_url(url: &str, allow_http: bool) -> Result<(), String> {
     if last.chars().all(|c| c.is_ascii_digit()) || name.starts_with("0x") || name.contains(".0x") {
         return Err(format!("{host:?} looks like a numeric address"));
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || !c.is_ascii()) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || !c.is_ascii())
+    {
         return Err(format!("{host:?} is not a valid host name"));
     }
     Ok(())
@@ -132,9 +164,16 @@ pub struct PublicOnly;
 impl ureq::Resolver for PublicOnly {
     fn resolve(&self, netloc: &str) -> std::io::Result<Vec<SocketAddr>> {
         let all: Vec<SocketAddr> = netloc.to_socket_addrs()?.collect();
-        let public: Vec<SocketAddr> = all.iter().copied().filter(|a| is_public_ip(a.ip())).collect();
+        let public: Vec<SocketAddr> = all
+            .iter()
+            .copied()
+            .filter(|a| is_public_ip(a.ip()))
+            .collect();
         if public.is_empty() && !all.is_empty() {
-            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, format!("{netloc} does not resolve to a public address")));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("{netloc} does not resolve to a public address"),
+            ));
         }
         Ok(public)
     }
@@ -169,7 +208,16 @@ mod tests {
 
     #[test]
     fn other_schemes_are_refused() {
-        for u in ["file:///etc/passwd", "ftp://example.org/a", "gopher://example.org", "javascript:alert(1)", "data:audio/mp3;base64,AAAA", "example.org/a.mp3", "", "//example.org/a"] {
+        for u in [
+            "file:///etc/passwd",
+            "ftp://example.org/a",
+            "gopher://example.org",
+            "javascript:alert(1)",
+            "data:audio/mp3;base64,AAAA",
+            "example.org/a.mp3",
+            "",
+            "//example.org/a",
+        ] {
             assert!(check_stream_url(u, true).is_err(), "{u}");
         }
     }
@@ -177,12 +225,38 @@ mod tests {
     #[test]
     fn loopback_private_and_link_local_hosts_are_refused() {
         for u in [
-            "https://127.0.0.1/a", "https://127.1.2.3:8080/a", "https://localhost/a", "https://LOCALHOST./a", "https://radio.localhost/a",
-            "https://10.0.0.5/a", "https://172.16.0.1/a", "https://172.31.255.255/a", "https://192.168.0.1/a",
-            "https://169.254.169.254/latest/meta-data", "https://0.0.0.0/a", "https://100.64.0.1/a", "https://224.0.0.1/a", "https://255.255.255.255/a",
-            "https://[::1]/a", "https://[::]/a", "https://[fe80::1]/a", "https://[fd00::1]/a", "https://[fc00::1]:8080/a", "https://[::ffff:127.0.0.1]/a", "https://[::ffff:10.0.0.1]/a",
-            "https://router/a", "https://nas.local/a", "https://printer.lan/a", "https://svc.internal/a", "https://2130706433/a", "https://0x7f.0.0.1/a", "https://127.1/a",
-            "https://user:pass@example.org/a", "https://example.org@127.0.0.1/a", "https:///a", "https://[::1/a",
+            "https://127.0.0.1/a",
+            "https://127.1.2.3:8080/a",
+            "https://localhost/a",
+            "https://LOCALHOST./a",
+            "https://radio.localhost/a",
+            "https://10.0.0.5/a",
+            "https://172.16.0.1/a",
+            "https://172.31.255.255/a",
+            "https://192.168.0.1/a",
+            "https://169.254.169.254/latest/meta-data",
+            "https://0.0.0.0/a",
+            "https://100.64.0.1/a",
+            "https://224.0.0.1/a",
+            "https://255.255.255.255/a",
+            "https://[::1]/a",
+            "https://[::]/a",
+            "https://[fe80::1]/a",
+            "https://[fd00::1]/a",
+            "https://[fc00::1]:8080/a",
+            "https://[::ffff:127.0.0.1]/a",
+            "https://[::ffff:10.0.0.1]/a",
+            "https://router/a",
+            "https://nas.local/a",
+            "https://printer.lan/a",
+            "https://svc.internal/a",
+            "https://2130706433/a",
+            "https://0x7f.0.0.1/a",
+            "https://127.1/a",
+            "https://user:pass@example.org/a",
+            "https://example.org@127.0.0.1/a",
+            "https:///a",
+            "https://[::1/a",
         ] {
             assert!(check_stream_url(u, true).is_err(), "{u} must be refused");
         }
@@ -193,7 +267,26 @@ mod tests {
         assert!(is_public_ip("1.1.1.1".parse().unwrap()));
         assert!(is_public_ip("2a00:1450:4001::1".parse().unwrap()));
         assert!(is_public_ip("::ffff:8.8.8.8".parse().unwrap()));
-        for s in ["127.0.0.1", "10.1.1.1", "172.20.0.1", "192.168.5.5", "169.254.1.1", "0.1.2.3", "100.100.0.1", "198.18.0.1", "203.0.113.5", "240.0.0.1", "::1", "::", "fe80::abcd", "fd12::1", "ff02::1", "::ffff:192.168.1.1", "2001:db8::1", "64:ff9b::7f00:1"] {
+        for s in [
+            "127.0.0.1",
+            "10.1.1.1",
+            "172.20.0.1",
+            "192.168.5.5",
+            "169.254.1.1",
+            "0.1.2.3",
+            "100.100.0.1",
+            "198.18.0.1",
+            "203.0.113.5",
+            "240.0.0.1",
+            "::1",
+            "::",
+            "fe80::abcd",
+            "fd12::1",
+            "ff02::1",
+            "::ffff:192.168.1.1",
+            "2001:db8::1",
+            "64:ff9b::7f00:1",
+        ] {
             assert!(!is_public_ip(s.parse().unwrap()), "{s}");
         }
     }

@@ -78,10 +78,13 @@ fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
     let mut url = url.to_string();
     let allow_http = url_guard::http_allowed();
     for _ in 0..8 {
-        url_guard::check_stream_url(&url, allow_http).map_err(|why| anyhow::anyhow!("{url}: {why}"))?;
+        url_guard::check_stream_url(&url, allow_http)
+            .map_err(|why| anyhow::anyhow!("{url}: {why}"))?;
         let resp = agent.get(&url).set("Icy-MetaData", "1").call()?;
         if (300..400).contains(&resp.status()) {
-            let to = resp.header("location").ok_or_else(|| anyhow::anyhow!("a redirect without a location"))?;
+            let to = resp
+                .header("location")
+                .ok_or_else(|| anyhow::anyhow!("a redirect without a location"))?;
             url = absolute(&url, to);
             continue;
         }
@@ -97,12 +100,19 @@ fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
             return Ok(resp);
         }
         let mut text = String::new();
-        resp.into_reader().take(64 * 1024).read_to_string(&mut text)?;
+        resp.into_reader()
+            .take(64 * 1024)
+            .read_to_string(&mut text)?;
         // .m3u: the first line that is an address; .pls: File1=address
         let next = text
             .lines()
             .map(|l| l.trim())
-            .map(|l| l.split_once('=').filter(|(k, _)| k.to_ascii_lowercase().starts_with("file")).map(|(_, v)| v.trim()).unwrap_or(l))
+            .map(|l| {
+                l.split_once('=')
+                    .filter(|(k, _)| k.to_ascii_lowercase().starts_with("file"))
+                    .map(|(_, v)| v.trim())
+                    .unwrap_or(l)
+            })
             .find(|l| l.starts_with("http://") || l.starts_with("https://"))
             .ok_or_else(|| anyhow::anyhow!("the playlist names no stream"))?;
         url = next.to_string();
@@ -117,27 +127,47 @@ fn absolute(from: &str, to: &str) -> String {
     if to.contains("://") {
         return to.to_string();
     }
-    let Some((scheme, rest)) = from.split_once("://") else { return to.to_string() };
+    let Some((scheme, rest)) = from.split_once("://") else {
+        return to.to_string();
+    };
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let origin = format!("{scheme}://{}", &rest[..end]);
     if let Some(path) = to.strip_prefix('/') {
         // ("//host/path" names another host: left to the check, which sees no scheme)
-        if path.starts_with('/') { return to.to_string() }
+        if path.starts_with('/') {
+            return to.to_string();
+        }
         return format!("{origin}/{path}");
     }
-    let dir = rest[end..].split(['?', '#']).next().unwrap_or("").rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+    let dir = rest[end..]
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("")
+        .rsplit_once('/')
+        .map(|(d, _)| d)
+        .unwrap_or("");
     format!("{origin}{dir}/{to}")
 }
 
 fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
     let resp = resolve(agent, url)?;
     let ctype = resp.content_type().to_ascii_lowercase();
-    let metaint = resp.header("icy-metaint").and_then(|v| v.trim().parse::<usize>().ok());
-    let name = resp.header("icy-name").map(|s| s.trim().to_string()).unwrap_or_default();
+    let metaint = resp
+        .header("icy-metaint")
+        .and_then(|v| v.trim().parse::<usize>().ok());
+    let name = resp
+        .header("icy-name")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
     let reader: Box<dyn Read + Send + Sync> = Box::new(resp.into_reader());
     let title = Arc::new(parking_lot::Mutex::new(String::new()));
     let reader: Box<dyn Read + Send + Sync> = match metaint {
-        Some(n) if n > 0 => Box::new(IcyReader { inner: reader, every: n, left: n, title: title.clone() }),
+        Some(n) if n > 0 => Box::new(IcyReader {
+            inner: reader,
+            every: n,
+            left: n,
+            title: title.clone(),
+        }),
         _ => reader,
     };
     let mss = MediaSourceStream::new(Box::new(ReadOnlySource::new(reader)), Default::default());
@@ -152,17 +182,26 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
     // AAC is read as ADTS straight away: probed, its frame headers pass for MPEG audio and
     // the MP3 reader takes it
     let mut format: Box<dyn FormatReader> = if ctype.contains("aac") {
-        Box::new(symphonia::default::formats::AdtsReader::try_new(mss, &FormatOptions::default())?)
+        Box::new(symphonia::default::formats::AdtsReader::try_new(
+            mss,
+            &FormatOptions::default(),
+        )?)
     } else {
         symphonia::default::get_probe()
-            .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?
+            .format(
+                &hint,
+                mss,
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )?
             .format
     };
     let track = format
         .default_track()
         .ok_or_else(|| anyhow::anyhow!("no audio in the stream"))?
         .clone();
-    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
     let mut samples: Option<SampleBuffer<f32>> = None;
     let mut shown = String::new();
     loop {
@@ -174,7 +213,11 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
         }
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                return Ok(())
+            }
             Err(e) => return Err(e.into()),
         };
         if packet.track_id() != track.id {
@@ -196,13 +239,22 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
         let data = sb.samples();
         buf.push(
             spec.rate,
-            data.chunks_exact(ch).map(|f| if ch >= 2 { [f[0], f[1]] } else { [f[0], f[0]] }),
+            data.chunks_exact(ch)
+                .map(|f| if ch >= 2 { [f[0], f[1]] } else { [f[0], f[0]] }),
         );
         let now = {
             let t = title.lock();
-            if t.is_empty() { name.clone() } else { t.clone() }
+            if t.is_empty() {
+                name.clone()
+            } else {
+                t.clone()
+            }
         };
-        let status = if buf.is_playing() { now } else { "buffering …".to_string() };
+        let status = if buf.is_playing() {
+            now
+        } else {
+            "buffering …".to_string()
+        };
         if status != shown {
             buf.set_status(status.clone());
             shown = status;
@@ -250,7 +302,12 @@ mod tests {
 
     #[test]
     fn a_blocked_address_plays_nothing_and_says_why() {
-        for url in ["http://127.0.0.1:8080/a.mp3", "https://192.168.1.1/a.mp3", "file:///etc/passwd", "https://169.254.169.254/latest"] {
+        for url in [
+            "http://127.0.0.1:8080/a.mp3",
+            "https://192.168.1.1/a.mp3",
+            "file:///etc/passwd",
+            "https://169.254.169.254/latest",
+        ] {
             let buf = open(url);
             let status = buf.status();
             assert!(status.starts_with("blocked: "), "{url}: {status:?}");
@@ -259,12 +316,32 @@ mod tests {
 
     #[test]
     fn redirects_are_made_absolute() {
-        assert_eq!(absolute("https://a.example/x/y.m3u", "https://b.example/z"), "https://b.example/z");
-        assert_eq!(absolute("https://a.example/x/y.m3u?q=1", "/live"), "https://a.example/live");
-        assert_eq!(absolute("https://a.example:8443/x/y.m3u", "stream.mp3"), "https://a.example:8443/x/stream.mp3");
-        assert_eq!(absolute("https://a.example", "/live"), "https://a.example/live");
+        assert_eq!(
+            absolute("https://a.example/x/y.m3u", "https://b.example/z"),
+            "https://b.example/z"
+        );
+        assert_eq!(
+            absolute("https://a.example/x/y.m3u?q=1", "/live"),
+            "https://a.example/live"
+        );
+        assert_eq!(
+            absolute("https://a.example:8443/x/y.m3u", "stream.mp3"),
+            "https://a.example:8443/x/stream.mp3"
+        );
+        assert_eq!(
+            absolute("https://a.example", "/live"),
+            "https://a.example/live"
+        );
         // a redirect to the inside stays visible to the check
-        assert!(url_guard::check_stream_url(&absolute("https://a.example/x", "http://127.0.0.1/admin"), true).is_err());
-        assert!(url_guard::check_stream_url(&absolute("https://a.example/x", "//127.0.0.1/admin"), true).is_err());
+        assert!(url_guard::check_stream_url(
+            &absolute("https://a.example/x", "http://127.0.0.1/admin"),
+            true
+        )
+        .is_err());
+        assert!(url_guard::check_stream_url(
+            &absolute("https://a.example/x", "//127.0.0.1/admin"),
+            true
+        )
+        .is_err());
     }
 }

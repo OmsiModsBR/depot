@@ -8,7 +8,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Changed
 - `cargo fmt` (rustfmt defaults, 100 columns) on `omsi-cfg`, `omsi-o3d`, `omsi-model`, `omsi-map`, `omsi-vehicle`,
-  `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content` and `omsi-script`; CI's new `rustfmt (formatted crates)` step checks them
+  `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content`, `omsi-script`, `omsi-audio`, `omsi-ui`,
+  `omsi-geometry` and `tools/omsi-check`; CI's new `rustfmt (formatted crates)` step checks them
   and blocks. Formatting only; no behaviour change.
 
 ### Added
