@@ -79,8 +79,8 @@ pub fn decode(bytes: &[u8]) -> Result<Image, String> {
         };
         // DXT2 and DXT4 hold colour premultiplied by alpha
         let premultiplied = matches!(fourcc, b"DXT2" | b"DXT4");
-        let bw = (width + 3) / 4;
-        let bh = (height + 3) / 4;
+        let bw = width.div_ceil(4);
+        let bh = height.div_ceil(4);
         if data.len() < bw * bh * block_bytes {
             return Err("truncated DXT data".into());
         }
@@ -119,7 +119,7 @@ pub fn decode(bytes: &[u8]) -> Result<Image, String> {
     // uncompressed: masks describe the channels (luminance: r mask only, flag 0x20000)
     let luminance = pf_flags & 0x20000 != 0;
     let alpha_only = pf_flags & 0x2 != 0 && pf_flags & 0x40 == 0 && !luminance;
-    let bytes_pp = (bpp.max(8) + 7) / 8;
+    let bytes_pp = bpp.max(8).div_ceil(8);
     let row = width * bytes_pp;
     if data.len() < row * height {
         return Err("truncated pixel data".into());
@@ -306,9 +306,9 @@ pub(crate) fn decode_block(block: &[u8], kind: u8) -> [[u8; 4]; 16] {
     match kind {
         3 => {
             let a = u64::from_le_bytes(block[..8].try_into().unwrap());
-            for i in 0..16 {
+            for (i, px) in out.iter_mut().enumerate() {
                 let v = ((a >> (4 * i)) & 15) as u8;
-                out[i][3] = v * 17;
+                px[3] = v * 17;
             }
         }
         5 => {

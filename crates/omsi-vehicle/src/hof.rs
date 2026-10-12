@@ -22,7 +22,7 @@ impl Terminus {
             .iter()
             .find(|s| !s.trim().is_empty())
             .map(String::as_str);
-        if first.is_some_and(|s| is_destination_image_path(s)) {
+        if first.is_some_and(is_destination_image_path) {
             return self.texture_id.trim().to_string();
         }
         first

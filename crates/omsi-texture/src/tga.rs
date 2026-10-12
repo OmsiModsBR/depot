@@ -23,7 +23,7 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
         return Err("empty image".into());
     }
     let mut pos = 18 + id_len;
-    let cmap_bytes = (cmap_bpp + 7) / 8;
+    let cmap_bytes = cmap_bpp.div_ceil(8);
     let cmap: &[u8] = if cmap_type != 0 {
         let n = cmap_len * cmap_bytes;
         if b.len() < pos + n {
@@ -40,7 +40,7 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
     if !(1..=3).contains(&base) {
         return Err(format!("unsupported image type {img_type}"));
     }
-    let px_bytes = (bpp + 7) / 8;
+    let px_bytes = bpp.div_ceil(8);
     // (a pixel or palette entry of no bytes has no colour to read; a picture wider than
     // any texture is a damaged header, not something to allocate gigabytes for)
     if px_bytes == 0 || px_bytes > 4 || (base == 1 && !(1..=4).contains(&cmap_bytes)) {
@@ -116,8 +116,8 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
             let c = match base {
                 1 => {
                     let mut idx = 0usize;
-                    for k in 0..px_bytes {
-                        idx |= (p[k] as usize) << (8 * k);
+                    for (k, b) in p.iter().enumerate() {
+                        idx |= (*b as usize) << (8 * k);
                     }
                     let idx = idx.saturating_sub(cmap_start);
                     if idx < cmap_len {

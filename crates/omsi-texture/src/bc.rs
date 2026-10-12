@@ -316,12 +316,12 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
     let mut mean = [0.0f32; 3];
     let mut n = 0.0f32;
     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-    for i in 0..16 {
+    for (i, px) in fpx.iter().enumerate() {
         if use_px & (1 << i) == 0 {
             continue;
         }
         for c in 0..3 {
-            let v = fpx[i][c] * sw[c];
+            let v = px[c] * sw[c];
             mean[c] += v;
             lo[c] = lo[c].min(v);
             hi[c] = hi[c].max(v);
@@ -332,14 +332,14 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
         *m /= n;
     }
     let mut cov = [0.0f32; 6];
-    for i in 0..16 {
+    for (i, px) in fpx.iter().enumerate() {
         if use_px & (1 << i) == 0 {
             continue;
         }
         let d = [
-            fpx[i][0] * sw[0] - mean[0],
-            fpx[i][1] * sw[1] - mean[1],
-            fpx[i][2] * sw[2] - mean[2],
+            px[0] * sw[0] - mean[0],
+            px[1] * sw[1] - mean[1],
+            px[2] * sw[2] - mean[2],
         ];
         cov[0] += d[0] * d[0];
         cov[1] += d[0] * d[1];
@@ -366,12 +366,12 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
         axis = [1.0, 1.0, 1.0];
     }
     let (mut tmin, mut tmax) = (f32::MAX, f32::MIN);
-    for i in 0..16 {
+    for (i, px) in fpx.iter().enumerate() {
         if use_px & (1 << i) == 0 {
             continue;
         }
         let t = (0..3)
-            .map(|c| (fpx[i][c] * sw[c] - mean[c]) * axis[c])
+            .map(|c| (px[c] * sw[c] - mean[c]) * axis[c])
             .sum::<f32>();
         tmin = tmin.min(t);
         tmax = tmax.max(t);

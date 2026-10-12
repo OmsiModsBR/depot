@@ -454,6 +454,10 @@ pub fn compile(input: &CompileInput) -> Program {
     p
 }
 
+/// The block being compiled: its kinds (aliases), the block, and the stack of open `{if}`s
+/// (jump op index, has an `{else}`).
+type OpenBlock = (Vec<BlockKind>, Block, Vec<(usize, bool)>);
+
 struct Compiler<'a> {
     p: &'a mut Program,
     consts: &'a HashMap<String, f32>,
@@ -581,10 +585,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_file(&mut self, f: &CfgFile) {
-        let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = None; // kinds (aliases), block, if-stack: (jump op index, has_else)
-                                                                                 // `{else}` without an open `{if}` (a stray `{endif}` closed it early): in OMSI a
-                                                                                 // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
-                                                                                 // Procity's dashboard blanked its odometer every frame through such an `{else}`
+        let mut cur: Option<OpenBlock> = None;
+        // `{else}` without an open `{if}` (a stray `{endif}` closed it early): in OMSI a
+        // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
+        // Procity's dashboard blanked its odometer every frame through such an `{else}`
         let mut orphan_elses: Vec<usize> = Vec::new();
         for (ln, raw) in f.lines.iter().enumerate() {
             let line_no = ln + 1;
@@ -594,12 +598,11 @@ impl<'a> Compiler<'a> {
                     Tok::Brace(b) => {
                         let bl = b.to_ascii_lowercase();
                         match bl.as_str() {
-                            "init" | "frame" | "frame_ai" | _
-                                if bl == "init"
-                                    || bl == "frame"
-                                    || bl == "frame_ai"
-                                    || bl.starts_with("macro:")
-                                    || bl.starts_with("trigger:") =>
+                            _ if bl == "init"
+                                || bl == "frame"
+                                || bl == "frame_ai"
+                                || bl.starts_with("macro:")
+                                || bl.starts_with("trigger:") =>
                             {
                                 let (kind, name) = match bl.as_str() {
                                     "init" => (BlockKind::Init, bl.clone()),
@@ -1070,6 +1073,18 @@ fn patch(op: &mut Op, target: u32) {
     }
 }
 
+pub fn with_lower<R>(name: &str, f: impl FnOnce(&str) -> R) -> R {
+    let mut buf = [0u8; 64];
+    match buf.get_mut(..name.len()) {
+        Some(b) => {
+            b.copy_from_slice(name.as_bytes());
+            b.make_ascii_lowercase();
+            f(std::str::from_utf8(b).unwrap_or(name))
+        }
+        None => f(&name.to_ascii_lowercase()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1173,17 +1188,5 @@ mod tests {
         assert!(!p.has_script_var("PAX_Exit0_Open"));
         assert!(!p.has_script_var("Velocity"));
         assert!(p.var("PAX_Exit0_Open").is_some());
-    }
-}
-
-pub fn with_lower<R>(name: &str, f: impl FnOnce(&str) -> R) -> R {
-    let mut buf = [0u8; 64];
-    match buf.get_mut(..name.len()) {
-        Some(b) => {
-            b.copy_from_slice(name.as_bytes());
-            b.make_ascii_lowercase();
-            f(std::str::from_utf8(b).unwrap_or(name))
-        }
-        None => f(&name.to_ascii_lowercase()),
     }
 }

@@ -41,7 +41,7 @@ impl KeyBinding {
 
 /// The chord bits of the modifier keys held.
 pub fn chord(shift: bool, ctrl: bool, alt: bool) -> i32 {
-    (shift as i32) * KEY_SHIFT | (ctrl as i32) * KEY_CTRL | (alt as i32) * KEY_ALT
+    ((shift as i32) * KEY_SHIFT) | ((ctrl as i32) * KEY_CTRL) | ((alt as i32) * KEY_ALT)
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

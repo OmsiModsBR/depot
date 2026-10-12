@@ -155,6 +155,8 @@ pub fn tile_index_of(name: &str) -> Option<(i32, i32)> {
     let (x, y) = stem.split_once('_')?;
     Some((x.parse().ok()?, y.parse().ok()?))
 }
+/// Terrain samples per tile edge.
+pub const TERRAIN_SAMPLES: usize = 61;
 
 #[cfg(test)]
 mod world_tests {
@@ -178,5 +180,3 @@ mod world_tests {
         assert!((lon - 13.19964).abs() < 1e-4, "{lon}");
     }
 }
-/// Terrain samples per tile edge.
-pub const TERRAIN_SAMPLES: usize = 61;

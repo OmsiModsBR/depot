@@ -189,7 +189,7 @@ pub fn prepare_image(img: Image) -> (TextureData, Prepared) {
 /// not multiples of four, which block formats need) the nearest multiple of four - a
 /// stretch of a texel or two (a 2550² repaint is 2552² on the GPU).
 pub fn block_size(w: u32, h: u32) -> Option<(u32, u32)> {
-    if w % 4 == 0 && h % 4 == 0 {
+    if w.is_multiple_of(4) && h.is_multiple_of(4) {
         return Some((w, h));
     }
     if w.min(h) < MIN_RESIZE_SIDE {
@@ -321,8 +321,8 @@ pub fn prepare_single_level(img: Image, alpha_only: bool) -> (TextureData, Prepa
         ..TextureData::from_image(img)
     };
     if !(o.bc && o.compress)
-        || img.width % 4 != 0
-        || img.height % 4 != 0
+        || !img.width.is_multiple_of(4)
+        || !img.height.is_multiple_of(4)
         || texels < MIN_COMPRESS_TEXELS
     {
         return (plain(img), info);

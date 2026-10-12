@@ -528,11 +528,11 @@ fn aachen_ibox_route_pad(lines: &mut Vec<String>) -> bool {
     }
 
     // Clear the digit field when entering PIN / line / route entry.
-    for i in 0..lines.len() {
-        let n = norm(&lines[i]);
+    for line in lines.iter_mut() {
+        let n = norm(line);
         if n == "10 (S.L.ibox_modus) 0 (S.L.ibox_eingabe)" {
-            let indent: String = lines[i].chars().take_while(|c| c.is_whitespace()).collect();
-            lines[i] = format!(
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            *line = format!(
                 "{indent}10 (S.L.ibox_modus) 0 (S.L.ibox_eingabe) \"\" (S.$.ibox_Zahleingabe)"
             );
             changed = true;
@@ -561,11 +561,11 @@ fn aachen_ibox_route_pad(lines: &mut Vec<String>) -> bool {
         i += 1;
     }
     // Wrong PIN clears the float — clear the star buffer too.
-    for i in 0..lines.len() {
-        let n = norm(&lines[i]);
+    for line in lines.iter_mut() {
+        let n = norm(line);
         if n == "(L.L.ibox_eingabe) (L.L.ibox_PIN) = ! {if} 0 (S.L.ibox_eingabe) {endif}" {
-            let indent: String = lines[i].chars().take_while(|c| c.is_whitespace()).collect();
-            lines[i] = format!(
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            *line = format!(
                 "{indent}(L.L.ibox_eingabe) (L.L.ibox_PIN) = ! {{if}} 0 (S.L.ibox_eingabe) \"\" (S.$.ibox_Zahleingabe) {{endif}}"
             );
             changed = true;
