@@ -8,9 +8,9 @@
 //!   run is pinned (see `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`).
 //! * Only when `OMSI_GOLDEN_RENDER=1` (or `OMSI_GOLDEN_BLESS=1`) is set and a graphics
 //!   adapter exists (a software one is enough): the real `depot` binary renders the
-//!   synthetic root twice. It is off by default because it has not been run on CI's
-//!   adapters yet; the refactoring plan runs it on the maintainer's machine, before and
-//!   after each step. The two pictures must be byte-identical, must show
+//!   synthetic root twice. CI runs it on the software Vulkan adapter (lavapipe, job
+//!   `offscreen-golden`); the refactoring plan also runs it on the maintainer's machine,
+//!   before and after each step. The two pictures must be byte-identical, must show
 //!   the box, and, when a golden file for this adapter exists, must match it within a
 //!   tolerance. Without an adapter these tests print `SKIP` and pass.
 //!
@@ -21,19 +21,22 @@
 //! OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture
 //! ```
 //!
-//! and commit `tests/golden/offscreen_synthetic.txt`. The file holds the adapter's name and
-//! backend and a 16x9 thumbnail of the picture. Pictures differ between drivers, so the
-//! thumbnail is only compared when the running adapter's name and backend equal the recorded
-//! ones; on any other adapter that comparison is skipped (the structural checks still run).
-//! `OMSI_GOLDEN_TOLERANCE` (mean absolute difference per channel, 0..255, default 6)
-//! widens or narrows the comparison.
+//! and commit the file it writes in `tests/golden/offscreen_synthetic/`. Pictures differ
+//! between drivers, so there is one file per adapter, named after the adapter's backend and
+//! name (`vulkan-llvmpipe-llvm-20-1-2-256-bits.txt`), and each holds that name and backend
+//! and a 16x9 thumbnail of the picture. The thumbnail is compared only with the file of the
+//! running adapter; without one that comparison is skipped (the structural checks still
+//! run), unless `OMSI_GOLDEN_REQUIRE=1` is set, as on CI: then a missing file fails the test
+//! and the failure prints the file to commit, so a new driver on the runner is noticed
+//! instead of skipped (a missing adapter fails too). `OMSI_GOLDEN_TOLERANCE` (mean absolute
+//! difference per channel, 0..255, default 6) widens or narrows the comparison.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const SIZE: (u32, u32) = (320, 180);
 const THUMB: (u32, u32) = (16, 9);
-const GOLDEN: &str = "tests/golden/offscreen_synthetic.txt";
+const GOLDEN_DIR: &str = "tests/golden/offscreen_synthetic";
 
 struct Root(PathBuf);
 
@@ -60,11 +63,18 @@ impl Root {
         }
         let map_dir = dir.join("maps").join("Golden");
         std::fs::create_dir_all(&map_dir).unwrap();
+        // the object where OMSI keeps one: the map names it from the root, its mesh lies in
+        // `model/` and its texture in `texture/` next to the description
+        let sco_dir = dir.join("Sceneryobjects").join("Golden");
+        for sub in ["model", "texture"] {
+            std::fs::create_dir_all(sco_dir.join(sub)).unwrap();
+        }
         let w = |name: &str, text: &str| std::fs::write(map_dir.join(name), text).unwrap();
+        let o = |name: &str, text: &str| std::fs::write(sco_dir.join(name), text).unwrap();
         w("global.cfg", "[name]\nGolden offscreen\n\n[map]\n0\n0\ntile_0_0.map\n");
         // one object 20 m north of the camera, at the tile's origin height
-        w("tile_0_0.map", "[version]\n14\n\n[object]\n0\nbox.sco\n7\n10\n20\n0\n0\n0\n0\n0\n");
-        w("box.sco", "[groups]\n1\nGolden\n[friendlyname]\nBox\n[mesh]\nbox.x\n");
+        w("tile_0_0.map", "[version]\n14\n\n[object]\n0\nSceneryobjects\\Golden\\box.sco\n7\n10\n20\n0\n0\n0\n0\n0\n");
+        o("box.sco", "[groups]\n1\nGolden\n[friendlyname]\nBox\n[mesh]\nbox.x\n");
         // a 4 m cube, x; up; depth
         let v = [
             (-2, 0, -2), (2, 0, -2), (2, 0, 2), (-2, 0, 2),
@@ -77,8 +87,8 @@ impl Root {
             .flat_map(|q| [format!("3;{},{},{};", q[0], q[1], q[2]), format!("3;{},{},{};", q[0], q[2], q[3])])
             .collect();
         let uvs: Vec<String> = (0..8).map(|i| format!("{};{};", i % 2, (i / 2) % 2)).collect();
-        w(
-            "box.x",
+        o(
+            "model/box.x",
             &format!(
                 "xof 0303txt 0032\nMesh box {{\n{};\n{};\n{};\n{};\nMeshTextureCoords {{{};\n{};}}\n\
                  MeshMaterialList {{1;{};{};;Material {{1;0.2;0.2;1;;0;0;0;0;;0;0;0;; TextureFilename {{\"box.png\";}} }}}}\n}}\n",
@@ -92,7 +102,7 @@ impl Root {
                 vec!["0"; faces.len()].join(","),
             ),
         );
-        image::save_buffer(map_dir.join("box.png"), &[200, 40, 40, 255].repeat(16), 4, 4, image::ColorType::Rgba8).unwrap();
+        image::save_buffer(sco_dir.join("texture").join("box.png"), &[200, 40, 40, 255].repeat(16), 4, 4, image::ColorType::Rgba8).unwrap();
         Root(dir)
     }
 
@@ -126,6 +136,7 @@ impl Root {
 }
 
 impl Drop for Root {
+
     fn drop(&mut self) {
         if let (Ok(p), Ok(t)) = (self.0.canonicalize(), std::env::temp_dir().canonicalize()) {
             if p.starts_with(&t) && p != t {
@@ -175,8 +186,18 @@ fn unhex(s: &str) -> Vec<u8> {
     (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap()).collect()
 }
 
-fn golden_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(GOLDEN)
+/// The golden file of one adapter: backend and name, lower case, every run of other
+/// characters turned into one `-`.
+fn golden_path(name: &str, backend: &str) -> PathBuf {
+    let mut slug = String::new();
+    for c in format!("{backend} {name}").to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(GOLDEN_DIR).join(format!("{}.txt", slug.trim_end_matches('-')))
 }
 
 #[test]
@@ -189,7 +210,7 @@ fn synthetic_root_reads_back_as_written() {
     let tile = omsi_map::Tile::load(&root.0.join("maps/Golden/tile_0_0.map")).unwrap();
     assert_eq!(tile.objects.len(), 1);
     let o = &tile.objects[0];
-    assert_eq!((o.file.as_str(), o.id, o.pos), ("box.sco", 7, [10.0, 20.0, 0.0]));
+    assert_eq!((o.file.as_str(), o.id, o.pos), ("Sceneryobjects\\Golden\\box.sco", 7, [10.0, 20.0, 0.0]));
 }
 
 #[test]
@@ -199,6 +220,7 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
         return;
     }
     let Some((name, backend)) = adapter() else {
+        assert!(std::env::var_os("OMSI_GOLDEN_REQUIRE").is_none(), "OMSI_GOLDEN_REQUIRE is set but there is no graphics adapter");
         eprintln!("SKIP: no graphics adapter here; the offscreen picture cannot be rendered");
         return;
     };
@@ -212,22 +234,24 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
     assert_ne!(centre[..3], corner[..3], "the box is not in the picture");
 
     let thumb = thumbnail(&a);
-    let path = golden_path();
+    let path = golden_path(&name, &backend);
+    let golden = format!("adapter={name}\nbackend={backend}\nthumb={}\n", hex(&thumb));
     if std::env::var_os("OMSI_GOLDEN_BLESS").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, format!("adapter={name}\nbackend={backend}\nthumb={}\n", hex(&thumb))).unwrap();
+        std::fs::write(&path, &golden).unwrap();
         eprintln!("golden written to {}", path.display());
         return;
     }
+    let shown = path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap_or(&path).display().to_string();
     let Ok(text) = std::fs::read_to_string(&path) else {
-        eprintln!("SKIP golden comparison: {GOLDEN} does not exist (OMSI_GOLDEN_BLESS=1 writes it)");
+        if std::env::var_os("OMSI_GOLDEN_REQUIRE").is_some() {
+            panic!("no golden for {name} ({backend}); if this picture is right, commit {shown} as:\n{golden}");
+        }
+        eprintln!("SKIP golden comparison: {shown} does not exist (OMSI_GOLDEN_BLESS=1 writes it)");
         return;
     };
     let field = |k: &str| text.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap_or_default().to_string();
-    if (field("adapter"), field("backend")) != (name.clone(), backend.clone()) {
-        eprintln!("SKIP golden comparison: recorded for {} ({}), running on {name} ({backend})", field("adapter"), field("backend"));
-        return;
-    }
+    assert_eq!((field("adapter"), field("backend")), (name.clone(), backend.clone()), "{shown} was recorded on another adapter");
     let want = unhex(&field("thumb"));
     assert_eq!(want.len(), thumb.len(), "golden has another thumbnail size");
     let tolerance: f64 = std::env::var("OMSI_GOLDEN_TOLERANCE").ok().and_then(|v| v.parse().ok()).unwrap_or(6.0);

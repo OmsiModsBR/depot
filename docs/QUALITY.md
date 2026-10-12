@@ -24,10 +24,18 @@ When a row is cleared, switch its CI step from informational to blocking and upd
 ## Offscreen golden
 
 `crates/omsi-app/tests/offscreen_golden.rs` renders a synthetic root (written by the test, no OMSI 2 content)
-with the real `depot --offscreen`. The picture checks run only with `OMSI_GOLDEN_RENDER=1` (or `OMSI_GOLDEN_BLESS=1`) and a graphics adapter (a software one is enough), and print
-`SKIP` and pass otherwise (they have not been run on CI's adapters yet, so they are meant for the maintainer's machine, before and after each refactoring step); the root read-back and the window/offscreen `signal_aspects` check always run. The
-thumbnail comparison runs only when `tests/golden/offscreen_synthetic.txt` exists and was recorded on the same
-adapter; regenerate it with `OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.
+with the real `depot --offscreen`. The picture checks run only with `OMSI_GOLDEN_RENDER=1` (or `OMSI_GOLDEN_BLESS=1`)
+and a graphics adapter (a software one is enough), and print `SKIP` and pass otherwise; the root read-back and the
+window/offscreen `signal_aspects` check always run. Pictures differ between drivers, so the thumbnail is compared with
+the golden of the running adapter only: one file per adapter in `crates/omsi-app/tests/golden/offscreen_synthetic/`,
+named after its backend and name. Write the running adapter's file with
+`OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.
+
+The `offscreen-golden` job (informational for now) runs it on every push and pull request on the software Vulkan
+adapter (lavapipe, `mesa-vulkan-drivers` on `ubuntu-24.04`) with `OMSI_GOLDEN_REQUIRE=1`: a missing adapter or a
+missing golden for lavapipe fails the job instead of skipping, and the failure (also in the job summary) prints the
+file to commit. That is what happens when the runner image moves to another mesa or LLVM, since the adapter's name
+carries the LLVM version. The job becomes blocking after three passing runs in a row on the same commit.
 
 ## Offscreen state traces
 
