@@ -1,9 +1,7 @@
 //! wgpu renderer.
 
 mod assets;
-pub mod atmosphere;
 mod camera;
-pub mod clouds;
 mod draw;
 mod frame;
 mod gpu;
@@ -16,6 +14,7 @@ mod renderer;
 mod rt;
 mod scene;
 mod shaders;
+mod sky;
 mod surface;
 mod targets;
 mod triple;
@@ -35,6 +34,7 @@ pub use renderer::{
     MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
 };
 pub use scene::{Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
+pub use sky::{atmosphere, clouds};
 pub use surface::{winit_window, SurfaceState};
 pub use triple::{panel_width, ScreenView, TripleScreen};
 
@@ -48,10 +48,12 @@ use frame::*;
 use gpu::*;
 use lighting::*;
 use pipelines::*;
+#[cfg(test)]
 use render::*;
 use renderer::*;
 use scene::*;
 use shaders::*;
+use sky::*;
 use targets::*;
 
 use anyhow::{anyhow, Context, Result};
