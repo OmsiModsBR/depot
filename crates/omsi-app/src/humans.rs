@@ -988,6 +988,33 @@ struct PedWalk {
     held: f32,
 }
 
+/// How far (m) from somebody left standing the nearest pavement may be for them to walk on.
+const STANDING_PAVEMENT_REACH: f64 = 16.0;
+
+/// Whether somebody standing looks for a pavement this frame: once a second.
+fn look_for_pavement(t_state: f32, dt: f32) -> bool {
+    t_state % 1.0 < dt.max(1e-3)
+}
+
+/// The leg a walk goes on with when its last leg ends in the middle of a pavement path (the
+/// point of a stop somebody got off at), `lane_len` long: on to one of the path's ends,
+/// turned round there (#913). A point already at an end goes to the other one: the leg used
+/// to come out as long as nothing and the person stayed on the spot (#57).
+fn pavement_continuation(leg: Leg, lane_len: f32, pick: u64) -> Leg {
+    const END: f32 = 0.05;
+    if leg.b > END && leg.b < lane_len - END {
+        let fwd = if leg.len() > END { leg.b > leg.a } else { pick % 2 == 0 };
+        return Leg { lane: leg.lane, a: leg.b, b: if fwd { lane_len } else { 0.0 } };
+    }
+    // at the start of the path it goes to the far end, at the far end back to the start
+    let to = if leg.b <= END { lane_len } else { 0.0 };
+    if (to - leg.b).abs() > END {
+        Leg { lane: leg.lane, a: leg.b, b: to }
+    } else {
+        Leg { lane: leg.lane, a: leg.b, b: leg.a }
+    }
+}
+
 impl PedWalk {
     fn new(legs: Vec<Leg>, roam: bool, side: f32) -> PedWalk {
         PedWalk {
@@ -4317,6 +4344,18 @@ impl Humans {
                 if !self.seen(self.people[i].position) && self.far_from_players(self.people[i].position, STROLL_RADIUS) {
                     remove.push(i);
                 }
+                // somebody put down where no pavement was within reach (a terminal's platform,
+                // a bay, an island) walks on from the nearest one once there is one (#57)
+                if let Some(net) = net.filter(|_| look_for_pavement(self.people[i].t_state, dt)) {
+                    let at = self.people[i].position;
+                    let found = self.ped.as_ref().and_then(|pn| pn.nearest(net, at, STANDING_PAVEMENT_REACH)).filter(|&(l, _, _)| net.lanes[l].length() > 0.35);
+                    if let Some((lane, s, _)) = found {
+                        let mut walk = PedWalk::new(vec![Leg { lane, a: s, b: s }], true, 0.0);
+                        let w = self.walk_want(i, &mut walk, net, traffic, cars, dt);
+                        self.people[i].state = State::Strolling(walk);
+                        return w;
+                    }
+                }
                 Want::stand(None, Activity::Stand)
             }
             _ => Want::stand(None, Activity::Stand),
@@ -4377,27 +4416,7 @@ impl Humans {
                         p.end_node(net, &leg)
                             .and_then(|n| p.next_leg(net, n, leg.lane, pick))
                     })
-                    .unwrap_or_else(|| {
-                        // a leg that ends in the middle of its path (the point of a stop
-                        // somebody got off at) goes on to one of its ends: turned round
-                        // there, the people off a bus were sent back to the same point
-                        // every frame and milled round each other at the stop (#913)
-                        let lane_len = net.lanes[leg.lane].length();
-                        if leg.b > 0.05 && leg.b < lane_len - 0.05 {
-                            let fwd = if leg.len() > 0.05 { leg.b > leg.a } else { pick % 2 == 0 };
-                            Leg {
-                                lane: leg.lane,
-                                a: leg.b,
-                                b: if fwd { lane_len } else { 0.0 },
-                            }
-                        } else {
-                            Leg {
-                                lane: leg.lane,
-                                a: leg.b,
-                                b: leg.a,
-                            }
-                        }
-                    });
+                    .unwrap_or_else(|| pavement_continuation(leg, net.lanes[leg.lane].length(), pick));
                 walk.legs.push(next);
                 if walk.leg > 6 {
                     walk.legs.drain(..walk.leg);
@@ -6759,6 +6778,35 @@ fn wrap_heading(h: f64) -> f64 {
 /// The angle between two headings (degrees, 0..180).
 fn angle_between(a: f64, b: f64) -> f64 {
     ((b - a + 540.0).rem_euclid(360.0) - 180.0).abs()
+}
+
+#[cfg(test)]
+mod standing_walk_tests {
+    use super::*;
+
+    /// A stop at either end of its pavement path leads somewhere, as one in the middle does.
+    #[test]
+    fn a_walk_from_a_stop_at_either_end_of_its_lane_goes_somewhere() {
+        for (at, pick) in [(0.0, 0), (0.0, 1), (0.02, 0), (30.0, 0), (30.0, 1), (29.98, 1), (12.0, 0), (12.0, 1)] {
+            let next = pavement_continuation(Leg { lane: 3, a: at, b: at }, 30.0, pick);
+            assert_eq!((next.lane, next.a), (3, at));
+            assert!(next.len() > 1.0, "from {at} (pick {pick}) the leg is {} m", next.len());
+        }
+        // from the start to the far end, from the far end to the start
+        assert_eq!(pavement_continuation(Leg { lane: 0, a: 0.0, b: 0.0 }, 30.0, 0).b, 30.0);
+        assert_eq!(pavement_continuation(Leg { lane: 0, a: 30.0, b: 30.0 }, 30.0, 0).b, 0.0);
+        // a walk that arrived at an end turns round, one in the middle keeps its direction
+        assert_eq!(pavement_continuation(Leg { lane: 0, a: 4.0, b: 30.0 }, 30.0, 0).b, 0.0);
+        assert_eq!(pavement_continuation(Leg { lane: 0, a: 4.0, b: 10.0 }, 30.0, 0).b, 30.0);
+    }
+
+    /// Somebody standing looks for a pavement once a second, not every frame.
+    #[test]
+    fn somebody_standing_looks_for_a_pavement_once_a_second() {
+        let dt = 1.0 / 60.0;
+        let looks = (0..600).filter(|k| look_for_pavement(*k as f32 * dt, dt)).count();
+        assert!((9..=11).contains(&looks), "{looks} looks in 10 s");
+    }
 }
 
 #[cfg(test)]
