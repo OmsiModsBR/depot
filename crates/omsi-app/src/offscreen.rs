@@ -386,8 +386,13 @@ pub(crate) fn run_offscreen(
     let spray_wet = puddles::road_wetness(initial_wetness(&weather), weather.snow);
     let spray_wind = Vec3::new(weather.wind.0.to_radians().sin(), weather.wind.0.to_radians().cos(), 0.0) * weather.wind.1 * puddles::GROUND_WIND;
     let mut real_time = RealTime::default();
+    // OMSI_STATE_TRACE=<file>: the state of every frame, for comparing two commits
+    let mut state_trace = crate::state_trace::StateTrace::from_env();
     for i in 0..total_frames {
         let t_s = i as f32 * dt;
+        if let Some(st) = state_trace.as_mut() {
+            st.frame(i, t_s, &world, player.as_ref(), traffic.as_ref(), duty.as_ref());
+        }
         if server {
             srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
             // a server on the real time (server.cfg): its clock reads this machine's
@@ -1281,6 +1286,10 @@ pub(crate) fn run_offscreen(
                 );
             }
         }
+    }
+    if let Some(mut st) = state_trace {
+        st.frame(total_frames, total_frames as f32 * dt, &world, player.as_ref(), traffic.as_ref(), duty.as_ref());
+        st.finish()?;
     }
     if let Some(id) = follow_id(args, traffic.as_ref()) {
         match follow_camera(traffic.as_ref(), id) {

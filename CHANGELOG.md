@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Added
+- Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
+  for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it
+  on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`
+  compares a commit with its base, and the CI job `offscreen-traces` (informational for now) runs it on pull
+  requests on the software Vulkan adapter. Test and CI only; no behaviour change.
 - Round-trip test of `settings.cfg` between the game and the launcher
   (`crates/omsi-app/src/settings/round_trip.rs`): writes the file from one side and reads it
   from the other, in both directions, for the defaults, one value per key and values at the
