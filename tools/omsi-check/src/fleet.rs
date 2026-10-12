@@ -489,10 +489,15 @@ fn run_vehicle(
         ));
     }
     if power && engine {
-        let fba = v.var("bremse_p_Brzyl_FBA").or_else(|| v.var("spring_brake_pressure"));
+        let fba = v
+            .var("bremse_p_Brzyl_FBA")
+            .or_else(|| v.var("spring_brake_pressure"));
         if let Some(p) = fba {
             if p < 6.0e5 {
-                problems.push(format!("air pressure low after 20s start-up (spring brake {:.1} bar < 6.0 bar)", p / 1e5));
+                problems.push(format!(
+                    "air pressure low after 20s start-up (spring brake {:.1} bar < 6.0 bar)",
+                    p / 1e5
+                ));
             }
         }
     }
@@ -531,7 +536,11 @@ fn run_vehicle(
                 .map(|t| t.rgba.iter().all(|b| *b == 0))
                 .unwrap_or(true)
         }) {
-            let ids = group.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let ids = group
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
             blank.push(format!("[scripttexture] {ids}"));
         }
     }
@@ -576,7 +585,10 @@ mod tests {
         model.meshes.push(inactive);
 
         assert!(shown_script_texture_groups(&model, |_| Some(0.0)).is_empty());
-        assert_eq!(shown_script_texture_groups(&model, |_| Some(1.0)), vec![vec![1]]);
+        assert_eq!(
+            shown_script_texture_groups(&model, |_| Some(1.0)),
+            vec![vec![1]]
+        );
     }
 }
 

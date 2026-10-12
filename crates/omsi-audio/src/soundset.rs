@@ -41,7 +41,15 @@ struct RuntimeSound {
 
 impl RuntimeSound {
     fn new(def: SoundEntry, clip: Option<Arc<Clip>>) -> RuntimeSound {
-        RuntimeSound { def, clip, voice: None, held: false, active_since: None, last_gain: 1.0, last_pitch: 1.0 }
+        RuntimeSound {
+            def,
+            clip,
+            voice: None,
+            held: false,
+            active_since: None,
+            last_gain: 1.0,
+            last_pitch: 1.0,
+        }
     }
 }
 
@@ -74,7 +82,15 @@ pub struct SoundSet {
 /// Ch/Stadtrandstr" is `Falkenseer Ch%Stadtrandstr.wav`: read as a folder, it was not found
 /// and the stop was not announced (#1096).
 fn file_trigger_name(file: &str) -> String {
-    file.chars().map(|c| if matches!(c, '/' | '?' | '*' | '"' | '<' | '>' | '|') { '%' } else { c }).collect()
+    file.chars()
+        .map(|c| {
+            if matches!(c, '/' | '?' | '*' | '"' | '<' | '>' | '|') {
+                '%'
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 /// Say once per file that a `(T.F.)` sound cannot be found: every AI bus of a type asks for
@@ -109,7 +125,9 @@ fn curve(points: &[(f32, f32)], x: f32) -> f32 {
     if x >= last.0 {
         return last.1;
     }
-    let i = (1..points.len()).find(|&i| x < points[i].0).unwrap_or(points.len() - 1);
+    let i = (1..points.len())
+        .find(|&i| x < points[i].0)
+        .unwrap_or(points.len() - 1);
     let (xa, ya) = points[i - 1];
     let (xb, yb) = points[i];
     if xb == xa {
@@ -297,7 +315,12 @@ impl SoundSet {
         };
         let ctx = self.ctx(engine);
         for s in self.sounds.iter_mut() {
-            if !s.def.triggers.iter().any(|d| d.trim().eq_ignore_ascii_case(trigger)) {
+            if !s
+                .def
+                .triggers
+                .iter()
+                .any(|d| d.trim().eq_ignore_ascii_case(trigger))
+            {
                 continue;
             }
             if let Some(id) = s.voice.take() {
@@ -308,13 +331,17 @@ impl SoundSet {
             s.last_pitch = 1.0;
             let e = ctx.eval(s, var, object_to_world);
             if e.audible && !e.wrong_view {
-                s.voice = Some(engine.play(clip.clone(), ctx.params(s, &e, false, object_to_world)));
+                s.voice =
+                    Some(engine.play(clip.clone(), ctx.params(s, &e, false, object_to_world)));
             }
         }
     }
 
     fn ctx(&self, engine: &AudioEngine) -> Ctx {
-        Ctx { listener: engine.listener_position(), ..self.ctx_without_engine() }
+        Ctx {
+            listener: engine.listener_position(),
+            ..self.ctx_without_engine()
+        }
     }
 
     /// What a `[volcurve]` reads. The name is looked up in the vehicle's variables and,
@@ -347,7 +374,9 @@ impl SoundSet {
     /// A `[loopsound]`'s frequency request in Hz (`rate * |variable| / reference`), `None`
     /// for a `[sound]`, which plays at its file's own rate.
     fn frequency(def: &SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> Option<f32> {
-        def.is_loop.then(|| def.sample_rate.trunc() * var(&def.pitch_variable).unwrap_or(0.0).abs() / def.pitch_ref)
+        def.is_loop.then(|| {
+            def.sample_rate.trunc() * var(&def.pitch_variable).unwrap_or(0.0).abs() / def.pitch_ref
+        })
     }
 
     /// The triggers (lower case) whose entries read script variables in a volume curve:
@@ -355,7 +384,12 @@ impl SoundSet {
     pub fn curve_triggers(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for s in &self.sounds {
-            if !s.def.vol_curves.iter().any(|vc| vc.variable.trim().parse::<i32>().is_err()) {
+            if !s
+                .def
+                .vol_curves
+                .iter()
+                .any(|vc| vc.variable.trim().parse::<i32>().is_err())
+            {
                 continue;
             }
             for t in &s.def.triggers {
@@ -417,7 +451,12 @@ impl SoundSet {
             }
             let Some(clip) = s.clip.clone() else { continue };
             let fired_by = if triggered {
-                triggers.iter().find(|t| s.def.triggers.iter().any(|d| d.trim().eq_ignore_ascii_case(t)))
+                triggers.iter().find(|t| {
+                    s.def
+                        .triggers
+                        .iter()
+                        .any(|d| d.trim().eq_ignore_ascii_case(t))
+                })
             } else {
                 None
             };
@@ -440,7 +479,12 @@ impl SoundSet {
             let mut e = eval_now(&ctx, s);
             // (a trigger that fires while an `[onlyone]` voice still plays, or an entry that is
             // too quiet to start, keeps the buffer's gain: nothing is restarted)
-            if reset && triggered && (!e.audible || s.voice.is_some_and(|id| s.def.only_one && engine.is_playing(id))) {
+            if reset
+                && triggered
+                && (!e.audible
+                    || s.voice
+                        .is_some_and(|id| s.def.only_one && engine.is_playing(id)))
+            {
                 s.last_gain = before;
                 e = eval_now(&ctx, s);
             }
@@ -533,24 +577,30 @@ impl SoundSet {
                 };
             } else if !ctx.view_lets_through(s.def.viewpoint) {
                 why = format!("viewpoint {} (listener {})", s.def.viewpoint, ctx.view);
-            } else if let Some(c) = s
-                .def
-                .conditions
-                .iter()
-                .find(|c| s.def.triggers.is_empty() && !c.holds(var(&c.variable).unwrap_or(0.0)))
+            } else if let Some(c) =
+                s.def.conditions.iter().find(|c| {
+                    s.def.triggers.is_empty() && !c.holds(var(&c.variable).unwrap_or(0.0))
+                })
             {
                 why = format!("condition {} = {:?}", c.variable, var(&c.variable));
             } else if let Some(vc) = s.def.vol_curves.iter().find(|vc| {
                 let active = s.active_since.map_or(0.0, |t| t.elapsed().as_secs_f32());
-                Self::curve_input(vc, var, active, 1.0).is_some_and(|x| curve(&vc.points, x) <= 1.0e-5)
+                Self::curve_input(vc, var, active, 1.0)
+                    .is_some_and(|x| curve(&vc.points, x) <= 1.0e-5)
             }) {
                 why = format!("volcurve {} = {:?}", vc.variable, var(&vc.variable));
             } else if let Some(f) = Self::frequency(&s.def, var).filter(|f| !(*f >= FREQ_MIN)) {
-                why = format!("frequency {f:.0} Hz ({} = {:?})", s.def.pitch_variable, var(&s.def.pitch_variable));
+                why = format!(
+                    "frequency {f:.0} Hz ({} = {:?})",
+                    s.def.pitch_variable,
+                    var(&s.def.pitch_variable)
+                );
             }
             let playing = s.voice.and_then(|id| engine.voice_state(id));
             match (playing, why.is_empty()) {
-                (Some((p, heard)), _) => out.push(format!("{file}: {heard:.3} heard, pitch {:.2}", p.pitch)),
+                (Some((p, heard)), _) => {
+                    out.push(format!("{file}: {heard:.3} heard, pitch {:.2}", p.pitch))
+                }
                 (None, true) => out.push(format!("{file}: ready, silent")),
                 (None, false) => out.push(format!("{file}: off - {why}")),
             }
@@ -569,27 +619,53 @@ impl SoundSet {
         object_to_world: &Mat4,
         listener: Vec3,
     ) -> Vec<(String, f32, f32, bool)> {
-        let ctx = Ctx { listener, ..self.ctx_without_engine() };
+        let ctx = Ctx {
+            listener,
+            ..self.ctx_without_engine()
+        };
         self.sounds
             .iter_mut()
             .map(|s| {
                 if !s.def.triggers.is_empty() || Self::conditions_hold(&s.def, var) {
-                    s.active_since.get_or_insert_with(|| std::time::Instant::now() - std::time::Duration::from_secs(5));
+                    s.active_since.get_or_insert_with(|| {
+                        std::time::Instant::now() - std::time::Duration::from_secs(5)
+                    });
                 }
                 let e = ctx.eval(s, var, object_to_world);
                 let dist = s
                     .def
                     .pos
-                    .map(|p| crate::mixer::distance_gain(s.def.range, (object_to_world.transform_point3(Vec3::from_array(p)) - listener).length()))
+                    .map(|p| {
+                        crate::mixer::distance_gain(
+                            s.def.range,
+                            (object_to_world.transform_point3(Vec3::from_array(p)) - listener)
+                                .length(),
+                        )
+                    })
                     .unwrap_or(1.0);
-                let heard = if e.wrong_view || !e.audible { 0.0 } else { e.gain * dist };
-                (s.def.file.trim().to_string(), heard, e.pitch, e.audible && !e.wrong_view)
+                let heard = if e.wrong_view || !e.audible {
+                    0.0
+                } else {
+                    e.gain * dist
+                };
+                (
+                    s.def.file.trim().to_string(),
+                    heard,
+                    e.pitch,
+                    e.audible && !e.wrong_view,
+                )
             })
             .collect()
     }
 
     fn ctx_without_engine(&self) -> Ctx {
-        Ctx { view: self.view_mask(), cab: self.muffled, master: self.master, doppler: !self.listener_vehicle, listener: Vec3::ZERO }
+        Ctx {
+            view: self.view_mask(),
+            cab: self.muffled,
+            master: self.master,
+            doppler: !self.listener_vehicle,
+            listener: Vec3::ZERO,
+        }
     }
 
     pub fn stop_all(&mut self, engine: &AudioEngine) {
@@ -623,13 +699,25 @@ impl Ctx {
 
     /// One entry this frame: its volume and pitch as DirectSound
     /// takes them, and whether it can be started.
-    fn eval(&self, s: &mut RuntimeSound, var: &dyn Fn(&str) -> Option<f32>, object_to_world: &Mat4) -> Eval {
+    fn eval(
+        &self,
+        s: &mut RuntimeSound,
+        var: &dyn Fn(&str) -> Option<f32>,
+        object_to_world: &Mat4,
+    ) -> Eval {
         let def = &s.def;
         if !self.view_lets_through(def.viewpoint) {
-            return Eval { gain: 0.0, audible: false, pitch: s.last_pitch, wrong_view: true };
+            return Eval {
+                gain: 0.0,
+                audible: false,
+                pitch: s.last_pitch,
+                wrong_view: true,
+            };
         }
         let triggered = !def.triggers.is_empty();
-        let pos = def.pos.map(|p| object_to_world.transform_point3(Vec3::from_array(p)));
+        let pos = def
+            .pos
+            .map(|p| object_to_world.transform_point3(Vec3::from_array(p)));
         let active = if triggered {
             TRIGGERED_ACTIVE
         } else {
@@ -637,21 +725,28 @@ impl Ctx {
         };
         let facing = match (pos, def.dir) {
             (Some(at), Some(d)) => {
-                let dir = object_to_world.transform_vector3(Vec3::from_array(d)).normalize_or_zero();
+                let dir = object_to_world
+                    .transform_vector3(Vec3::from_array(d))
+                    .normalize_or_zero();
                 dir.dot((self.listener - at).normalize_or_zero())
             }
             (Some(_), None) => 1.0,
             (None, _) => 0.0,
         };
         // (an untriggered entry whose conditions fail is at volume 0)
-        let mut vol = if triggered || SoundSet::conditions_hold(def, var) { def.volume * self.master } else { 0.0 };
+        let mut vol = if triggered || SoundSet::conditions_hold(def, var) {
+            def.volume * self.master
+        } else {
+            0.0
+        };
         for vc in &def.vol_curves {
             if let Some(x) = SoundSet::curve_input(vc, var, active, facing) {
                 vol *= curve(&vc.points, x);
             }
         }
         // `[3d]`: full up to the range, then range / distance
-        let dist_gain = pos.map(|p| crate::mixer::distance_gain(def.range, (p - self.listener).length()));
+        let dist_gain =
+            pos.map(|p| crate::mixer::distance_gain(def.range, (p - self.listener).length()));
         if let Some(g) = dist_gain {
             vol *= g;
         }
@@ -682,11 +777,25 @@ impl Ctx {
             Some(_) => 0.0,
             None => gain,
         };
-        Eval { gain, audible, pitch, wrong_view: false }
+        Eval {
+            gain,
+            audible,
+            pitch,
+            wrong_view: false,
+        }
     }
 
-    fn params(&self, s: &RuntimeSound, e: &Eval, looping: bool, object_to_world: &Mat4) -> VoiceParams {
-        let position = s.def.pos.map(|p| object_to_world.transform_point3(Vec3::from_array(p)));
+    fn params(
+        &self,
+        s: &RuntimeSound,
+        e: &Eval,
+        looping: bool,
+        object_to_world: &Mat4,
+    ) -> VoiceParams {
+        let position = s
+            .def
+            .pos
+            .map(|p| object_to_world.transform_point3(Vec3::from_array(p)));
         VoiceParams {
             gain: e.gain,
             pitch: e.pitch.max(0.001),
@@ -727,7 +836,13 @@ mod tests {
     use omsi_vehicle::VolCurve;
 
     fn ctx(view: i32, cab: bool) -> Ctx {
-        Ctx { view, cab, master: 1.0, doppler: false, listener: Vec3::ZERO }
+        Ctx {
+            view,
+            cab,
+            master: 1.0,
+            doppler: false,
+            listener: Vec3::ZERO,
+        }
     }
 
     fn eval(c: &Ctx, def: SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> Eval {
@@ -765,21 +880,53 @@ mod tests {
         let none = |_: &str| None;
         // the own bus's outside-only entry (`[viewpoint] 5`) in the cab: at Snd_OutsideVol,
         // not at all with everything shut
-        let engine_out = SoundEntry { volume: 0.8, viewpoint: 5, ..Default::default() };
+        let engine_out = SoundEntry {
+            volume: 0.8,
+            viewpoint: 5,
+            ..Default::default()
+        };
         set_outside_open(Some(0.0));
         assert!(eval(&ctx(2, true), engine_out.clone(), &none).wrong_view);
         set_outside_open(Some(0.5));
         let e = eval(&ctx(2, true), engine_out.clone(), &none);
         assert!((e.gain - 0.4).abs() < 1e-3, "{}", e.gain);
-        assert!((eval(&ctx(1, false), engine_out.clone(), &none).gain - 0.8).abs() < 1e-3, "outside: as it is");
+        assert!(
+            (eval(&ctx(1, false), engine_out.clone(), &none).gain - 0.8).abs() < 1e-3,
+            "outside: as it is"
+        );
         // an AI bus (view 4) heard from a cab: 0.2 + Snd_OutsideVol, no filter
-        let ai = SoundEntry { volume: 0.5, viewpoint: 4, ..Default::default() };
+        let ai = SoundEntry {
+            volume: 0.5,
+            viewpoint: 4,
+            ..Default::default()
+        };
         assert!((eval(&ctx(4, true), ai.clone(), &none).gain - 0.35).abs() < 1e-3);
-        assert!((eval(&ctx(4, false), ai, &none).gain - 0.5).abs() < 1e-3, "from the street: as it is");
+        assert!(
+            (eval(&ctx(4, false), ai, &none).gain - 0.5).abs() < 1e-3,
+            "from the street: as it is"
+        );
         // the player's bus heard from the street on an AI bus: never
-        assert!(eval(&ctx(4, false), SoundEntry { volume: 1.0, viewpoint: 1, ..Default::default() }, &none).wrong_view);
-        let cab = SoundEntry { volume: 0.8, viewpoint: 2, ..Default::default() };
-        assert!(eval(&ctx(1, false), cab, &none).wrong_view, "a cab sound stays in");
+        assert!(
+            eval(
+                &ctx(4, false),
+                SoundEntry {
+                    volume: 1.0,
+                    viewpoint: 1,
+                    ..Default::default()
+                },
+                &none
+            )
+            .wrong_view
+        );
+        let cab = SoundEntry {
+            volume: 0.8,
+            viewpoint: 2,
+            ..Default::default()
+        };
+        assert!(
+            eval(&ctx(1, false), cab, &none).wrong_view,
+            "a cab sound stays in"
+        );
         set_outside_open(None);
     }
 
@@ -790,8 +937,14 @@ mod tests {
             pos: Some([0.0, 8.0, 0.0]),
             range: 2.0,
             vol_curves: vec![
-                VolCurve { variable: "a".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] },
-                VolCurve { variable: "b".into(), points: vec![(0.0, 1.0), (1.0, 0.0)] },
+                VolCurve {
+                    variable: "a".into(),
+                    points: vec![(0.0, 0.0), (1.0, 1.0)],
+                },
+                VolCurve {
+                    variable: "b".into(),
+                    points: vec![(0.0, 1.0), (1.0, 0.0)],
+                },
             ],
             ..Default::default()
         };
@@ -804,8 +957,22 @@ mod tests {
 
     #[test]
     fn a_loop_sound_is_not_started_below_100_hz_and_keeps_its_rate_past_200_khz() {
-        let def = SoundEntry { volume: 1.0, is_loop: true, sample_rate: 44100.0, pitch_variable: "n".into(), pitch_ref: 1000.0, ..Default::default() };
-        let mut s = RuntimeSound::new(def, Some(Arc::new(Clip { sample_rate: 44100, channels: 1, samples: vec![0; 4] })));
+        let def = SoundEntry {
+            volume: 1.0,
+            is_loop: true,
+            sample_rate: 44100.0,
+            pitch_variable: "n".into(),
+            pitch_ref: 1000.0,
+            ..Default::default()
+        };
+        let mut s = RuntimeSound::new(
+            def,
+            Some(Arc::new(Clip {
+                sample_rate: 44100,
+                channels: 1,
+                samples: vec![0; 4],
+            })),
+        );
         let c = ctx(1, false);
         let e = c.eval(&mut s, &|_| Some(1.0), &Mat4::IDENTITY);
         assert!(!e.audible, "44 Hz");
@@ -824,15 +991,32 @@ mod tests {
         let hit = SoundEntry {
             volume: 1.0,
             triggers: vec!["ev_doorhitclose_0".into()],
-            vol_curves: vec![VolCurve { variable: "doorSpeed_0".into(), points: vec![(-1.0, 1.0), (-0.5, 0.0)] }],
+            vol_curves: vec![VolCurve {
+                variable: "doorSpeed_0".into(),
+                points: vec![(-1.0, 1.0), (-0.5, 0.0)],
+            }],
             ..Default::default()
         };
         let now = |n: &str| (n == "doorSpeed_0").then_some(0.8);
-        let at_fire = |t: &str, n: &str| (t == "ev_doorhitclose_0" && n == "doorSpeed_0").then_some(-1.0);
-        assert_eq!(eval(&ctx(2, true), hit.clone(), &now).gain, 0.0, "read at the frame's end: silent");
+        let at_fire =
+            |t: &str, n: &str| (t == "ev_doorhitclose_0" && n == "doorSpeed_0").then_some(-1.0);
+        assert_eq!(
+            eval(&ctx(2, true), hit.clone(), &now).gain,
+            0.0,
+            "read at the frame's end: silent"
+        );
         let fired = |n: &str| at_fire("ev_doorhitclose_0", n).or_else(|| now(n));
         assert_eq!(eval(&ctx(2, true), hit.clone(), &fired).gain, 1.0);
-        let set = SoundSet { sounds: vec![RuntimeSound::new(hit, None)], master: 1.0, dir: Default::default(), inside: true, ai: false, listener_vehicle: true, muffled: false, parts: Vec::new() };
+        let set = SoundSet {
+            sounds: vec![RuntimeSound::new(hit, None)],
+            master: 1.0,
+            dir: Default::default(),
+            inside: true,
+            ai: false,
+            listener_vehicle: true,
+            muffled: false,
+            parts: Vec::new(),
+        };
         assert_eq!(set.curve_triggers(), vec!["ev_doorhitclose_0".to_string()]);
     }
 
@@ -841,8 +1025,14 @@ mod tests {
     #[test]
     fn a_file_trigger_writes_what_a_file_name_cannot_have_as_percent() {
         let file = r"..\..\Announcements\Spandau\Falkenseer Ch/Stadtrandstr.wav";
-        assert_eq!(file_trigger_name(file), r"..\..\Announcements\Spandau\Falkenseer Ch%Stadtrandstr.wav");
-        assert_eq!(file_trigger_name(r"C:\a?b*c\d<e>f|g.wav"), r"C:\a%b%c\d%e%f%g.wav");
+        assert_eq!(
+            file_trigger_name(file),
+            r"..\..\Announcements\Spandau\Falkenseer Ch%Stadtrandstr.wav"
+        );
+        assert_eq!(
+            file_trigger_name(r"C:\a?b*c\d<e>f|g.wav"),
+            r"C:\a%b%c\d%e%f%g.wav"
+        );
         // found where the announcement lies
         let root = std::env::temp_dir().join(format!("depot-file-trigger-{}", std::process::id()));
         let sound = root.join("Vehicles").join("MAN_NL_NG").join("Sound");
@@ -858,16 +1048,32 @@ mod tests {
     }
 
     fn tone() -> std::sync::Arc<crate::mixer::Clip> {
-        std::sync::Arc::new(crate::mixer::Clip { sample_rate: 8000, channels: 1, samples: vec![1000; 8000] })
+        std::sync::Arc::new(crate::mixer::Clip {
+            sample_rate: 8000,
+            channels: 1,
+            samples: vec![1000; 8000],
+        })
     }
 
     /// The gain a running entry's voice has been given.
     fn voice_gain(set: &SoundSet, engine: &AudioEngine) -> Option<f32> {
-        set.sounds[0].voice.and_then(|id| engine.voice_state(id)).map(|(p, _)| p.gain)
+        set.sounds[0]
+            .voice
+            .and_then(|id| engine.voice_state(id))
+            .map(|(p, _)| p.gain)
     }
 
     fn set_of(def: SoundEntry) -> SoundSet {
-        SoundSet { sounds: vec![RuntimeSound::new(def, Some(tone()))], master: 1.0, dir: Default::default(), inside: true, ai: false, listener_vehicle: true, muffled: false, parts: Vec::new() }
+        SoundSet {
+            sounds: vec![RuntimeSound::new(def, Some(tone()))],
+            master: 1.0,
+            dir: Default::default(),
+            inside: true,
+            ai: false,
+            listener_vehicle: true,
+            muffled: false,
+            parts: Vec::new(),
+        }
     }
 
     fn step(set: &mut SoundSet, engine: &AudioEngine, v: f32, fired: &[String]) {
@@ -882,13 +1088,19 @@ mod tests {
         let engine = AudioEngine::silent();
         let mut set = set_of(SoundEntry {
             volume: 3.0,
-            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            vol_curves: vec![VolCurve {
+                variable: "v".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
             ..Default::default()
         });
         for _ in 0..3 {
             step(&mut set, &engine, 0.0, &[]);
         }
-        assert!(set.sounds[0].voice.is_none(), "silent while the curve is at 0");
+        assert!(
+            set.sounds[0].voice.is_none(),
+            "silent while the curve is at 0"
+        );
         step(&mut set, &engine, 1.0, &[]);
         assert_eq!(voice_gain(&set, &engine), Some(1.0));
     }
@@ -901,7 +1113,10 @@ mod tests {
         let mut set = set_of(SoundEntry {
             volume: 2.0,
             triggers: vec!["ev_brake".into()],
-            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            vol_curves: vec![VolCurve {
+                variable: "v".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
             ..Default::default()
         });
         // (a silent frame leaves the remembered gain at 0)
@@ -917,7 +1132,10 @@ mod tests {
         let engine = AudioEngine::silent();
         let mut set = set_of(SoundEntry {
             volume: 1.0,
-            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            vol_curves: vec![VolCurve {
+                variable: "v".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
             ..Default::default()
         });
         step(&mut set, &engine, 1.0, &[]);
@@ -937,13 +1155,24 @@ mod tests {
             volume: 2.0,
             only_one: true,
             triggers: vec!["ev".into()],
-            vol_curves: vec![VolCurve { variable: "v".into(), points: vec![(0.0, 0.0), (1.0, 1.0)] }],
+            vol_curves: vec![VolCurve {
+                variable: "v".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
             ..Default::default()
         });
         step(&mut set, &engine, 0.4, &["ev".to_string()]);
-        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
+        assert!(
+            (set.sounds[0].last_gain - 0.8).abs() < 1.0e-3,
+            "{}",
+            set.sounds[0].last_gain
+        );
         // volume 2 now: over 0 dB, refused - the buffer keeps the 0.8 it plays at
         step(&mut set, &engine, 1.0, &["ev".to_string()]);
-        assert!((set.sounds[0].last_gain - 0.8).abs() < 1.0e-3, "{}", set.sounds[0].last_gain);
+        assert!(
+            (set.sounds[0].last_gain - 0.8).abs() < 1.0e-3,
+            "{}",
+            set.sounds[0].last_gain
+        );
     }
 }
