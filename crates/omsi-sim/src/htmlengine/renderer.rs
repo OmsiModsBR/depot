@@ -278,8 +278,9 @@ impl EngineRenderer {
         cv.px
     }
 
-    #[cfg(test)]
-    pub(crate) fn text_of(&self, id: &str) -> Option<String> {
+    /// The text of the element with id `id` (for tests, including the game's own).
+    #[doc(hidden)]
+    pub fn text_of(&self, id: &str) -> Option<String> {
         self.js.dom.by_id(id).map(|i| self.js.dom.text_of(i))
     }
 }

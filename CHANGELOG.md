@@ -27,6 +27,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `rebase_css_urls`) moves into `omsi-sim/src/htmlengine/page.rs`, re-exported where it was
   (`vehicle_api`, `htmltex`): the engine no longer reaches into the rest of `omsi-sim`, the first step of the
   `omsi-html` crate. Code moved as is; no behaviour change.
+- The HTML engine's tests that need the rest of the game (the vehicle snapshot, the clock, pages loaded from
+  disk) move to `omsi-sim/tests/htmlengine_game.rs`; `EngineRenderer::text_of` is public (hidden from the docs)
+  for them.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
