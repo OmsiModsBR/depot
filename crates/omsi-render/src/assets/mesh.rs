@@ -2,9 +2,9 @@
 //! meshes off the render thread, and adding and updating them.
 
 use super::texture::next_gen;
-use crate::camera::Vertex;
 use crate::gpu::gl_worker_turn;
 use crate::renderer::Renderer;
+use crate::scene::Vertex;
 use crate::scene::{MeshId, Scene};
 use glam::Vec3;
 use omsi_geometry::MeshData;

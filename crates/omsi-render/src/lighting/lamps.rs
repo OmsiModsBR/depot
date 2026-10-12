@@ -2,10 +2,9 @@
 //! on the night sky and the light and glare they give the camera.
 
 use super::model::{drawn_by, gpu_light, GpuPointLight, LightMode, PointLight, LAMP_E};
-use crate::camera::Camera;
 use crate::gpu::GpuArray;
 use crate::renderer::Renderer;
-use crate::scene::Scene;
+use crate::scene::{Camera, Scene};
 use crate::sky::atmosphere;
 use glam::{DVec3, Mat4, Vec3};
 

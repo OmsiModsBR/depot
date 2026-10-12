@@ -1970,17 +1970,3 @@ impl Renderer {
         }
     }
 }
-
-/// Is `p` inside a vehicle's `[boundingbox]` (origin, heading in degrees, w l h cx cy cz)?
-/// The same box the shader keeps the weather out of, without its margins.
-pub(crate) fn point_in_vehicle_box(
-    p: DVec3,
-    (origin, heading, bb): &(DVec3, f64, [f32; 6]),
-) -> bool {
-    let d = (p - *origin).as_vec3();
-    let (sh, ch) = (*heading as f32).to_radians().sin_cos();
-    let x = d.x * ch - d.y * sh - bb[3];
-    let y = d.x * sh + d.y * ch - bb[4];
-    let z = d.z - bb[5];
-    x.abs() < bb[0] * 0.5 && y.abs() < bb[1] * 0.5 && z.abs() < bb[2] * 0.5
-}

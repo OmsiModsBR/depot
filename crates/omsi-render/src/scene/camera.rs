@@ -1,6 +1,7 @@
 //! The camera, the vertex layout and the camera uniform the shaders read.
 
-use super::*;
+use crate::gpu::{array_layout_entry_on, ArrayPath};
+use glam::{DVec3, Mat4, Vec3};
 
 #[derive(Default)]
 pub(crate) struct ViewCulling {

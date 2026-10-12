@@ -3,8 +3,8 @@
 
 use super::material::{AlphaMode, Material, MaterialUniform, TexAddressing};
 use super::texture::{next_gen, GpuTexture};
-use crate::camera::Vertex;
 use crate::renderer::Renderer;
+use crate::scene::Vertex;
 use crate::scene::{MaterialId, MeshId, Scene, TextureId};
 use glam::Vec3;
 
