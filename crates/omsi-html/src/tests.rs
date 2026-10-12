@@ -1,6 +1,6 @@
 use super::*;
 
-const DEMO: &str = include_str!("../../../../docs/examples/htmltexture/demo.html");
+const DEMO: &str = include_str!("../../../docs/examples/htmltexture/demo.html");
 
 fn px(frame: &[u8], w: u32, x: u32, y: u32) -> [u8; 4] {
     let i = ((y * w + x) * 4) as usize;

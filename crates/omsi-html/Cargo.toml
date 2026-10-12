@@ -1,0 +1,12 @@
+[package]
+name = "omsi-html"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "HTML/CSS/JS page engine for in-vehicle displays (HTML textures), drawn into RGBA bitmaps"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-texture = { path = "../omsi-texture" }
+log.workspace = true
+ab_glyph.workspace = true

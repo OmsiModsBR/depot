@@ -430,7 +430,7 @@ it in the table above and in the module docs. Existing names stay stable within 
 version.
 
 What the engine itself understands is listed at the top of
-`crates/omsi-sim/src/htmlengine/mod.rs`. If you add a feature there, add it to the "What the
+`crates/omsi-html/src/lib.rs`. If you add a feature there, add it to the "What the
 HTML engine supports" section here as well.
 
 ### Benchmark

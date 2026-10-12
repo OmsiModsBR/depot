@@ -1,4 +1,4 @@
-//! The vehicle snapshot (see [`crate::vehicle_api`]) as script values.
+//! The vehicle snapshot (see `omsi_sim::vehicle_api`) as script values.
 
 use super::*;
 

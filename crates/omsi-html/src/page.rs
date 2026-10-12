@@ -25,7 +25,7 @@ impl ApiValue {
     }
 
     /// The same map with property `key` set to `value`.
-    pub(crate) fn with(mut self, key: &str, value: ApiValue) -> ApiValue {
+    pub fn with(mut self, key: &str, value: ApiValue) -> ApiValue {
         if let ApiValue::Map(m) = &mut self {
             match m.iter_mut().find(|(k, _)| k == key) {
                 Some(slot) => slot.1 = value,
@@ -85,14 +85,14 @@ pub trait HtmlRenderer: Send {
     /// leaves this as it is.
     fn pointer(&mut self, _x: f32, _y: f32, _kind: PointerKind) {}
     /// The normalised state of the vehicle (`window.omsi.vehicle`, see
-    /// [`crate::vehicle_api`]). Called before [`Self::set_vars`] whenever it changed. A
+    /// `omsi_sim::vehicle_api`). Called before [`Self::set_vars`] whenever it changed. A
     /// backend that has no such object leaves this as it is.
     fn set_vehicle(&mut self, _api: &ApiValue) {}
-    /// `omsi.time`, `omsi.date` and `omsi.locale` (see [`crate::vehicle_api::environment`]): a
+    /// `omsi.time`, `omsi.date` and `omsi.locale` (see `omsi_sim::vehicle_api::environment`): a
     /// map whose entries become properties of `window.omsi`. Called before [`Self::set_vars`]
     /// whenever it changed.
     fn set_env(&mut self, _env: &ApiValue) {}
-    /// The depot file as a page sees it (`window.omsi.depot`, see [`crate::vehicle_api::depot`]).
+    /// The depot file as a page sees it (`window.omsi.depot`, see `omsi_sim::vehicle_api::depot`).
     /// Called once, before the first update.
     fn set_depot(&mut self, _depot: &ApiValue) {}
     /// The folders a page's pictures (`<img src>`, `url(...)`) are looked up in, in order.
@@ -103,7 +103,7 @@ pub trait HtmlRenderer: Send {
         Vec::new()
     }
     /// The departures of the stops the page asked for (`window.omsi.departures`, see
-    /// [`crate::vehicle_api::departures`]). Called before [`Self::set_vars`] whenever it changed.
+    /// `omsi_sim::vehicle_api::departures`). Called before [`Self::set_vars`] whenever it changed.
     fn set_departures(&mut self, _departures: &ApiValue) {}
     /// The stops the page asked departures for (`omsi.getDepartures(stop)`) since the last call,
     /// as keys: trimmed, lower case.
@@ -114,7 +114,7 @@ pub trait HtmlRenderer: Send {
 
 /// A style sheet is pasted into the page, so its `url(...)` paths, which are relative to the
 /// sheet, get the sheet's folder (`prefix`) put in front: they then read relative to the page.
-pub(crate) fn rebase_css_urls(css: &str, prefix: &str) -> String {
+pub fn rebase_css_urls(css: &str, prefix: &str) -> String {
     if prefix.is_empty() {
         return css.to_string();
     }
