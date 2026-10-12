@@ -29,6 +29,23 @@ with the real `depot --offscreen`. The picture checks run only with `OMSI_GOLDEN
 thumbnail comparison runs only when `tests/golden/offscreen_synthetic.txt` exists and was recorded on the same
 adapter; regenerate it with `OMSI_GOLDEN_BLESS=1 cargo test -p omsi-app --test offscreen_golden -- --nocapture`.
 
+## Offscreen state traces
+
+`crates/omsi-app/tests/offscreen_state_trace.rs` runs `depot --offscreen` on a synthetic street the test writes
+itself (two lanes, a crossing whose two lights run a program, six AI cars, a 12 m bus rolling north) with
+`OMSI_STATE_TRACE=<file>`, which writes for every frame where the bus is and how fast it goes, every AI car, the
+lights, the rail signals and the player's duty (`crates/omsi-app/src/state_trace.rs`). The test runs only when
+`OMSI_STATE_TRACE_DIR` is set (the run renders, so it needs a graphics adapter; a software one is enough), runs the
+street twice, fails when the two runs differ and writes the trace to `<dir>/synthetic.trace`. The street has no
+timetable yet, so the duty line reads `-`.
+
+The `offscreen-traces` job (informational for now) runs `scripts/offscreen-trace-diff.sh` on pull requests, on
+lavapipe: the scenario on the pull request's base and on the change, compared bit for bit, in the same way as the
+physics traces below. A change meant to alter the behaviour carries the `offscreen-delta` label (re-run the job
+after adding it). The job becomes blocking once two parity pull requests in a row passed it without a false alarm.
+Locally: `scripts/offscreen-trace-diff.sh [base-ref]` (default `origin/main`); the traces are kept in
+`target/offscreen-traces/`.
+
 ## Vehicle physics traces
 
 The refactor of the vehicle physics moves code in steps that must not change what the

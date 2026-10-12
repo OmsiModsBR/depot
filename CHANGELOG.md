@@ -6,7 +6,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
-Nothing yet.
+### Added
+- Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
+  for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it
+  on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`
+  compares a commit with its base, and the CI job `offscreen-traces` (informational for now) runs it on pull
+  requests on the software Vulkan adapter. Test and CI only; no behaviour change.
 
 ## 0.2.52 - 2026-10-10
 

@@ -104,6 +104,7 @@ mod situation;
 mod spawn;
 mod stock_keys;
 mod startup;
+mod state_trace;
 mod traffic_link;
 mod tutorial;
 mod weather_setup;
