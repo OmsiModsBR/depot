@@ -67,6 +67,8 @@ with the English text as the key. A pull request that changes it is checked auto
 
 See the layout in the [README](README.md#repository-layout) and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). File formats: [docs/FORMATS.md](docs/FORMATS.md).
+The renderer's domains and the layers they may import from are in
+[crates/omsi-render/ARCHITECTURE.md](crates/omsi-render/ARCHITECTURE.md).
 
 ## Releases
 
