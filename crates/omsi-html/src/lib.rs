@@ -23,7 +23,7 @@
 //!   (what a button in the cab does).
 //! * `window.omsi.vehicle` is a normalised snapshot of the vehicle with fixed names for every
 //!   bus: `engine.running/rpm`, `battery.on`, `doors.list[i].isOpen`, `lights.*`, `brakes.*` and
-//!   more (see [`crate::vehicle_api`] for the full list). A signal the bus lacks is `null` or
+//!   more (see `omsi_sim::vehicle_api` for the full list). A signal the bus lacks is `null` or
 //!   `false`. It is current whenever `update` runs and can be read from timers too.
 //! * `window.omsi.vars.num` / `.str` hold the latest value of every variable of the bus's own
 //!   variable list under its lower-case name, and `window.omsi.getVar(name)` reads one in any
@@ -42,7 +42,7 @@
 //!   (`day`, `month`, `year`, `asString`: `DD.MM.YYYY`, `MM/DD/YYYY` for `en`) show the simulation
 //!   clock; `window.omsi.locale` is the interface language (`en`, `de`, ...).
 //! * `window.omsi.vehicle.route` holds line, destination sign, the stops with their planned
-//!   times, the stop the bus is at and the last stop (see [`crate::vehicle_api`]).
+//!   times, the stop the bus is at and the last stop (see `omsi_sim::vehicle_api`).
 //!   `window.omsi.depot` lists the depot file's `lines[]` (each with its `routes[]`), `routes[]`
 //!   and `destinations[]`; the page sets the IBIS with `omsi.setRoute(index)` (line, route and
 //!   destination of `depot.routes[index]`), `omsi.setLine(text)` (the first route of that
@@ -52,7 +52,7 @@
 //! * `window.omsi.getDepartures(stop)` returns the departures of the next two hours at the bus stop
 //!   with that name (at most 20, soonest first) as `{ line, destination, time }`, `time` a
 //!   timestamp on the scale of `window.omsi.timestamp`. The first call for a stop returns `[]`; the
-//!   host fills `window.omsi.departures` (see [`crate::vehicle_api::departures`]) and calls `update`.
+//!   host fills `window.omsi.departures` (see `omsi_sim::vehicle_api::departures`) and calls `update`.
 //! * More JavaScript for such pages: `setTimeout`/`setInterval`/`clear*`, `classList`,
 //!   `createElement`/`appendChild`/`removeChild`/`remove`, `innerHTML` with markup, `getAttribute`,
 //!   `parentNode`, `Object.keys`, `Array.forEach/map/filter/indexOf/includes/pop/shift/slice`,
@@ -89,7 +89,7 @@ use style::*;
 pub use page::*;
 pub use renderer::EngineRenderer;
 
-pub(crate) const ROBOTO: &[u8] = include_bytes!("../../../../assets/fonts/Roboto-VariableFont_wdth,wght.ttf");
+pub(crate) const ROBOTO: &[u8] = include_bytes!("../../../assets/fonts/Roboto-VariableFont_wdth,wght.ttf");
 thread_local! {
     /// The regular and the bold face, parsed once per thread instead of once per frame.
     static FONTS: Option<(FontRef<'static>, FontRef<'static>)> = FontRef::try_from_slice(ROBOTO).ok().map(|reg| {

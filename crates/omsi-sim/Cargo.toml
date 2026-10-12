@@ -19,8 +19,8 @@ log.workspace = true
 anyhow.workspace = true
 hashbrown.workspace = true
 omsi-texture = { path = "../omsi-texture" }
+omsi-html = { path = "../omsi-html" }
 parking_lot = { workspace = true }
-ab_glyph.workspace = true
 
 [dev-dependencies]
 omsi-audio = { path = "../omsi-audio" }

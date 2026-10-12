@@ -13,6 +13,7 @@ members = [
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
+    "crates/omsi-html",
     "crates/omsi-sim",
     "crates/omsi-audio",
     "crates/omsi-net",
