@@ -299,12 +299,18 @@ fn shaders_validate_and_match_the_uniforms() {
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
         ("snow", snow_shader_source()),
-        ("post", include_str!("post.wgsl").to_string()),
-        ("ssao", include_str!("ssao.wgsl").to_string()),
+        ("post", include_str!("shaders/post/post.wgsl").to_string()),
+        ("ssao", include_str!("shaders/post/ssao.wgsl").to_string()),
         ("puddles", puddles::shader_source()),
-        ("upscale", include_str!("upscale.wgsl").to_string()),
-        ("mip", include_str!("mip.wgsl").to_string()),
-        ("xr_ui", include_str!("xr_ui.wgsl").to_string()),
+        (
+            "upscale",
+            include_str!("shaders/output/upscale.wgsl").to_string(),
+        ),
+        ("mip", include_str!("shaders/assets/mip.wgsl").to_string()),
+        (
+            "xr_ui",
+            include_str!("shaders/output/xr_ui.wgsl").to_string(),
+        ),
         // Enhanced+: the scene's pass with its reflection targets, the ray tracing
         (
             "scene (Enhanced+)",
@@ -312,7 +318,10 @@ fn shaders_validate_and_match_the_uniforms() {
         ),
         ("ray-traced lighting", rt::lighting_source()),
         ("ray-traced reflections", rt::reflect_source()),
-        ("texture means", include_str!("rt_avg.wgsl").to_string()),
+        (
+            "texture means",
+            include_str!("shaders/effects/rt_avg.wgsl").to_string(),
+        ),
     ];
     let sizes: &[(&str, usize)] = &[
         ("Enhanced", std::mem::size_of::<EnhancedUniform>()),

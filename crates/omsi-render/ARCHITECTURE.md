@@ -42,7 +42,7 @@ presents to the window or reads a texture back on its own.
 | 1 | `lighting` | The light model (`Lighting`, `PointLight`, `Corona`, `SmokeParticle`, `LightMode`), its GPU records (`GpuPointLight`, `GpuCorona`), the light grid and lamp shadows, the tile light map atlas | `lighting.rs`, parts of `frame.rs` |
 | 1 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, cloud textures, reflection probe) | `atmosphere.rs`, `clouds.rs`, parts of `frame.rs` and `renderer.rs` |
 | 0 | `gpu` | Opening the device (adapters, limits, the remembered fallbacks, `DevicePoller`), what the device can do (GL backend, `ArrayPath`, VRAM), `GpuArray`, errors (`catch`, device lost, out of memory) | `gpu.rs`, parts of `renderer.rs` and `lib.rs` |
-| 0 | `shaders` | The WGSL sources, grouped `common/`, `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, and the code that assembles them | `shaders.rs`, `*.wgsl` |
+| 0 | `shaders` | The WGSL sources, grouped `common/` (included by several shaders), `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, `assets/`, and the code that assembles them | in place (`shaders/`) |
 
 The "Lives today in" column shrinks as each domain reaches its folder; when it is empty, this
 column goes.

@@ -1,5 +1,7 @@
 //! The shaders' sources as the device gets them: the scene shader with the per-draw
 //! arrays as storage buffers or textures, and the sky, snow, fog lamps and corona shaders.
+//! The WGSL files sit beside this module, one folder per domain that draws with them;
+//! `common/` holds the pieces several shaders include.
 
 use super::*;
 
@@ -109,12 +111,12 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
 
 pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
-        include_str!("colour.wgsl"),
-        include_str!("shader.wgsl"),
-        include_str!("enhanced_common.wgsl"),
-        include_str!("puddle_common.wgsl"),
-        include_str!("lamp_air.wgsl"),
-        include_str!("enhanced.wgsl"),
+        include_str!("common/colour.wgsl"),
+        include_str!("scene/shader.wgsl"),
+        include_str!("common/enhanced_common.wgsl"),
+        include_str!("common/puddle_common.wgsl"),
+        include_str!("common/lamp_air.wgsl"),
+        include_str!("scene/enhanced.wgsl"),
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
@@ -267,10 +269,10 @@ pub(crate) fn cloud_noise_textures(
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
-        include_str!("colour.wgsl"),
-        include_str!("sky.wgsl"),
-        include_str!("enhanced_common.wgsl"),
-        include_str!("sky_enhanced.wgsl"),
+        include_str!("common/colour.wgsl"),
+        include_str!("sky/sky.wgsl"),
+        include_str!("common/enhanced_common.wgsl"),
+        include_str!("sky/sky_enhanced.wgsl"),
     ]
     .join("\n")
 }
@@ -279,10 +281,10 @@ pub(crate) fn sky_shader_source() -> String {
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
     let src = [
-        include_str!("snow.wgsl"),
-        include_str!("enhanced_common.wgsl"),
+        include_str!("sky/snow.wgsl"),
+        include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
-        include_str!("lamp_air.wgsl"),
+        include_str!("common/lamp_air.wgsl"),
     ]
     .join("\n");
     if array_path() == ArrayPath::NoStorage {
@@ -325,10 +327,10 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
-        include_str!("fog_lamps.wgsl"),
-        include_str!("enhanced_common.wgsl"),
+        include_str!("lights/fog_lamps.wgsl"),
+        include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
-        include_str!("lamp_air.wgsl"),
+        include_str!("common/lamp_air.wgsl"),
     ]
     .join("\n")
 }
@@ -349,10 +351,10 @@ const CELL_CAP: u32 = 32u;
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
-        include_str!("corona.wgsl"),
-        include_str!("enhanced_common.wgsl"),
+        include_str!("lights/corona.wgsl"),
+        include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
-        include_str!("lamp_air.wgsl"),
+        include_str!("common/lamp_air.wgsl"),
     ]
     .join("\n");
     // (the basic set lights rain by the sky alone: the loop over the lamps is one more

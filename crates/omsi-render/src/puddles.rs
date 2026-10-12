@@ -36,9 +36,9 @@ pub(super) struct Uniform {
 
 pub(super) fn shader_source() -> String {
     [
-        include_str!("colour.wgsl"),
-        include_str!("puddle_common.wgsl"),
-        include_str!("puddle_reflection.wgsl"),
+        include_str!("shaders/common/colour.wgsl"),
+        include_str!("shaders/common/puddle_common.wgsl"),
+        include_str!("shaders/effects/puddle_reflection.wgsl"),
     ]
     .join("\n")
 }
