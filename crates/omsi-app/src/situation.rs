@@ -227,6 +227,13 @@ fn spawn_arg(x: f64, y: f64, heading: f64, z: f64) -> String {
     }
 }
 
+/// The place `x,y` of a `--spawn` text that carries no height (`spawn_arg` left it out because
+/// the saved one was implausible).
+pub(crate) fn spawn_without_height(spawn: &str) -> Option<(f64, f64)> {
+    let v: Vec<f64> = spawn.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+    (v.len() == 3).then(|| (v[0], v[1]))
+}
+
 /// Prefer OMSI's saved total; old openOMSI only kept it in the script variables.
 /// A new bus starts at least at 8 km, so smaller header values
 /// are placeholders. The old writer's ordinal pattern also excludes its 8, 9, 10...
@@ -437,6 +444,8 @@ mod tests {
         assert_eq!(spawn_arg(1.0, 2.0, 90.0, 12.5), "1,2,90,12.5");
         assert_eq!(spawn_arg(1.0, 2.0, 90.0, -2_470_000.0), "1,2,90");
         assert_eq!(spawn_arg(1.0, 2.0, 90.0, f64::NAN), "1,2,90");
+        assert_eq!(spawn_without_height("1,2,90"), Some((1.0, 2.0)));
+        assert_eq!(spawn_without_height("1,2,90,12.5"), None);
     }
 
     #[test]
