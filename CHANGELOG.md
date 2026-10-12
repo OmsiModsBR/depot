@@ -13,8 +13,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   and blocks. Formatting only; no behaviour change.
 - The clippy warnings of the ten format crates are fixed (manual `div_ceil` and `is_multiple_of`, index loops,
   needless conversions and borrows, complex types named, doc lists). No behaviour change.
-- `omsi-render`: the camera, render-target and material types leave `lib.rs` for `camera.rs`, `targets.rs`
-  and `material.rs` (first step of splitting the file). Code moved as is; no behaviour change.
+- `omsi-render`: `lib.rs` is split into modules, with the code moved as is and no behaviour change:
+  `camera.rs`, `targets.rs` and `material.rs` for the types without logic; `gpu.rs` (adapter, video
+  memory, the OpenGL paths) and `lighting.rs`.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
