@@ -1135,6 +1135,13 @@ impl PedNet {
     /// often the pavement across the road - a passenger off a bus then walked straight
     /// over the carriageway through the traffic to it, or joined a crossing in the middle.
     fn nearest(&self, net: &Network, p: DVec3, reach: f64) -> Option<(usize, f32, f64)> {
+        self.nearest_with(net, p, reach, true)
+    }
+
+    /// `nearest`; without `island_fallback` only a pavement reached without going over a
+    /// carriageway counts (somebody left standing must not be sent across traffic that
+    /// `may_cross` would not watch).
+    fn nearest_with(&self, net: &Network, p: DVec3, reach: f64, island_fallback: bool) -> Option<(usize, f32, f64)> {
         let (cx, cy) = ((p.x / 50.0).floor() as i32, (p.y / 50.0).floor() as i32);
         let mut cands: Vec<(usize, f32, f64)> = Vec::new();
         let mut seen = HashSet::new();
@@ -1158,7 +1165,7 @@ impl PedNet {
             }
         }
         cands.sort_by(|a, b| a.2.total_cmp(&b.2));
-        let first = cands.first().copied();
+        let first = cands.first().copied().filter(|_| island_fallback);
         cands
             .into_iter()
             .find(|&(i, s, _)| {
@@ -4348,7 +4355,7 @@ impl Humans {
                 // a bay, an island) walks on from the nearest one once there is one (#57)
                 if let Some(net) = net.filter(|_| look_for_pavement(self.people[i].t_state, dt)) {
                     let at = self.people[i].position;
-                    let found = self.ped.as_ref().and_then(|pn| pn.nearest(net, at, STANDING_PAVEMENT_REACH)).filter(|&(l, _, _)| net.lanes[l].length() > 0.35);
+                    let found = self.ped.as_ref().and_then(|pn| pn.nearest_with(net, at, STANDING_PAVEMENT_REACH, false)).filter(|&(l, _, _)| net.lanes[l].length() > 0.35);
                     if let Some((lane, s, _)) = found {
                         let mut walk = PedWalk::new(vec![Leg { lane, a: s, b: s }], true, 0.0);
                         let w = self.walk_want(i, &mut walk, net, traffic, cars, dt);
