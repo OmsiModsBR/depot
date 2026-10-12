@@ -13,7 +13,8 @@
 # OUT          where the traces go (default: target/offscreen-traces)
 # CARGO_FLAGS  more flags for `cargo test` (e.g. --ignore-rust-version)
 #
-# Exit status: 0 the traces are identical (or <base> has no state trace yet); 1 they differ
+# Exit status: 0 the traces are identical (or <base> has no state trace yet, and the change's
+# own two runs agree); 1 they differ
 # (the first difference of each trace is printed); 2 a run failed, or two runs of the
 # working tree differ.
 set -euo pipefail
@@ -24,17 +25,8 @@ out=${OUT:-$root/target/offscreen-traces}
 harness=crates/omsi-app/tests/offscreen_state_trace.rs
 
 base_sha=$(git -C "$root" rev-parse --verify "$base_ref^{commit}")
-if ! git -C "$root" cat-file -e "$base_sha:crates/omsi-app/src/state_trace.rs" 2>/dev/null; then
-    echo "offscreen-trace-diff: ${base_ref} (${base_sha:0:10}) has no state trace (OMSI_STATE_TRACE) to compare with"
-    exit 0
-fi
-tree=$(mktemp -d)
 rm -rf "$out"
 mkdir -p "$out"
-git -C "$root" worktree add --detach --force "$tree" "$base_sha" >/dev/null
-trap 'git -C "$root" worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$tree"' EXIT
-mkdir -p "$tree/$(dirname "$harness")"
-cp "$root/$harness" "$tree/$harness"
 
 # run <checkout> <target dir> <label>: the scenarios, into $out/<label>
 # (each checkout builds in a target directory of its own, as in physics-trace-diff.sh)
@@ -72,8 +64,19 @@ report() {
     return $differ
 }
 
-run "$tree" "$root/target/offscreen-base" base
 run "$root" "${CARGO_TARGET_DIR:-$root/target}" head
+# (a base from before the state trace has nothing to compare with: the run above still
+# shows that the scenario runs and repeats itself)
+if ! git -C "$root" cat-file -e "$base_sha:crates/omsi-app/src/state_trace.rs" 2>/dev/null; then
+    echo "offscreen-trace-diff: ${base_ref} (${base_sha:0:10}) has no state trace (OMSI_STATE_TRACE) to compare with; the change's own runs agree"
+    exit 0
+fi
+tree=$(mktemp -d)
+git -C "$root" worktree add --detach --force "$tree" "$base_sha" >/dev/null
+trap 'git -C "$root" worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$tree"' EXIT
+mkdir -p "$tree/$(dirname "$harness")"
+cp "$root/$harness" "$tree/$harness"
+run "$tree" "$root/target/offscreen-base" base
 
 # (the test itself runs the root twice and fails when the two runs differ)
 traces=$(find "$out/head" -name '*.trace' | wc -l)
