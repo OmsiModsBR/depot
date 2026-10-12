@@ -6,6 +6,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- `cargo fmt` (rustfmt defaults, 100 columns) on `omsi-cfg`, `omsi-o3d`, `omsi-model` and `omsi-map`; CI's
+  new `rustfmt (formatted crates)` step checks them and blocks. Formatting only; no behaviour change.
+
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
   for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it

@@ -35,7 +35,11 @@ pub fn parse_f64(s: &str) -> f64 {
                     break;
                 }
             }
-            t[..end].parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
+            t[..end]
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
         }
     }
 }
