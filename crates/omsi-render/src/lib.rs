@@ -23,7 +23,7 @@ mod triple;
 // The public API, item by item: what the game (`omsi-app`) and the tests may use. A module
 // moving inside the crate changes nothing here but the path; see ARCHITECTURE.md.
 pub use camera::{Camera, Vertex};
-pub use gpu::{gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
+pub use gpu::{catch, catching, gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
 pub use lighting::{
     Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
 };
@@ -132,23 +132,3 @@ struct SsaoUniform {
 mod tests;
 #[cfg(test)]
 mod tests_units;
-
-thread_local! {
-    /// A panic on this thread now is caught and handled (see [`catching`]).
-    static CATCHING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Whether a panic on this thread is being caught by the renderer (the game's panic hook
-/// does not report it as the end of the game).
-pub fn catching() -> bool {
-    CATCHING.with(|c| c.get())
-}
-
-/// Run `f`; a panic in it (a driver wgpu cannot use, taking it down in a way it does not
-/// turn into an error) is caught and gives None, and is not reported as the end of the game.
-pub fn catch<R>(f: impl FnOnce() -> R) -> Option<R> {
-    let was = CATCHING.with(|c| c.replace(true));
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-    CATCHING.with(|c| c.set(was));
-    r.ok()
-}
