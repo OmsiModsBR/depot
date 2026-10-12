@@ -2891,14 +2891,14 @@ mod pad_action_tests {
         for a in super::PAD_GAME_ACTIONS {
             let held = a.starts_with("view_look_") || a == "voice_radio";
             let handled = held
-                || crate::input_script::is_game_action(a)
+                || crate::actions::is_game_action(a)
                 || a.starts_with("gear_")
                 || crate::player::door_action(a).is_some();
             assert!(handled, "{a}");
         }
         // held pad actions are game actions so they never reach the bus script
-        assert!(crate::input_script::is_game_action("voice_radio"));
-        assert!(crate::input_script::is_game_action("view_look_left"));
+        assert!(crate::actions::is_game_action("voice_radio"));
+        assert!(crate::actions::is_game_action("view_look_left"));
     }
 }
 

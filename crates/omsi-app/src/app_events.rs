@@ -887,7 +887,7 @@ impl ApplicationHandler for App {
                             }
                             return false;
                         }
-                        if crate::input_script::is_game_action(&n) {
+                        if crate::actions::is_game_action(&n) {
                             if *down {
                                 game.push(n);
                             }
@@ -1040,8 +1040,8 @@ impl ApplicationHandler for App {
                     // (out of the seat: nobody at the wheel)
                     p.sync_driver_hands(r, scene, dt, self.settings.driver && self.on_foot.is_none(), self.view == "driver", self.settings.hands_in_cab);
                     if self.view != "free" && self.view != "foot" {
-                        let key = crate::input_script::look_key_of(&self.view, Some(p.cam_choice));
-                        crate::input_script::swap_view_look(&mut self.look, &mut self.view_looks, &mut self.look_view, &key);
+                        let key = crate::input::look_key_of(&self.view, Some(p.cam_choice));
+                        crate::input::swap_view_look(&mut self.look, &mut self.view_looks, &mut self.look_view, &key);
                         if let Some(cam) = self.camera.as_ref() {
                             // (the seat kept for this bus, when one is: see `bus_seats`)
                             let bus = crate::game_lists::seat_key(p);
@@ -1154,7 +1154,7 @@ impl ApplicationHandler for App {
                             // arrow keys) turned the head is eased in, so the picture glides to
                             // the angle asked for instead of jumping to it (off by default); the
                             // seat's head pitch goes on top of it.
-                            let look = crate::input_script::ease_look(
+                            let look = crate::input::ease_look(
                                 &mut self.look_smooth,
                                 self.look,
                                 dt,
@@ -1190,12 +1190,12 @@ impl ApplicationHandler for App {
                             // a switch mid-glide finalizes that camera straight
                             // ahead instead of saving a partial angle, and
                             // leaving the view drops it the same way.
-                            let cur = crate::input_script::look_key_of(&self.view, Some(p.cam_choice));
+                            let cur = crate::input::look_key_of(&self.view, Some(p.cam_choice));
                             let mine = matches!(&self.f1_reset, Some((.., k)) if *k == cur);
                             if self.view == "driver" && mine {
                                 if let Some((look_from, zoom_from, t, _)) = self.f1_reset.clone() {
                                     let (look, zoom, done) =
-                                        crate::input_script::reset_blend(look_from, zoom_from, t + dt);
+                                        crate::input::reset_blend(look_from, zoom_from, t + dt);
                                     if done {
                                         self.look = (0.0, 0.0);
                                         self.view_zoom.remove(&self.view);
@@ -1823,7 +1823,7 @@ impl ApplicationHandler for App {
                         self.look.1 = (self.look.1 - step * 0.7).max(-85.0);
                     }
                     if self.view != "outside" {
-                        self.look.0 = crate::input_script::cab_look_yaw(self.look.0);
+                        self.look.0 = crate::input::cab_look_yaw(self.look.0);
                     }
                     // Ctrl+Shift+Page Up / Page Down held: the clock runs forwards / backwards,
                     // a quarter of an hour per second at first, faster the longer it is held
@@ -3107,7 +3107,7 @@ impl ApplicationHandler for App {
                     if self.view == "outside" {
                         // F3 chase orbits at its own gain, not the head's.
                         self.sync_view_look();
-                        let (y, p) = crate::input_script::chase_orbit_step(
+                        let (y, p) = crate::input::chase_orbit_step(
                             self.look.0,
                             self.look.1,
                             delta.0 as f32,

@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app/src/input_script.rs` held 4,900 lines, most of them the game's key, mouse and menu handling; it now
+  keeps only the `OMSI_INPUT` script (330 lines). The rest moves to files named for what they do:
+  `input/keyboard.rs`, `input/mouse.rs`, `input/menus.rs` and `input/editor_input.rs`, `actions.rs` (game
+  actions, vehicles, saving), `weather_time.rs` (weather, METAR, the clock) and `online.rs` (LAN and voice
+  each frame). Code moved as is; no behaviour change.
 - `vehicle_path` and `human_path`, which check a content path that came from another machine, move from
   `omsi-net` to `omsi_content::remote_path`; `omsi-net` re-exports them, and the game's driver and walker
   figures no longer need the network crate for it. The first step of building the game without
