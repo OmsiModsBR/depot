@@ -3,7 +3,6 @@
 
 use super::{atmosphere, clouds};
 use crate::lighting::Lighting;
-use crate::CLOUD_ORIGIN_PERIOD;
 use glam::{DVec3, Vec3};
 
 /// The sun's angular radius as drawn (a little larger than the real 0.27°).
@@ -322,3 +321,8 @@ pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInp
             .zip(&b.tint)
             .any(|(x, y)| (*x - *y).abs().max_element() > 0.01)
 }
+
+/// The period the sky's cloud patterns repeat with (m): 5 x the cloud field (14 km), 8 x
+/// its billow detail (8.75 km) and 28 x the high layer's (2.5 km) - the render origin is
+/// taken modulo this for them, which keeps centimetres of precision in 32 bits.
+pub(crate) const CLOUD_ORIGIN_PERIOD: f64 = 70000.0;

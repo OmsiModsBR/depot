@@ -1,7 +1,25 @@
 //! `Renderer::render_inner`: one picture, from the camera uniform and the draw lists to
 //! the passes it records and submits.
 
-use super::*;
+use super::state::{
+    Renderer, HDR_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
+};
+use crate::assets::AlphaMode;
+use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, Lighting};
+use crate::passes::{
+    batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
+    horizontal_sort_distance, in_scope, instance_depth_bias, nearest_by_origin, origin_key,
+    pipe_code, record_bundles, run_parts, surface_depth_coverage, world_surface_phase, Batch,
+    DrawItem, PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE,
+    PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
+};
+use crate::scene::{
+    point_in_vehicle_box, Camera, CameraUniform, Instance, RenderPhase, Scene, TextureId,
+    CULL_BLOCK,
+};
+use crate::sky::CLOUD_ORIGIN_PERIOD;
+use glam::{DVec3, Mat4, Vec3};
+use std::collections::HashMap;
 
 impl Renderer {
     #[allow(clippy::too_many_arguments)]

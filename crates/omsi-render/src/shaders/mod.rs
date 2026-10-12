@@ -3,7 +3,9 @@
 //! The WGSL files sit beside this module, one folder per domain that draws with them;
 //! `common/` holds the pieces several shaders include.
 
-use super::*;
+use crate::gpu::{array_path, basic_pipelines, ArrayPath, ARRAY_TEX_WIDTH};
+use crate::renderer::rt_gbuf;
+use crate::sky::clouds;
 
 /// The scene shader: the vanilla path and the enhanced fragment shader in one module.
 ///

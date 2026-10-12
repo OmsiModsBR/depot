@@ -26,4 +26,4 @@ pub(crate) use errors::{gpu_error_text, CATCHING};
 pub(crate) use open::{
     basic_pipelines, fallback_load, fallback_store, DevicePoller, BASIC_PIPELINES,
 };
-pub(crate) use timers::{pass_timer, GpuTimers};
+pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};
