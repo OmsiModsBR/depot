@@ -16,6 +16,12 @@ path = "src/lib.rs"
 name = "depot"
 path = "src/main.rs"
 
+# Off by default: code kept in the repository for later, out of the game's build
+# (docs/removed/MULTIPLAYER_DISABLED.md)
+[features]
+# the OMSI plugins (`plugins/*.opl`) and the Lua plugins' panels
+plugins = ["dep:omsi-plugin"]
+
 [build-dependencies]
 winresource.workspace = true
 
@@ -29,7 +35,7 @@ omsi-texture = { path = "../omsi-texture" }
 omsi-geometry = { path = "../omsi-geometry" }
 omsi-render = { path = "../omsi-render" }
 omsi-sim = { path = "../omsi-sim" }
-omsi-plugin = { path = "../omsi-plugin" }
+omsi-plugin = { path = "../omsi-plugin", optional = true }
 omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-content = { path = "../omsi-content" }
 omsi-timetable = { path = "../omsi-timetable" }

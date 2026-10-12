@@ -512,6 +512,7 @@ impl RemoteVehicle {
     }
 
     /// The same, for the plugins (`omsi.set_other_var`: their next state writes it again).
+    #[cfg_attr(not(feature = "plugins"), allow(dead_code))]
     pub fn vehicle_mut(&mut self) -> &mut omsi_sim::VehicleInstance {
         &mut self.vehicle
     }

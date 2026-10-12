@@ -165,6 +165,7 @@ impl ApplicationHandler for App {
                     lan::chat_type(&mut self.remotes, text);
                 }
                 // (the Lua plugins' `key` event; a key held down repeats nothing)
+                #[cfg(feature = "plugins")]
                 if let (PhysicalKey::Code(code), false) = (event.physical_key, event.repeat) {
                     if self.plugin_keys.len() < 64 {
                         self.plugin_keys.push((format!("{code:?}"), event.state == ElementState::Pressed));
@@ -702,12 +703,16 @@ impl ApplicationHandler for App {
                 let vr_on = self.vr.is_some();
                 #[cfg(not(windows))]
                 let vr_on = false;
+                #[cfg(feature = "plugins")]
+                let plugin_focus = crate::plugin_ui::focused(&self.plugins);
+                #[cfg(not(feature = "plugins"))]
+                let plugin_focus = false;
                 let needs_mouse = self.mouse_drive
                     || self.game_menu.is_some()
                     || self.chooser.is_some()
                     || self.list_kind.is_some()
                     || self.navigator.as_ref().is_some_and(|n| n.map_open())
-                    || crate::plugin_ui::focused(&self.plugins)
+                    || plugin_focus
                     || !matches!(self.view.as_str(), "driver" | "outside" | "pax");
                 let hide = (moved || actions.iter().any(|a| a.1)) && !needs_mouse && !vr_on;
                 if self.vr_nav_edit.is_none() && hide != self.cursor_hidden.is_some() && (hide || needs_mouse) {
@@ -1556,6 +1561,7 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
+                    #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
                         crate::plugins::queue_event(&mut self.plugin_events, "stops_skipped", vec![Num(count as f64), Num(due_at as f64), Num(at as f64)]);
@@ -1586,9 +1592,12 @@ impl ApplicationHandler for App {
                     if crash > 0.0 {
                         self.career.crashed(crash, p.vehicle.motion().velocity_kmh() / 3.6);
                         self.service_msg = Some((format!("Crash: {:.0} kJ", crash / 1000.0), 6.0));
-                        use omsi_plugin::InfoValue::Num;
-                        let args = vec![Num(crash as f64 / 1000.0), Num(p.vehicle.motion().velocity_kmh().abs() as f64)];
-                        crate::plugins::queue_event(&mut self.plugin_events, "crash", args);
+                        #[cfg(feature = "plugins")]
+                        {
+                            use omsi_plugin::InfoValue::Num;
+                            let args = vec![Num(crash as f64 / 1000.0), Num(p.vehicle.motion().velocity_kmh().abs() as f64)];
+                            crate::plugins::queue_event(&mut self.plugin_events, "crash", args);
+                        }
                     }
                 }
                 if !self.paused {
@@ -1623,45 +1632,48 @@ impl ApplicationHandler for App {
                     steam.client.run_callbacks();
                 }
                 // the plugins' frame, with the bus's scripts done
-                let plugins = self.plugins.get_or_insert_with(crate::plugins::load);
-                if !plugins.is_empty() && !self.paused {
-                    let info = crate::plugins::game_info(self);
-                    let keys = std::mem::take(&mut self.plugin_keys);
-                    let events = std::mem::take(&mut self.plugin_events);
-                    let plugins = self.plugins.as_mut().unwrap();
-                    // the vehicles around it: the AI traffic and the other players' buses
-                    let mut others: Vec<(u64, &'static str, &mut omsi_sim::VehicleInstance)> = Vec::new();
-                    if let Some(t) = self.traffic.as_mut() {
-                        others.extend(t.cars.iter_mut().map(|c| (c.id, "ai", &mut c.vehicle)));
-                    }
-                    others.extend(self.remotes.remotes.iter_mut().map(|(id, r)| ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())));
-                    let mut io = crate::plugins::Io { vehicle: self.player.as_mut().map(|p| &mut p.vehicle), others, dt, message: None, info, commands: Vec::new(), keys, events };
-                    plugins.frame(&mut io);
-                    let commands = std::mem::take(&mut io.commands);
-                    if let Some(m) = io.message {
-                        self.service_msg = Some(m);
-                    }
-                    // what the plugins asked the game to do: lines of the game menu
-                    for c in commands {
-                        if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == c) {
-                            let was = self.game_menu;
-                            self.menu_prev_pause = self.paused;
-                            self.menu_choose(event_loop, k);
-                            // (an action leaves the menu as it found it)
-                            if self.chooser.is_none() && was.is_none() {
-                                self.game_menu = None;
-                            }
-                        } else {
-                            // (a line of the vehicle or world pages)
-                            self.menu_prev_pause = self.paused;
-                            self.page_action(&c);
+                #[cfg(feature = "plugins")]
+                {
+                    let plugins = self.plugins.get_or_insert_with(crate::plugins::load);
+                    if !plugins.is_empty() && !self.paused {
+                        let info = crate::plugins::game_info(self);
+                        let keys = std::mem::take(&mut self.plugin_keys);
+                        let events = std::mem::take(&mut self.plugin_events);
+                        let plugins = self.plugins.as_mut().unwrap();
+                        // the vehicles around it: the AI traffic and the other players' buses
+                        let mut others: Vec<(u64, &'static str, &mut omsi_sim::VehicleInstance)> = Vec::new();
+                        if let Some(t) = self.traffic.as_mut() {
+                            others.extend(t.cars.iter_mut().map(|c| (c.id, "ai", &mut c.vehicle)));
                         }
-                    }
-                } else {
-                    self.plugin_keys.clear();
-                    // (while the game is paused they wait for the next frame)
-                    if self.plugins.as_ref().is_none_or(|p| p.is_empty()) {
-                        self.plugin_events.clear();
+                        others.extend(self.remotes.remotes.iter_mut().map(|(id, r)| ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())));
+                        let mut io = crate::plugins::Io { vehicle: self.player.as_mut().map(|p| &mut p.vehicle), others, dt, message: None, info, commands: Vec::new(), keys, events };
+                        plugins.frame(&mut io);
+                        let commands = std::mem::take(&mut io.commands);
+                        if let Some(m) = io.message {
+                            self.service_msg = Some(m);
+                        }
+                        // what the plugins asked the game to do: lines of the game menu
+                        for c in commands {
+                            if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == c) {
+                                let was = self.game_menu;
+                                self.menu_prev_pause = self.paused;
+                                self.menu_choose(event_loop, k);
+                                // (an action leaves the menu as it found it)
+                                if self.chooser.is_none() && was.is_none() {
+                                    self.game_menu = None;
+                                }
+                            } else {
+                                // (a line of the vehicle or world pages)
+                                self.menu_prev_pause = self.paused;
+                                self.page_action(&c);
+                            }
+                        }
+                    } else {
+                        self.plugin_keys.clear();
+                        // (while the game is paused they wait for the next frame)
+                        if self.plugins.as_ref().is_none_or(|p| p.is_empty()) {
+                            self.plugin_events.clear();
+                        }
                     }
                 }
                 // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
@@ -1691,6 +1703,7 @@ impl ApplicationHandler for App {
                     if hurt > 0 {
                         self.career.crashes[1] += hurt as i32;
                         self.service_msg = Some(("Pedestrian knocked down!".into(), 6.0));
+                        #[cfg(feature = "plugins")]
                         crate::plugins::queue_event(&mut self.plugin_events, "pedestrian", vec![omsi_plugin::InfoValue::Num(hurt as f64)]);
                     }
                 }
@@ -2269,6 +2282,7 @@ impl ApplicationHandler for App {
                         }
                     }
                     // (the cursor no longer works the cab: how to have it back)
+                    #[cfg(feature = "plugins")]
                     if crate::plugin_ui::focused(&self.plugins) {
                         lines.push(crate::plugin_ui::FOCUS_NOTE.into());
                     }
@@ -2392,7 +2406,11 @@ impl ApplicationHandler for App {
                     }
                     // the Lua plugins' panels (`omsi.ui`): over the picture and the navigator,
                     // under the game's own interface; not under its menus, nor in VR
+                    #[cfg(feature = "plugins")]
                     let plugin_focus = crate::plugin_ui::focused(&self.plugins);
+                    #[cfg(not(feature = "plugins"))]
+                    let plugin_focus = false;
+                    #[cfg(feature = "plugins")]
                     if let Some(plugin_ui) = self.plugins.as_ref().map(|p| p.ui.clone()) {
                         let dpi = self
                             .window

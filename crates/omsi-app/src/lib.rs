@@ -100,8 +100,12 @@ mod online;
 mod route_arrows;
 mod server;
 mod player;
+#[cfg(feature = "plugins")]
 mod plugin_ui;
+#[cfg(feature = "plugins")]
 mod plugins;
+#[cfg(not(feature = "plugins"))]
+mod plugins_off;
 mod services;
 mod situation;
 mod spawn;
@@ -536,8 +540,11 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         dd_scroll_drag: None,
         pane_scroll_drag: None,
         pane_scroll: None,
+        #[cfg(feature = "plugins")]
         plugin_keys: Vec::new(),
+        #[cfg(feature = "plugins")]
         plugin_events: Vec::new(),
+        #[cfg(feature = "plugins")]
         plugin_panels: Default::default(),
         clock_hold: 0.0,
         clock_jump: 0.0,
@@ -611,6 +618,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         notices: Vec::new(),
         // (a server counts its players by their own games, not itself)
         log_state: Default::default(),
+        #[cfg(feature = "plugins")]
         plugins: None,
         career: Default::default(),
         journey: None,
