@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app` asks `is_lan_client()` and `is_lan_host()` instead of comparing the LAN session's
+  `omsi_net::Role` in 22 places (weather, clock, menus, the editor, lists). Without a session both say
+  no, as the comparisons did. This prepares the `lan` feature. No behaviour change.
 - The plugin code (`plugins.rs`, `plugin_ui.rs` and the `omsi-plugin` crate) moves behind a new
   `plugins` feature of `omsi-app`, off by default, so the game no longer builds it. Plugins were already
   switched off since the first Depot release; `--features plugins` builds them again. Nothing is

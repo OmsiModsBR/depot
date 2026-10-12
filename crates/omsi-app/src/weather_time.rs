@@ -7,7 +7,7 @@ impl App {
     /// the weather at once (a change on its way and the weather cycle stop: this is the
     /// weather now). The sky's clouds are made again when their type changed.
     pub(crate) fn edit_weather(&mut self,f:impl FnOnce(&mut omsi_content::weather::Weather)){
-        if self.lan.as_ref().is_some_and(|l|l.role==omsi_net::Role::Client){
+        if self.is_lan_client(){
             self.service_msg=Some(("In a LAN session the host sets the weather".into(),3.0));return;
         }
         if self.metar_locked(){self.service_msg=Some(("The weather cannot be changed while the METAR sync is on".into(),3.0));return;}
@@ -20,7 +20,7 @@ impl App {
     }
 
     pub(crate) fn set_custom_weather(&mut self,mut custom:crate::weather_setup::CustomWeather){
-        if self.lan.as_ref().is_some_and(|l|l.role==omsi_net::Role::Client){
+        if self.is_lan_client(){
             self.service_msg=Some(("In a LAN session the host sets the weather".into(),3.0));return;
         }
         if self.metar_locked(){self.service_msg=Some(("The weather cannot be changed while the METAR sync is on".into(),3.0));return;}
@@ -64,7 +64,7 @@ impl App {
 
     /// The next (`dir` 1) or previous (-1) weather of the Weather folder, round the ends.
     pub(crate) fn step_weather(&mut self) {
-        if self.lan.as_ref().map(|l| l.role == omsi_net::Role::Client).unwrap_or(false) {
+        if self.is_lan_client() {
             self.service_msg = Some(("In a LAN session the host sets the weather".into(), 3.0));
             return;
         }
@@ -139,7 +139,7 @@ impl App {
         if let Some(w) = self.weather.as_ref() {
             crate::weather_setup::cloud_drift_step(&mut self.cloud_drift, w, secs as f64);
         }
-        let follows = self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client);
+        let follows = self.is_lan_client();
         if follows || self.weather_blend.is_some() {
             return;
         }
@@ -164,7 +164,7 @@ impl App {
     /// The weather follows the METAR report and cannot be changed (the `metar_sync` setting).
     /// In a LAN session as a client the host's weather counts: the host syncs, not us.
     pub(crate) fn metar_locked(&self) -> bool {
-        self.settings.metar_sync && !self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+        self.settings.metar_sync && !self.is_lan_client()
     }
 
     /// The airport whose report the sync follows: the one chosen, else the one of the weather
@@ -181,7 +181,7 @@ impl App {
 
     /// Fetch the selected station once, without turning the ten-minute METAR sync on.
     pub(crate) fn load_metar_once(&mut self) {
-        if self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+        if self.is_lan_client() {
             self.service_msg=Some(("In a LAN session the host sets the weather".into(),3.0));
             return;
         }
@@ -297,7 +297,7 @@ impl App {
     /// The clock follows the real time and cannot be changed (the `time_sync` setting). In a
     /// LAN session as a client the host's clock counts: the host or the server syncs, not us.
     pub(crate) fn real_time_locked(&self) -> bool {
-        self.settings.time_sync && !self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+        self.settings.time_sync && !self.is_lan_client()
     }
 
     /// With the real-time sync on: hold the clock to this device's date and time (a second
