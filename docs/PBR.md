@@ -51,4 +51,4 @@ compression), so use them where they are seen up close.
 - Prefer one packed `_orm` file over three single maps: one file read instead of three.
 - Check the green channel of a normal map: dents that look like bumps mean it needs `_gl`
   (or the other way round).
-- Source: `crates/omsi-texture/src/pbr.rs`, `crates/omsi-render/src/enhanced.wgsl`.
+- Source: `crates/omsi-texture/src/pbr.rs`, `crates/omsi-render/src/shaders/scene/enhanced.wgsl`.

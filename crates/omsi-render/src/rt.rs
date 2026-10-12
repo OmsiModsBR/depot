@@ -145,7 +145,11 @@ fn refl_div() -> u32 {
 
 /// The traced lighting's shader: the shared ray tracing and its own.
 pub(super) fn lighting_source() -> String {
-    [include_str!("rt_common.wgsl"), include_str!("rt.wgsl")].join("\n")
+    [
+        include_str!("shaders/common/rt_common.wgsl"),
+        include_str!("shaders/effects/rt.wgsl"),
+    ]
+    .join("\n")
 }
 
 /// The size of the shaders' `RtParams` (for the shader test).
@@ -154,14 +158,14 @@ pub(super) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
 
 /// The reflections' shader: the shared ray tracing, the enhanced uniform's layout, its own.
 pub(super) fn reflect_source() -> String {
-    let common = include_str!("enhanced_common.wgsl");
+    let common = include_str!("shaders/common/enhanced_common.wgsl");
     let enh = &common[..common
         .find("@group(0) @binding(11)")
         .expect("Enhanced struct")];
     [
-        include_str!("rt_common.wgsl"),
+        include_str!("shaders/common/rt_common.wgsl"),
         enh,
-        include_str!("rt_reflect.wgsl"),
+        include_str!("shaders/effects/rt_reflect.wgsl"),
     ]
     .join("\n")
 }
@@ -290,7 +294,7 @@ impl RayTracer {
         });
         let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("texture means"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("rt_avg.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/effects/rt_avg.wgsl").into()),
         });
         let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("texture means"),

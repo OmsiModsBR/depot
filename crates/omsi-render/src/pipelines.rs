@@ -79,7 +79,7 @@ pub(crate) fn overlay_pipeline(
     log::info!("renderer: compiling the overlays shaders");
     let overlay_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("overlay"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("overlay.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output/overlay.wgsl").into()),
     });
     let overlay_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("overlay"),
@@ -159,7 +159,7 @@ pub(crate) fn ao_pipelines(
     log::info!("renderer: compiling the SSAO shaders");
     let ssao_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("ssao"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("ssao.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/post/ssao.wgsl").into()),
     });
     let ao_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("ssao"),
@@ -472,7 +472,7 @@ pub(crate) fn mip_pipeline(
     log::info!("renderer: compiling the mip maps shaders");
     let mip_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("mip"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("mip.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/assets/mip.wgsl").into()),
     });
     let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("mip"),
@@ -555,7 +555,7 @@ pub(crate) fn post_pipelines(
     log::info!("renderer: compiling the post passes shaders");
     let post_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("post"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("post.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/post/post.wgsl").into()),
     });
     let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("post"),
@@ -688,7 +688,7 @@ pub(crate) fn overlay_1x_pipelines(
     log::info!("renderer: compiling the VR interface shaders");
     let xr_ui_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("OpenXR spatial UI"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("xr_ui.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output/xr_ui.wgsl").into()),
     });
     let xr_ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("OpenXR spatial UI"),
@@ -739,7 +739,7 @@ pub(crate) fn upscale_pipelines(
     log::info!("renderer: compiling the upscaler shaders");
     let upscale_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("upscale"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("upscale.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shaders/output/upscale.wgsl").into()),
     });
     let upscale_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("upscale"),
