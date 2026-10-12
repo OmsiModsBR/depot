@@ -3,6 +3,7 @@
 //! and what to do when the driver fails. Knows nothing of the scene or of a frame.
 
 mod arrays;
+mod buffers;
 mod caps;
 mod errors;
 mod open;
@@ -17,6 +18,7 @@ pub(crate) use arrays::{
     array_layout_entry, array_layout_entry_on, array_path, ArrayPath, GpuArray, ARRAY_PATH,
     ARRAY_TEX_WIDTH,
 };
+pub(crate) use buffers::buffer_init;
 pub(crate) use caps::{
     dedicated_vram_mb, gl_worker_turn, sixteen_texture_units, vulkan_vram_mb, GL_BACKEND,
 };

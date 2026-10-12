@@ -1,5 +1,6 @@
 //! wgpu renderer.
 
+mod assets;
 pub mod atmosphere;
 mod camera;
 pub mod clouds;
@@ -7,13 +8,11 @@ mod draw;
 mod frame;
 mod gpu;
 mod lighting;
-mod material;
 mod passes;
 mod pipelines;
 mod puddles;
 mod render;
 mod renderer;
-mod resources;
 mod rt;
 mod scene;
 mod shaders;
@@ -22,42 +21,42 @@ mod targets;
 mod triple;
 // The public API, item by item: what the game (`omsi-app`) and the tests may use. A module
 // moving inside the crate changes nothing here but the path; see ARCHITECTURE.md.
+pub use assets::{
+    fit_texture, prepare_mesh, prepare_meshes, prepare_texture, AlphaMode, GpuMesh, GpuTexture,
+    Material, MaterialExtra, PbrMaps, PreparedMesh, PreparedTexture, TexAddressing,
+};
 pub use camera::{Camera, Vertex};
 pub use gpu::{catch, catching, gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
 pub use lighting::{
     Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
 };
-pub use material::{AlphaMode, GpuTexture, Material, MaterialExtra, PbrMaps, TexAddressing};
 pub use renderer::{
     RenderOptions, Renderer, AUTO_SCALE_PIXELS, DEPTH_FORMAT, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH,
     MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
 };
-pub use resources::{
-    fit_texture, prepare_mesh, prepare_meshes, prepare_texture, PreparedMesh, PreparedTexture,
-};
-pub use scene::{GpuMesh, Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
+pub use scene::{Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
 pub use surface::{winit_window, SurfaceState};
 pub use triple::{panel_width, ScreenView, TripleScreen};
 
 // Crate-internal names, shared by the modules through `use super::*`. Temporary: each domain
 // imports by name once it reaches its folder (ARCHITECTURE.md), and these globs go.
+use assets::*;
 use camera::*;
 use draw::*;
 #[cfg(test)]
 use frame::*;
 use gpu::*;
 use lighting::*;
-use material::*;
 use pipelines::*;
 use render::*;
 use renderer::*;
-use resources::*;
 use scene::*;
 use shaders::*;
 use targets::*;
 
 use anyhow::{anyhow, Context, Result};
 use glam::{DVec3, Mat4, Vec3, Vec4};
+#[cfg(test)]
 use omsi_geometry::MeshData;
 use std::collections::HashMap;
 use std::sync::Arc;

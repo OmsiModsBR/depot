@@ -1490,4 +1490,59 @@ impl Renderer {
             });
         }
     }
+
+    /// The scene's slot for the picture behind the glass (black until a frame is drawn).
+    pub(crate) fn glass_slot(&self, scene: &mut Scene) -> TextureId {
+        if let Some(id) = scene.glass_slot {
+            return id;
+        }
+        scene.textures.push(GpuTexture::showing(
+            self.black_texture.texture.clone(),
+            self.black_texture.view.clone(),
+            (1, 1),
+        ));
+        let id = scene.textures.len() - 1;
+        scene.glass_slot = Some(id);
+        id
+    }
+
+    /// Refraction reads a copy made before drawing films, avoiding rain/wiper feedback.
+    pub(crate) fn prepare_glass_behind(
+        &mut self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) {
+        let Some(id) = scene.glass_slot else { return };
+        if self.glass_picture.as_ref().is_none_or(|v| {
+            v.texture().width() != width
+                || v.texture().height() != height
+                || v.texture().format() != format
+        }) {
+            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("picture behind glass"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            self.glass_picture = Some(tex.create_view(&Default::default()));
+        }
+        let view = self.glass_picture.as_ref().unwrap();
+        if scene.textures[id].view != *view {
+            scene.textures[id] =
+                GpuTexture::showing(view.texture().clone(), view.clone(), (width, height));
+            self.rebind_textures(scene, &[id]);
+        }
+    }
 }
