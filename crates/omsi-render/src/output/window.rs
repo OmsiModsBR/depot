@@ -1,5 +1,6 @@
 //! The window: its surface, and presenting a frame to it with upscale, FXAA, the overlays
 //! and the HUD.
+use std::collections::HashMap;
 
 use crate::gpu::{buffer_init, pass_timer};
 use crate::renderer::{Renderer, DEPTH_FORMAT};
@@ -84,7 +85,7 @@ impl<'w> SurfaceState<'w> {
         Ok(SurfaceState {
             surface: std::mem::ManuallyDrop::new(surface),
             config,
-            lost: renderer.device_lost.clone(),
+            lost: renderer.gpu.device_lost.clone(),
         })
     }
 
@@ -479,7 +480,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
                     },
                 ],
             });
@@ -513,7 +514,7 @@ impl Renderer {
             // the smaller the picture, the more it is sharpened
             let sharpen = (1.0 - width as f32 / full_w as f32) * 2.0;
             self.queue.write_buffer(
-                &self.upscale_buf,
+                &self.presenter.upscale_buf,
                 0,
                 bytemuck::cast_slice(&[
                     width as f32,
@@ -538,11 +539,11 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.upscale_pipeline);
+            pass.set_pipeline(&self.presenter.upscale_pipeline);
             pass.set_bind_group(0, bg, &[]);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() {
-                pass.set_pipeline(&self.overlay_pipeline_1x);
+                pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                         pass.set_bind_group(0, bg, &[]);
@@ -556,11 +557,11 @@ impl Renderer {
     pub(crate) fn picture_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene picture"),
-            layout: &self.upscale_layout,
+            layout: &self.presenter.upscale_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: self.upscale_buf.as_entire_binding(),
+                    resource: self.presenter.upscale_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -573,4 +574,21 @@ impl Renderer {
             ],
         })
     }
+}
+
+/// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the headset's UI.
+pub(crate) struct Presenter {
+    /// Overlay pipeline without multisampling, for drawing the HUD after the post pass.
+    pub(crate) overlay_pipeline_1x: wgpu::RenderPipeline,
+    pub(crate) xr_ui_pipeline: wgpu::RenderPipeline,
+    /// Render scale: the pipeline that scales the 3D picture up to the window, its
+    /// parameters, and the smaller targets per size (with their bind groups).
+    pub(crate) upscale_pipeline: wgpu::RenderPipeline,
+    pub(crate) copy_pipeline: wgpu::RenderPipeline,
+    /// Triple screen: a panel's picture copied 1:1 to its place in the window.
+    pub(crate) panel_pipeline: wgpu::RenderPipeline,
+    pub(crate) upscale_layout: wgpu::BindGroupLayout,
+    pub(crate) upscale_buf: wgpu::Buffer,
+    pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
+    pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
 }

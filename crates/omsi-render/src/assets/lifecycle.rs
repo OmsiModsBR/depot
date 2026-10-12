@@ -24,7 +24,7 @@ pub(crate) struct Freed {
 impl Renderer {
     /// The shared placeholders of freed slots.
     pub(crate) fn freed(&self, scene: &mut Scene) -> &Freed {
-        if self.freed.get().is_none() {
+        if self.assets.freed.get().is_none() {
             // a plain material, built as any other and taken out of the scene again (without
             // using up an addressing request meant for the next real material)
             let address = self.address_next.replace(TexAddressing::Wrap);
@@ -44,13 +44,13 @@ impl Renderer {
                 usage: wgpu::BufferUsages::INDEX,
                 mapped_at_creation: false,
             });
-            let _ = self.freed.set(Freed {
+            let _ = self.assets.freed.set(Freed {
                 vertex_buf,
                 index_buf,
                 bind_group,
                 buf,
             });
         }
-        self.freed.get().unwrap()
+        self.assets.freed.get().unwrap()
     }
 }

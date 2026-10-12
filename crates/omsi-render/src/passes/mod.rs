@@ -26,5 +26,5 @@ pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use main::PassPipelines;
 #[cfg(test)]
 pub(crate) use post::PostUniform;
-pub(crate) use post::{post_pipelines, PostPipelines};
-pub(crate) use shadow::shadow_pipelines;
+pub(crate) use post::{post_pipelines, Exposure, PostPipelines};
+pub(crate) use shadow::{shadow_pipelines, ShadowResources};

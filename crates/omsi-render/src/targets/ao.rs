@@ -20,7 +20,13 @@ pub(crate) struct AoTargets {
 impl Renderer {
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
     pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
-        if self.ao.as_ref().map(|a| a.size == (w, h)).unwrap_or(false) {
+        if self
+            .targets
+            .ao
+            .as_ref()
+            .map(|a| a.size == (w, h))
+            .unwrap_or(false)
+        {
             return false;
         }
         let size = wgpu::Extent3d {
@@ -74,7 +80,7 @@ impl Renderer {
         let bg = |label: &str, tex: &wgpu::TextureView| {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(label),
-                layout: &self.ao_layout,
+                layout: &self.layouts.ao_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -135,7 +141,7 @@ impl Renderer {
                 })
             })
         });
-        self.ao = Some(AoTargets {
+        self.targets.ao = Some(AoTargets {
             size: (w, h),
             depth_view,
             ao_view,

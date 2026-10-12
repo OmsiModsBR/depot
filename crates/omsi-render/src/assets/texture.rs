@@ -525,7 +525,7 @@ impl Renderer {
             });
             let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("mip"),
-                layout: &self.mip_layout,
+                layout: &self.assets.mip_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -533,7 +533,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.mip_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.assets.mip_sampler),
                     },
                 ],
             });
@@ -553,7 +553,7 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.mip_pipeline);
+            pass.set_pipeline(&self.assets.mip_pipeline);
             pass.set_bind_group(0, &bg, &[]);
             pass.draw(0..3, 0..1);
         }

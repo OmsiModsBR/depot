@@ -122,7 +122,7 @@ impl Renderer {
         }
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.lm_atlas,
+                texture: &self.light_map.lm_atlas,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
                     x: slot.0 * LM_TILE_PX,
@@ -147,7 +147,7 @@ impl Renderer {
 
     /// Where the light map atlas lies: its south-west corner (world x, y) and its side (m).
     pub fn set_light_map_place(&self, x: f64, y: f64, side: f64) {
-        self.lm_place.set((x, y, side));
+        self.light_map.lm_place.set((x, y, side));
     }
 
     /// Sky gradient textures (day, twilight, night); without them the sky is the clear colour.
@@ -166,7 +166,7 @@ impl Renderer {
             textures.iter().map(|t| &scene.textures[*t].view).collect();
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sky"),
-            layout: &self.sky_layout,
+            layout: &self.layouts.sky_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -182,30 +182,30 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: wgpu::BindingResource::TextureView(match clouds {
                         Some(c) => &scene.textures[c].view,
-                        None => &self.black_texture.view,
+                        None => &self.assets.black_texture.view,
                     }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&self.cloud_shape_view),
+                    resource: wgpu::BindingResource::TextureView(&self.sky.cloud_shape_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&self.cloud_detail_view),
+                    resource: wgpu::BindingResource::TextureView(&self.sky.cloud_detail_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
-                    resource: wgpu::BindingResource::Sampler(&self.cloud_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.sky.cloud_sampler),
                 },
             ],
         });

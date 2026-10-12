@@ -40,7 +40,7 @@ impl Renderer {
         }
         {
             // (a newer pose of the same mesh replaces one still waiting)
-            let mut pending = self.pending_meshes.borrow_mut();
+            let mut pending = self.assets.pending_meshes.borrow_mut();
             match pending.iter_mut().find(|(mid, _)| *mid == id) {
                 Some(e) => e.1 = bytes.to_vec(),
                 None => pending.push((id, bytes.to_vec())),
@@ -62,7 +62,7 @@ impl Renderer {
         let (vb, ib) = mesh_page_bytes(data);
         let mesh = if vb > MESH_PAGE_VERTEX_BYTES / 4
             || ib > MESH_PAGE_INDEX_BYTES / 4
-            || !self.mesh_pages
+            || !self.assets.mesh_pages
         {
             make_meshes(&self.device, &self.queue, &[data], true)
                 .pop()
@@ -91,7 +91,7 @@ impl Renderer {
     /// Whether this renderer's adapter draws meshes from shared pages (it can draw with a
     /// base vertex); [`prepare_meshes`] is told it.
     pub fn mesh_pages(&self) -> bool {
-        self.mesh_pages
+        self.assets.mesh_pages
     }
 
     /// Put a mesh made on another thread ([`prepare_mesh`]) into the scene.
@@ -902,8 +902,8 @@ impl Renderer {
         }
         if let Some(t) = scene.textures.get_mut(id) {
             *t = GpuTexture {
-                texture: self.white_texture.texture.clone(),
-                view: self.white_texture.view.clone(),
+                texture: self.assets.white_texture.texture.clone(),
+                view: self.assets.white_texture.view.clone(),
                 size: (1, 1),
                 bytes: 0,
                 gen: next_gen(),

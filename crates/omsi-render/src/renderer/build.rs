@@ -1,4 +1,16 @@
 //! Making everything the renderer draws with, once at start (`Renderer::build`).
+use crate::assets::AssetStore;
+use crate::gpu::GpuContext;
+use crate::gpu::Layouts;
+use crate::gpu::Samplers;
+use crate::lighting::LightMapAtlas;
+use crate::output::Diagnostics;
+use crate::output::Presenter;
+use crate::passes::Exposure;
+use crate::passes::ShadowResources;
+use crate::scene::CullHistory;
+use crate::sky::SkyResources;
+use crate::targets::TargetCache;
 
 use super::options::RenderOptions;
 use super::state::{color_targets, Renderer, DEPTH_FORMAT, RT_GBUF};
@@ -1266,63 +1278,138 @@ impl Renderer {
             .then(|| puddles::Pipelines::new(&device, &shader, &camera_layout, &material_layout));
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         Renderer {
-            _device_poller: DevicePoller::start(&device),
-            upscale_pipeline,
-            copy_pipeline,
-            panel_pipeline,
-            upscale_layout,
-            upscale_buf,
-            scale_targets: HashMap::new(),
-            triple_targets: None,
-            triple_culling: Default::default(),
-            glass_picture: None,
-            target_use: HashMap::new(),
+            gpu: GpuContext {
+                _device_poller: DevicePoller::start(&device),
+                format,
+                gpu_error,
+                rt_error,
+                out_of_memory,
+                device_lost,
+                encoding_pool: if omsi_cfg::env::var_os("OMSI_NO_RENDER_POOL").is_some() {
+                    None
+                } else {
+                    let workers = std::thread::available_parallelism()
+                        .map(|n| n.get() / 2)
+                        .unwrap_or(2)
+                        .clamp(2, 8);
+                    rayon::ThreadPoolBuilder::new()
+                        .num_threads(workers)
+                        .thread_name(|i| format!("omsi-render-{i}"))
+                        .build()
+                        .ok()
+                },
+            },
+            presenter: Presenter {
+                upscale_pipeline,
+                copy_pipeline,
+                panel_pipeline,
+                upscale_layout,
+                upscale_buf,
+                scale_targets: HashMap::new(),
+                triple_targets: None,
+                overlay_pipeline_1x,
+                xr_ui_pipeline,
+            },
+            culling: CullHistory {
+                triple_culling: Default::default(),
+                flicker: std::cell::RefCell::new(HashMap::new()),
+                cull_drawn: std::cell::RefCell::new(Vec::new()),
+                object_sizes: Default::default(),
+                object_sizes_scratch: Default::default(),
+            },
+            targets: TargetCache {
+                glass_picture: None,
+                target_use: HashMap::new(),
+                hdr_targets: HashMap::new(),
+                ao: None,
+                depth: None,
+                msaa_targets: HashMap::new(),
+            },
             dynamic_scale: std::cell::Cell::new(1.0),
-            flicker: std::cell::RefCell::new(HashMap::new()),
-            cull_drawn: std::cell::RefCell::new(Vec::new()),
-            object_sizes: Default::default(),
-            object_sizes_scratch: Default::default(),
-            shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
-            shadow_near_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
-            xr_shadow_cache: std::cell::Cell::new(None),
-            shadow_clear_pipeline,
-            mip_pipeline,
-            mip_layout,
-            mip_sampler,
-            clamp_sampler,
-            mirror_sampler,
+            shadows: ShadowResources {
+                shadow_far_cache: std::cell::Cell::new((
+                    Mat4::IDENTITY,
+                    0,
+                    DVec3::ZERO,
+                    Vec3::ZERO,
+                )),
+                shadow_near_cache: std::cell::Cell::new((
+                    Mat4::IDENTITY,
+                    0,
+                    DVec3::ZERO,
+                    Vec3::ZERO,
+                )),
+                xr_shadow_cache: std::cell::Cell::new(None),
+                shadow_clear_pipeline,
+                shadow_view,
+                shadow_view_far,
+                shadow_sampler,
+                shadow_layout,
+                shadow_pipelines,
+            },
+            assets: AssetStore {
+                mip_pipeline,
+                mip_layout,
+                mip_sampler,
+                white_texture,
+                black_texture,
+                flat_normal_texture,
+                pending_meshes: Default::default(),
+                freed: std::cell::OnceCell::new(),
+                mesh_pages: false,
+            },
+            samplers: Samplers {
+                clamp_sampler,
+                mirror_sampler,
+                lin_sampler,
+                sampler,
+            },
             address_next: std::cell::Cell::new(TexAddressing::Wrap),
             light_map_next: std::cell::Cell::new(false),
-            lm_atlas_view: lm_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
-            lm_atlas,
-            lm_uniform,
-            lm_place: std::cell::Cell::new((0.0, 0.0, 0.0)),
-            hdr_targets: HashMap::new(),
+            light_map: LightMapAtlas {
+                lm_atlas_view: lm_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
+                lm_atlas,
+                lm_uniform,
+                lm_place: std::cell::Cell::new((0.0, 0.0, 0.0)),
+            },
             puddles,
             post,
             post_layout,
             post_buf,
             post_sampler,
-            meter_view,
-            adapt_views,
-            adapt_bg,
-            adapt_front: 0,
-            exposure_log: ExposureLog::new(&device),
+            adaptation: Exposure {
+                meter_view,
+                adapt_views,
+                adapt_bg,
+                adapt_front: 0,
+                view_lamps: None,
+                exposure: None,
+            },
+            diagnostics: Diagnostics {
+                exposure_log: ExposureLog::new(&device),
+                gpu_timers,
+                profiling: omsi_cfg::env::var_os("OMSI_PROFILE").is_some(),
+                draw_audit_at: std::time::Instant::now(),
+            },
             enh_buf,
-            sky_lut,
-            sky_lut_view,
-            lin_sampler,
-            probe: Some(probe),
-            sky_state: None,
-            city_glow: None,
-            view_lamps: None,
-            sky_job: None,
-            exposure: None,
+            sky: SkyResources {
+                sky_lut,
+                sky_lut_view,
+                probe: Some(probe),
+                sky_state: None,
+                city_glow: None,
+                sky_job: None,
+                sky_sampler,
+                cloud_shape_view,
+                cloud_detail_view,
+                cloud_sampler,
+                cloud_shape_cpu,
+                cloud_sun: None,
+                sky_mesh,
+            },
             texture_aspect: None,
             last_frame: None,
             instant_exposure: false,
-            overlay_pipeline_1x,
-            xr_ui_pipeline,
             // (OMSI_RENDER_CLOCK=<s>: the animations' clock starts that far on - offscreen
             // stills of moving things, the windy trees, at different moments)
             started: std::time::Instant::now()
@@ -1335,9 +1422,13 @@ impl Renderer {
                 ))
                 .unwrap_or_else(std::time::Instant::now),
             tree_gust_drift: std::cell::Cell::new((glam::DVec2::ZERO, 0.0)),
-            ao: None,
             ao_sampler,
-            ao_layout,
+            layouts: Layouts {
+                ao_layout,
+                camera_layout,
+                material_layout,
+                sky_layout,
+            },
             ao_buf,
             prepass_pipelines,
             prepass_msaa_pipelines,
@@ -1349,8 +1440,6 @@ impl Renderer {
             device,
             queue,
             adapter_name,
-            camera_layout,
-            material_layout,
             pass,
             hdr_pass,
             sky_mirror_pipeline,
@@ -1362,59 +1451,16 @@ impl Renderer {
             corona_textures: Vec::new(),
             corona_layout,
             corona_sampler,
-            sky_layout,
-            sky_sampler,
-            cloud_shape_view,
-            cloud_detail_view,
-            cloud_sampler,
-            cloud_shape_cpu,
-            cloud_sun: None,
-            sky_mesh,
             overlay_pipeline,
             overlay_layout,
-            sampler,
             camera_buf,
-            white_texture,
-            black_texture,
-            flat_normal_texture,
-            format,
-            depth: None,
-            msaa_targets: HashMap::new(),
-            shadow_view,
-            shadow_view_far,
-            shadow_sampler,
-            shadow_layout,
-            shadow_pipelines,
             shadow_blobs: options.shadow_blobs,
             options,
-            gpu_error,
-            rt_error,
             env_heading: Default::default(),
-            out_of_memory,
-            device_lost,
             blend_by_origin: false,
-            gpu_timers,
             stats: Default::default(),
             counts: Default::default(),
-            profiling: omsi_cfg::env::var_os("OMSI_PROFILE").is_some(),
-            draw_audit_at: std::time::Instant::now(),
-            encoding_pool: if omsi_cfg::env::var_os("OMSI_NO_RENDER_POOL").is_some() {
-                None
-            } else {
-                let workers = std::thread::available_parallelism()
-                    .map(|n| n.get() / 2)
-                    .unwrap_or(2)
-                    .clamp(2, 8);
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(workers)
-                    .thread_name(|i| format!("omsi-render-{i}"))
-                    .build()
-                    .ok()
-            },
-            pending_meshes: Default::default(),
-            freed: std::cell::OnceCell::new(),
             rt,
-            mesh_pages: false,
         }
     }
 }

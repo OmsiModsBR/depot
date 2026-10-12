@@ -6,6 +6,7 @@ mod air;
 pub mod atmosphere;
 pub mod clouds;
 mod probe;
+mod resources;
 mod update;
 
 #[cfg(test)]
@@ -14,4 +15,5 @@ pub(crate) use air::{enhanced_weather_fog, CLOUD_ORIGIN_PERIOD};
 pub(crate) use probe::{
     Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE,
 };
+pub(crate) use resources::SkyResources;
 pub(crate) use update::EnhancedUniform;

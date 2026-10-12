@@ -5,5 +5,5 @@ mod ao;
 mod cache;
 mod hdr;
 
-pub(crate) use ao::AoTargets;
+pub(crate) use cache::TargetCache;
 pub(crate) use hdr::HdrTargets;

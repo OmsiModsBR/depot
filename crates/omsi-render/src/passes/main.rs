@@ -76,7 +76,7 @@ impl Renderer {
         // reject them first). The prepass still supplies AO; colour rebuilds its depth.
         // A depth-writing window in the colour pass must not replace the road receiver.
         let share_depth =
-            prepass_on && single && self.ao.is_some() && !has_presurface && !puddles_wanted;
+            prepass_on && single && self.targets.ao.is_some() && !has_presurface && !puddles_wanted;
         let targets = if share_depth {
             None
         } else {
@@ -179,11 +179,11 @@ impl Renderer {
             let msaa_color = targets.as_ref().map(|t| &t.0);
             let depth_view: &wgpu::TextureView = match &targets {
                 Some(t) => &t.1,
-                None => &self.ao.as_ref().unwrap().depth_view,
+                None => &self.targets.ao.as_ref().unwrap().depth_view,
             };
             // the enhanced path draws into a high-range picture the post pass then grades
             let hdr = if masked_frame {
-                self.hdr_targets.get(&(width, height))
+                self.targets.hdr_targets.get(&(width, height))
             } else {
                 None
             };
@@ -209,7 +209,7 @@ impl Renderer {
                     if lighting.enhanced
                         && !enhanced
                         && !with_overlays
-                        && self.sky_state.is_some()
+                        && self.sky.sky_state.is_some()
                         && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none() =>
                 {
                     p
@@ -339,12 +339,12 @@ impl Renderer {
                         if let Some(sky) = &scene.sky_bind_group {
                             pass.set_pipeline(sky_pipe);
                             pass.set_bind_group(1, sky, &[]);
-                            pass.set_vertex_buffer(0, self.sky_mesh.0.slice(..));
+                            pass.set_vertex_buffer(0, self.sky.sky_mesh.0.slice(..));
                             pass.set_index_buffer(
-                                self.sky_mesh.1.slice(..),
+                                self.sky.sky_mesh.1.slice(..),
                                 wgpu::IndexFormat::Uint32,
                             );
-                            pass.draw_indexed(0..self.sky_mesh.2, 0, 0..1);
+                            pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
                         }
                     }
                     pass.execute_bundles(
@@ -439,9 +439,9 @@ impl Renderer {
             if let Some(sky) = scene.sky_bind_group.as_ref().filter(|_| parts == 1) {
                 pass.set_pipeline(sky_pipe);
                 pass.set_bind_group(1, sky, &[]);
-                pass.set_vertex_buffer(0, self.sky_mesh.0.slice(..));
-                pass.set_index_buffer(self.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..self.sky_mesh.2, 0, 0..1);
+                pass.set_vertex_buffer(0, self.sky.sky_mesh.0.slice(..));
+                pass.set_index_buffer(self.sky.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
             }
             if main_bundles.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);

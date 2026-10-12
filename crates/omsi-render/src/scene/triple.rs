@@ -451,18 +451,18 @@ mod tests {
                 }
                 assert_eq!(scene.overlays.len(), 1);
                 assert!(renderer.env_heading.get().is_none());
-                assert!(renderer.cull_drawn.borrow().is_empty());
+                assert!(renderer.culling.cull_drawn.borrow().is_empty());
                 assert_ne!(
-                    renderer.triple_culling[0].drawn,
-                    renderer.triple_culling[1].drawn
+                    renderer.culling.triple_culling[0].drawn,
+                    renderer.culling.triple_culling[1].drawn
                 );
                 assert_ne!(
-                    renderer.triple_culling[2].drawn,
-                    renderer.triple_culling[1].drawn
+                    renderer.culling.triple_culling[2].drawn,
+                    renderer.culling.triple_culling[1].drawn
                 );
                 // Rain must sample this panel's current scene, including when
                 // the three panels reuse the same scratch texture dimensions.
-                let behind = renderer.glass_picture.as_ref().unwrap().texture();
+                let behind = renderer.targets.glass_picture.as_ref().unwrap().texture();
                 let data = renderer
                     .read_texture(behind, wgpu::TextureAspect::All)
                     .unwrap();

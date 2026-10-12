@@ -170,7 +170,7 @@ impl Renderer {
         {
             if let (Some(pipes), Some(ao), Some(cam_bg)) = (
                 self.fog_lamps_pipeline.as_ref(),
-                self.ao.as_ref(),
+                self.targets.ao.as_ref(),
                 scene.camera_bind_group.as_ref(),
             ) {
                 if let Some(fog_bg) = ao.fog_bg.as_ref() {
@@ -202,7 +202,7 @@ impl Renderer {
                     };
                     self.queue
                         .write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
-                    let h = &self.hdr_targets[&(width, height)];
+                    let h = &self.targets.hdr_targets[&(width, height)];
                     let view = h
                         .puddles
                         .as_ref()

@@ -310,7 +310,7 @@ impl Renderer {
     /// buffer for the whole frame outgrew the device's buffer limit on big maps, its
     /// creation failed validation and mapping it panicked (Windows, Vulkan).
     pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
-        let pending = std::mem::take(&mut *self.pending_meshes.borrow_mut());
+        let pending = std::mem::take(&mut *self.assets.pending_meshes.borrow_mut());
         if let Some(rt) = self.rt.as_ref() {
             rt.meshes_changed(pending.iter().map(|(id, _)| *id));
         }

@@ -1,4 +1,5 @@
 //! The numbers a frame leaves behind: GPU time per pass (OMSI_GPU_TIMERS).
+use crate::lighting::ExposureLog;
 
 use crate::gpu::GPU_TIMER_PASSES;
 use crate::renderer::Renderer;
@@ -120,7 +121,7 @@ impl Renderer {
     /// Take in the pass times of the last timed frame once its readback has arrived.
     pub(crate) fn collect_gpu_timers(&mut self) {
         let period = self.queue.get_timestamp_period() as f64;
-        for t in self.gpu_timers.iter_mut().flatten() {
+        for t in self.diagnostics.gpu_timers.iter_mut().flatten() {
             t.collect(period);
             // The last frame's stamps are read in a command buffer of their own, submitted
             // after that frame's: resolved in the frame's own buffer, the end stamp of its
@@ -144,4 +145,15 @@ impl Renderer {
             }
         }
     }
+}
+
+/// What the renderer measures and logs about itself.
+pub(crate) struct Diagnostics {
+    /// OMSI_DEBUG_EXPOSURE: the adapted metering read back now and then, and logged.
+    pub(crate) exposure_log: Option<ExposureLog>,
+    /// GPU time per pass (OMSI_GPU_TIMERS, when the device has timestamp queries): the
+    /// mirrors and the window's picture apart, each timed on its own.
+    pub(crate) gpu_timers: [Option<GpuTimers>; 2],
+    pub(crate) profiling: bool,
+    pub(crate) draw_audit_at: std::time::Instant,
 }

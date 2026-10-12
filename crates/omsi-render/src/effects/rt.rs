@@ -950,7 +950,7 @@ impl Renderer {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.lin_sampler),
+                            resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
@@ -991,7 +991,7 @@ impl Renderer {
     ) {
         self.encode_texture_means(encoder, scene);
         let Some(rt) = self.rt.as_mut() else { return };
-        let Some(depth) = self.ao.as_ref().map(|a| &a.depth_view) else {
+        let Some(depth) = self.targets.ao.as_ref().map(|a| &a.depth_view) else {
             return;
         };
         let Some(t) = rt.targets.as_ref() else { return };
@@ -1063,7 +1063,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 8,
-                        resource: wgpu::BindingResource::Sampler(&self.lin_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
                     },
                 ],
             })
@@ -1106,9 +1106,9 @@ impl Renderer {
     ) {
         let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
             self.rt.as_mut(),
-            self.hdr_targets.get(&(w, h)),
-            self.ao.as_ref(),
-            self.probe.as_ref(),
+            self.targets.hdr_targets.get(&(w, h)),
+            self.targets.ao.as_ref(),
+            self.sky.probe.as_ref(),
         ) else {
             return;
         };
@@ -1139,7 +1139,7 @@ impl Renderer {
             rt.refl = Some((half, mk("rt reflection rays")));
         }
         let (_, raw) = rt.refl.as_ref().unwrap();
-        let dummy = &self.black_texture.view;
+        let dummy = &self.assets.black_texture.view;
         let group =
             |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
                 self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1180,7 +1180,7 @@ impl Renderer {
                         },
                         wgpu::BindGroupEntry {
                             binding: 8,
-                            resource: wgpu::BindingResource::Sampler(&self.lin_sampler),
+                            resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
                         },
                         wgpu::BindGroupEntry {
                             binding: 9,

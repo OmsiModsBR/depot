@@ -241,7 +241,7 @@ impl Renderer {
             };
             self.queue
                 .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u));
-            let ao = self.ao.as_ref().unwrap();
+            let ao = self.targets.ao.as_ref().unwrap();
             {
                 let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("depth prepass"),

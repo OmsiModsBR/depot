@@ -24,7 +24,7 @@ impl Renderer {
         // sky), drawn in the window's frame only
         if enhanced && (lead_view || probe_redraw) {
             if let (Some(probe), Some(sky_bg)) =
-                (self.probe.as_mut(), scene.sky_bind_group.as_ref())
+                (self.sky.probe.as_mut(), scene.sky_bind_group.as_ref())
             {
                 // (face, round, the old picture's share): a whole new cube is every round
                 // of every face averaged; afterwards one face a frame, blended in
@@ -121,7 +121,7 @@ impl Renderer {
         // each blurrier level from the sharper ones (three faces a pass)
         if probe_redraw {
             if let (Some(probe), Some(sky_bg)) =
-                (self.probe.as_ref(), scene.sky_bind_group.as_ref())
+                (self.sky.probe.as_ref(), scene.sky_bind_group.as_ref())
             {
                 for (m, faces) in probe.faces.iter().enumerate() {
                     for (half, bg) in probe.bind_groups[m].iter().enumerate() {

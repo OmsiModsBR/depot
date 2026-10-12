@@ -45,12 +45,17 @@ impl Renderer {
         {
             log::error!("the graphics device was lost (test): OMSI_FAKE_GPU_ERROR=lost");
             self.device.destroy();
-            *self.device_lost.lock().unwrap_or_else(|e| e.into_inner()) = Some("test".into());
+            *self
+                .gpu
+                .device_lost
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some("test".into());
         }
         // the device is gone: nothing can be drawn, and the readbacks (the exposure meter)
         // would find their buffers taken away - "Error in Buffer::get_mapped_range:
         // Validation Error" ended the game instead of the session ending in order
         if self
+            .gpu
             .device_lost
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -73,19 +78,23 @@ impl Renderer {
                 mip_level_count: 1,
                 sample_count: 3,
                 dimension: wgpu::TextureDimension::D2,
-                format: self.format,
+                format: self.gpu.format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
         }
-        if self.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
+        if self.gpu.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
             self.fall_back_without_ray_tracing(scene);
-        } else if self.gpu_error.load(std::sync::atomic::Ordering::Relaxed) {
+        } else if self
+            .gpu
+            .gpu_error
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
             self.fall_back_to_single_sample(scene);
         }
         // OMSI_GPU_TIMERS: GPU time per pass, one frame at a time
         self.collect_gpu_timers();
-        let tset: Option<wgpu::QuerySet> = self.gpu_timers[with_overlays as usize]
+        let tset: Option<wgpu::QuerySet> = self.diagnostics.gpu_timers[with_overlays as usize]
             .as_ref()
             .filter(|t| !t.waiting && !t.unresolved)
             .map(|t| t.set.clone());
@@ -93,7 +102,7 @@ impl Renderer {
         // OMSI_PROFILE: time per stage, the mirrors apart from the window's picture
         let mut stage_t = std::time::Instant::now();
         let mut stage = |r: &Renderer, window: &'static str, mirror: &'static str| {
-            if r.profiling {
+            if r.diagnostics.profiling {
                 let now = std::time::Instant::now();
                 *r.stats
                     .borrow_mut()
@@ -185,7 +194,7 @@ impl Renderer {
             lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
-                && self.shadow_pipelines.len() > 6,
+                && self.shadows.shadow_pipelines.len() > 6,
         );
         self.prepare_coronas(
             scene,
@@ -217,7 +226,7 @@ impl Renderer {
             // a new AO texture: the camera bind group must point at it
             scene.dirty = true;
             scene.model_buf = None;
-            self.hdr_targets.clear();
+            self.targets.hdr_targets.clear();
         }
         if rt_frame
             && self
@@ -240,7 +249,7 @@ impl Renderer {
                 if masked_frame {
                     HDR_FORMAT
                 } else {
-                    self.format
+                    self.gpu.format
                 },
             );
         }
@@ -278,7 +287,8 @@ impl Renderer {
         let shadows = (with_overlays || projection.is_some())
             && (lighting.casts_sun_shadows() || moon_shadows);
         let shared_xr_shadows = if second_eye && shadows {
-            self.xr_shadow_cache
+            self.shadows
+                .xr_shadow_cache
                 .get()
                 .filter(|(origin, previous_sun, _, _, _)| {
                     *origin == scene.render_origin && *previous_sun == sun
@@ -310,7 +320,7 @@ impl Renderer {
         // and everything within 30 m - every frame. Redrawn at once when the camera has
         // jumped, the sun has moved or the render origin has (its matrix is relative to it).
         let near_wanted = light_matrix(SHADOW_RANGE);
-        let (near_m, near_age, near_origin, near_sun) = self.shadow_near_cache.get();
+        let (near_m, near_age, near_origin, near_sun) = self.shadows.shadow_near_cache.get();
         let near_jumped =
             (near_m.project_point3(cam_rel) - near_wanted.project_point3(cam_rel)).length() > 0.03;
         let redraw_near = draw_shadows
@@ -325,11 +335,13 @@ impl Renderer {
         } else if !shadows {
             near_wanted
         } else if redraw_near {
-            self.shadow_near_cache
+            self.shadows
+                .shadow_near_cache
                 .set((near_wanted, 0, scene.render_origin, sun));
             near_wanted
         } else {
-            self.shadow_near_cache
+            self.shadows
+                .shadow_near_cache
                 .set((near_m, near_age + 1, near_origin, near_sun));
             near_m
         };
@@ -342,7 +354,7 @@ impl Renderer {
         // was 0.6 ms of GPU time for a picture that hardly changes; a car in it is a few
         // texels, and a tile streamed in waits three frames at most for its shadow.
         let far_wanted = light_matrix(SHADOW_RANGE_FAR);
-        let (far_m, far_age, far_origin, far_sun) = self.shadow_far_cache.get();
+        let (far_m, far_age, far_origin, far_sun) = self.shadows.shadow_far_cache.get();
         let far_moved =
             (far_m.project_point3(cam_rel) - far_wanted.project_point3(cam_rel)).length() > 0.12;
         let redraw_far = draw_shadows
@@ -366,16 +378,18 @@ impl Renderer {
         } else if !shadows {
             far_wanted
         } else if redraw_far {
-            self.shadow_far_cache
+            self.shadows
+                .shadow_far_cache
                 .set((far_wanted, 0, scene.render_origin, sun));
             far_wanted
         } else {
-            self.shadow_far_cache
+            self.shadows
+                .shadow_far_cache
                 .set((far_m, far_age + 1, far_origin, far_sun));
             far_m
         };
         if projection.is_some() && !second_eye && shadows {
-            self.xr_shadow_cache.set(Some((
+            self.shadows.xr_shadow_cache.set(Some((
                 scene.render_origin,
                 sun,
                 light_view_proj,
@@ -394,7 +408,7 @@ impl Renderer {
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
         // where the tile light maps lie, relative to the render origin
         {
-            let (lx, ly, side) = self.lm_place.get();
+            let (lx, ly, side) = self.light_map.lm_place.get();
             let v: [f32; 4] = [
                 (lx - ro.x) as f32,
                 (ly - ro.y) as f32,
@@ -402,7 +416,7 @@ impl Renderer {
                 if side > 0.0 { 1.0 } else { 0.0 },
             ];
             self.queue
-                .write_buffer(&self.lm_uniform, 0, bytemuck::cast_slice(&v));
+                .write_buffer(&self.light_map.lm_uniform, 0, bytemuck::cast_slice(&v));
         }
         let cu = CameraUniform {
             post: [
@@ -575,7 +589,7 @@ impl Renderer {
                 .fog_base
                 .or(lighting.inside.map(|v| v.0.z))
                 .map(|z| (z - scene.render_origin.z) as f32);
-            self.view_lamps = Some(view_lamp_light(
+            self.adaptation.view_lamps = Some(view_lamp_light(
                 &scene.lights,
                 scene.render_origin,
                 cam_rel,
@@ -584,7 +598,10 @@ impl Renderer {
                 ground,
             ));
             if omsi_cfg::env::var_os("OMSI_DEBUG_VIEW_LAMPS").is_some() {
-                log::info!("view lamps: {:.6}", self.view_lamps.unwrap_or(0.0));
+                log::info!(
+                    "view lamps: {:.6}",
+                    self.adaptation.view_lamps.unwrap_or(0.0)
+                );
             }
         }
         // the night sky's glow from the lamps round the camera (the window's view leads), in
@@ -593,9 +610,12 @@ impl Renderer {
             let raw = lamp_sky_glow(scene, cam_rel);
             let target = raw.clamp(0.03, 1.5);
             let step = (target.ln() * 10.0).round() / 10.0;
-            let changed = self.city_glow.is_none_or(|g| (g.ln() - step).abs() > 0.15);
+            let changed = self
+                .sky
+                .city_glow
+                .is_none_or(|g| (g.ln() - step).abs() > 0.15);
             if changed {
-                self.city_glow = Some(step.exp());
+                self.sky.city_glow = Some(step.exp());
             }
             if omsi_cfg::env::var_os("OMSI_DEBUG_SKY").is_some() && changed {
                 log::info!(
@@ -605,7 +625,7 @@ impl Renderer {
             }
         }
         let probe_redraw = enhanced
-            && (lead_view || self.sky_state.is_none())
+            && (lead_view || self.sky.sky_state.is_none())
             && self.prepare_enhanced(lighting, cam_rel, ro, dt);
         // --- what every pass draws, as batches over one draw list (see `Batch`): the shadow
         // casters of each cascade, the depth prepass and the main pass. The list is built
@@ -803,7 +823,8 @@ impl Renderer {
             let n = scene.instances.len();
             let parts = (n / 8192).clamp(
                 1,
-                self.encoding_pool
+                self.gpu
+                    .encoding_pool
                     .as_ref()
                     .map_or(3, |p| p.current_num_threads())
                     + 1,
@@ -822,7 +843,7 @@ impl Renderer {
                 })
             };
             let mut found: [Vec<DrawItem>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-            for part in run_parts(self.encoding_pool.as_ref(), parts, |p| {
+            for part in run_parts(self.gpu.encoding_pool.as_ref(), parts, |p| {
                 let mut out: [Vec<DrawItem>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
                 let end = ((p + 1) * chunk).min(n);
                 let mut b = p * chunk;
@@ -942,7 +963,7 @@ impl Renderer {
         // their thresholds while the head turned)
         let main_view = with_overlays || xr_view;
         let mut drawn_before = if main_view {
-            std::mem::take(&mut *self.cull_drawn.borrow_mut())
+            std::mem::take(&mut *self.culling.cull_drawn.borrow_mut())
         } else {
             Vec::new()
         };
@@ -952,8 +973,9 @@ impl Renderer {
                 .is_some_and(|w| w & (1u64 << (i % 64)) != 0)
         };
         let (mut sizes_before, mut sizes_now) = if main_view {
-            let sizes_before = std::mem::take(&mut *self.object_sizes.borrow_mut());
-            let mut sizes_now = std::mem::take(&mut *self.object_sizes_scratch.borrow_mut());
+            let sizes_before = std::mem::take(&mut *self.culling.object_sizes.borrow_mut());
+            let mut sizes_now =
+                std::mem::take(&mut *self.culling.object_sizes_scratch.borrow_mut());
             sizes_now.clear();
             (sizes_before, sizes_now)
         } else {
@@ -1081,7 +1103,8 @@ impl Renderer {
         let n = scene.instances.len();
         let parts = (n / 8192).clamp(
             1,
-            self.encoding_pool
+            self.gpu
+                .encoding_pool
                 .as_ref()
                 .map_or(3, |p| p.current_num_threads())
                 + 1,
@@ -1105,7 +1128,7 @@ impl Renderer {
         };
         let (mut visible, mut found): (Vec<(usize, f32, bool)>, Vec<([u64; 4], f32)>) =
             (Vec::new(), Vec::new());
-        for (v, sizes) in run_parts(self.encoding_pool.as_ref(), parts, |p| {
+        for (v, sizes) in run_parts(self.gpu.encoding_pool.as_ref(), parts, |p| {
             let mut sizes = Vec::new();
             let mut v = Vec::new();
             let end = ((p + 1) * chunk).min(n);
@@ -1124,9 +1147,9 @@ impl Renderer {
         }
         if main_view {
             sizes_now.extend(found);
-            *self.object_sizes.borrow_mut() = sizes_now;
+            *self.culling.object_sizes.borrow_mut() = sizes_now;
             sizes_before.clear();
-            *self.object_sizes_scratch.borrow_mut() = sizes_before;
+            *self.culling.object_sizes_scratch.borrow_mut() = sizes_before;
         }
         if main_view {
             drawn_before.resize(scene.instances.len().div_ceil(64), 0);
@@ -1134,13 +1157,13 @@ impl Renderer {
             for &(i, _, _) in &visible {
                 drawn_before[i / 64] |= 1u64 << (i % 64);
             }
-            *self.cull_drawn.borrow_mut() = drawn_before;
+            *self.culling.cull_drawn.borrow_mut() = drawn_before;
         }
         // OMSI_DEBUG_FLICKER: a near instance in view in two frames running that is drawn in
         // one and not in the other - the objects blinking in and out as the view moves
         if with_overlays && omsi_cfg::env::var_os("OMSI_DEBUG_FLICKER").is_some() {
             let drawn: std::collections::HashSet<usize> = visible.iter().map(|v| v.0).collect();
-            let mut prev = self.flicker.borrow_mut();
+            let mut prev = self.culling.flicker.borrow_mut();
             let mut now: HashMap<usize, bool> = HashMap::new();
             for (i, inst) in scene.instances.iter().enumerate() {
                 let m = &scene.meshes[inst.mesh];
@@ -1246,7 +1269,7 @@ impl Renderer {
             .iter()
             .any(|&(i, _, _)| scene.instances[i].presurface);
         let mut prepass_found: Option<(Vec<u32>, Vec<Batch>)> = None;
-        let pool = self.encoding_pool.as_ref();
+        let pool = self.gpu.encoding_pool.as_ref();
         in_scope(pool, |scope| {
             if prepass_on {
                 let job = &prepass_job;
@@ -1569,12 +1592,12 @@ impl Renderer {
         if debug_draws {
             log::info!("  main pass: {} opaque/alpha-tested and {} blended draws in {} batches; prepass {} batches; draw list {} entries", main_draws[0], main_draws[1], main_batches.len(), prepass_batches.len(), list.len());
         }
-        if self.profiling && !with_overlays {
+        if self.diagnostics.profiling && !with_overlays {
             let mut c = self.counts.borrow_mut();
             *c.entry("mirror pictures").or_default() += 1.0;
             *c.entry("mirror visible instances").or_default() += visible.len() as f64;
         }
-        if self.profiling && with_overlays {
+        if self.diagnostics.profiling && with_overlays {
             let mut c = self.counts.borrow_mut();
             *c.entry("scene instances").or_default() += scene.instances.len() as f64;
             *c.entry("visible instances").or_default() += visible.len() as f64;
@@ -1599,8 +1622,11 @@ impl Renderer {
             *c.entry("ktris shadow far").or_default() += tris(&shadow_batches[1]);
             *c.entry("ktris shadow close").or_default() += tris(&shadow_batches[2]);
         }
-        if self.profiling && with_overlays && self.draw_audit_at.elapsed().as_secs() >= 10 {
-            self.draw_audit_at = std::time::Instant::now();
+        if self.diagnostics.profiling
+            && with_overlays
+            && self.diagnostics.draw_audit_at.elapsed().as_secs() >= 10
+        {
+            self.diagnostics.draw_audit_at = std::time::Instant::now();
             // (batches, draws, triangles) per asset: what the CPU encodes and what the GPU
             // goes through
             let mut assets: HashMap<&str, (usize, usize, u64)> = HashMap::new();
@@ -1646,11 +1672,11 @@ impl Renderer {
             let format = if masked_frame {
                 HDR_FORMAT
             } else {
-                self.format
+                self.gpu.format
             };
             record_bundles(
                 &self.device,
-                self.encoding_pool.as_ref(),
+                self.gpu.encoding_pool.as_ref(),
                 scene,
                 &main_batches,
                 pp,
@@ -1838,7 +1864,7 @@ impl Renderer {
         let big = shadow_batches.iter().map(|b| b.len()).sum::<usize>() + prepass_batches.len()
             > 64
             || !main_parts.is_empty();
-        let profiling = self.profiling;
+        let profiling = self.diagnostics.profiling;
         let finish = |encoder: wgpu::CommandEncoder| {
             let start = profiling.then(std::time::Instant::now);
             let commands = encoder.finish();
@@ -1848,8 +1874,9 @@ impl Renderer {
             )
         };
         let (shadow_commands, prepass_commands, part_commands, commands, finish_times) =
-            if big && self.encoding_pool.is_some() {
-                self.encoding_pool
+            if big && self.gpu.encoding_pool.is_some() {
+                self.gpu
+                    .encoding_pool
                     .as_ref()
                     .unwrap()
                     .in_place_scope_fifo(|scope| {
@@ -1948,7 +1975,7 @@ impl Renderer {
                     [shadow_secs, prepass_secs, main_secs, 0.0, 0.0],
                 )
             };
-        if self.profiling {
+        if self.diagnostics.profiling {
             // These overlap across helper threads; do not add them to the stage totals.
             let keys = if with_overlays {
                 [
@@ -1980,7 +2007,7 @@ impl Renderer {
         );
         stage(self, "submit", "mirror.submit");
         if let (Some(t), false) = (
-            self.gpu_timers[with_overlays as usize].as_mut(),
+            self.diagnostics.gpu_timers[with_overlays as usize].as_mut(),
             timed.is_empty(),
         ) {
             t.pending = timed;

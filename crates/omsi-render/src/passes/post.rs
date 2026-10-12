@@ -173,14 +173,14 @@ impl Renderer {
             // adaptation to it is the light model's already: lifted by the meter on top, a
             // lamp-lit street came out most of a stop brighter than any eye sees it)
             let mut m = meter_tuning();
-            let after_sunset = self.sky_state.as_ref().map_or(0.0, |st| {
+            let after_sunset = self.sky.sky_state.as_ref().map_or(0.0, |st| {
                 ((0.052 - st.input.sun_dir.normalize_or_zero().z) / 0.157).clamp(0.0, 1.0)
             });
             m[3] *= 1.0
                 - atmosphere::smoothstep(
                     3.0,
                     7.0,
-                    self.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
+                    self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
                 );
             let pu = PostUniform {
                 // the metering may take a little off a bright picture and add a little to a
@@ -212,13 +212,13 @@ impl Renderer {
                 c: [
                     m[0],
                     m[5],
-                    self.exposure.map(f32::exp).unwrap_or(1.0),
+                    self.adaptation.exposure.map(f32::exp).unwrap_or(1.0),
                     lighting.led_glow * 10.0,
                 ],
                 // Enhanced+: its grade, the vignette and the sharpening; both: the tone
                 // curve's contrast (post.wgsl `natural_tone`)
                 d: {
-                    let contrast = tone_contrast(self.exposure.unwrap_or(0.0));
+                    let contrast = tone_contrast(self.adaptation.exposure.unwrap_or(0.0));
                     if rt_frame && omsi_cfg::env::var_os("OMSI_NO_RT_GRADE").is_none() {
                         [1.0, 0.08, 0.0, contrast]
                     } else {
@@ -233,7 +233,7 @@ impl Renderer {
                 && self.options.fxaa
                 && self.options.msaa <= 1
                 && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
-            if let Some(h) = self.hdr_targets.get(&(width, height)) {
+            if let Some(h) = self.targets.hdr_targets.get(&(width, height)) {
                 let puddles = h.puddles.as_ref().filter(|_| puddles_on);
                 let levels = h.down.len();
                 for i in 0..levels {
@@ -259,30 +259,36 @@ impl Renderer {
                 if lead_view {
                     post_pass(
                         encoder,
-                        &self.meter_view,
+                        &self.adaptation.meter_view,
                         None,
                         &self.post.meter,
                         &h.meter_bg,
                     );
-                    let front = self.adapt_front;
+                    let front = self.adaptation.adapt_front;
                     post_pass(
                         encoder,
-                        &self.adapt_views[1 - front],
+                        &self.adaptation.adapt_views[1 - front],
                         None,
                         &self.post.adapt,
-                        &self.adapt_bg[front],
+                        &self.adaptation.adapt_bg[front],
                     );
-                    self.adapt_front = 1 - front;
+                    self.adaptation.adapt_front = 1 - front;
                 }
                 // (a device lost since this frame began took the meter's buffer as well)
                 let lost = self.device_lost().is_some();
                 if let Some(log) = self
+                    .diagnostics
                     .exposure_log
                     .as_mut()
                     .filter(|_| with_overlays && !lost)
                 {
-                    let pre = self.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
-                    log.sample(encoder, &self.adapt_views[self.adapt_front], pre, m);
+                    let pre = self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
+                    log.sample(
+                        encoder,
+                        &self.adaptation.adapt_views[self.adaptation.adapt_front],
+                        pre,
+                        m,
+                    );
                 }
                 // (timed on its last pass: the glow chain with the metering, see GpuTimers)
                 for i in (0..levels).rev() {
@@ -294,8 +300,8 @@ impl Renderer {
                     post_pass(encoder, &h.up[i], timer, &self.post.up, &h.up_bg[i]);
                 }
                 let final_view = if fxaa { &h.ldr } else { scene_view };
-                let tonemap_bg =
-                    &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)[self.adapt_front];
+                let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)
+                    [self.adaptation.adapt_front];
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("tone map"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -342,7 +348,7 @@ impl Renderer {
                     pass.draw(0..3, 0..1);
                 }
                 if !overlays.is_empty() && !scaled {
-                    pass.set_pipeline(&self.overlay_pipeline_1x);
+                    pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
                     for (k, _) in overlays.iter().enumerate() {
                         if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                             pass.set_bind_group(0, bg, &[]);
@@ -353,4 +359,19 @@ impl Renderer {
             }
         }
     }
+}
+
+/// The eye's adaptation: the metered luminance, the adapted value and the exposure as it follows the sky.
+pub(crate) struct Exposure {
+    /// The metered mean log luminance (1x1), and the adapted value in two textures drawn
+    /// into by turns (`adapt_front` is the current one), with their bind groups.
+    pub(crate) meter_view: wgpu::TextureView,
+    pub(crate) adapt_views: [wgpu::TextureView; 2],
+    pub(crate) adapt_bg: [wgpu::BindGroup; 2],
+    pub(crate) adapt_front: usize,
+    /// The lamps' and headlights' light on what the camera looks at (`view_lamp_light`),
+    /// which the eye adapts to by night.
+    pub(crate) view_lamps: Option<f32>,
+    /// The pre-exposure (natural log) as it follows the sky's.
+    pub(crate) exposure: Option<f32>,
 }

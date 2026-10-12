@@ -436,7 +436,7 @@ impl Renderer {
             let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
             let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
             let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-            let renderer = Self::build(
+            let mut renderer = Self::build(
                 device.clone(),
                 queue.clone(),
                 name.clone(),
@@ -479,10 +479,8 @@ impl Renderer {
                             (msaa != options.msaa || basic).then_some((msaa, basic)),
                         );
                     }
-                    made = Ok(Renderer {
-                        mesh_pages,
-                        ..renderer
-                    });
+                    renderer.assets.mesh_pages = mesh_pages;
+                    made = Ok(renderer);
                     break;
                 }
                 Some(e) => {
@@ -510,7 +508,7 @@ impl Renderer {
             omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref(),
         ) {
             if !basic_pipelines() {
-                *r.device_lost.lock().unwrap_or_else(|e| e.into_inner()) =
+                *r.gpu.device_lost.lock().unwrap_or_else(|e| e.into_inner()) =
                     Some("test (OMSI_FAKE_GPU_ERROR=lost-build)".into());
             }
         }
@@ -533,19 +531,21 @@ impl Renderer {
     /// Whether the card ran out of memory since the last call (the game then keeps fewer
     /// textures, before the driver gives up the device).
     pub fn take_out_of_memory(&self) -> bool {
-        self.out_of_memory
+        self.gpu
+            .out_of_memory
             .swap(false, std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn device_lost(&self) -> Option<String> {
-        self.device_lost
+        self.gpu
+            .device_lost
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {
-        self.format
+        self.gpu.format
     }
 
     /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
@@ -794,8 +794,8 @@ impl Renderer {
         lighting: &Lighting,
     ) {
         // (the triple screen's panels are not kept once it is turned off)
-        if self.triple_targets.take().is_some() {
-            self.triple_culling = Default::default();
+        if self.presenter.triple_targets.take().is_some() {
+            self.culling.triple_culling = Default::default();
         }
         self.render_inner(
             scene, target, width, height, camera, lighting, true, None, None, false,
@@ -820,7 +820,7 @@ impl Renderer {
         let views = rig.views(camera, width, height);
         // all three panels have the same size: they share the size-keyed targets
         let pw = panel_width(width);
-        if self.triple_targets.as_ref().map(|t| t.0) != Some((width, height)) {
+        if self.presenter.triple_targets.as_ref().map(|t| t.0) != Some((width, height)) {
             let targets = views
                 .iter()
                 .map(|v| {
@@ -835,7 +835,7 @@ impl Renderer {
                         mip_level_count: 1,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
-                        format: self.format,
+                        format: self.gpu.format,
                         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                             | wgpu::TextureUsages::TEXTURE_BINDING,
                         view_formats: &[],
@@ -852,7 +852,7 @@ impl Renderer {
                     );
                     let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("triple screen composite"),
-                        layout: &self.upscale_layout,
+                        layout: &self.presenter.upscale_layout,
                         entries: &[
                             wgpu::BindGroupEntry {
                                 binding: 0,
@@ -864,14 +864,14 @@ impl Renderer {
                             },
                             wgpu::BindGroupEntry {
                                 binding: 2,
-                                resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                                resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
                             },
                         ],
                     });
                     (view, group)
                 })
                 .collect();
-            self.triple_targets = Some(((width, height), targets));
+            self.presenter.triple_targets = Some(((width, height), targets));
         }
         // the HUD is drawn once over the whole window, after the panels: they draw none
         // (its rect buffers are kept aside, not rebuilt each frame)
@@ -881,7 +881,9 @@ impl Renderer {
         // Centre meters exposure and updates shared lighting once. All panels
         // then use that same exposure and sun shadow atlas.
         for (turn, i) in [1, 0, 2].into_iter().enumerate() {
-            let view = self.triple_targets.as_ref().unwrap().1[i].0.clone();
+            let view = self.presenter.triple_targets.as_ref().unwrap().1[i]
+                .0
+                .clone();
             self.swap_triple_culling(i);
             self.render_inner(
                 scene,
@@ -923,16 +925,20 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.panel_pipeline);
+            pass.set_pipeline(&self.presenter.panel_pipeline);
             for (i, v) in views.iter().enumerate() {
                 // (the right panel loses its last pixel or two at the window's edge)
                 let [x, y, w, h] = v.viewport;
                 pass.set_scissor_rect(x, y, w.min(width - x), h);
-                pass.set_bind_group(0, &self.triple_targets.as_ref().unwrap().1[i].1, &[]);
+                pass.set_bind_group(
+                    0,
+                    &self.presenter.triple_targets.as_ref().unwrap().1[i].1,
+                    &[],
+                );
                 pass.draw(0..3, 0..1);
             }
             pass.set_scissor_rect(0, 0, width, height);
-            pass.set_pipeline(&self.overlay_pipeline_1x);
+            pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
             for (_, _, group, _) in &scene.overlay_res {
                 pass.set_bind_group(0, group, &[]);
                 pass.draw(0..6, 0..1);
@@ -1020,7 +1026,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
                     },
                 ],
             });
@@ -1124,7 +1130,7 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.xr_ui_pipeline);
+            pass.set_pipeline(&self.presenter.xr_ui_pipeline);
             for (_, group) in &prepared[eye] {
                 pass.set_bind_group(0, group, &[]);
                 pass.draw(0..6, 0..1);
@@ -1176,13 +1182,13 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: self.format,
+            format: self.gpu.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
         // (its depth buffer is the pass's own, see `msaa_targets`)
-        let bytes = texture_bytes(self.format, width, height, 1);
+        let bytes = texture_bytes(self.gpu.format, width, height, 1);
         scene.textures.push(GpuTexture {
             texture,
             view,
@@ -1229,7 +1235,7 @@ impl Renderer {
     /// The mirrors' frames (drawn without the overlays) are timed on their own.
     pub fn gpu_pass_times(&self) -> Vec<(String, f64, u32)> {
         let mut out = Vec::new();
-        for (k, t) in self.gpu_timers.iter().enumerate() {
+        for (k, t) in self.diagnostics.gpu_timers.iter().enumerate() {
             let Some(t) = t else { continue };
             for (label, v) in &t.totals {
                 let name = if k == 0 {

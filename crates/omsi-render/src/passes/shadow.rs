@@ -1,4 +1,7 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
+use glam::DVec3;
+use glam::Mat4;
+use glam::Vec3;
 
 use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
 use crate::gpu::{basic_pipelines, pass_timer};
@@ -205,9 +208,9 @@ impl Renderer {
                 continue;
             }
             let view = if cascade == 0 {
-                &self.shadow_view
+                &self.shadows.shadow_view
             } else {
-                &self.shadow_view_far
+                &self.shadows.shadow_view_far
             };
             let keep_near = cascade == 0 && !redraw_near;
             let mut pass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -243,24 +246,24 @@ impl Renderer {
                 let sz = self.options.shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[0], |pipe| {
-                    &self.shadow_pipelines[pipe as usize]
+                    &self.shadows.shadow_pipelines[pipe as usize]
                 });
                 let csz = self.options.shadow_size.min(SHADOW_CLOSE_MAX) as f32;
                 pass.set_viewport(sz, 0.0, csz, csz, 0.0, 1.0);
                 if keep_near {
                     // (the near half is last frame's: only the close part is cleared)
-                    pass.set_pipeline(&self.shadow_clear_pipeline);
+                    pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
                     pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[2], |pipe| {
-                    &self.shadow_pipelines[4 + pipe as usize]
+                    &self.shadows.shadow_pipelines[4 + pipe as usize]
                 });
             } else {
                 let sz = self.options.shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[cascade], |pipe| {
-                    &self.shadow_pipelines[cascade * 2 + pipe as usize]
+                    &self.shadows.shadow_pipelines[cascade * 2 + pipe as usize]
                 });
             }
         }
@@ -271,7 +274,7 @@ impl Renderer {
                 label: Some("lamp shadows"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.shadow_view_far,
+                    view: &self.shadows.shadow_view_far,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -286,13 +289,34 @@ impl Renderer {
             let tile = sz / LAMP_SHADOWS as f32;
             for k in 0..lamp_shadows.len() {
                 pass.set_viewport(k as f32 * tile, sz, tile, tile, 0.0, 1.0);
-                pass.set_pipeline(&self.shadow_clear_pipeline);
+                pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                 pass.draw(0..3, 0..1);
                 pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 encode_batches(&mut pass, scene, &shadow_batches[3], |pipe| {
-                    &self.shadow_pipelines[6 + 2 * k + pipe as usize]
+                    &self.shadows.shadow_pipelines[6 + 2 * k + pipe as usize]
                 });
             }
         }
     }
+}
+
+/// The sun's shadow maps, their pipelines, and the cascades as last drawn.
+pub(crate) struct ShadowResources {
+    pub(crate) shadow_view: wgpu::TextureView,
+    pub(crate) shadow_view_far: wgpu::TextureView,
+    pub(crate) shadow_sampler: wgpu::Sampler,
+    pub(crate) shadow_layout: wgpu::BindGroupLayout,
+    /// [near opaque, near alpha-tested, far opaque, far alpha-tested, close opaque, close
+    /// alpha-tested], then the street lamps' (6 + 2 k + kind; not with `basic_pipelines`)
+    pub(crate) shadow_pipelines: Vec<wgpu::RenderPipeline>,
+    /// The far shadow cascade as last drawn: its light matrix, frames since, the render
+    /// origin and the sun it was drawn for.
+    pub(crate) shadow_far_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
+    /// The same for the near cascade, drawn every other frame (see `render_inner`).
+    pub(crate) shadow_near_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
+    /// Shadow atlas matrices from the first OpenXR eye, reused by the second eye.
+    pub(crate) xr_shadow_cache: std::cell::Cell<Option<(DVec3, Vec3, Mat4, Mat4, Mat4)>>,
+    /// Depth-only pipeline that fills its viewport with the far depth: clears the close
+    /// cascade's part of the atlas when the near part is kept from the frame before.
+    pub(crate) shadow_clear_pipeline: wgpu::RenderPipeline,
 }
