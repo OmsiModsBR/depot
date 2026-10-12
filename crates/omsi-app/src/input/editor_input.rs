@@ -8,7 +8,7 @@ impl App {
     pub(crate) fn toggle_editor(&mut self) {
         // (in a LAN session the host edits the map for everybody: its edits go to the
         // others' games, a client's would stay its own)
-        if self.editor.is_none() && self.lan.as_ref().map(|l| l.role == omsi_net::Role::Client).unwrap_or(false) {
+        if self.editor.is_none() && self.is_lan_client() {
             self.service_msg = Some(("In a LAN session only the host edits the map".into(), 3.0));
             return;
         }

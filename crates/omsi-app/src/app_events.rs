@@ -1605,7 +1605,7 @@ impl ApplicationHandler for App {
                 }
                 self.placing_frame();
                 // the host sends every edit of the map again now and then (players join)
-                if self.lan.as_ref().map(|l| l.role == omsi_net::Role::Host).unwrap_or(false) {
+                if self.is_lan_host() {
                     self.editor_sync_t -= dt;
                     if self.editor_sync_t <= 0.0 {
                         self.editor_sync_t = 10.0;
@@ -1849,7 +1849,7 @@ impl ApplicationHandler for App {
                             (false, true) => -1.0,
                             _ => 0.0,
                         };
-                        let client = self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client);
+                        let client = self.is_lan_client();
                         if ctrl && shift && dir != 0.0 && !client {
                             if self.clock_hold == 0.0 && self.real_time_locked() {
                                 // (says once why the clock stays)

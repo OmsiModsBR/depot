@@ -3,6 +3,17 @@
 use super::*;
 
 impl App {
+    /// Whether this game joined another's LAN session (the host then decides the weather,
+    /// the clock and the map's edits).
+    pub(crate) fn is_lan_client(&self) -> bool {
+        self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+    }
+
+    /// Whether this game hosts a LAN session.
+    pub(crate) fn is_lan_host(&self) -> bool {
+        self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host)
+    }
+
     /// LAN play, once a frame: send our bus, take in the others', and keep a drawn
     /// vehicle for each of them.
     pub(crate) fn tick_lan(&mut self, dt: f32) {

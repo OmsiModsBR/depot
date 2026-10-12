@@ -637,7 +637,7 @@ impl App {
             }
             "later" | "earlier" | "later10" | "earlier10" => {
                 self.close_game_menu();
-                if self.lan.as_ref().map(|l| l.role == omsi_net::Role::Client).unwrap_or(false) {
+                if self.is_lan_client() {
                     self.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
                 } else {
                     self.shift_clock(match id {
@@ -1084,7 +1084,7 @@ impl App {
     /// Put the bus on the street nearest the world point `at` (the city map's Ctrl+click),
     /// facing along it.
     pub(crate) fn place_bus_at(&mut self, at: glam::DVec2) {
-        if self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+        if self.is_lan_client() {
             self.service_msg = Some(("In a LAN session only the host moves vehicles on the map".into(), 4.0));
             return;
         }

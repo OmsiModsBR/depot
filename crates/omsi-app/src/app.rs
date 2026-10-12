@@ -1018,7 +1018,7 @@ impl App {
         let mut centers: Vec<DVec3> = self.camera.iter().map(|c| c.position).collect();
         centers.extend(self.player.iter().map(|p| p.vehicle.position));
         // a LAN host simulates the world around every player: the ground and the roads there
-        if self.lan.as_ref().map(|l| l.role == omsi_net::Role::Host).unwrap_or(false) {
+        if self.is_lan_host() {
             centers.extend(self.remotes.remotes.values().map(|r| r.vehicle().position));
         }
         let (Some(streamer), Some(w), Some(r), Some(scene)) = (

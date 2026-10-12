@@ -153,7 +153,7 @@ impl App {
             let (h, m, sec) = (n(0), n(2), n(4));
             if h > 23 || m > 59 || sec > 59 {
                 self.service_msg = Some((format!("{:02}:{:02}:{:02} is no time of day", h, m, sec), 3.0));
-            } else if self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+            } else if self.is_lan_client() {
                 self.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
             } else if self.real_time_locked() {
                 self.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
@@ -419,7 +419,7 @@ impl crate::App {
         if self.navigator.is_none() {
             v.retain(|x| x.0 != "map");
         }
-        let host = self.lan.as_ref().map(|l| l.role == omsi_net::Role::Host).unwrap_or(false);
+        let host = self.is_lan_host();
         // the server code: a line to copy it, right under "World options" (only in a LAN session or on a server)
         if self.lan.is_some() || on_server(&self.args) {
             if let Some(w) = v.iter().position(|x| x.0 == "world") {
