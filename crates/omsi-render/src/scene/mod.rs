@@ -5,16 +5,13 @@
 mod bounds;
 mod camera;
 mod instances;
-mod interior;
 mod model;
-mod settings;
 mod triple;
 
 pub use camera::{Camera, Vertex};
 pub use model::{Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
 pub use triple::{panel_width, ScreenView, TripleScreen};
 
-#[cfg(test)]
 pub(crate) use bounds::InstanceBounds;
 pub(crate) use bounds::{point_in_vehicle_box, CULL_BLOCK};
 pub(crate) use camera::{

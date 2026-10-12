@@ -144,22 +144,4 @@ impl Renderer {
             }
         }
     }
-
-    /// Average GPU time per pass so far: (pass, milliseconds, frames measured).
-    /// The mirrors' frames (drawn without the overlays) are timed on their own.
-    pub fn gpu_pass_times(&self) -> Vec<(String, f64, u32)> {
-        let mut out = Vec::new();
-        for (k, t) in self.gpu_timers.iter().enumerate() {
-            let Some(t) = t else { continue };
-            for (label, v) in &t.totals {
-                let name = if k == 0 {
-                    format!("mirrors: {label}")
-                } else {
-                    label.to_string()
-                };
-                out.push((name, v.0 / v.1.max(1) as f64 * 1000.0, v.1));
-            }
-        }
-        out
-    }
 }

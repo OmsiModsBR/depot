@@ -95,6 +95,11 @@ jobs:
       - name: rustfmt (informational)
         continue-on-error: true
         run: cargo fmt --all -- --check
+      # The layers of omsi-render (crates/omsi-render/ARCHITECTURE.md): prints the imports that
+      # point up or sideways. Informational until the last step of the render plan.
+      - name: omsi-render layers (informational)
+        continue-on-error: true
+        run: scripts/check-render-layers.sh --strict
       - name: clippy (informational)
         continue-on-error: true
         run: cargo clippy --locked --workspace --all-targets

@@ -214,16 +214,4 @@ impl Renderer {
                 .collect()
         })
     }
-
-    /// Choose the render origin. Everything is re-uploaded when it moves.
-    pub fn set_render_origin(&self, scene: &mut Scene, origin: DVec3) {
-        if scene.render_origin != origin {
-            if origin.z != scene.render_origin.z || scene.model_buf.is_none() {
-                scene.dirty = true;
-            } else {
-                scene.origin_moved = true;
-            }
-            scene.render_origin = origin;
-        }
-    }
 }

@@ -9,7 +9,6 @@ use super::atmosphere;
 use super::probe::PROBE_MIPS;
 use crate::lighting::{debug_view, tone_contrast, Lighting, CABIN_E, LAMP_E, WINDOW_RADIANCE};
 use crate::renderer::Renderer;
-use crate::scene::{Scene, TextureId};
 use glam::{DVec3, Vec3};
 
 impl Renderer {
@@ -301,68 +300,6 @@ impl Renderer {
         self.queue
             .write_buffer(&self.enh_buf, 0, bytemuck::bytes_of(&u));
         redraw
-    }
-
-    /// Sky gradient textures (day, twilight, night); without them the sky is the clear colour.
-    pub fn set_sky_textures(&self, scene: &mut Scene, textures: [TextureId; 3]) {
-        self.set_sky_textures_clouds(scene, textures, None)
-    }
-
-    /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
-    pub fn set_sky_textures_clouds(
-        &self,
-        scene: &mut Scene,
-        textures: [TextureId; 3],
-        clouds: Option<TextureId>,
-    ) {
-        let views: Vec<&wgpu::TextureView> =
-            textures.iter().map(|t| &scene.textures[*t].view).collect();
-        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sky"),
-            layout: &self.sky_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(views[0]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(views[1]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(views[2]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(match clouds {
-                        Some(c) => &scene.textures[c].view,
-                        None => &self.black_texture.view,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&self.cloud_shape_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&self.cloud_detail_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 8,
-                    resource: wgpu::BindingResource::Sampler(&self.cloud_sampler),
-                },
-            ],
-        });
-        scene.sky_bind_group = Some(bg);
     }
 }
 
