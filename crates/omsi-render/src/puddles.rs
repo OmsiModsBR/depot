@@ -1332,9 +1332,7 @@ fn vehicle_capture_splits_shared_batches_without_drawing_ai_entries() {
             .collect::<Vec<_>>(),
         vec![0..2, 3..4, 5..6]
     );
-    assert!(
-        selected
-            .iter()
-            .all(|b| (b.pipe, b.mesh, b.first, b.count, b.material) == (7, 3, 12, 24, 4))
-    );
+    assert!(selected
+        .iter()
+        .all(|b| (b.pipe, b.mesh, b.first, b.count, b.material) == (7, 3, 12, 24, 4)));
 }
