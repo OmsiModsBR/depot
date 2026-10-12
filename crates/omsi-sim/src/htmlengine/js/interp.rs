@@ -38,7 +38,7 @@ pub(crate) struct Interp {
     /// An error inside a callback of a built-in method (`forEach` ...), raised by the caller.
     pub(crate) pending_err: Option<String>,
     /// Route, line, destination and next-stop requests of the page (`omsi.setRoute(...)` ...).
-    pub(crate) requests: Vec<crate::htmltex::HtmlRequest>,
+    pub(crate) requests: Vec<HtmlRequest>,
     /// The stops the page asked departures for (`omsi.getDepartures(stop)`), as keys: trimmed,
     /// lower case. Taken by the game, which fills `omsi.departures`.
     pub(crate) departure_wants: Vec<String>,
@@ -47,7 +47,7 @@ pub(crate) struct Interp {
 impl Interp {
     /// A page's interpreter; `api` decides what `window.omsi` offers (a scenery object's page
     /// has no vehicle, depot or route functions).
-    pub(crate) fn with_api(dom: Dom, api: crate::htmltex::PageApi) -> Interp {
+    pub(crate) fn with_api(dom: Dom, api: PageApi) -> Interp {
         let global = Arc::new(Mutex::new(Scope { vars: HashMap::new(), parent: None }));
         let mut basic = vec![
             ("setVar", Val::Nat(Nat::SetVar)),
@@ -78,7 +78,7 @@ impl Interp {
             ("locale", Val::Str("en".to_string())),
             ("vars", Val::Obj(obj_of(&[("num", Val::Obj(obj_of(&[]))), ("str", Val::Obj(obj_of(&[])))]))),
         ];
-        if api == crate::htmltex::PageApi::Vehicle {
+        if api == PageApi::Vehicle {
             basic.extend([
                 ("setRoute", Val::Nat(Nat::SetRoute)),
                 ("setLine", Val::Nat(Nat::SetLine)),
@@ -919,20 +919,20 @@ impl Interp {
                 let v = a(0);
                 if v.is_finite() && v >= 0.0 {
                     let i = v as usize;
-                    self.requests.push(if n == Nat::SetRoute { crate::htmltex::HtmlRequest::SetRoute(i) } else { crate::htmltex::HtmlRequest::SetDestination(i) });
+                    self.requests.push(if n == Nat::SetRoute { HtmlRequest::SetRoute(i) } else { HtmlRequest::SetDestination(i) });
                 } else {
                     log::debug!("htmltexture: {n:?} ignored, the index is not a number");
                 }
                 Val::Undef
             }
             Nat::ClearLine => {
-                self.requests.push(crate::htmltex::HtmlRequest::ClearLine);
+                self.requests.push(HtmlRequest::ClearLine);
                 Val::Undef
             }
             Nat::SetNextStop => {
                 let v = a(0);
                 if v.is_finite() && v >= 0.0 {
-                    self.requests.push(crate::htmltex::HtmlRequest::SetNextStop(v as usize));
+                    self.requests.push(HtmlRequest::SetNextStop(v as usize));
                 } else {
                     log::debug!("htmltexture: SetNextStop ignored, the index is not a number");
                 }
@@ -941,7 +941,7 @@ impl Interp {
             Nat::SetLine => {
                 let line = args.first().map(to_str).unwrap_or_default();
                 if !line.trim().is_empty() {
-                    self.requests.push(crate::htmltex::HtmlRequest::SetLine(line));
+                    self.requests.push(HtmlRequest::SetLine(line));
                 }
                 Val::Undef
             }

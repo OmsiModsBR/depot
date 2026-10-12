@@ -23,6 +23,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   ambient occlusion, sky cube, probe, main pass, reflections, fog lamps, glass, post, present) as
   methods in `passes.rs`, and the tests to `tests.rs` and `tests_units.rs`: no file of the crate is
   over 3,000 lines.
+- The HTML engine's interface with the game (`ApiValue`, `HtmlRenderer`, `HtmlRequest`, `PageApi`, `PointerKind`,
+  `rebase_css_urls`) moves into `omsi-sim/src/htmlengine/page.rs`, re-exported where it was
+  (`vehicle_api`, `htmltex`): the engine no longer reaches into the rest of `omsi-sim`, the first step of the
+  `omsi-html` crate. Code moved as is; no behaviour change.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,

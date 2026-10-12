@@ -64,7 +64,6 @@
 //! * `js`: the JavaScript subset (`lexer`, `parser`, `interp`).
 //! * `renderer`: [`EngineRenderer`], the [`HtmlRenderer`] backend that ties them together.
 
-use crate::htmltex::{HtmlRenderer, PointerKind};
 use ab_glyph::{point, Font, FontRef, PxScale, ScaleFont, VariableFont};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -75,6 +74,7 @@ mod dom;
 mod images;
 mod js;
 mod layout;
+mod page;
 mod renderer;
 mod style;
 
@@ -86,6 +86,7 @@ use js::*;
 use layout::*;
 use style::*;
 
+pub use page::*;
 pub use renderer::EngineRenderer;
 
 pub(crate) const ROBOTO: &[u8] = include_bytes!("../../../../assets/fonts/Roboto-VariableFont_wdth,wght.ttf");

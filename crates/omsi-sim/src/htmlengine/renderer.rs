@@ -30,11 +30,11 @@ pub(crate) struct LayoutCache {
 
 impl EngineRenderer {
     pub fn new(width: u32, height: u32, html: &str) -> EngineRenderer {
-        EngineRenderer::with_api(width, height, html, crate::htmltex::PageApi::Vehicle)
+        EngineRenderer::with_api(width, height, html, PageApi::Vehicle)
     }
 
-    /// A page whose `window.omsi` is the one of `api` (see [`crate::htmltex::PageApi`]).
-    pub fn with_api(width: u32, height: u32, html: &str, api: crate::htmltex::PageApi) -> EngineRenderer {
+    /// A page whose `window.omsi` is the one of `api` (see [`PageApi`]).
+    pub fn with_api(width: u32, height: u32, html: &str, api: PageApi) -> EngineRenderer {
         let dom = Dom::parse(html);
         let scripts = dom.scripts.clone();
         log::debug!(
@@ -291,14 +291,14 @@ impl HtmlRenderer for EngineRenderer {
         self.call_update(num, strs);
     }
 
-    fn set_vehicle(&mut self, api: &crate::vehicle_api::ApiValue) {
+    fn set_vehicle(&mut self, api: &ApiValue) {
         if let Some(omsi) = self.omsi() {
             omsi.lock().unwrap().insert("vehicle".to_string(), api_to_val(api));
         }
     }
 
-    fn set_env(&mut self, env: &crate::vehicle_api::ApiValue) {
-        if let (Some(omsi), crate::vehicle_api::ApiValue::Map(m)) = (self.omsi(), env) {
+    fn set_env(&mut self, env: &ApiValue) {
+        if let (Some(omsi), ApiValue::Map(m)) = (self.omsi(), env) {
             let mut o = omsi.lock().unwrap();
             for (k, v) in m {
                 o.insert(k.clone(), api_to_val(v));
@@ -352,17 +352,17 @@ impl HtmlRenderer for EngineRenderer {
         self.dirty = true;
     }
 
-    fn set_depot(&mut self, depot: &crate::vehicle_api::ApiValue) {
+    fn set_depot(&mut self, depot: &ApiValue) {
         if let Some(omsi) = self.omsi() {
             omsi.lock().unwrap().insert("depot".to_string(), api_to_val(depot));
         }
     }
 
-    fn take_requests(&mut self) -> Vec<crate::htmltex::HtmlRequest> {
+    fn take_requests(&mut self) -> Vec<HtmlRequest> {
         std::mem::take(&mut self.js.requests)
     }
 
-    fn set_departures(&mut self, departures: &crate::vehicle_api::ApiValue) {
+    fn set_departures(&mut self, departures: &ApiValue) {
         if let Some(omsi) = self.omsi() {
             omsi.lock().unwrap().insert("departures".to_string(), api_to_val(departures));
         }
