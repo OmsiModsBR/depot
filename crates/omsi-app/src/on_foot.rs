@@ -1188,7 +1188,7 @@ impl App {
             let hh = (if wk.course.is_finite() { wk.course } else { wk.heading } as f64).to_radians();
             // the player's own figure, as their game draws them (a random passenger's
             // otherwise), else one fixed by their id
-            let kind = omsi_net::human_path(&figure)
+            let kind = omsi_content::remote_path::human_path(&figure)
                 .map(|rel| omsi_cfg::resolve_path(&self.args.root, &rel))
                 .filter(|p| omsi_cfg::vfs::exists(p))
                 .and_then(|p| crate::driver::cached_type(&p))
