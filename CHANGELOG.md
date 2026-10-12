@@ -6,7 +6,13 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
-Nothing yet.
+### Added
+- Round-trip test of `settings.cfg` between the game and the launcher
+  (`crates/omsi-app/src/settings/round_trip.rs`): writes the file from one side and reads it
+  from the other, in both directions, for the defaults, one value per key and values at the
+  edges of the ranges. The differences found at the edges are listed in the test, not fixed;
+  see docs/QUALITY.md. The game's test-only `Settings::to_text` now writes every field.
+  Test only; no behaviour change.
 
 ## 0.2.52 - 2026-10-10
 

@@ -728,6 +728,11 @@ impl Settings {
         text.push_str(&format!("arrows_switch_cams={}\n", self.arrows_switch_cams as u8));
         text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
         text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
+        // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
+        text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
+        text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_surface={}\nnav_light={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nmachine_translation={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_surface as u8, self.nav_light as u8, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.machine_translation as u8, self.shadow_casters, self.reflections as u8));
+        text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
+        text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
         text
     }
 
@@ -806,6 +811,11 @@ pub fn view_distance() -> Option<f64> {
     let text = std::fs::read_to_string(Settings::path()?).ok()?;
     text.lines().filter_map(|l| l.trim().split_once('=')).find(|(k, _)| k.trim().eq_ignore_ascii_case("view_distance")).and_then(|(_, v)| v.trim().parse::<f64>().ok()).filter(|v| *v > 0.0)
 }
+
+/// The file as the game writes it and as the launcher writes it, read by the other side
+/// (`settings/round_trip.rs`).
+#[cfg(test)]
+mod round_trip;
 
 #[cfg(test)]
 mod tests {

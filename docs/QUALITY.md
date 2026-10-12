@@ -53,3 +53,21 @@ physics computes. Two jobs of the workflow guard it on pull requests:
 Locally: `scripts/physics-trace-diff.sh [base-ref]` (default `origin/main`); the traces are
 kept in `target/physics-traces/`. Without `OMSI_PHYSICS_TRACE_DIR`, `cargo test` runs each
 scenario twice and checks that both runs agree.
+
+## settings.cfg between the game and the launcher
+
+The launcher's settings page writes `settings.cfg` and the game reads it. The unit tests in
+`crates/omsi-app/src/settings/round_trip.rs` (run by `cargo test --workspace`) write the file
+from one side and read it from the other, in both directions:
+
+- `game>launcher`: the file as the game writes it (`Settings::to_text`, test only), read and
+  saved by the launcher as its page's Save does, then read by the game again.
+- `launcher>game`: the file as the launcher writes it, read by the game, written by it, then
+  read by the launcher again.
+
+They try the defaults, one value per key inside its range (`VARIED`, which must reach every
+field the game has) and, on every key, values at and past the ends of the ranges and ones
+that are no number (`EDGES`). Inside the ranges and on the defaults both sides agree. The
+differences at the edges are listed per key and direction, with what goes wrong, in `KNOWN`;
+they are not fixed there. A change that fixes one takes its line out of `KNOWN` (the test
+fails while a listed difference no longer happens), and a new difference fails the test.
