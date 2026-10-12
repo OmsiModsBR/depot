@@ -1,7 +1,13 @@
 //! Draw lists: the draw items and their batches, the `pipe_code` kinds, and recording the
 //! batches into passes and render bundles.
 
-use super::*;
+use super::main::PassPipelines;
+use crate::assets::{AlphaMode, Material};
+use crate::gpu::CATCHING;
+use crate::renderer::{rt_gbuf, AUX_FORMAT, DEPTH_FORMAT, GBUF_FORMAT, HDR_FORMAT, MASK_FORMAT};
+use crate::scene::{Instance, MaterialId, RenderPhase, Scene};
+use glam::{DVec3, Vec3};
+use std::collections::HashMap;
 
 /// One single-sampled full-screen pass.
 pub(crate) fn post_pass(
@@ -506,4 +512,18 @@ pub(crate) fn record_bundles(
         .into_iter()
         .flatten()
         .collect()
+}
+
+/// A fragment shader's filterable 2D texture at `binding`.
+pub(crate) fn float_tex(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
 }

@@ -923,3 +923,78 @@ impl Renderer {
         n
     }
 }
+
+/// The mip map generator (mip.wgsl): its bind group layout, pipeline and sampler.
+pub(crate) fn mip_pipeline(
+    device: &wgpu::Device,
+) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline, wgpu::Sampler) {
+    // --- mipmaps on the GPU: the CPU box filter took up to a second per bus spawn
+    log::info!("renderer: compiling the mip maps shaders");
+    let mip_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("mip"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/assets/mip.wgsl").into()),
+    });
+    let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("mip"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let mip_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("mip"),
+        bind_group_layouts: &[Some(&mip_layout)],
+        immediate_size: 0,
+    });
+    let mip_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("mip"),
+        layout: Some(&mip_pl),
+        vertex: wgpu::VertexState {
+            module: &mip_shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &mip_shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+    let mip_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    (mip_layout, mip_pipeline, mip_sampler)
+}

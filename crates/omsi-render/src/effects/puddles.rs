@@ -1,7 +1,28 @@
 //! Bounded screen-space puddles, with a small planar capture of the player's vehicle
 //! for its complete geometry. Both use at most 518400 pixels.
 
-use super::*;
+use crate::assets::MaterialUniform;
+#[cfg(test)]
+use crate::assets::{AlphaMode, MaterialExtra};
+use crate::gpu::pass_timer;
+#[cfg(test)]
+use crate::lighting::half_to_f32;
+use crate::lighting::Lighting;
+use crate::passes::{
+    encode_batches, encode_batches_filtered, one_sided_primitive, post_pass, Batch, PIPE_BLEND,
+    PIPE_BLEND_NO_WRITE, PIPE_KINDS,
+};
+#[cfg(test)]
+use crate::renderer::RenderOptions;
+use crate::renderer::{Renderer, DEPTH_FORMAT, HDR_FORMAT};
+#[cfg(test)]
+use crate::scene::MaterialId;
+use crate::scene::{Camera, CameraUniform, Scene, Vertex};
+use crate::sky::{atmosphere, PROBE_MIPS};
+use crate::targets::HdrTargets;
+use glam::{DVec3, Mat4, Vec3};
+#[cfg(test)]
+use omsi_geometry::MeshData;
 
 const MAX_TRACE_PIXELS: f32 = 960.0 * 540.0;
 
@@ -15,14 +36,14 @@ struct VehicleBox {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(super) struct VehicleUniform {
+pub(crate) struct VehicleUniform {
     plane: [f32; 4],
     parts: [VehicleBox; 4],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(super) struct Uniform {
+pub(crate) struct Uniform {
     view_proj: [[f32; 4]; 4],
     inv_view_proj: [[f32; 4]; 4],
     eye_time: [f32; 4],
@@ -34,16 +55,16 @@ pub(super) struct Uniform {
     vehicle_parts: [VehicleBox; 4],
 }
 
-pub(super) fn shader_source() -> String {
+pub(crate) fn shader_source() -> String {
     [
-        include_str!("shaders/common/colour.wgsl"),
-        include_str!("shaders/common/puddle_common.wgsl"),
-        include_str!("shaders/effects/puddle_reflection.wgsl"),
+        include_str!("../shaders/common/colour.wgsl"),
+        include_str!("../shaders/common/puddle_common.wgsl"),
+        include_str!("../shaders/effects/puddle_reflection.wgsl"),
     ]
     .join("\n")
 }
 
-pub(super) struct Pipelines {
+pub(crate) struct Pipelines {
     layout: wgpu::BindGroupLayout,
     params: wgpu::Buffer,
     trace: wgpu::RenderPipeline,
@@ -58,7 +79,7 @@ pub(super) struct Pipelines {
 }
 
 impl Pipelines {
-    pub(super) fn new(
+    pub(crate) fn new(
         device: &wgpu::Device,
         scene_shader: &wgpu::ShaderModule,
         camera_layout: &wgpu::BindGroupLayout,
@@ -329,7 +350,7 @@ impl Pipelines {
     }
 }
 
-pub(super) struct Targets {
+pub(crate) struct Targets {
     size: (u32, u32),
     source_depth: wgpu::Texture,
     hit_depth: wgpu::Texture,
@@ -339,14 +360,14 @@ pub(super) struct Targets {
     trace: wgpu::TextureView,
     blur: wgpu::TextureView,
     filtered: wgpu::TextureView,
-    pub(super) view: wgpu::TextureView,
+    pub(crate) view: wgpu::TextureView,
     trace_bg: wgpu::BindGroup,
     blur_x_bg: wgpu::BindGroup,
     blur_y_bg: wgpu::BindGroup,
     resolve_bg: wgpu::BindGroup,
-    pub(super) down_bg: wgpu::BindGroup,
-    pub(super) tonemap_bg: [wgpu::BindGroup; 2],
-    pub(super) classic_bg: wgpu::BindGroup,
+    pub(crate) down_bg: wgpu::BindGroup,
+    pub(crate) tonemap_bg: [wgpu::BindGroup; 2],
+    pub(crate) classic_bg: wgpu::BindGroup,
 }
 
 fn trace_size(w: u32, h: u32) -> (u32, u32) {
@@ -503,7 +524,7 @@ impl Targets {
 }
 
 impl Renderer {
-    pub(super) fn prepare_puddle_reflections(
+    pub(crate) fn prepare_puddle_reflections(
         &mut self,
         w: u32,
         h: u32,
@@ -633,7 +654,7 @@ impl Renderer {
         true
     }
 
-    pub(super) fn encode_puddle_reflections(
+    pub(crate) fn encode_puddle_reflections(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         w: u32,

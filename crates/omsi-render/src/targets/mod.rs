@@ -1,0 +1,9 @@
+//! The render targets and their per-size caches: the enhanced path's HDR chain, the
+//! multisampled and depth attachments, and the ambient-occlusion textures.
+
+mod ao;
+mod cache;
+mod hdr;
+
+pub(crate) use ao::AoTargets;
+pub(crate) use hdr::HdrTargets;

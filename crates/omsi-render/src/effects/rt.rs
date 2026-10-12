@@ -14,10 +14,16 @@
 //! structures now and then; its numbers show: 3 cut-out meshes as solid, 4 cut-out meshes
 //! as clear, 7 the rays unfiltered, 8 / 9 / 10 the reflections' rays and weights (OMSI_DEBUG_ENHANCED=1 and 2 show the traced shadow and occlusion).
 
-use super::*;
+use crate::assets::AlphaMode;
+use crate::gpu::pass_timer;
+use crate::lighting::Lighting;
+use crate::renderer::{Renderer, HDR_FORMAT};
+use crate::scene::{Camera, Instance, MeshId, Scene, Vertex};
+use glam::{DVec3, Mat4};
+use std::collections::HashMap;
 
 /// How far from the camera meshes are traced (m): beyond it the shadow map holds.
-pub(super) const RT_RANGE: f32 = 420.0;
+pub(crate) const RT_RANGE: f32 = 420.0;
 /// How far the ambient occlusion looks (m).
 const AO_RADIUS: f32 = 2.2;
 /// The sun disc as traced (tangent of its radius): larger than the real 0.27 deg, for the
@@ -91,15 +97,15 @@ struct Params {
 /// The traced lighting's textures for one picture size (all rgba16float: r the ambient
 /// occlusion, g the view depth it was traced at, b the sun's visibility (< 0: not traced),
 /// a the frames accumulated).
-pub(super) struct Targets {
-    pub(super) size: (u32, u32),
+pub(crate) struct Targets {
+    pub(crate) size: (u32, u32),
     raw: wgpu::TextureView,
     tmp: wgpu::TextureView,
     /// What the main pass reads (camera bind group binding 8 in place of the SSAO).
-    pub(super) out: wgpu::TextureView,
+    pub(crate) out: wgpu::TextureView,
 }
 
-pub(super) struct RayTracer {
+pub(crate) struct RayTracer {
     blas: HashMap<BlasKey, BlasEntry>,
     /// Meshes whose vertices changed (skinned people): their structures are built again.
     dirty: std::cell::RefCell<std::collections::HashSet<MeshId>>,
@@ -117,13 +123,13 @@ pub(super) struct RayTracer {
     trace: wgpu::ComputePipeline,
     temporal: wgpu::ComputePipeline,
     params: wgpu::Buffer,
-    pub(super) targets: Option<Targets>,
+    pub(crate) targets: Option<Targets>,
     frame: u64,
     /// Last frame's view-projection, render origin and player vehicle (origin, heading deg).
     prev: Option<(Mat4, DVec3, Option<(DVec3, f64)>)>,
     /// Which structures to build this frame.
     to_build: Vec<BlasKey>,
-    pub(super) instances: usize,
+    pub(crate) instances: usize,
     /// The reflections: their layout, the rays, their history and the composite.
     refl_layout: wgpu::BindGroupLayout,
     reflect: wgpu::ComputePipeline,
@@ -144,28 +150,28 @@ fn refl_div() -> u32 {
 }
 
 /// The traced lighting's shader: the shared ray tracing and its own.
-pub(super) fn lighting_source() -> String {
+pub(crate) fn lighting_source() -> String {
     [
-        include_str!("shaders/common/rt_common.wgsl"),
-        include_str!("shaders/effects/rt.wgsl"),
+        include_str!("../shaders/common/rt_common.wgsl"),
+        include_str!("../shaders/effects/rt.wgsl"),
     ]
     .join("\n")
 }
 
 /// The size of the shaders' `RtParams` (for the shader test).
 #[cfg(test)]
-pub(super) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
+pub(crate) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
 
 /// The reflections' shader: the shared ray tracing, the enhanced uniform's layout, its own.
-pub(super) fn reflect_source() -> String {
-    let common = include_str!("shaders/common/enhanced_common.wgsl");
+pub(crate) fn reflect_source() -> String {
+    let common = include_str!("../shaders/common/enhanced_common.wgsl");
     let enh = &common[..common
         .find("@group(0) @binding(11)")
         .expect("Enhanced struct")];
     [
-        include_str!("shaders/common/rt_common.wgsl"),
+        include_str!("../shaders/common/rt_common.wgsl"),
         enh,
-        include_str!("shaders/effects/rt_reflect.wgsl"),
+        include_str!("../shaders/effects/rt_reflect.wgsl"),
     ]
     .join("\n")
 }
@@ -215,7 +221,7 @@ fn storage_buffer(
 }
 
 impl RayTracer {
-    pub(super) fn new(device: &wgpu::Device) -> RayTracer {
+    pub(crate) fn new(device: &wgpu::Device) -> RayTracer {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ray tracing"),
             entries: &[
@@ -294,7 +300,7 @@ impl RayTracer {
         });
         let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("texture means"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/effects/rt_avg.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/effects/rt_avg.wgsl").into()),
         });
         let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("texture means"),
@@ -517,13 +523,13 @@ impl RayTracer {
     }
 
     /// The vertices of these meshes changed: their structures are built again.
-    pub(super) fn meshes_changed(&self, ids: impl IntoIterator<Item = MeshId>) {
+    pub(crate) fn meshes_changed(&self, ids: impl IntoIterator<Item = MeshId>) {
         self.dirty.borrow_mut().extend(ids);
     }
 
     /// The traced lighting's textures for this size; true when they were made anew (the
     /// camera bind group must then point at the new one).
-    pub(super) fn ensure_targets(&mut self, device: &wgpu::Device, w: u32, h: u32) -> bool {
+    pub(crate) fn ensure_targets(&mut self, device: &wgpu::Device, w: u32, h: u32) -> bool {
         if self.targets.as_ref().is_some_and(|t| t.size == (w, h)) {
             return false;
         }
@@ -600,7 +606,7 @@ impl Renderer {
     /// (made for meshes met for the first time) and the records of their geometries, and the
     /// shaders' parameters. False when there is nothing to trace with.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn prepare_ray_tracing(
+    pub(crate) fn prepare_ray_tracing(
         &mut self,
         scene: &Scene,
         camera: &Camera,
@@ -976,7 +982,7 @@ impl Renderer {
 
     /// Build this frame's structures and trace the lighting into `Targets::out`, after the
     /// depth prepass.
-    pub(super) fn encode_ray_tracing(
+    pub(crate) fn encode_ray_tracing(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         scene: &Scene,
@@ -1090,7 +1096,7 @@ impl Renderer {
 impl Renderer {
     /// The ray-traced reflections of the window's picture, added to `HdrTargets::view` after
     /// the main pass (and before the rain on the glass, which looks through it).
-    pub(super) fn encode_rt_reflections(
+    pub(crate) fn encode_rt_reflections(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         w: u32,
@@ -1249,7 +1255,7 @@ mod spv_dump {
             ("reflect", super::reflect_source()),
             (
                 "scene_plus",
-                super::super::scene_shader_source(false).replace("//RT ", ""),
+                crate::shaders::scene_shader_source(false).replace("//RT ", ""),
             ),
         ];
         for (name, src) in &modules {
