@@ -20,22 +20,41 @@ mod shaders;
 mod surface;
 mod targets;
 mod triple;
-pub use camera::*;
+// The public API, item by item: what the game (`omsi-app`) and the tests may use. A module
+// moving inside the crate changes nothing here but the path; see ARCHITECTURE.md.
+pub use camera::{Camera, Vertex};
+pub use gpu::{gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
+pub use lighting::{
+    Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
+};
+pub use material::{AlphaMode, GpuTexture, Material, MaterialExtra, PbrMaps, TexAddressing};
+pub use renderer::{
+    RenderOptions, Renderer, AUTO_SCALE_PIXELS, DEPTH_FORMAT, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH,
+    MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
+};
+pub use resources::{
+    fit_texture, prepare_mesh, prepare_meshes, prepare_texture, PreparedMesh, PreparedTexture,
+};
+pub use scene::{GpuMesh, Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
+pub use surface::{winit_window, SurfaceState};
+pub use triple::{panel_width, ScreenView, TripleScreen};
+
+// Crate-internal names, shared by the modules through `use super::*`. Temporary: each domain
+// imports by name once it reaches its folder (ARCHITECTURE.md), and these globs go.
+use camera::*;
 use draw::*;
 #[cfg(test)]
 use frame::*;
-pub use gpu::*;
-pub use lighting::*;
-pub use material::*;
+use gpu::*;
+use lighting::*;
+use material::*;
 use pipelines::*;
 use render::*;
-pub use renderer::*;
-pub use resources::*;
-pub use scene::*;
+use renderer::*;
+use resources::*;
+use scene::*;
 use shaders::*;
-pub use surface::*;
 use targets::*;
-pub use triple::{panel_width, ScreenView, TripleScreen};
 
 use anyhow::{anyhow, Context, Result};
 use glam::{DVec3, Mat4, Vec3, Vec4};
