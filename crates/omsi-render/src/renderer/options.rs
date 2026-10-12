@@ -1,7 +1,7 @@
 //! The renderer's options and the scaled scene: `RenderOptions`, the picture's format and
 //! the dynamic resolution.
 
-use super::state::{Renderer, MSAA, SHADOW_SIZE};
+use super::state::{MSAA, SHADOW_SIZE};
 
 /// What the renderer is built with: the user's graphics settings.
 #[derive(Debug, Clone, Copy)]
@@ -105,62 +105,5 @@ pub(crate) fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
         1.0
     } else {
         (AUTO_SCALE_PIXELS / pixels).sqrt().clamp(0.5, 1.0)
-    }
-}
-
-impl Renderer {
-    pub fn format(&self) -> wgpu::TextureFormat {
-        self.format
-    }
-
-    /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
-    pub fn scene_scale(&self, width: u32, height: u32) -> f32 {
-        let s = scene_scale_for(self.options.render_scale, width, height);
-        // (a fixed render scale is the player's choice: the governor works on automatic)
-        if self.options.render_scale > 0.0 {
-            s
-        } else {
-            (s * self.dynamic_scale.get()).clamp(0.5, 1.0)
-        }
-    }
-
-    /// Draw the 3D picture at this fraction of what the render scale says (0.6..1): the
-    /// game lowers it while a slow graphics chip cannot keep the frame rate up, and raises
-    /// it again when there is room. Steps of a twentieth, so that the few sizes it takes
-    /// keep their render targets.
-    pub fn set_dynamic_scale(&self, s: f32) {
-        // (1, 0.85, 0.7 or 0.55 - the last for a phone's chip that is still too slow: see
-        // the game's governor)
-        let s = s.clamp(0.55, 1.0);
-        let level = [1.0f32, 0.85, 0.7, 0.55]
-            .into_iter()
-            .min_by(|a, b| (a - s).abs().total_cmp(&(b - s).abs()))
-            .unwrap_or(1.0);
-        self.dynamic_scale.set(level);
-    }
-
-    pub fn dynamic_scale(&self) -> f32 {
-        self.dynamic_scale.get()
-    }
-
-    /// The size the 3D scene is drawn at for a window of this size.
-    pub fn scene_size(&self, width: u32, height: u32) -> (u32, u32) {
-        let s = self.scene_scale(width, height);
-        if s >= 0.999 {
-            return (width, height);
-        }
-        (
-            ((width as f32 * s).round() as u32).max(1),
-            ((height as f32 * s).round() as u32).max(1),
-        )
-    }
-
-    /// Why the graphics device was lost, if it was: nothing can be drawn any more.
-    /// Lay the sphere maps of `[matl_envmap]` out by this heading instead of the view
-    /// (None: by the view, as Omsi.exe does). A sphere map turns with the view it is drawn
-    /// for: in the headset every turn of the player's head turned every reflection of the
-    /// bus with it, the two eyes each their own way - the reflections swam about.
-    pub fn set_env_heading(&self, heading: Option<f32>) {
-        self.env_heading.set(heading);
     }
 }

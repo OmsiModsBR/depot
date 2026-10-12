@@ -11,8 +11,15 @@ pub use mesh::{prepare_mesh, prepare_meshes, GpuMesh, PreparedMesh};
 pub use texture::{fit_texture, prepare_texture, GpuTexture, PreparedTexture};
 
 pub(crate) use lifecycle::Freed;
-pub(crate) use material::{material_layout_entries, BindKey, MaterialUniform};
+pub(crate) use material::{
+    material_layout_entries, snow_texture_flag, BindKey, MaterialMaps, MaterialUniform,
+};
+pub(crate) use mesh::{
+    make_meshes, mesh_page_bytes, MeshPage, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
+    RT_BUFFERS,
+};
 #[cfg(test)]
 pub(crate) use mesh::{page_give, page_take};
-pub(crate) use mesh::{MeshPage, RT_BUFFERS};
-pub(crate) use texture::{fit_size, mip_pipeline, next_gen, texture_bytes, upload_texture};
+pub(crate) use texture::{
+    fit_image, fit_size, mip_pipeline, next_gen, texture_bytes, upload_texture,
+};

@@ -2,9 +2,8 @@
 //! and the HUD.
 
 use crate::gpu::{buffer_init, pass_timer};
-use crate::lighting::Lighting;
 use crate::renderer::{Renderer, DEPTH_FORMAT};
-use crate::scene::{Camera, Scene, TextureId};
+use crate::scene::{Scene, TextureId};
 use anyhow::{Context, Result};
 use std::sync::Arc;
 
@@ -435,25 +434,6 @@ pub(crate) fn snap_rect(r: [f32; 4]) -> [f32; 4] {
 }
 
 impl Renderer {
-    /// Render the scene into `target` (which must have the renderer's format).
-    pub fn render(
-        &mut self,
-        scene: &mut Scene,
-        target: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-        camera: &Camera,
-        lighting: &Lighting,
-    ) {
-        // (the triple screen's panels are not kept once it is turned off)
-        if self.triple_targets.take().is_some() {
-            self.triple_culling = Default::default();
-        }
-        self.render_inner(
-            scene, target, width, height, camera, lighting, true, None, None, false,
-        );
-    }
-
     pub(crate) fn prepare_overlays(&self, scene: &mut Scene, full_w: u32, full_h: u32) {
         let overlays = &scene.overlays;
         // the HUD's rect buffers and bind groups live on between frames: making them

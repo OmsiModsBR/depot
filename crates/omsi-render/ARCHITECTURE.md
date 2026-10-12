@@ -31,9 +31,9 @@ presents to the window or reads a texture back on its own.
 
 | Layer | Domain | Owns | Lives today in |
 | --- | --- | --- | --- |
-| Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic | the `pub fn`s still sit in the domains (`renderer/`, `output/`, `scene/`, `assets/`, `lighting/`, `sky/`); the re-exports are in `lib.rs` |
-| 4 | `renderer` | The internal state of `Renderer`, building it, the frame (`FrameContext` and its stages), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `open`, `build`, `prepare`, `frame`) |
-| Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, presenting with upscale, FXAA, overlay and HUD), `image` (`render_to_image`, texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) | in place (`output/`: `window`, `image`, `xr`, `triple`, `diagnostics`); the exposure log is still in `lighting/exposure.rs` |
+| Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic | in place (`api/`: `renderer`, `scene`, `assets`, `lights`, `types`); the methods still carry their whole bodies, which move to their domains in the next steps, and `RenderOptions` is still in `renderer/options.rs` |
+| 4 | `renderer` | The internal state of `Renderer`, building it, the frame (`FrameContext` and its stages), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `build`, `prepare`, `frame`); opening the renderer is still in `api/renderer.rs` |
+| Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, presenting with upscale, FXAA, overlay and HUD), `image` (`render_to_image`, texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) | in place (`output/`: `window`, `image`, `triple`, `diagnostics`); the XR methods are still in `api/renderer.rs` and the exposure log in `lighting/exposure.rs` |
 | 3 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO | in place (`targets/`) |
 | 3 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow`, `depth` (prepass and SSAO), `sky`, `main`, `glass`, `reflections`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) | in place (`passes/`); the coronas and smoke are still drawn inside `Renderer::render_inner` |
 | 3 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`) |
@@ -61,6 +61,8 @@ column goes.
    `use super::*`: the import list is the domain's dependency map. Nothing imports from `api`;
    only `renderer` and `api` import from `output`. The globs left in `lib.rs` serve only the tests
    (`tests.rs`, `tests_units.rs`) and go when those move to their domains.
+   `scripts/check-render-layers.sh` lists the imports that break this rule (informational on CI
+   for now).
 4. **Smallest visibility.** `pub(super)` inside a domain, `pub(crate)` only for what another
    domain uses.
 5. **A pass keeps its parts together.** Pipelines, uniform, layout and encoding sit in the

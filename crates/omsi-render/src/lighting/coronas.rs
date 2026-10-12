@@ -1,7 +1,6 @@
 //! Coronas and smoke sprites: their textures and their per-frame lists.
 
 use super::model::{Corona, GpuCorona, SmokeParticle};
-use crate::assets::upload_texture;
 use crate::renderer::Renderer;
 use crate::scene::{point_in_vehicle_box, Scene};
 use glam::DVec3;
@@ -47,51 +46,6 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
 }
 
 impl Renderer {
-    /// Register picture `id` for coronas (`Corona::texture`): a light's own bitmap, whose
-    /// brightness is the glow's shape.
-    pub fn set_corona_texture(&mut self, id: u16, img: &omsi_texture::Image) {
-        let t = upload_texture(&self.device, &self.queue, img, true);
-        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("corona picture"),
-            layout: &self.corona_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&t.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.corona_sampler),
-                },
-            ],
-        });
-        let i = id as usize;
-        if self.corona_textures.len() <= i {
-            self.corona_textures.resize_with(i + 1, || None);
-        }
-        self.corona_textures[i] = Some(bg);
-    }
-
-    /// The picture of a smoke particle: the game's `Texture/rauch.tga` (OMSI's default
-    /// for every `[smoke]`), alpha as its mask.
-    pub fn set_smoke_texture(&mut self, img: &omsi_texture::Image) {
-        let t = upload_texture(&self.device, &self.queue, img, true);
-        self.smoke_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("smoke"),
-            layout: &self.corona_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&t.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.corona_sampler),
-                },
-            ],
-        });
-    }
-
     /// Upload this frame's coronas.
     /// `cab`: the box of the vehicle the camera is in, whose own flares Omsi.exe draws
     /// after the vehicle (0x6f0a2c -> 0x6f07bc), the others before it (0x6f0400/0x6f0418).

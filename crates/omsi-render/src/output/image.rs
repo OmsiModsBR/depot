@@ -1,40 +1,14 @@
 //! A frame delivered as an image or into a texture: rendering off screen and reading the
 //! pixels back.
 
-use crate::assets::{fit_size, next_gen, texture_bytes, GpuTexture};
 use crate::gpu::wait_gpu;
 use crate::lighting::Lighting;
 use crate::renderer::Renderer;
-use crate::scene::{Camera, Scene, TextureId, TripleScreen};
+use crate::scene::{Camera, Scene, TripleScreen};
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 
 impl Renderer {
-    /// Render off-screen and return RGBA8 pixels.
-    pub fn render_to_image(
-        &mut self,
-        scene: &mut Scene,
-        width: u32,
-        height: u32,
-        camera: &Camera,
-        lighting: &Lighting,
-    ) -> Result<Vec<u8>> {
-        self.render_image(scene, width, height, camera, lighting, None)
-    }
-
-    /// Capture all three physical screen projections, including the shared HUD.
-    pub fn render_triple_to_image(
-        &mut self,
-        scene: &mut Scene,
-        width: u32,
-        height: u32,
-        camera: &Camera,
-        lighting: &Lighting,
-        rig: &TripleScreen,
-    ) -> Result<Vec<u8>> {
-        self.render_image(scene, width, height, camera, lighting, Some(rig))
-    }
-
     pub(crate) fn render_image(
         &mut self,
         scene: &mut Scene,
@@ -139,72 +113,5 @@ impl Renderer {
         drop(data);
         buf.unmap();
         Ok(out)
-    }
-
-    /// A texture the scene can be rendered into (`render_to_texture`), e.g. a rear-view mirror.
-    pub fn add_render_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
-        let (width, height) = fit_size(
-            width.max(1),
-            height.max(1),
-            self.device.limits().max_texture_dimension_2d,
-        );
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("render target"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&Default::default());
-        // (its depth buffer is the pass's own, see `msaa_targets`)
-        let bytes = texture_bytes(self.format, width, height, 1);
-        scene.textures.push(GpuTexture {
-            texture,
-            view,
-            size: (width, height),
-            bytes,
-            gen: next_gen(),
-        });
-        scene.textures.len() - 1
-    }
-
-    /// Render the scene from `camera` into a texture made by `add_render_texture`.
-    /// `aspect`: the projection's width over height (OMSI draws its mirrors 1.6 wide into
-    /// square textures, and their meshes show the middle of that).
-    pub fn render_to_texture(
-        &mut self,
-        scene: &mut Scene,
-        id: TextureId,
-        camera: &Camera,
-        lighting: &Lighting,
-        aspect: f32,
-    ) {
-        let Some(t) = scene.textures.get(id) else {
-            return;
-        };
-        let view = t.view.clone();
-        let (w, h) = t.size;
-        self.texture_aspect = Some(aspect);
-        self.render_inner(
-            scene,
-            &view,
-            w,
-            h,
-            camera,
-            lighting,
-            false,
-            Some(id),
-            None,
-            false,
-        );
-        self.texture_aspect = None;
     }
 }

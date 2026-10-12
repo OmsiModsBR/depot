@@ -4,8 +4,8 @@
 use super::texture::next_gen;
 use crate::gpu::gl_worker_turn;
 use crate::renderer::Renderer;
+use crate::scene::Scene;
 use crate::scene::Vertex;
-use crate::scene::{MeshId, Scene};
 use glam::Vec3;
 use omsi_geometry::MeshData;
 
@@ -257,7 +257,7 @@ pub(crate) fn make_meshes(
 
 /// A mesh on the GPU, made on a worker thread; [`Renderer::add_prepared_mesh`] puts it into
 /// a scene.
-pub struct PreparedMesh(GpuMesh);
+pub struct PreparedMesh(pub(crate) GpuMesh);
 
 /// Make a mesh's GPU buffers on any thread (the device takes calls from all of them).
 pub fn prepare_mesh(device: &wgpu::Device, queue: &wgpu::Queue, data: &MeshData) -> PreparedMesh {
@@ -305,50 +305,6 @@ pub struct GpuMesh {
 }
 
 impl Renderer {
-    /// Overwrite the vertices of a mesh (skinned humans); the vertex count must not grow.
-    pub fn update_mesh(
-        &self,
-        scene: &mut Scene,
-        id: MeshId,
-        positions: &[Vec3],
-        normals: &[Vec3],
-        uvs: &[glam::Vec2],
-    ) {
-        let verts: Vec<Vertex> = positions
-            .iter()
-            .zip(normals)
-            .zip(uvs)
-            .map(|((p, n), uv)| Vertex {
-                pos: p.to_array(),
-                normal: n.to_array(),
-                uv: uv.to_array(),
-            })
-            .collect();
-        let bytes: &[u8] = bytemuck::cast_slice(&verts);
-        let m = &mut scene.meshes[id];
-        if (m.vertex_bytes as usize) < bytes.len() {
-            return;
-        }
-        {
-            // (a newer pose of the same mesh replaces one still waiting)
-            let mut pending = self.pending_meshes.borrow_mut();
-            match pending.iter_mut().find(|(mid, _)| *mid == id) {
-                Some(e) => e.1 = bytes.to_vec(),
-                None => pending.push((id, bytes.to_vec())),
-            }
-        }
-        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-        for p in positions {
-            lo = lo.min(*p);
-            hi = hi.max(*p);
-        }
-        if !positions.is_empty() {
-            m.bounds_center = (lo + hi) * 0.5;
-            m.bounds_radius = (hi - m.bounds_center).length();
-            Self::mesh_bounds_changed(scene, id);
-        }
-    }
-
     /// Copy the vertex data `update_mesh` collected into the meshes. Written through the
     /// queue, mesh by mesh (the writes land before the frame's commands run): one staging
     /// buffer for the whole frame outgrew the device's buffer limit on big maps, its
@@ -369,54 +325,5 @@ impl Renderer {
             self.queue
                 .write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize]);
         }
-    }
-
-    pub fn add_mesh(&self, scene: &mut Scene, data: &MeshData) -> MeshId {
-        let (vb, ib) = mesh_page_bytes(data);
-        let mesh = if vb > MESH_PAGE_VERTEX_BYTES / 4
-            || ib > MESH_PAGE_INDEX_BYTES / 4
-            || !self.mesh_pages
-        {
-            make_meshes(&self.device, &self.queue, &[data], true)
-                .pop()
-                .expect("one mesh")
-        } else {
-            let found = scene
-                .mesh_pages
-                .iter_mut()
-                .enumerate()
-                .find_map(|(k, p)| p.take(vb, ib).map(|at| (k, at)));
-            let (k, at) = found.unwrap_or_else(|| {
-                let mut page =
-                    MeshPage::new(&self.device, MESH_PAGE_VERTEX_BYTES, MESH_PAGE_INDEX_BYTES);
-                let at = page
-                    .take(vb, ib)
-                    .expect("a new page holds a mesh a quarter its size");
-                scene.mesh_pages.push(page);
-                (scene.mesh_pages.len() - 1, at)
-            });
-            scene.mesh_pages[k].place(&self.queue, data, k as u32, at)
-        };
-        scene.meshes.push(mesh);
-        scene.meshes.len() - 1
-    }
-
-    /// Whether this renderer's adapter draws meshes from shared pages (it can draw with a
-    /// base vertex); [`prepare_meshes`] is told it.
-    pub fn mesh_pages(&self) -> bool {
-        self.mesh_pages
-    }
-
-    /// Put a mesh made on another thread ([`prepare_mesh`]) into the scene.
-    pub fn add_prepared_mesh(&self, scene: &mut Scene, mesh: PreparedMesh) -> MeshId {
-        scene.meshes.push(mesh.0);
-        scene.meshes.len() - 1
-    }
-
-    /// Bytes of all textures of the scene on the GPU (render targets included).
-    /// Bytes the meshes' vertex and index buffers take on the GPU (the freed ones' shared
-    /// placeholder not counted).
-    pub fn mesh_bytes(&self, scene: &Scene) -> u64 {
-        scene.mesh_page_bytes()
     }
 }

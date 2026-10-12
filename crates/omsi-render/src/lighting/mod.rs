@@ -5,7 +5,6 @@
 mod coronas;
 mod exposure;
 mod lamps;
-mod light_map;
 mod model;
 
 pub use model::{
