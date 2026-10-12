@@ -13,6 +13,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   and blocks. Formatting only; no behaviour change.
 - The clippy warnings of the ten format crates are fixed (manual `div_ceil` and `is_multiple_of`, index loops,
   needless conversions and borrows, complex types named, doc lists). No behaviour change.
+- The HTML engine's interface with the game (`ApiValue`, `HtmlRenderer`, `HtmlRequest`, `PageApi`, `PointerKind`,
+  `rebase_css_urls`) moves into `omsi-sim/src/htmlengine/page.rs`, re-exported where it was
+  (`vehicle_api`, `htmltex`): the engine no longer reaches into the rest of `omsi-sim`, the first step of the
+  `omsi-html` crate. Code moved as is; no behaviour change.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,

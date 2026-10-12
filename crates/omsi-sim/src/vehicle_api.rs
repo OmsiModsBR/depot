@@ -54,6 +54,8 @@ use crate::SimClock;
 use omsi_vehicle::hof::Hof;
 use std::sync::RwLock;
 
+pub use crate::htmlengine::ApiValue;
+
 static LOCALE: RwLock<String> = RwLock::new(String::new());
 
 /// Set the interface language pages see as `omsi.locale` (ISO 639-1, e.g. `de`; empty = `en`).
@@ -131,39 +133,6 @@ pub fn departures(by_key: &std::collections::HashMap<String, Vec<(String, String
             })
             .collect(),
     )
-}
-
-/// A value of the snapshot tree.
-#[derive(Clone, Debug, PartialEq)]
-pub enum ApiValue {
-    Null,
-    Bool(bool),
-    Num(f64),
-    Str(String),
-    List(Vec<ApiValue>),
-    /// Properties in the order they are listed in.
-    Map(Vec<(String, ApiValue)>),
-}
-
-impl ApiValue {
-    /// A property of a [`ApiValue::Map`].
-    pub fn get(&self, key: &str) -> Option<&ApiValue> {
-        match self {
-            ApiValue::Map(m) => m.iter().find(|(k, _)| k == key).map(|(_, v)| v),
-            _ => None,
-        }
-    }
-
-    /// The same map with property `key` set to `value`.
-    fn with(mut self, key: &str, value: ApiValue) -> ApiValue {
-        if let ApiValue::Map(m) = &mut self {
-            match m.iter_mut().find(|(k, _)| k == key) {
-                Some(slot) => slot.1 = value,
-                None => m.push((key.to_string(), value)),
-            }
-        }
-        self
-    }
 }
 
 /// Everything the snapshot is made from. [`VehicleInstance::html_api_snapshot`] fills it from
