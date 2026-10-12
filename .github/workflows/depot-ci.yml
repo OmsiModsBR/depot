@@ -101,6 +101,50 @@ jobs:
           cargo audit || echo "::warning::cargo audit reported findings"
           cargo deny check || echo "::warning::cargo deny reported findings"
 
+  # Informational for now (docs/QUALITY.md): the offscreen golden on the software Vulkan
+  # adapter (lavapipe), so the picture of the synthetic root is checked on every change without
+  # a graphics card. OMSI_GOLDEN_REQUIRE makes a missing adapter or a missing golden for this
+  # adapter fail instead of skip; the failure prints the golden to commit. Once it has passed
+  # three runs in a row on the same commit, drop continue-on-error to make it blocking.
+  offscreen-golden:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+      - name: System libraries and the software Vulkan adapter
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake pkg-config libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev mesa-vulkan-drivers libvulkan1
+      - name: Offscreen golden on lavapipe
+        env:
+          OMSI_GOLDEN_RENDER: 1
+          OMSI_GOLDEN_REQUIRE: 1
+        run: |
+          # only the software adapter, so a runner image that ever ships another driver does
+          # not change which adapter the golden is compared on (the manifest's name varies
+          # between mesa releases)
+          VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)
+          export VK_DRIVER_FILES VK_ICD_FILENAMES="$VK_DRIVER_FILES"
+          set +e
+          cargo test --locked -p omsi-app --release --test offscreen_golden -- --nocapture 2>&1 | tee golden.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Offscreen golden (lavapipe)'
+            echo '```'
+            grep -E 'SKIP|golden|adapter=|backend=|thumb=|panicked|test result' golden.log | head -n 40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
   # Blocking on pull requests: the vehicle physics of the change against its base, frame by
   # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md). A change that only moves code
   # leaves every trace identical. One meant to alter the physics carries the `physics-delta`

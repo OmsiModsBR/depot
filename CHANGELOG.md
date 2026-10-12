@@ -13,6 +13,16 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   edges of the ranges. The differences found at the edges are listed in the test, not fixed;
   see docs/QUALITY.md. The game's test-only `Settings::to_text` now writes every field.
   Test only; no behaviour change.
+- CI job `offscreen-golden` (informational for now): the offscreen golden runs on every push and pull
+  request on the software Vulkan adapter (lavapipe), with `OMSI_GOLDEN_REQUIRE=1` so a missing adapter or a
+  missing golden for it fails instead of skipping. Golden files are now kept per adapter in
+  `crates/omsi-app/tests/golden/offscreen_synthetic/`. Test and CI only; no behaviour change.
+
+### Fixed
+- The offscreen golden's synthetic root kept the box next to the map, where the game does not look for
+  scenery objects, so the picture showed only ground and sky and the "box is in the picture" check failed
+  on any adapter. The box now sits in `Sceneryobjects/Golden/` with its mesh in `model/` and its texture in
+  `texture/`, as in OMSI 2. Test only.
 
 ## 0.2.52 - 2026-10-10
 
