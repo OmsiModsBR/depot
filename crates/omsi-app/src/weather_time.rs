@@ -40,7 +40,7 @@ impl App {
             }
         }
         self.follow_date();
-        if let Some(l)=self.lan.as_mut().filter(|l|l.role==omsi_net::Role::Host){l.set_weather(&spec);}
+        if let Some(l)=self.online.lan.as_mut().filter(|l|l.role==omsi_net::Role::Host){l.set_weather(&spec);}
         self.service_msg=Some(("Weather: Custom weather".into(),2.0));
     }
 
@@ -52,7 +52,7 @@ impl App {
         if self.real_time_locked() {
             return 1.0;
         }
-        match self.lan.as_ref() {
+        match self.online.lan.as_ref() {
             Some(l) => l.clock_speed,
             None => self.settings.time_speed.clamp(1.0, 30.0),
         }
@@ -101,7 +101,7 @@ impl App {
         self.weather_blend = Some(crate::weather_cycle::Blend::new(from, to, secs));
         if share {
             // (a host: the others take it up with its next clock message)
-            if let (Some(l), Some(f)) = (self.lan.as_mut(), file.as_ref()) {
+            if let (Some(l), Some(f)) = (self.online.lan.as_mut(), file.as_ref()) {
                 l.set_weather(f);
             }
         }
@@ -265,7 +265,7 @@ impl App {
     /// A host that started on `metar:<ICAO>` tells the players the report's values as soon as
     /// they are there (they cannot download it by the station's name: only the host syncs).
     pub(crate) fn share_start_metar(&mut self) {
-        let Some(l) = self.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) else { return };
+        let Some(l) = self.online.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) else { return };
         if !l.weather().to_ascii_lowercase().starts_with("metar:") {
             return;
         }
@@ -287,7 +287,7 @@ impl App {
         self.args.weather = Some(file.clone());
         self.weather_cycle = None;
         self.weather_blend = Some(crate::weather_cycle::Blend::new(from, to, 60.0));
-        if let Some(l) = self.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
+        if let Some(l) = self.online.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
             l.set_weather(&wire);
         }
         log::info!("weather: METAR sync, going over to {file} ({name})");

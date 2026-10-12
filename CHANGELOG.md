@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The seven LAN fields of `omsi-app`'s `App` (`lan`, `remotes`, `voice`, `remote_walkers`,
+  `inside_remote`, `is_admin`, `remote_added`) move into one `Online` struct, `App::online`, so the
+  `lan` feature can switch them off together. No behaviour change.
 - `omsi-app` asks `is_lan_client()` and `is_lan_host()` instead of comparing the LAN session's
   `omsi_net::Role` in 22 places (weather, clock, menus, the editor, lists). Without a session both say
   no, as the comparisons did. This prepares the `lan` feature. No behaviour change.

@@ -184,8 +184,8 @@ impl App {
                 // `type <text>`: characters into the open LAN chat line (after `key V`)
                 "type" => {
                     let text = cmd.split_once(' ').map(|x| x.1).unwrap_or("");
-                    if lan::chat_open(&self.remotes) {
-                        lan::chat_type(&mut self.remotes, text);
+                    if lan::chat_open(&self.online.remotes) {
+                        lan::chat_type(&mut self.online.remotes, text);
                     } else {
                         log::warn!("input script: the chat line is not open");
                     }

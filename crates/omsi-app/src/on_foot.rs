@@ -262,7 +262,7 @@ impl App {
                 add(&c.vehicle);
             }
         }
-        for rm in self.remotes.remotes.values() {
+        for rm in self.online.remotes.remotes.values() {
             add(rm.vehicle());
         }
         boxes
@@ -1149,7 +1149,7 @@ impl App {
         let f = self.on_foot.as_ref()?;
         // aboard a player's bus (ours or another's): where in it, so that the others draw
         // us in that bus as it drives
-        let my_id = self.lan.as_ref().map(|l| l.my_id).filter(|i| *i != 0);
+        let my_id = self.online.lan.as_ref().map(|l| l.my_id).filter(|i| *i != 0);
         let owner = |b: BusId| match b {
             BusId::Player => my_id,
             BusId::Ai(x) => crate::humans::remote_bus_player(x),
@@ -1170,8 +1170,8 @@ impl App {
 
     /// Other players on foot: their avatars.
     pub(crate) fn sync_remote_walkers(&mut self) {
-        let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self.remotes.remotes.iter().map(|(id, r)| (*id, r.last.walker, r.last.figure.clone())).collect();
-        if walkers.iter().all(|w| w.1.is_none()) && self.remote_walkers.is_empty() {
+        let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self.online.remotes.remotes.iter().map(|(id, r)| (*id, r.last.walker, r.last.figure.clone())).collect();
+        if walkers.iter().all(|w| w.1.is_none()) && self.online.remote_walkers.is_empty() {
             return;
         }
         if walkers.iter().any(|w| w.1.is_some()) && self.humans.is_none() {
@@ -1180,7 +1180,7 @@ impl App {
             self.humans = Some(h);
         }
         let (Some(h), Some(w), Some(r), Some(scene)) = (self.humans.as_mut(), self.world.as_ref(), self.renderer.as_ref(), self.scene.as_mut()) else { return };
-        let my_id = self.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
+        let my_id = self.online.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
         let mut now = Vec::new();
         for (id, wk, figure) in walkers {
             let Some(wk) = wk else { continue };
@@ -1209,17 +1209,17 @@ impl App {
                 None => AvatarCmd { pos: DVec3::new(wk.x, wk.y, wk.z), heading: wk.heading as f64, vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64, lift: 0.0, seat: None, floor: w.walk_height(wk.x, wk.y).filter(|g| wk.z > g + 0.25).map(|_| wk.z), aboard: None },
             };
             h.avatar(REMOTE_KEY + id, w, r, scene, cmd, kind);
-            if !self.remote_walkers.contains(&id) {
+            if !self.online.remote_walkers.contains(&id) {
                 log::info!("LAN: player {id} got up and walks at ({:.1}, {:.1})", wk.x, wk.y);
             }
             now.push(id);
         }
-        for id in std::mem::take(&mut self.remote_walkers) {
+        for id in std::mem::take(&mut self.online.remote_walkers) {
             if !now.contains(&id) {
                 h.avatar_remove(REMOTE_KEY + id);
             }
         }
-        self.remote_walkers = now;
+        self.online.remote_walkers = now;
     }
 }
 

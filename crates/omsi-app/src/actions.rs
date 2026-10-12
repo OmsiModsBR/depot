@@ -790,7 +790,7 @@ impl App {
             clock.time -= 86400.0;
             clock.day_of_year = clock.day_of_year % omsi_sim::clock::days_in_year(clock.year) + 1;
         }
-        if !self.settings.time_sync || self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+        if !self.settings.time_sync || self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
             self.clock = clock;
         }
         p.vehicle.host.clock = self.clock.clone();
@@ -1070,7 +1070,7 @@ impl App {
 
     pub(crate) fn toggle_pause(&mut self) {
         // (a LAN session goes on for the others: it cannot be paused)
-        if self.lan.is_some() {
+        if self.online.lan.is_some() {
             self.service_msg = Some(("A LAN session cannot be paused".into(), 3.0));
             return;
         }
@@ -1143,7 +1143,7 @@ impl App {
     /// written), as OMSI keeps it: the launcher offers to continue it. Not
     /// in a tutorial, a LAN session or without a bus of one's own.
     pub(crate) fn save_last_situation(&mut self) -> Option<std::path::PathBuf> {
-        if self.tutorial.is_some() || self.lan.is_some() || self.player.is_none() {
+        if self.tutorial.is_some() || self.online.lan.is_some() || self.player.is_none() {
             return None;
         }
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return None };

@@ -73,7 +73,7 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
     v.push(("view", Text(app.view.clone())));
     v.push(("paused", Bool(app.paused)));
     v.push(("on_foot", Bool(app.on_foot.is_some())));
-    v.push(("multiplayer", Bool(app.lan.is_some())));
+    v.push(("multiplayer", Bool(app.online.lan.is_some())));
     // the situation the game started from (the launcher's "continue": `laststn.osn`)
     // (relative to the OMSI folder, `/`-separated, whether the launcher passed it absolute or not)
     if let Some(s) = app.args.situation.as_ref() {

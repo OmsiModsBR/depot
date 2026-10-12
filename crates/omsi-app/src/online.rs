@@ -2,16 +2,37 @@
 
 use super::*;
 
+/// The LAN session and what the game keeps of the other players in it. None of it does
+/// anything while multiplayer is switched off (`docs/removed/MULTIPLAYER_DISABLED.md`).
+#[derive(Default)]
+pub(crate) struct Online {
+    /// The session itself, with the chat line.
+    pub lan: Option<omsi_net::LanSession>,
+    /// The other players' buses (drawn and heard like AI vehicles), the sync tables and the
+    /// host's world as far as it was taken over.
+    pub remotes: lan::LanGame,
+    /// Positional voice through GreenTeaSpeak in a session (`voice`).
+    pub voice: Option<crate::voice::Voice>,
+    /// Other players on foot whose avatars are drawn (their ids).
+    pub remote_walkers: Vec<u32>,
+    /// The player on foot is in this other player's bus (see `lan`: drawn from inside).
+    pub inside_remote: Option<u32>,
+    /// A dedicated server said we administer it (`admin`).
+    pub is_admin: bool,
+    /// The copies of objects the LAN host made in the editor, as this client shows them.
+    pub remote_added: std::collections::HashMap<i64, crate::scene::TileGpu>,
+}
+
 impl App {
     /// Whether this game joined another's LAN session (the host then decides the weather,
     /// the clock and the map's edits).
     pub(crate) fn is_lan_client(&self) -> bool {
-        self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+        self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
     }
 
     /// Whether this game hosts a LAN session.
     pub(crate) fn is_lan_host(&self) -> bool {
-        self.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host)
+        self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host)
     }
 
     /// LAN play, once a frame: send our bus, take in the others', and keep a drawn
@@ -19,9 +40,9 @@ impl App {
     pub(crate) fn tick_lan(&mut self, dt: f32) {
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_held();
-        let Some(lan) = self.lan.as_mut() else {
+        let Some(lan) = self.online.lan.as_mut() else {
             // (the session is over: the plugin is told so)
-            self.voice = None;
+            self.online.voice = None;
             return;
         };
         let duty = self
@@ -32,17 +53,17 @@ impl App {
         let frame = lan::Frame {
             audio: self.audio.as_ref(),
             listener: self.camera.as_ref().map(|c| c.position),
-            muffled: self.in_cab || self.inside_remote.is_some(),
+            muffled: self.in_cab || self.online.inside_remote.is_some(),
             riders: self.humans.as_ref().map(|h| h.riding()).unwrap_or(0),
             clock: Some(&self.clock),
             tour: self.duty.as_ref().map(|d| format!("{}/{}", d.line, d.tour)),
             walker,
-            inside_of: self.inside_remote,
+            inside_of: self.online.inside_remote,
             radio_keyed,
         };
         let updates = lan::tick(
             lan,
-            &mut self.remotes,
+            &mut self.online.remotes,
             dt,
             &self.args,
             self.player.as_mut(),
@@ -57,7 +78,7 @@ impl App {
         for u in updates {
             self.apply_world_update(u);
         }
-        let cmds = self.lan.as_mut().map(|l| l.take_commands()).unwrap_or_default();
+        let cmds = self.online.lan.as_mut().map(|l| l.take_commands()).unwrap_or_default();
         for (from, text) in cmds {
             self.lan_command(from, &text);
         }
@@ -66,7 +87,7 @@ impl App {
 
     /// A command another player's game sent ours (`LanSession::command`).
     pub(crate) fn lan_command(&mut self, from: u32, text: &str) {
-        let Some(lan) = self.lan.as_ref() else { return };
+        let Some(lan) = self.online.lan.as_ref() else { return };
         let my_id = lan.my_id;
         if let Some(ev) = text.strip_prefix("trigger ") {
             // a switch worked by a passenger of ours: only by one who is in our bus
@@ -85,7 +106,7 @@ impl App {
         if text == "voice?" {
             if lan.role == omsi_net::Role::Host {
                 let answer = crate::voice::VoiceServer::command(crate::voice::hosted().as_ref());
-                if let Some(l) = self.lan.as_mut() {
+                if let Some(l) = self.online.lan.as_mut() {
                     l.command(from, &answer);
                 }
             }
@@ -93,7 +114,7 @@ impl App {
         }
         if text.starts_with("voice ") {
             if from == 1 {
-                if let (Some(v), Some(server)) = (self.voice.as_mut(), crate::voice::VoiceServer::parse_command(text)) {
+                if let (Some(v), Some(server)) = (self.online.voice.as_mut(), crate::voice::VoiceServer::parse_command(text)) {
                     v.set_server(server);
                 }
             }
@@ -105,17 +126,17 @@ impl App {
     /// The voice chat (`voice`), once a frame of a session: started with it when the
     /// settings allow, the host's voice server asked for, the plugin told who is where.
     pub(crate) fn tick_voice(&mut self, dt: f32) {
-        let Some(lan) = self.lan.as_mut() else {
-            self.voice = None;
+        let Some(lan) = self.online.lan.as_mut() else {
+            self.online.voice = None;
             return;
         };
         // (a dedicated server has nobody to talk at its place; a joining game that lost
         // its host is in no session to talk in)
         if !self.settings.voice_chat || self.args.server.is_some() || !lan.connected {
-            self.voice = None;
+            self.online.voice = None;
             return;
         }
-        let v = self.voice.get_or_insert_with(|| crate::voice::Voice::new(crate::voice::DEFAULT_PORT));
+        let v = self.online.voice.get_or_insert_with(|| crate::voice::Voice::new(crate::voice::DEFAULT_PORT));
         match lan.role {
             omsi_net::Role::Host => {
                 // (once: hosted() reads voice.cfg)
@@ -129,10 +150,10 @@ impl App {
                 }
             }
         }
-        let lan = self.lan.as_ref().unwrap();
+        let lan = self.online.lan.as_ref().unwrap();
         let my_bus = self.player.as_ref().map(|p| p.vehicle.position);
-        let others = crate::voice::speakers(lan, &self.remotes, my_bus);
-        let inside = if self.in_cab { Some(lan.my_id) } else { self.inside_remote };
+        let others = crate::voice::speakers(lan, &self.online.remotes, my_bus);
+        let inside = if self.in_cab { Some(lan.my_id) } else { self.online.inside_remote };
         // driving a bus (not on foot): on the company radio automatically
         let on_radio = self.player.is_some() && !self.ego;
         let radio_keyed = on_radio && self.voice_radio_held();
@@ -144,7 +165,7 @@ impl App {
             radio_keyed,
         });
         let me = (lan.my_name.clone(), lan.my_id);
-        if let Some(v) = self.voice.as_mut() {
+        if let Some(v) = self.online.voice.as_mut() {
             v.tick(dt, (&me.0, me.1), listener, &others);
         }
     }
