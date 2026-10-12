@@ -13,6 +13,16 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   and blocks. Formatting only; no behaviour change.
 - The clippy warnings of the ten format crates are fixed (manual `div_ceil` and `is_multiple_of`, index loops,
   needless conversions and borrows, complex types named, doc lists). No behaviour change.
+- `omsi-render`: `lib.rs` is split into modules, with the code moved as is and no behaviour change:
+  `camera.rs`, `targets.rs` and `material.rs` for the types without logic; `gpu.rs` (adapter, video
+  memory, the OpenGL paths) and `lighting.rs`; `pipelines.rs` for the pipelines `Renderer::build` makes
+  apart from the main pass's (shadows, prepass, ambient occlusion, fog lamps, mip maps, post passes,
+  overlays, upscaling), each in a function of its own; and `renderer.rs` (the `Renderer`, its options
+  and its start), `resources.rs` (meshes, textures, materials), `scene.rs`, `frame.rs`, `draw.rs`,
+  `shaders.rs` and `surface.rs`. `render_inner` moves to `render.rs` with its passes (shadows, prepass and
+  ambient occlusion, sky cube, probe, main pass, reflections, fog lamps, glass, post, present) as
+  methods in `passes.rs`, and the tests to `tests.rs` and `tests_units.rs`: no file of the crate is
+  over 3,000 lines.
 - The HTML engine's interface with the game (`ApiValue`, `HtmlRenderer`, `HtmlRequest`, `PageApi`, `PointerKind`,
   `rebase_css_urls`) moves into `omsi-sim/src/htmlengine/page.rs`, re-exported where it was
   (`vehicle_api`, `htmltex`): the engine no longer reaches into the rest of `omsi-sim`, the first step of the
@@ -42,6 +52,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `crates/omsi-app/tests/golden/offscreen_synthetic/`. Test and CI only; no behaviour change.
 
 ### Fixed
+- AI buses of a depot group whose depot file exists nowhere (Mapa Transcol's garages, whose buses carry
+  only `Transcol.hof`) drove with a blank destination sign. They now run with the first depot file of their
+  own folder, as a plain group's buses do, and a bus with no depot file at all is logged as a warning (#58).
 - The offscreen golden's synthetic root kept the box next to the map, where the game does not look for
   scenery objects, so the picture showed only ground and sky and the "box is in the picture" check failed
   on any adapter. The box now sits in `Sceneryobjects/Golden/` with its mesh in `model/` and its texture in
