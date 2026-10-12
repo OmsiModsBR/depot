@@ -19,7 +19,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   apart from the main pass's (shadows, prepass, ambient occlusion, fog lamps, mip maps, post passes,
   overlays, upscaling), each in a function of its own; and `renderer.rs` (the `Renderer`, its options
   and its start), `resources.rs` (meshes, textures, materials), `scene.rs`, `frame.rs`, `draw.rs`,
-  `shaders.rs` and `surface.rs`.
+  `shaders.rs` and `surface.rs`. `render_inner` moves to `render.rs` with its passes (shadows, prepass and
+  ambient occlusion, sky cube, probe, main pass, reflections, fog lamps, glass, post, present) as
+  methods in `passes.rs`, and the tests to `tests.rs` and `tests_units.rs`: no file of the crate is
+  over 3,000 lines.
 
 ### Added
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
