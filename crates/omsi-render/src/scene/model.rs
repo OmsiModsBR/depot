@@ -1,16 +1,12 @@
 //! The scene and what it is made of: the ids, the render phases, `Instance` and `Scene`.
 use super::bounds::InstanceBounds;
-use crate::assets::{BindKey, GpuMesh, GpuTexture, Material, MeshPage, PbrMaps};
+use crate::assets::{
+    BindKey, GpuMesh, GpuTexture, Material, MaterialId, MeshId, MeshPage, PbrMaps, TextureId,
+};
 use crate::gpu::GpuArray;
 use crate::lighting::{Corona, PointLight, SmokeParticle};
 use glam::{DVec3, Mat4};
 use std::collections::HashMap;
-
-pub type MeshId = usize;
-
-pub type TextureId = usize;
-
-pub type MaterialId = usize;
 
 /// The ordered world passes used by OMSI for ground and scenery geometry.
 ///

@@ -2,14 +2,14 @@
 //! the batches of the depth prepass and the main pass.
 
 use super::frame::{DrawLists, FrameClock, FrameContext};
-use super::state::{Renderer, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};
+use super::state::Renderer;
 use crate::assets::AlphaMode;
 use crate::passes::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
     horizontal_sort_distance, in_scope, instance_depth_bias, nearest_by_origin, origin_key,
     pipe_code, run_parts, surface_depth_coverage, world_surface_phase, Batch, DrawItem,
     PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE, PIPE_SURFACE_DEPTH,
-    PIPE_TERRAIN_PAINT,
+    PIPE_TERRAIN_PAINT, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
 };
 use crate::scene::{point_in_vehicle_box, Instance, RenderPhase, Scene, CULL_BLOCK};
 use glam::{DVec3, Mat4, Vec3};

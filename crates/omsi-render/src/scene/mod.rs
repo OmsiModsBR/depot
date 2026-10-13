@@ -10,8 +10,9 @@ mod model;
 mod triple;
 mod visibility;
 
-pub use camera::{Camera, Vertex};
-pub use model::{Instance, MaterialId, MeshId, RenderPhase, Scene, TextureId};
+pub use crate::assets::{MaterialId, MeshId, TextureId, Vertex};
+pub use camera::Camera;
+pub use model::{Instance, RenderPhase, Scene};
 pub use triple::{panel_width, ScreenView, TripleScreen};
 
 pub(crate) use bounds::InstanceBounds;

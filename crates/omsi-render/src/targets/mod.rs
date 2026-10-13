@@ -4,6 +4,7 @@
 mod ao;
 mod cache;
 mod hdr;
+mod puddles;
 
 pub(crate) use cache::TargetCache;
-pub(crate) use hdr::HdrTargets;
+pub(crate) use puddles::PuddleTargets;

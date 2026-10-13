@@ -2,8 +2,9 @@
 //! and recycling their slots.
 
 use super::material::{AlphaMode, TexAddressing};
+use super::Vertex;
 use crate::renderer::Renderer;
-use crate::scene::{Scene, Vertex};
+use crate::scene::Scene;
 
 /// The placeholders freed scene slots share: an empty vertex and index buffer and a plain
 /// material bind group. Making new ones for every freed slot (two buffers per mesh, a

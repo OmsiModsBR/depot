@@ -2,10 +2,11 @@
 //! what the picture draws and writes the camera uniform into a `FrameContext`; the draw lists
 //! (`lists.rs`) and the passes (`encode.rs`) follow, and the commands are submitted at the end.
 
-use super::state::{Renderer, HDR_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
+use super::state::Renderer;
+use crate::gpu::HDR_FORMAT;
 use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
-use crate::passes::{Batch, ShadowSchedule};
+use crate::passes::{Batch, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
 use crate::scene::{point_in_vehicle_box, Camera, CameraUniform, Scene, TextureId};
 use crate::sky::CLOUD_ORIGIN_PERIOD;
 use glam::{DVec3, Mat4, Vec3};

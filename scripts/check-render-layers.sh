@@ -3,8 +3,8 @@
 #
 # Each file under src/<domain>/ may name `crate::<other>` only for a domain on a lower layer:
 #
-#   api > renderer > output > passes | targets | effects > scene > assets | lighting | sky
-#       > gpu | shaders
+#   api > renderer > output > effects > passes > targets > scene > sky > assets | lighting
+#       > shaders > gpu
 #
 # Domains on the same layer do not import each other, nothing imports `api`, and only
 # `renderer` and `api` import `output`. The crate root (lib.rs) and the tests are not checked.
@@ -19,13 +19,17 @@ cd "$(dirname "$0")/../crates/omsi-render/src"
 
 layer() {
     case "$1" in
-        api) echo 6 ;;
-        renderer) echo 5 ;;
-        output) echo 4 ;;
-        passes | targets | effects) echo 3 ;;
-        scene) echo 2 ;;
-        assets | lighting | sky) echo 1 ;;
-        gpu | shaders) echo 0 ;;
+        api) echo 10 ;;
+        renderer) echo 9 ;;
+        output) echo 8 ;;
+        effects) echo 7 ;;
+        passes) echo 6 ;;
+        targets) echo 5 ;;
+        scene) echo 4 ;;
+        sky) echo 3 ;;
+        assets | lighting) echo 2 ;;
+        shaders) echo 1 ;;
+        gpu) echo 0 ;;
         *) echo "" ;;
     esac
 }

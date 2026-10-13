@@ -1,12 +1,14 @@
 //! What the scene draws with on the GPU: meshes, textures and materials, and their life cycle
 //! (freeing them and recycling their slots). Knows nothing of a frame or of the passes.
 
+mod ids;
 mod lifecycle;
 mod material;
 mod mesh;
 mod store;
 mod texture;
 
+pub use ids::{MaterialId, MeshId, TextureId, Vertex};
 pub use material::{AlphaMode, Material, MaterialExtra, PbrMaps, TexAddressing};
 pub use mesh::{prepare_mesh, prepare_meshes, GpuMesh, PreparedMesh};
 pub use texture::{fit_texture, prepare_texture, GpuTexture, PreparedTexture};

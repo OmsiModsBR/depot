@@ -2,10 +2,10 @@
 //! on the night sky and the light and glare they give the camera.
 
 use super::model::{drawn_by, gpu_light, GpuPointLight, LightMode, PointLight, LAMP_E};
+use super::smoothstep;
 use crate::gpu::GpuArray;
 use crate::renderer::Renderer;
 use crate::scene::{Camera, Scene};
-use crate::sky::atmosphere;
 use glam::{DVec3, Mat4, Vec3};
 
 pub(crate) const LIGHT_CELL: f32 = 25.0;
@@ -155,13 +155,9 @@ pub(crate) fn view_lamp_light(
             } else {
                 let mut e = core * core / (d2 * d2 + core.powi(4)).sqrt() * window;
                 if l.direction.length_squared() > 1e-6 {
-                    e *= atmosphere::smoothstep(
-                        l.cone[1],
-                        l.cone[0],
-                        t.dot(l.direction.normalize()),
-                    );
+                    e *= smoothstep(l.cone[1], l.cone[0], t.dot(l.direction.normalize()));
                 } else if l.housed {
-                    e *= 0.05 + 0.95 * atmosphere::smoothstep(-0.1, 0.3, -t.z);
+                    e *= 0.05 + 0.95 * smoothstep(-0.1, 0.3, -t.z);
                 }
                 e
             };
@@ -215,9 +211,9 @@ pub(crate) fn glare_veil(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forwar
         let k = if l.beam != 0.0 {
             headlamp_profile(t, l.direction, l.beam > 0.0) / (core * core).max(1e-3)
         } else if l.direction.length_squared() > 1e-6 {
-            atmosphere::smoothstep(l.cone[1], l.cone[0], t.dot(l.direction.normalize()))
+            smoothstep(l.cone[1], l.cone[0], t.dot(l.direction.normalize()))
         } else if l.housed {
-            0.05 + 0.95 * atmosphere::smoothstep(-0.1, 0.3, -t.z)
+            0.05 + 0.95 * smoothstep(-0.1, 0.3, -t.z)
         } else {
             1.0
         };
@@ -238,12 +234,11 @@ pub(crate) fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
         return 0.0;
     }
     let across = (t.x * fwd.y - t.y * fwd.x).abs() / ahead;
-    let wide =
-        0.12 * atmosphere::smoothstep(1.0, 0.45, across) + 0.88 * (-across * across / 0.06).exp();
+    let wide = 0.12 * smoothstep(1.0, 0.45, across) + 0.88 * (-across * across / 0.06).exp();
     let drop = -t.z / t.truncate().length().max(1e-3);
     let mut up = (0.06 / drop.abs().max(1e-4)).powf(3.4).min(1.0);
     if low {
-        up *= atmosphere::smoothstep(-0.012, 0.025, drop);
+        up *= smoothstep(-0.012, 0.025, drop);
         return wide * up;
     }
     let hot = (-across * across / 0.012 - drop * drop / 0.0004).exp();

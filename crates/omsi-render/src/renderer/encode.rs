@@ -2,7 +2,8 @@
 //! delivery to its output.
 
 use super::frame::{DrawLists, FrameClock, FrameContext, FrameEncoders};
-use super::state::{Renderer, HDR_FORMAT};
+use super::state::Renderer;
+use crate::gpu::HDR_FORMAT;
 use crate::passes::record_bundles;
 use crate::scene::Scene;
 
@@ -187,9 +188,23 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
+        // (the AO's fog target and the picture the fog is added onto: the puddles' when they
+        // drew this frame)
+        let fog = self
+            .targets
+            .ao
+            .as_ref()
+            .and_then(|ao| ao.fog_bg.as_ref().map(|bg| (&ao.fog_view, bg)));
+        let fog_picture = self.targets.hdr_targets.get(&(width, height)).map(|h| {
+            h.puddles
+                .as_ref()
+                .filter(|_| puddles_on)
+                .map_or(&h.view, |p| &p.view)
+        });
         self.fog_lamps.encode_fog_lamps(
             &self.queue,
-            &self.targets,
+            fog,
+            fog_picture,
             scene,
             &mut encoder,
             lighting,
@@ -199,7 +214,6 @@ impl Renderer {
             enhanced,
             masked_frame,
             prepass_on,
-            puddles_on,
             with_overlays,
             &clock.tset,
             &mut clock.timed,

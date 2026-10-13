@@ -3,9 +3,7 @@
 //! The WGSL files sit beside this module, one folder per domain that draws with them;
 //! `common/` holds the pieces several shaders include.
 
-use crate::gpu::{array_path, basic_pipelines, ArrayPath, ARRAY_TEX_WIDTH};
-use crate::renderer::rt_gbuf;
-use crate::sky::clouds;
+use crate::gpu::{array_path, basic_pipelines, rt_gbuf, ArrayPath, ARRAY_TEX_WIDTH};
 
 /// The scene shader: the vanilla path and the enhanced fragment shader in one module.
 ///
@@ -165,107 +163,6 @@ pub(crate) fn lean_scene(src: String) -> String {
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
     out
-}
-
-/// The enhanced clouds' noise textures (clouds.rs), made once: the shape map (2-D RGBA8)
-/// and the detail volume (3-D R8), both with their mip chains, and a repeating sampler.
-pub(crate) fn cloud_noise_textures(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> (wgpu::TextureView, wgpu::TextureView, wgpu::Sampler, Vec<u8>) {
-    let t0 = std::time::Instant::now();
-    let (shape, detail) = std::thread::scope(|s| {
-        let a = s.spawn(clouds::shape_map);
-        let b = s.spawn(clouds::detail_volume);
-        (
-            a.join().expect("cloud shape"),
-            b.join().expect("cloud detail"),
-        )
-    });
-    let make = |label: &str,
-                size: u32,
-                dim: wgpu::TextureDimension,
-                format: wgpu::TextureFormat,
-                bpp: u32,
-                levels: &[Vec<u8>]| {
-        let depth = if dim == wgpu::TextureDimension::D3 {
-            size
-        } else {
-            1
-        };
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: depth,
-            },
-            mip_level_count: levels.len() as u32,
-            sample_count: 1,
-            dimension: dim,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        for (m, data) in levels.iter().enumerate() {
-            let e = (size >> m).max(1);
-            let d = if dim == wgpu::TextureDimension::D3 {
-                e
-            } else {
-                1
-            };
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &tex,
-                    mip_level: m as u32,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(e * bpp),
-                    rows_per_image: Some(e),
-                },
-                wgpu::Extent3d {
-                    width: e,
-                    height: e,
-                    depth_or_array_layers: d,
-                },
-            );
-        }
-        tex.create_view(&wgpu::TextureViewDescriptor::default())
-    };
-    let shape_view = make(
-        "cloud shape",
-        clouds::SHAPE_SIZE,
-        wgpu::TextureDimension::D2,
-        wgpu::TextureFormat::Rgba8Unorm,
-        4,
-        &shape,
-    );
-    let detail_view = make(
-        "cloud detail",
-        clouds::DETAIL_SIZE,
-        wgpu::TextureDimension::D3,
-        wgpu::TextureFormat::R8Unorm,
-        1,
-        &detail,
-    );
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("cloud noise"),
-        address_mode_u: wgpu::AddressMode::Repeat,
-        address_mode_v: wgpu::AddressMode::Repeat,
-        address_mode_w: wgpu::AddressMode::Repeat,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Linear,
-        ..Default::default()
-    });
-    log::info!("cloud noise made in {:.2} s", t0.elapsed().as_secs_f32());
-    // (the shape map's second level kept for the clouds' shadow, `cloud_sun_transmittance`)
-    let cpu = shape.get(1).cloned().unwrap_or_default();
-    (shape_view, detail_view, sampler, cpu)
 }
 
 /// The sky dome (both paths) and the enhanced reflection probe.

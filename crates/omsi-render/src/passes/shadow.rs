@@ -1,13 +1,27 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
 
 use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
-use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer};
+use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer, DEPTH_FORMAT};
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
-use crate::renderer::{
-    DEPTH_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
-};
 use crate::scene::Scene;
 use glam::{DVec3, Mat4, Vec3};
+
+/// Half size of the area around the camera covered by the near shadow cascade (m).
+pub const SHADOW_RANGE: f32 = 140.0;
+
+/// Half size of the far cascade (m): coarser, but reaches the whole visible street.
+pub const SHADOW_RANGE_FAR: f32 = 700.0;
+
+/// Half size of the close cascade around the camera (m). The near cascade's texel is
+/// 280 m / 2048 = 14 cm, and a moving bus's shadow edge stepped from texel to texel: the
+/// shadow trembled while driving. The close map (the right half of the near map's atlas)
+/// has 3 cm texels for the bus and everything next to it.
+pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
+
+/// The close cascade's map is drawn no bigger than this (texels a side), whatever the shadow
+/// setting: 3 cm texels. At the 4096 setting it had been 1.6 cm, and drawing it was a third
+/// of the shadow pass's 4.6 ms.
+pub(crate) const SHADOW_CLOSE_MAX: u32 = 2048;
 
 /// The sun's shadow maps (near and far), their sampler, and the pipelines drawn into them:
 /// the clearing one and one per kind and cascade.

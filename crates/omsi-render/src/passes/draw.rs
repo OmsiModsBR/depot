@@ -3,8 +3,9 @@
 
 use super::main::PassPipelines;
 use crate::assets::{AlphaMode, Material};
-use crate::gpu::CATCHING;
-use crate::renderer::{rt_gbuf, AUX_FORMAT, DEPTH_FORMAT, GBUF_FORMAT, HDR_FORMAT, MASK_FORMAT};
+use crate::gpu::{
+    rt_gbuf, AUX_FORMAT, CATCHING, DEPTH_FORMAT, GBUF_FORMAT, HDR_FORMAT, MASK_FORMAT,
+};
 use crate::scene::{Instance, MaterialId, RenderPhase, Scene};
 use glam::{DVec3, Vec3};
 use std::collections::HashMap;

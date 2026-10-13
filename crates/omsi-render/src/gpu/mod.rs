@@ -7,11 +7,13 @@ mod buffers;
 mod caps;
 mod context;
 mod errors;
+mod formats;
 mod open;
 mod timers;
 
 pub use caps::{gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
 pub use errors::{catch, catching};
+pub use formats::{DEPTH_FORMAT, MSAA};
 
 #[cfg(test)]
 pub(crate) use arrays::array_tex_spans;
@@ -25,5 +27,8 @@ pub(crate) use caps::{
 };
 pub(crate) use context::{GpuContext, Samplers};
 pub(crate) use errors::{gpu_error_text, CATCHING};
+pub(crate) use formats::{
+    color_targets, rt_gbuf, AUX_FORMAT, GBUF_FORMAT, HDR_FORMAT, MASK_FORMAT, RT_GBUF,
+};
 pub(crate) use open::{basic_pipelines, fallback_load, fallback_store, BASIC_PIPELINES};
 pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};

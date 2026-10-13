@@ -15,9 +15,9 @@
 //! as clear, 7 the rays unfiltered, 8 / 9 / 10 the reflections' rays and weights (OMSI_DEBUG_ENHANCED=1 and 2 show the traced shadow and occlusion).
 
 use crate::assets::AlphaMode;
-use crate::gpu::pass_timer;
+use crate::gpu::{pass_timer, HDR_FORMAT};
 use crate::lighting::Lighting;
-use crate::renderer::{Renderer, HDR_FORMAT};
+use crate::renderer::Renderer;
 use crate::scene::{Camera, Instance, MeshId, Scene, Vertex};
 use glam::{DVec3, Mat4};
 use std::collections::HashMap;

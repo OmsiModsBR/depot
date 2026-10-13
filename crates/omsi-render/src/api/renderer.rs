@@ -5,11 +5,11 @@ use crate::assets::{fit_size, next_gen, texture_bytes, GpuTexture, RT_BUFFERS};
 use crate::gpu::{
     basic_pipelines, buffer_init, dedicated_vram_mb, fallback_load, fallback_store, gpu_error_text,
     vulkan_vram_mb, ArrayPath, GpuArray, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, ARRAY_PATH,
-    BASIC_PIPELINES, GL_BACKEND,
+    BASIC_PIPELINES, DEPTH_FORMAT, GL_BACKEND, MASK_FORMAT, MSAA,
 };
 use crate::lighting::Lighting;
 use crate::output::Output;
-use crate::renderer::{scene_scale_for, RenderOptions, Renderer, DEPTH_FORMAT, MASK_FORMAT, MSAA};
+use crate::renderer::{scene_scale_for, RenderOptions, Renderer};
 use crate::scene::{panel_width, Camera, Scene, TextureId, TripleScreen};
 use anyhow::anyhow;
 use anyhow::{Context, Result};

@@ -1,10 +1,13 @@
 //! Making everything the renderer draws with, once at start (`Renderer::build`).
 
 use super::options::RenderOptions;
-use super::state::{color_targets, Renderer, DEPTH_FORMAT, RT_GBUF};
+use super::state::Renderer;
 use crate::assets::{AssetStore, TexAddressing};
 use crate::effects::{puddles, rt};
-use crate::gpu::{basic_pipelines, sixteen_texture_units, GpuContext, Samplers, GL_BACKEND};
+use crate::gpu::{
+    basic_pipelines, color_targets, sixteen_texture_units, GpuContext, Samplers, DEPTH_FORMAT,
+    GL_BACKEND, RT_GBUF,
+};
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::{
