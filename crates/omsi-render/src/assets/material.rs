@@ -22,7 +22,8 @@ pub(crate) struct MaterialUniform {
     /// y an occlusion, z a roughness, w a metalness channel.
     pub(crate) pbr: [f32; 4],
     /// x: a screen (`MaterialExtra::screen`); y: 1 `[matl_texadress_border]`, 2
-    /// `[matl_texadress_mirroronce]`; z the border colour's rgb packed as r * 65536 + g * 256 + b (bytes), w its alpha.
+    /// `[matl_texadress_mirroronce]`; z the border colour's rgb packed as r * 65536 + g * 256 + b
+    /// (bytes), w its alpha.
     pub(crate) flags: [f32; 4],
     /// rgb: the D3D material's ambient colour, which takes the ambient light (C); w: 1 for
     /// a texture that is a season's snow picture (no snow laid over it), 2 the map's water,
@@ -641,26 +642,29 @@ impl Renderer {
                 .map(|t| t.view.clone())
                 .unwrap_or_else(|| or.view.clone())
         };
-        let env_view = view(maps.envmap.map(|e| e.0), &self.black_texture);
-        let night_view = view(maps.nightmap, &self.black_texture);
-        let light_view = view(maps.lightmap, &self.black_texture);
-        let diffuse_view = view(maps.texture, &self.white_texture);
-        let trans_view = view(maps.transmap.map(|t| t.0), &self.white_texture);
+        let env_view = view(maps.envmap.map(|e| e.0), &self.assets.black_texture);
+        let night_view = view(maps.nightmap, &self.assets.black_texture);
+        let light_view = view(maps.lightmap, &self.assets.black_texture);
+        let diffuse_view = view(maps.texture, &self.assets.white_texture);
+        let trans_view = view(maps.transmap.map(|t| t.0), &self.assets.white_texture);
         // a mask or bump map without its own texture reads white (full mask, flat)
-        let mask_view = view(maps.env_mask, &self.white_texture);
-        let bump_view = view(maps.bump.map(|b| b.0), &self.white_texture);
+        let mask_view = view(maps.env_mask, &self.assets.white_texture);
+        let bump_view = view(maps.bump.map(|b| b.0), &self.assets.white_texture);
         // (without a PBR set: a flat normal, and full occlusion/roughness/metal channels the
         // shader leaves unread by its flags)
-        let normal_view = view(maps.pbr.and_then(|p| p.normal), &self.flat_normal_texture);
-        let orm_view = view(maps.pbr.and_then(|p| p.orm), &self.white_texture);
+        let normal_view = view(
+            maps.pbr.and_then(|p| p.normal),
+            &self.assets.flat_normal_texture,
+        );
+        let orm_view = view(maps.pbr.and_then(|p| p.orm), &self.assets.white_texture);
         let sampler = match address {
-            TexAddressing::Wrap => &self.sampler,
-            TexAddressing::Mirror => &self.mirror_sampler,
-            TexAddressing::Clamp | TexAddressing::MirrorOnce => &self.clamp_sampler,
+            TexAddressing::Wrap => &self.samplers.sampler,
+            TexAddressing::Mirror => &self.samplers.mirror_sampler,
+            TexAddressing::Clamp | TexAddressing::MirrorOnce => &self.samplers.clamp_sampler,
         };
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &self.material_layout,
+            layout: &self.layouts.material_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -708,7 +712,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 11,
-                    resource: wgpu::BindingResource::Sampler(&self.clamp_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.clamp_sampler),
                 },
             ],
         })

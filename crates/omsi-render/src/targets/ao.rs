@@ -20,7 +20,13 @@ pub(crate) struct AoTargets {
 impl Renderer {
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
     pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
-        if self.ao.as_ref().map(|a| a.size == (w, h)).unwrap_or(false) {
+        if self
+            .targets
+            .ao
+            .as_ref()
+            .map(|a| a.size == (w, h))
+            .unwrap_or(false)
+        {
             return false;
         }
         let size = wgpu::Extent3d {
@@ -74,11 +80,11 @@ impl Renderer {
         let bg = |label: &str, tex: &wgpu::TextureView| {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(label),
-                layout: &self.ao_layout,
+                layout: &self.ssao.ao_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.ao_buf.as_entire_binding(),
+                        resource: self.ssao.ao_buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -112,16 +118,16 @@ impl Renderer {
                 view_formats: &[],
             })
             .create_view(&Default::default());
-        let fog_bg = self.fog_lamps_pipeline.is_some().then(|| {
+        let fog_bg = self.fog_lamps.fog_lamps_pipeline.is_some().then(|| {
             // (the half-size pass reads no result: the layout wants one, the AO's is bound)
             [&ao_view, &fog_view].map(|read| {
                 self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("fog lamps"),
-                    layout: &self.fog_lamps_layout,
+                    layout: &self.fog_lamps.fog_lamps_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: self.fog_lamps_buf.as_entire_binding(),
+                            resource: self.fog_lamps.fog_lamps_buf.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -135,7 +141,7 @@ impl Renderer {
                 })
             })
         });
-        self.ao = Some(AoTargets {
+        self.targets.ao = Some(AoTargets {
             size: (w, h),
             depth_view,
             ao_view,

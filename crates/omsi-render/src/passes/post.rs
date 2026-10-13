@@ -1,7 +1,8 @@
 //! The enhanced post passes: glow, exposure metering and tone mapping.
 
-use super::draw::{float_tex, post_pass};
-use crate::gpu::pass_timer;
+use super::draw::post_pass;
+use crate::assets::GpuTexture;
+use crate::gpu::{float_tex, pass_timer};
 use crate::lighting::{meter_tuning, tone_contrast, Lighting};
 use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
@@ -28,6 +29,10 @@ pub(crate) struct PostPipelines {
     pub(crate) tonemap: wgpu::RenderPipeline,
     pub(crate) tonemap_encoded: wgpu::RenderPipeline,
     pub(crate) fxaa: wgpu::RenderPipeline,
+    /// Their bind group layout, uniform buffer and sampler.
+    pub(crate) post_layout: wgpu::BindGroupLayout,
+    pub(crate) post_buf: wgpu::Buffer,
+    pub(crate) post_sampler: wgpu::Sampler,
 }
 
 /// The enhanced path's post passes (post.wgsl): their bind group layout, uniform buffer,
@@ -36,12 +41,7 @@ pub(crate) fn post_pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     hdr_format: wgpu::TextureFormat,
-) -> (
-    wgpu::BindGroupLayout,
-    wgpu::Buffer,
-    wgpu::Sampler,
-    PostPipelines,
-) {
+) -> PostPipelines {
     // --- enhanced graphics: the post passes (glow, metering, adaptation, tone curve, FXAA)
     log::info!("renderer: compiling the post passes shaders");
     let post_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -124,7 +124,7 @@ pub(crate) fn post_pipelines(
             cache: None,
         })
     };
-    let post = PostPipelines {
+    PostPipelines {
         down_first: post_pipeline("fs_down_first", hdr_format),
         down: post_pipeline("fs_down", hdr_format),
         up: post_pipeline("fs_up", hdr_format),
@@ -133,8 +133,10 @@ pub(crate) fn post_pipelines(
         tonemap: post_pipeline("fs_tonemap", format),
         tonemap_encoded: post_pipeline("fs_tonemap_encoded", wgpu::TextureFormat::Rgba8Unorm),
         fxaa: post_pipeline("fs_fxaa", format),
-    };
-    (post_layout, post_buf, post_sampler, post)
+        post_layout,
+        post_buf,
+        post_sampler,
+    }
 }
 
 impl Renderer {
@@ -173,14 +175,14 @@ impl Renderer {
             // adaptation to it is the light model's already: lifted by the meter on top, a
             // lamp-lit street came out most of a stop brighter than any eye sees it)
             let mut m = meter_tuning();
-            let after_sunset = self.sky_state.as_ref().map_or(0.0, |st| {
+            let after_sunset = self.sky.sky_state.as_ref().map_or(0.0, |st| {
                 ((0.052 - st.input.sun_dir.normalize_or_zero().z) / 0.157).clamp(0.0, 1.0)
             });
             m[3] *= 1.0
                 - atmosphere::smoothstep(
                     3.0,
                     7.0,
-                    self.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
+                    self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
                 );
             let pu = PostUniform {
                 // the metering may take a little off a bright picture and add a little to a
@@ -212,13 +214,13 @@ impl Renderer {
                 c: [
                     m[0],
                     m[5],
-                    self.exposure.map(f32::exp).unwrap_or(1.0),
+                    self.adaptation.exposure.map(f32::exp).unwrap_or(1.0),
                     lighting.led_glow * 10.0,
                 ],
                 // Enhanced+: its grade, the vignette and the sharpening; both: the tone
                 // curve's contrast (post.wgsl `natural_tone`)
                 d: {
-                    let contrast = tone_contrast(self.exposure.unwrap_or(0.0));
+                    let contrast = tone_contrast(self.adaptation.exposure.unwrap_or(0.0));
                     if rt_frame && omsi_cfg::env::var_os("OMSI_NO_RT_GRADE").is_none() {
                         [1.0, 0.08, 0.0, contrast]
                     } else {
@@ -227,13 +229,13 @@ impl Renderer {
                 },
             };
             self.queue
-                .write_buffer(&self.post_buf, 0, bytemuck::bytes_of(&pu));
+                .write_buffer(&self.post.post_buf, 0, bytemuck::bytes_of(&pu));
             // (a mirror's small picture goes without FXAA)
             let fxaa = with_overlays
                 && self.options.fxaa
                 && self.options.msaa <= 1
                 && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
-            if let Some(h) = self.hdr_targets.get(&(width, height)) {
+            if let Some(h) = self.targets.hdr_targets.get(&(width, height)) {
                 let puddles = h.puddles.as_ref().filter(|_| puddles_on);
                 let levels = h.down.len();
                 for i in 0..levels {
@@ -259,30 +261,36 @@ impl Renderer {
                 if lead_view {
                     post_pass(
                         encoder,
-                        &self.meter_view,
+                        &self.adaptation.meter_view,
                         None,
                         &self.post.meter,
                         &h.meter_bg,
                     );
-                    let front = self.adapt_front;
+                    let front = self.adaptation.adapt_front;
                     post_pass(
                         encoder,
-                        &self.adapt_views[1 - front],
+                        &self.adaptation.adapt_views[1 - front],
                         None,
                         &self.post.adapt,
-                        &self.adapt_bg[front],
+                        &self.adaptation.adapt_bg[front],
                     );
-                    self.adapt_front = 1 - front;
+                    self.adaptation.adapt_front = 1 - front;
                 }
                 // (a device lost since this frame began took the meter's buffer as well)
                 let lost = self.device_lost().is_some();
                 if let Some(log) = self
+                    .diagnostics
                     .exposure_log
                     .as_mut()
                     .filter(|_| with_overlays && !lost)
                 {
-                    let pre = self.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
-                    log.sample(encoder, &self.adapt_views[self.adapt_front], pre, m);
+                    let pre = self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
+                    log.sample(
+                        encoder,
+                        &self.adaptation.adapt_views[self.adaptation.adapt_front],
+                        pre,
+                        m,
+                    );
                 }
                 // (timed on its last pass: the glow chain with the metering, see GpuTimers)
                 for i in (0..levels).rev() {
@@ -294,8 +302,8 @@ impl Renderer {
                     post_pass(encoder, &h.up[i], timer, &self.post.up, &h.up_bg[i]);
                 }
                 let final_view = if fxaa { &h.ldr } else { scene_view };
-                let tonemap_bg =
-                    &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)[self.adapt_front];
+                let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)
+                    [self.adaptation.adapt_front];
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("tone map"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -342,7 +350,7 @@ impl Renderer {
                     pass.draw(0..3, 0..1);
                 }
                 if !overlays.is_empty() && !scaled {
-                    pass.set_pipeline(&self.overlay_pipeline_1x);
+                    pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
                     for (k, _) in overlays.iter().enumerate() {
                         if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                             pass.set_bind_group(0, bg, &[]);
@@ -351,6 +359,97 @@ impl Renderer {
                     }
                 }
             }
+        }
+    }
+}
+
+/// The eye's adaptation: the metered luminance, the adapted value and the exposure as it follows
+/// the sky.
+pub(crate) struct Exposure {
+    /// The metered mean log luminance (1x1), and the adapted value in two textures drawn
+    /// into by turns (`adapt_front` is the current one), with their bind groups.
+    pub(crate) meter_view: wgpu::TextureView,
+    pub(crate) adapt_views: [wgpu::TextureView; 2],
+    pub(crate) adapt_bg: [wgpu::BindGroup; 2],
+    pub(crate) adapt_front: usize,
+    /// The lamps' and headlights' light on what the camera looks at (`view_lamp_light`),
+    /// which the eye adapts to by night.
+    pub(crate) view_lamps: Option<f32>,
+    /// The pre-exposure (natural log) as it follows the sky's.
+    pub(crate) exposure: Option<f32>,
+}
+
+impl Exposure {
+    /// The meter's and the adapted value's textures and their bind groups.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        post: &PostPipelines,
+        white_texture: &GpuTexture,
+        hdr_format: wgpu::TextureFormat,
+    ) -> Self {
+        let one = wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        };
+        let tiny = |label: &str| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: one,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: hdr_format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        let meter_view = tiny("exposure meter");
+        let adapt_views = [tiny("exposure a"), tiny("exposure b")];
+        // adapt_bg[k] reads the meter and adapt[k] (and draws into the other one)
+        let adapt_bg = [0usize, 1].map(|k| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("exposure"),
+                layout: &post.post_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: post.post_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&meter_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&post.post_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&adapt_views[k]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&white_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&white_texture.view),
+                    },
+                ],
+            })
+        });
+        Self {
+            meter_view,
+            adapt_views,
+            adapt_bg,
+            adapt_front: 0,
+            view_lamps: None,
+            exposure: None,
         }
     }
 }

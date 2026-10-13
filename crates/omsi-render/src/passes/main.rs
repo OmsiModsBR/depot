@@ -4,6 +4,7 @@ use super::draw::{
     encode_batches, encode_batches_filtered, main_pipeline, Batch, PIPE_ALPHA_TEST, PIPE_BLEND,
     PIPE_BLEND_NO_WRITE,
 };
+use crate::assets::upload_texture;
 use crate::gpu::pass_timer;
 use crate::lighting::Lighting;
 use crate::renderer::Renderer;
@@ -76,7 +77,7 @@ impl Renderer {
         // reject them first). The prepass still supplies AO; colour rebuilds its depth.
         // A depth-writing window in the colour pass must not replace the road receiver.
         let share_depth =
-            prepass_on && single && self.ao.is_some() && !has_presurface && !puddles_wanted;
+            prepass_on && single && self.targets.ao.is_some() && !has_presurface && !puddles_wanted;
         let targets = if share_depth {
             None
         } else {
@@ -119,8 +120,10 @@ impl Renderer {
                 })
         });
         if msaa_prepass {
-            if let (Some(pipes), Some(t)) = (self.prepass_msaa_pipelines.as_ref(), targets.as_ref())
-            {
+            if let (Some(pipes), Some(t)) = (
+                self.prepass.prepass_msaa_pipelines.as_ref(),
+                targets.as_ref(),
+            ) {
                 let mut pass = lead.as_mut().unwrap_or(&mut *encoder).begin_render_pass(
                     &wgpu::RenderPassDescriptor {
                         label: Some("msaa depth prepass"),
@@ -154,7 +157,7 @@ impl Renderer {
             }
         }
         let msaa_prepass =
-            msaa_prepass && self.prepass_msaa_pipelines.is_some() && targets.is_some();
+            msaa_prepass && self.prepass.prepass_msaa_pipelines.is_some() && targets.is_some();
         let mut main_parts: Vec<wgpu::CommandEncoder> = Vec::new();
         {
             // The enhanced sky dome was meant to cover everything, so this used to clear to
@@ -179,11 +182,11 @@ impl Renderer {
             let msaa_color = targets.as_ref().map(|t| &t.0);
             let depth_view: &wgpu::TextureView = match &targets {
                 Some(t) => &t.1,
-                None => &self.ao.as_ref().unwrap().depth_view,
+                None => &self.targets.ao.as_ref().unwrap().depth_view,
             };
             // the enhanced path draws into a high-range picture the post pass then grades
             let hdr = if masked_frame {
-                self.hdr_targets.get(&(width, height))
+                self.targets.hdr_targets.get(&(width, height))
             } else {
                 None
             };
@@ -209,7 +212,7 @@ impl Renderer {
                     if lighting.enhanced
                         && !enhanced
                         && !with_overlays
-                        && self.sky_state.is_some()
+                        && self.sky.sky_state.is_some()
                         && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none() =>
                 {
                     p
@@ -339,12 +342,12 @@ impl Renderer {
                         if let Some(sky) = &scene.sky_bind_group {
                             pass.set_pipeline(sky_pipe);
                             pass.set_bind_group(1, sky, &[]);
-                            pass.set_vertex_buffer(0, self.sky_mesh.0.slice(..));
+                            pass.set_vertex_buffer(0, self.sky.sky_mesh.0.slice(..));
                             pass.set_index_buffer(
-                                self.sky_mesh.1.slice(..),
+                                self.sky.sky_mesh.1.slice(..),
                                 wgpu::IndexFormat::Uint32,
                             );
-                            pass.draw_indexed(0..self.sky_mesh.2, 0, 0..1);
+                            pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
                         }
                     }
                     pass.execute_bundles(
@@ -439,9 +442,9 @@ impl Renderer {
             if let Some(sky) = scene.sky_bind_group.as_ref().filter(|_| parts == 1) {
                 pass.set_pipeline(sky_pipe);
                 pass.set_bind_group(1, sky, &[]);
-                pass.set_vertex_buffer(0, self.sky_mesh.0.slice(..));
-                pass.set_index_buffer(self.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..self.sky_mesh.2, 0, 0..1);
+                pass.set_vertex_buffer(0, self.sky.sky_mesh.0.slice(..));
+                pass.set_index_buffer(self.sky.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
             }
             if main_bundles.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
@@ -458,7 +461,7 @@ impl Renderer {
             if scene.smoke_count > 0 && omsi_cfg::env::var_os("OMSI_NO_SMOKE").is_none() {
                 if let Some(sb) = &scene.smoke_buf {
                     pass.set_pipeline(&pp.smoke_pipeline);
-                    pass.set_bind_group(1, &self.smoke_bind_group, &[]);
+                    pass.set_bind_group(1, &self.sprites.smoke_bind_group, &[]);
                     pass.set_vertex_buffer(0, sb.slice(..));
                     pass.draw(0..6, 0..scene.smoke_count);
                 }
@@ -477,10 +480,10 @@ impl Renderer {
                     fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
                 };
                 self.queue
-                    .write_buffer(&self.snow_buf, 0, bytemuck::bytes_of(&u));
+                    .write_buffer(&self.sprites.snow_buf, 0, bytemuck::bytes_of(&u));
                 pass.set_pipeline(snow);
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                pass.set_bind_group(1, &self.snow_bind_group, &[]);
+                pass.set_bind_group(1, &self.sprites.snow_bind_group, &[]);
                 pass.draw(0..6, 0..counts.iter().sum::<u32>());
             }
             // light coronas, additive: the world's, then the vehicle the camera is in -
@@ -502,10 +505,11 @@ impl Renderer {
                     for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late)
                     {
                         let bg = self
+                            .sprites
                             .corona_textures
                             .get(tex as usize)
                             .and_then(|b| b.as_ref())
-                            .unwrap_or(&self.corona_bind_group);
+                            .unwrap_or(&self.sprites.corona_bind_group);
                         pass.set_bind_group(1, bg, &[]);
                         pass.draw(0..6, first..first + count);
                     }
@@ -514,7 +518,7 @@ impl Renderer {
             // HUD overlays (on the vanilla path at full size; the enhanced path draws them
             // after grading, a scaled picture after scaling it up)
             if !overlays.is_empty() && !masked_frame && !scaled {
-                pass.set_pipeline(&self.overlay_pipeline);
+                pass.set_pipeline(&self.presenter.overlay_pipeline);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                         pass.set_bind_group(0, bg, &[]);
@@ -524,5 +528,150 @@ impl Renderer {
             }
         }
         main_parts
+    }
+}
+
+/// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the
+/// snow's parameters.
+pub(crate) struct SpriteResources {
+    pub(crate) corona_bind_group: wgpu::BindGroup,
+    /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
+    pub(crate) snow_buf: wgpu::Buffer,
+    pub(crate) snow_bind_group: wgpu::BindGroup,
+    /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
+    pub(crate) smoke_bind_group: wgpu::BindGroup,
+    /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
+    /// unused).
+    pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
+    pub(crate) corona_layout: wgpu::BindGroupLayout,
+    pub(crate) corona_sampler: wgpu::Sampler,
+}
+
+impl SpriteResources {
+    /// The coronas' and the smoke's pictures, and the snowfall's parameters (laid out by
+    /// `snow_layout`).
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        snow_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        // coronas: camera group + a corona texture group
+        let corona_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("corona"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        // corona sprite: soft radial falloff
+        let cs = 64u32;
+        let mut corona_img = omsi_texture::Image {
+            width: cs,
+            height: cs,
+            rgba: vec![0; (cs * cs * 4) as usize],
+            has_alpha: false,
+        };
+        for y in 0..cs {
+            for x in 0..cs {
+                let dx = (x as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let dy = (y as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let r = (dx * dx + dy * dy).sqrt();
+                let v = ((1.0 - r).max(0.0)).powf(1.6) * 255.0;
+                let o = ((y * cs + x) * 4) as usize;
+                corona_img.rgba[o..o + 4].copy_from_slice(&[v as u8, v as u8, v as u8, 255]);
+            }
+        }
+        let corona_texture = upload_texture(device, queue, &corona_img, false);
+        let corona_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let corona_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("corona"),
+            layout: &corona_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&corona_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&corona_sampler),
+                },
+            ],
+        });
+        // a soft grey puff until the app hands over the game's own `Texture/rauch.tga`
+        let mut puff = omsi_texture::Image {
+            width: cs,
+            height: cs,
+            rgba: vec![0; (cs * cs * 4) as usize],
+            has_alpha: true,
+        };
+        for y in 0..cs {
+            for x in 0..cs {
+                let dx = (x as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let dy = (y as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let a = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0).powf(1.2) * 255.0;
+                let o = ((y * cs + x) * 4) as usize;
+                puff.rgba[o..o + 4].copy_from_slice(&[255, 255, 255, a as u8]);
+            }
+        }
+        let puff_texture = upload_texture(device, queue, &puff, false);
+        let smoke_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("smoke"),
+            layout: &corona_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&puff_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&corona_sampler),
+                },
+            ],
+        });
+        drop(puff_texture);
+        let snow_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("snow params"),
+            size: std::mem::size_of::<SnowUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let snow_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("snow"),
+            layout: snow_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: snow_buf.as_entire_binding(),
+            }],
+        });
+        drop(corona_texture);
+        Self {
+            corona_bind_group,
+            snow_buf,
+            snow_bind_group,
+            smoke_bind_group,
+            corona_textures: Vec::new(),
+            corona_layout,
+            corona_sampler,
+        }
     }
 }

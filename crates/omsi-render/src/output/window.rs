@@ -4,8 +4,10 @@
 use crate::gpu::{buffer_init, pass_timer};
 use crate::renderer::{Renderer, DEPTH_FORMAT};
 use crate::scene::{Scene, TextureId};
-use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::sync::Arc;
+
+use anyhow::{Context, Result};
 
 /// Helper for windowed rendering.
 pub struct SurfaceState<'w> {
@@ -84,7 +86,7 @@ impl<'w> SurfaceState<'w> {
         Ok(SurfaceState {
             surface: std::mem::ManuallyDrop::new(surface),
             config,
-            lost: renderer.device_lost.clone(),
+            lost: renderer.gpu.device_lost.clone(),
         })
     }
 
@@ -467,7 +469,7 @@ impl Renderer {
             );
             let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("overlay"),
-                layout: &self.overlay_layout,
+                layout: &self.presenter.overlay_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -479,7 +481,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sky_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
                     },
                 ],
             });
@@ -491,11 +493,56 @@ impl Renderer {
         }
     }
 
+    pub(crate) fn picture_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene picture"),
+            layout: &self.presenter.upscale_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.presenter.upscale_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
+                },
+            ],
+        })
+    }
+}
+
+/// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the
+/// headset's UI.
+pub(crate) struct Presenter {
+    /// The HUD and overlays drawn into the multisampled picture, and their layout.
+    pub(crate) overlay_pipeline: wgpu::RenderPipeline,
+    pub(crate) overlay_layout: wgpu::BindGroupLayout,
+    /// Overlay pipeline without multisampling, for drawing the HUD after the post pass.
+    pub(crate) overlay_pipeline_1x: wgpu::RenderPipeline,
+    pub(crate) xr_ui_pipeline: wgpu::RenderPipeline,
+    /// Render scale: the pipeline that scales the 3D picture up to the window, its
+    /// parameters, and the smaller targets per size (with their bind groups).
+    pub(crate) upscale_pipeline: wgpu::RenderPipeline,
+    pub(crate) copy_pipeline: wgpu::RenderPipeline,
+    /// Triple screen: a panel's picture copied 1:1 to its place in the window.
+    pub(crate) panel_pipeline: wgpu::RenderPipeline,
+    pub(crate) upscale_layout: wgpu::BindGroupLayout,
+    pub(crate) upscale_buf: wgpu::Buffer,
+    pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
+    pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
+}
+
+impl Presenter {
     /// With a render scale: the smaller picture scaled up to the window, the overlays on top
     /// at full size.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_present(
         &self,
+        queue: &wgpu::Queue,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         scene_target: &Option<(wgpu::TextureView, wgpu::BindGroup)>,
@@ -512,7 +559,7 @@ impl Renderer {
             // --- the smaller picture scaled up to the window, the HUD on top at full size;
             // the smaller the picture, the more it is sharpened
             let sharpen = (1.0 - width as f32 / full_w as f32) * 2.0;
-            self.queue.write_buffer(
+            queue.write_buffer(
                 &self.upscale_buf,
                 0,
                 bytemuck::cast_slice(&[
@@ -552,25 +599,29 @@ impl Renderer {
             }
         }
     }
+}
 
-    pub(crate) fn picture_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
-        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene picture"),
-            layout: &self.upscale_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.upscale_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.post_sampler),
-                },
-            ],
-        })
+impl Presenter {
+    /// The overlay, scaling and panel pipelines for the window's `format`.
+    pub(crate) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, msaa: u32) -> Self {
+        let (overlay_layout, overlay_shader, overlay_pl, premul, overlay_pipeline) =
+            overlay_pipeline(device, format, msaa);
+        let (overlay_pipeline_1x, xr_ui_pipeline) =
+            overlay_1x_pipelines(device, format, &overlay_pl, &overlay_shader, premul);
+        let (upscale_layout, upscale_pipeline, copy_pipeline, panel_pipeline, upscale_buf) =
+            upscale_pipelines(device, format);
+        Self {
+            overlay_pipeline,
+            overlay_layout,
+            upscale_pipeline,
+            copy_pipeline,
+            panel_pipeline,
+            upscale_layout,
+            upscale_buf,
+            scale_targets: HashMap::new(),
+            triple_targets: None,
+            overlay_pipeline_1x,
+            xr_ui_pipeline,
+        }
     }
 }

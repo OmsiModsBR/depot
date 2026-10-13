@@ -382,7 +382,7 @@ impl Targets {
     fn new(r: &Renderer, hdr: &HdrTargets, w: u32, h: u32) -> Self {
         let pipelines = r.puddles.as_ref().unwrap();
         let size = trace_size(w, h);
-        let source_depth = r.ao.as_ref().unwrap().depth_view.texture().clone();
+        let source_depth = r.targets.ao.as_ref().unwrap().depth_view.texture().clone();
         let hit_depth = r.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("puddle hit depth including glass"),
             size: wgpu::Extent3d {
@@ -458,36 +458,36 @@ impl Targets {
                     },
                     binding(1, &hdr.view),
                     binding(2, &hdr.mask),
-                    binding(3, &r.ao.as_ref().unwrap().depth_view),
+                    binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
                     binding(4, ray_view),
                     wgpu::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&r.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
                     },
-                    binding(6, &r.probe.as_ref().unwrap().view),
+                    binding(6, &r.sky.probe.as_ref().unwrap().view),
                     binding(7, &hit_depth_view),
                     binding(8, &vehicle_view),
                 ],
             })
         };
         // The trace target must never appear in its own bind group, including unused slots.
-        let trace_bg = group(&r.black_texture.view);
+        let trace_bg = group(&r.assets.black_texture.view);
         let blur_x_bg = group(&trace);
         let blur_y_bg = group(&blur);
         let resolve_bg = group(&filtered);
         let post_group = |base, adapt, screen_mask| {
             r.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post with puddle reflections"),
-                layout: &r.post_layout,
+                layout: &r.post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: r.post_buf.as_entire_binding(),
+                        resource: r.post.post_buf.as_entire_binding(),
                     },
                     binding(1, &view),
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&r.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
                     },
                     binding(3, base),
                     binding(4, adapt),
@@ -495,10 +495,14 @@ impl Targets {
                 ],
             })
         };
-        let down_bg = post_group(&hdr.mask, &r.white_texture.view, &r.black_texture.view);
+        let down_bg = post_group(
+            &hdr.mask,
+            &r.assets.white_texture.view,
+            &r.assets.black_texture.view,
+        );
         let tonemap_bg = [
-            post_group(&hdr.up[0], &r.adapt_views[0], &hdr.mask),
-            post_group(&hdr.up[0], &r.adapt_views[1], &hdr.mask),
+            post_group(&hdr.up[0], &r.adaptation.adapt_views[0], &hdr.mask),
+            post_group(&hdr.up[0], &r.adaptation.adapt_views[1], &hdr.mask),
         ];
         let classic_bg = r.picture_group(&view);
         Self {
@@ -536,29 +540,27 @@ impl Renderer {
         ro: DVec3,
     ) -> bool {
         if self.puddles.is_none()
-            || self.ao.is_none()
-            || self.probe.is_none()
-            || (cu.post[0] > 0.5 && self.sky_state.is_none())
+            || self.targets.ao.is_none()
+            || self.sky.probe.is_none()
+            || (cu.post[0] > 0.5 && self.sky.sky_state.is_none())
         {
             return false;
         }
-        let Some(hdr) = self.hdr_targets.get(&(w, h)) else {
+        let Some(hdr) = self.targets.hdr_targets.get(&(w, h)) else {
             return false;
         };
         // A previously used size can outlive the AO depth after a resize/another view.
         // Rebind the current receiver texture instead of tracing against an old frame.
-        if hdr
-            .puddles
-            .as_ref()
-            .is_none_or(|t| t.source_depth != *self.ao.as_ref().unwrap().depth_view.texture())
-        {
+        if hdr.puddles.as_ref().is_none_or(|t| {
+            t.source_depth != *self.targets.ao.as_ref().unwrap().depth_view.texture()
+        }) {
             let targets = Targets::new(self, hdr, w, h);
             log::info!(
                 "puddle reflections: {}x{} rays, at most 48 steps; resolve {w}x{h}",
                 targets.size.0,
                 targets.size.1
             );
-            self.hdr_targets.get_mut(&(w, h)).unwrap().puddles = Some(targets);
+            self.targets.hdr_targets.get_mut(&(w, h)).unwrap().puddles = Some(targets);
         }
         let vp = Mat4::from_cols_array_2d(&cu.view_proj);
         let proj = projection.unwrap_or_else(|| {
@@ -566,7 +568,7 @@ impl Renderer {
         });
         let enhanced = cu.post[0] > 0.5;
         let surround = if enhanced {
-            let st = self.sky_state.as_ref().unwrap();
+            let st = self.sky.sky_state.as_ref().unwrap();
             [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z]
                 .into_iter()
                 .map(|n| atmosphere::sh_irradiance(&st.sh, n))
@@ -577,7 +579,7 @@ impl Renderer {
             lighting.secondary * 0.5 + lighting.sun_color * lighting.sun_intensity * 0.35
         };
         let pre = if enhanced {
-            self.exposure.unwrap_or(0.0).exp()
+            self.adaptation.exposure.unwrap_or(0.0).exp()
         } else {
             1.0
         };
@@ -612,7 +614,7 @@ impl Renderer {
                 PROBE_MIPS as f32,
             ],
             sky: (surround * pre)
-                .extend(self.probe.as_ref().unwrap().scale * pre)
+                .extend(self.sky.probe.as_ref().unwrap().scale * pre)
                 .to_array(),
             projection_trace: [
                 proj.z_axis.z,
@@ -668,7 +670,7 @@ impl Renderer {
         timed: &mut Vec<&'static str>,
     ) {
         let pipelines = self.puddles.as_ref().unwrap();
-        let targets = self.hdr_targets[&(w, h)].puddles.as_ref().unwrap();
+        let targets = self.targets.hdr_targets[&(w, h)].puddles.as_ref().unwrap();
         // Select only this vehicle's existing draw entries. AI instances can share meshes
         // and batches with it; selecting a mesh alone would reflect all of them at one height.
         let origins = vehicle_origins(lighting, camera);
@@ -977,10 +979,13 @@ mod tests {
             for size in [64, 48, 64] {
                 r.render_to_image(&mut scene, size, size, &camera, &lighting)
                     .unwrap();
-                let targets = r.hdr_targets[&(size, size)].puddles.as_ref().unwrap();
+                let targets = r.targets.hdr_targets[&(size, size)]
+                    .puddles
+                    .as_ref()
+                    .unwrap();
                 assert_eq!(
                     targets.source_depth,
-                    *r.ao.as_ref().unwrap().depth_view.texture()
+                    *r.targets.ao.as_ref().unwrap().depth_view.texture()
                 );
                 // Read both textures below through an immutable renderer borrow.
                 let receiver = depth_at_centre(&r, &targets.source_depth, size);
@@ -1059,13 +1064,13 @@ mod tests {
     }
 
     fn refraction_source(r: &Renderer, enhanced: bool) -> Vec<f32> {
-        let texture = r.glass_picture.as_ref().unwrap().texture();
+        let texture = r.targets.glass_picture.as_ref().unwrap().texture();
         let bytes = r.read_texture(texture, wgpu::TextureAspect::All).unwrap();
         if texture.format() != HDR_FORMAT {
             return bytes.into_iter().map(|v| v as f32 / 255.0).collect();
         }
         let pre = if enhanced {
-            r.exposure.unwrap().exp()
+            r.adaptation.exposure.unwrap().exp()
         } else {
             1.0
         };

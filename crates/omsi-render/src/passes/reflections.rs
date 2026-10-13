@@ -23,7 +23,7 @@ impl Renderer {
         scaled: bool,
     ) {
         if reflection_frame {
-            let h = &self.hdr_targets[&(width, height)];
+            let h = &self.targets.hdr_targets[&(width, height)];
             let bg = h
                 .puddles
                 .as_ref()
@@ -45,11 +45,11 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.copy_pipeline);
+            pass.set_pipeline(&self.presenter.copy_pipeline);
             pass.set_bind_group(0, bg, &[]);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() && !scaled {
-                pass.set_pipeline(&self.overlay_pipeline_1x);
+                pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                         pass.set_bind_group(0, bg, &[]);

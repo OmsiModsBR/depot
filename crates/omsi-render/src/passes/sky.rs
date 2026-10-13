@@ -2,11 +2,10 @@
 //! blurred mip chain.
 
 use crate::gpu::pass_timer;
-use crate::renderer::Renderer;
 use crate::scene::Scene;
-use crate::sky::{SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS};
+use crate::sky::{SkyResources, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS};
 
-impl Renderer {
+impl SkyResources {
     /// The enhanced sky cube: a face a frame, all six the first time and for a new sky.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_sky_cube(
@@ -17,6 +16,7 @@ impl Renderer {
         lead_view: bool,
         probe_redraw: bool,
         redraw_near: bool,
+        instant_exposure: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
@@ -28,7 +28,7 @@ impl Renderer {
             {
                 // (face, round, the old picture's share): a whole new cube is every round
                 // of every face averaged; afterwards one face a frame, blended in
-                let full = !probe.cube_filled || self.instant_exposure;
+                let full = !probe.cube_filled || instant_exposure;
                 probe.cube_wait += 1;
                 let recapture = std::mem::take(&mut probe.cube_recapture);
                 let draws: Vec<(u32, u32, f64)> = if full {

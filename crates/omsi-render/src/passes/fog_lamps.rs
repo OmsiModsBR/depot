@@ -2,10 +2,10 @@
 
 use crate::gpu::{array_path, basic_pipelines, pass_timer, ArrayPath};
 use crate::lighting::Lighting;
-use crate::renderer::Renderer;
 use crate::scene::Scene;
 use crate::shaders::fog_lamps_shader_source;
 use crate::sky::enhanced_weather_fog;
+use crate::targets::TargetCache;
 use glam::Mat4;
 
 #[repr(C)]
@@ -22,11 +22,7 @@ pub(crate) fn fog_lamps_pipelines(
     camera_layout: &wgpu::BindGroupLayout,
     gl: bool,
     hdr_format: wgpu::TextureFormat,
-) -> (
-    wgpu::BindGroupLayout,
-    wgpu::Buffer,
-    Option<[wgpu::RenderPipeline; 2]>,
-) {
+) -> FogLampsPass {
     // the lamps in the fog: the camera group (lights, grid, the enhanced uniform) and the
     // prepass depth, added onto the high-range picture
     let fog_lamps_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -131,15 +127,21 @@ pub(crate) fn fog_lamps_pipelines(
                 make("fs_fog_composite", Some(add)),
             ]
         });
-    (fog_lamps_layout, fog_lamps_buf, fog_lamps_pipeline)
+    FogLampsPass {
+        fog_lamps_pipeline,
+        fog_lamps_layout,
+        fog_lamps_buf,
+    }
 }
 
-impl Renderer {
+impl FogLampsPass {
     /// The lamps' light in the weather's fog and the sun's shafts between the shadows, over the
     /// picture before its glow and metering.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_fog_lamps(
         &self,
+        queue: &wgpu::Queue,
+        targets: &TargetCache,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         lighting: &Lighting,
@@ -170,7 +172,7 @@ impl Renderer {
         {
             if let (Some(pipes), Some(ao), Some(cam_bg)) = (
                 self.fog_lamps_pipeline.as_ref(),
-                self.ao.as_ref(),
+                targets.ao.as_ref(),
                 scene.camera_bind_group.as_ref(),
             ) {
                 if let Some(fog_bg) = ao.fog_bg.as_ref() {
@@ -200,9 +202,8 @@ impl Renderer {
                             droplets,
                         ],
                     };
-                    self.queue
-                        .write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
-                    let h = &self.hdr_targets[&(width, height)];
+                    queue.write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
+                    let h = &targets.hdr_targets[&(width, height)];
                     let view = h
                         .puddles
                         .as_ref()
@@ -244,4 +245,13 @@ impl Renderer {
             }
         }
     }
+}
+
+/// The lamps' light in the fog: its pipelines, bind group layout and parameters.
+pub(crate) struct FogLampsPass {
+    /// Enhanced: the lamps' light the fog scatters, added over the drawn picture (none on
+    /// OpenGL and without storage buffers), its bind group layout and parameters.
+    pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
+    pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
+    pub(crate) fog_lamps_buf: wgpu::Buffer,
 }

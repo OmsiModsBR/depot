@@ -81,15 +81,15 @@ impl Renderer {
             },
             wgpu::BindGroupEntry {
                 binding: 5,
-                resource: wgpu::BindingResource::TextureView(&self.shadow_view),
+                resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view),
             },
             wgpu::BindGroupEntry {
                 binding: 6,
-                resource: wgpu::BindingResource::Sampler(&self.shadow_sampler),
+                resource: wgpu::BindingResource::Sampler(&self.shadows.shadow_sampler),
             },
             wgpu::BindGroupEntry {
                 binding: 7,
-                resource: wgpu::BindingResource::TextureView(&self.shadow_view_far),
+                resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view_far),
             },
             wgpu::BindGroupEntry {
                 binding: 8,
@@ -99,13 +99,13 @@ impl Renderer {
                         .as_ref()
                         .and_then(|r| r.targets.as_ref())
                         .map(|t| &t.out)
-                        .or(self.ao.as_ref().map(|a| &a.blur_view))
-                        .unwrap_or(&self.white_texture.view),
+                        .or(self.targets.ao.as_ref().map(|a| &a.blur_view))
+                        .unwrap_or(&self.assets.white_texture.view),
                 ),
             },
             wgpu::BindGroupEntry {
                 binding: 9,
-                resource: wgpu::BindingResource::Sampler(&self.ao_sampler),
+                resource: wgpu::BindingResource::Sampler(&self.ssao.ao_sampler),
             },
             wgpu::BindGroupEntry {
                 binding: 10,
@@ -118,30 +118,30 @@ impl Renderer {
             wgpu::BindGroupEntry {
                 binding: 12,
                 resource: wgpu::BindingResource::TextureView(
-                    &self.probe.as_ref().expect("reflection probe").view,
+                    &self.sky.probe.as_ref().expect("reflection probe").view,
                 ),
             },
             wgpu::BindGroupEntry {
                 binding: 13,
-                resource: wgpu::BindingResource::Sampler(&self.lin_sampler),
+                resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
             },
             wgpu::BindGroupEntry {
                 binding: 14,
-                resource: wgpu::BindingResource::TextureView(&self.sky_lut_view),
+                resource: wgpu::BindingResource::TextureView(&self.sky.sky_lut_view),
             },
             wgpu::BindGroupEntry {
                 binding: 17,
                 resource: wgpu::BindingResource::TextureView(
-                    &self.probe.as_ref().expect("reflection probe").cube_view,
+                    &self.sky.probe.as_ref().expect("reflection probe").cube_view,
                 ),
             },
             wgpu::BindGroupEntry {
                 binding: 18,
-                resource: wgpu::BindingResource::TextureView(&self.lm_atlas_view),
+                resource: wgpu::BindingResource::TextureView(&self.light_map.lm_atlas_view),
             },
             wgpu::BindGroupEntry {
                 binding: 19,
-                resource: self.lm_uniform.as_entire_binding(),
+                resource: self.light_map.lm_uniform.as_entire_binding(),
             },
         ];
         // (the point lights where the device has storage buffers for them)
@@ -160,13 +160,13 @@ impl Renderer {
         }
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera"),
-            layout: &self.camera_layout,
+            layout: &self.layouts.camera_layout,
             entries: &entries,
         });
         scene.camera_bind_group = Some(bg);
         let sbg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("shadow camera"),
-            layout: &self.shadow_layout,
+            layout: &self.shadows.shadow_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -222,17 +222,16 @@ impl Renderer {
         };
         RT_BUFFERS.store(false, std::sync::atomic::Ordering::Relaxed);
         // (the meshes' shared pages stay on, as after the multisampling fallback below)
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer {
-            mesh_pages,
-            ..Self::build(
-                self.device.clone(),
-                self.queue.clone(),
-                self.adapter_name.clone(),
-                self.format,
-                options,
-            )
-        };
+        let mesh_pages = self.assets.mesh_pages;
+        let mut rebuilt = Self::build(
+            self.device.clone(),
+            self.queue.clone(),
+            self.adapter_name.clone(),
+            self.gpu.format,
+            options,
+        );
+        rebuilt.assets.mesh_pages = mesh_pages;
+        *self = rebuilt;
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -253,29 +252,28 @@ impl Renderer {
         // Release render targets before building their single-sample replacements. Keeping
         // the old targets alive while the new renderer is built can turn a recoverable OOM
         // into another allocation failure.
-        self.depth = None;
-        self.msaa_targets.clear();
-        self.ao = None;
-        self.hdr_targets.clear();
-        self.scale_targets.clear();
-        self.triple_targets = None;
-        self.glass_picture = None;
-        self.target_use.clear();
+        self.targets.depth = None;
+        self.targets.msaa_targets.clear();
+        self.targets.ao = None;
+        self.targets.hdr_targets.clear();
+        self.presenter.scale_targets.clear();
+        self.presenter.triple_targets = None;
+        self.targets.glass_picture = None;
+        self.targets.target_use.clear();
         let options = RenderOptions {
             msaa: 1,
             ..self.options
         };
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer {
-            mesh_pages,
-            ..Self::build(
-                self.device.clone(),
-                self.queue.clone(),
-                self.adapter_name.clone(),
-                self.format,
-                options,
-            )
-        };
+        let mesh_pages = self.assets.mesh_pages;
+        let mut rebuilt = Self::build(
+            self.device.clone(),
+            self.queue.clone(),
+            self.adapter_name.clone(),
+            self.gpu.format,
+            options,
+        );
+        rebuilt.assets.mesh_pages = mesh_pages;
+        *self = rebuilt;
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;

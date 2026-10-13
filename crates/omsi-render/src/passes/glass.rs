@@ -24,14 +24,14 @@ impl Renderer {
         reflection_frame: bool,
     ) {
         if glass_on {
-            let hdr = masked_frame.then(|| &self.hdr_targets[&(width, height)]);
+            let hdr = masked_frame.then(|| &self.targets.hdr_targets[&(width, height)]);
             let view = hdr.map_or(scene_view, |h| {
                 h.puddles
                     .as_ref()
                     .filter(|_| puddles_on)
                     .map_or(&h.view, |p| &p.view)
             });
-            let behind = self.glass_picture.as_ref().unwrap();
+            let behind = self.targets.glass_picture.as_ref().unwrap();
             encoder.copy_texture_to_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: view.texture(),
@@ -102,7 +102,7 @@ impl Renderer {
                     1
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.ao.as_ref().unwrap().depth_view,
+                    view: &self.targets.ao.as_ref().unwrap().depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -126,8 +126,8 @@ impl Renderer {
             return id;
         }
         scene.textures.push(GpuTexture::showing(
-            self.black_texture.texture.clone(),
-            self.black_texture.view.clone(),
+            self.assets.black_texture.texture.clone(),
+            self.assets.black_texture.view.clone(),
             (1, 1),
         ));
         let id = scene.textures.len() - 1;
@@ -144,7 +144,7 @@ impl Renderer {
         format: wgpu::TextureFormat,
     ) {
         let Some(id) = scene.glass_slot else { return };
-        if self.glass_picture.as_ref().is_none_or(|v| {
+        if self.targets.glass_picture.as_ref().is_none_or(|v| {
             v.texture().width() != width
                 || v.texture().height() != height
                 || v.texture().format() != format
@@ -165,9 +165,9 @@ impl Renderer {
                     | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
-            self.glass_picture = Some(tex.create_view(&Default::default()));
+            self.targets.glass_picture = Some(tex.create_view(&Default::default()));
         }
-        let view = self.glass_picture.as_ref().unwrap();
+        let view = self.targets.glass_picture.as_ref().unwrap();
         if scene.textures[id].view != *view {
             scene.textures[id] =
                 GpuTexture::showing(view.texture().clone(), view.clone(), (width, height));

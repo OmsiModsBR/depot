@@ -41,8 +41,10 @@ impl Renderer {
     /// The HDR colour targets of the enhanced path for this size, with the glow's levels,
     /// the tone-mapped picture FXAA reads and the post passes' bind groups.
     pub(crate) fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
-        self.target_use.insert((w, h), std::time::Instant::now());
-        if self.hdr_targets.contains_key(&(w, h)) {
+        self.targets
+            .target_use
+            .insert((w, h), std::time::Instant::now());
+        if self.targets.hdr_targets.contains_key(&(w, h)) {
             return false;
         }
         self.evict_targets();
@@ -104,11 +106,11 @@ impl Renderer {
                        screen_mask: &wgpu::TextureView| {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post"),
-                layout: &self.post_layout,
+                layout: &self.post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.post_buf.as_entire_binding(),
+                        resource: self.post.post_buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -116,7 +118,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
@@ -134,9 +136,9 @@ impl Renderer {
             })
         };
         let bg = |src: &wgpu::TextureView, base: &wgpu::TextureView, adapt: &wgpu::TextureView| {
-            bg_with(src, base, adapt, &self.black_texture.view)
+            bg_with(src, base, adapt, &self.assets.black_texture.view)
         };
-        let none = &self.white_texture.view;
+        let none = &self.assets.white_texture.view;
         // (the first level of the glow reads the screen mask as its `t_base`: no light from
         // the screens)
         let down_bg: Vec<wgpu::BindGroup> = (0..levels)
@@ -163,13 +165,13 @@ impl Renderer {
             .collect();
         let meter_bg = bg(&down[levels - 1], none, none);
         let tonemap_bg = [
-            bg_with(&view, &up[0], &self.adapt_views[0], &mask),
-            bg_with(&view, &up[0], &self.adapt_views[1], &mask),
+            bg_with(&view, &up[0], &self.adaptation.adapt_views[0], &mask),
+            bg_with(&view, &up[0], &self.adaptation.adapt_views[1], &mask),
         ];
         // (FXAA reads the screen mask as its `t_base` and leaves the screens as they are)
         let fxaa_bg = bg(&ldr, &mask, none);
         let classic_bg = self.picture_group(&view);
-        self.hdr_targets.insert(
+        self.targets.hdr_targets.insert(
             (w, h),
             HdrTargets {
                 msaa_view,
