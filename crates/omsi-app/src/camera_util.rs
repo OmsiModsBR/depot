@@ -1,6 +1,11 @@
 //! Camera helpers: the default and follow cameras, picking rays, the orbit distance, and the mirrors.
 
-use super::*;
+use crate::cli::Args;
+use crate::player::Player;
+use crate::scene::{self, World};
+use crate::traffic;
+use glam::{DVec3, Vec3};
+use omsi_render::{Camera, Renderer, Scene};
 
 /// Default camera from `[mapcam]`: tile x, tile y, x, z, y, yaw, pitch, distance.
 pub(crate) fn default_camera(world: &World) -> Camera {
@@ -379,7 +384,7 @@ pub(crate) fn render_mirrors(
     let mut lighting = lighting.clone();
     // a mirror's small picture: nothing smaller than a few of its pixels, and nothing much
     // beyond what a mirror shows (the far distance below)
-    let px = crate::MIRROR_SIZE.load(std::sync::atomic::Ordering::Relaxed).max(64) as f32;
+    let px = crate::startup::MIRROR_SIZE.load(std::sync::atomic::Ordering::Relaxed).max(64) as f32;
     lighting.min_obj_size = lighting.min_obj_size.max((12.0 / px).clamp(0.03, 0.09));
     lighting.shadows = false;
     // Enhanced graphics draw the mirrors with the plain shading (see Renderer::render_inner),

@@ -1,6 +1,14 @@
 //! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
 
-use super::*;
+use anyhow::{Context, Result};
+use crate::cli::{Args, parse_triggers};
+use crate::player::Player;
+use crate::scene::{self, World};
+use crate::situation::{find_hof, start_clock};
+use glam::{DVec3, Vec3};
+use omsi_render::{Renderer, Scene};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// The vehicle file to spawn for `--bus`. The rear section of an articulated bus is never
 /// driven on its own (OMSI does not even list it): asked for one, the bus it belongs to is

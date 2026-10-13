@@ -20,7 +20,8 @@
 //! `OMSI_INSTANCE`, else the process id.
 
 use crate::scene::{self, World};
-use crate::{Args, Player};
+use crate::cli::Args;
+use crate::player::Player;
 use glam::DVec3;
 use omsi_net::{Footprint, LanEvent, LanSession, PartPose, Pose, Role};
 use omsi_render::{Renderer, Scene};
@@ -705,7 +706,7 @@ pub fn player_name(args: &Args) -> String {
 
 /// Our world as the other side sees it.
 pub fn world_info(args: &Args) -> omsi_net::WorldInfo {
-    let clock = crate::start_clock(args);
+    let clock = crate::situation::start_clock(args);
     omsi_net::WorldInfo {
         map: args.map.replace('\\', "/"),
         date: date_of(&clock),
@@ -1522,7 +1523,7 @@ fn adopt_at_runtime(
         theirs.day_of_year = None;
         theirs.season = (!hw.season.trim().is_empty()).then(|| hw.season.trim().to_string());
         theirs.weather = weather.clone();
-        let want = crate::season_folder(&theirs, &world.global).1;
+        let want = crate::world_load::season_folder(&theirs, &world.global).1;
         if want != omsi_texture::season_folder() {
             warnings.push(format!("the host's season ({}) differs from the one loaded here ({}) - start the game again to see it", want.as_deref().unwrap_or("summer"), omsi_texture::season_folder().as_deref().unwrap_or("summer")));
         }
@@ -2504,9 +2505,9 @@ fn new_remote(
 ) -> Option<RemoteVehicle> {
     let (ty, stand_in) = remote_type(args, pose, player)?;
     let mut host =
-        omsi_sim::VehicleHost::new(clock.cloned().unwrap_or_else(|| crate::start_clock(args)));
+        omsi_sim::VehicleHost::new(clock.cloned().unwrap_or_else(|| crate::situation::start_clock(args)));
     host.font_lib = Some(world.fonts.clone());
-    let hof = crate::find_hof(args, world, &ty);
+    let hof = crate::situation::find_hof(args, world, &ty);
     host.hof = hof.clone();
     let scheme = if pose.paint.is_empty() {
         None

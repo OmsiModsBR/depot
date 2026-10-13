@@ -3,7 +3,7 @@
 //! the screen, the views, the pause, and a status line every minute - what a bug report
 //! needs to be understood without asking.
 
-use crate::App;
+use crate::app::App;
 
 #[derive(Default)]
 pub(crate) struct LogState {

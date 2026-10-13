@@ -32,7 +32,7 @@ const TRAIL: f64 = 400.0;
 
 /// Whether the vehicle the arguments name is bound to rails (it then needs the rail
 /// network the traffic builds, with or without cars).
-pub(crate) fn args_rail(args: &crate::Args) -> bool {
+pub(crate) fn args_rail(args: &crate::cli::Args) -> bool {
     args.bus
         .as_deref()
         .map(|b| omsi_cfg::resolve_path(&args.root, b))

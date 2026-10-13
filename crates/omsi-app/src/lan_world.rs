@@ -20,7 +20,7 @@
 use crate::humans::{Humans, MirrorPose};
 use crate::scene::World;
 use crate::traffic::Traffic;
-use crate::Args;
+use crate::cli::Args;
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_net::world::{
@@ -1244,7 +1244,7 @@ impl LanWorld {
                 let hof = m
                     .hofs
                     .entry(path)
-                    .or_insert_with(|| crate::find_hof(args, world, &car.vehicle.ty))
+                    .or_insert_with(|| crate::situation::find_hof(args, world, &car.vehicle.ty))
                     .clone();
                 if let Some(k) = car.vehicle.ty.program.str_var("Linie") {
                     car.vehicle.state.str_vars[k as usize] = line.clone();

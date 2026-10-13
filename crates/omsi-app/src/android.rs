@@ -12,10 +12,21 @@
 //! lacks: the full screen without the system bars, the screen kept on, asking for access
 //! to the shared storage, and the vibration.
 
-use super::*;
+use crate::app::App;
+use crate::cli::Args;
+use crate::lan_mods;
+use crate::launcher;
+use crate::startup::{graphics_instance, BUILD, VERSION};
+use crate::{launcher_statics, make_app, prepare};
+use clap::Parser;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use winit::application::ApplicationHandler;
+use winit::event::{DeviceEvent, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::platform::android::activity::AndroidApp;
 use winit::platform::android::EventLoopBuilderExtAndroid;
+use winit::window::WindowId;
 
 /// Whether the first drive of this run was already started (see `Shell::switch`).
 static SAFER_TRIED: AtomicBool = AtomicBool::new(false);

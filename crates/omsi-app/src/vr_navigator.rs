@@ -215,7 +215,7 @@ pub(crate) struct Editing {
     mouse_drive_before: bool,
 }
 
-impl crate::App {
+impl crate::app::App {
     pub(crate) fn start_vr_nav_edit(&mut self) {
         if !self.vr_active() || self.player.is_none() || self.vr_nav_edit.is_some() {
             return;

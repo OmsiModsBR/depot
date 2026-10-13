@@ -4,7 +4,7 @@
 //! list of (label, action) lines in the menu's chooser; choosing a line does it and shows
 //! the list again (or the next one: a line's tours).
 
-use crate::App;
+use crate::app::App;
 
 /// Which list the chooser shows.
 #[derive(Debug, Clone, PartialEq)]
@@ -1504,6 +1504,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "nav_ai" => app.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
         "nav_surface" => app.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
         "nav_light" => app.navigator.as_ref().map_or(s.nav_light, |n| n.light),
+        "nav_contours" => app.navigator.as_ref().map_or(s.nav_contours, |n| n.show_contours),
         "shadows" => s.shadows,
         "head" => s.head_movement,
         "cam_smooth" => s.driverview_smooth,
@@ -1600,6 +1601,13 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
             }
             app.settings.nav_surface = on;
             Some(("nav_surface", bit))
+        }
+        "nav_contours" => {
+            if let Some(n) = app.navigator.as_mut() {
+                n.show_contours = on;
+            }
+            app.settings.nav_contours = on;
+            Some(("nav_contours", bit))
         }
         "nav_light" => {
             if let Some(n) = app.navigator.as_mut() {
@@ -2183,6 +2191,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "drive_keys" => vec![("omsi", "Custom controls (Controls page)"), ("simple", "W A S D + arrows"), ("wasd", "W A S D only"), ("arrows", "Arrow keys only")],
         "resolution" => crate::launcher::pages::RESOLUTIONS.to_vec(),
         "navigator_corner" => vec![("top-left", "Top left"), ("top-right", "Top right"), ("bottom-left", "Bottom left"), ("bottom-right", "Bottom right")],
+        "nav_orientation" => vec![("map", "As the map is drawn"), ("north", "North up"), ("heading", "Heading up")],
         "boarding" => vec![("auto", "Pay and take the ticket"), ("pay", "The driver sells the ticket"), ("walk", "Just walk in")],
         "pax_voices" => vec![("all", "Greetings and tickets"), ("tickets", "Only the ticket asked for"), ("off", "Silent")],
         "maintenance" => vec![("0", "Infinite (no wear)"), ("1", "Very bad"), ("2", "Bad"), ("3", "Normal"), ("4", "Good")],
@@ -2282,10 +2291,12 @@ fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_contours", "Terrain contours", "Shows the terrain's contour lines on the city map, when the map ships them (also a button on the map)"),
         switch_row(app, "nav_light", "Light map", "The map in a light look: light ground and white roads instead of the dark one"),
         switch_row(app, "nav_surface", "Map surface", "Shows the map's own surface (water, green, rivers, place names) under the roads, when the map ships one"),
         switch_row(app, "nav_arrows", "Route arrows (as in OMSI 2)", "Shows OMSI 2's route arrows over the road"),
         pick("navigator_corner", "Corner", later),
+        pick("nav_orientation", "City map orientation", "How the city map is turned: as the map is drawn, real north up (where the map says where it lies) or the vehicle's heading up; the compass on the map changes it for the session"),
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),
         switch_row(app, "coll_objects", "Collisions with objects", "Enables/disables collisions with objects such as buildings, streetlights, etc."),
         switch_row(app, "coll_vehicles", "Collisions with vehicles", "Enables/Disables Collisions with Other Vehicles"),

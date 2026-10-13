@@ -11,10 +11,15 @@
 //! actions of `Inputs/keyboard.cfg` (or the keys that stand for them), so every bus - stock
 //! or mod - is driven by them as it is by the keyboard.
 
-use super::*;
-use omsi_ui::paint::Align;
+use crate::app::App;
+use crate::camera_util::ORBIT_DEFAULT;
+use omsi_render::Renderer;
 use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Weight};
+use omsi_ui::paint::Align;
+use std::time::Instant;
 use winit::event::{Touch as Finger, TouchPhase};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
 
 /// What a control does.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

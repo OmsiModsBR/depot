@@ -1,7 +1,7 @@
 //! Putting the player's bus somewhere else: a place picked on the map, or back on the ground
 //! where it last stood after falling through the world.
 
-use crate::App;
+use crate::app::App;
 
 /// Our bus put at `at` facing `heading` (stopped), with the walker back at its wheel.
 pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
