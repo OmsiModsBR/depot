@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app`'s traffic, people, timetable and driver modules (`traffic`, `humans`, `schedule`,
+  `navigator`, `driver`, `bus_service`, `spawn`, `player`, `on_foot`, `route_arrows`, `career`,
+  `services`) read their `OMSI_*` variables through `omsi_cfg::flags`, where 44 more are now
+  declared. No behaviour change.
 - `omsi-app`'s world modules (`scene`, `tiles`, `lights`, `rain`, `puddles`, `ground_gap`,
   `memory`, `weather_setup`, `world_load`) read their 66 `OMSI_*` variables through
   `omsi_cfg::flags`, where they are now declared. No behaviour change.
