@@ -391,6 +391,7 @@ impl DriverFigure {
 
     /// The driver as another game has them (LAN): the figure it names by its `.hum` file
     /// (relative to the installation), else one of the map's as `new` picks.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn new_named(
         world: &crate::scene::World,
         renderer: &Renderer,

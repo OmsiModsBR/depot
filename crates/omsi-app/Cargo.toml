@@ -21,7 +21,7 @@ path = "src/main.rs"
 [features]
 # the OMSI plugins (`plugins/*.opl`) and the Lua plugins' panels
 plugins = ["dep:omsi-plugin"]
-default = ["lan"]
+default = []
 # LAN play: the session, its voice chat, the admin commands and the host's mods
 lan = ["dep:omsi-net", "omsi-launcher-core/lan"]
 # the dedicated server (`--server`), which hosts a LAN session

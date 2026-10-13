@@ -140,6 +140,7 @@ impl Editor {
     /// What the other players' games need to show the object being edited as it is now
     /// (`all`: every object edited or added this session): LAN commands, see
     /// `App::editor_broadcast`.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn sync_lines(&self, world: &World, root: &Path, all: bool) -> Vec<String> {
         let mut out = Vec::new();
         let edits = world.object_edits.lock();

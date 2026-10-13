@@ -250,6 +250,7 @@ fn render_text(font: &FontVec, text: &str, px: f32, color: [u8; 4]) -> omsi_text
 /// How many rows the chat shows (a long line takes several), and how many lines it keeps to
 /// scroll back.
 const CHAT_SHOWN: usize = 8;
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub const CHAT_KEEP: usize = 200;
 
 /// A notification from the server (`notify`): a card over the navigator that goes by itself.
@@ -264,17 +265,22 @@ pub struct Notice {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NoticeKind {
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Info,
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Warn,
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Alert,
 }
 
 /// How many notifications show at once (the newest; an older one makes room).
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub const NOTICES_SHOWN: usize = 3;
 
 impl Notice {
     /// `notify`'s argument: `<id> <seconds> <info|warn|alert> <text>` → the id and the notice
     /// (seconds held to 2 .. 30; an unknown kind is information).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn parse(arg: &str) -> Option<(String, Notice)> {
         let mut it = arg.trim().splitn(4, ' ');
         let id = it.next().filter(|s| !s.is_empty())?.to_string();
@@ -296,6 +302,7 @@ impl Notice {
 }
 
 /// A new notice in the list, the oldest going when there are more than `NOTICES_SHOWN`.
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub fn push_notice(list: &mut Vec<Notice>, n: Notice) {
     list.push(n);
     while list.len() > NOTICES_SHOWN {
@@ -333,6 +340,7 @@ impl ChatWidget {
     }
 
     /// The mouse wheel over the chat (or while typing) scrolls the history.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn wheel(&mut self, lines: usize, amount: f32) {
         let max = lines.saturating_sub(CHAT_SHOWN);
         let s = self.scroll as i32 + amount.round() as i32;
@@ -2409,6 +2417,7 @@ fn clip_left(tc: &TextCache, text: &str, px: f32, width: f32) -> String {
 
 /// A chat line with its bad words starred out (rustrict: profanity, slurs and the usual
 /// ways of writing around a filter, without a word list to keep).
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub fn filter_chat(text: &str) -> String {
     use rustrict::CensorStr;
     text.censor()
