@@ -1,6 +1,14 @@
 //! What the traffic is told about the player and the LAN buses.
 
-use super::*;
+use crate::app::App;
+use crate::humans;
+use crate::player::Player;
+use crate::scene::World;
+use crate::traffic;
+use glam::DVec3;
+use omsi_render::{Camera, Renderer, Scene};
+#[cfg(feature = "lan")]
+use crate::lan;
 
 /// Position, heading, half extents and speed of the player's vehicle for the AI's
 /// obstacle checks.

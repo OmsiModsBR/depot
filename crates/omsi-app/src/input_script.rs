@@ -1,6 +1,14 @@
 //! `OMSI_INPUT`: scripted keyboard, mouse and camera input for window runs, and its key names.
 
-use super::*;
+use crate::actions::dump_display_textures;
+use crate::app::App;
+use crate::camera_util::{ORBIT_MAX, ORBIT_MIN};
+use crate::describe;
+use std::path::{Path, PathBuf};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
+#[cfg(feature = "lan")]
+use crate::lan;
 
 impl App {
     /// A key of the input script by name: a letter, a digit, F1..F12, or one of the named keys.

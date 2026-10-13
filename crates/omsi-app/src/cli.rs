@@ -1,6 +1,10 @@
 //! The command line: `Args` and the small parsers of its values.
 
-use super::*;
+use anyhow::{anyhow, Result};
+use clap::Parser;
+use glam::DVec3;
+use omsi_render::Camera;
+use std::path::PathBuf;
 
 /// The window and picture size when `--size` is not given.
 pub(crate) const DEFAULT_SIZE: &str = "1600x900";

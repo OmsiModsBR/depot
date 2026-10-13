@@ -1,6 +1,14 @@
 //! Opening a map: the season, the world, the spawn point.
 
-use super::*;
+use anyhow::Result;
+use crate::camera_util::default_camera;
+use crate::cli::{Args, parse_cam};
+use crate::scene::World;
+use crate::situation::start_clock;
+use crate::weather_setup::load_weather;
+use glam::DVec3;
+use omsi_render::{Camera, Renderer, Scene};
+use std::time::Instant;
 
 /// The map's season for these arguments (kind, texture folder): `--season`, else the date
 /// as the map's season table has it; a snow weather puts the map into its snow textures

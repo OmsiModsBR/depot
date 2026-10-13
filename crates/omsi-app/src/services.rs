@@ -1,6 +1,13 @@
 //! Runs without a window: exporting a bus (`--export-glb`) and the service commands.
 
-use super::*;
+use anyhow::{anyhow, Result};
+use crate::cli::Args;
+use crate::export;
+use crate::scene::World;
+use crate::situation::start_clock;
+use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 /// `--export-glb`: the vehicle alone, no map, written as glTF.
 pub(crate) fn run_export(args: &Args, out: &PathBuf) -> Result<()> {
@@ -102,6 +109,7 @@ pub(crate) fn run_services(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
 
     /// A vehicle of `script` alone, with the variables `vars`.
     fn scripted(script: &str, vars: &str) -> omsi_sim::VehicleInstance {
