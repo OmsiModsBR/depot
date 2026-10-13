@@ -33,8 +33,24 @@ fn the_night_meter_sees_a_lamp_lit_lot_from_above() {
         far: 1000.0,
     };
     let cam_rel = cam.position.as_vec3();
-    let seen = view_lamp_light(&lights, DVec3::ZERO, cam_rel, &cam, 16.0 / 9.0, Some(0.0));
-    let in_air = view_lamp_light(&lights, DVec3::ZERO, cam_rel, &cam, 16.0 / 9.0, None);
+    let seen = view_lamp_light(
+        &lights,
+        DVec3::ZERO,
+        cam_rel,
+        (cam.forward(), cam.right(), cam.up()),
+        cam.fov_deg,
+        16.0 / 9.0,
+        Some(0.0),
+    );
+    let in_air = view_lamp_light(
+        &lights,
+        DVec3::ZERO,
+        cam_rel,
+        (cam.forward(), cam.right(), cam.up()),
+        cam.fov_deg,
+        16.0 / 9.0,
+        None,
+    );
     // (the lot's ground: some 10-30 lux under the lamps, 1e-3 .. 3e-3, less between and
     // round them - a log-average of some 10 lux; a moonless night is 2e-6)
     assert!(seen > 5e-5, "{seen}");
@@ -1293,13 +1309,13 @@ fn cached_bounds_follow_transforms_skinning_and_recycled_resources() {
         let inst = &scene.instances[i];
         let expected = InstanceBounds::new(&scene.meshes[inst.mesh], inst.transform);
         assert_eq!(
-            Renderer::bounding_sphere(scene, inst),
+            bounding_sphere(scene, inst),
             (
                 expected.centre + (inst.origin - scene.render_origin).as_vec3(),
                 expected.radius
             )
         );
-        assert_eq!(Renderer::instance_scale(scene, inst), expected.scale);
+        assert_eq!(instance_scale(scene, inst), expected.scale);
     };
     renderer.prepare(&mut scene);
     check(&scene, i);
@@ -1485,7 +1501,7 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
             "terrain outside cover: {outside:?}"
         );
         scene.instances[foreground].visible = true;
-        Renderer::mark_changed(&mut scene, foreground);
+        mark_changed(&mut scene, foreground);
         let rgba = renderer
             .render_to_image(&mut scene, 64, 64, &camera, &lighting)
             .unwrap();
@@ -1495,7 +1511,7 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
             "foreground stays visible: {centre:?}"
         );
         scene.instances[foreground].visible = false;
-        Renderer::mark_changed(&mut scene, foreground);
+        mark_changed(&mut scene, foreground);
         // Ordinary blended surfaces must keep showing the terrain, as must covers
         // whose material explicitly disables depth writes or uses alpha testing.
         for (presurface, alpha, no_z_write) in [

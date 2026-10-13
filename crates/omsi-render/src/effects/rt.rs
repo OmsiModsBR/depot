@@ -13,12 +13,11 @@
 //! OMSI_RT_REFL_HALF=1 traces the reflections at half size. OMSI_DEBUG_RT=1 logs the
 //! structures now and then; its numbers show: 3 cut-out meshes as solid, 4 cut-out meshes
 //! as clear, 7 the rays unfiltered, 8 / 9 / 10 the reflections' rays and weights (OMSI_DEBUG_ENHANCED=1 and 2 show the traced shadow and occlusion).
-
 use crate::assets::AlphaMode;
 use crate::gpu::{pass_timer, HDR_FORMAT};
 use crate::lighting::Lighting;
 use crate::renderer::Renderer;
-use crate::scene::{Camera, Instance, MeshId, Scene, Vertex};
+use crate::scene::{bounding_sphere, instance_scale, Camera, Instance, MeshId, Scene, Vertex};
 use glam::{DVec3, Mat4};
 use std::collections::HashMap;
 
@@ -658,14 +657,14 @@ impl Renderer {
                     continue;
                 }
             }
-            let (c, r) = Self::bounding_sphere(scene, inst);
+            let (c, r) = bounding_sphere(scene, inst);
             let d = (c - cam).length();
             if d - r > RT_RANGE {
                 continue;
             }
             // the level of detail the picture shows
             if inst.lod.0 > 0.0 || inst.lod.1 < f32::MAX {
-                let scale = Self::instance_scale(scene, inst);
+                let scale = instance_scale(scene, inst);
                 let radius = if inst.object_radius > 0.0 {
                     inst.object_radius
                 } else {

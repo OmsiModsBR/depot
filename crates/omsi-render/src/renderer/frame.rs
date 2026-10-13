@@ -607,7 +607,8 @@ impl Renderer {
                 &scene.lights,
                 scene.render_origin,
                 cam_rel,
-                camera,
+                (camera.forward(), camera.right(), camera.up()),
+                camera.fov_deg,
                 aspect,
                 ground,
             ));
@@ -621,7 +622,7 @@ impl Renderer {
         // the night sky's glow from the lamps round the camera (the window's view leads), in
         // steps of a tenth: the sky is recomputed for a new value, not for every metre driven
         if enhanced && lead_view {
-            let raw = lamp_sky_glow(scene, cam_rel);
+            let raw = lamp_sky_glow(&scene.lights, scene.render_origin, cam_rel);
             let target = raw.clamp(0.03, 1.5);
             let step = (target.ln() * 10.0).round() / 10.0;
             let changed = self

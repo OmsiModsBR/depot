@@ -13,14 +13,18 @@ pub use model::{
 };
 
 #[cfg(test)]
-pub(crate) use coronas::{smoke_ground_fade, smoke_sprite};
+pub(crate) use coronas::smoke_ground_fade;
+pub(crate) use coronas::smoke_sprite;
 #[cfg(test)]
 pub(crate) use exposure::half_to_f32;
 pub(crate) use exposure::{meter_tuning, tone_contrast, ExposureLog};
 #[cfg(test)]
 pub(crate) use lamps::glare_veil;
+pub(crate) use lamps::LAMP_SHADOW_REACH;
+pub(crate) use lamps::LIGHT_CELL;
+pub(crate) use lamps::LIGHT_CELL_CAP;
+pub(crate) use lamps::LIGHT_GRID_SIDE;
 pub(crate) use lamps::{lamp_sky_glow, view_lamp_light, LampShadow, FAR_MAP_ASPECT, LAMP_SHADOWS};
 pub(crate) use light_map::LightMapAtlas;
 pub(crate) use model::{debug_view, smoothstep, GpuCorona, CABIN_E, LAMP_E, WINDOW_RADIANCE};
-#[cfg(test)]
 pub(crate) use model::{drawn_by, gpu_light, GpuPointLight};

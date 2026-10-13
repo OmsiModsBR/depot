@@ -1,10 +1,9 @@
 //! The public methods for light and sky: the interior lights, the coronas' and smoke's
 //! textures, the light map's tiles and the classic sky's textures.
-
 use crate::assets::upload_texture;
 use crate::lighting::{PointLight, LM_TILE_PX};
 use crate::renderer::{Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH};
-use crate::scene::{Scene, TextureId};
+use crate::scene::{mark_changed, Scene, TextureId};
 
 impl Renderer {
     /// `n` consecutive slots for a vehicle's `[interiorlight]` lamps; give them back with
@@ -56,7 +55,7 @@ impl Renderer {
         let i = &mut scene.instances[instance];
         if i.interior_lamps != code {
             i.interior_lamps = code;
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 

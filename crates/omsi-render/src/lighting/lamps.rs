@@ -1,11 +1,8 @@
 //! Street lamps and headlights: the light grid, the lamps' shadow maps, the glow they throw
 //! on the night sky and the light and glare they give the camera.
 
-use super::model::{drawn_by, gpu_light, GpuPointLight, LightMode, PointLight, LAMP_E};
+use super::model::{LightMode, PointLight, LAMP_E};
 use super::smoothstep;
-use crate::gpu::GpuArray;
-use crate::renderer::Renderer;
-use crate::scene::{Camera, Scene};
 use glam::{DVec3, Mat4, Vec3};
 
 pub(crate) const LIGHT_CELL: f32 = 25.0;
@@ -55,10 +52,9 @@ pub(crate) const LIGHT_CELL_CAP: usize = 32;
 /// handful of lamps leaves the stars; a city's thousands turn the sky orange-grey.
 pub(crate) const SKY_GLOW_REF: f32 = 830.0;
 
-pub(crate) fn lamp_sky_glow(scene: &Scene, cam_rel: Vec3) -> f32 {
-    let ro = scene.render_origin;
+pub(crate) fn lamp_sky_glow(lights: &[PointLight], ro: DVec3, cam_rel: Vec3) -> f32 {
     let mut sum = 0.0f32;
-    for l in &scene.lights {
+    for l in lights {
         if !l.housed || l.intensity <= 0.0 {
             continue;
         }
@@ -82,19 +78,20 @@ pub(crate) fn lamp_sky_glow(scene: &Scene, cam_rel: Vec3) -> f32 {
 /// the sides of a narrow view - the meter read a moonless night while the picture was full
 /// of lit streets, and the eye's adaptation to that dark lifted every lamp's light to
 /// white (the modded maps' lamps, spaced and placed differently from the stock ones, most).
+/// `(f, r, u)`: the camera's forward, right and up.
 pub(crate) fn view_lamp_light(
     lights: &[PointLight],
     ro: DVec3,
     cam_rel: Vec3,
-    camera: &Camera,
+    (f, r, u): (Vec3, Vec3, Vec3),
+    fov_deg: f32,
     aspect: f32,
     ground: Option<f32>,
 ) -> f32 {
     let ground = ground
         .filter(|g| g.is_finite() && *g < cam_rel.z - 0.3)
         .unwrap_or(cam_rel.z - 1.6);
-    let (f, r, u) = (camera.forward(), camera.right(), camera.up());
-    let ty = (camera.fov_deg.to_radians() * 0.5).tan();
+    let ty = (fov_deg.to_radians() * 0.5).tan();
     let tx = ty * aspect.max(0.1);
     let mut points = Vec::with_capacity(35);
     for j in 0..5 {
@@ -170,8 +167,7 @@ pub(crate) fn view_lamp_light(
     // floor is a moonless night's light, which every point has.
     let floor = 2e-6f32;
     let log_sum: f32 = per_point.iter().map(|v| (v + floor).ln()).sum();
-    (log_sum / per_point.len() as f32).exp() - floor
-        + glare_veil(lights, ro, cam_rel, camera.forward())
+    (log_sum / per_point.len() as f32).exp() - floor + glare_veil(lights, ro, cam_rel, f)
 }
 
 /// The lamps' and headlights' glare in view as the illuminance whose mid grey has the same
@@ -243,143 +239,4 @@ pub(crate) fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
     }
     let hot = (-across * across / 0.012 - drop * drop / 0.0004).exp();
     wide * up + 6.0 * hot
-}
-
-impl Renderer {
-    /// Upload this frame's point lights into the light grid around the camera. Returns the
-    /// grid origin (render-origin relative). `enhanced`: the frame is drawn by the enhanced
-    /// path, which takes a headlight as one spot light where the vanilla path takes three
-    /// points (`LightMode`). Its mirrors (the vanilla shader) and its picture share the
-    /// enhanced list, so that it is not sent twice a frame: the vanilla shader passes a spot
-    /// by, whose radius it reads as 0, and the mirrors show no headlight pools. The three
-    /// stand-in points stay out of it, or a street full of cars would fill the grid cells'
-    /// sixteen places before the street lamps got theirs.
-    pub(crate) fn prepare_lights(
-        &self,
-        scene: &mut Scene,
-        cam_rel: Vec3,
-        enhanced: bool,
-        lamp_shadows: bool,
-    ) -> ([f32; 4], Vec<LampShadow>) {
-        // the street lamps that get a shadow map: the few lighting the camera's
-        // surroundings most (by their strength over the distance)
-        let mut chosen: Vec<(f32, LampShadow, [i64; 3])> = Vec::new();
-        let ro = scene.render_origin;
-        let side = LIGHT_GRID_SIDE;
-        let half = side as f32 * LIGHT_CELL * 0.5;
-        // snapped to whole cells, so that the grid stays the same while nothing moves
-        let origin = [
-            ((cam_rel.x - half) / LIGHT_CELL).floor() * LIGHT_CELL,
-            ((cam_rel.y - half) / LIGHT_CELL).floor() * LIGHT_CELL,
-        ];
-        let mut gpu_lights: Vec<GpuPointLight> =
-            Vec::with_capacity(scene.interior_lights.len() + scene.lights.len().max(1));
-        // the vehicles' interior lamps first, at the indices their meshes name (they are in
-        // no grid cell: only those meshes look them up)
-        for l in &scene.interior_lights {
-            gpu_lights.push(gpu_light(l, (l.position - ro).as_vec3()));
-        }
-        let mut grid = vec![u32::MAX; side * side * LIGHT_CELL_CAP];
-        for l in &scene.lights {
-            if !drawn_by(l, enhanced) {
-                continue;
-            }
-            let p = (l.position - ro).as_vec3();
-            let x0 = ((p.x - l.radius - origin[0]) / LIGHT_CELL).floor();
-            let x1 = ((p.x + l.radius - origin[0]) / LIGHT_CELL).floor();
-            let y0 = ((p.y - l.radius - origin[1]) / LIGHT_CELL).floor();
-            let y1 = ((p.y + l.radius - origin[1]) / LIGHT_CELL).floor();
-            if x1 < 0.0 || y1 < 0.0 || x0 >= side as f32 || y0 >= side as f32 {
-                continue;
-            }
-            let idx = gpu_lights.len() as u32;
-            gpu_lights.push(gpu_light(l, p));
-            if lamp_shadows && enhanced && l.housed && l.intensity > 0.0 {
-                let d = (p - cam_rel).length();
-                if d < l.radius + LAMP_SHADOW_REACH {
-                    let mut score =
-                        l.intensity * (l.color[0] + l.color[1] + l.color[2]) * l.core * l.core
-                            / (d * d + 25.0);
-                    // (a lamp that had a map keeps it until another is clearly stronger: the
-                    // set changing with every metre the camera moved switched shadows on and
-                    // off between lamps that light the view about alike, #1613)
-                    let key = l.position.to_array().map(|c| (c * 100.0).round() as i64);
-                    if scene.lamp_shadow_last.contains(&key) {
-                        score *= 1.6;
-                    }
-                    chosen.push((
-                        score,
-                        LampShadow {
-                            index: idx,
-                            position: p,
-                            range: l.radius,
-                        },
-                        key,
-                    ));
-                }
-            }
-            for y in (y0.max(0.0) as usize)..=(y1.min(side as f32 - 1.0) as usize) {
-                for x in (x0.max(0.0) as usize)..=(x1.min(side as f32 - 1.0) as usize) {
-                    let base = (y * side + x) * LIGHT_CELL_CAP;
-                    if let Some(slot) = grid[base..base + LIGHT_CELL_CAP]
-                        .iter()
-                        .position(|v| *v == u32::MAX)
-                    {
-                        grid[base + slot] = idx;
-                    } else if omsi_cfg::env::var_os("OMSI_DEBUG_LIGHT_GRID").is_some() {
-                        log::info!("light grid: cell ({x}, {y}) full, light at ({:.1}, {:.1}) radius {:.0} {} left out", p.x, p.y, l.radius, if l.direction.length_squared() > 0.5 { "spot" } else { "point" });
-                    }
-                }
-            }
-        }
-        if gpu_lights.is_empty() {
-            gpu_lights.push(GpuPointLight {
-                pos: [0.0; 4],
-                color: [0.0; 4],
-                dir: [0.0; 4],
-                extra: [0.0; 4],
-            });
-        }
-        let lbytes: &[u8] = bytemuck::cast_slice(&gpu_lights);
-        let gbytes: &[u8] = bytemuck::cast_slice(&grid);
-        let mut rebuilt = false;
-        match &scene.light_buf {
-            Some(b) if b.size() >= lbytes.len() as u64 => {
-                if scene.last_lights != lbytes {
-                    b.write(&self.queue, 0, lbytes);
-                }
-            }
-            _ => {
-                let cap = (lbytes.len() * 2).max(64 * std::mem::size_of::<GpuPointLight>());
-                let b = GpuArray::new(&self.device, "lights", cap as u64, 16, false);
-                b.write(&self.queue, 0, lbytes);
-                scene.light_buf = Some(b);
-                rebuilt = true;
-            }
-        }
-        match &scene.grid_buf {
-            Some(b) => {
-                if scene.last_grid != grid {
-                    b.write(&self.queue, 0, gbytes);
-                }
-            }
-            None => {
-                let b = GpuArray::new(&self.device, "light grid", gbytes.len() as u64, 4, false);
-                b.write(&self.queue, 0, gbytes);
-                scene.grid_buf = Some(b);
-                rebuilt = true;
-            }
-        }
-        scene.last_lights.clear();
-        scene.last_lights.extend_from_slice(lbytes);
-        scene.last_grid = grid;
-        if rebuilt {
-            self.rebuild_camera_bind_group(scene);
-        }
-        chosen.sort_by(|a, b| b.0.total_cmp(&a.0));
-        chosen.truncate(LAMP_SHADOWS);
-        scene.lamp_shadow_last = chosen.iter().map(|c| c.2).collect();
-        let lamps = chosen.into_iter().map(|c| c.1).collect();
-        ([origin[0], origin[1], LIGHT_CELL, side as f32], lamps)
-    }
 }

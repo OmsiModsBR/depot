@@ -4,8 +4,6 @@
 use super::texture::next_gen;
 use super::Vertex;
 use crate::gpu::gl_worker_turn;
-use crate::renderer::Renderer;
-use crate::scene::Scene;
 use glam::Vec3;
 use omsi_geometry::MeshData;
 
@@ -302,28 +300,4 @@ pub struct GpuMesh {
     pub one_sided: bool,
     /// Source asset for the optional draw-cost audit.
     pub source: Option<String>,
-}
-
-impl Renderer {
-    /// Copy the vertex data `update_mesh` collected into the meshes. Written through the
-    /// queue, mesh by mesh (the writes land before the frame's commands run): one staging
-    /// buffer for the whole frame outgrew the device's buffer limit on big maps, its
-    /// creation failed validation and mapping it panicked (Windows, Vulkan).
-    pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
-        let pending = std::mem::take(&mut *self.assets.pending_meshes.borrow_mut());
-        if let Some(rt) = self.rt.as_ref() {
-            rt.meshes_changed(pending.iter().map(|(id, _)| *id));
-        }
-        for (id, b) in &pending {
-            let Some(m) = scene.meshes.get(*id) else {
-                continue;
-            };
-            let len = (b.len() as u64) / 4 * 4;
-            if len == 0 || m.vertex_bytes < len {
-                continue;
-            }
-            self.queue
-                .write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize]);
-        }
-    }
 }

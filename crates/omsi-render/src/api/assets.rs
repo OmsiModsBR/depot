@@ -1,6 +1,5 @@
 //! The public methods for meshes, textures and materials: adding, updating, freeing and
 //! recycling them.
-
 use crate::assets::{
     fit_image, fit_size, make_meshes, mesh_page_bytes, next_gen, snow_texture_flag, texture_bytes,
     upload_texture, AlphaMode, BindKey, GpuTexture, Material, MaterialExtra, MaterialMaps,
@@ -9,8 +8,11 @@ use crate::assets::{
 };
 use crate::gpu::buffer_init;
 use crate::renderer::Renderer;
-use crate::scene::{MaterialId, MeshId, Scene, TextureId, Vertex};
+use crate::scene::{
+    mesh_bounds_changed, mesh_slot_replaced, MaterialId, MeshId, Scene, TextureId, Vertex,
+};
 use glam::Vec3;
+
 use omsi_geometry::MeshData;
 
 impl Renderer {
@@ -54,7 +56,7 @@ impl Renderer {
         if !positions.is_empty() {
             m.bounds_center = (lo + hi) * 0.5;
             m.bounds_radius = (hi - m.bounds_center).length();
-            Self::mesh_bounds_changed(scene, id);
+            mesh_bounds_changed(scene, id);
         }
     }
 
@@ -677,7 +679,7 @@ impl Renderer {
             uniform.ambient[3] = if texture.is_none() {
                 -1.0
             } else {
-                snow_texture_flag(scene, texture)
+                snow_texture_flag(&scene.snow_textures, texture)
             };
         }
         let slot = |t: Option<TextureId>| {
@@ -888,7 +890,7 @@ impl Renderer {
         m.ranges.clear();
         m.bounds_center = Vec3::ZERO;
         m.bounds_radius = 0.0;
-        Self::mesh_slot_replaced(scene, id);
+        mesh_slot_replaced(scene, id);
     }
 
     /// Release a texture (a material still using it keeps it alive until it is freed too).
@@ -951,7 +953,7 @@ impl Renderer {
         }
         let m = scene.meshes.pop().unwrap();
         scene.meshes[into] = m;
-        Self::mesh_slot_replaced(scene, into);
+        mesh_slot_replaced(scene, into);
         into
     }
 

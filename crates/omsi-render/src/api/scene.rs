@@ -1,9 +1,10 @@
 //! The scene's public methods: making a scene, adding, moving and removing instances, and
 //! their settings.
-
 use crate::assets::AlphaMode;
 use crate::renderer::Renderer;
-use crate::scene::{Instance, InstanceBounds, MaterialId, MeshId, RenderPhase, Scene};
+use crate::scene::{
+    mark_changed, Instance, InstanceBounds, MaterialId, MeshId, RenderPhase, Scene,
+};
 use glam::{DVec3, Mat4};
 use std::collections::HashMap;
 
@@ -195,7 +196,7 @@ impl Renderer {
         if scene.instances[instance].mesh != mesh {
             scene.instances[instance].mesh = mesh;
             scene.bounds_users_stale = true;
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 
@@ -211,7 +212,7 @@ impl Renderer {
         if i.transform != transform || i.origin != origin {
             i.transform = transform;
             i.origin = origin;
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 
@@ -286,7 +287,7 @@ impl Renderer {
         inst.base = scene.instances[into].base;
         scene.instances[into] = inst;
         scene.bounds_users_stale = true;
-        Self::mark_changed(scene, into);
+        mark_changed(scene, into);
         into
     }
 
@@ -338,7 +339,7 @@ impl Renderer {
         if let Some(i) = scene.instances.get_mut(instance) {
             if i.roof != roof {
                 i.roof = roof;
-                Self::mark_changed(scene, instance);
+                mark_changed(scene, instance);
             }
         }
     }
@@ -354,7 +355,7 @@ impl Renderer {
         let i = &mut scene.instances[instance];
         if (i.interior - interior).abs() > 1e-4 {
             i.interior = interior;
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 
@@ -368,7 +369,7 @@ impl Renderer {
             *l = v;
         }
         if changed {
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 
@@ -382,7 +383,7 @@ impl Renderer {
             *l = v;
         }
         if changed {
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 
@@ -466,7 +467,7 @@ impl Renderer {
         }
         i.visible = visible;
         if changed {
-            Self::mark_changed(scene, instance);
+            mark_changed(scene, instance);
         }
     }
 }
