@@ -12,7 +12,7 @@
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
 use crate::humans::{AvatarCmd, BusId, Humans};
-use crate::App;
+use crate::app::App;
 use glam::{DVec2, DVec3};
 use omsi_sim::collision::Obb;
 use winit::keyboard::KeyCode;

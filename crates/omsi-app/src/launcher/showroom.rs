@@ -9,9 +9,18 @@
 //! a fresh `World` (whose caches belong to one scene); the old scene goes when the new one
 //! is ready, so the picture never goes blank while switching.
 
-use super::super::*;
+use anyhow::{anyhow, Result};
+use clap::Parser;
+use crate::cli::Args;
+use crate::player;
+use crate::scene;
+use crate::situation::start_clock;
+use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
+use crate::weather_setup::{load_weather, setup_sky, weather_lighting};
 use glam::DVec3;
 use omsi_render::{Camera, Lighting, Renderer, Scene};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver};
 
 /// What the showroom shows.

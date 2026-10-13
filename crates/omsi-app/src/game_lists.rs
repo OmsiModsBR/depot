@@ -4,7 +4,7 @@
 //! list of (label, action) lines in the menu's chooser; choosing a line does it and shows
 //! the list again (or the next one: a line's tours).
 
-use crate::App;
+use crate::app::App;
 
 /// Which list the chooser shows.
 #[derive(Debug, Clone, PartialEq)]

@@ -63,7 +63,7 @@ pub(crate) fn queue_event(events: &mut Vec<GameEvent>, name: &'static str, args:
 pub(crate) const PLUGIN_COMMANDS: [&str; 14] = ["refuel", "wash", "repair", "shot", "save", "load", "weather", "later", "earlier", "info", "timetable", "reset", "couple", "uncouple"];
 
 /// What the game is doing, for `omsi.info()`.
-pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
+pub(crate) fn game_info(app: &crate::app::App) -> Vec<(&'static str, InfoValue)> {
     use InfoValue::{Bool, Num, Text};
     let mut v: Vec<(&'static str, InfoValue)> = Vec::new();
     v.push(("map", Text(app.world.as_ref().map(|w| w.global.name.clone()).unwrap_or_default())));

@@ -2,7 +2,7 @@
 //! existing controller; opening this UI never creates another hardware connection.
 use crate::controllers::{DeviceCfg, Func};
 use crate::game_lists::{ListKind, Move, HEADING};
-use crate::App;
+use crate::app::App;
 
 pub(crate) fn is_controller_list(kind: Option<&ListKind>) -> bool {
     matches!(kind, Some(ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_)))

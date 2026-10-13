@@ -20,7 +20,7 @@
 //! touches nothing outside the vehicle. No plugin is ever loaded from the session folder
 //! (`omsi_cfg::mark_sandbox`).
 
-use crate::Args;
+use crate::cli::Args;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};

@@ -155,33 +155,31 @@ pub(crate) fn ui_language(code: &str) {
     omsi_sim::vehicle_api::set_locale(iso);
 }
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::Parser;
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Instant;
 use winit::event_loop::EventLoop;
-use app::*;
-use camera_util::*;
-use cli::*;
-use duty_start::*;
-use input_script::*;
-use launcher_link::*;
-use memory::*;
-use offscreen::*;
-use services::*;
-use situation::*;
-use spawn::*;
-use startup::*;
-use weather_setup::*;
+use app::App;
+use camera_util::ORBIT_DEFAULT;
+use cli::Args;
+use duty_start::place_on_duty;
+use input_script::parse_input_script;
+use launcher_link::open_launcher;
+use offscreen::run_offscreen;
+use services::run_export;
+use situation::apply_situation;
+use startup::{
+    BUILD, CLASSIC, CLOUDS, content_dir, ENHANCED, ENHANCED_PLUS, fatal_dialog, find_root,
+    graphics_instance, is_omsi_root, MIRROR_SIZE, root_memo, SOUND_AI, SOUND_SCENERY, VERSION,
+};
 
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
     omsi_cfg::migrate_legacy_data_dir();
     #[cfg(target_os = "macos")]
-    restart_with_allocator_settings();
+    startup::restart_with_allocator_settings();
     #[cfg(windows)]
-    attach_parent_console();
+    startup::attach_parent_console();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
@@ -694,6 +692,8 @@ mod tests {
     use super::*;
     use glam::DVec3;
     use omsi_render::Camera;
+    use crate::app::start_centers;
+    use crate::cli::Args;
 
     #[test]
     fn streaming_starts_around_the_bus() {

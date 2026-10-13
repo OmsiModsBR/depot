@@ -6616,7 +6616,7 @@ impl Traffic {
                         for (i, part, dir) in &parts {
                             ss.add_part(*i, omsi_audio::SoundSet::new_exterior(audio, &part.chosen_for(&number), dir));
                         }
-                        ss.master = crate::sound_gain(&crate::SOUND_AI);
+                        ss.master = crate::startup::sound_gain(&crate::startup::SOUND_AI);
                         c.vehicle.host.snapshot_triggers = ss.curve_triggers().into_iter().collect();
                         c.sounds = Some(ss);
                     }

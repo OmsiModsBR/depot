@@ -1121,7 +1121,7 @@ impl Streamer {
         if (self.loaded_total, self.unloaded_total) != (self.relieved_at.0, self.relieved_at.1) && self.relieved_at.2.elapsed().as_secs_f32() >= 4.0 && self.queue.is_empty() && !self.inflight {
             self.relieved_at = (self.loaded_total, self.unloaded_total, std::time::Instant::now());
             self.world.compact_slots(renderer, scene);
-            crate::release_free_memory();
+            crate::memory::release_free_memory();
         }
         if self.last_summary.elapsed().as_secs_f32() >= 10.0 && omsi_cfg::flags::PROFILE.is_set() {
             self.last_summary = std::time::Instant::now();

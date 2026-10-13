@@ -177,7 +177,7 @@ impl World {
         if let Some(t) = g[i] {
             return t;
         }
-        let n = crate::MIRROR_SIZE.load(std::sync::atomic::Ordering::Relaxed).clamp(64, 2048);
+        let n = crate::startup::MIRROR_SIZE.load(std::sync::atomic::Ordering::Relaxed).clamp(64, 2048);
         let t = renderer.add_render_texture(scene, n, n);
         g[i] = Some(t);
         t
@@ -10064,7 +10064,7 @@ impl World {
                 if a.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &sdir)) {
                     log::info!("scenery sound {}: {} sounds ({:.0} m away)", path.display(), cfg.sounds.len(), dist);
                     let mut ss = omsi_audio::SoundSet::new(a, &cfg, &sdir);
-                    ss.master = crate::sound_gain(&crate::SOUND_SCENERY);
+                    ss.master = crate::startup::sound_gain(&crate::startup::SOUND_SCENERY);
                     *sounds = Some(ss);
                 }
             }
