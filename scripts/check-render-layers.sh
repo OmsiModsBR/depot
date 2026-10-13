@@ -3,7 +3,7 @@
 #
 # Each file under src/<domain>/ may name `crate::<other>` only for a domain on a lower layer:
 #
-#   api > renderer > output > effects > targets > passes > scene > sky > assets | lighting
+#   api > renderer > output > effects > passes > targets > scene > sky > assets | lighting
 #       > shaders > gpu
 #
 # Domains on the same layer do not import each other, nothing imports `api`, and only
@@ -23,8 +23,8 @@ layer() {
         renderer) echo 9 ;;
         output) echo 8 ;;
         effects) echo 7 ;;
-        targets) echo 6 ;;
-        passes) echo 5 ;;
+        passes) echo 6 ;;
+        targets) echo 5 ;;
         scene) echo 4 ;;
         sky) echo 3 ;;
         assets | lighting) echo 2 ;;
