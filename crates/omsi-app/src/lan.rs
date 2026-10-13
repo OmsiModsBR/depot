@@ -652,8 +652,7 @@ pub(crate) use crate::settings::data_dir;
 
 /// The status file of this game process.
 fn status_path() -> Option<PathBuf> {
-    let id = omsi_cfg::env::var("OMSI_INSTANCE")
-        .ok()
+    let id = omsi_cfg::flags::INSTANCE.text()
         .filter(|s| {
             !s.is_empty()
                 && s.len() <= 64
@@ -767,7 +766,7 @@ pub fn open_public_gateway(session: &LanSession, info: omsi_net::ws::ServerInfo,
     if let Ok(mut w) = WS_PATH.lock() {
         *w = Some(WsPath { gateway: Some(gateway), tunnel: None, _client: None, url: None });
     }
-    if !want_tunnel || omsi_cfg::env::var_os("OMSI_NO_TUNNEL").is_some() || omsi_cfg::env::var_os("OMSI_NO_BRIDGE").is_some() {
+    if !want_tunnel || omsi_cfg::flags::NO_TUNNEL.is_set() || omsi_cfg::flags::NO_BRIDGE.is_set() {
         return;
     }
     // (in the background: cloudflared is fetched first when it is not installed)
@@ -791,7 +790,7 @@ pub fn open_public_gateway(session: &LanSession, info: omsi_net::ws::ServerInfo,
         let mut checked = Instant::now();
         // the official server (`OMSI_OFFICIAL_KEY`: its signing key's file) says where it is
         // reached every five minutes, for the players who type `openomsi`
-        let official = omsi_cfg::env::var_os("OMSI_OFFICIAL_KEY").and_then(|p| std::fs::read(&p).map_err(|e| log::warn!("official key {}: {e}", std::path::Path::new(&p).display())).ok());
+        let official = omsi_cfg::flags::OFFICIAL_KEY.os().and_then(|p| std::fs::read(&p).map_err(|e| log::warn!("official key {}: {e}", std::path::Path::new(&p).display())).ok());
         let mut announced: Option<(String, Instant)> = None;
         loop {
             let now = url.lock().ok().and_then(|u| u.clone());
@@ -2674,7 +2673,7 @@ impl RemoteVehicle {
     fn interpolated(&mut self) -> Option<Pose> {
         // (`OMSI_NO_INTERP=1`: the old way, for comparing)
         static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        if *OFF.get_or_init(|| omsi_cfg::env::var_os("OMSI_NO_INTERP").is_some()) {
+        if *OFF.get_or_init(|| omsi_cfg::flags::NO_INTERP.is_set()) {
             return None;
         }
         let off = self.offset?;
@@ -2983,7 +2982,7 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
 
 /// Our vehicle's variables to the others, and theirs taken into the copies drawn here.
 fn sync_vars(lan: &mut LanSession, game: &mut LanGame, player: Option<&Player>, dt: f32) {
-    if omsi_cfg::env::var_os("OMSI_NO_VAR_SYNC").is_some() {
+    if omsi_cfg::flags::NO_VAR_SYNC.is_set() {
         return;
     }
     if let Some(p) = player {
@@ -3001,7 +3000,7 @@ fn sync_vars(lan: &mut LanSession, game: &mut LanGame, player: Option<&Player>, 
         let strings: Vec<String> = t.strings.iter().map(|id| strs.get(*id as usize).cloned().unwrap_or_default()).collect();
         lan.send_vars(t.hash, &t.floats, &floats, &t.strings, &strings, dt);
         // `OMSI_DEBUG_VAR_SYNC=<variable>`: ours every two seconds, theirs as it came
-        if let Some(name) = omsi_cfg::env::var("OMSI_DEBUG_VAR_SYNC").ok() {
+        if let Some(name) = omsi_cfg::flags::DEBUG_VAR_SYNC.text() {
             game.vars_log += dt;
             if game.vars_log > 2.0 {
                 game.vars_log = 0.0;
@@ -3252,7 +3251,7 @@ pub fn tick(
     // OMSI_LAN_SAY="30=Hallo;45=Tschüss": chat lines said at these seconds of the session
     // (for tests of games that have no keyboard: offscreen runs)
     game.clock += dt;
-    if let Ok(script) = omsi_cfg::env::var("OMSI_LAN_SAY") {
+    if let Some(script) = omsi_cfg::flags::LAN_SAY.text() {
         for item in script.split(';') {
             if let Some((at, text)) = item.split_once('=') {
                 if at
@@ -3411,7 +3410,7 @@ pub fn tick(
         // never faded by an alpha variable the AI scripts left at 0, the bellows skinned
         let inside = frame.inside_of == Some(*id);
         // OMSI_TRACE_REMOTE=<file.csv>: where each other player's bus is drawn, every frame
-        if let Ok(path) = omsi_cfg::env::var("OMSI_TRACE_REMOTE") {
+        if let Some(path) = omsi_cfg::flags::TRACE_REMOTE.text() {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
                 let _ = writeln!(f, "{:.4},{id},{:.3},{:.3},{:.3},{:.2},{}", lan_now(), rv.vehicle.position.x, rv.vehicle.position.y, rv.vehicle.position.z, rv.vehicle.heading, rv.offset.is_some());
@@ -3426,7 +3425,7 @@ pub fn tick(
 /// `OMSI_DEBUG_LAN`: every few seconds, what we know of every player, what their bus
 /// shows and plays here, and the bytes that went over the network.
 fn debug_log(lan: &LanSession, game: &mut LanGame, dt: f32, frame: &Frame) {
-    if omsi_cfg::env::var_os("OMSI_DEBUG_LAN").is_none() {
+    if !omsi_cfg::flags::DEBUG_LAN.is_set() {
         return;
     }
     game.log_t -= dt;
@@ -3695,7 +3694,7 @@ pub fn hud_lines(lan: &LanSession, _game: &LanGame, _player: Option<&Player>) ->
         lines.push(format!("Online: {w}"));
     }
     // OMSI_DEBUG_LAN: what the HUD shows, every few seconds
-    if omsi_cfg::env::var_os("OMSI_DEBUG_LAN").is_some() {
+    if omsi_cfg::flags::DEBUG_LAN.is_set() {
         HUD_LOG.with(|t| {
             let now = Instant::now();
             if t.get()
@@ -3801,7 +3800,7 @@ mod tests {
     /// L's sound variables filled it in name order before its roller blind's scroll.
     #[test]
     fn the_roller_blind_scroll_is_in_the_sync_table() {
-        let root = omsi_cfg::env::var_os("OMSI_ROOT")
+        let root = omsi_cfg::flags::ROOT.os()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("../../../OMSI 2 Original"));
         let bus = root.join("Vehicles/AA-FR_BusBundle/2002_Agora_L_4d_main.bus");
@@ -3822,7 +3821,7 @@ mod tests {
     /// other players' games).
     #[test]
     fn the_rear_section_is_in_the_sync_table() {
-        let root = omsi_cfg::env::var_os("OMSI_ROOT")
+        let root = omsi_cfg::flags::ROOT.os()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("../../../OMSI 2 Original"));
         let bus = root.join("Vehicles/AA-FR_BusBundle/2002_Agora_L_3d_main.bus");

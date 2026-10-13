@@ -12,7 +12,7 @@
 #   scripts/check-render-layers.sh [--strict]
 #
 # Prints one line per import that points up or sideways. Exit status: 0, or 1 with --strict
-# when there is one (informational on CI until the last step of the plan makes it blocking).
+# when there is one (as CI runs it).
 set -euo pipefail
 
 cd "$(dirname "$0")/../crates/omsi-render/src"

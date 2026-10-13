@@ -387,7 +387,7 @@ fn collect(args: &Args) -> (Manifest, Vec<PathBuf>) {
 
 /// Serve the session's mods on TCP `port` (a thread; the list is made in the background).
 pub fn serve(port: u16, session: u64, args: &Args) {
-    if omsi_cfg::env::var_os("OMSI_NO_LAN_MODS").is_some() {
+    if omsi_cfg::flags::NO_LAN_MODS.is_set() {
         return;
     }
     let listener = match TcpListener::bind(("0.0.0.0", port)) {
@@ -674,7 +674,7 @@ fn place(stored: &Path, target: &Path) -> std::io::Result<()> {
 }
 
 pub fn fetch(args: &mut Args, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
-    if omsi_cfg::env::var_os("OMSI_NO_LAN_MODS").is_some() {
+    if omsi_cfg::flags::NO_LAN_MODS.is_set() {
         return Err("switched off (OMSI_NO_LAN_MODS)".into());
     }
     let (mut out, mut input) = open(host, session)?;

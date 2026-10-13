@@ -1122,14 +1122,14 @@ impl FreeList {
 fn batch_static_splines(
     splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3)>,
 ) -> Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3)> {
-    if omsi_cfg::env::var_os("OMSI_NO_SPLINE_BATCHING").is_some() {
+    if omsi_cfg::flags::NO_SPLINE_BATCHING.is_set() {
         return splines;
     }
     let mut groups: Vec<(Vec<Arc<MeshData>>, Arc<SplineType>, bool, DVec3)> = Vec::new();
     let mut cells = HashMap::new();
     let mut signatures = HashMap::new();
     let mut type_materials = HashMap::new();
-    let material_batching = omsi_cfg::env::var_os("OMSI_NO_MATERIAL_SPLINE_BATCHING").is_none();
+    let material_batching = !omsi_cfg::flags::NO_MATERIAL_SPLINE_BATCHING.is_set();
     for (mesh, ty, casts, sort_origin) in splines {
         let (lo, hi) = mesh.positions.iter().fold(
             (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY)),
@@ -1381,7 +1381,7 @@ impl GpuCache {
         let Some(path) = omsi_texture::find_texture(name, &dirs_ref) else {
             if !name.trim().is_empty() && self.misses.insert(name.to_string()) {
                 log::warn!("Did not find texture file \"{name}\"!");
-                if omsi_cfg::env::var_os("OMSI_DEBUG_MISSING").is_some() {
+                if omsi_cfg::flags::DEBUG_MISSING.is_set() {
                     log::info!("  texture {name} looked for in {:?}", dirs);
                 }
             }
@@ -1990,15 +1990,13 @@ static OVER_ROAD_AT: std::sync::Mutex<Vec<(f64, f64, f32, f32)>> = std::sync::Mu
 
 fn heightprofile_ground() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| omsi_cfg::env::var_os("OMSI_HEIGHTPROFILE_GROUND").is_some())
+    *ON.get_or_init(|| omsi_cfg::flags::HEIGHTPROFILE_GROUND.is_set())
 }
 
 fn surface_flush() -> f32 {
     static V: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *V.get_or_init(|| {
-        omsi_cfg::env::var("OMSI_SURFACE_FLUSH")
-            .ok()
-            .and_then(|v| v.parse().ok())
+        omsi_cfg::flags::SURFACE_FLUSH.number()
             .unwrap_or(0.12)
     })
 }
@@ -2046,7 +2044,7 @@ pub fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::HeightMap>> {
     static MEMO: std::sync::OnceLock<Mutex<HashMap<PathBuf, Option<Arc<omsi_geometry::HeightMap>>>>> = std::sync::OnceLock::new();
     // OMSI_NO_SURF: every road as smooth as before (A/B)
-    if omsi_cfg::env::var_os("OMSI_NO_SURF").is_some() {
+    if omsi_cfg::flags::NO_SURF.is_set() {
         return None;
     }
     let found = omsi_texture::find_texture(texture, dirs)?;
@@ -3619,9 +3617,7 @@ impl World {
     ) -> Result<LoadStats> {
         let t0 = std::time::Instant::now();
         // OMSI_BATCH=n: prepare the tiles a few at a time, as the window's streaming does
-        let batch = omsi_cfg::env::var("OMSI_BATCH")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
+        let batch = omsi_cfg::flags::BATCH.number::<usize>()
             .filter(|n| *n > 0)
             .unwrap_or(tiles.len().max(1));
         let mut stats = LoadStats {
@@ -3643,7 +3639,7 @@ impl World {
         self.staged.lock().clear();
         self.refresh_tile_lists();
         stats.log_ground();
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             log::info!(
                 "build_scene: prepared in {:.2} s, uploaded in {:.2} s",
                 (t1 - t0).as_secs_f64(),
@@ -3652,7 +3648,7 @@ impl World {
         }
         // OMSI_DUMP_GROUND=file: every loaded tile's final terrain and how much of it the
         // roads cut away, as text (to compare a whole-map load with a streamed one)
-        if let Some(path) = omsi_cfg::env::var_os("OMSI_DUMP_GROUND") {
+        if let Some(path) = omsi_cfg::flags::DUMP_GROUND.os() {
             let mut out = String::new();
             let terrains = self.terrains.read();
             let surfaces = self.surfaces.read();
@@ -3791,7 +3787,7 @@ impl World {
         if files > 0 {
             let records: usize = groups.iter().flat_map(|g| g.1.iter().map(|m| m.1)).sum();
             log::warn!("{} object and spline files named by the map are not installed ({} records, in {} add-on folders; OMSI_CHECK_TYPES=1 lists them)", files, records, groups.len());
-            if omsi_cfg::env::var_os("OMSI_CHECK_TYPES").is_some() {
+            if omsi_cfg::flags::CHECK_TYPES.is_set() {
                 for (folder, list) in &groups {
                     log::info!(
                         "  missing from {folder}: {} files, {} records",
@@ -3836,7 +3832,7 @@ impl World {
     }
 
     fn prepare_tiles_impl(&self, tiles: &[(i32, i32, PathBuf)], initial_diag: bool) -> (Vec<Prepared>, LoadStats) {
-        let profile = omsi_cfg::env::var_os("OMSI_PROFILE").is_some();
+        let profile = omsi_cfg::flags::PROFILE.is_set();
         let t0 = std::time::Instant::now();
         let index = self.index();
         let layout = self.layout();
@@ -4161,7 +4157,7 @@ impl World {
                 _ => [-5.0; 4],
             }
         });
-        let debug_splines = omsi_cfg::env::var_os("OMSI_DEBUG_SPLINES").is_some();
+        let debug_splines = omsi_cfg::flags::DEBUG_SPLINES.is_set();
         let mut lanes: Vec<Lane> = Vec::new();
         let mut meshes: Vec<Arc<MeshData>> = Vec::new();
         for s in tile
@@ -4174,7 +4170,7 @@ impl World {
                 continue;
             };
             let curve = SplineCurve::from_map(s, origin2);
-            if omsi_cfg::env::var_os("OMSI_CHECK_SPLINES").is_some() {
+            if omsi_cfg::flags::CHECK_SPLINES.is_set() {
                 SPLINE_ENDS.lock().insert(s.id, (curve.point_at(0.0), curve.end_point(), s.prev_id, s.next_id, s.file.clone()));
             }
             // editor-only splines (invisible streets, flight paths) still carry lanes
@@ -4209,7 +4205,7 @@ impl World {
             let mesh = build_spline_mesh(&st.def, &curve, s.mirror, origin);
             // OMSI_CHECK_SPIKES: a face standing taller than the profile, the gradient and
             // the cant allow (a spike out of the road)
-            if omsi_cfg::env::var_os("OMSI_CHECK_SPIKES").is_some() && !mesh.is_empty() {
+            if omsi_cfg::flags::CHECK_SPIKES.is_set() && !mesh.is_empty() {
                 let (zlo, zhi) = st.def.profiles.iter().flat_map(|p| p.points.iter().map(|q| q.z)).fold((f32::MAX, f32::MIN), |(a, b), z| (a.min(z), b.max(z)));
                 let n = omsi_geometry::spline_station_count(&st.def, &curve).max(1);
                 let step = curve.length / n as f64;
@@ -4257,7 +4253,7 @@ impl World {
                     // makes the outline from it; the terrain takes it with the `[terrainhole]`
                     // meshes, "Terrain hole cutting: Spline")
                     let mode = s.terrain_align.map(|v| v.clamp(0.0, 255.0) as u8).unwrap_or(1);
-                    if omsi_cfg::env::var_os("OMSI_LIST_ALIGNED").is_some() {
+                    if omsi_cfg::flags::LIST_ALIGNED.is_set() {
                         let p = curve.point_at(curve.length * 0.5);
                         log::info!("aligned spline {} {} mode {mode} mid ({:.1}, {:.1}, {:.1}) heading {:.0}", s.id, s.file, p.x, p.y, p.z, curve.heading_at(curve.length * 0.5));
                     }
@@ -4317,11 +4313,9 @@ impl World {
             .collect();
         *out.lanes.lock() = lanes;
         *out.meshes.lock() = Some(meshes);
-        let only_object = omsi_cfg::env::var("OMSI_ONLY_OBJECT")
-            .ok()
+        let only_object = omsi_cfg::flags::ONLY_OBJECT.text()
             .map(|f| f.to_ascii_lowercase());
-        let skip_object = omsi_cfg::env::var("OMSI_SKIP_OBJECT")
-            .ok()
+        let skip_object = omsi_cfg::flags::SKIP_OBJECT.text()
             .map(|f| f.to_ascii_lowercase());
         let wanted = |file: &str| {
             let f = file.to_ascii_lowercase();
@@ -4335,7 +4329,7 @@ impl World {
                     .unwrap_or(false)
         };
         // [object]
-        let debug_outside = omsi_cfg::env::var_os("OMSI_DEBUG_OBJECTS").is_some();
+        let debug_outside = omsi_cfg::flags::DEBUG_OBJECTS.is_set();
         let mut outside = 0usize;
         for o in &tile.objects {
             if !wanted(&o.file) {
@@ -4514,7 +4508,7 @@ impl World {
         let Some(ot) = self.object_type(file) else {
             self.note_missing(file, "scenery object", tx, ty, key);
             stats.lock().failed_objects += 1;
-            if omsi_cfg::env::var_os("OMSI_DEBUG_MISSING").is_some() {
+            if omsi_cfg::flags::DEBUG_MISSING.is_set() {
                 log::info!("object not placed: {file} (tile {tx},{ty}, id {key})");
             }
             return None;
@@ -4719,10 +4713,10 @@ impl World {
                     .unwrap_or(glam::Mat4::IDENTITY);
                 if *index >= pt.sco.attachments.len() {
                     // `OMSI_NO_ATTACH_FALLBACK=1` drops them instead, for an A/B
-                    if omsi_cfg::env::var_os("OMSI_NO_ATTACH_FALLBACK").is_some() {
+                    if omsi_cfg::flags::NO_ATTACH_FALLBACK.is_set() {
                         continue;
                     }
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_MISSING").is_some() {
+                    if omsi_cfg::flags::DEBUG_MISSING.is_set() {
                         log::info!("attached object {} (id {}) on point index {index} of {parent} ({} has {}): at the parent's origin ({:.1}, {:.1}, {:.1})", o.ot.sco.path.display(), o.id, pt.sco.path.display(), pt.sco.attachments.len(), pp.pos.x, pp.pos.y, pp.pos.z);
                     }
                 }
@@ -4739,7 +4733,7 @@ impl World {
         for (o, fp) in st.objects.iter().zip(&final_poses) {
             if let (Placement::Attached { parent, .. }, None) = (&o.place, fp) {
                 unattached += 1;
-                if omsi_cfg::env::var_os("OMSI_DEBUG_MISSING").is_some() {
+                if omsi_cfg::flags::DEBUG_MISSING.is_set() {
                     log::info!("attached object {} (id {}) on {parent} not placed: the parent is not in the tile", o.ot.sco.path.display(), o.id);
                 }
             }
@@ -4809,7 +4803,7 @@ impl World {
                 omsi_geometry::compute_normals_d3d(&mut m);
                 meshes.push(m);
             }
-            if biggest > 1.0 && omsi_cfg::env::var_os("OMSI_DEBUG_WARP").is_some() {
+            if biggest > 1.0 && omsi_cfg::flags::DEBUG_WARP.is_set() {
                 let (lo, hi) = base.positions.iter().fold((f32::MAX, f32::MIN), |a, p| (a.0.min(p.z), a.1.max(p.z)));
                 log::info!("crossing {} at ({:.1}, {:.1}, {:.1}) moved up to {biggest:.2} m (field {lo:.2}..{hi:.2}, {} points)", ot.sco.path.display(), pos.x, pos.y, pos.z, base.positions.len());
             }
@@ -4855,7 +4849,7 @@ impl World {
         // ground's triangles cut through the camber and past the kerbs: a piece of road
         // gone under the grass, while beside it the ground stood lifted over the verge.
         // `OMSI_TERRAIN_ALIGN=1` still does it.)
-        if omsi_cfg::env::var_os("OMSI_TERRAIN_ALIGN").is_some() {
+        if omsi_cfg::flags::TERRAIN_ALIGN.is_set() {
             let mut ts = TileSurface::new(SURFACE_RASTER);
             let mut reach = 0.0f32;
             let mut any = false;
@@ -4941,7 +4935,7 @@ impl World {
         // ground - every pole, sign and tree there - floated over the pavement with it (#860).
         // `OMSI_CROSSING_DEFORM=1` still does it.)
         let mut deformed = false;
-        if omsi_cfg::env::var_os("OMSI_CROSSING_DEFORM").is_some() {
+        if omsi_cfg::flags::CROSSING_DEFORM.is_set() {
             let mut ds = TileSurface::new(SURFACE_RASTER);
             let mut any = false;
             for q in &order {
@@ -5004,9 +4998,9 @@ impl World {
         let mut parked_cars: Vec<(DVec3, f64)> = Vec::new();
         let mut objects: Vec<PlacedObject> = Vec::new();
         let mut trees = Vec::new();
-        let debug_objects = omsi_cfg::env::var_os("OMSI_DEBUG_OBJECTS").is_some();
-        let check_objects = omsi_cfg::env::var_os("OMSI_CHECK_OBJECTS").is_some();
-        let debug_float = omsi_cfg::env::var_os("OMSI_DEBUG_FLOAT").is_some();
+        let debug_objects = omsi_cfg::flags::DEBUG_OBJECTS.is_set();
+        let check_objects = omsi_cfg::flags::CHECK_OBJECTS.is_set();
+        let debug_float = omsi_cfg::flags::DEBUG_FLOAT.is_set();
         let index = self.index();
         for (oi, (o, fp)) in st.objects.iter().zip(res.poses.iter()).enumerate() {
             let Some(Pose { pos, rot: xf }) = *fp else {
@@ -5115,7 +5109,7 @@ impl World {
                     list.push(c);
                     let idx = list.len() - 1;
                     self.controller_of_object.lock().insert(o.id, idx);
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                    if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                         log::info!("traffic light program {idx}: object {} {} at ({:.1}, {:.1}) cycle {:?} lights {}", o.id, ot.sco.path.display(), pos.x, pos.y, ot.sco.traffic_lights_group, ot.sco.traffic_lights.len());
                     }
                     idx
@@ -5270,7 +5264,7 @@ impl World {
                     ))
                 };
                 if !shape.parts.is_empty() {
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_COLLISION").is_some() {
+                    if omsi_cfg::flags::DEBUG_COLLISION.is_set() {
                         log::info!("obstacle {} key {} at ({:.1}, {:.1}) z {:.1} rot {:.0}: collision mesh of {} triangles as {} parts{}", ot.sco.path.display(), o.key, pos.x, pos.y, pos.z, heading, c.indices.len() / 3, shape.parts.len(), if upright { "" } else { " (tilted)" });
                     }
                     state
@@ -5298,7 +5292,7 @@ impl World {
                             d.dot(r).abs() <= probe.half.x && d.dot(f).abs() <= probe.half.y && w.z >= probe.z0 - 1.0 && w.z <= probe.z1 - 0.5
                         })
                     };
-                    if road_through && omsi_cfg::env::var_os("OMSI_DEBUG_COLLISION").is_some() {
+                    if road_through && omsi_cfg::flags::DEBUG_COLLISION.is_set() {
                         log::info!("no wall: {} key {} - a road runs through its [boundingbox]", ot.sco.path.display(), o.key);
                     }
                     if bb[2] > 0.4
@@ -5320,7 +5314,7 @@ impl World {
                         if o.parked && !gone {
                             state.parked_boxes.push(obb);
                         }
-                        if omsi_cfg::env::var_os("OMSI_DEBUG_COLLISION").is_some() {
+                        if omsi_cfg::flags::DEBUG_COLLISION.is_set() {
                             log::info!("obstacle {} key {} at ({:.1}, {:.1}) z {:.1}..{:.1} size {:.1}x{:.1}x{:.1} centre offset ({:.1}, {:.1}) rot {:.0}{}{}", ot.sco.path.display(), o.key, pos.x, pos.y, obb.z0, obb.z1, bb[0], bb[1], bb[2], bb[3], bb[4], heading, if obb.pole.is_some() { " pole" } else { "" }, " [boundingbox]");
                         }
                     }
@@ -5362,7 +5356,7 @@ impl World {
             let lamp = if ot.sco.is_traffic_light || child_lamp {
                 let named = o.extra.first().map(|s| s.trim()).filter(|s| !s.is_empty());
                 let index = named.map(|s| omsi_cfg::parse_f64(s) as usize).unwrap_or(0);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_LAMPS").is_some() {
+                if omsi_cfg::flags::DEBUG_LAMPS.is_set() {
                     match o.lamp_parent {
                         None => log::info!("traffic light {} (id {}) names no crossing ([varparent]); extra {:?}", ot.sco.path.display(), o.id, o.extra),
                         Some(p) => log::info!("traffic light {} (id {}) at ({:.0}, {:.0}): crossing {p}, light {:?}", ot.sco.path.display(), o.id, pos.x, pos.y, o.extra),
@@ -5525,8 +5519,8 @@ impl World {
             .zip(st.splines.iter())
             .map(|(m, sp)| (m, sp.ty.clone(), sp.casts_shadow, sp.sort_origin))
             .collect();
-        let (splines, ground_splines) = if omsi_cfg::env::var_os("OMSI_NO_GROUND_SPLINE_BATCHING").is_some()
-            || omsi_cfg::env::var_os("OMSI_NO_SPLINE_BATCHING").is_some()
+        let (splines, ground_splines) = if omsi_cfg::flags::NO_GROUND_SPLINE_BATCHING.is_set()
+            || omsi_cfg::flags::NO_SPLINE_BATCHING.is_set()
         {
             (splines, Vec::new())
         } else {
@@ -5583,14 +5577,14 @@ impl World {
         staged: &HashMap<(i32, i32), Arc<StagedTile>>,
         layout: &TileLayout,
     ) {
-        let debug_raster = omsi_cfg::env::var("OMSI_DEBUG_RASTER").ok().and_then(|q| {
+        let debug_raster = omsi_cfg::flags::DEBUG_RASTER.text().and_then(|q| {
             q.split_once(',')
                 .and_then(|(a, b)| Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?)))
         });
-        let check_roads = omsi_cfg::env::var_os("OMSI_CHECK_ROADS").is_some();
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_SPLINES").is_some();
+        let check_roads = omsi_cfg::flags::CHECK_ROADS.is_set();
+        let debug = omsi_cfg::flags::DEBUG_SPLINES.is_set();
         type Check = (usize, usize, Vec<(f64, f64, f32)>);
-        let debug_physics = omsi_cfg::env::var_os("OMSI_DEBUG_PHYSICS").is_some();
+        let debug_physics = omsi_cfg::flags::DEBUG_PHYSICS.is_set();
         let results: Vec<(Arc<TileSurface>, Option<Image>, Check, usize)> = prepared
             .par_iter_mut()
             .map(|p| {
@@ -5679,7 +5673,7 @@ impl World {
                     else {
                         continue;
                     };
-                    if omsi_cfg::env::var_os("OMSI_NO_SPLINE_HOLES").is_none() {
+                    if !omsi_cfg::flags::NO_SPLINE_HOLES.is_set() {
                         for rim in &q.hole_rims {
                             let ring: Vec<_> = rim.iter().map(|v| v.truncate()).collect();
                             ts.add_outline(&ring, tx, ty);
@@ -5824,7 +5818,7 @@ impl World {
                         log::info!("tile ({tx}, {ty}): terrain cut under flush surfaces");
                     }
                     let rgba = ts.mask_image(&terrain_at, surface_flush());
-                    if let Some(dir) = omsi_cfg::env::var("OMSI_DUMP_CUT").ok() {
+                    if let Some(dir) = omsi_cfg::flags::DUMP_CUT.text() {
                         let a: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
                         if let Some(img) = image::GrayImage::from_raw(ts.size as u32, ts.size as u32, a) {
                             let _ = image::imageops::flip_vertical(&img).save(format!("{dir}/cut_{tx}_{ty}.png"));
@@ -5917,7 +5911,7 @@ impl World {
         let mut where_: Vec<(f64, f64, f32)> = Vec::new();
         let (mut tris, mut wheel_meshes) = (0usize, 0usize);
         for (p, (ts, cut, check, wheels)) in prepared.iter_mut().zip(results) {
-            p.cut = cut.map(|c| if omsi_cfg::env::var_os("OMSI_CUT_PLAIN").is_some() { omsi_texture::gpu::TextureData { gpu_mips: false, ..omsi_texture::gpu::TextureData::from_image(c) } } else { tile_texture(c, true) });
+            p.cut = cut.map(|c| if omsi_cfg::flags::CUT_PLAIN.is_set() { omsi_texture::gpu::TextureData { gpu_mips: false, ..omsi_texture::gpu::TextureData::from_image(c) } } else { tile_texture(c, true) });
             tris += ts.drive.tris.len();
             wheel_meshes += wheels;
             // the wheel surfaces come and go with the tile (World::unload_tile)
@@ -6406,7 +6400,7 @@ impl World {
                 let bump = match slot_ov
                     .iter()
                     .find_map(|o| o.bumpmap.clone())
-                    .filter(|_| envmap.is_some() && omsi_cfg::env::var_os("OMSI_NO_BUMP").is_none())
+                    .filter(|_| envmap.is_some() && !omsi_cfg::flags::NO_BUMP.is_set())
                 {
                     Some((name, f)) => {
                         gpu.bump_texture(renderer, scene, &name, &dirs)
@@ -6444,7 +6438,7 @@ impl World {
                 renderer.address_next.set(address);
                 renderer.light_map_next.set(ot.sco.light_map_mapping);
                 // OMSI_DEBUG_OBJMAT=<part of the object's file name>: how its slots are made
-                if let Ok(f) = omsi_cfg::env::var("OMSI_DEBUG_OBJMAT") {
+                if let Some(f) = omsi_cfg::flags::DEBUG_OBJMAT.text() {
                     if ot.sco.path.to_string_lossy().to_ascii_lowercase().contains(&f.to_ascii_lowercase()) {
                         log::info!("{} slot {slot} '{}': tex {} alpha {:?} color {:?} emissive {:?} night {} transmap {:?} envmap {:?} auto_night {}", ot.sco.path.display(), m.texture, tex.is_some(), alpha, color, emissive, night.is_some(), transmap.map(|t| t.1), envmap.map(|e| e.1), t.auto_night);
                     }
@@ -6686,7 +6680,7 @@ impl World {
         let gpu = &mut *gpu_guard;
         self.ensure_ground(renderer, scene, gpu);
         let ground_mat = gpu.ground.as_ref().unwrap().ground_mat;
-        let slow = omsi_cfg::env::var_os("OMSI_DEBUG_UPLOAD").is_some();
+        let slow = omsi_cfg::flags::DEBUG_UPLOAD.is_set();
         loop {
             let t_item = std::time::Instant::now();
             if let Some(path) = u.textures.pop() {
@@ -6817,7 +6811,7 @@ impl World {
         let key = (p.tx, p.ty);
         let images: &HashMap<PathBuf, Arc<TextureData>> = &p.images;
         let ground_dirs = vec![self.root.clone()];
-        let only_object = omsi_cfg::env::var("OMSI_ONLY_OBJECT").is_ok();
+        let only_object = omsi_cfg::flags::ONLY_OBJECT.text().is_some();
         let decodes_before = (gpu.sync_decodes, gpu.sync_decode_secs);
         let t_start = std::time::Instant::now();
         let out_of_time = |done_some: bool| {
@@ -6933,7 +6927,7 @@ impl World {
                         // tile is the same tile mesh once more, blended in through its own mask - which
                         // is how OMSI's car parks get their asphalt, its side streets their cobbles and
                         // its meadows their fields.
-                        let no_paint = omsi_cfg::env::var_os("OMSI_NO_GROUND_PAINT").is_some();
+                        let no_paint = omsi_cfg::flags::NO_GROUND_PAINT.is_set();
                         for (layer, mask, painted) in p.paint.iter().filter(|_| !no_paint) {
                             let Some(gt) = self.global.ground_textures.get(*layer) else {
                                 continue;
@@ -6978,7 +6972,7 @@ impl World {
                                 inst.ground_layer = true;
                                 inst.render_phase = RenderPhase::Terrain;
                             }
-                            if omsi_cfg::env::var_os("OMSI_DEBUG_SURFACES").is_some() {
+                            if omsi_cfg::flags::DEBUG_SURFACES.is_set() {
                                 log::info!("tile ({}, {}): ground layer {layer} '{}' painted on {:.1} % of the tile, mask {:?}", p.tx, p.ty, gt.texture, painted * 100.0, mask.format);
                             }
                         }
@@ -7047,7 +7041,7 @@ impl World {
                             wm.ranges.push((0, 6, 0));
                             let wid = gpu.add_mesh(renderer, scene, &wm);
                             tg.meshes.push(wid);
-                            if omsi_cfg::env::var_os("OMSI_DEBUG_SURFACES").is_some() {
+                            if omsi_cfg::flags::DEBUG_SURFACES.is_set() {
                                 log::info!("tile ({}, {}): water at {:.1}..{:.1} m, centred ({:.0}, {:.0})", p.tx, p.ty, h.iter().cloned().fold(f32::MAX, f32::min), h.iter().cloned().fold(f32::MIN, f32::max), p.origin.x + tile_size() / 2.0, p.origin.y + tile_size() / 2.0);
                             }
                             // an ordinary instance, not a surface: the surface depth bias would let a
@@ -7161,7 +7155,7 @@ impl World {
                     } else {
                         sg.materials.clone()
                     };
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_SPLINES").is_some() {
+                    if omsi_cfg::flags::DEBUG_SPLINES.is_set() {
                         let mean_nz = mesh.normals.iter().map(|n| n.z).sum::<f32>()
                             / mesh.normals.len().max(1) as f32;
                         log::info!("upload spline {} origin={:?} ranges={:?} mats={:?} mean normal z={mean_nz:+.2} verts={} first positions {:?}", st.def.path.display(), p.origin, &mesh.ranges[..mesh.ranges.len().min(3)], mats, mesh.positions.len(), &mesh.positions[..mesh.positions.len().min(3)]);
@@ -7998,7 +7992,7 @@ impl World {
             pl.secs[phase.min(3) as usize] += t_phase.elapsed().as_secs_f64();
         }
         let done = pl.phase >= 4;
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             let took = t_start.elapsed().as_secs_f64();
             let decodes = (
                 gpu.sync_decodes - decodes_before.0,
@@ -8615,7 +8609,7 @@ impl World {
                     .join(", ")
             )
         };
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TEXTURES").is_some() {
+        if omsi_cfg::flags::DEBUG_TEXTURES.is_set() {
             log::info!("all textures by size: {all_formats}");
         }
         let gpu = self.gpu.lock();
@@ -8819,7 +8813,7 @@ impl World {
         if n > 0 {
             let t = std::time::Instant::now();
             let rebound = renderer.rebind_textures(scene, &swapped);
-            if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+            if omsi_cfg::flags::PROFILE.is_set() {
                 log::info!("textures: {n} compressed ones swapped in, {rebound} materials rebound in {:.1} ms", t.elapsed().as_secs_f64() * 1000.0);
             }
         }
@@ -9042,7 +9036,7 @@ impl World {
         }
         drop(gpu);
         let rebound = renderer.rebind_textures(scene, &shrunk);
-        if (!shrunk.is_empty() || restoring > 0) && omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if (!shrunk.is_empty() || restoring > 0) && omsi_cfg::flags::PROFILE.is_set() {
             log::info!("texture budget: {:.0} of {:.0} MB in use, {} textures lost a level ({} materials rebound), {} coming back, in {:.1} ms", usage as f64 / 1e6, limit as f64 / 1e6, shrunk.len(), rebound, restoring, t0.elapsed().as_secs_f64() * 1000.0);
         }
         shrunk.len() + restoring
@@ -9099,7 +9093,7 @@ impl World {
             lens[2] - keep[2],
             lens[3] - keep[3],
         ];
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             log::info!("scene slots: cut {} meshes, {} textures, {} materials, {} instances off the end in {:.1} ms", cut[0], cut[1], cut[2], cut[3], t.elapsed().as_secs_f64() * 1000.0);
         }
         cut
@@ -9525,7 +9519,7 @@ impl World {
             let a = aspects.get(&o.map_id).copied().unwrap_or(0.0);
             if o.inst.var("Signal") != Some(a) {
                 o.inst.set_var("Signal", a);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_SIGNALS").is_some() {
+                if omsi_cfg::flags::DEBUG_SIGNALS.is_set() {
                     log::info!("signal {} at ({:.0}, {:.0}) shows {a}", o.map_id, o.pos.x, o.pos.y);
                 }
             }
@@ -9634,7 +9628,7 @@ impl World {
     /// at night as the terrain is.
     pub fn update_light_map_atlas(&self, renderer: &Renderer, eye: DVec3) {
         // (`OMSI_NO_LIGHT_MAP=1`: the tiles' night light maps left out, for an A/B)
-        if omsi_cfg::env::var_os("OMSI_NO_LIGHT_MAP").is_some() {
+        if omsi_cfg::flags::NO_LIGHT_MAP.is_set() {
             return;
         }
         let ts = tile_size();
@@ -9670,7 +9664,7 @@ impl World {
             let Some(o) = scripted.iter_mut().find(|o| o.map_id == id) else { continue };
             if let Some(Some(d)) = o.ty.sco.path_switch_dir.get(path as usize) {
                 let was = o.inst.var("Switch");
-                if o.inst.set_var("Switch", *d as f32) && was != Some(*d as f32) && omsi_cfg::env::var_os("OMSI_DEBUG_SWITCHES").is_some() {
+                if o.inst.set_var("Switch", *d as f32) && was != Some(*d as f32) && omsi_cfg::flags::DEBUG_SWITCHES.is_set() {
                     log::info!("switch {} ({}) at ({:.0}, {:.0}) thrown to {d} for a train", id, o.ty.sco.path.display(), o.pos.x, o.pos.y);
                 }
             }
@@ -9686,7 +9680,7 @@ impl World {
         }
         let scripted = self.scripted.lock();
         static DEBUG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        if *DEBUG.get_or_init(|| omsi_cfg::env::var_os("OMSI_DEBUG_PARTICLES").is_some()) {
+        if *DEBUG.get_or_init(|| omsi_cfg::flags::DEBUG_PARTICLES.is_set()) {
             let mut near: Vec<(f64, &ParticleObject)> = objs.values().flatten().map(|po| ((po.pos - center).length(), po)).collect();
             near.sort_by(|a, b| a.0.total_cmp(&b.0));
             for (d, po) in near.iter().take(3) {
@@ -9860,7 +9854,7 @@ impl World {
                         let (w, h) = (st.def.width.max(1) as u32, st.def.height.max(1) as u32);
                         if let Some(rgba) = st.pending.take() {
                             // OMSI_DUMP_SCENERY_TEXT=<dir>: the pictures as drawn
-                            if let Some(dir) = omsi_cfg::env::var_os("OMSI_DUMP_SCENERY_TEXT") {
+                            if let Some(dir) = omsi_cfg::flags::DUMP_SCENERY_TEXT.os() {
                                 let path = std::path::Path::new(&dir)
                                     .join(format!("text_{}.png", o.map_id));
                                 log::info!(
@@ -10358,7 +10352,7 @@ fn sync_materials(
         }
         if let Some(inst) = render.instances.get(v.mesh) {
             let m = v.material(|n| vehicle.var(n));
-            if omsi_cfg::env::var("OMSI_DEBUG_VARIANTS").ok().is_some_and(|f| !f.is_empty() && v.var.to_ascii_lowercase().contains(&f.to_ascii_lowercase())) {
+            if omsi_cfg::flags::DEBUG_VARIANTS.text().is_some_and(|f| !f.is_empty() && v.var.to_ascii_lowercase().contains(&f.to_ascii_lowercase())) {
                 log::info!("variant mesh {} slot {} var {} = {:?}: material {m} (base {}, item {})", v.mesh, v.slot, v.var, vehicle.var(&v.var), v.base, v.item);
             }
             renderer.set_material(scene, *inst, v.slot, m);
@@ -10415,7 +10409,7 @@ fn sync_interior_lamps(
             }
         }
         let total: u32 = distinct.iter().map(|d| d.len() as u32).sum();
-        if omsi_cfg::env::var_os("OMSI_DEBUG_INTERIOR").is_some() {
+        if omsi_cfg::flags::DEBUG_INTERIOR.is_set() {
             log::info!("interior lamps of {}: {} lamps, {} instances, {} meshes lit by sets {:?}", ty.def.path.display(), n, render.instances.len(), sets.len(), distinct);
         }
         if total == 0 {
@@ -10669,7 +10663,7 @@ fn material_extra(
         // for the raindrops (ZENABLE 1, blend ZERO/ONE). Taken as "no
         // depth test", the Sprinter's inner window glass (flagged so) was drawn over the
         // body skin round every opening. OMSI_NOZCHECK_BIAS=1: the old reading.
-        no_z_check: ov.iter().any(|o| o.no_z_check) && omsi_cfg::env::var_os("OMSI_NOZCHECK_BIAS").is_some(),
+        no_z_check: ov.iter().any(|o| o.no_z_check) && omsi_cfg::flags::NOZCHECK_BIAS.is_set(),
         z_bias: ov.iter().map(|o| o.z_bias).find(|b| *b != 0).unwrap_or(0),
         ambient: None,
         specular,
@@ -10730,7 +10724,7 @@ pub(crate) fn attach_pbr(renderer: &Renderer, scene: &mut Scene, path: &Path, id
     if is_snow_picture(path) {
         scene.snow_textures.insert(id);
     }
-    if omsi_cfg::env::var_os("OMSI_NO_PBR").is_some() {
+    if omsi_cfg::flags::NO_PBR.is_set() {
         return;
     }
     let files = omsi_texture::pbr::find(path);
@@ -11757,7 +11751,7 @@ fn vehicle_bump_names(
     vt: &omsi_sim::VehicleType,
     scheme: Option<usize>,
 ) -> Vec<(String, Vec<PathBuf>)> {
-    if omsi_cfg::env::var_os("OMSI_NO_BUMP").is_some() || omsi_cfg::env::var_os("OMSI_NO_ENVMAP").is_some() {
+    if omsi_cfg::flags::NO_BUMP.is_set() || omsi_cfg::flags::NO_ENVMAP.is_set() {
         return Vec::new();
     }
     let mut dirs = vt.texture_dirs(root);
@@ -12112,7 +12106,7 @@ impl World {
                 }
             }
         }
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             log::info!(
                 "vehicle sets: {} let go ({textures} textures, {meshes} meshes), {} kept",
                 gone.len(),
@@ -12152,7 +12146,7 @@ impl World {
                 let id = renderer.add_prepared_texture(scene, t);
                 gpu.take_texture_slot(renderer, scene, id)
             };
-            if omsi_cfg::env::var_os("OMSI_DEBUG_TEXTURES").is_some() {
+            if omsi_cfg::flags::DEBUG_TEXTURES.is_set() {
                 log::info!(
                     "vehicle texture {} (made ahead) {:?}, {:.2} MB",
                     path.display(),
@@ -12190,7 +12184,7 @@ impl World {
             }
             id
         };
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TEXTURES").is_some() {
+        if omsi_cfg::flags::DEBUG_TEXTURES.is_set() {
             log::info!(
                 "vehicle texture {} {}x{} {:?} {} levels, {:.2} MB",
                 path.display(),
@@ -12269,7 +12263,7 @@ impl World {
                 self.gpu.lock().add_data(renderer, scene, &data)
             }
         };
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TEXTURES").is_some() {
+        if omsi_cfg::flags::DEBUG_TEXTURES.is_set() {
             log::info!(
                 "vehicle bump map {}, {:.2} MB",
                 key.display(),
@@ -12562,7 +12556,7 @@ impl World {
         // (the Sprinter's, the Mercus's, the Urbino 15's saloon showed through half their
         // panels drawn so while `[matl_noZcheck]` still took their inner glass out of the
         // depth test; OMSI_NO_MODEL_ORDER=1 draws opaque parts first again)
-        if ordered && omsi_cfg::env::var_os("OMSI_NO_MODEL_ORDER").is_none() {
+        if ordered && !omsi_cfg::flags::NO_MODEL_ORDER.is_set() {
             log::debug!("{}: drawn in model order (a blended slot writes depth before an opaque one)", vt.def.path.display());
             for &i in &instances {
                 if scene.instances.get(i).is_some_and(|x| !x.blob) {
@@ -12667,8 +12661,8 @@ impl World {
         let mut missing_tex: Vec<String> = Vec::new();
         // OMSI_ONLY_MESH=a|b draws only the meshes whose file names contain one of the
         // parts (and logs their materials); OMSI_HIDE_MESH=a|b leaves those out
-        let only = omsi_cfg::env::var("OMSI_ONLY_MESH").ok();
-        let hide = omsi_cfg::env::var("OMSI_HIDE_MESH").ok();
+        let only = omsi_cfg::flags::ONLY_MESH.text();
+        let hide = omsi_cfg::flags::HIDE_MESH.text();
         let matches = |list: &str, file: &str| {
             list.split('|').any(|f| {
                 !f.is_empty() && file.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
@@ -12826,7 +12820,7 @@ impl World {
                     // it, in model order with its depth written - see `Instance::ordered` -
                     // instead of being guessed opaque, which drew overlay layers black, #127.
                     // `OMSI_REPAIR_BODY_DEPTH=1` brings the old guess back for comparison.)
-                    let repair_body_depth = omsi_cfg::env::var_os("OMSI_REPAIR_BODY_DEPTH").is_some() && !layer && is_vehicle_body_material(&def.file, &m.texture, tex.is_some(), transmap.is_some(), ov.iter().any(|o| o.no_z_write), body_hint);
+                    let repair_body_depth = omsi_cfg::flags::REPAIR_BODY_DEPTH.is_set() && !layer && is_vehicle_body_material(&def.file, &m.texture, tex.is_some(), transmap.is_some(), ov.iter().any(|o| o.no_z_write), body_hint);
                     // (only a blended slot: an alpha-tested one - `[matl_alpha] 1`, the EN92's
                     // pictograms, a Sprinter's seat covers - is cut out as the model says, and
                     // made opaque its cut-out parts were grey boxes; and not a layer made of
@@ -12846,7 +12840,7 @@ impl World {
                     }
                     // Keep the material's declared alpha mode: a transmap mask alone must not
                     // make a solid body panel translucent.
-                    if omsi_cfg::env::var_os("OMSI_FORCE_OPAQUE").is_some() && !dirt_overlay {
+                    if omsi_cfg::flags::FORCE_OPAQUE.is_set() && !dirt_overlay {
                         alpha = AlphaMode::Opaque;
                     }
                     // (a night or light map named as a [CTCTexture] is the paint scheme's
@@ -12873,12 +12867,12 @@ impl World {
                     // a separate mask of about 6-10 %; read as the mask, the alpha made them
                     // mirrors. The mask and the bump map are shared vehicle textures like the
                     // rest (the bump map as a height map under a key of its own).
-                    let envmap = ov.iter().find_map(|o| o.envmap.clone()).filter(|_| omsi_cfg::env::var_os("OMSI_NO_ENVMAP").is_none()).and_then(|(t, f)| {
+                    let envmap = ov.iter().find_map(|o| o.envmap.clone()).filter(|_| !omsi_cfg::flags::NO_ENVMAP.is_set()).and_then(|(t, f)| {
                         let id = tex!(&t, &dirs_ref)?;
                         Some((id, f))
                     });
                     let env_mask = ov.iter().find_map(|o| o.envmap_mask.clone()).filter(|t| envmap.is_some() && !t.trim().is_empty()).and_then(|t| tex!(&subst(&t), &dirs_ref));
-                    let bump = ov.iter().find_map(|o| o.bumpmap.clone()).filter(|_| envmap.is_some() && omsi_cfg::env::var_os("OMSI_NO_BUMP").is_none()).and_then(|(t, f)| tex!(&subst(&t), &dirs_ref, vehicle_bump_texture).map(|id| (id, f)));
+                    let bump = ov.iter().find_map(|o| o.bumpmap.clone()).filter(|_| envmap.is_some() && !omsi_cfg::flags::NO_BUMP.is_set()).and_then(|(t, f)| tex!(&subst(&t), &dirs_ref, vehicle_bump_texture).map(|id| (id, f)));
                     // a [matl_freetex] slot gets its texture from a string variable at run
                     // time, so an empty slot here is not a missing file
                     let freetex = ov_all.iter().any(|o| o.freetex.is_some());
@@ -12936,7 +12930,7 @@ impl World {
                     // (while it snows the film is the snow-crystal texture, drawn as it is)
                     // (all three graphics: OMSI 2's own rain, its texture sliding down the
                     // pane, looked like wet paper next to drops that bend the street)
-                    extra.rain_film = rain_layer && !snowing() && omsi_cfg::env::var_os("OMSI_TEXTURE_RAIN").is_none();
+                    extra.rain_film = rain_layer && !snowing() && !omsi_cfg::flags::TEXTURE_RAIN.is_set();
                     // Some mod buses put [matl_noZcheck] on the complete body mesh.
                     // That flag is for decals; on a body it disables depth writing and
                     // lets the cabin bleed through the outside shell. Keep it on genuine
@@ -13127,7 +13121,7 @@ impl World {
         }
         materials.sort_unstable();
         materials.dedup();
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             let (tn, ts) = *tex_time.borrow();
             log::info!("  vehicle set {}: {} meshes ({:.1} ms), {} textures uploaded ({:.1} ms), {} materials, {:.1} ms in all", vt.def.path.file_name().unwrap_or_default().to_string_lossy(), mesh_keys.len(), mesh_secs * 1000.0, tn, ts * 1000.0, materials.len(), t_all.elapsed().as_secs_f64() * 1000.0);
         }

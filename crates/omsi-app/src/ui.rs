@@ -1927,7 +1927,7 @@ impl Ui {
         let keys = !crate::platform::touch_controls();
         // (a phone draws to its edges, round the camera's hole in the screen: on the rail's
         // side in one of the two landscape turns - its contents keep clear of it)
-        let cut = if crate::platform::MOBILE || omsi_cfg::env::var_os("OMSI_MOBILE").is_some() { 18.0 * s } else { 0.0 };
+        let cut = if crate::platform::MOBILE || omsi_cfg::flags::MOBILE.is_set() { 18.0 * s } else { 0.0 };
         let rail_w = (264.0 * s + cut).min(f.width * 0.86).round();
         // the rail: flat, a hairline at its edge, a soft shadow over the picture
         self.text.shadow(r, scene, [-40.0 * s, -40.0 * s, rail_w, f.height + 40.0 * s], 0.0, 30.0 * s, 0.0, 120);

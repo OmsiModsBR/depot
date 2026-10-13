@@ -54,7 +54,7 @@ impl RouteArrows {
             // centimetres off it; a stop's helper stands where the stop object stands)
             let z = if *kind == "busstop" { pos.z } else { world.walk_height(pos.x, pos.y).filter(|z| (z - pos.z).abs() < 1.5).unwrap_or(pos.z) };
             if let Some(tg) = world.add_helper_object(renderer, scene, sco(kind), DVec3::new(pos.x, pos.y, z), *heading, std::slice::from_ref(text)) {
-                if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
+                if omsi_cfg::flags::DEBUG_NAV.is_set() {
                     log::info!("route arrow {kind} '{text}' at ({:.1}, {:.1}, {:.2}) heading {:.0}", pos.x, pos.y, z, heading);
                 }
                 self.placed.push((key, tg));
@@ -72,7 +72,7 @@ impl RouteArrows {
     /// Every arrow goes at once: the setting was switched off (`tick` is no longer called
     /// then, so those standing would stay where they were for good).
     pub(crate) fn clear(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene) {
-        if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
+        if omsi_cfg::flags::DEBUG_NAV.is_set() {
             log::info!("route arrows: the {} standing taken away", self.placed.len());
         }
         for (_, tg) in self.placed.drain(..) {

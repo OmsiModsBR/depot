@@ -144,7 +144,7 @@ pub(crate) struct RayTracer {
 
 /// One reflection ray per this many pixels each way (OMSI_RT_REFL_HALF=1: per 2 x 2).
 fn refl_div() -> u32 {
-    if omsi_cfg::env::var_os("OMSI_RT_REFL_HALF").is_some() {
+    if omsi_cfg::flags::RT_REFL_HALF.is_set() {
         2
     } else {
         1
@@ -848,7 +848,7 @@ impl RayTracer {
         if frame % 240 == 0 {
             rt.blas.retain(|_, e| frame - e.used < 1200);
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_RT").is_some() && frame % 30 == 1 {
+        if omsi_cfg::flags::DEBUG_RT.is_set() && frame % 30 == 1 {
             log::info!(
                 "ray tracing: {} instances, {} geometries, {} structures ({} built this frame)",
                 chosen.len(),
@@ -879,10 +879,7 @@ impl RayTracer {
                 ),
                 _ => ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]),
             };
-        let debug = omsi_cfg::env::var("OMSI_DEBUG_RT")
-            .ok()
-            .and_then(|v| v.parse::<f32>().ok())
-            .unwrap_or(0.0);
+        let debug = omsi_cfg::flags::DEBUG_RT.number::<f32>().unwrap_or(0.0);
         let p = Params {
             inv_view_proj: view_proj.inverse().to_cols_array_2d(),
             view_proj: view_proj.to_cols_array_2d(),

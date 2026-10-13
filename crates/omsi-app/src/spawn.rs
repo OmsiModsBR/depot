@@ -508,7 +508,7 @@ pub(crate) fn spawn_player(
             log::warn!("trigger {name} not found");
         }
     }
-    if omsi_cfg::env::var_os("OMSI_DEBUG_MESHES").is_some() {
+    if omsi_cfg::flags::DEBUG_MESHES.is_set() {
         for (i, vm) in p.vehicle.ty.meshes.iter().enumerate() {
             let def = &p.vehicle.ty.model.meshes[vm.def_index];
             let (lo, hi) = vm.data.positions.iter().fold(
@@ -527,7 +527,7 @@ pub(crate) fn spawn_player(
                 .fold(f32::MAX, f32::min);
             log::info!("mesh {i:3} {:40} vp={} tris={:6} bounds {:?}..{:?} uv {:?}..{:?} min|n|={nrm:.2} mats={} anims={} visible={:?}", def.file, def.viewpoint, vm.data.indices.len() / 3, lo, hi, uv0, uv1, vm.materials.len(), def.animations.len(), def.visible);
             // per material slot: which part of its texture the mesh shows (display texts)
-            if omsi_cfg::env::var("OMSI_DEBUG_MESHES")
+            if omsi_cfg::flags::DEBUG_MESHES.text()
                 .map(|f| {
                     !f.is_empty()
                         && def
@@ -578,7 +578,7 @@ pub(crate) fn spawn_player(
             }
         }
     }
-    if omsi_cfg::env::var_os("OMSI_DEBUG_PROPS").is_some() {
+    if omsi_cfg::flags::DEBUG_PROPS.is_set() {
         for (i, vm) in p.vehicle.ty.meshes.iter().enumerate() {
             let pr = &p.vehicle.mesh_props[i];
             let def = &p.vehicle.ty.model.meshes[vm.def_index];

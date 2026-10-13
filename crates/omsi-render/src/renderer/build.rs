@@ -34,7 +34,7 @@ impl Renderer {
         let (msaa, shadow_size) = (options.msaa, options.shadow_size);
         RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
         let gpu = GpuContext::open(&device, format, msaa, options.ray_tracing);
-        if omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref() == Ok("build") && msaa > 1 {
+        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("build") && msaa > 1 {
             // test hook for the fallback in `new_with`: a sample count no device takes
             let _ = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("invalid"),
@@ -168,10 +168,7 @@ impl Renderer {
                 cache: None,
             })
         };
-        let bias: i32 = omsi_cfg::env::var("OMSI_SURFACE_BIAS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(-24);
+        let bias: i32 = omsi_cfg::flags::SURFACE_BIAS.number().unwrap_or(-24);
         // one pipeline per `pipe_code`: the kind decides blending and the depth write
         let scene_pipelines =
             |f: wgpu::TextureFormat, fs: &str, samples: u32| -> Vec<wgpu::RenderPipeline> {
@@ -512,8 +509,8 @@ impl Renderer {
             // stills of moving things, the windy trees, at different moments)
             started: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs_f64(
-                    omsi_cfg::env::var("OMSI_RENDER_CLOCK")
-                        .ok()
+                    omsi_cfg::flags::RENDER_CLOCK
+                        .text()
                         .and_then(|v| v.trim().parse::<f64>().ok())
                         .filter(|s| s.is_finite() && *s >= 0.0)
                         .unwrap_or(0.0),

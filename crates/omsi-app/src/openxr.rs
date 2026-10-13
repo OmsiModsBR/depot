@@ -210,9 +210,7 @@ impl Vr {
         }
         // The runtime's recommendation is a quality target, not a minimum.
         // Rendering both eyes at the full Quest Link size is expensive.
-        let scale = omsi_cfg::env::var("OMSI_OPENXR_SCALE")
-            .ok()
-            .and_then(|s| s.parse::<f32>().ok())
+        let scale = omsi_cfg::flags::OPENXR_SCALE.number::<f32>()
             .filter(|s| s.is_finite())
             .unwrap_or(configured_scale)
             .clamp(0.5, 1.0);
@@ -338,7 +336,7 @@ impl Vr {
             recommended_height,
             scale
         );
-        if let Ok(rate) = omsi_cfg::env::var("OMSI_OPENXR_MIRROR_RATE") {
+        if let Some(rate) = omsi_cfg::flags::OPENXR_MIRROR_RATE.text() {
             log::info!("OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)");
         }
         Ok(Self {
@@ -957,7 +955,7 @@ impl Vr {
                 self.stats_desktop_mirror.as_secs_f64() * 1000.0 / count,
                 self.stats_gpu_wait.as_secs_f64() * 1000.0 / count,
             );
-            if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+            if omsi_cfg::flags::PROFILE.is_set() {
                 let stages = renderer.stats.borrow();
                 let mut detail: Vec<_> = stages
                     .iter()

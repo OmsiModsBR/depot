@@ -86,8 +86,8 @@ const JOINT_BLEND: f32 = 0.5;
 fn debug_pax() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        omsi_cfg::env::var_os("OMSI_DEBUG_PAX").is_some()
-            || omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some()
+        omsi_cfg::flags::DEBUG_PAX.is_set()
+            || omsi_cfg::flags::DEBUG_HUMANS.is_set()
     })
 }
 
@@ -1845,7 +1845,7 @@ impl Humans {
             }
         }
         log::info!("humans: {} types", types.len());
-        if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
+        if omsi_cfg::flags::DEBUG_HUMANS.is_set() {
             for t in &types {
                 let (mut lo, mut hi) = (f32::MAX, f32::MIN);
                 for m in &t.meshes {
@@ -1955,7 +1955,7 @@ impl Humans {
             map_humans_done: false,
             last_sync: 0.0,
             pose_stats: (0, 0, 0.0, 0.0),
-            trace: omsi_cfg::env::var("OMSI_TRACE_PAX").ok().and_then(|f| std::fs::File::create(f).ok()).map(|f| {
+            trace: omsi_cfg::flags::TRACE_PAX.text().and_then(|f| std::fs::File::create(f).ok()).map(|f| {
                 use std::io::Write;
                 let mut w = std::io::BufWriter::new(f);
                 let _ = writeln!(w, "t,id,state,ground,posed,x,y,z,heading,lx,ly,lz,rx,ry,rz,vx,vy");
@@ -2027,7 +2027,7 @@ impl Humans {
             let s = self.stops.get_mut(&id).unwrap();
             gained += merge_spots(&mut s.spots, &mut s.taken, fresh.spots);
         }
-        if debug_pax() || (omsi_cfg::env::var_os("OMSI_PROFILE").is_some() && (removed > 0 || !gone.is_empty())) {
+        if debug_pax() || (omsi_cfg::flags::PROFILE.is_set() && (removed > 0 || !gone.is_empty())) {
             log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {gained} waiting places added to busy stops, {removed} people taken away", gone.len());
         }
     }
@@ -2703,7 +2703,7 @@ impl Humans {
             .collect();
         ids.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         let ids: Vec<i64> = ids.into_iter().map(|(_, id)| id).collect();
-        let forced = omsi_cfg::env::var("OMSI_PAX_WAITING").ok().and_then(|v| v.parse::<usize>().ok());
+        let forced = omsi_cfg::flags::PAX_WAITING.number::<usize>();
         // the people handed over to another player's bus stop counting once it has left
         // their stop (or the session)
         if !self.handed.is_empty() {
@@ -2945,7 +2945,7 @@ impl Humans {
             }
         }
         // OMSI_PAX_CROSS=x,y: a few pedestrians sent across the signalised crossing nearest that point
-        if let Some((x, y)) = omsi_cfg::env::var("OMSI_PAX_CROSS").ok().and_then(|v| {
+        if let Some((x, y)) = omsi_cfg::flags::PAX_CROSS.text().and_then(|v| {
             let mut it = v.split(',').filter_map(|t| t.trim().parse::<f64>().ok());
             Some((it.next()?, it.next()?))
         }) {
@@ -3667,7 +3667,7 @@ impl Humans {
                     continue;
                 }
                 // onto the wall's face, keeping the step along it
-                if omsi_cfg::env::var_os("OMSI_DEBUG_WALLS").is_some() {
+                if omsi_cfg::flags::DEBUG_WALLS.is_set() {
                     log::info!("t={:.1} pax {} ({}) kept out of a wall ({:.1} x {:.1} m, heights {:.1}..{:.1}) at ({:.2}, {:.2}), its centre ({:.2}, {:.2}), want ({:.2}, {:.2}) vel ({:.2}, {:.2})", self.time, self.people[i].label(), self.people[i].state.name(), b.half.x * 2.0, b.half.y * 2.0, z0 - z, z1 - z, w.pos.x, w.pos.y, b.center.x, b.center.y, w.want.x, w.want.y, w.vel.x, w.vel.y);
                 }
                 let n = (q - w.pos).try_normalize().unwrap_or(DVec2::ZERO);
@@ -4034,7 +4034,7 @@ impl Humans {
         self.tick_stages.clear();
         let took = self.tick_inner(dt, world, bus, traffic, renderer, scene);
         let ms = started.elapsed().as_secs_f64() * 1000.0;
-        if (debug_pax() || omsi_cfg::env::var_os("OMSI_PROFILE").is_some()) && ms > 30.0 {
+        if (debug_pax() || omsi_cfg::flags::PROFILE.is_set()) && ms > 30.0 {
             log::info!(
                 "t={:.1} slow people tick: {ms:.1} ms ({} people): {}",
                 self.time,
@@ -4042,12 +4042,12 @@ impl Humans {
                 self.tick_stages.iter().filter(|s| s.1 >= 1.0).map(|(n, t)| format!("{n} {t:.1}")).collect::<Vec<_>>().join(", ")
             );
         }
-        if omsi_cfg::env::var_os("OMSI_CHECK_WALLS").is_some() {
+        if omsi_cfg::flags::CHECK_WALLS.is_set() {
             self.check_walls();
         }
         // OMSI_CHECK_GROUND=1: people on foot with a walkable surface over their heads'
         // reach above them, every two seconds (people "in the ground")
-        if omsi_cfg::env::var_os("OMSI_CHECK_GROUND").is_some() && (self.time / 2.0).floor() != ((self.time - dt as f64) / 2.0).floor() {
+        if omsi_cfg::flags::CHECK_GROUND.is_set() && (self.time / 2.0).floor() != ((self.time - dt as f64) / 2.0).floor() {
             for p in &self.people {
                 if !matches!(p.place, Place::Ground) || p.puppet.is_some() {
                     continue;
@@ -5027,7 +5027,7 @@ impl Humans {
                 renderer.set_transform(scene, *inst, at, xf);
                 renderer.set_interior(scene, *inst, p.lit * 0.5);
             }
-            if self.avatar_hidden.contains_key(&p.id) && omsi_cfg::env::var_os("OMSI_DEBUG_FOOT").is_some() && self.sync_frame % 30 == 0 {
+            if self.avatar_hidden.contains_key(&p.id) && omsi_cfg::flags::DEBUG_FOOT.is_set() && self.sync_frame % 30 == 0 {
                 log::info!("avatar drawn at ({:.2}, {:.2}, {:.2}) heading {:.0} place {:?} go {}", at.x, at.y, at.z, heading, matches!(p.place, Place::Ground), go);
             }
             if let Some(hide) = self.avatar_hidden.get_mut(&p.id) {
@@ -5069,7 +5069,7 @@ impl Humans {
         }
         // OMSI_CHECK_TPOSE=1: everybody drawn with the arms out (the file's rest pose): the
         // skinned mesh wider than 1.3 m from hand to hand
-        if omsi_cfg::env::var_os("OMSI_CHECK_TPOSE").is_some() {
+        if omsi_cfg::flags::CHECK_TPOSE.is_set() {
             for p in &self.people {
                 let Some((pos, _)) = p.skins.first() else {
                     log::info!("t-pose? {} {}: never skinned", p.label(), p.state_name());
@@ -6225,7 +6225,7 @@ mod tests {
     /// the plain floor.
     #[test]
     fn footsteps_come_from_the_links_step_sound_pack() {
-        let root = omsi_cfg::env::var_os("OMSI_ROOT")
+        let root = omsi_cfg::flags::ROOT.os()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("../../../OMSI 2 Original"));
         let bus = root.join("Vehicles/MAN_SD200/MAN_SD80.bus");
@@ -6256,7 +6256,7 @@ mod tests {
     /// the walk from up there to an exit goes down the stairs.
     #[test]
     fn double_decker_exits_are_reached_down_the_stairs() {
-        let root = omsi_cfg::env::var_os("OMSI_ROOT")
+        let root = omsi_cfg::flags::ROOT.os()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("../../../OMSI 2 Original"));
         let bus = root.join("Vehicles/MAN_SD202/MAN_D92.bus");

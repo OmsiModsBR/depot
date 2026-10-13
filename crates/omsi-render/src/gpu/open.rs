@@ -15,7 +15,7 @@ pub(crate) static BASIC_PIPELINES: std::sync::atomic::AtomicBool =
 
 pub(crate) fn basic_pipelines() -> bool {
     BASIC_PIPELINES.load(std::sync::atomic::Ordering::Relaxed)
-        || omsi_cfg::env::var_os("OMSI_BASIC_PIPELINES").is_some()
+        || omsi_cfg::flags::BASIC_PIPELINES.is_set()
 }
 
 /// The file that remembers, per graphics adapter, the reduced renderer that worked there
@@ -97,9 +97,7 @@ impl DevicePoller {
         // loads, a slow chip's frame) this thread gave up with wgpu-hal's panic "Could not
         // lock adapter context" (#898, after #843). It is not needed there: every submit
         // of the frame runs the same upkeep (wgpu-core's `maintain` after `queue.submit`).
-        if cfg!(target_arch = "wasm32")
-            || gl_backend()
-            || omsi_cfg::env::var_os("OMSI_NO_POLL_THREAD").is_some()
+        if cfg!(target_arch = "wasm32") || gl_backend() || omsi_cfg::flags::NO_POLL_THREAD.is_set()
         {
             return None;
         }

@@ -31,7 +31,7 @@ pub(crate) fn take_leave() -> bool {
 /// The on-screen controls: always on a phone; `OMSI_TOUCH=1` shows them on a computer
 /// (driven by `touch` commands of `OMSI_INPUT`, or the mouse as a finger).
 pub(crate) fn touch_controls() -> bool {
-    MOBILE || omsi_cfg::env::var_os("OMSI_TOUCH").is_some()
+    MOBILE || omsi_cfg::flags::TOUCH.is_set()
 }
 
 /// The phone's tilt as a steering wheel's turn (-1 left .. 1 right), when the tilt sensor

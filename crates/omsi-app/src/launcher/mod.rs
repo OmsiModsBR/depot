@@ -196,10 +196,10 @@ impl Launcher {
         clipboard: Clipboard::new().ok(),
         // OMSI_LAUNCHER_EXIT=secs, OMSI_LAUNCHER_SHOT=secs:file.png, OMSI_LAUNCHER_PAGE=mods:
         // looking at the window without a person at it
-        exit_after: omsi_cfg::env::var("OMSI_LAUNCHER_EXIT").ok().and_then(|v| v.parse().ok()),
-        shot: omsi_cfg::env::var("OMSI_LAUNCHER_SHOT").ok().and_then(|v| v.split_once(':').map(|(t, f)| (t.parse().unwrap_or(5.0), std::path::PathBuf::from(f)))),
+        exit_after: omsi_cfg::flags::LAUNCHER_EXIT.number(),
+        shot: omsi_cfg::flags::LAUNCHER_SHOT.text().and_then(|v| v.split_once(':').map(|(t, f)| (t.parse().unwrap_or(5.0), std::path::PathBuf::from(f)))),
         started: Instant::now(),
-        script: omsi_cfg::env::var("OMSI_LAUNCHER_INPUT")
+        script: omsi_cfg::flags::LAUNCHER_INPUT.text()
             .map(|v| {
                 v.split(';')
                     .filter_map(|c| {
@@ -236,7 +236,7 @@ impl Launcher {
         let why = state::root_problem(&app.state.config.root);
         app.state.set_status(why, true);
     }
-    if let Ok(p) = omsi_cfg::env::var("OMSI_LAUNCHER_PAGE") {
+    if let Some(p) = omsi_cfg::flags::LAUNCHER_PAGE.text() {
         if let Some((pg, _, _)) = PAGES.iter().find(|(_, n, _)| n.eq_ignore_ascii_case(p.split(':').next().unwrap_or(""))) {
             app.page = *pg;
             // (the phone's tab for it)
@@ -364,7 +364,7 @@ impl ApplicationHandler for Launcher {
             return;
         }
         // (`OMSI_LAUNCHER_SIZE=WxH`: another window size, for looking at the layout)
-        let asked = omsi_cfg::env::var("OMSI_LAUNCHER_SIZE").ok().and_then(|v| v.split_once('x').and_then(|(a, b)| Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?))));
+        let asked = omsi_cfg::flags::LAUNCHER_SIZE.text().and_then(|v| v.split_once('x').and_then(|(a, b)| Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?))));
         let (fit, at) = match asked {
             Some((iw, ih)) => (winit::dpi::LogicalSize::new(iw, ih), None),
             None => crate::startup::fit_window(event_loop, 1440.0, 880.0, None),
@@ -377,7 +377,7 @@ impl ApplicationHandler for Launcher {
                 attrs = attrs.with_position(at);
             }
         }
-        if omsi_cfg::env::var_os("OMSI_BACKGROUND").is_some() {
+        if omsi_cfg::flags::BACKGROUND.is_set() {
             attrs = attrs.with_active(false);
         }
         let window = match event_loop.create_window(attrs) {
@@ -577,7 +577,7 @@ impl ApplicationHandler for Launcher {
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
             0.5
-        } else if !self.focused && omsi_cfg::env::var_os("OMSI_BACKGROUND").is_none() {
+        } else if !self.focused && !omsi_cfg::flags::BACKGROUND.is_set() {
             0.1
         } else if self.last_input.elapsed().as_secs_f32() > 3.0 && self.dragging.is_none() && self.script.is_empty() {
             // idle: 20 frames a second keep the preview and the progress bars moving
@@ -650,7 +650,7 @@ impl Launcher {
             return false;
         }
         if let Some(o) = other {
-            std::env::set_var("OMSI_BACKEND", o);
+            std::env::set_var(omsi_cfg::flags::BACKEND.name, o);
             self.state.settings["graphics_api"] = serde_json::json!(o);
             self.state.settings_dirty = 0.3;
         }

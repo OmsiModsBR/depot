@@ -376,7 +376,7 @@ impl ApplicationHandler for App {
                 let now = Instant::now();
                 let raw_dt = (now - self.last).as_secs_f32();
                 self.log_frame(raw_dt);
-                let profiling = omsi_cfg::env::var_os("OMSI_PROFILE").is_some();
+                let profiling = omsi_cfg::flags::PROFILE.is_set();
                 let waited: f64 = ["acquire", "present", "gpu"].iter()
                     .map(|&k| self.profile.get(k).copied().unwrap_or(0.0))
                     .sum();
@@ -434,7 +434,7 @@ impl ApplicationHandler for App {
                         self.governor = (0.0, 0, 0.0);
                         let free = self.settings.render_scale <= 0.0
                             && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
-                            && omsi_cfg::env::var_os("OMSI_FIXED_SCALE").is_none();
+                            && !omsi_cfg::flags::FIXED_SCALE.is_set();
                         if let (Some(r), true) = (self.renderer.as_mut(), free) {
                             let s = r.dynamic_scale();
                             let step = render_scale_step(fps, wait_share);
@@ -847,7 +847,7 @@ impl ApplicationHandler for App {
                     *fade = (*fade - dt).max(0.0);
                     analog.steering = Some(*steer);
                     // OMSI_TRACE_STEER=<csv>: the mouse steering frame by frame
-                    if let Some(path) = omsi_cfg::env::var_os("OMSI_TRACE_STEER") {
+                    if let Some(path) = omsi_cfg::flags::TRACE_STEER.os() {
                         use std::io::Write;
                         static TRACE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
                         let mut g = TRACE.lock().unwrap_or_else(|e| e.into_inner());
@@ -1044,9 +1044,7 @@ impl ApplicationHandler for App {
                     }
                     static EVERY: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
                     if let Some(every) = *EVERY.get_or_init(|| {
-                        omsi_cfg::env::var("OMSI_DEBUG_PHYSICS")
-                            .ok()
-                            .and_then(|v| v.parse::<f32>().ok())
+                        omsi_cfg::flags::DEBUG_PHYSICS.number::<f32>()
                             .filter(|v| *v > 0.0)
                     }) {
                         static LAST: std::sync::atomic::AtomicU32 =
@@ -1699,7 +1697,7 @@ impl ApplicationHandler for App {
                     }
                 }
                 // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
-                if let (Some(p), Ok(list)) = (self.player.as_ref(), omsi_cfg::env::var("OMSI_WATCH_VARS")) {
+                if let (Some(p), Some(list)) = (self.player.as_ref(), omsi_cfg::flags::WATCH_VARS.text()) {
                     thread_local!(static LAST: std::cell::RefCell<std::collections::HashMap<String, f32>> = Default::default());
                     LAST.with(|last| {
                         let mut last = last.borrow_mut();
@@ -2108,7 +2106,7 @@ impl ApplicationHandler for App {
                         // puddles and the wet asphalt the renderer draws (the same wetness:
                         // none under snow, OMSI_WETNESS as the picture takes it)
                         let wetness = puddles::road_wetness(self.wetness, wt.snow);
-                        if (wetness > 0.0 || !self.spray.is_empty()) && omsi_cfg::env::var_os("OMSI_NO_SPRAY").is_none() {
+                        if (wetness > 0.0 || !self.spray.is_empty()) && !omsi_cfg::flags::NO_SPRAY.is_set() {
                             let __ts = Instant::now();
                             let mut vehicles: Vec<(u64, &omsi_sim::VehicleInstance)> = Vec::new();
                             if let Some(p) = self.player.as_ref() {
@@ -2377,6 +2375,7 @@ impl ApplicationHandler for App {
                             Some(f) => (f.pos, f.heading),
                             None => (p.vehicle.position, p.vehicle.heading),
                         };
+                        let car_line = |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
                         let frame = navigator::NavFrame {
                             traffic: self.traffic.as_ref(),
                             #[cfg(feature = "lan")]
@@ -2396,6 +2395,8 @@ impl ApplicationHandler for App {
                             stop_requested: navigator::stop_requested(&p.vehicle),
                             time: self.clock.time,
                             weekday: self.clock.weekday(),
+                            date: self.clock.date_code(),
+                            car_line: Some(&car_line),
                             language: &self.settings.language,
                             screen: if vr_active {
                                 (1440.0, 1440.0)
@@ -2616,9 +2617,7 @@ impl ApplicationHandler for App {
                     }
                     None => lights::lighting_from(&daylight, 50000.0),
                 };
-                lighting.wetness = omsi_cfg::env::var("OMSI_WETNESS")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
+                lighting.wetness = omsi_cfg::flags::WETNESS.number()
                     .unwrap_or(self.wetness);
                 #[cfg(feature = "lan")]
                 let remote_inside = self.online.inside_remote.and_then(|id| self.online.remotes.remotes.get(&id)).map(|rv| rv.vehicle());
@@ -2714,7 +2713,7 @@ impl ApplicationHandler for App {
                     // OMSI_HIDE_WINDOW=from,to: treat the window as hidden between these
                     // seconds of the session (the frame is acquired and dropped unshown), to
                     // check the hidden-window path without covering the window by hand
-                    let hide_test = omsi_cfg::env::var("OMSI_HIDE_WINDOW").ok().and_then(|v| {
+                    let hide_test = omsi_cfg::flags::HIDE_WINDOW.text().and_then(|v| {
                         let mut it = v.split(',').filter_map(|x| x.trim().parse::<f32>().ok());
                         Some((it.next()?, it.next()?))
                     });
@@ -2734,7 +2733,7 @@ impl ApplicationHandler for App {
                         wgpu::CurrentSurfaceTexture::Success(frame)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
                         wgpu::CurrentSurfaceTexture::Occluded
-                        if omsi_cfg::env::var_os("OMSI_RENDER_OCCLUDED").is_some() =>
+                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() =>
                             {
                                 let (w, h) = (s.config.width, s.config.height);
                                 if self
@@ -2824,9 +2823,7 @@ impl ApplicationHandler for App {
                                 if vr_active {
                                     // Preserve the user's total redraw budget. A negative
                                     // value explicitly requests every mirror each frame.
-                                    omsi_cfg::env::var("OMSI_OPENXR_MIRROR_RATE")
-                                        .ok()
-                                        .and_then(|s| s.parse::<f32>().ok())
+                                    omsi_cfg::flags::OPENXR_MIRROR_RATE.number::<f32>()
                                         .filter(|rate| rate.is_finite() && *rate >= -1.0)
                                         .unwrap_or(self.settings.vr_mirror_rate)
                                 } else {
@@ -2974,7 +2971,7 @@ impl ApplicationHandler for App {
                         // the on-screen controls over the picture (a phone)
                         self.touch.render(r, &view, s.config.width, s.config.height);
                         *self.profile.entry("render").or_default() += __t.elapsed().as_secs_f64();
-                        if omsi_cfg::env::var_os("OMSI_PROFILE_GPU").is_some() {
+                        if omsi_cfg::flags::PROFILE_GPU.is_set() {
                             // wait for the GPU here, so that its time shows as a stage of its own
                             let __t = Instant::now();
                             let _ = omsi_render::wait_gpu(&r.device, None);
@@ -3014,9 +3011,7 @@ impl ApplicationHandler for App {
                     // max_fps (the original's [maxFPS]; OMSI_MAX_FPS for a test): the rest of
                     // the frame's time is slept, not spun, so a limit gives the CPU back
                     // (and keeps a laptop cool enough not to slow itself down)
-                    let max_fps = omsi_cfg::env::var("OMSI_MAX_FPS")
-                        .ok()
-                        .and_then(|v| v.parse::<u32>().ok())
+                    let max_fps = omsi_cfg::flags::MAX_FPS.number::<u32>()
                         .unwrap_or(self.settings.max_fps);
                     // 0 = the screen's refresh rate: frames the screen never shows only heat the
                     // machine (with V-sync off and no limit an M4 drew 300 frames a second in the
@@ -3046,7 +3041,7 @@ impl ApplicationHandler for App {
                         *self.profile.entry("limiter").or_default() += __t.elapsed().as_secs_f64();
                     }
                     self.frames += 1;
-                    let profiling = omsi_cfg::env::var_os("OMSI_PROFILE").is_some();
+                    let profiling = omsi_cfg::flags::PROFILE.is_set();
                     if profiling
                         && self.cpu_mark.is_none()
                         && self.started.elapsed().as_secs_f32() > 15.0
@@ -3057,14 +3052,14 @@ impl ApplicationHandler for App {
                     if let (Some(limit), false) = (self.args.exit_after, self.exiting) {
                         if self.started.elapsed().as_secs_f32() > limit {
                             self.exiting = true;
-                            log::info!("exit after {limit} s: {} frames total ({} with the window hidden{}), {:.1} fps average, {} frames over 50 ms, worst {:.0} ms", self.total_frames, self.hidden_frames, if omsi_cfg::env::var_os("OMSI_RENDER_OCCLUDED").is_some() { ", drawn off-screen" } else { ", not drawn" }, self.total_frames as f32 / self.started.elapsed().as_secs_f32(), self.spikes, self.worst_ms);
+                            log::info!("exit after {limit} s: {} frames total ({} with the window hidden{}), {:.1} fps average, {} frames over 50 ms, worst {:.0} ms", self.total_frames, self.hidden_frames, if omsi_cfg::flags::RENDER_OCCLUDED.is_set() { ", drawn off-screen" } else { ", not drawn" }, self.total_frames as f32 / self.started.elapsed().as_secs_f32(), self.spikes, self.worst_ms);
                             if let (Some(st), Some(w)) =
                                 (self.streamer.as_ref(), self.world.as_ref())
                             {
                                 log::info!("tile streaming: {} tiles loaded now, {} loaded and {} unloaded in all, {:.1} s preparing on the worker, slowest upload {:.0} ms, streaming over 16 ms in {} frames (worst {:.0} ms); {} objects + {} trees, {} rows, {} attached ({} without parent), {} unresolved", w.loaded_tiles().len(), st.loaded_total, st.unloaded_total, st.prepare_secs, st.worst_upload_ms, st.slow_frames, st.worst_frame_ms, st.stats.objects, st.stats.trees, st.stats.rows, st.stats.attached, st.stats.unattached, st.stats.failed_objects);
                                 st.stats.log_ground();
                             }
-                            if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+                            if omsi_cfg::flags::PROFILE.is_set() {
                                 let n = self.total_frames.max(1) as f64;
                                 for (k, v) in &self.profile {
                                     log::info!("profile {k:10}: {:.1} ms/frame", v / n * 1000.0);
@@ -3108,7 +3103,7 @@ impl ApplicationHandler for App {
                     }
                     self.total_frames += 1;
                     if self.fps_t.elapsed().as_secs_f32() >= 1.0 {
-                        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+                        if omsi_cfg::flags::PROFILE.is_set() {
                             let secs = self.fps_t.elapsed().as_secs_f32();
                             log::info!("profile interval: {:.1} fps over {secs:.2} s", self.frames as f32 / secs);
                         }
