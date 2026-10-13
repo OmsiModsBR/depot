@@ -1,4 +1,4 @@
-//! The camera, the vertex layout and the camera uniform the shaders read.
+//! The camera and the camera uniform the shaders read.
 
 use crate::gpu::{array_layout_entry_on, ArrayPath};
 use glam::{DVec3, Mat4, Vec3};
@@ -8,14 +8,6 @@ pub(crate) struct ViewCulling {
     pub(crate) drawn: Vec<u64>,
     pub(crate) sizes: hashbrown::HashMap<[u64; 4], f32>,
     pub(crate) scratch: hashbrown::HashMap<[u64; 4], f32>,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub pos: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
 }
 
 #[repr(C)]

@@ -3,7 +3,8 @@
 
 use super::ao::AoTargets;
 use super::hdr::HdrTargets;
-use crate::renderer::{Renderer, DEPTH_FORMAT};
+use crate::gpu::DEPTH_FORMAT;
+use crate::renderer::Renderer;
 use std::collections::HashMap;
 
 impl Renderer {

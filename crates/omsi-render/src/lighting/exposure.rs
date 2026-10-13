@@ -1,7 +1,7 @@
 //! Exposure: the metering's tuning, the tone curve's contrast and the log of the measured
 //! exposure.
 
-use crate::sky::atmosphere;
+use super::smoothstep;
 use std::sync::Arc;
 
 /// The metering (see `meter_tuning`).
@@ -65,7 +65,7 @@ pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
         })
         .unwrap_or((TONE_CONTRAST_DAY, TONE_CONTRAST_NIGHT));
     // (the pre-exposure is about 1 by day, 70 in the blue hour and 400-700 at night)
-    let t = atmosphere::smoothstep(2.0, 8.0, log_pre / std::f32::consts::LN_2);
+    let t = smoothstep(2.0, 8.0, log_pre / std::f32::consts::LN_2);
     day + (night - day) * t
 }
 

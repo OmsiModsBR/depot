@@ -1,8 +1,8 @@
 //! The window: its surface, and presenting a frame to it with upscale, FXAA, the overlays
 //! and the HUD.
 
-use crate::gpu::{buffer_init, pass_timer};
-use crate::renderer::{Renderer, DEPTH_FORMAT};
+use crate::gpu::{buffer_init, pass_timer, DEPTH_FORMAT};
+use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
 use std::collections::HashMap;
 use std::sync::Arc;

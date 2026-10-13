@@ -1,8 +1,8 @@
 //! Where instances are: their bounds and scale, the culling blocks, and the render origin
 //! the scene is drawn relative to.
 
-use super::model::{Instance, MeshId, Scene};
-use crate::assets::GpuMesh;
+use super::model::{Instance, Scene};
+use crate::assets::{GpuMesh, MeshId};
 use crate::renderer::Renderer;
 use glam::{DVec3, Mat4, Vec3};
 

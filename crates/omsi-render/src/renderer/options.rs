@@ -1,7 +1,8 @@
 //! The renderer's options and the scaled scene: `RenderOptions`, the picture's format and
 //! the dynamic resolution.
 
-use super::state::{MSAA, SHADOW_SIZE};
+use super::state::SHADOW_SIZE;
+use crate::gpu::MSAA;
 
 /// What the renderer is built with: the user's graphics settings.
 #[derive(Debug, Clone, Copy)]

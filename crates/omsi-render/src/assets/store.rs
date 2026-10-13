@@ -3,7 +3,7 @@
 
 use super::lifecycle::Freed;
 use super::texture::{mip_pipeline, upload_texture, GpuTexture};
-use crate::scene::MeshId;
+use super::MeshId;
 
 /// The renderer's own textures, the mip maker, and the meshes and materials waiting or freed.
 pub(crate) struct AssetStore {

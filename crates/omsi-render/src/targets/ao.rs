@@ -1,7 +1,8 @@
 //! The ambient-occlusion pass's textures for one target size, and the lamps' light in the
 //! fog worked out beside them.
 
-use crate::renderer::{Renderer, DEPTH_FORMAT};
+use crate::gpu::DEPTH_FORMAT;
+use crate::renderer::Renderer;
 
 /// The textures of the ambient-occlusion pass for one target size.
 pub(crate) struct AoTargets {

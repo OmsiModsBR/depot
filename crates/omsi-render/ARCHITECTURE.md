@@ -18,31 +18,34 @@ presents to the window or reads a texture back on its own.
 
 ```text
    Entry           api                          (only pub; nothing imports from it)
-4  Orchestration   renderer
+8  Orchestration   renderer
    Outputs         output                       (window, image, xr, triple, diagnostics)
-3  Passes          passes   targets   effects
-2  Scene           scene
-1  Model           assets   lighting   sky
-0  Base            gpu      shaders
+7  Targets         targets                      (their bind groups use the passes' layouts)
+6  Effects         effects
+5  Passes          passes
+4  Scene           scene
+3  Sky             sky                          (the sky follows the light model)
+2  Model           assets   lighting
+1  Shaders         shaders                      (assembled for what the device can do)
+0  Base            gpu                          (also the render target formats)
                    (imports point down only)
 ```
-
 ## Domains
 
 | Layer | Domain | Owns | Lives today in |
 | --- | --- | --- | --- |
 | Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic | in place (`api/`: `renderer`, `scene`, `assets`, `lights`, `types`); the methods still carry their whole bodies, which move to their domains in the next steps, and `RenderOptions` is still in `renderer/options.rs` |
-| 4 | `renderer` | The internal state of `Renderer`, building it, the frame (`FrameContext` and its stages), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `build`, `prepare`, `frame`, `lists`, `encode`): `Renderer::build` calls one constructor per sub-struct, and `render_inner` runs `begin_frame` (the `FrameContext`), `draw_lists` (visibility and batches), `ShadowResources::schedule`, `encode_frame` and `submit_frame`, which hands the frame to an `Output`; opening the renderer is still in `api/renderer.rs` |
+| 8 | `renderer` | The internal state of `Renderer`, building it, the frame (`FrameContext` and its stages), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `build`, `prepare`, `frame`, `lists`, `encode`): `Renderer::build` calls one constructor per sub-struct, and `render_inner` runs `begin_frame` (the `FrameContext`), `draw_lists` (visibility and batches), `ShadowResources::schedule`, `encode_frame` and `submit_frame`, which hands the frame to an `Output`; opening the renderer is still in `api/renderer.rs` |
 | Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, presenting with upscale, FXAA, overlay and HUD), `image` (`render_to_image`, texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) | in place (`output/`: `destination` (`Output`: `Window`, `Texture`, `XrEye`, `TriplePanel`), `window` (with `Presenter`), `image`, `triple`, `diagnostics` (with `Diagnostics`)); the XR methods are still in `api/renderer.rs` and the exposure log in `lighting/exposure.rs` |
-| 3 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO | in place (`targets/`) |
-| 3 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow`, `depth` (prepass and SSAO), `sky`, `main`, `glass`, `reflections`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) | in place (`passes/`), each pass with its own struct (`ShadowResources`, `PrepassPipelines`, `SsaoPass`, `FogLampsPass`, `SpriteResources`, `PostPipelines`, `Exposure`); `shadow`, `sky` and `fog_lamps` encode on their own struct, while `depth`, `main`, `glass`, `reflections` and `post` still take `&Renderer` because they call other `Renderer` methods or the `Presenter` |
-| 3 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`) |
-| 2 | `scene` | `Scene`, `Instance`, the ids, `RenderPhase`, the camera, the views' geometry (`TripleScreen`, `ScreenView`, `ViewCulling`), bounds, visibility (culling and level of detail) and the logic behind the per-instance settings | in place (`scene/`, with the shared bind group `Layouts` and the `CullHistory`); visibility (culling, level of detail) runs in `renderer/lists.rs` |
-| 1 | `assets` | Meshes (`GpuMesh`, `MeshPage`), textures (`GpuTexture`, uploads, mip chains, fitting), materials (`Material`, `MaterialExtra`, `PbrMaps`, `BindKey`) and their life cycle (free, recycle, `Freed`, pending mesh writes) | in place (`assets/`, the state in `AssetStore`); `buffer_init` went to `gpu/buffers.rs`, the scene's instance slots to `scene.rs`, glass and render-to-texture to `passes.rs` and `frame.rs` |
-| 1 | `lighting` | The light model (`Lighting`, `PointLight`, `Corona`, `SmokeParticle`, `LightMode`), its GPU records (`GpuPointLight`, `GpuCorona`), the light grid and lamp shadows, the tile light map atlas | in place (`lighting/`, the atlas in `LightMapAtlas`) |
-| 1 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, cloud textures, reflection probe) | in place (`sky/`, the GPU resources in `SkyResources`) |
-| 0 | `gpu` | Opening the device (adapters, limits, the remembered fallbacks, `DevicePoller`), what the device can do (GL backend, `ArrayPath`, VRAM), `GpuArray`, errors (`catch`, device lost, out of memory) | in place (`gpu/`, the device's callbacks, encoder pool and poller in `GpuContext`, the samplers in `Samplers`); the adapter and device opening is still in `Renderer::new_on` (`api/renderer.rs`) |
-| 0 | `shaders` | The WGSL sources, grouped `common/` (included by several shaders), `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, `assets/`, and the code that assembles them | in place (`shaders/`) |
+| 7 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO | in place (`targets/`) |
+| 6 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`) |
+| 5 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow` (with the cascades' ranges), `depth` (prepass and SSAO), `sky`, `main`, `glass`, `reflections`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) | in place (`passes/`), each pass with its own struct (`ShadowResources`, `PrepassPipelines`, `SsaoPass`, `FogLampsPass`, `SpriteResources`, `PostPipelines`, `Exposure`); `shadow`, `sky` and `fog_lamps` encode on their own struct, while `depth`, `main`, `glass`, `reflections` and `post` still take `&Renderer` because they call other `Renderer` methods or the `Presenter` |
+| 4 | `scene` | `Scene`, `Instance`, `RenderPhase`, the camera, the views' geometry (`TripleScreen`, `ScreenView`, `ViewCulling`), bounds, visibility (culling and level of detail) and the logic behind the per-instance settings | in place (`scene/`, with the shared bind group `Layouts` and the `CullHistory`); visibility (culling, level of detail) runs in `renderer/lists.rs` |
+| 3 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, the clouds' noise textures, reflection probe) | in place (`sky/`, the GPU resources in `SkyResources`) |
+| 2 | `assets` | The ids (`MeshId`, `TextureId`, `MaterialId`) and `Vertex`, meshes (`GpuMesh`, `MeshPage`), textures (`GpuTexture`, uploads, mip chains, fitting), materials (`Material`, `MaterialExtra`, `PbrMaps`, `BindKey`) and their life cycle (free, recycle, `Freed`, pending mesh writes) | in place (`assets/`, the state in `AssetStore`); `buffer_init` went to `gpu/buffers.rs`, the scene's instance slots to `scene.rs`, glass and render-to-texture to `passes.rs` and `frame.rs` |
+| 2 | `lighting` | The light model (`Lighting`, `PointLight`, `Corona`, `SmokeParticle`, `LightMode`), its GPU records (`GpuPointLight`, `GpuCorona`), the light grid and lamp shadows, the tile light map atlas | in place (`lighting/`, the atlas in `LightMapAtlas`) |
+| 1 | `shaders` | The WGSL sources, grouped `common/` (included by several shaders), `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, `assets/`, and the code that assembles them | in place (`shaders/`) |
+| 0 | `gpu` | Opening the device (adapters, limits, the remembered fallbacks, `DevicePoller`), what the device can do (GL backend, `ArrayPath`, VRAM), `GpuArray`, errors (`catch`, device lost, out of memory), the render targets' formats (`DEPTH_FORMAT`, `HDR_FORMAT`, the masks and G-buffer, `color_targets`) | in place (`gpu/`, the device's callbacks, encoder pool and poller in `GpuContext`, the samplers in `Samplers`); the adapter and device opening is still in `Renderer::new_on` (`api/renderer.rs`) |
 
 The "Lives today in" column shrinks as each domain reaches its folder; when it is empty, this
 column goes.

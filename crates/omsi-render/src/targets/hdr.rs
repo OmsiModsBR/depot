@@ -2,7 +2,8 @@
 //! levels and the bind groups of the passes between them.
 
 use crate::effects::puddles;
-use crate::renderer::{rt_gbuf, Renderer, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
+use crate::gpu::{rt_gbuf, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
+use crate::renderer::Renderer;
 
 /// High-range colour targets of the enhanced path for one size: the multisampled one the
 /// scene is drawn into, the single-sampled one it resolves into, the glow's levels, the

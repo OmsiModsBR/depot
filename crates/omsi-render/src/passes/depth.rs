@@ -1,8 +1,8 @@
 //! The depth prepass and the ambient occlusion (SSAO), with their pipelines and uniform.
 
 use super::draw::{encode_batches, one_sided_primitive, Batch};
-use crate::gpu::pass_timer;
-use crate::renderer::{Renderer, DEPTH_FORMAT};
+use crate::gpu::{pass_timer, DEPTH_FORMAT};
+use crate::renderer::Renderer;
 use crate::scene::{Camera, Scene};
 use glam::Mat4;
 

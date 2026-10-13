@@ -6,4 +6,3 @@ mod cache;
 mod hdr;
 
 pub(crate) use cache::TargetCache;
-pub(crate) use hdr::HdrTargets;

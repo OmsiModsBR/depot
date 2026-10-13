@@ -21,6 +21,6 @@ pub(crate) use exposure::{meter_tuning, tone_contrast, ExposureLog};
 pub(crate) use lamps::glare_veil;
 pub(crate) use lamps::{lamp_sky_glow, view_lamp_light, LampShadow, FAR_MAP_ASPECT, LAMP_SHADOWS};
 pub(crate) use light_map::LightMapAtlas;
-pub(crate) use model::{debug_view, GpuCorona, CABIN_E, LAMP_E, WINDOW_RADIANCE};
+pub(crate) use model::{debug_view, smoothstep, GpuCorona, CABIN_E, LAMP_E, WINDOW_RADIANCE};
 #[cfg(test)]
 pub(crate) use model::{drawn_by, gpu_light, GpuPointLight};

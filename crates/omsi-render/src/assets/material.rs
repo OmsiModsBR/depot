@@ -2,9 +2,10 @@
 //! to the scene.
 
 use super::texture::GpuTexture;
+use super::{MaterialId, TextureId};
 use crate::gpu::buffer_init;
 use crate::renderer::Renderer;
-use crate::scene::{MaterialId, Scene, TextureId};
+use crate::scene::Scene;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

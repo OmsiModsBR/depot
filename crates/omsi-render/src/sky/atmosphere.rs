@@ -22,6 +22,7 @@
 //! Units: 1 = 10 000 lux of irradiance (the noon sun is about 10, a street under its lamps
 //! about 0.002) and 1 per steradian of radiance.
 
+pub(crate) use crate::lighting::smoothstep;
 use glam::Vec3;
 
 /// The sky table: azimuth from the sun (0..π, the sky is symmetric about the sun's
@@ -503,11 +504,6 @@ pub fn lut_elevation(v: f32) -> f32 {
 /// Table row coordinate (0..1) of an elevation in radians.
 pub fn lut_row(el: f32) -> f32 {
     0.5 + 0.5 * el.signum() * (el.abs() / std::f32::consts::FRAC_PI_2).min(1.0).sqrt()
-}
-
-pub(crate) fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
-    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// Real spherical harmonics up to order 2 in direction d.

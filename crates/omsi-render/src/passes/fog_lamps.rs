@@ -5,7 +5,6 @@ use crate::lighting::Lighting;
 use crate::scene::Scene;
 use crate::shaders::fog_lamps_shader_source;
 use crate::sky::enhanced_weather_fog;
-use crate::targets::TargetCache;
 use glam::Mat4;
 
 #[repr(C)]
@@ -141,7 +140,8 @@ impl FogLampsPass {
     pub(crate) fn encode_fog_lamps(
         &self,
         queue: &wgpu::Queue,
-        targets: &TargetCache,
+        fog: Option<(&wgpu::TextureView, &[wgpu::BindGroup; 2])>,
+        picture: Option<&wgpu::TextureView>,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         lighting: &Lighting,
@@ -151,7 +151,6 @@ impl FogLampsPass {
         enhanced: bool,
         masked_frame: bool,
         prepass_on: bool,
-        puddles_on: bool,
         with_overlays: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
@@ -170,12 +169,11 @@ impl FogLampsPass {
         }
         if enhanced && prepass_on && with_overlays && masked_frame && (fog_lamps || shafts || glare)
         {
-            if let (Some(pipes), Some(ao), Some(cam_bg)) = (
+            if let (Some(pipes), Some(cam_bg)) = (
                 self.fog_lamps_pipeline.as_ref(),
-                targets.ao.as_ref(),
                 scene.camera_bind_group.as_ref(),
             ) {
-                if let Some(fog_bg) = ao.fog_bg.as_ref() {
+                if let (Some((fog_view, fog_bg)), Some(view)) = (fog, picture) {
                     // (how much of the weather's extinction is mist and fog - droplets of some
                     // ten micrometres, which scatter a lamp's light into a halo and its beam
                     // into a cone - rather than rain: a raindrop of a millimetre sends what it
@@ -203,14 +201,8 @@ impl FogLampsPass {
                         ],
                     };
                     queue.write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
-                    let h = &targets.hdr_targets[&(width, height)];
-                    let view = h
-                        .puddles
-                        .as_ref()
-                        .filter(|_| puddles_on)
-                        .map_or(&h.view, |p| &p.view);
                     for (k, (target, load)) in [
-                        (&ao.fog_view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+                        (fog_view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
                         (view, wgpu::LoadOp::Load),
                     ]
                     .into_iter()

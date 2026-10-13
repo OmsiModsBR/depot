@@ -4,7 +4,7 @@
 use crate::assets::MaterialUniform;
 #[cfg(test)]
 use crate::assets::{AlphaMode, MaterialExtra};
-use crate::gpu::pass_timer;
+use crate::gpu::{pass_timer, DEPTH_FORMAT, HDR_FORMAT};
 #[cfg(test)]
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
@@ -13,13 +13,12 @@ use crate::passes::{
     PIPE_BLEND_NO_WRITE, PIPE_KINDS,
 };
 #[cfg(test)]
-use crate::renderer::RenderOptions;
-use crate::renderer::{Renderer, DEPTH_FORMAT, HDR_FORMAT};
+use crate::RenderOptions;
+use crate::renderer::Renderer;
 #[cfg(test)]
 use crate::scene::MaterialId;
 use crate::scene::{Camera, CameraUniform, Scene, Vertex};
 use crate::sky::{atmosphere, PROBE_MIPS};
-use crate::targets::HdrTargets;
 use glam::{DVec3, Mat4, Vec3};
 #[cfg(test)]
 use omsi_geometry::MeshData;
@@ -379,7 +378,16 @@ fn trace_size(w: u32, h: u32) -> (u32, u32) {
 }
 
 impl Targets {
-    fn new(r: &Renderer, hdr: &HdrTargets, w: u32, h: u32) -> Self {
+    /// `picture`, `mask` and `glow`: the size's high-range picture, its screen mask and its
+    /// first glow level.
+    fn new(
+        r: &Renderer,
+        picture: &wgpu::TextureView,
+        mask: &wgpu::TextureView,
+        glow: &wgpu::TextureView,
+        w: u32,
+        h: u32,
+    ) -> Self {
         let pipelines = r.puddles.as_ref().unwrap();
         let size = trace_size(w, h);
         let source_depth = r.targets.ao.as_ref().unwrap().depth_view.texture().clone();
@@ -456,8 +464,8 @@ impl Targets {
                         binding: 0,
                         resource: pipelines.params.as_entire_binding(),
                     },
-                    binding(1, &hdr.view),
-                    binding(2, &hdr.mask),
+                    binding(1, picture),
+                    binding(2, mask),
                     binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
                     binding(4, ray_view),
                     wgpu::BindGroupEntry {
@@ -496,13 +504,13 @@ impl Targets {
             })
         };
         let down_bg = post_group(
-            &hdr.mask,
+            mask,
             &r.assets.white_texture.view,
             &r.assets.black_texture.view,
         );
         let tonemap_bg = [
-            post_group(&hdr.up[0], &r.adaptation.adapt_views[0], &hdr.mask),
-            post_group(&hdr.up[0], &r.adaptation.adapt_views[1], &hdr.mask),
+            post_group(glow, &r.adaptation.adapt_views[0], mask),
+            post_group(glow, &r.adaptation.adapt_views[1], mask),
         ];
         let classic_bg = r.picture_group(&view);
         Self {
@@ -554,7 +562,7 @@ impl Renderer {
         if hdr.puddles.as_ref().is_none_or(|t| {
             t.source_depth != *self.targets.ao.as_ref().unwrap().depth_view.texture()
         }) {
-            let targets = Targets::new(self, hdr, w, h);
+            let targets = Targets::new(self, &hdr.view, &hdr.mask, &hdr.up[0], w, h);
             log::info!(
                 "puddle reflections: {}x{} rays, at most 48 steps; resolve {w}x{h}",
                 targets.size.0,
