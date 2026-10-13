@@ -2720,6 +2720,8 @@ pub(crate) fn run_offscreen(
             nav.show_ai = settings.nav_ai;
             nav.show_surface = settings.nav_surface;
             nav.light = settings.nav_light;
+            nav.show_contours = settings.nav_contours;
+            nav.orient = match settings.nav_orientation.as_str() { "north" => 1, "heading" => 2, _ => 0 };
             if omsi_cfg::flags::NAV_MAP.is_set() {
                 nav.toggle_map();
             }

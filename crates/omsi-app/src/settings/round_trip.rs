@@ -55,6 +55,8 @@ const VARIED: &[(&str, &str)] = &[
     ("nav_ai", "0"),
     ("nav_surface", "0"),
     ("nav_light", "1"),
+    ("nav_contours", "1"),
+    ("nav_orientation", "north"),
     ("get_up", "1"),
     ("texture_compression", "0"),
     ("auto_clutch", "0"),
