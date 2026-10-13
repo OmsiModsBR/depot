@@ -1,6 +1,5 @@
 //! The renderer's public methods: opening it, its settings, preparing the scene, and the
 //! frame's entry points (the window, a triple screen, a headset's eyes, an image or a texture).
-
 use crate::assets::{fit_size, next_gen, texture_bytes, GpuTexture, RT_BUFFERS};
 use crate::gpu::{
     basic_pipelines, buffer_init, dedicated_vram_mb, fallback_load, fallback_store, gpu_error_text,
@@ -10,10 +9,11 @@ use crate::gpu::{
 use crate::lighting::Lighting;
 use crate::output::Output;
 use crate::renderer::{scene_scale_for, RenderOptions, Renderer};
-use crate::scene::{panel_width, Camera, Scene, TextureId, TripleScreen};
+use crate::scene::{panel_width, prepare_bounds, Camera, Scene, TextureId, TripleScreen};
+use glam::{Mat4, Vec4};
+
 use anyhow::anyhow;
 use anyhow::{Context, Result};
-use glam::{Mat4, Vec4};
 
 impl Renderer {
     /// Create a renderer with the default options. `surface` is used to pick a compatible
@@ -601,7 +601,7 @@ impl Renderer {
     }
 
     pub fn prepare(&self, scene: &mut Scene) {
-        Self::prepare_bounds(scene);
+        prepare_bounds(scene);
         scene.bind_groups.clear();
         if std::mem::take(&mut scene.origin_moved) && !scene.dirty {
             let ro = scene.render_origin;

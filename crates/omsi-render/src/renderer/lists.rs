@@ -1,6 +1,5 @@
 //! A picture's draw lists (`Renderer::draw_lists`): the shadow casters, what is in view and
 //! the batches of the depth prepass and the main pass.
-
 use super::frame::{DrawLists, FrameClock, FrameContext};
 use super::state::Renderer;
 use crate::assets::AlphaMode;
@@ -11,7 +10,10 @@ use crate::passes::{
     PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE, PIPE_SURFACE_DEPTH,
     PIPE_TERRAIN_PAINT, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
 };
-use crate::scene::{point_in_vehicle_box, Instance, RenderPhase, Scene, CULL_BLOCK};
+use crate::scene::{
+    bounding_sphere, cull_blocks, instance_scale, point_in_vehicle_box, Instance, RenderPhase,
+    Scene, CULL_BLOCK,
+};
 use glam::{DVec3, Mat4, Vec3};
 use std::collections::HashMap;
 
@@ -68,7 +70,7 @@ impl Renderer {
         // an instance's screen size as the camera pass measures it for the LOD choice
         let lod_fov = camera.fov_deg.to_radians().max(1e-3);
         let lod_size = |inst: &Instance| -> f32 {
-            let scale = Self::instance_scale(scene, inst);
+            let scale = instance_scale(scene, inst);
             let radius = if inst.object_radius > 0.0 {
                 inst.object_radius
             } else {
@@ -119,7 +121,7 @@ impl Renderer {
                 if m.ranges.is_empty() {
                     continue;
                 }
-                let (c, r) = Self::bounding_sphere(scene, inst);
+                let (c, r) = bounding_sphere(scene, inst);
                 if inst.lod.0 > 0.0 || inst.lod.1 < f32::MAX {
                     let size = lod_size(inst);
                     if size < inst.lod.0 || (inst.lod.1 < f32::MAX && size >= inst.lod.1) {
@@ -245,7 +247,7 @@ impl Renderer {
                     + 1,
             );
             let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
-            let blocks = Self::cull_blocks(scene);
+            let blocks = cull_blocks(scene);
             let lit = |b: usize| {
                 blocks.as_ref().is_none_or(|bl| {
                     let (c, r) = bl[b];
@@ -537,7 +539,7 @@ impl Renderer {
                         if inst.surface {
                             return None;
                         }
-                        let (c, r) = Self::bounding_sphere(scene, inst);
+                        let (c, r) = bounding_sphere(scene, inst);
                         Some((inst.origin, (c - cam_rel).length() - r))
                     }))
                 };
@@ -861,7 +863,7 @@ impl Renderer {
                     continue;
                 }
                 let m = &scene.meshes[inst.mesh];
-                let (c, _) = Self::bounding_sphere(scene, inst);
+                let (c, _) = bounding_sphere(scene, inst);
                 let v = view.transform_point3(c);
                 log::info!("cull {i}: mesh {} r {:.2} centre {:?} origin {:?} view {:?} visible {} lod {:?} tan ({tan_x:.2}, {tan_y:.2}) fog {fog_far:.0} surface {} decal {} casts {} phase {:?} source {:?}", inst.mesh, m.bounds_radius, m.bounds_center, inst.origin, v, inst.visible, inst.lod, inst.surface, inst.decal, inst.casts_shadow, inst.render_phase, m.source);
             }
@@ -913,7 +915,7 @@ impl Renderer {
             if inst.blob && !shadow_blobs {
                 return None;
             }
-            let (c, r) = Self::bounding_sphere(scene, inst);
+            let (c, r) = bounding_sphere(scene, inst);
             let v = view.transform_point3(c);
             let z = -v.z; // distance along the view direction
                           // camera inside the sphere: drawn whatever the frustum says, but the
@@ -939,7 +941,7 @@ impl Renderer {
             // `set_object_culling`), else of the mesh alone. Surfaces and terrain
             // are never dropped for it.
             let size = if inst.object_radius > 0.0 {
-                let scale = Self::instance_scale(scene, inst);
+                let scale = instance_scale(scene, inst);
                 let radius = inst.object_radius * scale;
                 let ov = view.transform_point3((inst.origin - scene.render_origin).as_vec3());
                 let (od, oz) = (ov.length(), -ov.z);
@@ -1026,7 +1028,7 @@ impl Renderer {
                 + 1,
         );
         let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
-        let blocks = Self::cull_blocks(scene);
+        let blocks = cull_blocks(scene);
         let block_seen = |b: usize| {
             let Some(bl) = blocks.as_ref() else {
                 return true;
@@ -1086,7 +1088,7 @@ impl Renderer {
                 if m.ranges.is_empty() || !inst.visible || inst.surface {
                     continue;
                 }
-                let (c, r) = Self::bounding_sphere(scene, inst);
+                let (c, r) = bounding_sphere(scene, inst);
                 let v = view.transform_point3(c);
                 let z = -v.z;
                 if v.length() > 150.0

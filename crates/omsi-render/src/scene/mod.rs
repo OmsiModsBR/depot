@@ -16,9 +16,13 @@ pub use model::{Instance, RenderPhase, Scene};
 pub use triple::{panel_width, ScreenView, TripleScreen};
 
 pub(crate) use bounds::InstanceBounds;
-pub(crate) use bounds::{point_in_vehicle_box, CULL_BLOCK};
+pub(crate) use bounds::{
+    bounding_sphere, cull_blocks, instance_scale, mesh_bounds_changed, mesh_slot_replaced,
+    point_in_vehicle_box, prepare_bounds, CULL_BLOCK,
+};
 #[cfg(test)]
 pub(crate) use camera::camera_layout_entries;
 pub(crate) use camera::{CameraUniform, ENHANCED_CAMERA_TEXTURES};
+pub(crate) use instances::mark_changed;
 pub(crate) use layouts::Layouts;
 pub(crate) use visibility::CullHistory;
