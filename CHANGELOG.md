@@ -91,6 +91,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- City map orientation: a compass on the city map shows where north lies and a click turns the map between
+  **Map** (as the package draws it), **North** up and **Heading** up. New setting `nav_orientation` (`map`,
+  `north`, `heading`; a row in the game settings) and new manifest key `north` (degrees from the map's up to real
+  north, `docs/MAP_PACKAGE.md` sections 2 and 8.3). Dragging, zoom, the street under the pointer and the vehicle
+  arrows follow the turn. Packages without `north` behave as before. Source: maintainer (Leo, `lmonteirotech`), fork
+  lmonteirotech/openOMSI branch `local/lines-timetable` (the orientation part of `b826977` and `cfb9e86`, without
+  its calibration tools and map-specific parts), MIT. Not validated against real OMSI 2 content; only build and
+  automated tests were run.
 - City map terrain view: a **Terrain** button (and the setting `nav_contours`) shows the contour lines of the terrain
   from a map package that carries them (new line classes 5 and 6 of `docs/MAP_PACKAGE.md` section 4), the height
   written on the index lines, and the height of the street the player is on and of the street under the pointer.

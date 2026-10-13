@@ -261,6 +261,8 @@ pub struct MapSurface {
     has_streets: bool,
     /// The package carries the terrain's contour lines.
     has_contours: bool,
+    /// Where real north lies, in degrees clockwise from the map's own up (the manifest's `north`; 0 when it says nothing).
+    north: f32,
     /// Added to the heights of the contour lines when the manifest says so (some maps' heights are relative).
     terrain_offset: f32,
     /// Where the index contours are written (a point and a height about every 700 m of them), made on first use.
@@ -337,6 +339,7 @@ impl MapSurface {
         ];
         let mut brt_lines: Vec<String> = Vec::new();
         let mut terrain_offset = 0.0f32;
+        let mut north = 0.0f32;
         let (mut dark, mut light) = (Palette::dark(), Palette::light());
         for line in text.lines() {
             let line = line.trim();
@@ -357,6 +360,7 @@ impl MapSurface {
                 "player_line" => player_colors[1] = parse_color(v).unwrap_or(player_colors[1]),
                 "player_brt" => player_colors[2] = parse_color(v).unwrap_or(player_colors[2]),
                 "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
+                "north" => north = v.parse().ok().filter(|n: &f32| n.is_finite()).unwrap_or(0.0),
                 "brt_lines" => {
                     brt_lines = v
                         .split(',')
@@ -397,6 +401,7 @@ impl MapSurface {
                 s.load_regions(&dir);
                 s.load_lines(&dir);
                 s.terrain_offset = terrain_offset;
+                s.north = north;
                 s.has_contours = s.index.iter().any(|e| s.data.get(e.at..e.at + e.len).is_some_and(chunk_has_contours));
                 s.has_streets = s.index.iter().any(|e| {
                     s.data
@@ -491,6 +496,7 @@ impl MapSurface {
             lines: Vec::new(),
             has_streets: false,
             has_contours: false,
+            north: 0.0,
             terrain_offset: 0.0,
             contour_marks: std::sync::OnceLock::new(),
         })
@@ -541,6 +547,11 @@ impl MapSurface {
 
     pub fn lines(&self) -> &[LineInfo] {
         &self.lines
+    }
+
+    /// Where real north lies: degrees clockwise from the map's own up.
+    pub fn north(&self) -> f32 {
+        self.north
     }
 
     /// The package carries contour lines (the city map then has a button for them).
