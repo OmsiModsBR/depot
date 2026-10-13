@@ -22,11 +22,7 @@ pub(crate) fn fog_lamps_pipelines(
     camera_layout: &wgpu::BindGroupLayout,
     gl: bool,
     hdr_format: wgpu::TextureFormat,
-) -> (
-    wgpu::BindGroupLayout,
-    wgpu::Buffer,
-    Option<[wgpu::RenderPipeline; 2]>,
-) {
+) -> FogLampsPass {
     // the lamps in the fog: the camera group (lights, grid, the enhanced uniform) and the
     // prepass depth, added onto the high-range picture
     let fog_lamps_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -131,7 +127,11 @@ pub(crate) fn fog_lamps_pipelines(
                 make("fs_fog_composite", Some(add)),
             ]
         });
-    (fog_lamps_layout, fog_lamps_buf, fog_lamps_pipeline)
+    FogLampsPass {
+        fog_lamps_pipeline,
+        fog_lamps_layout,
+        fog_lamps_buf,
+    }
 }
 
 impl Renderer {

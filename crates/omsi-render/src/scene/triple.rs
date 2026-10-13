@@ -1,5 +1,6 @@
 //! Physical, monoscopic three-screen rig. Dimensions are millimetres; angles are
 //! measured inward from a flat row of monitors. All views share the driver's eye.
+
 use super::camera::Camera;
 use glam::{DVec3, Mat4, Vec3, Vec4};
 

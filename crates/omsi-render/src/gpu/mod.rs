@@ -16,8 +16,8 @@ pub use errors::{catch, catching};
 #[cfg(test)]
 pub(crate) use arrays::array_tex_spans;
 pub(crate) use arrays::{
-    array_layout_entry, array_layout_entry_on, array_path, ArrayPath, GpuArray, ARRAY_PATH,
-    ARRAY_TEX_WIDTH,
+    array_layout_entry, array_layout_entry_on, array_path, float_tex, ArrayPath, GpuArray,
+    ARRAY_PATH, ARRAY_TEX_WIDTH,
 };
 pub(crate) use buffers::buffer_init;
 pub(crate) use caps::{
@@ -25,7 +25,5 @@ pub(crate) use caps::{
 };
 pub(crate) use context::{GpuContext, Samplers};
 pub(crate) use errors::{gpu_error_text, CATCHING};
-pub(crate) use open::{
-    basic_pipelines, fallback_load, fallback_store, DevicePoller, BASIC_PIPELINES,
-};
+pub(crate) use open::{basic_pipelines, fallback_load, fallback_store, BASIC_PIPELINES};
 pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};

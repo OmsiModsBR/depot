@@ -1,24 +1,18 @@
 //! The renderer's state: the `Renderer` struct, the formats and sizes of its targets, and
 //! the shadows' ranges.
-use crate::assets::AssetStore;
-use crate::gpu::GpuContext;
-use crate::scene::Layouts;
-use crate::gpu::Samplers;
+
+use super::options::RenderOptions;
+use crate::assets::{AssetStore, TexAddressing};
+use crate::gpu::{GpuContext, Samplers};
 use crate::lighting::LightMapAtlas;
-use crate::output::Diagnostics;
-use crate::output::Presenter;
-use crate::passes::Exposure;
-use crate::passes::FogLampsPass;
-use crate::passes::PrepassPipelines;
-use crate::passes::ShadowResources;
-use crate::passes::SpriteResources;
-use crate::passes::SsaoPass;
-use crate::scene::CullHistory;
+use crate::output::{Diagnostics, Presenter};
+use crate::passes::{
+    Exposure, FogLampsPass, PrepassPipelines, ShadowResources, SpriteResources, SsaoPass,
+};
+use crate::scene::{CullHistory, Layouts};
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
 
-use super::options::RenderOptions;
-use crate::assets::TexAddressing;
 use crate::effects::{puddles, rt};
 use crate::passes::{PassPipelines, PostPipelines};
 

@@ -1,13 +1,13 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
-use glam::DVec3;
-use glam::Mat4;
-use glam::Vec3;
+
+use crate::gpu::array_layout_entry;
+use crate::scene::Scene;
+use glam::{DVec3, Mat4, Vec3};
 
 use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
 use crate::gpu::{basic_pipelines, pass_timer};
 use crate::lighting::{LampShadow, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::renderer::{Renderer, DEPTH_FORMAT, SHADOW_CLOSE_MAX};
-use crate::scene::Scene;
 
 /// The sun's shadow maps (near and far), their sampler, and the pipelines drawn into them:
 /// the clearing one and one per kind and cascade.
@@ -319,4 +319,54 @@ pub(crate) struct ShadowResources {
     /// Depth-only pipeline that fills its viewport with the far depth: clears the close
     /// cascade's part of the atlas when the near part is kept from the frame before.
     pub(crate) shadow_clear_pipeline: wgpu::RenderPipeline,
+}
+
+impl ShadowResources {
+    /// The shadow maps, their layout, sampler and pipelines.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        shadow_size: u32,
+        shader: &wgpu::ShaderModule,
+        material_layout: &wgpu::BindGroupLayout,
+        vertex_layout: &wgpu::VertexBufferLayout<'_>,
+    ) -> Self {
+        let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shadow camera"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                array_layout_entry(1, wgpu::ShaderStages::VERTEX, true),
+                array_layout_entry(2, wgpu::ShaderStages::VERTEX, true),
+                array_layout_entry(10, wgpu::ShaderStages::VERTEX, false),
+            ],
+        });
+        let (shadow_view, shadow_view_far, shadow_sampler, shadow_clear_pipeline, shadow_pipelines) =
+            shadow_pipelines(
+                device,
+                shadow_size,
+                shader,
+                &shadow_layout,
+                material_layout,
+                vertex_layout,
+            );
+        Self {
+            shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
+            shadow_near_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
+            xr_shadow_cache: std::cell::Cell::new(None),
+            shadow_clear_pipeline,
+            shadow_view,
+            shadow_view_far,
+            shadow_sampler,
+            shadow_layout,
+            shadow_pipelines,
+        }
+    }
 }

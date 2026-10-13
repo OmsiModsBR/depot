@@ -233,3 +233,17 @@ pub(crate) fn array_layout_entry_on(
         count: None,
     }
 }
+
+/// A fragment shader's filterable 2D texture at `binding`.
+pub(crate) fn float_tex(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
+}

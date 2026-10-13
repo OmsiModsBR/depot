@@ -1,12 +1,14 @@
 //! The main pass: the scene's pipelines and drawing the scene into the picture.
 
+use crate::assets::upload_texture;
+use crate::gpu::pass_timer;
+use crate::lighting::Lighting;
+use crate::renderer::Renderer;
+
 use super::draw::{
     encode_batches, encode_batches_filtered, main_pipeline, Batch, PIPE_ALPHA_TEST, PIPE_BLEND,
     PIPE_BLEND_NO_WRITE,
 };
-use crate::gpu::pass_timer;
-use crate::lighting::Lighting;
-use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
 use crate::shaders::{snowfall_flakes, SnowUniform};
 
@@ -530,7 +532,8 @@ impl Renderer {
     }
 }
 
-/// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the snow's parameters.
+/// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the
+/// snow's parameters.
 pub(crate) struct SpriteResources {
     pub(crate) corona_bind_group: wgpu::BindGroup,
     /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
@@ -543,4 +546,133 @@ pub(crate) struct SpriteResources {
     pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
     pub(crate) corona_layout: wgpu::BindGroupLayout,
     pub(crate) corona_sampler: wgpu::Sampler,
+}
+
+impl SpriteResources {
+    /// The coronas' and the smoke's pictures, and the snowfall's parameters (laid out by
+    /// `snow_layout`).
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        snow_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        // coronas: camera group + a corona texture group
+        let corona_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("corona"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        // corona sprite: soft radial falloff
+        let cs = 64u32;
+        let mut corona_img = omsi_texture::Image {
+            width: cs,
+            height: cs,
+            rgba: vec![0; (cs * cs * 4) as usize],
+            has_alpha: false,
+        };
+        for y in 0..cs {
+            for x in 0..cs {
+                let dx = (x as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let dy = (y as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let r = (dx * dx + dy * dy).sqrt();
+                let v = ((1.0 - r).max(0.0)).powf(1.6) * 255.0;
+                let o = ((y * cs + x) * 4) as usize;
+                corona_img.rgba[o..o + 4].copy_from_slice(&[v as u8, v as u8, v as u8, 255]);
+            }
+        }
+        let corona_texture = upload_texture(device, queue, &corona_img, false);
+        let corona_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let corona_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("corona"),
+            layout: &corona_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&corona_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&corona_sampler),
+                },
+            ],
+        });
+        // a soft grey puff until the app hands over the game's own `Texture/rauch.tga`
+        let mut puff = omsi_texture::Image {
+            width: cs,
+            height: cs,
+            rgba: vec![0; (cs * cs * 4) as usize],
+            has_alpha: true,
+        };
+        for y in 0..cs {
+            for x in 0..cs {
+                let dx = (x as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let dy = (y as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
+                let a = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0).powf(1.2) * 255.0;
+                let o = ((y * cs + x) * 4) as usize;
+                puff.rgba[o..o + 4].copy_from_slice(&[255, 255, 255, a as u8]);
+            }
+        }
+        let puff_texture = upload_texture(device, queue, &puff, false);
+        let smoke_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("smoke"),
+            layout: &corona_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&puff_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&corona_sampler),
+                },
+            ],
+        });
+        drop(puff_texture);
+        let snow_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("snow params"),
+            size: std::mem::size_of::<SnowUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let snow_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("snow"),
+            layout: snow_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: snow_buf.as_entire_binding(),
+            }],
+        });
+        drop(corona_texture);
+        Self {
+            corona_bind_group,
+            snow_buf,
+            snow_bind_group,
+            smoke_bind_group,
+            corona_textures: Vec::new(),
+            corona_layout,
+            corona_sampler,
+        }
+    }
 }

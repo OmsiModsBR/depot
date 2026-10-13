@@ -8,7 +8,7 @@ mod window;
 
 pub use window::{winit_window, SurfaceState};
 
-pub(crate) use diagnostics::{Diagnostics, GpuTimers};
+pub(crate) use diagnostics::Diagnostics;
 #[cfg(test)]
 pub(crate) use window::snap_rect;
-pub(crate) use window::{overlay_1x_pipelines, overlay_pipeline, upscale_pipelines, Presenter};
+pub(crate) use window::Presenter;

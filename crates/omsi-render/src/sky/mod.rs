@@ -12,8 +12,6 @@ mod update;
 #[cfg(test)]
 pub(crate) use air::{enhanced_sky_input, sky_input_differs};
 pub(crate) use air::{enhanced_weather_fog, CLOUD_ORIGIN_PERIOD};
-pub(crate) use probe::{
-    Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE,
-};
+pub(crate) use probe::{PROBE_MIPS, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS};
 pub(crate) use resources::SkyResources;
 pub(crate) use update::EnhancedUniform;

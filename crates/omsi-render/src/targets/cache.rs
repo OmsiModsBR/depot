@@ -1,5 +1,6 @@
 //! The per-size target cache: the multisampled colour and depth attachments, the depth
 //! target, and letting go of sizes no longer drawn.
+
 use super::ao::AoTargets;
 use super::hdr::HdrTargets;
 use std::collections::HashMap;
@@ -155,4 +156,18 @@ pub(crate) struct TargetCache {
     pub(crate) glass_picture: Option<wgpu::TextureView>,
     /// When each size of the size-keyed targets (scale, MSAA, HDR) was last asked for.
     pub(crate) target_use: HashMap<(u32, u32), std::time::Instant>,
+}
+
+impl TargetCache {
+    /// No targets yet: they are made at the first size asked for.
+    pub(crate) fn new() -> Self {
+        Self {
+            glass_picture: None,
+            target_use: HashMap::new(),
+            hdr_targets: HashMap::new(),
+            ao: None,
+            depth: None,
+            msaa_targets: HashMap::new(),
+        }
+    }
 }

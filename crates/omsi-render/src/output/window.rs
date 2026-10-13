@@ -1,12 +1,13 @@
 //! The window: its surface, and presenting a frame to it with upscale, FXAA, the overlays
 //! and the HUD.
+
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::gpu::{buffer_init, pass_timer};
 use crate::renderer::{Renderer, DEPTH_FORMAT};
 use crate::scene::{Scene, TextureId};
 use anyhow::{Context, Result};
-use std::sync::Arc;
 
 /// Helper for windowed rendering.
 pub struct SurfaceState<'w> {
@@ -576,7 +577,8 @@ impl Renderer {
     }
 }
 
-/// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the headset's UI.
+/// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the
+/// headset's UI.
 pub(crate) struct Presenter {
     /// The HUD and overlays drawn into the multisampled picture, and their layout.
     pub(crate) overlay_pipeline: wgpu::RenderPipeline,
@@ -594,4 +596,29 @@ pub(crate) struct Presenter {
     pub(crate) upscale_buf: wgpu::Buffer,
     pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
     pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
+}
+
+impl Presenter {
+    /// The overlay, scaling and panel pipelines for the window's `format`.
+    pub(crate) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, msaa: u32) -> Self {
+        let (overlay_layout, overlay_shader, overlay_pl, premul, overlay_pipeline) =
+            overlay_pipeline(device, format, msaa);
+        let (overlay_pipeline_1x, xr_ui_pipeline) =
+            overlay_1x_pipelines(device, format, &overlay_pl, &overlay_shader, premul);
+        let (upscale_layout, upscale_pipeline, copy_pipeline, panel_pipeline, upscale_buf) =
+            upscale_pipelines(device, format);
+        Self {
+            overlay_pipeline,
+            overlay_layout,
+            upscale_pipeline,
+            copy_pipeline,
+            panel_pipeline,
+            upscale_layout,
+            upscale_buf,
+            scale_targets: HashMap::new(),
+            triple_targets: None,
+            overlay_pipeline_1x,
+            xr_ui_pipeline,
+        }
+    }
 }

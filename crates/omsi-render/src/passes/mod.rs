@@ -14,7 +14,7 @@ mod sky;
 pub(crate) use depth::{ao_pipelines, prepass_pipelines, PrepassPipelines, SsaoPass};
 pub(crate) use draw::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
-    encode_batches, encode_batches_filtered, float_tex, horizontal_sort_distance, in_scope,
+    encode_batches, encode_batches_filtered, horizontal_sort_distance, in_scope,
     instance_depth_bias, nearest_by_origin, one_sided_primitive, origin_key, pipe_code, post_pass,
     record_bundles, run_parts, surface_depth_coverage, surface_instance_code, world_surface_phase,
     Batch, DrawItem, PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE,
@@ -27,4 +27,4 @@ pub(crate) use main::{PassPipelines, SpriteResources};
 #[cfg(test)]
 pub(crate) use post::PostUniform;
 pub(crate) use post::{post_pipelines, Exposure, PostPipelines};
-pub(crate) use shadow::{shadow_pipelines, ShadowResources};
+pub(crate) use shadow::ShadowResources;

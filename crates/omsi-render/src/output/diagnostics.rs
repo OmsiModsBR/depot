@@ -1,7 +1,7 @@
 //! The numbers a frame leaves behind: GPU time per pass (OMSI_GPU_TIMERS).
-use crate::lighting::ExposureLog;
 
 use crate::gpu::GPU_TIMER_PASSES;
+use crate::lighting::ExposureLog;
 use crate::renderer::Renderer;
 use std::sync::Arc;
 
@@ -156,4 +156,17 @@ pub(crate) struct Diagnostics {
     pub(crate) gpu_timers: [Option<GpuTimers>; 2],
     pub(crate) profiling: bool,
     pub(crate) draw_audit_at: std::time::Instant,
+}
+
+impl Diagnostics {
+    /// The GPU timers and the exposure log, when asked for.
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        let gpu_timers = [GpuTimers::new(device), GpuTimers::new(device)];
+        Self {
+            exposure_log: ExposureLog::new(device),
+            gpu_timers,
+            profiling: omsi_cfg::env::var_os("OMSI_PROFILE").is_some(),
+            draw_audit_at: std::time::Instant::now(),
+        }
+    }
 }

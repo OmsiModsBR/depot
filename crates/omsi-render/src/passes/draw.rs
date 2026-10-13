@@ -77,7 +77,8 @@ pub(crate) struct DrawItem {
     pub(crate) entry: u32,
 }
 
-/// Draws of the same mesh range with materials that look alike and the same pipeline, made as one instanced
+/// Draws of the same mesh range with materials that look alike and the same pipeline, made as one
+/// instanced
 /// draw: `instances` indexes the frame's draw list, which holds each instance's per-draw
 /// entry (the vertex shader looks it up). Thousands of single draws were the biggest CPU
 /// cost of a frame - wgpu validates and records every one - and trees, lamps, fences,
@@ -512,18 +513,4 @@ pub(crate) fn record_bundles(
         .into_iter()
         .flatten()
         .collect()
-}
-
-/// A fragment shader's filterable 2D texture at `binding`.
-pub(crate) fn float_tex(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::FRAGMENT,
-        ty: wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
-        },
-        count: None,
-    }
 }

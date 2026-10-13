@@ -4,8 +4,7 @@
 use super::texture::next_gen;
 use crate::gpu::gl_worker_turn;
 use crate::renderer::Renderer;
-use crate::scene::Scene;
-use crate::scene::Vertex;
+use crate::scene::{Scene, Vertex};
 use glam::Vec3;
 use omsi_geometry::MeshData;
 

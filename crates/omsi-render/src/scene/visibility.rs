@@ -19,3 +19,16 @@ pub(crate) struct CullHistory {
     /// Cleared and reused as the next main view's object-size history.
     pub(crate) object_sizes_scratch: std::cell::RefCell<hashbrown::HashMap<[u64; 4], f32>>,
 }
+
+impl CullHistory {
+    /// No history yet.
+    pub(crate) fn new() -> Self {
+        Self {
+            triple_culling: Default::default(),
+            flicker: std::cell::RefCell::new(HashMap::new()),
+            cull_drawn: std::cell::RefCell::new(Vec::new()),
+            object_sizes: Default::default(),
+            object_sizes_scratch: Default::default(),
+        }
+    }
+}

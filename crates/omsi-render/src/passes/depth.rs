@@ -25,7 +25,7 @@ pub(crate) fn prepass_pipelines(
     msaa: u32,
     shader: &wgpu::ShaderModule,
     vertex_layout: &wgpu::VertexBufferLayout<'_>,
-) -> ([wgpu::RenderPipeline; 6], Option<[wgpu::RenderPipeline; 6]>) {
+) -> PrepassPipelines {
     let prepass_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("prepass"),
         bind_group_layouts: &[Some(&camera_layout), Some(&material_layout)],
@@ -94,21 +94,15 @@ pub(crate) fn prepass_pipelines(
         ]
         .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa))
     });
-    (prepass_pipelines, prepass_msaa_pipelines)
+    PrepassPipelines {
+        prepass_pipelines,
+        prepass_msaa_pipelines,
+    }
 }
 
 /// The ambient occlusion: its bind group layout, uniform buffer and sampler, and the AO and
 /// blur pipelines (none on OpenGL).
-pub(crate) fn ao_pipelines(
-    device: &wgpu::Device,
-    gl: bool,
-) -> (
-    wgpu::BindGroupLayout,
-    wgpu::Buffer,
-    wgpu::Sampler,
-    Option<wgpu::RenderPipeline>,
-    Option<wgpu::RenderPipeline>,
-) {
+pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
     // ambient occlusion: a depth prepass with the camera projection, then the AO and a blur
     log::info!("renderer: compiling the SSAO shaders");
     let ssao_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -201,7 +195,13 @@ pub(crate) fn ao_pipelines(
     };
     let ssao_pipeline = (!gl).then(|| make_ao("fs_ssao"));
     let blur_pipeline = (!gl).then(|| make_ao("fs_blur"));
-    (ao_layout, ao_buf, ao_sampler, ssao_pipeline, blur_pipeline)
+    SsaoPass {
+        ao_sampler,
+        ao_layout,
+        ao_buf,
+        ssao_pipeline,
+        blur_pipeline,
+    }
 }
 
 impl Renderer {

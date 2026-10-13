@@ -1,11 +1,13 @@
 //! The enhanced post passes: glow, exposure metering and tone mapping.
 
-use super::draw::{float_tex, post_pass};
-use crate::gpu::pass_timer;
-use crate::lighting::{meter_tuning, tone_contrast, Lighting};
+use super::draw::post_pass;
+use crate::assets::GpuTexture;
+use crate::gpu::{float_tex, pass_timer};
 use crate::renderer::Renderer;
-use crate::scene::{Scene, TextureId};
 use crate::sky::atmosphere;
+
+use crate::lighting::{meter_tuning, tone_contrast, Lighting};
+use crate::scene::{Scene, TextureId};
 
 /// The enhanced path's post passes (post.wgsl `PostParams`).
 #[repr(C)]
@@ -362,7 +364,8 @@ impl Renderer {
     }
 }
 
-/// The eye's adaptation: the metered luminance, the adapted value and the exposure as it follows the sky.
+/// The eye's adaptation: the metered luminance, the adapted value and the exposure as it follows
+/// the sky.
 pub(crate) struct Exposure {
     /// The metered mean log luminance (1x1), and the adapted value in two textures drawn
     /// into by turns (`adapt_front` is the current one), with their bind groups.
@@ -375,4 +378,79 @@ pub(crate) struct Exposure {
     pub(crate) view_lamps: Option<f32>,
     /// The pre-exposure (natural log) as it follows the sky's.
     pub(crate) exposure: Option<f32>,
+}
+
+impl Exposure {
+    /// The meter's and the adapted value's textures and their bind groups.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        post: &PostPipelines,
+        white_texture: &GpuTexture,
+        hdr_format: wgpu::TextureFormat,
+    ) -> Self {
+        let one = wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        };
+        let tiny = |label: &str| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: one,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: hdr_format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        let meter_view = tiny("exposure meter");
+        let adapt_views = [tiny("exposure a"), tiny("exposure b")];
+        // adapt_bg[k] reads the meter and adapt[k] (and draws into the other one)
+        let adapt_bg = [0usize, 1].map(|k| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("exposure"),
+                layout: &post.post_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: post.post_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&meter_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&post.post_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&adapt_views[k]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&white_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&white_texture.view),
+                    },
+                ],
+            })
+        });
+        Self {
+            meter_view,
+            adapt_views,
+            adapt_bg,
+            adapt_front: 0,
+            view_lamps: None,
+            exposure: None,
+        }
+    }
 }

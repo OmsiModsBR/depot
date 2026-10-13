@@ -22,7 +22,8 @@ pub(crate) struct MaterialUniform {
     /// y an occlusion, z a roughness, w a metalness channel.
     pub(crate) pbr: [f32; 4],
     /// x: a screen (`MaterialExtra::screen`); y: 1 `[matl_texadress_border]`, 2
-    /// `[matl_texadress_mirroronce]`; z the border colour's rgb packed as r * 65536 + g * 256 + b (bytes), w its alpha.
+    /// `[matl_texadress_mirroronce]`; z the border colour's rgb packed as r * 65536 + g * 256 + b
+    /// (bytes), w its alpha.
     pub(crate) flags: [f32; 4],
     /// rgb: the D3D material's ambient colour, which takes the ambient light (C); w: 1 for
     /// a texture that is a season's snow picture (no snow laid over it), 2 the map's water,
