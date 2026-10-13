@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Writes a tiny synthetic map package (about 2 KB) to test the Lines panel.
+"""Writes a tiny synthetic map package (about 2 KB) to test the Lines panel and the street names and limits.
 
 Everything in it is invented by this script: no OpenStreetMap data, nothing from OMSI 2. It has a
-`surface.oms` (a lake, a river, a railway), a `manifest.cfg` and a `lines.lin` with one bus line,
+`surface.oms` (a lake, a river, a railway, a named street with limits and a named street without), a `manifest.cfg` and a `lines.lin` with one bus line,
 one tram line, one train line and a bus line with two eras, so the tabs per kind of vehicle and
 the eras can be checked. Format: docs/MAP_PACKAGE.md.
 
@@ -20,7 +20,7 @@ import struct
 from pathlib import Path
 
 CHUNK = 300.0
-WATER, RIVER, RAIL = 0, 0, 1
+WATER, RIVER, RAIL, STREET, STREET_LIMITS = 0, 0, 1, 3, 4
 
 
 def chunk_body(fills, lines, labels):
@@ -29,9 +29,12 @@ def chunk_body(fills, lines, labels):
         flat = [v for t in tris for p in t for v in p]
         b += struct.pack("<BI", cls, len(tris)) + struct.pack("<%df" % len(flat), *flat)
     b += struct.pack("<I", len(lines))
-    for cls, width, pts in lines:
+    for line in lines:
+        cls, width, pts = line[:3]
+        # (a street also says its name, an index into the names, and for class 4 the limit of heavy vehicles)
+        flags, name = line[3:5] if len(line) > 3 else (0, 0xFFFFFFFF)
         flat = [v for p in pts for v in p]
-        b += struct.pack("<BBfII", cls, 0, width, 0xFFFFFFFF, len(pts)) + struct.pack("<%df" % len(flat), *flat)
+        b += struct.pack("<BBfII", cls, flags, width, name, len(pts)) + struct.pack("<%df" % len(flat), *flat)
     b += struct.pack("<I", len(labels))
     for kind, rank, name, x, y in labels:
         b += struct.pack("<BBIff", kind, rank, name, x, y)
@@ -39,11 +42,14 @@ def chunk_body(fills, lines, labels):
 
 
 def surface():
-    names = ["Test Lake"]
+    names = ["Test Lake", "Test Street", "Test Lane"]
     lake = [((40, 40), (140, 40), (140, 120)), ((40, 40), (140, 120), (40, 120))]
     river = (RIVER, 6.0, [(140, 80), (200, 120), (299, 130)])
     rail = (RAIL, 0.0, [(0, 250), (150, 240), (299, 250)])
-    body = chunk_body([(WATER, lake)], [river, rail], [(4, 120, 0, 90.0, 80.0)])
+    # class 4: `width` is the limit in km/h, `flags` the limit of heavy vehicles; class 3 has none
+    street = (STREET_LIMITS, 50.0, [(20, 200), (150, 190), (290, 200)], 30, 1)
+    lane = (STREET, 0.0, [(150, 190), (160, 280)], 0, 2)
+    body = chunk_body([(WATER, lake)], [river, rail, street, lane], [(4, 120, 0, 90.0, 80.0)])
     head = b"OMSF" + struct.pack("<I", 1) + struct.pack("<dd", 0.0, 0.0)
     head += struct.pack("<ffff", 0.0, CHUNK, 0.0, CHUNK) + struct.pack("<f", CHUNK)
     head += struct.pack("<I", len(names))

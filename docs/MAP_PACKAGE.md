@@ -169,8 +169,9 @@ section 1, so any source and any tool will do.
 [lmonteirotech/openomsi-map-packages](https://github.com/lmonteirotech/openomsi-map-packages): it reads the map
 itself (tiles, timetables, eras), locates it against OpenStreetMap when it can and writes the whole folder of
 section 1, with a report of what it found. That repository also holds the real packages (their data is under
-the ODbL and is not part of this repository). To try the Lines panel without any real data,
-`tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package.
+the ODbL and is not part of this repository). To try the Lines panel and the street names and limits without any real data,
+`tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package (a street with limits, a street
+without, a lake, a river and a railway).
 
 The upstream example packages (derived from OpenStreetMap data under the ODbL, one of them with line data from a third-party map author) are deliberately not included in Depot: their data licence and provenance have not been reviewed here. See the changelog entry for the origin of this feature.
 
