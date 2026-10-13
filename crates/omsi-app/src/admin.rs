@@ -19,6 +19,7 @@
 //! `unstick <id>`, `clock <seconds of the day>`, `traffic next`, `traffic clear`,
 //! `weather cycle`, `weather set <Weather/file.owt>`.
 
+use crate::teleport::teleport;
 use crate::App;
 use omsi_net::{LanSession, Role};
 
@@ -223,7 +224,7 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             }
         }
         "traffic" if arg.trim() == "clear" => {
-            clear_ai_traffic(app);
+            crate::traffic_link::clear_ai_traffic(app);
         }
         "traffic" => {
             if let Some(t) = app.traffic.as_mut() {
@@ -233,19 +234,6 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             }
         }
         _ => log::info!("admin: unknown action '{action}'"),
-    }
-}
-
-/// Take the current random AI traffic off the road. Timetable buses are kept, and the
-/// configured random traffic target will populate the roads again normally.
-pub(crate) fn clear_ai_traffic(app: &mut App) {
-    if app.online.lan.as_ref().is_some_and(|l| l.role == Role::Client) {
-        app.service_msg = Some(("In a LAN session only the host can clear AI traffic".into(), 3.0));
-        return;
-    }
-    if let (Some(t), Some(w), Some(r), Some(scene)) = (app.traffic.as_mut(), app.world.as_ref(), app.renderer.as_ref(), app.scene.as_mut()) {
-        let removed = t.clear_random(w, r, scene);
-        app.service_msg = Some((format!("{removed} AI vehicles taken off the road"), 3.0));
     }
 }
 
@@ -292,43 +280,6 @@ fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
     teleport(app, glam::DVec3::new(x, y, pos.z), heading);
 }
 
-/// Our bus put at `at` facing `heading` (stopped), with the walker back at its wheel.
-pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
-    if app.on_foot.is_some() {
-        app.back_to_bus();
-    }
-    // on the level at the height asked for (a car park under a building, a road under a
-    // bridge), else the highest ground there (a place picked on the map, at no height)
-    let ground = app.world.as_ref().and_then(|w| {
-        let near = (at.z != 0.0)
-            .then(|| crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below)
-            .flatten()
-            .filter(|b| (at.z - b).abs() < 3.0);
-        near.or_else(|| w.walk_height(at.x, at.y))
-    });
-    let z = ground.unwrap_or(at.z);
-    if let Some(p) = app.player.as_mut() {
-        // (as a joining player's bus is moved off an occupied spawn: `lan::clear_spawn`)
-        let origin = glam::DVec3::new(at.x, at.y, z);
-        p.vehicle.position = origin;
-        p.vehicle.heading = heading;
-        if let Some(rb) = p.vehicle.rigid_mut() {
-            rb.place(origin, heading);
-        }
-        for t in p.vehicle.trailers.iter_mut() {
-            t.realign();
-        }
-        // (settled on the ground there; where its tiles are still to be read - a street far
-        // off picked on the map - it waits at the street's height for them, as the frame
-        // holds a bus with no ground under it, instead of dropping through first)
-        if ground.is_some() {
-            for _ in 0..3 {
-                p.vehicle.update(1.0 / 30.0);
-            }
-        }
-        log::info!("teleported to ({:.1}, {:.1}) heading {heading:.0}", at.x, at.y);
-    }
-}
 
 /// A command from another game (the host's, or an admin's to the host).
 pub(crate) fn command(app: &mut App, from: u32, text: &str) {
@@ -703,42 +654,6 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
         // a player's game showed a notification (`notify`): said for the tool that sent it
         "notify-seen" => log::info!("server: player {from} saw notice {}", arg.trim()),
         _ => log::info!("server: command '{text}' from player {from} not taken"),
-    }
-}
-
-/// The bus fallen through the world (a hole in the ground, a tile that was not there yet,
-/// a mod's road without a surface) fell for ever. Where it last stood on the ground is
-/// kept every second; a bus more than 8 m under the ground there is - or 40 m under where
-/// it last stood, where there is no ground - is put back there.
-pub(crate) fn guard_fall(app: &mut App, dt: f32) {
-    let Some(p) = app.player.as_ref() else { return };
-    let at = p.vehicle.position;
-    // the ground under the bus (the face at or below it: on a car park's lower level the
-    // building's roof is not its ground - measured from the roof, a bus driving under it
-    // had fallen through the world and was put up there), and the highest there is
-    let (under, ground) = match app.world.as_ref() {
-        Some(w) => (crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below, w.walk_height(at.x, at.y)),
-        None => (None, None),
-    };
-    app.safe_age += dt;
-    let fallen = match (under, ground) {
-        (Some(_), _) => false,
-        (None, Some(g)) => at.z < g - 8.0,
-        (None, None) => app.safe_pose.map(|s| at.z < s.0.z - 40.0).unwrap_or(false),
-    };
-    if fallen {
-        if let Some((pos, heading)) = app.safe_pose {
-            log::warn!("the bus fell through the world at ({:.1}, {:.1}, {:.1}): put back at ({:.1}, {:.1})", at.x, at.y, at.z, pos.x, pos.y);
-            teleport(app, pos, heading);
-            app.service_msg = Some(("The bus fell through the ground: it was put back where it last stood".into(), 5.0));
-        }
-        return;
-    }
-    if app.safe_age >= 1.0 {
-        if let Some(g) = under.filter(|g| (at.z - g).abs() < 2.5) {
-            app.safe_age = 0.0;
-            app.safe_pose = Some((glam::DVec3::new(at.x, at.y, g), p.vehicle.heading));
-        }
     }
 }
 

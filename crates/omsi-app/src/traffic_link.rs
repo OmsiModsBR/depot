@@ -107,3 +107,79 @@ pub(crate) fn lay_down_poles(
         }
     }
 }
+
+/// Where a vehicle stands and how big it is: the centre of its box (reaching back over an
+/// articulated bus's rear sections), heading in degrees clockwise from north, length and width.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct VehicleBox {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub heading: f32,
+    pub length: f32,
+    pub width: f32,
+}
+
+/// The box of a vehicle: centre, heading, length, width.
+pub(crate) fn vehicle_box(v: &omsi_sim::VehicleInstance, fallback: [f32; 6]) -> VehicleBox {
+    let bb = v.ty.def.bounding_box.unwrap_or(fallback);
+    let h = v.heading.to_radians();
+    let (cx, cy) = (bb[3] as f64, bb[4] as f64);
+    let c = v.position
+        + DVec3::new(
+            cx * h.cos() + cy * h.sin(),
+            -cx * h.sin() + cy * h.cos(),
+            0.0,
+        );
+    // an articulated bus reaches back over its rear sections
+    let mut length = bb[1];
+    let mut centre = c;
+    for t in &v.trailers {
+        if let Some(tb) = t.ty.def.bounding_box {
+            let back = (t.position - v.position).truncate().length() as f32 + tb[1] * 0.5;
+            let extra = (back - (bb[1] * 0.5 - bb[4])).max(0.0);
+            length += extra;
+            centre -= DVec3::new(h.sin(), h.cos(), 0.0) * (extra as f64 * 0.5);
+        }
+    }
+    VehicleBox {
+        x: centre.x,
+        y: centre.y,
+        z: v.position.z,
+        heading: v.heading as f32,
+        length,
+        width: bb[0],
+    }
+}
+
+/// What a vehicle's indicators show: 0 off, 1 left, 2 right, 3 hazard - the indicator
+/// switch where the script has one, else the lamps (as they are lit just now).
+pub(crate) fn indicator(v: &omsi_sim::VehicleInstance) -> u8 {
+    let on = |n: &str| v.var(n).unwrap_or(0.0) > 0.5;
+    if on("lights_sw_warnblinker") {
+        3
+    } else {
+        match v.var("lights_sw_blinker") {
+            Some(s) if (0.5..2.5).contains(&s) => s.round() as u8,
+            _ => match (on("lights_blinker_l"), on("lights_blinker_r")) {
+                (true, true) => 3,
+                (true, false) => 1,
+                (false, true) => 2,
+                _ => 0,
+            },
+        }
+    }
+}
+
+/// Take the current random AI traffic off the road. Timetable buses are kept, and the
+/// configured random traffic target will populate the roads again normally.
+pub(crate) fn clear_ai_traffic(app: &mut App) {
+    if app.is_lan_client() {
+        app.service_msg = Some(("In a LAN session only the host can clear AI traffic".into(), 3.0));
+        return;
+    }
+    if let (Some(t), Some(w), Some(r), Some(scene)) = (app.traffic.as_mut(), app.world.as_ref(), app.renderer.as_ref(), app.scene.as_mut()) {
+        let removed = t.clear_random(w, r, scene);
+        app.service_msg = Some((format!("{removed} AI vehicles taken off the road"), 3.0));
+    }
+}

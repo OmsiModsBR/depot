@@ -589,7 +589,7 @@ impl App {
                 self.close_game_menu();
                 if let Some(p) = self.player.as_ref() {
                     let (at, heading) = (p.vehicle.position, p.vehicle.heading);
-                    crate::admin::teleport(self, at, heading);
+                    crate::teleport::teleport(self, at, heading);
                     self.service_msg = Some(("The vehicle stands on its wheels again".into(), 3.0));
                 }
             }
@@ -1105,7 +1105,7 @@ impl App {
         let l = &net.lanes[lane];
         let (pos, heading) = l.at(s);
         let heading = heading as f64;
-        crate::admin::teleport(self, pos, heading);
+        crate::teleport::teleport(self, pos, heading);
         self.service_msg = Some(("The bus stands where the map was clicked".into(), 3.0));
     }
 
