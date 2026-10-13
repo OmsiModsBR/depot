@@ -266,6 +266,7 @@ const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 const PEDAL: [f32; 7] = [0.5, 0.7, 0.85, 1.0, 1.25, 1.5, 2.0];
 
 /// The next of `steps` after `now` (round to the first).
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub(crate) fn next_step<T: PartialOrd + Copy>(steps: &[T], now: T) -> T {
     steps.iter().copied().find(|s| *s > now).unwrap_or(steps[0])
 }

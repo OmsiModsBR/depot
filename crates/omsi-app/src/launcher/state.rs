@@ -30,6 +30,7 @@ pub enum Msg {
     Mods(Result<core::ModsStatus, String>),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Join(serde_json::Value),
     #[cfg(feature = "lan")]
     Server { address: String, info: Result<omsi_net::ws::ServerInfo, String> },
@@ -50,6 +51,7 @@ pub struct ServerEntry {
 
 /// How the Multiplayer page joins a server.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub enum JoinProto {
     /// The web gateway where the server answered, else UDP.
     #[default]
@@ -245,6 +247,7 @@ pub struct State {
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
     pub cmdline: String,
     pub join: (bool, String),
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub join_checked: String,
     pub logs: std::collections::HashMap<u32, Vec<String>>,
     pub open_logs: std::collections::HashSet<u32>,
@@ -258,9 +261,11 @@ pub struct State {
     pub second_armed: Option<Instant>,
     /// Multiplayer: the saved servers, what each said last (and when it was asked), and the
     /// one the Drive page is joined to now (its address).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub servers: Vec<ServerEntry>,
     #[cfg(feature = "lan")]
     pub server_info: std::collections::HashMap<String, (Instant, Result<omsi_net::ws::ServerInfo, String>)>,
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub server_asked: std::collections::HashMap<String, Instant>,
     pub joined_server: Option<String>,
     tx: Sender<Msg>,
@@ -519,6 +524,7 @@ impl State {
     }
 
     /// Keep the server list on disk.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn save_servers(&self) {
         let _ = std::fs::create_dir_all(core::data_dir());
         let _ = std::fs::write(servers_path(), serde_json::to_vec_pretty(&self.servers).unwrap_or_default());
@@ -538,10 +544,6 @@ impl State {
         let a = address.to_string();
         self.spawn(move || Msg::Server { info: omsi_net::ws::query(&a, true), address: a });
     }
-
-    /// Without LAN play no server is asked.
-    #[cfg(not(feature = "lan"))]
-    pub fn ask_server(&mut self, _address: &str, _every: f32) {}
 
     /// The Drive page joins `address`: the server's map is the map, the session is joined.
     /// `proto` says how: over UDP straight to the game port, over the server's web gateway

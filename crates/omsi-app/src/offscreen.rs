@@ -3034,6 +3034,7 @@ pub(crate) fn run_offscreen(
 /// guessed on past the last frame they had, and standing still for a moment again and again
 /// (#660); its clock and timetable fell behind the day as well.
 #[derive(Default)]
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub(crate) struct RealTime {
     /// When the last step was to end (its wait ran until then).
     end: Option<Instant>,
@@ -3044,9 +3045,11 @@ impl RealTime {
     /// from now rather than run back to back until they have caught up - the same quarter of
     /// a second after which the session's stamps take the wall clock again
     /// (`LanSession::tick`).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     const BEHIND_MAX: std::time::Duration = std::time::Duration::from_millis(250);
 
     /// How long to wait at `now`, at the end of a step of `dt` seconds.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub(crate) fn wait(&mut self, now: Instant, dt: f32) -> std::time::Duration {
         let dt = std::time::Duration::from_secs_f32(dt);
         let due = self.end.map(|e| e + dt).unwrap_or(now + dt);

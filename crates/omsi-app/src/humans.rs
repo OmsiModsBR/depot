@@ -3494,6 +3494,7 @@ impl Humans {
 
     /// LAN play: the other players' buses this frame, by player id (their riders are drawn
     /// in them, see `remote_bus_id`).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn set_remote_buses<'a>(&mut self, buses: impl Iterator<Item = (u32, &'a VehicleInstance)>) {
         let mut out = Vec::new();
         for (player, v) in buses {
@@ -3547,17 +3548,20 @@ impl Humans {
     }
 
     /// Is `bus` among the buses people can be in this frame (an AI bus, or another player's)?
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn knows_bus(&self, bus: u64) -> bool {
         self.remote_now.iter().any(|b| b.id == BusId::Ai(bus)) || self.seats.contains_key(&BusId::Ai(bus))
     }
 
     /// Is person `id` (one drawn for another game) here?
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn has_mirror(&self, id: u32) -> bool {
         self.people.iter().any(|p| p.id == id && p.remote)
     }
 
     /// The riders of our own bus, for the other LAN players to see: (id, type, place in the
     /// bus frame, heading there, seat, activity).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn lan_riders(&self) -> Vec<LanPerson> {
         self.people
             .iter()
@@ -5509,6 +5513,7 @@ impl Humans {
 
 /// Where one of the host's people is this frame, as a client draws them.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub struct MirrorPose {
     pub pos: DVec3,
     pub heading: f64,
@@ -5523,6 +5528,7 @@ pub struct MirrorPose {
 
 /// The bus id (`BusId::Ai`) another LAN player's bus has among the buses here: far above
 /// the traffic's car ids.
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub fn remote_bus_id(player: u32) -> u64 {
     (1 << 40) | player as u64
 }
@@ -5533,11 +5539,13 @@ pub fn placed_bus_id(uid: u64) -> u64 {
 }
 
 /// The player whose bus `remote_bus_id` gave this id (None for a traffic bus).
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub fn remote_bus_player(bus: u64) -> Option<u32> {
     (bus >> 40 == 1).then_some((bus & 0xFFFF_FFFF) as u32)
 }
 
 /// One of the host's people as it tells the clients.
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub struct LanPerson {
     pub id: u32,
     pub ty: Arc<HumanType>,
@@ -5580,6 +5588,7 @@ impl Humans {
     /// Everybody within `radius` of `near` the clients may see (host): on foot, waiting at
     /// a stop, or aboard a timetable bus - not the riders of our own bus, which the others
     /// see from outside only.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn lan_people(&self, near: DVec3, radius: f64) -> Vec<LanPerson> {
         let r2 = radius * radius;
         self.people
@@ -5621,6 +5630,7 @@ impl Humans {
     /// A client's bus takes these waiting people (host): those still waiting leave our
     /// world (they are the client's now); returns them. Somebody who has meanwhile walked
     /// up to another bus stays ours.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn hand_over(&mut self, player: u32, ids: &[u32]) -> Vec<u32> {
         let mut out = Vec::new();
         for id in ids {
@@ -5646,6 +5656,7 @@ impl Humans {
     /// Draw the host's people from now on (`on`), or simulate our own again. Everybody who
     /// is not getting on, riding or getting off our bus goes (the host's come instead; the
     /// host's copies cannot walk on by themselves).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn set_mirror(&mut self, on: bool) {
         if self.mirror == on {
             return;
@@ -5682,6 +5693,7 @@ impl Humans {
     }
 
     /// The human type of a file relative to a content root (`Humans/…/x.hum`).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn type_by_file(&self, file: &str) -> Option<usize> {
         let want = file.replace('\\', "/").to_ascii_lowercase();
         self.types.iter().position(|t| {
@@ -5695,6 +5707,7 @@ impl Humans {
     }
 
     /// The file of a human type relative to its content root (`Humans/…/x.hum`).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn type_file(ty: &HumanType) -> String {
         let p = ty.def.path.to_string_lossy().replace('\\', "/");
         match p.to_ascii_lowercase().rfind("/humans/") {
@@ -5704,6 +5717,7 @@ impl Humans {
     }
 
     /// One of the host's people appears here (client).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn mirror_add(
         &mut self,
         world: &World,
@@ -5732,6 +5746,7 @@ impl Humans {
     }
 
     /// Where one of the host's people is this frame (client).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn mirror_set(&mut self, id: u32, pose: &MirrorPose) {
         let Some(p) = self.people.iter_mut().find(|p| p.id == id && p.remote) else {
             return;
@@ -5759,6 +5774,7 @@ impl Humans {
     }
 
     /// One of the host's people has gone (client).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn mirror_remove(&mut self, id: u32) {
         if let Some(i) = self.people.iter().position(|p| p.id == id && p.remote) {
             let p = self.people.swap_remove(i);
@@ -5774,6 +5790,7 @@ impl Humans {
     }
 
     /// The type of one of our people (host).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn lan_people_by_id(&self, id: u32) -> Option<Arc<HumanType>> {
         self.people
             .iter()
@@ -5782,6 +5799,7 @@ impl Humans {
     }
 
     /// Where the host's people are drawn (client; `OMSI_LAN_TRACE`).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn mirror_positions(&self) -> Vec<(u32, DVec3)> {
         self.people
             .iter()
@@ -5791,12 +5809,14 @@ impl Humans {
     }
 
     /// Waiting people to ask the host for (client).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn take_claims(&mut self) -> Vec<u32> {
         std::mem::take(&mut self.claims_out)
     }
 
     /// The host handed this waiting person over to our bus (client). (The people of a LAN
     /// game stay the host's: nothing is taken over.)
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn grant(&mut self, id: u32) -> bool {
         self.claimed.remove(&id);
         let Some((stop, spot)) = self.mirror_wait.remove(&id) else { return false };

@@ -7,6 +7,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app`'s `lan` feature is now off by default, so the game's build no longer carries LAN play,
+  the dedicated server or `omsi-net` (as with `plugins` and `omsi-plugin`). The LAN helpers left in
+  shared modules are marked as used only with `lan`, and the off twin of `ask_server` goes.
+  `cargo build -p omsi-app --features lan,server,plugins` builds everything again
+  (`docs/removed/MULTIPLAYER_DISABLED.md`). Multiplayer was already switched off at run time, so
+  nothing changes in the game.
+- CI (`quality` job): the `omsi-app` tests run with every feature, and a check fails if
+  `omsi-net` or `omsi-plugin` reach the game's default build.
 - The offscreen run, the game's start-up and the window's graphics set-up in `omsi-app` keep their
   LAN code behind the `lan` feature, and the dedicated server's code (`server.rs`, the server admin
   commands, the server's status page and clock) moves behind the `server` feature. Without `server`,

@@ -19,6 +19,7 @@ use winit::keyboard::KeyCode;
 
 /// The local player's avatar key (other players' walkers are `REMOTE_KEY + id`).
 pub(crate) const AVATAR_KEY: u32 = 0;
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub(crate) const REMOTE_KEY: u32 = 1_000_000;
 
 /// Walking and running pace (m/s), how quickly the walker gets to it (1/s), jump speed.

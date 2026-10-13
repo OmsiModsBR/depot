@@ -47,6 +47,7 @@ pub enum Sheet {
     /// The selected duty's roadbook and IBIS hint.
     Roadbook,
     /// Saved dedicated servers.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Servers,
 }
 
@@ -68,9 +69,12 @@ pub struct PhoneView {
     /// A page of More that is open.
     pub page: Option<Page>,
     pub filter: String,
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub code: String,
     /// Fields of the phone's saved-server manager.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub server_addr: String,
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub server_name: String,
 }
 

@@ -100,6 +100,17 @@ jobs:
       - name: omsi-render layers (informational)
         continue-on-error: true
         run: scripts/check-render-layers.sh --strict
+      # LAN play, the dedicated server and the plugins are off in the game's build (features
+      # `lan`, `server` and `plugins` of omsi-app, docs/removed/MULTIPLAYER_DISABLED.md): their
+      # crates stay out of it, and their code is still compiled and tested here.
+      - name: omsi-net and omsi-plugin out of the game build
+        run: |
+          if cargo tree --locked -p omsi-app -e normal --prefix none | grep -E '^omsi-(net|plugin) '; then
+            echo "::error::omsi-app pulls omsi-net or omsi-plugin without its lan/plugins features"
+            exit 1
+          fi
+      - name: omsi-app tests with LAN, server and plugins
+        run: cargo test --locked -p omsi-app --lib --all-features
       - name: clippy (informational)
         continue-on-error: true
         run: cargo clippy --locked --workspace --all-targets

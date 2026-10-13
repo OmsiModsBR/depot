@@ -3058,6 +3058,7 @@ pub fn set_ai_destination(
 }
 
 /// The same with terminus number `ti` of the depot file itself (its `AI_target_index`).
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub fn set_ai_destination_at(
     v: &mut omsi_sim::VehicleInstance,
     hof: &omsi_vehicle::Hof,
@@ -4066,6 +4067,7 @@ impl Schedule {
     /// LAN play (host): the tours the other players drive now. A tour taken leaves the
     /// timetable like the player's own (its bus on the road goes); one given up (the player
     /// left, or took another duty) runs again from its next departure.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn set_lan_tours(&mut self, tours: HashSet<(String, String)>) {
         if tours == self.lan_tours {
             return;

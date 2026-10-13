@@ -7556,6 +7556,7 @@ impl Traffic {
     /// Draw the host's traffic from now on (`on`), or simulate our own again: either way
     /// every car there is now goes (ours make room for the host's, the host's copies
     /// cannot drive on by themselves).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn set_mirror(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, on: bool) {
         if self.mirror == on {
             return;
@@ -7597,6 +7598,7 @@ impl Traffic {
 
     /// A car of the host's traffic, standing at `pos` (client). Its id is the host's.
     #[allow(clippy::too_many_arguments)]
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn add_mirror_car(
         &mut self,
         world: &World,
@@ -7682,6 +7684,7 @@ impl Traffic {
 
     /// A vehicle type the traffic has loaded already (the random traffic's types and the
     /// coupled parts), by file.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn loaded_type(&self, path: &Path) -> Option<Arc<VehicleType>> {
         self.types
             .iter()
@@ -7693,6 +7696,7 @@ impl Traffic {
 
     /// The light programs of the crossings within `radius` of `near` (host): (crossing
     /// object, position in the cycle, clock held at a stop point).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn light_states(&self, near: DVec3, radius: f64) -> Vec<(i64, f64, bool)> {
         let mut ctls: Vec<usize> = self
             .net
@@ -7720,6 +7724,7 @@ impl Traffic {
     }
 
     /// Where the host's light program of crossing `object` stands (client).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn set_light_state(&mut self, object: i64, time: f64, held: bool) {
         if let Some(ctl) = self
             .controller_of_object
@@ -7739,6 +7744,7 @@ fn mirror_light_tick(ctl: &mut TrafficLightController, dt: f32, day_time: f64) {
     }
 }
 
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 fn set_mirror_light_clock(ctl: &mut TrafficLightController, time: f64, held: bool) {
     // A crossing may receive its first snapshot before its first tick. Mark its clock
     // started now, so the time-of-day seed cannot replace the host's position later.
@@ -7747,6 +7753,7 @@ fn set_mirror_light_clock(ctl: &mut TrafficLightController, time: f64, held: boo
     ctl.held = held;
 }
 
+#[cfg_attr(not(feature = "lan"), allow(dead_code))]
 fn reset_light_runtime(ctl: &mut TrafficLightController, day_time: f64) {
     // Stop/jump bookkeeping belongs to the clock's previous owner. Keep the program
     // and current position, but discard its old requests and visited points.

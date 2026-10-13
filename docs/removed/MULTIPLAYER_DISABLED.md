@@ -18,6 +18,7 @@ O pacote `depot-*-server-*` não é mais gerado em nenhuma arquitetura. (O fonte
 
 **Plugins (nativos e Lua) inativados.** `plugins::load()` devolve sempre vazio; nada em `Plugins/` é carregado. `docs/PLUGINS.md` avisa.
 Desde a trilha 2 da refatoração, o código de plugins (`plugins.rs`, `plugin_ui.rs` e o crate `omsi-plugin`) fica atrás da feature `plugins` do `omsi-app`, desligada por padrão, e não entra mais no binário do jogo. Para compilar com ele: `cargo build -p omsi-app --features plugins`. O `omsi-plugin` continua membro do workspace e é testado por conta própria.
+Do mesmo jeito, o código de LAN (`lan.rs`, `lan_world.rs`, `lan_mods.rs`, `admin.rs`, `voice.rs`, `online.rs` e o crate `omsi-net`) fica atrás da feature `lan`, e o do servidor dedicado (`server.rs` e a administração do servidor) atrás da feature `server`, que liga a `lan`. As duas ficam desligadas por padrão, e o `omsi-net` não entra mais no binário do jogo. Sem `lan`, `lan_off.rs` responde "nenhuma sessão" nos pontos do jogo que perguntavam pela LAN. Para compilar tudo: `cargo build -p omsi-app --features lan,server,plugins` (ou `--all-features`).
 
 **Links corrigidos para o projeto certo.** `SECURITY.md`, templates de issue (`.github/ISSUE_TEMPLATE`), `site/` (`REPO` e links), `docs/USER_GUIDE.md`, `docs/BUILDING.md`
 passam de `openOMSI-Project/openOMSI` para `OmsiModsBR/depot`. O endereço do site (`docs/VERSIONING.md`, `SECURITY.md`) é https://omsimods.com.br

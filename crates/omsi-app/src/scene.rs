@@ -8081,6 +8081,7 @@ impl World {
 
     /// The parking spaces whose cars have driven off (LAN host: the clients take the same
     /// cars away).
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn departed_keys(&self) -> Vec<i64> {
         let mut k: Vec<i64> = self.departed.lock().iter().copied().collect();
         k.sort_unstable();
@@ -8090,6 +8091,7 @@ impl World {
     /// LAN client: the parked cars as the host has them - the spaces it lists empty, and
     /// (when the list is `complete`) every other one taken again. A space on a tile not
     /// loaded here yet is remembered: the tile comes up with it empty.
+    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn mirror_departed(&self, renderer: &Renderer, scene: &mut Scene, keys: &[i64], complete: bool) {
         let before = self.departed.lock().len();
         for &k in keys {
