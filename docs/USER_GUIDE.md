@@ -653,7 +653,7 @@ Environment variables, all off unless set. The useful ones:
 | `OMSI_TRACE_STEER=file.csv` | write mouse steering, frame by frame (cursor, target, wheel, speed) |
 
 `OMSI_MUTE`, `OMSI_LAN_AUDIO` and `OMSI_LAN_SAY` are the LAN tests' switches; the rest are
-listed where they are read (`grep -r OMSI_ crates`).
+listed in [ENVIRONMENT.md](ENVIRONMENT.md), made from the register in `omsi_cfg::flags`.
 
 ## LAN play
 

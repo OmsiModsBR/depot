@@ -580,6 +580,74 @@ flags! {
     /// Offscreen: with LAN, the other buses' sounds heard at the camera (for the logs).
     LAN_AUDIO = "OMSI_LAN_AUDIO", Switch, Test, "omsi-app::offscreen";
 
+    // --- omsi-render: switches a phone's env.txt may set (the reads move after T1.6)
+
+    /// The settings as they are on a weak graphics chip too (no lighter defaults).
+    FULL_GPU = "OMSI_FULL_GPU", Switch, User, "omsi-render::api::renderer", env_txt;
+    /// `default` or `downlevel`: pretend the graphics card can do only that much.
+    GPU_LIMITS = "OMSI_GPU_LIMITS", Text, Diagnostic, "omsi-render::api::renderer", env_txt;
+    /// Only the simple pipelines, for drivers whose shader compiler fails on the others.
+    BASIC_PIPELINES = "OMSI_BASIC_PIPELINES", Switch, User, "omsi-render::gpu::open", env_txt;
+    /// Time each pass on the GPU (with `OMSI_PROFILE`).
+    GPU_TIMERS = "OMSI_GPU_TIMERS", Switch, Diagnostic, "omsi-render::api::renderer", env_txt;
+    /// No shadows.
+    NO_SHADOWS = "OMSI_NO_SHADOWS", Switch, User, "omsi-render::lighting::model", env_txt;
+    /// No coronas round the lamps.
+    NO_CORONAS = "OMSI_NO_CORONAS", Switch, User, "omsi-render::passes::main", env_txt;
+    /// One-sided faces drawn from both sides.
+    NO_CULL = "OMSI_NO_CULL", Switch, Diagnostic, "omsi-render::passes::draw", env_txt;
+    /// Textures uploaded as RGBA, not compressed on the GPU.
+    NO_BC = "OMSI_NO_BC", Switch, User, "omsi-render::api::renderer", env_txt;
+    /// No compression of loose pictures.
+    NO_TEXCOMPRESS = "OMSI_NO_TEXCOMPRESS", Switch, User, "omsi-render::api::renderer", env_txt;
+    /// No FXAA.
+    NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-render::renderer::frame", env_txt;
+    /// No ambient occlusion.
+    NO_AO = "OMSI_NO_AO", Switch, User, "omsi-render::renderer::frame", env_txt;
+    /// No ray queries.
+    NO_RT = "OMSI_NO_RT", Switch, User, "omsi-render::api::renderer", env_txt;
+    /// The ray-traced frame without its colour grade.
+    NO_RT_GRADE = "OMSI_NO_RT_GRADE", Switch, User, "omsi-render::passes::post", env_txt;
+    /// The enhanced renderer's HDR picture left out.
+    NO_ENHANCED = "OMSI_NO_ENHANCED", Switch, User, "omsi-render::renderer::frame", env_txt;
+
+    // --- omsi-app: LAN, the launcher and plugins
+
+    /// No plugins loaded.
+    NO_PLUGINS = "OMSI_NO_PLUGINS", Switch, User, "omsi-app::plugins", env_txt;
+    /// Write a picture of the plugins' panels to this file (`plugin_ui`'s preview test).
+    UI_PREVIEW = "OMSI_UI_PREVIEW", Path, Test, "omsi-app::plugin_ui";
+    /// The launcher's window at this size (`WxH`), to look at the layout.
+    LAUNCHER_SIZE = "OMSI_LAUNCHER_SIZE", Text, User, "omsi-app::launcher", env_txt;
+    /// Open the launcher at this page (`drive:2`, `settings:3`, `controls:1`, …).
+    LAUNCHER_PAGE = "OMSI_LAUNCHER_PAGE", Text, Test, "omsi-app::launcher";
+    /// Write a picture of the launcher after this many seconds (`secs:file.png`).
+    LAUNCHER_SHOT = "OMSI_LAUNCHER_SHOT", Text, Test, "omsi-app::launcher";
+    /// Close the launcher after this many seconds.
+    LAUNCHER_EXIT = "OMSI_LAUNCHER_EXIT", Number, Test, "omsi-app::launcher";
+    /// Work the launcher from this script (`t=2 click 412,60; t=3 type 76; …`).
+    LAUNCHER_INPUT = "OMSI_LAUNCHER_INPUT", Text, Test, "omsi-app::launcher";
+    /// Log, every few seconds, what the game knows of every LAN player and the bytes sent.
+    DEBUG_LAN = "OMSI_DEBUG_LAN", Switch, Diagnostic, "omsi-app::lan";
+    /// Log what arrives for this vehicle variable from the other LAN players.
+    DEBUG_VAR_SYNC = "OMSI_DEBUG_VAR_SYNC", Text, Diagnostic, "omsi-app::lan";
+    /// The vehicles' variables are not sent to the other LAN players.
+    NO_VAR_SYNC = "OMSI_NO_VAR_SYNC", Switch, Diagnostic, "omsi-app::lan";
+    /// The other LAN players' buses drawn where they were last heard of, not interpolated.
+    NO_INTERP = "OMSI_NO_INTERP", Switch, Diagnostic, "omsi-app::lan";
+    /// A LAN host opens no tunnel to the internet.
+    NO_TUNNEL = "OMSI_NO_TUNNEL", Switch, Diagnostic, "omsi-app::lan";
+    /// A LAN host serves no mods and a joining game fetches none.
+    NO_LAN_MODS = "OMSI_NO_LAN_MODS", Switch, Diagnostic, "omsi-app::lan_mods";
+    /// Chat lines said at these seconds of the session (`30=Hallo;45=Tschüss`), for LAN tests.
+    LAN_SAY = "OMSI_LAN_SAY", Text, Test, "omsi-app::lan";
+    /// Write where each other LAN player's bus is drawn, every frame, to this CSV file.
+    TRACE_REMOTE = "OMSI_TRACE_REMOTE", Path, Diagnostic, "omsi-app::lan";
+    /// Write the LAN world's poses to this file.
+    LAN_TRACE = "OMSI_LAN_TRACE", Path, Diagnostic, "omsi-app::lan_world";
+    /// The official server's signing key (a file): the server says where it is reached.
+    OFFICIAL_KEY = "OMSI_OFFICIAL_KEY", Path, Path, "omsi-app::lan";
+
     // --- tests and example programs
 
     /// The installed content for the tests, when `OMSI_ROOT` is not set.
@@ -607,6 +675,67 @@ flags! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `docs/ENVIRONMENT.md`, made from the register.
+    fn environment_md() -> String {
+        let mut out = String::from(
+            "# Environment variables\n\n\
+             <!-- Made from `crates/omsi-cfg/src/flags.rs` by `cargo test -p omsi-cfg --lib \
+             write_environment_md -- --ignored`; do not edit by hand. -->\n\n\
+             The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. \
+             \"env.txt\" marks the ones a phone's `depot/env.txt` may set. The \
+             diagnostics `omsi-render` alone reads are added once its reorganisation is done.\n",
+        );
+        let groups = [
+            (Kind::User, "Settings"),
+            (Kind::Path, "Paths and programs"),
+            (Kind::Diagnostic, "Diagnostics"),
+            (Kind::Test, "Tests"),
+            (Kind::Internal, "Set by the program itself"),
+        ];
+        for (kind, title) in groups {
+            let mut flags: Vec<&Flag> = ALL.iter().filter(|f| f.kind == kind).collect();
+            flags.sort_by_key(|f| f.name);
+            out.push_str(&format!("\n## {title}\n\n"));
+            out.push_str("| Variable | Value | Read by | env.txt | What it does |\n");
+            out.push_str("| --- | --- | --- | --- | --- |\n");
+            for f in flags {
+                let about: Vec<&str> = f.about.lines().map(str::trim).collect();
+                let value = match f.value {
+                    Value::Switch => "switch",
+                    Value::Number => "number",
+                    Value::Text => "text",
+                    Value::Path => "path",
+                };
+                out.push_str(&format!(
+                    "| `{}` | {value} | `{}` | {} | {} |\n",
+                    f.name,
+                    f.owner,
+                    if f.env_txt { "yes" } else { "" },
+                    about.join(" ").replace('|', "\\|"),
+                ));
+            }
+        }
+        out
+    }
+
+    const ENVIRONMENT_MD: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/ENVIRONMENT.md");
+
+    #[test]
+    fn environment_md_is_up_to_date() {
+        let on_disk = std::fs::read_to_string(ENVIRONMENT_MD).unwrap_or_default();
+        assert!(
+            on_disk.replace("\r\n", "\n") == environment_md(),
+            "docs/ENVIRONMENT.md is not what the register says: run \
+             `cargo test -p omsi-cfg --lib write_environment_md -- --ignored`"
+        );
+    }
+
+    #[test]
+    #[ignore = "writes docs/ENVIRONMENT.md"]
+    fn write_environment_md() {
+        std::fs::write(ENVIRONMENT_MD, environment_md()).unwrap();
+    }
 
     #[test]
     fn each_name_once_and_spelt_as_declared() {
