@@ -10,7 +10,6 @@ pub(crate) struct Layouts {
     pub(crate) camera_layout: wgpu::BindGroupLayout,
     pub(crate) material_layout: wgpu::BindGroupLayout,
     pub(crate) sky_layout: wgpu::BindGroupLayout,
-    pub(crate) ao_layout: wgpu::BindGroupLayout,
 }
 
 /// The samplers the materials and the lighting share.

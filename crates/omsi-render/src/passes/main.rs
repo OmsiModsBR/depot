@@ -119,8 +119,10 @@ impl Renderer {
                 })
         });
         if msaa_prepass {
-            if let (Some(pipes), Some(t)) = (self.prepass_msaa_pipelines.as_ref(), targets.as_ref())
-            {
+            if let (Some(pipes), Some(t)) = (
+                self.prepass.prepass_msaa_pipelines.as_ref(),
+                targets.as_ref(),
+            ) {
                 let mut pass = lead.as_mut().unwrap_or(&mut *encoder).begin_render_pass(
                     &wgpu::RenderPassDescriptor {
                         label: Some("msaa depth prepass"),
@@ -154,7 +156,7 @@ impl Renderer {
             }
         }
         let msaa_prepass =
-            msaa_prepass && self.prepass_msaa_pipelines.is_some() && targets.is_some();
+            msaa_prepass && self.prepass.prepass_msaa_pipelines.is_some() && targets.is_some();
         let mut main_parts: Vec<wgpu::CommandEncoder> = Vec::new();
         {
             // The enhanced sky dome was meant to cover everything, so this used to clear to
@@ -458,7 +460,7 @@ impl Renderer {
             if scene.smoke_count > 0 && omsi_cfg::env::var_os("OMSI_NO_SMOKE").is_none() {
                 if let Some(sb) = &scene.smoke_buf {
                     pass.set_pipeline(&pp.smoke_pipeline);
-                    pass.set_bind_group(1, &self.smoke_bind_group, &[]);
+                    pass.set_bind_group(1, &self.sprites.smoke_bind_group, &[]);
                     pass.set_vertex_buffer(0, sb.slice(..));
                     pass.draw(0..6, 0..scene.smoke_count);
                 }
@@ -477,10 +479,10 @@ impl Renderer {
                     fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
                 };
                 self.queue
-                    .write_buffer(&self.snow_buf, 0, bytemuck::bytes_of(&u));
+                    .write_buffer(&self.sprites.snow_buf, 0, bytemuck::bytes_of(&u));
                 pass.set_pipeline(snow);
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                pass.set_bind_group(1, &self.snow_bind_group, &[]);
+                pass.set_bind_group(1, &self.sprites.snow_bind_group, &[]);
                 pass.draw(0..6, 0..counts.iter().sum::<u32>());
             }
             // light coronas, additive: the world's, then the vehicle the camera is in -
@@ -502,10 +504,11 @@ impl Renderer {
                     for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late)
                     {
                         let bg = self
+                            .sprites
                             .corona_textures
                             .get(tex as usize)
                             .and_then(|b| b.as_ref())
-                            .unwrap_or(&self.corona_bind_group);
+                            .unwrap_or(&self.sprites.corona_bind_group);
                         pass.set_bind_group(1, bg, &[]);
                         pass.draw(0..6, first..first + count);
                     }
@@ -514,7 +517,7 @@ impl Renderer {
             // HUD overlays (on the vanilla path at full size; the enhanced path draws them
             // after grading, a scaled picture after scaling it up)
             if !overlays.is_empty() && !masked_frame && !scaled {
-                pass.set_pipeline(&self.overlay_pipeline);
+                pass.set_pipeline(&self.presenter.overlay_pipeline);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
                         pass.set_bind_group(0, bg, &[]);
@@ -525,4 +528,19 @@ impl Renderer {
         }
         main_parts
     }
+}
+
+/// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the snow's parameters.
+pub(crate) struct SpriteResources {
+    pub(crate) corona_bind_group: wgpu::BindGroup,
+    /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
+    pub(crate) snow_buf: wgpu::Buffer,
+    pub(crate) snow_bind_group: wgpu::BindGroup,
+    /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
+    pub(crate) smoke_bind_group: wgpu::BindGroup,
+    /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
+    /// unused).
+    pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
+    pub(crate) corona_layout: wgpu::BindGroupLayout,
+    pub(crate) corona_sampler: wgpu::Sampler,
 }

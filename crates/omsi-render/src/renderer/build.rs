@@ -7,7 +7,11 @@ use crate::lighting::LightMapAtlas;
 use crate::output::Diagnostics;
 use crate::output::Presenter;
 use crate::passes::Exposure;
+use crate::passes::FogLampsPass;
+use crate::passes::PrepassPipelines;
 use crate::passes::ShadowResources;
+use crate::passes::SpriteResources;
+use crate::passes::SsaoPass;
 use crate::scene::CullHistory;
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
@@ -849,8 +853,7 @@ impl Renderer {
             &vertex_layout,
         );
         let (mip_layout, mip_pipeline, mip_sampler) = mip_pipeline(&device);
-        let (post_layout, post_buf, post_sampler, post) =
-            post_pipelines(&device, format, hdr_format);
+        let post = post_pipelines(&device, format, hdr_format);
         let one = wgpu::Extent3d {
             width: 1,
             height: 1,
@@ -878,11 +881,11 @@ impl Renderer {
         let adapt_bg = [0usize, 1].map(|k| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("exposure"),
-                layout: &post_layout,
+                layout: &post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: post_buf.as_entire_binding(),
+                        resource: post.post_buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -890,7 +893,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&post.post_sampler),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
@@ -1300,6 +1303,8 @@ impl Renderer {
                 },
             },
             presenter: Presenter {
+                overlay_pipeline,
+                overlay_layout,
                 upscale_pipeline,
                 copy_pipeline,
                 panel_pipeline,
@@ -1374,9 +1379,6 @@ impl Renderer {
             },
             puddles,
             post,
-            post_layout,
-            post_buf,
-            post_sampler,
             adaptation: Exposure {
                 meter_view,
                 adapt_views,
@@ -1422,21 +1424,27 @@ impl Renderer {
                 ))
                 .unwrap_or_else(std::time::Instant::now),
             tree_gust_drift: std::cell::Cell::new((glam::DVec2::ZERO, 0.0)),
-            ao_sampler,
-            layouts: Layouts {
+            ssao: SsaoPass {
+                ao_sampler,
                 ao_layout,
+                ao_buf,
+                ssao_pipeline,
+                blur_pipeline,
+            },
+            layouts: Layouts {
                 camera_layout,
                 material_layout,
                 sky_layout,
             },
-            ao_buf,
-            prepass_pipelines,
-            prepass_msaa_pipelines,
-            ssao_pipeline,
-            blur_pipeline,
-            fog_lamps_pipeline,
-            fog_lamps_layout,
-            fog_lamps_buf,
+            prepass: PrepassPipelines {
+                prepass_pipelines,
+                prepass_msaa_pipelines,
+            },
+            fog_lamps: FogLampsPass {
+                fog_lamps_pipeline,
+                fog_lamps_layout,
+                fog_lamps_buf,
+            },
             device,
             queue,
             adapter_name,
@@ -1444,15 +1452,15 @@ impl Renderer {
             hdr_pass,
             sky_mirror_pipeline,
             reflection_pass,
-            corona_bind_group,
-            snow_buf,
-            snow_bind_group,
-            smoke_bind_group,
-            corona_textures: Vec::new(),
-            corona_layout,
-            corona_sampler,
-            overlay_pipeline,
-            overlay_layout,
+            sprites: SpriteResources {
+                corona_bind_group,
+                snow_buf,
+                snow_bind_group,
+                smoke_bind_group,
+                corona_textures: Vec::new(),
+                corona_layout,
+                corona_sampler,
+            },
             camera_buf,
             shadow_blobs: options.shadow_blobs,
             options,

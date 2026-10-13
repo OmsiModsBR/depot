@@ -240,7 +240,7 @@ impl Renderer {
                 shift: [proj.z_axis.x, proj.z_axis.y, 0.0, 0.0],
             };
             self.queue
-                .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u));
+                .write_buffer(&self.ssao.ao_buf, 0, bytemuck::bytes_of(&u));
             let ao = self.targets.ao.as_ref().unwrap();
             {
                 let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -260,12 +260,17 @@ impl Renderer {
                 });
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
                 encode_batches(&mut pass, scene, &prepass_batches, |pipe| {
-                    &self.prepass_pipelines[pipe as usize]
+                    &self.prepass.prepass_pipelines[pipe as usize]
                 });
             }
             for (pipe, bg, target, pass_label) in [
-                (&self.ssao_pipeline, &ao.ssao_bg, &ao.ao_view, "ssao"),
-                (&self.blur_pipeline, &ao.blur_bg, &ao.blur_view, "ssao blur"),
+                (&self.ssao.ssao_pipeline, &ao.ssao_bg, &ao.ao_view, "ssao"),
+                (
+                    &self.ssao.blur_pipeline,
+                    &ao.blur_bg,
+                    &ao.blur_view,
+                    "ssao blur",
+                ),
             ] {
                 let Some(pipe) = pipe.as_ref().filter(|_| ao_on) else {
                     break;
@@ -295,4 +300,27 @@ impl Renderer {
             self.encode_ray_tracing(prepass_encoder, scene, tset.as_ref(), timed);
         }
     }
+}
+
+/// The depth prepass's pipelines.
+pub(crate) struct PrepassPipelines {
+    /// Depth prepass pipelines (plain, alpha-tested; each two-sided and culled),
+    /// single-sampled, camera projection.
+    /// Plain opaque, alpha-tested, and the opaque portions of blended transmap materials;
+    /// each has a two-sided and a culled variant.
+    pub(crate) prepass_pipelines: [wgpu::RenderPipeline; 6],
+    /// The same, multisampled: the enhanced main pass's own depth laid first (see
+    /// `render_inner`), so that its costly shading runs once per visible surface.
+    pub(crate) prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+}
+
+/// Ambient occlusion: its sampler, bind group layout, parameters and pipelines.
+pub(crate) struct SsaoPass {
+    pub(crate) ao_sampler: wgpu::Sampler,
+    pub(crate) ao_layout: wgpu::BindGroupLayout,
+    pub(crate) ao_buf: wgpu::Buffer,
+    /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
+    /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
+    pub(crate) ssao_pipeline: Option<wgpu::RenderPipeline>,
+    pub(crate) blur_pipeline: Option<wgpu::RenderPipeline>,
 }

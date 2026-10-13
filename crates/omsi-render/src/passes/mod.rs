@@ -11,7 +11,7 @@ mod reflections;
 mod shadow;
 mod sky;
 
-pub(crate) use depth::{ao_pipelines, prepass_pipelines};
+pub(crate) use depth::{ao_pipelines, prepass_pipelines, PrepassPipelines, SsaoPass};
 pub(crate) use draw::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
     encode_batches, encode_batches_filtered, float_tex, horizontal_sort_distance, in_scope,
@@ -20,10 +20,10 @@ pub(crate) use draw::{
     Batch, DrawItem, PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE,
     PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
 };
-pub(crate) use fog_lamps::fog_lamps_pipelines;
 #[cfg(test)]
 pub(crate) use fog_lamps::FogLampUniform;
-pub(crate) use main::PassPipelines;
+pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
+pub(crate) use main::{PassPipelines, SpriteResources};
 #[cfg(test)]
 pub(crate) use post::PostUniform;
 pub(crate) use post::{post_pipelines, Exposure, PostPipelines};

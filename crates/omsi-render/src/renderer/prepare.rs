@@ -105,7 +105,7 @@ impl Renderer {
             },
             wgpu::BindGroupEntry {
                 binding: 9,
-                resource: wgpu::BindingResource::Sampler(&self.ao_sampler),
+                resource: wgpu::BindingResource::Sampler(&self.ssao.ao_sampler),
             },
             wgpu::BindGroupEntry {
                 binding: 10,

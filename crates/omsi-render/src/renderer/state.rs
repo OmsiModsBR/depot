@@ -8,7 +8,11 @@ use crate::lighting::LightMapAtlas;
 use crate::output::Diagnostics;
 use crate::output::Presenter;
 use crate::passes::Exposure;
+use crate::passes::FogLampsPass;
+use crate::passes::PrepassPipelines;
 use crate::passes::ShadowResources;
+use crate::passes::SpriteResources;
+use crate::passes::SsaoPass;
 use crate::scene::CullHistory;
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
@@ -28,46 +32,11 @@ pub struct Renderer {
     /// of an Enhanced picture (sky_enhanced.wgsl `fs_enhanced_mirror`).
     pub(crate) sky_mirror_pipeline: Option<wgpu::RenderPipeline>,
     pub(crate) reflection_pass: Option<PassPipelines>,
-    pub(crate) corona_bind_group: wgpu::BindGroup,
-    /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
-    pub(crate) snow_buf: wgpu::Buffer,
-    pub(crate) snow_bind_group: wgpu::BindGroup,
-    /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
-    pub(crate) smoke_bind_group: wgpu::BindGroup,
-    /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
-    /// unused).
-    pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
-    pub(crate) corona_layout: wgpu::BindGroupLayout,
-    pub(crate) corona_sampler: wgpu::Sampler,
-    pub(crate) overlay_pipeline: wgpu::RenderPipeline,
-    pub(crate) overlay_layout: wgpu::BindGroupLayout,
     pub(crate) camera_buf: wgpu::Buffer,
-    pub(crate) ao_sampler: wgpu::Sampler,
-    pub(crate) ao_buf: wgpu::Buffer,
-    /// Depth prepass pipelines (plain, alpha-tested; each two-sided and culled),
-    /// single-sampled, camera projection.
-    /// Plain opaque, alpha-tested, and the opaque portions of blended transmap materials;
-    /// each has a two-sided and a culled variant.
-    pub(crate) prepass_pipelines: [wgpu::RenderPipeline; 6],
-    /// The same, multisampled: the enhanced main pass's own depth laid first (see
-    /// `render_inner`), so that its costly shading runs once per visible surface.
-    pub(crate) prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
-    /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
-    /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
-    pub(crate) ssao_pipeline: Option<wgpu::RenderPipeline>,
-    pub(crate) blur_pipeline: Option<wgpu::RenderPipeline>,
-    /// Enhanced: the lamps' light the fog scatters, added over the drawn picture (none on
-    /// OpenGL and without storage buffers), its bind group layout and parameters.
-    pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
-    pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
-    pub(crate) fog_lamps_buf: wgpu::Buffer,
     /// The settings this renderer was built with.
     pub options: RenderOptions,
     pub(crate) puddles: Option<puddles::Pipelines>,
     pub(crate) post: PostPipelines,
-    pub(crate) post_layout: wgpu::BindGroupLayout,
-    pub(crate) post_buf: wgpu::Buffer,
-    pub(crate) post_sampler: wgpu::Sampler,
     /// Enhanced lighting: its uniform (the sky table, the probe and the sky last computed are
     /// in `sky`, the exposure as it follows it in `adaptation`).
     pub(crate) enh_buf: wgpu::Buffer,
@@ -104,6 +73,10 @@ pub struct Renderer {
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
     /// Enhanced+: the ray tracer (on a device with ray queries, see `RenderOptions::ray_tracing`).
     pub(crate) rt: Option<rt::RayTracer>,
+    pub(crate) sprites: SpriteResources,
+    pub(crate) prepass: PrepassPipelines,
+    pub(crate) ssao: SsaoPass,
+    pub(crate) fog_lamps: FogLampsPass,
     pub(crate) layouts: Layouts,
     pub(crate) samplers: Samplers,
     pub(crate) assets: AssetStore,

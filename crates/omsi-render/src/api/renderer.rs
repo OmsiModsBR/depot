@@ -1014,7 +1014,7 @@ impl Renderer {
             );
             let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("OpenXR menu rectangle"),
-                layout: &self.overlay_layout,
+                layout: &self.presenter.overlay_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,

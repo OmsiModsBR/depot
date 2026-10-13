@@ -216,7 +216,7 @@ impl Renderer {
         let ao_on = with_overlays
             && self.rt.is_none()
             && self.options.ssao
-            && self.ssao_pipeline.is_some()
+            && self.ssao.ssao_pipeline.is_some()
             && omsi_cfg::env::var_os("OMSI_NO_AO").is_none();
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling, see `share_depth`)

@@ -106,11 +106,11 @@ impl Renderer {
                        screen_mask: &wgpu::TextureView| {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post"),
-                layout: &self.post_layout,
+                layout: &self.post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.post_buf.as_entire_binding(),
+                        resource: self.post.post_buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -118,7 +118,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,

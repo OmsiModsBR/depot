@@ -462,7 +462,7 @@ impl Targets {
                     binding(4, ray_view),
                     wgpu::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&r.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
                     },
                     binding(6, &r.sky.probe.as_ref().unwrap().view),
                     binding(7, &hit_depth_view),
@@ -478,16 +478,16 @@ impl Targets {
         let post_group = |base, adapt, screen_mask| {
             r.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post with puddle reflections"),
-                layout: &r.post_layout,
+                layout: &r.post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: r.post_buf.as_entire_binding(),
+                        resource: r.post.post_buf.as_entire_binding(),
                     },
                     binding(1, &view),
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&r.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
                     },
                     binding(3, base),
                     binding(4, adapt),

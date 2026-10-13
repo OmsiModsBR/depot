@@ -720,7 +720,7 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
     if renderer.options.msaa <= 1 {
         return; // This adapter cannot exercise a multisampled depth buffer.
     }
-    assert!(renderer.prepass_msaa_pipelines.is_some());
+    assert!(renderer.prepass.prepass_msaa_pipelines.is_some());
     let mut scene = renderer.new_scene();
     let mask = renderer.add_texture(
         &mut scene,
@@ -789,11 +789,11 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
         let enabled = renderer
             .render_to_image(&mut scene, 64, 64, &camera, &lighting)
             .unwrap();
-        let pipelines = renderer.prepass_msaa_pipelines.take().unwrap();
+        let pipelines = renderer.prepass.prepass_msaa_pipelines.take().unwrap();
         let disabled = renderer
             .render_to_image(&mut scene, 64, 64, &camera, &lighting)
             .unwrap();
-        renderer.prepass_msaa_pipelines = Some(pipelines);
+        renderer.prepass.prepass_msaa_pipelines = Some(pipelines);
         let delta = enabled
             .iter()
             .zip(&disabled)

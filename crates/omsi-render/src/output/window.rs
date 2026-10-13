@@ -468,7 +468,7 @@ impl Renderer {
             );
             let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("overlay"),
-                layout: &self.overlay_layout,
+                layout: &self.presenter.overlay_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -569,7 +569,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.post_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
                 },
             ],
         })
@@ -578,6 +578,9 @@ impl Renderer {
 
 /// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the headset's UI.
 pub(crate) struct Presenter {
+    /// The HUD and overlays drawn into the multisampled picture, and their layout.
+    pub(crate) overlay_pipeline: wgpu::RenderPipeline,
+    pub(crate) overlay_layout: wgpu::BindGroupLayout,
     /// Overlay pipeline without multisampling, for drawing the HUD after the post pass.
     pub(crate) overlay_pipeline_1x: wgpu::RenderPipeline,
     pub(crate) xr_ui_pipeline: wgpu::RenderPipeline,

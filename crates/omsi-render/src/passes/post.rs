@@ -28,6 +28,10 @@ pub(crate) struct PostPipelines {
     pub(crate) tonemap: wgpu::RenderPipeline,
     pub(crate) tonemap_encoded: wgpu::RenderPipeline,
     pub(crate) fxaa: wgpu::RenderPipeline,
+    /// Their bind group layout, uniform buffer and sampler.
+    pub(crate) post_layout: wgpu::BindGroupLayout,
+    pub(crate) post_buf: wgpu::Buffer,
+    pub(crate) post_sampler: wgpu::Sampler,
 }
 
 /// The enhanced path's post passes (post.wgsl): their bind group layout, uniform buffer,
@@ -36,12 +40,7 @@ pub(crate) fn post_pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     hdr_format: wgpu::TextureFormat,
-) -> (
-    wgpu::BindGroupLayout,
-    wgpu::Buffer,
-    wgpu::Sampler,
-    PostPipelines,
-) {
+) -> PostPipelines {
     // --- enhanced graphics: the post passes (glow, metering, adaptation, tone curve, FXAA)
     log::info!("renderer: compiling the post passes shaders");
     let post_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -124,7 +123,7 @@ pub(crate) fn post_pipelines(
             cache: None,
         })
     };
-    let post = PostPipelines {
+    PostPipelines {
         down_first: post_pipeline("fs_down_first", hdr_format),
         down: post_pipeline("fs_down", hdr_format),
         up: post_pipeline("fs_up", hdr_format),
@@ -133,8 +132,10 @@ pub(crate) fn post_pipelines(
         tonemap: post_pipeline("fs_tonemap", format),
         tonemap_encoded: post_pipeline("fs_tonemap_encoded", wgpu::TextureFormat::Rgba8Unorm),
         fxaa: post_pipeline("fs_fxaa", format),
-    };
-    (post_layout, post_buf, post_sampler, post)
+        post_layout,
+        post_buf,
+        post_sampler,
+    }
 }
 
 impl Renderer {
@@ -227,7 +228,7 @@ impl Renderer {
                 },
             };
             self.queue
-                .write_buffer(&self.post_buf, 0, bytemuck::bytes_of(&pu));
+                .write_buffer(&self.post.post_buf, 0, bytemuck::bytes_of(&pu));
             // (a mirror's small picture goes without FXAA)
             let fxaa = with_overlays
                 && self.options.fxaa

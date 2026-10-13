@@ -169,7 +169,7 @@ impl Renderer {
         if enhanced && prepass_on && with_overlays && masked_frame && (fog_lamps || shafts || glare)
         {
             if let (Some(pipes), Some(ao), Some(cam_bg)) = (
-                self.fog_lamps_pipeline.as_ref(),
+                self.fog_lamps.fog_lamps_pipeline.as_ref(),
                 self.targets.ao.as_ref(),
                 scene.camera_bind_group.as_ref(),
             ) {
@@ -200,8 +200,11 @@ impl Renderer {
                             droplets,
                         ],
                     };
-                    self.queue
-                        .write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
+                    self.queue.write_buffer(
+                        &self.fog_lamps.fog_lamps_buf,
+                        0,
+                        bytemuck::bytes_of(&u),
+                    );
                     let h = &self.targets.hdr_targets[&(width, height)];
                     let view = h
                         .puddles
@@ -244,4 +247,13 @@ impl Renderer {
             }
         }
     }
+}
+
+/// The lamps' light in the fog: its pipelines, bind group layout and parameters.
+pub(crate) struct FogLampsPass {
+    /// Enhanced: the lamps' light the fog scatters, added over the drawn picture (none on
+    /// OpenGL and without storage buffers), its bind group layout and parameters.
+    pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
+    pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
+    pub(crate) fog_lamps_buf: wgpu::Buffer,
 }

@@ -66,7 +66,7 @@ impl Renderer {
         let t = upload_texture(&self.device, &self.queue, img, true);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("corona picture"),
-            layout: &self.corona_layout,
+            layout: &self.sprites.corona_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -74,24 +74,24 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.corona_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.sprites.corona_sampler),
                 },
             ],
         });
         let i = id as usize;
-        if self.corona_textures.len() <= i {
-            self.corona_textures.resize_with(i + 1, || None);
+        if self.sprites.corona_textures.len() <= i {
+            self.sprites.corona_textures.resize_with(i + 1, || None);
         }
-        self.corona_textures[i] = Some(bg);
+        self.sprites.corona_textures[i] = Some(bg);
     }
 
     /// The picture of a smoke particle: the game's `Texture/rauch.tga` (OMSI's default
     /// for every `[smoke]`), alpha as its mask.
     pub fn set_smoke_texture(&mut self, img: &omsi_texture::Image) {
         let t = upload_texture(&self.device, &self.queue, img, true);
-        self.smoke_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        self.sprites.smoke_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("smoke"),
-            layout: &self.corona_layout,
+            layout: &self.sprites.corona_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -99,7 +99,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.corona_sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.sprites.corona_sampler),
                 },
             ],
         });
