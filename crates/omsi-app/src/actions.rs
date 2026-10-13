@@ -1,7 +1,16 @@
 //! What the game does when asked by a key, a menu, a page or a plugin: the game actions,
 //! placing and switching vehicles, saving and loading.
 
-use super::*;
+use crate::app::App;
+use crate::camera_util::ORBIT_DEFAULT;
+use crate::cli::Args;
+use crate::input::part_in_reach;
+use crate::player::Player;
+use crate::services::{at_petrol_station, run_services};
+use crate::situation::build_situation;
+use crate::spawn::spawn_player;
+use std::path::{Path, PathBuf};
+use winit::event_loop::ActiveEventLoop;
 
 /// Global actions a controller button should send to the game instead of to the bus script.
 pub(crate) fn is_game_action(name: &str) -> bool {

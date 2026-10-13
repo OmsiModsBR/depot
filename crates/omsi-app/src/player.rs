@@ -1,6 +1,14 @@
 //! The player: their bus, its controls and cameras.
 
-use super::*;
+use crate::camera_arm;
+use crate::camera_util::{ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN, ray_may_hit};
+use crate::scene;
+use crate::schedule;
+use crate::weather_setup::debug_sound_every;
+use glam::{DVec3, Vec3};
+use omsi_render::{Camera, Renderer, Scene};
+use std::time::Instant;
+use winit::keyboard::KeyCode;
 
 fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'static str {
     // Scripts can cancel the lever themselves after a turn; prefer their current state.

@@ -1,6 +1,39 @@
 //! The window's game: `App`, its state and its per-frame work.
 
-use super::*;
+use crate::ambience;
+use crate::career;
+use crate::cli::{Args, parse_time};
+use crate::hud;
+use crate::humans;
+use crate::memory::texture_budget;
+use crate::menu;
+use crate::money;
+use crate::navigator;
+use crate::player::Player;
+use crate::puddles;
+use crate::radio;
+use crate::rain;
+use crate::scene::World;
+use crate::schedule;
+use crate::settings;
+use crate::situation::{start_clock, ticket_key_name};
+use crate::spawn::spawn_player;
+use crate::startup::{fatal_message, window_renderer};
+use crate::tiles;
+use crate::traffic;
+use crate::ui;
+use crate::weather_setup::{initial_wetness, load_weather, setup_sky};
+use crate::world_load::{load_world, open_world, spawn_point};
+use glam::DVec3;
+use omsi_render::{Camera, Renderer, Scene, SurfaceState};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Instant;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
+use winit::window::Window;
+#[cfg(feature = "lan")]
+use crate::lan;
 
 const SLOW_UPLOAD_MB_S: f64 = 300.0;
 
