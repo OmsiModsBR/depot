@@ -31,6 +31,7 @@ pub enum Msg {
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     Join(serde_json::Value),
+    #[cfg(feature = "lan")]
     Server { address: String, info: Result<omsi_net::ws::ServerInfo, String> },
     /// A background job stopped on an error of its own (a panic): whatever it was loading
     /// is not coming.
@@ -60,6 +61,7 @@ pub enum JoinProto {
 }
 
 /// A code host's status page (its gateway is the session's port + 10).
+#[cfg(feature = "lan")]
 fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
     let c = omsi_net::SessionCode::decode(code)?;
     for a in c.addrs().into_iter().take(3) {
@@ -74,7 +76,9 @@ fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
 }
 
 /// The list as saved, with the official server first when it is not in it.
+#[cfg_attr(not(feature = "lan"), allow(unused_mut))]
 fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
+    #[cfg(feature = "lan")]
     if !list.iter().any(|s| omsi_net::official::is_alias(&s.address)) {
         list.insert(0, ServerEntry { name: omsi_net::official::NAME.into(), address: omsi_net::official::ALIAS.into() });
     }
@@ -255,6 +259,7 @@ pub struct State {
     /// Multiplayer: the saved servers, what each said last (and when it was asked), and the
     /// one the Drive page is joined to now (its address).
     pub servers: Vec<ServerEntry>,
+    #[cfg(feature = "lan")]
     pub server_info: std::collections::HashMap<String, (Instant, Result<omsi_net::ws::ServerInfo, String>)>,
     pub server_asked: std::collections::HashMap<String, Instant>,
     pub joined_server: Option<String>,
@@ -322,6 +327,7 @@ impl State {
             polling: false,
             second_armed: None,
             servers: with_official(std::fs::read(servers_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()),
+            #[cfg(feature = "lan")]
             server_info: Default::default(),
             server_asked: Default::default(),
             joined_server: None,
@@ -472,6 +478,7 @@ impl State {
         self.spawn(|| Msg::Mods(core::mods_status().map_err(|e| format!("{e:#}"))));
     }
 
+    #[cfg(feature = "lan")]
     pub fn check_join(&mut self) {
         // (multiplayer is disabled: nothing is looked up)
         if true {
@@ -491,6 +498,7 @@ impl State {
     }
 
     /// The buses the host or server offers (None: any, it has not said).
+    #[cfg(feature = "lan")]
     pub fn host_vehicles(&self) -> Option<Vec<String>> {
         if self.choice.lan_mode != "join" {
             return None;
@@ -500,6 +508,16 @@ impl State {
         (!list.is_empty()).then_some(list)
     }
 
+    /// Without LAN play no host is looked up.
+    #[cfg(not(feature = "lan"))]
+    pub fn check_join(&mut self) {}
+
+    /// Without LAN play no host or server limits the buses.
+    #[cfg(not(feature = "lan"))]
+    pub fn host_vehicles(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// Keep the server list on disk.
     pub fn save_servers(&self) {
         let _ = std::fs::create_dir_all(core::data_dir());
@@ -507,6 +525,7 @@ impl State {
     }
 
     /// Ask a server about itself (its status and icon), at most every `every` seconds.
+    #[cfg(feature = "lan")]
     pub fn ask_server(&mut self, address: &str, every: f32) {
         // (multiplayer is disabled: no server is asked, nothing goes on the network)
         if true {
@@ -520,9 +539,14 @@ impl State {
         self.spawn(move || Msg::Server { info: omsi_net::ws::query(&a, true), address: a });
     }
 
+    /// Without LAN play no server is asked.
+    #[cfg(not(feature = "lan"))]
+    pub fn ask_server(&mut self, _address: &str, _every: f32) {}
+
     /// The Drive page joins `address`: the server's map is the map, the session is joined.
     /// `proto` says how: over UDP straight to the game port, over the server's web gateway
     /// (a WebSocket), or `Auto` (the web gateway where the server answered, else UDP).
+    #[cfg(feature = "lan")]
     pub fn join_server(&mut self, address: &str, proto: JoinProto) {
         let info = self.server_info.get(address).cloned().and_then(|(_, r)| r.ok());
         let is_web = omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
@@ -626,10 +650,13 @@ impl State {
         // comes before the map is loaded: through a tunnel it came later, the game started
         // on the map chosen here, and the players never met ("the host drives on X10 Berlin,
         // you on Berlin-Spandau"). A map not installed here comes with the host's mods.
+        #[cfg(feature = "lan")]
         let host_map = (c.lan_mode == "join")
             .then(|| self.joined_server.clone().unwrap_or_else(|| c.lan_addr.clone()))
             .and_then(|k| self.server_info.get(&k).and_then(|x| x.1.as_ref().ok()).map(|i| i.map.trim().replace('\\', "/")))
             .filter(|m| m.to_ascii_lowercase().contains("maps/"));
+        #[cfg(not(feature = "lan"))]
+        let host_map: Option<String> = None;
         core::Duty {
             map: host_map.unwrap_or_else(|| c.map.clone()),
             bus: c.bus.clone(),
@@ -814,6 +841,7 @@ impl State {
                 self.loading_lines = false;
                 self.set_status(format!("Reading the content stopped on an error: {why}"), true);
             }
+            #[cfg(feature = "lan")]
             Msg::Server { address, info } => {
                 // the host of the code typed in: its map is the one the duty is chosen on
                 // (installed here: the line, tour and entry point of another map go)
@@ -1285,6 +1313,7 @@ pub fn root_problem(root: &str) -> String {
 
 /// The server's message when a game ended because its server sent it away or turned it away
 /// (`lan::LEFT_SERVER` in the log of this run); None for any other end.
+#[cfg(feature = "lan")]
 pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
     let text = std::fs::read(log).ok()?;
     let text = String::from_utf8_lossy(&text[text.len().saturating_sub(64 * 1024)..]).to_string();
@@ -1293,6 +1322,12 @@ pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
     let line = run.iter().rev().find(|l| l.contains(crate::lan::LEFT_SERVER))?;
     let why = line.split_once(crate::lan::LEFT_SERVER)?.1.trim();
     Some(if why.is_empty() { "sent away by the host".to_string() } else { why.chars().take(300).collect() })
+}
+
+/// Without LAN play no server sends a game away.
+#[cfg(not(feature = "lan"))]
+pub fn disconnect_of(_log: &std::path::Path) -> Option<String> {
+    None
 }
 
 /// What a game's log says when the game ended on an error: the error (a panic, "no graphics
@@ -1351,7 +1386,7 @@ const MACHINE_LINES: [&str; 4] = ["] system: ", "] graphics adapter: ", "] openi
 /// The line between the machine and the end of the log in a crash's tail.
 pub const CRASH_TAIL_GAP: &str = "…";
 
-#[cfg(test)]
+#[cfg(all(test, feature = "lan"))]
 mod disconnect_tests {
     #[test]
     fn the_servers_word_is_read_back_from_the_log_of_this_run() {

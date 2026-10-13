@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app` gets the features `lan` and `server` (`server` implies `lan`). `lan` is on by default
+  for now, so nothing changes yet. The launcher's server browser (the Multiplayer page, the phone's
+  Online tab and saved servers, the joined server's banner and clock) is the first part behind `lan`.
+  The game's own LAN code follows in the next steps, and then `lan` turns off by default.
 - `omsi-launcher-core` gets a `lan` feature, off by default, for the one thing it takes from
   `omsi-net`: checking a LAN join code or address. Without it, `check_join` answers that LAN play is
   not in this build and a duty's `join:` target goes to the game unchecked (the game ignores it).

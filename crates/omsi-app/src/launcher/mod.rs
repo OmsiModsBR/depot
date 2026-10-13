@@ -12,6 +12,7 @@ pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
 pub mod phone;
+#[cfg(feature = "lan")]
 mod multiplayer;
 pub(crate) mod pages;
 mod showroom;
@@ -108,6 +109,7 @@ pub struct Launcher {
     /// The launcher made for a phone (see `phone`).
     pub phone: phone::PhoneView,
     pub pages: pages::PagesView,
+    #[cfg(feature = "lan")]
     pub mp: multiplayer::MultiplayerView,
     /// Server icons in the interface pipeline (by server address), and those decoded but
     /// not yet uploaded.
@@ -184,6 +186,7 @@ impl Launcher {
         drive: drive::DriveView::default(),
         phone: phone::PhoneView::default(),
         pages: pages::PagesView::default(),
+        #[cfg(feature = "lan")]
         mp: multiplayer::MultiplayerView::default(),
         icons: Default::default(),
         icons_pending: Vec::new(),
@@ -1031,7 +1034,10 @@ impl Launcher {
         let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
         match self.page {
             Page::Drive => drive::draw(self, content),
+            #[cfg(feature = "lan")]
             Page::Multiplayer => multiplayer::draw(self, content),
+            #[cfg(not(feature = "lan"))]
+            Page::Multiplayer => {}
             Page::Profile => pages::profile(self, content),
             Page::Settings => pages::settings(self, content),
             Page::Controls => pages::controls(self, content),
