@@ -864,7 +864,7 @@ fn a_reshaped_mesh_moves_the_bounds_of_every_instance_drawing_it() {
         renderer.add_mesh(&mut scene, &data),
         renderer.add_mesh(&mut scene, &data),
     );
-    let mut add = |scene: &mut Scene, mesh, x: f64| {
+    let add = |scene: &mut Scene, mesh, x: f64| {
         renderer.add_instance(
             scene,
             mesh,

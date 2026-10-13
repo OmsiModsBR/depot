@@ -256,7 +256,7 @@ impl Renderer {
         self.targets.msaa_targets.clear();
         self.targets.ao = None;
         self.targets.hdr_targets.clear();
-        self.presenter.scale_targets.clear();
+        self.targets.scale_targets.clear();
         self.presenter.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.target_use.clear();

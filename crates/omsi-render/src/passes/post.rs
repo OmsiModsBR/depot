@@ -3,10 +3,10 @@
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
 use crate::gpu::{float_tex, pass_timer};
-use crate::lighting::{meter_tuning, tone_contrast, Lighting};
-use crate::renderer::Renderer;
+use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
-use crate::sky::atmosphere;
+use crate::sky::{atmosphere, SkyResources};
+use crate::targets::TargetCache;
 
 /// The enhanced path's post passes (post.wgsl `PostParams`).
 #[repr(C)]
@@ -139,175 +139,211 @@ pub(crate) fn post_pipelines(
     }
 }
 
-impl Renderer {
-    /// The enhanced path's post passes: glow, metering, adaptation, tone curve and FXAA.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_enhanced_post(
-        &mut self,
-        scene: &Scene,
-        encoder: &mut wgpu::CommandEncoder,
-        lighting: &Lighting,
-        scene_view: &wgpu::TextureView,
-        overlays: &[(TextureId, [f32; 4])],
-        width: u32,
-        height: u32,
-        dt: f32,
-        enhanced: bool,
-        lead_view: bool,
-        puddles_on: bool,
-        rt_frame: bool,
-        scaled: bool,
-        with_overlays: bool,
-        tset: &Option<wgpu::QuerySet>,
-        timed: &mut Vec<&'static str>,
-    ) {
-        if enhanced {
-            // --- the post passes: glow, metering and adaptation, tone curve, FXAA
-            let secs = |tau: f32| {
-                if dt > 0.0 {
-                    1.0 - (-dt / tau).exp()
-                } else {
+/// What the enhanced path's post passes work with: their pipelines, the targets, the
+/// eye's adaptation and the sky it follows.
+pub(crate) struct PostParts<'a> {
+    pub(crate) queue: &'a wgpu::Queue,
+    pub(crate) post: &'a PostPipelines,
+    pub(crate) targets: &'a TargetCache,
+    pub(crate) adaptation: &'a mut Exposure,
+    pub(crate) sky: &'a SkyResources,
+    /// The options' multisampling and FXAA.
+    pub(crate) msaa: u32,
+    pub(crate) fxaa: bool,
+    pub(crate) instant_exposure: bool,
+    /// The exposure log, when this picture is sampled into it (the window's, the device
+    /// not lost).
+    pub(crate) exposure_log: Option<&'a mut ExposureLog>,
+    /// The presenter's pipeline for the HUD overlays at full size.
+    pub(crate) overlay_pipeline_1x: &'a wgpu::RenderPipeline,
+}
+
+/// The enhanced path's post passes: glow, metering, adaptation, tone curve and FXAA.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_enhanced_post(
+    ctx: PostParts,
+    scene: &Scene,
+    encoder: &mut wgpu::CommandEncoder,
+    lighting: &Lighting,
+    scene_view: &wgpu::TextureView,
+    overlays: &[(TextureId, [f32; 4])],
+    width: u32,
+    height: u32,
+    dt: f32,
+    enhanced: bool,
+    lead_view: bool,
+    puddles_on: bool,
+    rt_frame: bool,
+    scaled: bool,
+    with_overlays: bool,
+    tset: &Option<wgpu::QuerySet>,
+    timed: &mut Vec<&'static str>,
+) {
+    if enhanced {
+        // --- the post passes: glow, metering and adaptation, tone curve, FXAA
+        let secs = |tau: f32| {
+            if dt > 0.0 {
+                1.0 - (-dt / tau).exp()
+            } else {
+                1.0
+            }
+        };
+        // (the brightening is for what the light model cannot know by day - a dark cab,
+        // an underpass; by night the picture is dark because the night is, and the eye's
+        // adaptation to it is the light model's already: lifted by the meter on top, a
+        // lamp-lit street came out most of a stop brighter than any eye sees it)
+        let mut m = meter_tuning();
+        let after_sunset = ctx.sky.sky_state.as_ref().map_or(0.0, |st| {
+            ((0.052 - st.input.sun_dir.normalize_or_zero().z) / 0.157).clamp(0.0, 1.0)
+        });
+        m[3] *= 1.0
+            - atmosphere::smoothstep(
+                3.0,
+                7.0,
+                ctx.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
+            );
+        let pu = PostUniform {
+            // the metering may take a little off a bright picture and add a little to a
+            // dark one: a night stays a night, snow stays white
+            a: [
+                // (the share of the light beyond the screen's white the eye scatters
+                // further than a third of a degree, CIE 146 - see post.wgsl `fs_up`)
+                0.2,
+                m[2],
+                m[3],
+                if ctx.instant_exposure || dt <= 0.0 {
                     1.0
-                }
-            };
-            // (the brightening is for what the light model cannot know by day - a dark cab,
-            // an underpass; by night the picture is dark because the night is, and the eye's
-            // adaptation to it is the light model's already: lifted by the meter on top, a
-            // lamp-lit street came out most of a stop brighter than any eye sees it)
-            let mut m = meter_tuning();
-            let after_sunset = self.sky.sky_state.as_ref().map_or(0.0, |st| {
-                ((0.052 - st.input.sun_dir.normalize_or_zero().z) / 0.157).clamp(0.0, 1.0)
-            });
-            m[3] *= 1.0
-                - atmosphere::smoothstep(
-                    3.0,
-                    7.0,
-                    self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2,
-                );
-            let pu = PostUniform {
-                // the metering may take a little off a bright picture and add a little to a
-                // dark one: a night stays a night, snow stays white
-                a: [
-                    // (the share of the light beyond the screen's white the eye scatters
-                    // further than a third of a degree, CIE 146 - see post.wgsl `fs_up`)
-                    0.2,
-                    m[2],
-                    m[3],
-                    if self.instant_exposure || dt <= 0.0 {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                ],
-                // darker: the eye takes a few seconds; brighter: under one
-                b: [
-                    secs(2.5),
-                    secs(0.6),
-                    m[1],
-                    m[4] + lighting.night_brightness * after_sunset,
-                ],
-                // (w: an LED panel's dots count for this much in the glow's source. The mix
-                // the glow lands with is a few per cent - a lamp a hundred times brighter
-                // than white spreads, a white wall does not - so the dots are multiplied up
-                // there instead of being drawn burning: their halo shows, they don't bleach.
-                // `Led glow`, 0 = not at all.)
-                c: [
-                    m[0],
-                    m[5],
-                    self.adaptation.exposure.map(f32::exp).unwrap_or(1.0),
-                    lighting.led_glow * 10.0,
-                ],
-                // Enhanced+: its grade, the vignette and the sharpening; both: the tone
-                // curve's contrast (post.wgsl `natural_tone`)
-                d: {
-                    let contrast = tone_contrast(self.adaptation.exposure.unwrap_or(0.0));
-                    if rt_frame && omsi_cfg::env::var_os("OMSI_NO_RT_GRADE").is_none() {
-                        [1.0, 0.08, 0.0, contrast]
-                    } else {
-                        [0.0, 0.0, 0.0, contrast]
-                    }
+                } else {
+                    0.0
                 },
-            };
-            self.queue
-                .write_buffer(&self.post.post_buf, 0, bytemuck::bytes_of(&pu));
-            // (a mirror's small picture goes without FXAA)
-            let fxaa = with_overlays
-                && self.options.fxaa
-                && self.options.msaa <= 1
-                && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
-            if let Some(h) = self.targets.hdr_targets.get(&(width, height)) {
-                let puddles = h.puddles.as_ref().filter(|_| puddles_on);
-                let levels = h.down.len();
-                for i in 0..levels {
-                    post_pass(
-                        encoder,
-                        &h.down[i],
-                        None,
-                        if i == 0 {
-                            &self.post.down_first
-                        } else {
-                            &self.post.down
-                        },
-                        if i == 0 {
-                            puddles.map(|p| &p.down_bg).unwrap_or(&h.down_bg[i])
-                        } else {
-                            &h.down_bg[i]
-                        },
-                    );
+            ],
+            // darker: the eye takes a few seconds; brighter: under one
+            b: [
+                secs(2.5),
+                secs(0.6),
+                m[1],
+                m[4] + lighting.night_brightness * after_sunset,
+            ],
+            // (w: an LED panel's dots count for this much in the glow's source. The mix
+            // the glow lands with is a few per cent - a lamp a hundred times brighter
+            // than white spreads, a white wall does not - so the dots are multiplied up
+            // there instead of being drawn burning: their halo shows, they don't bleach.
+            // `Led glow`, 0 = not at all.)
+            c: [
+                m[0],
+                m[5],
+                ctx.adaptation.exposure.map(f32::exp).unwrap_or(1.0),
+                lighting.led_glow * 10.0,
+            ],
+            // Enhanced+: its grade, the vignette and the sharpening; both: the tone
+            // curve's contrast (post.wgsl `natural_tone`)
+            d: {
+                let contrast = tone_contrast(ctx.adaptation.exposure.unwrap_or(0.0));
+                if rt_frame && omsi_cfg::env::var_os("OMSI_NO_RT_GRADE").is_none() {
+                    [1.0, 0.08, 0.0, contrast]
+                } else {
+                    [0.0, 0.0, 0.0, contrast]
                 }
-                // the exposure: meter the smallest level, move the adapted value towards it
-                // (the window's picture only: a mirror is graded with the window's exposure,
-                // as the eye that looks into it is adapted to the street)
-                if lead_view {
-                    post_pass(
-                        encoder,
-                        &self.adaptation.meter_view,
-                        None,
-                        &self.post.meter,
-                        &h.meter_bg,
-                    );
-                    let front = self.adaptation.adapt_front;
-                    post_pass(
-                        encoder,
-                        &self.adaptation.adapt_views[1 - front],
-                        None,
-                        &self.post.adapt,
-                        &self.adaptation.adapt_bg[front],
-                    );
-                    self.adaptation.adapt_front = 1 - front;
-                }
-                // (a device lost since this frame began took the meter's buffer as well)
-                let lost = self.device_lost().is_some();
-                if let Some(log) = self
-                    .diagnostics
-                    .exposure_log
-                    .as_mut()
-                    .filter(|_| with_overlays && !lost)
-                {
-                    let pre = self.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
-                    log.sample(
-                        encoder,
-                        &self.adaptation.adapt_views[self.adaptation.adapt_front],
-                        pre,
-                        m,
-                    );
-                }
-                // (timed on its last pass: the glow chain with the metering, see GpuTimers)
-                for i in (0..levels).rev() {
-                    let timer = if i == 0 {
-                        pass_timer(tset.as_ref(), timed, "glow+meter")
+            },
+        };
+        ctx.queue
+            .write_buffer(&ctx.post.post_buf, 0, bytemuck::bytes_of(&pu));
+        // (a mirror's small picture goes without FXAA)
+        let fxaa = with_overlays
+            && ctx.fxaa
+            && ctx.msaa <= 1
+            && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
+        if let Some(h) = ctx.targets.hdr_targets.get(&(width, height)) {
+            let puddles = h.puddles.as_ref().filter(|_| puddles_on);
+            let levels = h.down.len();
+            for i in 0..levels {
+                post_pass(
+                    encoder,
+                    &h.down[i],
+                    None,
+                    if i == 0 {
+                        &ctx.post.down_first
                     } else {
-                        None
-                    };
-                    post_pass(encoder, &h.up[i], timer, &self.post.up, &h.up_bg[i]);
-                }
-                let final_view = if fxaa { &h.ldr } else { scene_view };
-                let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)
-                    [self.adaptation.adapt_front];
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("tone map"),
+                        &ctx.post.down
+                    },
+                    if i == 0 {
+                        puddles.map(|p| &p.down_bg).unwrap_or(&h.down_bg[i])
+                    } else {
+                        &h.down_bg[i]
+                    },
+                );
+            }
+            // the exposure: meter the smallest level, move the adapted value towards it
+            // (the window's picture only: a mirror is graded with the window's exposure,
+            // as the eye that looks into it is adapted to the street)
+            if lead_view {
+                post_pass(
+                    encoder,
+                    &ctx.adaptation.meter_view,
+                    None,
+                    &ctx.post.meter,
+                    &h.meter_bg,
+                );
+                let front = ctx.adaptation.adapt_front;
+                post_pass(
+                    encoder,
+                    &ctx.adaptation.adapt_views[1 - front],
+                    None,
+                    &ctx.post.adapt,
+                    &ctx.adaptation.adapt_bg[front],
+                );
+                ctx.adaptation.adapt_front = 1 - front;
+            }
+            if let Some(log) = ctx.exposure_log {
+                let pre = ctx.adaptation.exposure.unwrap_or(0.0) / std::f32::consts::LN_2;
+                log.sample(
+                    encoder,
+                    &ctx.adaptation.adapt_views[ctx.adaptation.adapt_front],
+                    pre,
+                    m,
+                );
+            }
+            // (timed on its last pass: the glow chain with the metering, see GpuTimers)
+            for i in (0..levels).rev() {
+                let timer = if i == 0 {
+                    pass_timer(tset.as_ref(), timed, "glow+meter")
+                } else {
+                    None
+                };
+                post_pass(encoder, &h.up[i], timer, &ctx.post.up, &h.up_bg[i]);
+            }
+            let final_view = if fxaa { &h.ldr } else { scene_view };
+            let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)
+                [ctx.adaptation.adapt_front];
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tone map"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: final_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: pass_timer(tset.as_ref(), timed, "tone map"),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(if fxaa {
+                &ctx.post.tonemap_encoded
+            } else {
+                &ctx.post.tonemap
+            });
+            pass.set_bind_group(0, tonemap_bg, &[]);
+            pass.draw(0..3, 0..1);
+            if fxaa {
+                drop(pass);
+                pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("fxaa"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: final_view,
+                        view: scene_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -316,46 +352,20 @@ impl Renderer {
                         },
                     })],
                     depth_stencil_attachment: None,
-                    timestamp_writes: pass_timer(tset.as_ref(), timed, "tone map"),
+                    timestamp_writes: pass_timer(tset.as_ref(), timed, "fxaa"),
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(if fxaa {
-                    &self.post.tonemap_encoded
-                } else {
-                    &self.post.tonemap
-                });
-                pass.set_bind_group(0, tonemap_bg, &[]);
+                pass.set_pipeline(&ctx.post.fxaa);
+                pass.set_bind_group(0, &h.fxaa_bg, &[]);
                 pass.draw(0..3, 0..1);
-                if fxaa {
-                    drop(pass);
-                    pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("fxaa"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: scene_view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: pass_timer(tset.as_ref(), timed, "fxaa"),
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-                    pass.set_pipeline(&self.post.fxaa);
-                    pass.set_bind_group(0, &h.fxaa_bg, &[]);
-                    pass.draw(0..3, 0..1);
-                }
-                if !overlays.is_empty() && !scaled {
-                    pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
-                    for (k, _) in overlays.iter().enumerate() {
-                        if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                            pass.set_bind_group(0, bg, &[]);
-                            pass.draw(0..6, 0..1);
-                        }
+            }
+            if !overlays.is_empty() && !scaled {
+                pass.set_pipeline(ctx.overlay_pipeline_1x);
+                for (k, _) in overlays.iter().enumerate() {
+                    if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
+                        pass.set_bind_group(0, bg, &[]);
+                        pass.draw(0..6, 0..1);
                     }
                 }
             }

@@ -7,7 +7,6 @@ mod fog_lamps;
 mod glass;
 mod main;
 mod post;
-mod reflections;
 mod shadow;
 mod sky;
 
@@ -23,9 +22,10 @@ pub(crate) use draw::{
 #[cfg(test)]
 pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
-pub(crate) use main::{PassPipelines, SpriteResources};
+pub(crate) use glass::encode_glass;
+pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
 #[cfg(test)]
 pub(crate) use post::PostUniform;
-pub(crate) use post::{post_pipelines, Exposure, PostPipelines};
+pub(crate) use post::{encode_enhanced_post, post_pipelines, Exposure, PostParts, PostPipelines};
 pub(crate) use shadow::{ShadowResources, ShadowSchedule, SHADOW_CLOSE_MAX};
 pub use shadow::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};

@@ -2,8 +2,9 @@
 //! levels and the bind groups of the passes between them.
 
 use super::PuddleTargets;
+use super::{GroupParts, TargetCache};
+use crate::assets::AssetStore;
 use crate::gpu::{rt_gbuf, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
-use crate::renderer::Renderer;
 
 /// High-range colour targets of the enhanced path for one size: the multisampled one the
 /// scene is drawn into, the single-sampled one it resolves into, the glow's levels, the
@@ -38,17 +39,28 @@ pub(crate) struct HdrTargets {
 /// Glow levels of the enhanced post path.
 pub(crate) const GLOW_LEVELS: usize = 6;
 
-impl Renderer {
+impl TargetCache {
     /// The HDR colour targets of the enhanced path for this size, with the glow's levels,
     /// the tone-mapped picture FXAA reads and the post passes' bind groups.
-    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
-        self.targets
-            .target_use
-            .insert((w, h), std::time::Instant::now());
-        if self.targets.hdr_targets.contains_key(&(w, h)) {
+    /// `picture_group`: the presenter's bind group for a picture (`Presenter::picture_group`).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn hdr_targets(
+        &mut self,
+        device: &wgpu::Device,
+        samples: u32,
+        post: GroupParts,
+        post_sampler: &wgpu::Sampler,
+        assets: &AssetStore,
+        adapt_views: &[wgpu::TextureView],
+        picture_group: impl FnOnce(&wgpu::TextureView) -> wgpu::BindGroup,
+        w: u32,
+        h: u32,
+    ) -> bool {
+        self.target_use.insert((w, h), std::time::Instant::now());
+        if self.hdr_targets.contains_key(&(w, h)) {
             return false;
         }
-        self.evict_targets();
+        self.evict();
         let fmt = wgpu::TextureFormat::Rgba16Float;
         let target = |label: &str, tw: u32, th: u32, format: wgpu::TextureFormat, samples: u32| {
             let usage = if samples > 1 {
@@ -58,7 +70,7 @@ impl Renderer {
                     | wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_SRC
             };
-            self.device
+            device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
                     size: wgpu::Extent3d {
@@ -75,17 +87,15 @@ impl Renderer {
                 })
                 .create_view(&Default::default())
         };
-        let msaa_view =
-            (self.options.msaa > 1).then(|| target("hdr msaa", w, h, fmt, self.options.msaa));
+        let msaa_view = (samples > 1).then(|| target("hdr msaa", w, h, fmt, samples));
         let view = target("hdr", w, h, fmt, 1);
-        let mask_msaa = (self.options.msaa > 1)
-            .then(|| target("screen mask msaa", w, h, MASK_FORMAT, self.options.msaa));
+        let mask_msaa =
+            (samples > 1).then(|| target("screen mask msaa", w, h, MASK_FORMAT, samples));
         let mask = target("screen mask", w, h, MASK_FORMAT, 1);
         let gbuf = rt_gbuf().then(|| {
             [GBUF_FORMAT, AUX_FORMAT].map(|f| {
                 (
-                    (self.options.msaa > 1)
-                        .then(|| target("rt surfaces msaa", w, h, f, self.options.msaa)),
+                    (samples > 1).then(|| target("rt surfaces msaa", w, h, f, samples)),
                     target("rt surfaces", w, h, f, 1),
                 )
             })
@@ -105,13 +115,13 @@ impl Renderer {
                        base: &wgpu::TextureView,
                        adapt: &wgpu::TextureView,
                        screen_mask: &wgpu::TextureView| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post"),
-                layout: &self.post.post_layout,
+                layout: post.layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.post.post_buf.as_entire_binding(),
+                        resource: post.buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -119,7 +129,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(post_sampler),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
@@ -137,9 +147,9 @@ impl Renderer {
             })
         };
         let bg = |src: &wgpu::TextureView, base: &wgpu::TextureView, adapt: &wgpu::TextureView| {
-            bg_with(src, base, adapt, &self.assets.black_texture.view)
+            bg_with(src, base, adapt, &assets.black_texture.view)
         };
-        let none = &self.assets.white_texture.view;
+        let none = &assets.white_texture.view;
         // (the first level of the glow reads the screen mask as its `t_base`: no light from
         // the screens)
         let down_bg: Vec<wgpu::BindGroup> = (0..levels)
@@ -166,13 +176,13 @@ impl Renderer {
             .collect();
         let meter_bg = bg(&down[levels - 1], none, none);
         let tonemap_bg = [
-            bg_with(&view, &up[0], &self.adaptation.adapt_views[0], &mask),
-            bg_with(&view, &up[0], &self.adaptation.adapt_views[1], &mask),
+            bg_with(&view, &up[0], &adapt_views[0], &mask),
+            bg_with(&view, &up[0], &adapt_views[1], &mask),
         ];
         // (FXAA reads the screen mask as its `t_base` and leaves the screens as they are)
         let fxaa_bg = bg(&ldr, &mask, none);
-        let classic_bg = self.picture_group(&view);
-        self.targets.hdr_targets.insert(
+        let classic_bg = picture_group(&view);
+        self.hdr_targets.insert(
             (w, h),
             HdrTargets {
                 msaa_view,

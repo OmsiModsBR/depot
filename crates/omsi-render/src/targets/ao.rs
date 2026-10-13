@@ -1,8 +1,8 @@
 //! The ambient-occlusion pass's textures for one target size, and the lamps' light in the
 //! fog worked out beside them.
 
+use super::{GroupParts, TargetCache};
 use crate::gpu::DEPTH_FORMAT;
-use crate::renderer::Renderer;
 
 /// The textures of the ambient-occlusion pass for one target size.
 pub(crate) struct AoTargets {
@@ -18,16 +18,21 @@ pub(crate) struct AoTargets {
     pub(crate) fog_bg: Option<[wgpu::BindGroup; 2]>,
 }
 
-impl Renderer {
+impl TargetCache {
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
-    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
-        if self
-            .targets
-            .ao
-            .as_ref()
-            .map(|a| a.size == (w, h))
-            .unwrap_or(false)
-        {
+    /// `ssao`: the SSAO passes' layout and parameters; `fog_lamps`: the lamps-in-the-fog
+    /// pass's, when it has its pipelines; `puddles`: the puddles' reflections are on (they
+    /// copy the prepass depth).
+    pub(crate) fn ensure_ao(
+        &mut self,
+        device: &wgpu::Device,
+        ssao: GroupParts,
+        fog_lamps: Option<GroupParts>,
+        puddles: bool,
+        w: u32,
+        h: u32,
+    ) -> bool {
+        if self.ao.as_ref().map(|a| a.size == (w, h)).unwrap_or(false) {
             return false;
         }
         let size = wgpu::Extent3d {
@@ -35,7 +40,7 @@ impl Renderer {
             height: h,
             depth_or_array_layers: 1,
         };
-        let depth = self.device.create_texture(&wgpu::TextureDescriptor {
+        let depth = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("prepass depth"),
             size,
             mip_level_count: 1,
@@ -44,7 +49,7 @@ impl Renderer {
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
-                | if self.puddles.is_some() {
+                | if puddles {
                     wgpu::TextureUsages::COPY_SRC
                 } else {
                     wgpu::TextureUsages::empty()
@@ -58,7 +63,7 @@ impl Renderer {
             depth_or_array_layers: 1,
         };
         let mk = |label: &str| {
-            self.device.create_texture(&wgpu::TextureDescriptor {
+            device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
                 size: half,
                 mip_level_count: 1,
@@ -79,13 +84,13 @@ impl Renderer {
         let blur_view = blur.create_view(&Default::default());
 
         let bg = |label: &str, tex: &wgpu::TextureView| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(label),
-                layout: &self.ssao.ao_layout,
+                layout: ssao.layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.ssao.ao_buf.as_entire_binding(),
+                        resource: ssao.buf.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -101,8 +106,7 @@ impl Renderer {
         // the SSAO pass reads no AO texture, but the layout wants one: bind the blur target
         let ssao_bg = bg("ssao", &blur_view);
         let blur_bg = bg("ssao blur", &ao_view);
-        let fog_view = self
-            .device
+        let fog_view = device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("fog lamps"),
                 // (one row more: the sun's visibility, see fog_lamps.wgsl)
@@ -119,16 +123,16 @@ impl Renderer {
                 view_formats: &[],
             })
             .create_view(&Default::default());
-        let fog_bg = self.fog_lamps.fog_lamps_pipeline.is_some().then(|| {
+        let fog_bg = fog_lamps.map(|fog_lamps| {
             // (the half-size pass reads no result: the layout wants one, the AO's is bound)
             [&ao_view, &fog_view].map(|read| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("fog lamps"),
-                    layout: &self.fog_lamps.fog_lamps_layout,
+                    layout: fog_lamps.layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: self.fog_lamps.fog_lamps_buf.as_entire_binding(),
+                            resource: fog_lamps.buf.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -142,7 +146,7 @@ impl Renderer {
                 })
             })
         });
-        self.targets.ao = Some(AoTargets {
+        self.ao = Some(AoTargets {
             size: (w, h),
             depth_view,
             ao_view,

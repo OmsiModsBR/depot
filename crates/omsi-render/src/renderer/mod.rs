@@ -3,14 +3,19 @@
 
 mod assets;
 mod build;
+mod effects;
 mod encode;
 mod frame;
 mod lights;
 mod lists;
 mod options;
+mod output;
+mod passes;
 mod prepare;
+mod reflections;
 mod sky;
 mod state;
+mod targets;
 
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
 pub use state::{Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};

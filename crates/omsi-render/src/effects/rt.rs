@@ -14,10 +14,13 @@
 //! structures now and then; its numbers show: 3 cut-out meshes as solid, 4 cut-out meshes
 //! as clear, 7 the rays unfiltered, 8 / 9 / 10 the reflections' rays and weights (OMSI_DEBUG_ENHANCED=1 and 2 show the traced shadow and occlusion).
 use crate::assets::AlphaMode;
+use crate::assets::AssetStore;
+use crate::gpu::Samplers;
 use crate::gpu::{pass_timer, HDR_FORMAT};
 use crate::lighting::Lighting;
-use crate::renderer::Renderer;
 use crate::scene::{bounding_sphere, instance_scale, Camera, Instance, MeshId, Scene, Vertex};
+use crate::sky::SkyResources;
+use crate::targets::TargetCache;
 use glam::{DVec3, Mat4};
 use std::collections::HashMap;
 
@@ -564,7 +567,21 @@ impl RayTracer {
     }
 }
 
-impl Renderer {
+/// What the ray tracing takes from the rest of the renderer: the device, the placeholder
+/// textures, the enhanced uniform, the samplers, the sky's probe and the targets it reads.
+pub(crate) struct RtParts<'a> {
+    pub(crate) device: &'a wgpu::Device,
+    pub(crate) queue: &'a wgpu::Queue,
+    pub(crate) assets: &'a AssetStore,
+    pub(crate) enh_buf: &'a wgpu::Buffer,
+    pub(crate) samplers: &'a Samplers,
+    pub(crate) sky: &'a SkyResources,
+    pub(crate) targets: &'a TargetCache,
+    /// `RenderOptions::omsi_shadow_casters`.
+    pub(crate) shadow_casters: bool,
+}
+
+impl RayTracer {
     /// Which of an instance's mesh ranges are traced, solid or cut out (a bit per range), as
     /// its materials draw them; blended ones (glass, decals, dirt) are not.
     fn traced_ranges(scene: &Scene, inst: &Instance) -> (u64, u64, u64) {
@@ -605,8 +622,9 @@ impl Renderer {
     /// (made for meshes met for the first time) and the records of their geometries, and the
     /// shaders' parameters. False when there is nothing to trace with.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare_ray_tracing(
+    pub(crate) fn prepare(
         &mut self,
+        parts: &RtParts,
         scene: &Scene,
         camera: &Camera,
         lighting: &Lighting,
@@ -616,9 +634,7 @@ impl Renderer {
         h: u32,
         dt: f32,
     ) -> bool {
-        let Some(rt) = self.rt.as_mut() else {
-            return false;
-        };
+        let rt = &mut *self;
         rt.frame += 1;
         let frame = rt.frame;
         let ro = scene.render_origin;
@@ -684,8 +700,7 @@ impl Renderer {
             if solid | cut | glass == 0 {
                 continue;
             }
-            let caster =
-                inst.casts_shadow && !(self.options.omsi_shadow_casters && !inst.omsi_caster);
+            let caster = inst.casts_shadow && !(parts.shadow_casters && !inst.omsi_caster);
             let seen = !inst.mirror_only;
             let t = Mat4::from_translation((inst.origin - ro).as_vec3()) * inst.transform;
             let c = t.to_cols_array();
@@ -739,7 +754,7 @@ impl Renderer {
                             });
                             spans.push((*first, count));
                         }
-                        let blas = self.device.create_blas(
+                        let blas = parts.device.create_blas(
                             &wgpu::CreateBlasDescriptor {
                                 label: None,
                                 flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE,
@@ -806,7 +821,7 @@ impl Renderer {
         // the top level: grown when the instances outnumber it
         if chosen.len() as u32 > rt.tlas_cap {
             rt.tlas_cap = (chosen.len() as u32).next_power_of_two();
-            rt.tlas = RayTracer::make_tlas(&self.device, rt.tlas_cap);
+            rt.tlas = RayTracer::make_tlas(&parts.device, rt.tlas_cap);
             rt.tlas_used = 0;
         }
         for (i, (key, rows, base, mask)) in chosen.iter().enumerate() {
@@ -822,12 +837,12 @@ impl Renderer {
         let bytes: &[u8] = bytemuck::cast_slice(&rt.records);
         if bytes.len() as u64 > rt.records_buf.size() {
             rt.records_buf = RayTracer::make_records(
-                &self.device,
+                &parts.device,
                 (rt.records.len() as u64).next_power_of_two(),
             );
         }
         if !bytes.is_empty() {
-            self.queue.write_buffer(&rt.records_buf, 0, bytes);
+            parts.queue.write_buffer(&rt.records_buf, 0, bytes);
         }
         // structures nobody used for a while are let go
         if frame % 240 == 0 {
@@ -889,15 +904,21 @@ impl Renderer {
             sky: [0.0; 4],
             sun_light: [0.0; 4],
         };
-        self.queue
+        parts
+            .queue
             .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p));
         rt.prev = Some((view_proj, ro, vehicle));
         true
     }
 
     /// The mean colours of the textures the records name that have none yet (or were replaced).
-    fn encode_texture_means(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
-        let Some(rt) = self.rt.as_mut() else { return };
+    fn encode_texture_means(
+        &mut self,
+        parts: &RtParts,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: &Scene,
+    ) {
+        let rt = &mut *self;
         if scene.textures.len() > rt.tex_gen.len() {
             rt.tex_gen.resize(scene.textures.len(), 0);
         }
@@ -905,7 +926,7 @@ impl Renderer {
         if need > rt.tex_avg.size() {
             // (grown: the means made so far are copied over)
             let bigger = RayTracer::make_avg(
-                &self.device,
+                &parts.device,
                 (scene.textures.len() as u64).next_power_of_two(),
                 rt.avg_stride,
             );
@@ -939,7 +960,7 @@ impl Renderer {
         let groups: Vec<wgpu::BindGroup> = wanted
             .iter()
             .map(|&t| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                parts.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("texture mean"),
                     layout: &rt.avg_layout,
                     entries: &[
@@ -949,7 +970,7 @@ impl Renderer {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
+                            resource: wgpu::BindingResource::Sampler(&parts.samplers.lin_sampler),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
@@ -981,16 +1002,17 @@ impl Renderer {
 
     /// Build this frame's structures and trace the lighting into `Targets::out`, after the
     /// depth prepass.
-    pub(crate) fn encode_ray_tracing(
+    pub(crate) fn encode(
         &mut self,
+        parts: &RtParts,
         encoder: &mut wgpu::CommandEncoder,
         scene: &Scene,
         queries: Option<&wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
-        self.encode_texture_means(encoder, scene);
-        let Some(rt) = self.rt.as_mut() else { return };
-        let Some(depth) = self.targets.ao.as_ref().map(|a| &a.depth_view) else {
+        self.encode_texture_means(parts, encoder, scene);
+        let rt = &mut *self;
+        let Some(depth) = parts.targets.ao.as_ref().map(|a| &a.depth_view) else {
             return;
         };
         let Some(t) = rt.targets.as_ref() else { return };
@@ -1024,7 +1046,7 @@ impl Renderer {
             encoder.build_acceleration_structures(entries.iter(), std::iter::once(&rt.tlas));
         }
         let group = |inp: &wgpu::TextureView, raw: &wgpu::TextureView, out: &wgpu::TextureView| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            parts.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("ray tracing"),
                 layout: &rt.layout,
                 entries: &[
@@ -1062,7 +1084,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 8,
-                        resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
+                        resource: wgpu::BindingResource::Sampler(&parts.samplers.lin_sampler),
                     },
                 ],
             })
@@ -1092,11 +1114,12 @@ impl Renderer {
     }
 }
 
-impl Renderer {
+impl RayTracer {
     /// The ray-traced reflections of the window's picture, added to `HdrTargets::view` after
     /// the main pass (and before the rain on the glass, which looks through it).
-    pub(crate) fn encode_rt_reflections(
+    pub(crate) fn encode_reflections(
         &mut self,
+        parts: &RtParts,
         encoder: &mut wgpu::CommandEncoder,
         w: u32,
         h: u32,
@@ -1104,10 +1127,10 @@ impl Renderer {
         timed: &mut Vec<&'static str>,
     ) {
         let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
-            self.rt.as_mut(),
-            self.targets.hdr_targets.get(&(w, h)),
-            self.targets.ao.as_ref(),
-            self.sky.probe.as_ref(),
+            Some(&mut *self),
+            parts.targets.hdr_targets.get(&(w, h)),
+            parts.targets.ao.as_ref(),
+            parts.sky.probe.as_ref(),
         ) else {
             return;
         };
@@ -1117,7 +1140,8 @@ impl Renderer {
         let half = (w.div_ceil(refl_div()), h.div_ceil(refl_div()));
         if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
             let mk = |label: &str| {
-                self.device
+                parts
+                    .device
                     .create_texture(&wgpu::TextureDescriptor {
                         label: Some(label),
                         size: wgpu::Extent3d {
@@ -1138,10 +1162,10 @@ impl Renderer {
             rt.refl = Some((half, mk("rt reflection rays")));
         }
         let (_, raw) = rt.refl.as_ref().unwrap();
-        let dummy = &self.assets.black_texture.view;
+        let dummy = &parts.assets.black_texture.view;
         let group =
             |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                parts.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("ray-traced reflections"),
                     layout: &rt.refl_layout,
                     entries: &[
@@ -1179,7 +1203,7 @@ impl Renderer {
                         },
                         wgpu::BindGroupEntry {
                             binding: 8,
-                            resource: wgpu::BindingResource::Sampler(&self.samplers.lin_sampler),
+                            resource: wgpu::BindingResource::Sampler(&parts.samplers.lin_sampler),
                         },
                         wgpu::BindGroupEntry {
                             binding: 9,
@@ -1191,7 +1215,7 @@ impl Renderer {
                         },
                         wgpu::BindGroupEntry {
                             binding: 11,
-                            resource: self.enh_buf.as_entire_binding(),
+                            resource: parts.enh_buf.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 12,
