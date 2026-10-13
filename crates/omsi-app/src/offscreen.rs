@@ -2768,6 +2768,10 @@ pub(crate) fn run_offscreen(
             }
             nav.set_map(world.navigation_map());
             nav.set_surface(crate::map_surface::MapSurface::open(&world.map_dir));
+            nav.set_chrono(world.chrono_dirs.read().clone());
+            if let Ok(v) = omsi_cfg::env::var("OMSI_NAV_LINES") {
+                nav.debug_lines(&v);
+            }
             let (line, terminus, stops, trip) = navigator::duty_parts(duty.as_ref());
             if let (Some((key, name)), Some(sch)) = (trip, schedule.as_ref()) {
                 let lanes = sch.trip_route_in(nav.map_net().unwrap(), &name);
@@ -2775,6 +2779,7 @@ pub(crate) fn run_offscreen(
                 nav.set_route(&key, lanes, true, g);
             }
             let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
+            let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
             let frame = navigator::NavFrame {
                 traffic: traffic.as_ref(),
                 #[cfg(feature = "lan")]
@@ -2794,6 +2799,8 @@ pub(crate) fn run_offscreen(
                 stop_requested: navigator::stop_requested(&p.vehicle),
                 time: clock.time,
                 weekday: clock.weekday(),
+                date: clock.date_code(),
+                car_line: Some(&car_line),
                 language: &settings.language,
                 screen: (viewport[2], viewport[3]),
                 ui_scale: settings.ui_scale,

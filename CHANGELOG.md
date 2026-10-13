@@ -123,6 +123,26 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- Lines panel timetables: double-clicking a line on the city map shows its departures by direction and day
+  (Monday to Friday, Saturday, Sunday) and, for a chosen departure, when the bus is at each stop, also written
+  on the map at the stops. The times come from the map's own timetable (`TTData`), the same figures the AI
+  buses run by, and nothing is added to the package. Lines carry a kind of vehicle (bus, tram, metro, rail)
+  with a tab for each, and a form of a line can have dates (eras), so only the forms in force on the session's
+  date are shown. Select all / Clear, one click ticks both directions, trams, metro trains and trains have
+  their own icons on the map, and the manifest can name which rail vehicles are which. Documented in
+  `docs/MAP_PACKAGE.md`. Source: maintainer (Leo, `lmonteirotech`), fork lmonteirotech/openOMSI branch
+  `local/lines-timetable` (commits `5327426`, `0999942`, `d287e0c`, `161fab8`), MIT. Not validated against
+  real OMSI 2 content; only build and automated tests were run. One test of the train icon was corrected
+  (it compared the train's triangle count with the bus's, which is lower).
+  `docs/MAP_PACKAGE.md` now names `tools/mapgen` of lmonteirotech/openomsi-map-packages as the supported way
+  to build packages, and `tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package
+  (no OpenStreetMap or OMSI 2 data) for trying the Lines panel.
+- City map: the street under the pointer (any street the map's package names, also where the game has no road)
+  in a small box, and the speed limit of the street the player is on as a road sign (and the limit of heavy
+  vehicles when it is another), from a new line class of the package, "street with limits" (class 4 of
+  `docs/MAP_PACKAGE.md` section 4). Packages without that class behave as before. Source: maintainer (Leo,
+  `lmonteirotech`), fork lmonteirotech/openOMSI branch `local/lines-timetable` (commits `cae2286` and the limits
+  part of `d09111f`), MIT. Not validated against real OMSI 2 content; only build and automated tests were run.
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
   for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it
   on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`
