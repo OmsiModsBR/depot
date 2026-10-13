@@ -648,10 +648,7 @@ pub struct Frame<'a> {
     pub radio_keyed: bool,
 }
 
-pub(crate) fn data_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot"))
-}
+pub(crate) use crate::settings::data_dir;
 
 /// The status file of this game process.
 fn status_path() -> Option<PathBuf> {
@@ -1807,36 +1804,11 @@ pub fn paint_name(args: &Args, ty: &omsi_sim::VehicleType) -> String {
         .unwrap_or_default()
 }
 
-/// The box of a vehicle: centre, heading, length, width.
+
+/// The box of a vehicle: centre, heading, length, width (`traffic_link::vehicle_box`).
 pub fn footprint_of(v: &omsi_sim::VehicleInstance, fallback: [f32; 6]) -> Footprint {
-    let bb = v.ty.def.bounding_box.unwrap_or(fallback);
-    let h = v.heading.to_radians();
-    let (cx, cy) = (bb[3] as f64, bb[4] as f64);
-    let c = v.position
-        + DVec3::new(
-            cx * h.cos() + cy * h.sin(),
-            -cx * h.sin() + cy * h.cos(),
-            0.0,
-        );
-    // an articulated bus reaches back over its rear sections
-    let mut length = bb[1];
-    let mut centre = c;
-    for t in &v.trailers {
-        if let Some(tb) = t.ty.def.bounding_box {
-            let back = (t.position - v.position).truncate().length() as f32 + tb[1] * 0.5;
-            let extra = (back - (bb[1] * 0.5 - bb[4])).max(0.0);
-            length += extra;
-            centre -= DVec3::new(h.sin(), h.cos(), 0.0) * (extra as f64 * 0.5);
-        }
-    }
-    Footprint {
-        x: centre.x,
-        y: centre.y,
-        z: v.position.z,
-        heading: v.heading as f32,
-        length,
-        width: bb[0],
-    }
+    let b = crate::traffic_link::vehicle_box(v, fallback);
+    Footprint { x: b.x, y: b.y, z: b.z, heading: b.heading, length: b.length, width: b.width }
 }
 
 const BUS_BOX: [f32; 6] = [2.5, 11.5, 3.0, 0.0, 0.0, 1.5];
@@ -1871,25 +1843,6 @@ fn line_and_destination(p: &Player, duty: Option<(&str, &str)>) -> (String, Stri
         _ => String::new(),
     };
     (line, dest.trim().to_string())
-}
-
-/// What a vehicle's indicators show: 0 off, 1 left, 2 right, 3 hazard - the indicator
-/// switch where the script has one, else the lamps (as they are lit just now).
-pub(crate) fn indicator(v: &omsi_sim::VehicleInstance) -> u8 {
-    let on = |n: &str| v.var(n).unwrap_or(0.0) > 0.5;
-    if on("lights_sw_warnblinker") {
-        3
-    } else {
-        match v.var("lights_sw_blinker") {
-            Some(s) if (0.5..2.5).contains(&s) => s.round() as u8,
-            _ => match (on("lights_blinker_l"), on("lights_blinker_r")) {
-                (true, true) => 3,
-                (true, false) => 1,
-                (false, true) => 2,
-                _ => 0,
-            },
-        }
-    }
 }
 
 /// What we send about our own bus.
@@ -1949,7 +1902,7 @@ pub fn my_pose(
     } else {
         0
     };
-    let blinker = indicator(v);
+    let blinker = crate::traffic_link::indicator(v);
     let fp = footprint_of(v, BUS_BOX);
     let bb = v.ty.def.bounding_box.unwrap_or(BUS_BOX);
     let h = v.heading.to_radians();

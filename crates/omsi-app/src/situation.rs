@@ -138,7 +138,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         let (x, y) = omsi_map::tile_local_to_world(v.tile.0, v.tile.1, v.pos[0], v.pos[2]);
         let heading = situation_heading(&v.orientation);
         // (with its height: a bus saved on a bridge stays on it)
-        args.spawn = Some(format!("{x},{y},{heading},{}", v.pos[1]));
+        args.spawn = Some(spawn_arg(x, y, heading, v.pos[1]));
         if !v.paint.trim().is_empty() {
             args.hof = Some(v.paint.clone());
         }
@@ -193,7 +193,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
                 .map(|(_, c)| format!("{}", *c as i64));
             crate::cli::SituationOther {
                 bus: content_relative(&v.file.replace('\\', "/"), "vehicles"),
-                spawn: format!("{x},{y},{},{}", situation_heading(&v.orientation), v.pos[1]),
+                spawn: spawn_arg(x, y, situation_heading(&v.orientation), v.pos[1]),
                 hof: Some(v.paint.clone()).filter(|p| !p.trim().is_empty()),
                 paint,
                 vars: v.vars.iter().map(|(n, x)| (n.clone(), *x as f32)).collect(),
@@ -205,6 +205,33 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
     if !args.situation_others.is_empty() {
         log::info!("situation: {} more vehicle(s) placed", args.situation_others.len());
     }
+}
+
+/// The lowest height (m) a saved vehicle can plausibly stand at. A vehicle that fell through
+/// an unloaded tile came back from a save thousands of kilometres under the map (#33).
+const LOWEST_PLAUSIBLE_HEIGHT: f64 = -10_000.0;
+
+/// Whether a vehicle's height is one a map can have: finite and not far under the world.
+pub(crate) fn plausible_height(z: f64) -> bool {
+    z.is_finite() && z > LOWEST_PLAUSIBLE_HEIGHT
+}
+
+/// The `--spawn` text `x,y,heading[,z]` of a saved vehicle. An implausible saved height is
+/// left out, so the vehicle is put on the ground of its place.
+fn spawn_arg(x: f64, y: f64, heading: f64, z: f64) -> String {
+    if plausible_height(z) {
+        format!("{x},{y},{heading},{z}")
+    } else {
+        log::warn!("situation: a vehicle saved at height {z} is put on the ground at ({x:.1}, {y:.1})");
+        format!("{x},{y},{heading}")
+    }
+}
+
+/// The place `x,y` of a `--spawn` text that carries no height (`spawn_arg` left it out because
+/// the saved one was implausible).
+pub(crate) fn spawn_without_height(spawn: &str) -> Option<(f64, f64)> {
+    let v: Vec<f64> = spawn.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+    (v.len() == 3).then(|| (v[0], v[1]))
 }
 
 /// Prefer OMSI's saved total; old openOMSI only kept it in the script variables.
@@ -276,9 +303,12 @@ pub(crate) fn build_situation(
                     )
                 })
                 .collect();
+        // (a height under the world - the vehicle fell through an unloaded tile - is not
+        // saved: the ground of the place is, #33)
+        let z = if plausible_height(v.position.z) { v.position.z } else { world.ground_height(v.position.x, v.position.y).unwrap_or(0.0) };
         SituationVehicle {
             file: rel(&v.ty.def.path),
-            pos: [lx, v.position.z, ly],
+            pos: [lx, z, ly],
             orientation,
             tile,
             odometer_km: v.odometer_km(),
@@ -403,6 +433,20 @@ fn content_relative(path: &str, folder: &str) -> String {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    /// A vehicle that fell through the map is neither saved nor spawned at its fallen height.
+    #[test]
+    fn a_fallen_height_is_not_a_spawn_height() {
+        assert!(plausible_height(0.0) && plausible_height(-400.0) && plausible_height(2500.0));
+        for z in [-119_841.0, -2_470_000.0, f64::NAN, f64::NEG_INFINITY, f64::INFINITY] {
+            assert!(!plausible_height(z), "{z}");
+        }
+        assert_eq!(spawn_arg(1.0, 2.0, 90.0, 12.5), "1,2,90,12.5");
+        assert_eq!(spawn_arg(1.0, 2.0, 90.0, -2_470_000.0), "1,2,90");
+        assert_eq!(spawn_arg(1.0, 2.0, 90.0, f64::NAN), "1,2,90");
+        assert_eq!(spawn_without_height("1,2,90"), Some((1.0, 2.0)));
+        assert_eq!(spawn_without_height("1,2,90,12.5"), None);
+    }
 
     #[test]
     fn saved_odometer_prefers_the_header_and_recovers_legacy_variables() {

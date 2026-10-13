@@ -4,6 +4,13 @@
 
 use std::path::PathBuf;
 
+/// Where the game keeps its own files (`~/.depot`): settings beside the content, the
+/// seats, the missing content list, the LAN status files.
+pub(crate) fn data_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(".depot"))
+}
+
 /// Version of the settings file (`version=`); files without it are version 1.
 pub const SETTINGS_VERSION: u32 = 2;
 
@@ -1167,7 +1174,7 @@ pub mod bus_seats {
     use std::path::PathBuf;
 
     fn path() -> Option<PathBuf> {
-        crate::lan::data_dir().map(|d| d.join("seats.cfg"))
+        crate::settings::data_dir().map(|d| d.join("seats.cfg"))
     }
 
     fn key(bus: &str) -> String {

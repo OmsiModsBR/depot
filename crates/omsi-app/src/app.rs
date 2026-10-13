@@ -241,7 +241,7 @@ pub(crate) struct App {
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
     /// Where the bus last stood on the ground (and facing where): it is put back there when
-    /// it falls through the world (see `admin::guard_fall`).
+    /// it falls through the world (see `teleport::guard_fall`).
     pub(crate) safe_pose: Option<(glam::DVec3, f64)>,
     /// Seconds since `safe_pose` was taken.
     pub(crate) safe_age: f32,
@@ -696,6 +696,15 @@ impl App {
                 }
                 // a situation's further vehicles, each as it was saved
                 for o in self.args.situation_others.clone() {
+                    // saved under the world (it fell through an unloaded tile, #33) with its place
+                    // not loaded: its ground is unknown, and put at sea level it would fall on
+                    // through elevated terrain; left out rather than placed wrongly
+                    if let Some((x, y)) = crate::situation::spawn_without_height(&o.spawn) {
+                        if w.ground_height(x, y).is_none() {
+                            log::warn!("situation vehicle {}: saved at an implausible height and its place is not loaded; left out", o.bus);
+                            continue;
+                        }
+                    }
                     let one = Args {
                         bus: Some(o.bus.clone()),
                         spawn: Some(o.spawn.clone()),
@@ -1105,7 +1114,7 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
             text.push_str(&format!("  {t}\n"));
         }
     }
-    let Some(dir) = crate::lan::data_dir() else { return };
+    let Some(dir) = crate::settings::data_dir() else { return };
     let path = dir.join("missing_content.txt");
     let _ = std::fs::write(&path, text);
     let objects = files.iter().filter(|(_, w)| *w != "spline").count();
