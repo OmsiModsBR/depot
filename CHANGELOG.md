@@ -137,6 +137,21 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `docs/MAP_PACKAGE.md` now names `tools/mapgen` of lmonteirotech/openomsi-map-packages as the supported way
   to build packages, and `tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package
   (no OpenStreetMap or OMSI 2 data) for trying the Lines panel.
+- City map orientation: a compass on the city map shows where north lies and a click turns the map between
+  **Map** (as the package draws it), **North** up and **Heading** up. New setting `nav_orientation` (`map`,
+  `north`, `heading`; a row in the game settings) and new manifest key `north` (degrees from the map's up to real
+  north, `docs/MAP_PACKAGE.md` sections 2 and 8.3). Dragging, zoom, the street under the pointer and the vehicle
+  arrows follow the turn. Packages without `north` behave as before. Source: maintainer (Leo, `lmonteirotech`), fork
+  lmonteirotech/openOMSI branch `local/lines-timetable` (the orientation part of `b826977` and `cfb9e86`, without
+  its calibration tools and map-specific parts), MIT. Not validated against real OMSI 2 content; only build and
+  automated tests were run.
+- City map terrain view: a **Terrain** button (and the setting `nav_contours`) shows the contour lines of the terrain
+  from a map package that carries them (new line classes 5 and 6 of `docs/MAP_PACKAGE.md` section 4), the height
+  written on the index lines, and the height of the street the player is on and of the street under the pointer.
+  The view shows only water, rivers, rails, the game's roads and the contour lines. New manifest keys
+  `terrain_offset` and `contour` (colour). Packages without contour lines behave as before. Source: maintainer
+  (Leo, `lmonteirotech`), fork lmonteirotech/openOMSI branch `local/lines-timetable` (the contour part of
+  `d09111f` and `ae77b95`), MIT. Not validated against real OMSI 2 content; only build and automated tests were run.
 - City map: the street under the pointer (any street the map's package names, also where the game has no road)
   in a small box, and the speed limit of the street the player is on as a road sign (and the limit of heavy
   vehicles when it is another), from a new line class of the package, "street with limits" (class 4 of
