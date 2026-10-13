@@ -95,7 +95,7 @@ impl GpuContext {
             rt_error,
             out_of_memory,
             device_lost,
-            encoding_pool: if omsi_cfg::env::var_os("OMSI_NO_RENDER_POOL").is_some() {
+            encoding_pool: if omsi_cfg::flags::NO_RENDER_POOL.is_set() {
                 None
             } else {
                 let workers = std::thread::available_parallelism()

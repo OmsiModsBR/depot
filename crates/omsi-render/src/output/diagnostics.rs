@@ -40,7 +40,7 @@ impl GpuTimers {
             // before the pass in front of it has finished its fragments: measured from their
             // own first stamps the post passes of the enhanced path overlapped and added up
             // to 25 ms of a 10 ms frame.
-            if omsi_cfg::env::var_os("OMSI_GPU_TIMERS_RAW").is_some() {
+            if omsi_cfg::flags::GPU_TIMERS_RAW.is_set() {
                 log::info!(
                     "gpu stamps: {:?}",
                     t.pending
@@ -79,7 +79,7 @@ impl GpuTimers {
 
 impl GpuTimers {
     pub(crate) fn new(device: &wgpu::Device) -> Option<GpuTimers> {
-        if omsi_cfg::env::var_os("OMSI_GPU_TIMERS").is_none()
+        if !omsi_cfg::flags::GPU_TIMERS.is_set()
             || !device.features().contains(wgpu::Features::TIMESTAMP_QUERY)
         {
             return None;
@@ -162,7 +162,7 @@ impl Diagnostics {
         Self {
             exposure_log: ExposureLog::new(device),
             gpu_timers,
-            profiling: omsi_cfg::env::var_os("OMSI_PROFILE").is_some(),
+            profiling: omsi_cfg::flags::PROFILE.is_set(),
             draw_audit_at: std::time::Instant::now(),
         }
     }

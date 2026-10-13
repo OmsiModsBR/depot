@@ -48,8 +48,8 @@ impl Renderer {
         // casters of each cascade, the depth prepass and the main pass. The list is built
         // and uploaded before any pass is encoded.
         clock.stage(self, "setup", "mirror.setup");
-        let debug_draws = omsi_cfg::env::var_os("OMSI_DEBUG_DRAWS").is_some();
-        let debug_cull = omsi_cfg::env::var_os("OMSI_DEBUG_CULL").is_some();
+        let debug_draws = omsi_cfg::flags::DEBUG_DRAWS.is_set();
+        let debug_cull = omsi_cfg::flags::DEBUG_CULL.is_set();
         let mut list: Vec<u32> = Vec::new();
         let mut items: Vec<DrawItem> = Vec::new();
         // near, far, close
@@ -93,9 +93,9 @@ impl Renderer {
             (SHADOW_RANGE_FAR, light_view_proj_far, 6.0),
             (SHADOW_RANGE_CLOSE, light_view_proj_close, 0.1),
         ];
-        let dbg_shadow = omsi_cfg::env::var_os("OMSI_DEBUG_SHADOW").is_some();
-        let dbg_r: f32 = omsi_cfg::env::var("OMSI_DEBUG_SHADOW")
-            .ok()
+        let dbg_shadow = omsi_cfg::flags::DEBUG_SHADOW.is_set();
+        let dbg_r: f32 = omsi_cfg::flags::DEBUG_SHADOW
+            .text()
             .and_then(|v| v.trim().parse().ok())
             .unwrap_or(3.0);
         let casters = |span: std::ops::Range<usize>| -> [Vec<DrawItem>; 4] {
@@ -303,7 +303,7 @@ impl Renderer {
         }
         clock.stage(self, "shadow items", "mirror.shadow items");
         let visible = self.visibility(scene, f, clock, debug_cull);
-        let only_surfaces = omsi_cfg::env::var_os("OMSI_ONLY_SURFACES").is_some();
+        let only_surfaces = omsi_cfg::flags::ONLY_SURFACES.is_set();
         let visible: Vec<(usize, f32, bool)> = if only_surfaces {
             visible
                 .into_iter()
@@ -687,7 +687,7 @@ impl Renderer {
         // tested, 2 blended, 3 blended without depth writes, 4 surface depth, 5 terrain
         // paint; 3 includes its specialized terrain variant) - with
         // OMSI_GPU_TIMERS_RAW, what each kind costs the GPU
-        if let Ok(skip) = omsi_cfg::env::var("OMSI_SKIP_PIPE") {
+        if let Some(skip) = omsi_cfg::flags::SKIP_PIPE.text() {
             let skip: Vec<u8> = skip
                 .split(',')
                 .filter_map(|x| x.trim().parse().ok())
@@ -854,7 +854,7 @@ impl Renderer {
         } else {
             camera.far
         };
-        if let Some(p) = omsi_cfg::env::var("OMSI_DEBUG_CULL").ok().and_then(|v| {
+        if let Some(p) = omsi_cfg::flags::DEBUG_CULL.text().and_then(|v| {
             let f: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
             (f.len() == 3).then(|| (DVec3::new(f[0], f[1], 0.0), f[2]))
         }) {
@@ -1079,7 +1079,7 @@ impl Renderer {
         }
         // OMSI_DEBUG_FLICKER: a near instance in view in two frames running that is drawn in
         // one and not in the other - the objects blinking in and out as the view moves
-        if with_overlays && omsi_cfg::env::var_os("OMSI_DEBUG_FLICKER").is_some() {
+        if with_overlays && omsi_cfg::flags::DEBUG_FLICKER.is_set() {
             let drawn: std::collections::HashSet<usize> = visible.iter().map(|v| v.0).collect();
             let mut prev = self.culling.flicker.borrow_mut();
             let mut now: HashMap<usize, bool> = HashMap::new();

@@ -118,10 +118,10 @@ pub(crate) fn encode_main_pass(
         && !single
         && prepass_on
         && needs_msaa_prepass
-        && omsi_cfg::env::var_os("OMSI_NO_MSAA_PREPASS").is_none();
+        && !omsi_cfg::flags::NO_MSAA_PREPASS.is_set();
     let parts = if !cfg!(any(target_os = "macos", target_os = "ios"))
         && main_bundles.len() >= 2
-        && omsi_cfg::env::var_os("OMSI_NO_MAIN_SPLIT").is_none()
+        && !omsi_cfg::flags::NO_MAIN_SPLIT.is_set()
     {
         main_bundles.len().min(2)
     } else {
@@ -227,7 +227,7 @@ pub(crate) fn encode_main_pass(
                     && !enhanced
                     && !with_overlays
                     && ctx.sky.sky_state.is_some()
-                    && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none() =>
+                    && !omsi_cfg::flags::NO_ENHANCED.is_set() =>
             {
                 p
             }
@@ -469,7 +469,7 @@ pub(crate) fn encode_main_pass(
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
         }
         // smoke, blended over the scene
-        if scene.smoke_count > 0 && omsi_cfg::env::var_os("OMSI_NO_SMOKE").is_none() {
+        if scene.smoke_count > 0 && !omsi_cfg::flags::NO_SMOKE.is_set() {
             if let Some(sb) = &scene.smoke_buf {
                 pass.set_pipeline(&pp.smoke_pipeline);
                 pass.set_bind_group(1, &ctx.sprites.smoke_bind_group, &[]);
@@ -479,9 +479,11 @@ pub(crate) fn encode_main_pass(
         }
         // the snowfall, every flake worked out on the GPU (snow.wgsl), over the world and
         // under the cab of the vehicle the camera is in
-        if let Some(snow) = pp.snow_pipeline.as_ref().filter(|_| {
-            lighting.snowfall > 0.01 && omsi_cfg::env::var_os("OMSI_NO_SNOWFALL").is_none()
-        }) {
+        if let Some(snow) = pp
+            .snow_pipeline
+            .as_ref()
+            .filter(|_| lighting.snowfall > 0.01 && !omsi_cfg::flags::NO_SNOWFALL.is_set())
+        {
             let (counts, mean) = snowfall_flakes(lighting.snowfall);
             let u = SnowUniform {
                 wind: lighting.wind.extend(ctx.seconds % 20000.0).to_array(),
@@ -496,8 +498,7 @@ pub(crate) fn encode_main_pass(
         }
         // light coronas, additive: the world's, then the vehicle the camera is in -
         // drawn over them as Omsi.exe draws it last (see `cab_items`) - then its own
-        let coronas_on =
-            scene.corona_count > 0 && omsi_cfg::env::var_os("OMSI_NO_CORONAS").is_none();
+        let coronas_on = scene.corona_count > 0 && !omsi_cfg::flags::NO_CORONAS.is_set();
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
