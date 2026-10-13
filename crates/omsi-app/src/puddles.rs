@@ -259,7 +259,7 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
 /// The wetness the renderer draws the puddles with: the roads' own (`OMSI_WETNESS` in its
 /// place, as the picture takes it), none under snow (a snowy road has no standing water).
 pub fn road_wetness(wetness: f32, snow: bool) -> f32 {
-    let w = omsi_cfg::env::var("OMSI_WETNESS").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(wetness);
+    let w = omsi_cfg::flags::WETNESS.number::<f32>().unwrap_or(wetness);
     if snow {
         0.0
     } else {
@@ -432,7 +432,7 @@ impl Spray {
         }
         // a tyre that left (a vehicle gone, a wheel off the road) owes nothing
         self.tyres.retain(|_, s| s.seen);
-        if omsi_cfg::env::var_os("OMSI_DEBUG_RAIN").is_some() && (self.tyres_wet > 0 || !self.puffs.is_empty()) {
+        if omsi_cfg::flags::DEBUG_RAIN.is_set() && (self.tyres_wet > 0 || !self.puffs.is_empty()) {
             log::info!("spray: {} of {} tyres throwing water, {} in a puddle, {} puffs", self.tyres_wet, tyres.len(), self.tyres_in_puddle, self.puffs.len());
         }
     }

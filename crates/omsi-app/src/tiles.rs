@@ -364,7 +364,7 @@ impl MapIndex {
                 checked += 1;
                 let ours = ((acc - d) / interval + 1e-6).ceil().max(0.0) as usize;
                 agree += (ours == *first) as usize;
-                if ours != *first && omsi_cfg::env::var_os("OMSI_DEBUG_REPEATERS").is_some() {
+                if ours != *first && omsi_cfg::flags::DEBUG_REPEATERS.is_set() {
                     log::info!("repeater {:?} on spline {spline}: the map says object {first}, the chain {ours} (chain {acc:.2} m, start {d:.2} m, interval {interval} m: the map's first at {:.2} m, ours at {:.2} m)", key, d + *first as f64 * interval - acc, d + ours as f64 * interval - acc);
                 }
             }
@@ -1123,18 +1123,18 @@ impl Streamer {
             self.world.compact_slots(renderer, scene);
             crate::release_free_memory();
         }
-        if self.last_summary.elapsed().as_secs_f32() >= 10.0 && omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if self.last_summary.elapsed().as_secs_f32() >= 10.0 && omsi_cfg::flags::PROFILE.is_set() {
             self.last_summary = std::time::Instant::now();
             let at: Vec<String> = centers.iter().map(|c| format!("({:.0}, {:.0})", c.x, c.y)).collect();
             log::info!("tile streaming at {}: {} loaded / {} unloaded so far; {}", at.join(" "), self.loaded_total, self.unloaded_total, self.world.gpu_summary(scene));
-            if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+            if omsi_cfg::flags::PROFILE.is_set() {
                 log::info!("  {}", self.world.cpu_summary());
             }
         }
         let total = t0.elapsed();
         if self.initial.is_none() && total.as_secs_f64() * 1000.0 > 16.0 {
             self.slow_frames += 1;
-            if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+            if omsi_cfg::flags::PROFILE.is_set() {
                 log::info!("tile streaming: {:.0} ms this frame ({uploaded} uploaded in {:.0} ms, {unloaded} unloaded in {:.0} ms, lists {:.0} ms)", total.as_secs_f64() * 1000.0, t_upload.as_secs_f64() * 1000.0, (t_unload - t_upload).as_secs_f64() * 1000.0, (total - t_unload).as_secs_f64() * 1000.0);
             }
         }

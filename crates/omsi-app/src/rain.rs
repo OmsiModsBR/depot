@@ -139,7 +139,7 @@ impl Rain {
                 ..Default::default()
             });
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_RAIN").is_some() {
+        if omsi_cfg::flags::DEBUG_RAIN.is_set() {
             log::info!(
                 "rain: {} particles, {excluded} inside the buses (boxes {:?})",
                 self.particles.len(),
