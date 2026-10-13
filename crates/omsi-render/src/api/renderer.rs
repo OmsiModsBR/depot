@@ -6,6 +6,10 @@ use crate::gpu::{
     vulkan_vram_mb, ArrayPath, GpuArray, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, ARRAY_PATH,
     BASIC_PIPELINES, DEPTH_FORMAT, GL_BACKEND, MASK_FORMAT, MSAA,
 };
+use crate::gpu::{
+    fake_poll_loss, gl_backend, guarded_poll, let_go, lost_why, read_buffer_with, wait_poll,
+    wait_with, GpuWaitError,
+};
 use crate::lighting::Lighting;
 use crate::output::Output;
 use crate::renderer::{scene_scale_for, RenderOptions, Renderer};
@@ -536,11 +540,43 @@ impl Renderer {
     }
 
     pub fn device_lost(&self) -> Option<String> {
-        self.gpu
-            .device_lost
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        lost_why(&self.gpu.device_lost)
+    }
+
+    /// Wait until the GPU has done `submission` (None: everything submitted so far). A lost
+    /// device is not waited for, and one lost during the wait is an error, not wgpu's panic
+    /// (#48); either way `device_lost` then says why. (`OMSI_FAKE_GPU_ERROR=lost-poll`: lost
+    /// here three seconds in.)
+    pub fn wait_gpu(&self, submission: Option<wgpu::SubmissionIndex>) -> Result<(), GpuWaitError> {
+        let fake = fake_poll_loss(self.started);
+        wait_with(gl_backend(), |timeout| {
+            guarded_poll(Some(&self.gpu.device_lost), fake, || {
+                self.device.poll(wait_poll(submission.clone(), timeout))
+            })
+        })
+    }
+
+    /// Let the device run what has finished, without waiting; guarded as `wait_gpu`.
+    pub fn poll_gpu(&self) -> Result<(), GpuWaitError> {
+        let fake = fake_poll_loss(self.started);
+        guarded_poll(Some(&self.gpu.device_lost), fake, || {
+            self.device.poll(wgpu::PollType::Poll)
+        })
+        .map(|_| ())
+    }
+
+    /// Read `buf` (made with `MAP_READ`, its copy already submitted) back whole; a mapping
+    /// refused or a device lost on the way is an error, not wgpu's panic.
+    pub fn read_buffer(&self, buf: &wgpu::Buffer) -> Result<Vec<u8>, GpuWaitError> {
+        read_buffer_with(buf, || self.wait_gpu(None))
+    }
+
+    /// Let the renderer go at the end. Letting the device's queue go waits for the GPU, and
+    /// wgpu panics when a card that hangs does not answer in time: the game had ended in
+    /// order, and that panic still went to the log and the launcher as its crash. Whether it
+    /// went in order.
+    pub fn close(self) -> bool {
+        let_go(self)
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {
@@ -1249,5 +1285,73 @@ impl Renderer {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod lost_device_tests {
+    use super::*;
+
+    fn noop_renderer() -> Renderer {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        pollster::block_on(Renderer::new_with(
+            &instance,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("noop renderer")
+    }
+
+    fn readback(r: &Renderer) -> wgpu::Buffer {
+        let buf = r.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 16,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        r.queue.write_buffer(&buf, 0, &[7; 16]);
+        r.queue.submit([]);
+        buf
+    }
+
+    #[test]
+    fn a_working_device_is_waited_for_polled_and_read_back() {
+        let r = noop_renderer();
+        assert_eq!(r.wait_gpu(None), Ok(()));
+        assert_eq!(r.poll_gpu(), Ok(()));
+        let buf = readback(&r);
+        assert_eq!(r.read_buffer(&buf).map(|d| d.len()), Ok(16));
+        assert_eq!(r.device_lost(), None);
+        assert!(r.close(), "a working device closes in order");
+    }
+
+    #[test]
+    fn a_lost_device_is_neither_waited_for_nor_polled_nor_read() {
+        let r = noop_renderer();
+        let buf = readback(&r);
+        crate::gpu::mark_lost(&r.gpu.device_lost, "Unknown: test");
+        assert_eq!(r.device_lost().as_deref(), Some("Unknown: test"));
+        assert_eq!(r.wait_gpu(None), Err(GpuWaitError::Lost));
+        assert_eq!(r.poll_gpu(), Err(GpuWaitError::Lost));
+        assert_eq!(r.read_buffer(&buf), Err(GpuWaitError::Lost));
+        // (and letting it go after the loss goes in order too)
+        assert!(r.close());
+    }
+
+    #[test]
+    fn a_device_destroyed_on_purpose_is_not_lost() {
+        let r = noop_renderer();
+        // (`destroy` is the device let go of on purpose: no loss)
+        r.device.destroy();
+        let _ = r.device.poll(wgpu::PollType::Poll);
+        assert_eq!(r.device_lost(), None);
     }
 }

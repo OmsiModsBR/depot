@@ -228,11 +228,22 @@ pub fn run() -> Result<()> {
     });
     let mut app = app;
     let r = event_loop.run_app(&mut app);
+    // the game's GPU resources go with it: letting the device's queue go waits for the GPU,
+    // and wgpu panics when a card that hangs does not answer in time - the game had ended in
+    // order, and that panic was its crash in the report (#48)
+    if !close_app(app) {
+        log::warn!("the graphics device did not close in order (the game had ended already)");
+    }
     // the host's mods of this session go with it
     #[cfg(feature = "lan")]
     lan_mods::clean_up();
     r?;
     Ok(())
+}
+
+/// Let `app` go, a panic in letting it go caught (see `run`). Whether it went in order.
+pub(crate) fn close_app<T>(app: T) -> bool {
+    omsi_render::catch(move || drop(app)).is_some()
 }
 
 /// The showroom is drawn the way the game will be.
@@ -694,6 +705,19 @@ mod tests {
     use super::*;
     use glam::DVec3;
     use omsi_render::Camera;
+
+    #[test]
+    fn an_app_whose_letting_go_panics_closes_without_a_crash() {
+        struct HungQueue;
+        impl Drop for HungQueue {
+            fn drop(&mut self) {
+                panic!("We timed out while waiting on the last successful submission to complete!");
+            }
+        }
+        assert!(!super::close_app(HungQueue));
+        assert!(!omsi_render::catching());
+        assert!(super::close_app(vec![1, 2, 3]));
+    }
 
     #[test]
     fn streaming_starts_around_the_bus() {

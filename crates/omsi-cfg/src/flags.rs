@@ -701,7 +701,7 @@ flags! {
     GPU_TIMERS_RAW = "OMSI_GPU_TIMERS_RAW", Switch, Diagnostic, "omsi-render::output::diagnostics";
     /// Start the animation clock this many seconds later, for offscreen stills.
     RENDER_CLOCK = "OMSI_RENDER_CLOCK", Number, Test, "omsi-render::renderer::build";
-    /// Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`).
+    /// Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`, `lost-poll`, `oom`).
     FAKE_GPU_ERROR = "OMSI_FAKE_GPU_ERROR", Text, Test, "omsi-render";
 
     // --- omsi-app: LAN, the launcher and plugins

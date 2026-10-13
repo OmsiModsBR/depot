@@ -231,6 +231,9 @@ impl Renderer {
             options,
         );
         rebuilt.assets.mesh_pages = mesh_pages;
+        // (what the old device context noted goes on: an "out of memory" that switched the
+        // multisampling off still has to cut the textures, #48)
+        rebuilt.gpu.inherit(&self.gpu);
         *self = rebuilt;
         scene.dirty = true;
         scene.model_buf = None;
@@ -273,6 +276,9 @@ impl Renderer {
             options,
         );
         rebuilt.assets.mesh_pages = mesh_pages;
+        // (what the old device context noted goes on: an "out of memory" that switched the
+        // multisampling off still has to cut the textures, #48)
+        rebuilt.gpu.inherit(&self.gpu);
         *self = rebuilt;
         scene.dirty = true;
         scene.model_buf = None;

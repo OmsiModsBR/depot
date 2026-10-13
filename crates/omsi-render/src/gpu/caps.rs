@@ -2,6 +2,7 @@
 //! and its limits.
 
 use super::arrays::{array_path, ArrayPath};
+use super::lost::{guarded_poll, wait_poll, wait_with, GpuWaitError};
 
 /// Texture memory (MB) the adapter is taken to have room for (0 = no adapter yet), see
 /// `Renderer::new`.
@@ -42,27 +43,22 @@ pub(crate) fn sixteen_texture_units() -> bool {
 /// a second with a panic - "Could not lock adapter context. This is most-likely a deadlock."
 /// (wgpu-hal's WGL lock; #843: a slow chip took longer than that for a frame). There the
 /// wait is made of short ones, and the context is free between them.
+///
+/// A device lost on the way gives `GpuWaitError::Lost` instead of wgpu's panic (see `lost`).
 pub fn wait_gpu(
     device: &wgpu::Device,
     submission: Option<wgpu::SubmissionIndex>,
-) -> Result<(), wgpu::PollError> {
-    if !gl_backend() {
-        return device
-            .poll(wgpu::PollType::Wait {
-                submission_index: submission,
-                timeout: None,
-            })
-            .map(|_| ());
-    }
-    loop {
-        match device.poll(wgpu::PollType::Wait {
-            submission_index: submission.clone(),
-            timeout: Some(GL_WAIT_SLICE),
-        }) {
-            Err(wgpu::PollError::Timeout) => std::thread::yield_now(),
-            r => return r.map(|_| ()),
-        }
-    }
+) -> Result<(), GpuWaitError> {
+    wait_with(gl_backend(), |timeout| {
+        guarded_poll(None, false, || {
+            device.poll(wait_poll(submission.clone(), timeout))
+        })
+    })
+}
+
+/// Let the device run what has finished, without waiting (a lost device: an error).
+pub fn poll_gpu(device: &wgpu::Device) -> Result<(), GpuWaitError> {
+    guarded_poll(None, false, || device.poll(wgpu::PollType::Poll)).map(|_| ())
 }
 
 /// The longest a single wait for the GPU holds the GL context (see [`wait_gpu`]).

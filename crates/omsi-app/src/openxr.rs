@@ -906,10 +906,8 @@ impl Vr {
         // The runtime may sample this image immediately after release. Wait for
         // wgpu's submissions until explicit D3D12 fence handoff is implemented.
         let gpu_wait_start = Instant::now();
-        renderer.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })?;
+        // (a device lost meanwhile is an error, not wgpu's panic: the frame sees it lost)
+        renderer.wait_gpu(None)?;
         let gpu_wait_time = gpu_wait_start.elapsed();
         self.prepared[index] = true;
         drop(first_use);

@@ -659,7 +659,10 @@ impl Launcher {
         if let Some(h) = self.gpu_rest_drop.take() {
             let _ = h.join();
         }
-        self.renderer = None;
+        // (the lost device let go of without a panic of wgpu's reaching the launcher)
+        if let Some(r) = self.renderer.take() {
+            r.close();
+        }
         self.make_surface();
         true
     }
@@ -970,9 +973,8 @@ impl Launcher {
         let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
         enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
         r.queue.submit([enc.finish()]);
-        buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        r.device.poll(wgpu::PollType::wait_indefinitely()).ok();
-        let data = buf.slice(..).get_mapped_range();
+        // (a device lost on the way: no picture, instead of wgpu's panic in reading it back)
+        let data = r.read_buffer(&buf).ok()?;
         let bgra = matches!(r.format(), wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm);
         let mut img = image::RgbaImage::new(w, h);
         for y in 0..h {

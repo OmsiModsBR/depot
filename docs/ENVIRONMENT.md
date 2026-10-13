@@ -294,7 +294,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_CLOUDFLARED_OWN` | switch | `omsi-net::tunnel` |  | Only the game's own `cloudflared`, to test its download. |
 | `OMSI_DRIVE_PROFILE` | text | `omsi-app::offscreen` |  | Offscreen: hold the pedals and the wheel from each time on (`t throttle brake [steer]/ …`). |
 | `OMSI_DRIVE_V0` | number | `omsi-app::offscreen` |  | Offscreen: the bus's speed (km/h) on the first frame. |
-| `OMSI_FAKE_GPU_ERROR` | text | `omsi-render` |  | Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`). |
+| `OMSI_FAKE_GPU_ERROR` | text | `omsi-render` |  | Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`, `lost-poll`, `oom`). |
 | `OMSI_FLEET_AHEAD` | number | `omsi-app::schedule` |  | How far ahead (minutes, 25 by default) the fleet is read. |
 | `OMSI_FLEET_IDLE` | number | `omsi-app::schedule` |  | How long (s) a vehicle set nobody uses is kept, in place of the default. |
 | `OMSI_HIDE_WINDOW` | text | `omsi-app::app_events` |  | Treat the window as hidden between these seconds (`from,to`). |
