@@ -152,8 +152,9 @@ flags! {
     DEBUG_UNLINKED = "OMSI_DEBUG_UNLINKED", Switch, Diagnostic, "omsi-sim::traffic";
     /// Log what the scripts write into the text textures.
     DEBUG_TEXT = "OMSI_DEBUG_TEXT", Switch, Diagnostic, "omsi-sim::host";
-    /// Log the bus's impacts and the obstacles it hits.
-    DEBUG_PHYSICS = "OMSI_DEBUG_PHYSICS", Switch, Diagnostic, "omsi-sim::vehicle";
+    /// Log the bus's impacts and the obstacles it hits (a number: also the bus's pose every
+    /// this many seconds).
+    DEBUG_PHYSICS = "OMSI_DEBUG_PHYSICS", Number, Diagnostic, "omsi-sim::vehicle";
     /// Log the animation of the meshes whose name contains this text.
     DEBUG_ANIM = "OMSI_DEBUG_ANIM", Text, Diagnostic, "omsi-sim::vehicle";
     /// Log the IBIS's search for a way to type a duty in.
@@ -421,6 +422,164 @@ flags! {
     /// Log the petrol stations and how far the bus is from them.
     DEBUG_SERVICES = "OMSI_DEBUG_SERVICES", Switch, Diagnostic, "omsi-app::services";
 
+    // --- omsi-app: settings of the window, the graphics and the controls
+
+    /// The graphics interface to ask first: `vulkan`, `dx12` or `gl` (set by the game itself
+    /// when it starts again after a lost device, and on phones without a good Vulkan).
+    BACKEND = "OMSI_BACKEND", Text, User, "omsi-app::startup", env_txt;
+    /// How many times in a row the game started again after a lost graphics device (set by
+    /// the game itself; any number starts it with the safe graphics settings).
+    SAFE_GPU = "OMSI_SAFE_GPU", Number, User, "omsi-app::settings", env_txt;
+    /// The renderer for one run: `vanilla`, `vanilla_plus` or `enhanced`.
+    GRAPHICS = "OMSI_GRAPHICS", Text, User, "omsi-app::settings", env_txt;
+    /// The enhanced renderer, whatever the setting says.
+    ENHANCED = "OMSI_ENHANCED", Switch, User, "omsi-app";
+    /// The enhanced renderer with its extras (`--enhanced-plus`).
+    ENHANCED_PLUS = "OMSI_ENHANCED_PLUS", Switch, User, "omsi-app";
+    /// No clouds.
+    NO_CLOUDS = "OMSI_NO_CLOUDS", Switch, User, "omsi-app", env_txt;
+    /// The frame rate limit, in place of the setting.
+    MAX_FPS = "OMSI_MAX_FPS", Number, User, "omsi-app::app_events", env_txt;
+    /// The on-screen controls of a phone on a computer too.
+    TOUCH = "OMSI_TOUCH", Switch, User, "omsi-app::platform", env_txt;
+    /// The phone's layout on a computer (the rail kept clear of a camera hole).
+    MOBILE = "OMSI_MOBILE", Switch, User, "omsi-app::ui", env_txt;
+    /// Repeat a session: the scripts' `random` is seeded with this number.
+    SEED = "OMSI_SEED", Number, User, "omsi-app", env_txt;
+    /// VR through OpenXR, whatever the setting says (Windows; the old switch, kept for
+    /// existing VR runs).
+    OPENXR = "OMSI_OPENXR", Switch, User, "omsi-app::settings";
+    /// The size of the VR picture against the headset's recommendation.
+    OPENXR_SCALE = "OMSI_OPENXR_SCALE", Number, User, "omsi-app::openxr";
+    /// How many mirror pictures a second are drawn in VR (-1: every mirror each frame).
+    OPENXR_MIRROR_RATE = "OMSI_OPENXR_MIRROR_RATE", Number, User, "omsi-app::openxr";
+    /// `0`: TrackIR read through its own interface left off.
+    TRACKIR_NATIVE = "OMSI_TRACKIR_NATIVE", Text, User, "omsi-app::headtrack";
+    /// `0` or `1`: the trees move in the wind or not, whatever the setting says.
+    WINDY_TREES = "OMSI_WINDY_TREES", Text, Diagnostic, "omsi-app::settings";
+    /// Another program opened as the launcher.
+    LAUNCHER = "OMSI_LAUNCHER", Path, Path, "omsi-app::launcher_link";
+    /// No restart of the game with the allocator settings it wants (macOS).
+    KEEP_ALLOCATOR = "OMSI_KEEP_ALLOCATOR", Switch, Diagnostic, "omsi-app::startup";
+
+    // --- omsi-app: diagnostics of the window, the frame and the offscreen run
+
+    /// A test window that does not take the keyboard, and no dialog on a fatal error.
+    BACKGROUND = "OMSI_BACKGROUND", Switch, Test, "omsi-app";
+    /// Drive the window's handlers (mouse, keys, `look`, `turn`, `touch`) from this script
+    /// (`t=3 move x,y; t=3.2 press; t=4 key F3; …`).
+    INPUT = "OMSI_INPUT", Text, Test, "omsi-app::input_script";
+    /// Treat the window as hidden between these seconds (`from,to`).
+    HIDE_WINDOW = "OMSI_HIDE_WINDOW", Text, Test, "omsi-app::app_events";
+    /// Draw even while the window is hidden.
+    RENDER_OCCLUDED = "OMSI_RENDER_OCCLUDED", Switch, Test, "omsi-app::app_events";
+    /// The render scale stays as set, not changed with the frame time.
+    FIXED_SCALE = "OMSI_FIXED_SCALE", Switch, Diagnostic, "omsi-app::app_events";
+    /// Wait for the GPU in each frame, so that its time shows as a stage of its own.
+    PROFILE_GPU = "OMSI_PROFILE_GPU", Switch, Diagnostic, "omsi-app::app_events";
+    /// Log every change of these variables of the player's bus (`a,b`).
+    WATCH_VARS = "OMSI_WATCH_VARS", Text, Diagnostic, "omsi-app::app_events";
+    /// Write the mouse steering, frame by frame, to this CSV file.
+    TRACE_STEER = "OMSI_TRACE_STEER", Path, Diagnostic, "omsi-app::app_events";
+    /// No spray from the tyres on wet roads.
+    NO_SPRAY = "OMSI_NO_SPRAY", Switch, Diagnostic, "omsi-app::app_events";
+    /// Log where the mirrors' cameras are.
+    DEBUG_MIRRORS = "OMSI_DEBUG_MIRRORS", Switch, Diagnostic, "omsi-app::camera_util";
+    /// The mirrors drawn with the window's light in the enhanced renderer, not darkened at
+    /// dusk.
+    MIRROR_ENHANCED = "OMSI_MIRROR_ENHANCED", Switch, Diagnostic, "omsi-app::camera_util";
+    /// Log the camera's arm (1, or a higher number for more).
+    DEBUG_CAMERA = "OMSI_DEBUG_CAMERA", Number, Diagnostic, "omsi-app::camera_arm";
+    /// Offscreen: follow the vehicle with this camera (`dx,dy,dz,yaw,pitch[,1]`).
+    FOLLOW_CAM = "OMSI_FOLLOW_CAM", Text, Diagnostic, "omsi-app::camera_util";
+    /// Offscreen: how far (m, 18 by default) the outside camera sits from the vehicle.
+    ORBIT_DIST = "OMSI_ORBIT_DIST", Number, Diagnostic, "omsi-app::camera_util";
+    /// Offscreen: the camera at this place in the player's vehicle.
+    CAM_VEHICLE = "OMSI_CAM_VEHICLE", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: `--view pax` from the vehicle's passenger camera of this number.
+    PAX_CAM = "OMSI_PAX_CAM", Number, Diagnostic, "omsi-app::offscreen";
+    /// Write the offscreen run's state, step by step, to this file (the B0 trace).
+    STATE_TRACE = "OMSI_STATE_TRACE", Path, Test, "omsi-app::state_trace";
+    /// Offscreen: hold the pedals and the wheel from each time on (`t throttle brake
+    /// [steer]/ …`).
+    DRIVE_PROFILE = "OMSI_DRIVE_PROFILE", Text, Test, "omsi-app::offscreen";
+    /// Offscreen: the bus's speed (km/h) on the first frame.
+    DRIVE_V0 = "OMSI_DRIVE_V0", Number, Test, "omsi-app::offscreen";
+    /// Offscreen: drive the bus at this speed (km/h) along the straightest lanes.
+    AUTOPILOT = "OMSI_AUTOPILOT", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the rear section held at this angle (degrees) to the front one.
+    JOINT_ANGLE = "OMSI_JOINT_ANGLE", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log these variables of the player's bus at the end (`a,b`).
+    DEBUG_VARS = "OMSI_DEBUG_VARS", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log `OMSI_DEBUG_VARS` every this many seconds of the drive.
+    DEBUG_VARS_EVERY = "OMSI_DEBUG_VARS_EVERY", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log these variables every half second (`a,b,$c`; `$` reads a string).
+    TRACE_VARS = "OMSI_TRACE_VARS", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: write each wheel's suspension, frame by frame, to this CSV file.
+    SUSP_TRACE = "OMSI_SUSP_TRACE", Path, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log, once a second, how deep a drawn tyre goes into the road.
+    WHEEL_TRACE = "OMSI_WHEEL_TRACE", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log where the bus came to rest on the ground after it was placed.
+    DEBUG_REST = "OMSI_DEBUG_REST", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: write the player vehicle's script textures into this folder.
+    DUMP_SCRIPTTEX = "OMSI_DUMP_SCRIPTTEX", Path, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: aim at every clickable part of the cockpit and say which one is hit.
+    CLICK_ALL = "OMSI_CLICK_ALL", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: fire every trigger of the player's bus and list the ones that change
+    /// nothing.
+    TRIGGER_ALL = "OMSI_TRIGGER_ALL", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log the variables each trigger changes.
+    DEBUG_TRIGGERS = "OMSI_DEBUG_TRIGGERS", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the same moment also drawn with the blended draws in the old order.
+    BLEND_AB = "OMSI_BLEND_AB", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: pictures of the cars placed inside the camera's view.
+    POPULATION_SHOTS = "OMSI_POPULATION_SHOTS", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: check that there is ground where a player is put down.
+    CHECK_ENTRIES = "OMSI_CHECK_ENTRIES", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: drive every lane as a bus and list the objects that would stop it.
+    CHECK_OBSTACLES = "OMSI_CHECK_OBSTACLES", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: list the driving lanes passing near this point (`x,y,r`).
+    LANES_NEAR = "OMSI_LANES_NEAR", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: probe the ground along every lane's wheel tracks as a tyre does.
+    CHECK_WHEELS = "OMSI_CHECK_WHEELS", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: write the ground under the lanes near the start to this file.
+    GROUND_SAMPLE = "OMSI_GROUND_SAMPLE", Path, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the wheels' ground on a grid around a point (`x,y,half,step`).
+    PROBE_GRID = "OMSI_PROBE_GRID", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the terrain and road heights along a line (`x0,y0,x1,y1[,n]`).
+    PROBE = "OMSI_PROBE", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: photograph the road network from above and say where grass shows.
+    ROAD_PHOTO = "OMSI_ROAD_PHOTO", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: how many points (400 by default) `OMSI_ROAD_PHOTO` photographs.
+    ROAD_PHOTO_N = "OMSI_ROAD_PHOTO_N", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: how far to either side of the lane `OMSI_ROAD_PHOTO` looks.
+    ROAD_PHOTO_SIDE = "OMSI_ROAD_PHOTO_SIDE", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: `OMSI_ROAD_PHOTO` from a driver's eye this far back along the lane.
+    ROAD_PHOTO_SLANT = "OMSI_ROAD_PHOTO_SLANT", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: also photograph each place from above down to 25 m under the lane.
+    HOLE_PHOTO = "OMSI_HOLE_PHOTO", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: draw the final picture this many more times and log the median times.
+    BENCH = "OMSI_BENCH", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: log each frame of `OMSI_BENCH`.
+    BENCH_FRAMES = "OMSI_BENCH_FRAMES", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: draw this many frames before the picture.
+    WARM_FRAMES = "OMSI_WARM_FRAMES", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: meet the texture budget from this place first (`x,y[,MB]`).
+    BUDGET_FROM = "OMSI_BUDGET_FROM", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: lay the mirror panels (1 to 3) over the picture.
+    MIRROR_HUD = "OMSI_MIRROR_HUD", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the navigator shows the timetable.
+    NAV_SCHEDULE = "OMSI_NAV_SCHEDULE", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the navigator shows its map.
+    NAV_MAP = "OMSI_NAV_MAP", Switch, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the cabin air and the condensation on the glass after this long with this
+    /// many aboard (`minutes,people[,engine 0/1]`).
+    CONDENSATION = "OMSI_CONDENSATION", Text, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: the rain on the glass as the bus would meet it at this speed (m/s).
+    GLASS_WIND = "OMSI_GLASS_WIND", Number, Diagnostic, "omsi-app::offscreen";
+    /// Offscreen: with LAN, the other buses' sounds heard at the camera (for the logs).
+    LAN_AUDIO = "OMSI_LAN_AUDIO", Switch, Test, "omsi-app::offscreen";
+
     // --- tests and example programs
 
     /// The installed content for the tests, when `OMSI_ROOT` is not set.
@@ -440,6 +599,9 @@ flags! {
 
     /// The launcher's id for a game it started (the game's LAN files are named after it).
     INSTANCE = "OMSI_INSTANCE", Text, Internal, "omsi-launcher-core::instances";
+    /// The commit and date the game was built from, set by `omsi-app`'s `build.rs` for the
+    /// compiler (read with `env!`, not at run time).
+    BUILD = "OMSI_BUILD", Text, Internal, "omsi-app::startup";
 }
 
 #[cfg(test)]

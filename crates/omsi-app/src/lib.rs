@@ -225,7 +225,7 @@ pub fn run() -> Result<()> {
     if args.launcher || (bare && !args.menu) {
         // the launcher window (the game started again by it with a full command line);
         // OMSI_LAUNCHER=<program> still opens another launcher instead
-        if omsi_cfg::env::var_os("OMSI_LAUNCHER").is_some() && open_launcher()? {
+        if omsi_cfg::flags::LAUNCHER.is_set() && open_launcher()? {
             return Ok(());
         }
         launcher_statics();
@@ -250,9 +250,9 @@ pub fn run() -> Result<()> {
 /// The showroom is drawn the way the game will be.
 pub(crate) fn launcher_statics() {
     let s = settings::Settings::load();
-    ENHANCED.store(s.enhanced || omsi_cfg::env::var_os("OMSI_ENHANCED").is_some(), std::sync::atomic::Ordering::Relaxed);
+    ENHANCED.store(s.enhanced || omsi_cfg::flags::ENHANCED.is_set(), std::sync::atomic::Ordering::Relaxed);
     CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
-    CLOUDS.store(s.clouds && omsi_cfg::env::var_os("OMSI_NO_CLOUDS").is_none(), std::sync::atomic::Ordering::Relaxed);
+    CLOUDS.store(s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Everything before a window: the language, the session's random seed, the original
@@ -282,8 +282,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     };
     // the scripts' `random` differs from session to session (starting air pressure, part
     // lifetimes ...); OMSI_SEED=n repeats a session's numbers
-    let seed = omsi_cfg::env::var("OMSI_SEED")
-        .ok()
+    let seed = omsi_cfg::flags::SEED.text()
         .and_then(|s| s.trim().parse::<u64>().ok())
         .unwrap_or_else(|| {
             let t = std::time::SystemTime::now()
@@ -400,13 +399,13 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     {
         args.drive_keys = settings.drive_keys.clone();
     }
-    let plus = args.enhanced_plus || omsi_cfg::env::var_os("OMSI_ENHANCED_PLUS").is_some();
+    let plus = args.enhanced_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
     ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
     ENHANCED.store(
-        settings.enhanced || args.enhanced || plus || omsi_cfg::env::var_os("OMSI_ENHANCED").is_some(),
+        settings.enhanced || args.enhanced || plus || omsi_cfg::flags::ENHANCED.is_set(),
         std::sync::atomic::Ordering::Relaxed,
     );
-    CLOUDS.store(settings.clouds && omsi_cfg::env::var_os("OMSI_NO_CLOUDS").is_none(), std::sync::atomic::Ordering::Relaxed);
+    CLOUDS.store(settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
     SOUND_AI.store(settings.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
     SOUND_SCENERY.store(settings.vol_scenery.to_bits(), std::sync::atomic::Ordering::Relaxed);
     MIRROR_SIZE.store(settings.mirror_size, std::sync::atomic::Ordering::Relaxed);

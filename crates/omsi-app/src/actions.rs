@@ -1175,7 +1175,7 @@ impl App {
     /// other graphics interface when the lost one was Vulkan. Twice at most in a row. False
     /// when it cannot (a LAN session, the tutorial, nothing to save): the session ends.
     pub(crate) fn restart_after_device_loss(&mut self) -> bool {
-        let n = omsi_cfg::env::var("OMSI_SAFE_GPU").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+        let n = omsi_cfg::flags::SAFE_GPU.number::<u32>().unwrap_or(0);
         if n >= 2 {
             return false;
         }
@@ -1187,15 +1187,15 @@ impl App {
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
             cmd.arg("--autostart");
         }
-        cmd.env("OMSI_SAFE_GPU", (n + 1).to_string());
+        cmd.env(omsi_cfg::flags::SAFE_GPU.name, (n + 1).to_string());
         // (on Windows the other interface: DirectX 12 after Vulkan, Vulkan after DirectX 12 -
         // an AMD Radeon's DX12 driver lost the device where its Vulkan one did not, #274)
         let name = self.renderer.as_ref().map(|r| r.adapter_name.clone()).unwrap_or_default();
         if cfg!(windows) {
             if name.contains("(Vulkan)") {
-                cmd.env("OMSI_BACKEND", "dx12");
+                cmd.env(omsi_cfg::flags::BACKEND.name, "dx12");
             } else if name.contains("(Dx12)") {
-                cmd.env("OMSI_BACKEND", "vulkan");
+                cmd.env(omsi_cfg::flags::BACKEND.name, "vulkan");
             }
         }
         match cmd.spawn() {

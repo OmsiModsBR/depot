@@ -71,7 +71,7 @@ fn android_main(app: AndroidApp) {
         log::warn!("{SHARED} cannot be written (no access to the storage yet): the content folder is the app's own");
         app.external_data_path().unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()))
     };
-    std::env::set_var("OMSI_CONTENT", &content);
+    std::env::set_var(omsi_cfg::flags::CONTENT.name, &content);
     let _ = std::fs::write(content.join("README.txt"), README);
     hide_from_gallery(&content);
     // `depot/env.txt`: a few harmless OMSI_* switches a computer takes from its environment,
@@ -311,7 +311,7 @@ impl Shell {
         if !SAFER_TRIED.swap(true, Ordering::Relaxed) && previous_run_crash().is_some() {
             let prev = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("game-prev.log")).unwrap_or_default();
             let vulkan = prev.lines().any(|l| l.contains("renderer: ") && l.contains("(Vulkan)")) || prev.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
-            std::env::set_var("OMSI_SAFE_GPU", "1");
+            std::env::set_var(omsi_cfg::flags::SAFE_GPU.name, "1");
             // It went down while the graphics driver compiled the shaders (the last it said
             // was a stage of that): the phone's Vulkan driver cannot take them, and will not
             // next time either (the Maleoon and several Mali drivers after the cloud noise,
@@ -328,8 +328,8 @@ impl Shell {
                     }
                 }
             }
-            if vulkan && std::env::var_os("OMSI_BACKEND").is_none() {
-                std::env::set_var("OMSI_BACKEND", "gl");
+            if vulkan && std::env::var_os(omsi_cfg::flags::BACKEND.name).is_none() {
+                std::env::set_var(omsi_cfg::flags::BACKEND.name, "gl");
             }
             log::warn!("the last run closed in the middle of a drive: this one starts with safer graphics{}", if vulkan { " on OpenGL" } else { "" });
         }
