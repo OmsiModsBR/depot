@@ -320,6 +320,8 @@ struct LinesText {
     out_back: &'static str,
     minutes: &'static str,
     count: &'static str,
+    /// The limit of heavy vehicles, when it is not the same.
+    heavy: &'static str,
     timetable: &'static str,
     /// Tick every line of the tab on show, and clear them.
     /// Said in the card while no line is open: how to open one.
@@ -338,8 +340,8 @@ struct LinesText {
 
 fn lines_text(lang: &str) -> LinesText {
     match lang.to_ascii_uppercase().as_str() {
-        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", comma: true },
-        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", comma: false },
+        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", heavy: "pesados", comma: true },
+        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", heavy: "heavy", comma: false },
     }
 }
 
@@ -502,6 +504,8 @@ pub struct Navigator {
     /// The municipality and the street the bus is on (from the package), refreshed now and then.
     loc_city: Option<String>,
     loc_street: Option<String>,
+    /// The limit of the street the bus is on (km/h) and that of heavy vehicles, 0 when not said.
+    loc_limit: (u32, u32),
     /// The light look of the maps (the `nav_light` setting).
     pub light: bool,
     /// The small map's surface mesh (buffer 6): the surface version and anchor it was built for, and its size.
@@ -638,6 +642,7 @@ impl Navigator {
             icon_tex: None,
             loc_city: None,
             loc_street: None,
+            loc_limit: (0, 0),
             light: false,
             surface_mesh: None,
             building: None,
@@ -1179,6 +1184,7 @@ impl Navigator {
                 Some(sf) => sf.locate(f.bus.truncate()),
                 None => (None, None),
             };
+            self.loc_limit = self.surface.as_ref().filter(|s| self.show_surface && s.has_location()).and_then(|sf| sf.street_info(f.bus.truncate(), 30.0)).map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
         if !self.enabled && self.shown < 0.01 {
@@ -2435,6 +2441,10 @@ pub struct CityMap {
     /// The view stays on the bus until the map is dragged.
     follow: bool,
     drag: Option<(f32, f32)>,
+    /// Where the pointer is over the map (window pixels), and the street found under it (for a point of about
+    /// two metres: not looked up again while it stays on it).
+    hover: Option<(f32, f32)>,
+    hover_cache: Option<((i64, i64, i64), Option<crate::map_surface::Street>)>,
     target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.
     roads: Option<(u64, u32, DVec2)>,
@@ -3089,6 +3099,7 @@ impl Navigator {
     }
 
     pub fn map_move(&mut self, x: f32, y: f32) {
+        self.city.hover = self.map_hit(x, y).then_some((x, y));
         if let Some((px, py)) = self.city.drag {
             let (dx, dy) = ((x - px) as f64, (y - py) as f64);
             if dx.abs() + dy.abs() > 0.5 {
@@ -3098,6 +3109,28 @@ impl Navigator {
             self.city.center.y += dy * self.city.mpp;
             self.city.drag = Some((x, y));
         }
+    }
+
+    /// The name of the street under the pointer, from the map's package: any street the package names, also where
+    /// the game has no road (not while the map is dragged or the pointer is on the lines panel).
+    fn hover_street(&mut self) -> Option<crate::map_surface::Street> {
+        let (x, y) = self.city.hover?;
+        let r = self.city.rect;
+        if self.city.drag.is_some() || (self.city.lines.open && self.city.lines.panel.is_some_and(|p| p.contains(Vec2::new(x - r[0], y - r[1])))) {
+            return None;
+        }
+        let pos = self.map_point(x, y)?;
+        // (the search reach follows the zoom, so the zoom is part of the key)
+        let reach = (self.city.mpp * 10.0).clamp(8.0, 40.0);
+        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, (reach * 100.0).round() as i64);
+        if let Some((k, name)) = &self.city.hover_cache {
+            if *k == key {
+                return name.clone();
+            }
+        }
+        let name = self.surface.as_ref().and_then(|s| s.street_info(pos, reach));
+        self.city.hover_cache = Some((key, name.clone()));
+        name
     }
 
     /// The wheel over the map: zoom, keeping the point under the cursor where it is.
@@ -3552,6 +3585,39 @@ impl Navigator {
                 let r = Rect::new(pad, y, tw, 22.0 * s);
                 ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
                 ui.text_in(&mut self.atlas, &self.fonts, &t, 12.0 * s, Weight::Medium, r, Align::Center, TEXT);
+                // its limit as a road sign (and the heavy vehicles', smaller, when it is another)
+                let (limit, heavy) = self.loc_limit;
+                let mut sx = pad + tw + 8.0 * s;
+                for (v, rad) in [(limit, 17.0 * s), (heavy, 12.5 * s)] {
+                    if v == 0 {
+                        continue;
+                    }
+                    let c = Vec2::new(sx + rad, r.center().y);
+                    ui.rounded(Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), rad, Color::rgba(205, 30, 36, 1.0));
+                    ui.rounded(Rect::new(c.x - rad * 0.74, c.y - rad * 0.74, 1.48 * rad, 1.48 * rad), rad * 0.74, Color::WHITE);
+                    ui.text_in(&mut self.atlas, &self.fonts, &v.to_string(), rad * 0.95, Weight::Bold, Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), Align::Center, Color::rgba(15, 15, 15, 1.0));
+                    sx += 2.0 * rad + 6.0 * s;
+                    if rad < 14.0 * s {
+                        ui.text(&mut self.atlas, &self.fonts, lt.heavy, 10.5 * s, Weight::Medium, Vec2::new(sx, c.y + 4.0 * s), Align::Left, TEXT_DIM);
+                    }
+                }
+                y += if limit > 0 { 38.0 * s } else { 26.0 * s };
+            }
+            // the street under the pointer, with its limits (smaller)
+            if let Some(st) = self.hover_street() {
+                let mut text = st.name.clone();
+                if st.speed > 0 {
+                    text += &format!("  ·  {} km/h", st.speed);
+                }
+                if st.heavy > 0 {
+                    text += &format!("  ·  {} {}", lt.heavy, st.heavy);
+                }
+                let t = self.fonts.fit(&text, 11.5 * s, Weight::Bold, w * 0.42);
+                let tw = self.fonts.width(&t, 11.5 * s, Weight::Bold) + 20.0 * s;
+                let r = Rect::new(pad, y, tw, 21.0 * s);
+                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
+                ui.rounded_border(r, 3.0 * s, 1.0, Color::hex(0x6f9bd6).alpha(0.7));
+                ui.text_in(&mut self.atlas, &self.fonts, &t, 11.5 * s, Weight::Bold, r, Align::Center, TEXT);
             }
         }
         if have_lines && self.city.lines.open {

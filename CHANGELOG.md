@@ -126,6 +126,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `docs/MAP_PACKAGE.md` now names `tools/mapgen` of lmonteirotech/openomsi-map-packages as the supported way
   to build packages, and `tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package
   (no OpenStreetMap or OMSI 2 data) for trying the Lines panel.
+- City map: the street under the pointer (any street the map's package names, also where the game has no road)
+  in a small box, and the speed limit of the street the player is on as a road sign (and the limit of heavy
+  vehicles when it is another), from a new line class of the package, "street with limits" (class 4 of
+  `docs/MAP_PACKAGE.md` section 4). Packages without that class behave as before. Source: maintainer (Leo,
+  `lmonteirotech`), fork lmonteirotech/openOMSI branch `local/lines-timetable` (commits `cae2286` and the limits
+  part of `d09111f`), MIT. Not validated against real OMSI 2 content; only build and automated tests were run.
 - Offscreen state trace (B0 of the refactoring plan): `OMSI_STATE_TRACE=<file>` makes `depot --offscreen` write,
   for every frame, the player's vehicle, the AI cars, the lights, the rail signals and the duty. A new test runs it
   on a synthetic street (`crates/omsi-app/tests/offscreen_state_trace.rs`), `scripts/offscreen-trace-diff.sh`

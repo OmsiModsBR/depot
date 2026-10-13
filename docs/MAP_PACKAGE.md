@@ -114,9 +114,19 @@ u32  n_labels  ; n_labels x { u8 kind, u8 rank, u32 name, f32 x, f32 y }    name
 ```
 
 - `class` for fills: `0 water, 1 green (parks, gardens), 2 built, 3 grass (grass, meadow, scrub), 4 forest (wood, forest), 5 sport (pitches, stadiums), 6 farm`.
-- `class` for lines: `0 river, 1 rail, 2 border, 3 street`. A **street** (class 3) is not drawn: its points are
-  only looked up to tell the player which street they are on (the nearest piece within 30 m;
-  `name` is its name, `flags` its rank 0-5). Other classes are skipped by a reader that does not know them.
+- `class` for lines:
+
+  | class | what | `width_m` | `flags` |
+  |---|---|---|---|
+  | 0 | river | 3 stream, 6 or more river | 0 |
+  | 1 | rail | | 0 |
+  | 2 | border | | 0 |
+  | 3 | street | | its rank 0-5 |
+  | 4 | street with limits | its speed limit, km/h (0 = none) | the limit of heavy vehicles, km/h (0 = the same, or none) |
+
+  A **street** (class 3 or 4) is not drawn: its points are only looked up to tell the player which street
+  they are on and the street under the pointer (the nearest piece within 30 m, or within a reach that grows
+  with the zoom for the pointer; `name` is its name). Other classes are skipped by a reader that does not know them.
   Roads are optional here: the game keeps drawing its own lanes from the tiles, so a package
   may leave road classes out. If present, they are decoration under the game's own roads.
 - `flags` for lines: bit0 = bridge, bit1 = tunnel (draw dashed/under).
@@ -206,6 +216,12 @@ room, no name. The city map draws each name as a big, faint watermark inside its
 zoomed out (it gives way to street names when zoomed in). With the regions and the named streets
 the game shows a **"municipality · street"** row under the next stop on the small map, and the
 same two names in a chip on the city map. Without them, none of it appears.
+
+The city map also shows the street under the pointer (any street the package names, also where the game has
+no road) in a small box, with its limits when the package says them (class 4 of the street lines, section 4).
+The limit of the street the player is on is shown as a **road sign** beside the "you are on" chip (and, smaller,
+the limit of heavy vehicles when it is another). A generator takes the limits from `maxspeed` and `maxspeed:hgv`
+of the real streets where they exist; a street without a limit is class 3 and shows none.
 
 ### 8.4 Lines (`lines.lin`)
 

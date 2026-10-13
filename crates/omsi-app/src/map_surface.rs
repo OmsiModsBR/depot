@@ -36,6 +36,18 @@ const LINE_RAIL: u8 = 1;
 const LINE_BORDER: u8 = 2;
 /// A named street: not drawn, only looked up ("you are on ...").
 const LINE_STREET: u8 = 3;
+/// A named street that also says its limits: `width` is the limit (km/h, 0 = none), `flags` the limit of heavy
+/// vehicles (km/h, 0 = the same, or none).
+const LINE_STREET_LIMITS: u8 = 4;
+
+/// A street found by place: its name and its speed limits (km/h, 0 = not said).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Street {
+    pub name: String,
+    pub speed: u32,
+    /// For heavy vehicles, when it is not the same.
+    pub heavy: u32,
+}
 
 /// What the author's manifest may colour (`water = #rrggbb`, and `light_water = ...` for the
 /// light map); a key left out keeps the default of that look.
@@ -579,6 +591,12 @@ impl MapSurface {
             .iter()
             .find(|r| point_in_poly(&r.poly, pos))
             .map(|r| r.name.clone());
+        (region, self.street_info(pos, 30.0).map(|s| s.name))
+    }
+
+    /// The named street within `reach` metres of a game position, with its limits (read from the chunks around,
+    /// nothing kept).
+    pub fn street_info(&self, pos: DVec2, reach: f64) -> Option<Street> {
         let mut street = None;
         if self.has_streets {
             let a = self.world_to_author(pos) - self.origin;
@@ -586,7 +604,7 @@ impl MapSurface {
                 (a.x / self.chunk).floor() as i32,
                 (a.y / self.chunk).floor() as i32,
             );
-            let mut best: Option<(f64, u32)> = None;
+            let mut best: Option<(f64, u32, u32, u32)> = None;
             for dx in -1..=1 {
                 for dy in -1..=1 {
                     let Some(&i) = self.by_key.get(&(cx + dx, cy + dy)) else {
@@ -599,11 +617,11 @@ impl MapSurface {
                 }
             }
             street = best
-                .filter(|b| b.0 <= 30.0)
-                .map(|b| self.name(b.1))
-                .filter(|n| !n.is_empty());
+                .filter(|b| b.0 <= reach)
+                .map(|b| Street { name: self.name(b.1), speed: b.2, heavy: if b.3 == b.2 { 0 } else { b.3 } })
+                .filter(|s| !s.name.is_empty());
         }
-        (region, street)
+        street
     }
 
     /// The colours of the dark or the light map.
@@ -825,7 +843,7 @@ impl MapSurface {
             let w = r.f32()?;
             let _name = r.u32()?;
             let n = r.u32()? as usize;
-            if class == LINE_STREET {
+            if class == LINE_STREET || class == LINE_STREET_LIMITS {
                 // a street to look up, not to draw: its points are not turned into game metres
                 r.take(n.checked_mul(8)?)?;
                 continue;
@@ -958,7 +976,7 @@ fn chunk_has_streets(body: &[u8]) -> bool {
             r.f32()?;
             r.u32()?;
             let n = r.u32()? as usize;
-            if class == LINE_STREET {
+            if class == LINE_STREET || class == LINE_STREET_LIMITS {
                 return Some(true);
             }
             r.take(n.checked_mul(8)?)?;
@@ -969,8 +987,8 @@ fn chunk_has_streets(body: &[u8]) -> bool {
 }
 
 /// The nearest street piece of a chunk to `p` (author-grid metres from the file's origin):
-/// `best` is (distance, name index), kept when nearer than what it holds.
-fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Option<()> {
+/// `best` is (distance, name index, limit, heavy limit), kept when nearer than what it holds.
+fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32, u32, u32)>) -> Option<()> {
     let mut r = Rd { b: body, i: 0 };
     for _ in 0..r.u32()? {
         r.u8()?;
@@ -979,11 +997,12 @@ fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Opti
     }
     for _ in 0..r.u32()? {
         let class = r.u8()?;
-        r.u8()?;
-        r.f32()?;
+        let flags = r.u8()?;
+        let width = r.f32()?;
         let name = r.u32()?;
         let n = r.u32()? as usize;
-        if class != LINE_STREET {
+        let (speed, heavy) = if class == LINE_STREET_LIMITS { (width.max(0.0).round() as u32, flags as u32) } else { (0, 0) };
+        if class != LINE_STREET && class != LINE_STREET_LIMITS {
             r.take(n.checked_mul(8)?)?;
             continue;
         }
@@ -993,7 +1012,7 @@ fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Opti
             if let Some(a) = prev {
                 let d = dist_to_segment(p, a, q);
                 if best.is_none_or(|b| d < b.0) {
-                    *best = Some((d, name));
+                    *best = Some((d, name, speed, heavy));
                 }
             }
             prev = Some(q);
@@ -1347,8 +1366,29 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
         assert!(chunk_has_streets(&b));
         let mut best = None;
         street_in_chunk(&b, DVec2::new(40.0, 12.0), &mut best).unwrap();
-        let (d, name) = best.unwrap();
-        assert!((d - 12.0).abs() < 1e-6 && name == 7);
+        let (d, name, speed, heavy) = best.unwrap();
+        assert!((d - 12.0).abs() < 1e-6 && name == 7 && speed == 0 && heavy == 0);
+    }
+
+    #[test]
+    fn a_street_with_limits_says_them() {
+        // one street of two points, name index 3, limit 50 (the width), 30 for heavy vehicles (the flags)
+        let mut b = Vec::new();
+        b.extend(0u32.to_le_bytes());
+        b.extend(1u32.to_le_bytes());
+        b.extend([LINE_STREET_LIMITS, 30]);
+        b.extend(50.0f32.to_le_bytes());
+        b.extend(3u32.to_le_bytes());
+        b.extend(2u32.to_le_bytes());
+        for v in [0.0f32, 0.0, 100.0, 0.0] {
+            b.extend(v.to_le_bytes());
+        }
+        b.extend(0u32.to_le_bytes());
+        assert!(chunk_has_streets(&b));
+        let mut best = None;
+        street_in_chunk(&b, DVec2::new(40.0, 5.0), &mut best).unwrap();
+        let (d, name, speed, heavy) = best.unwrap();
+        assert!((d - 5.0).abs() < 1e-6 && name == 3 && speed == 50 && heavy == 30);
     }
 
     #[test]
