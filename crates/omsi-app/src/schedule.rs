@@ -228,7 +228,7 @@ fn station_targets(trips: impl Iterator<Item = (Vec<i64>, String)>, name_of: imp
     named
 }
 
-fn trip_stations(trip: &omsi_timetable::Trip) -> Vec<i64> {
+pub(crate) fn trip_stations(trip: &omsi_timetable::Trip) -> Vec<i64> {
     if !trip.stations.is_empty() {
         return trip.stations.clone();
     }
@@ -1953,6 +1953,13 @@ impl Schedule {
             names.entry(b.object_id).or_insert_with(|| b.name.trim().to_string());
         }
         names
+    }
+
+    /// The line a timetable vehicle runs (by car id): what its trip says, else its line file's name.
+    pub fn car_line(&self, id: u64) -> Option<String> {
+        let d = &self.departures[*self.car_departure.get(&id)?];
+        let l = self.data.trips.get(d.trip).map_or("", |t| t.line.trim());
+        Some(if l.is_empty() { d.line.clone() } else { l.to_string() })
     }
 
     pub fn pending(&self) -> usize {

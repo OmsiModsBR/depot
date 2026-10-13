@@ -2375,6 +2375,7 @@ impl ApplicationHandler for App {
                             Some(f) => (f.pos, f.heading),
                             None => (p.vehicle.position, p.vehicle.heading),
                         };
+                        let car_line = |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
                         let frame = navigator::NavFrame {
                             traffic: self.traffic.as_ref(),
                             #[cfg(feature = "lan")]
@@ -2394,6 +2395,8 @@ impl ApplicationHandler for App {
                             stop_requested: navigator::stop_requested(&p.vehicle),
                             time: self.clock.time,
                             weekday: self.clock.weekday(),
+                            date: self.clock.date_code(),
+                            car_line: Some(&car_line),
                             language: &self.settings.language,
                             screen: if vr_active {
                                 (1440.0, 1440.0)
