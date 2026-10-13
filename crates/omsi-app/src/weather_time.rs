@@ -1,6 +1,7 @@
 //! Changing the weather (by hand, the cycle, METAR) and the clock (real-time sync, jumps).
 
-use super::*;
+use crate::app::App;
+use crate::weather_setup::load_weather;
 
 impl App {
     /// Change the weather in force by hand: `f` changes a copy of it, which takes the place of

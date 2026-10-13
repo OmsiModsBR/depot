@@ -154,7 +154,7 @@ pub(crate) fn ui_language(code: &str) {
     omsi_sim::vehicle_api::set_locale(iso);
 }
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use glam::{DVec3, Vec3};
 use omsi_render::{Camera, Renderer, Scene, SurfaceState};

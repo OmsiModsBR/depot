@@ -1,7 +1,7 @@
 //! The game menu and its lists: opening and closing them, moving through them and picking
 //! an entry.
 
-use super::*;
+use crate::app::App;
 
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server.

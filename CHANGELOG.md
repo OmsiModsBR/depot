@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- Nine more modules of `omsi-app` (`camera_util`, `input/keyboard`, `input/menus`, `server`,
+  `situation`, `spawn`, `touch`, `weather_setup`, `weather_time`) import what they use from where it
+  is defined instead of `use super::*`.
 - Ten modules of `omsi-app` (`cli`, `duty_start`, `input_script`, `input/editor_input`,
   `launcher_link`, `memory`, `online`, `services`, `traffic_link`, `world_load`) import what they
   use from where it is defined instead of taking everything from the crate root with `use super::*`.

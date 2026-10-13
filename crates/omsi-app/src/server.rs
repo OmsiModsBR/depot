@@ -10,7 +10,9 @@
 //! 64x64 PNG, like Minecraft's), `server.log` its log. A missing `server.cfg` is written with
 //! the defaults and a comment for every key.
 
-use super::*;
+use anyhow::{Context, Result};
+use crate::cli::Args;
+use crate::startup::BUILD;
 use std::path::Path;
 
 /// What `server.cfg` says (see `DEFAULT_CFG`).
