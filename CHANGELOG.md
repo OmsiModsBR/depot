@@ -7,6 +7,13 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-sim`'s `vehicle.rs` is split by subject into `vehicle/` submodules (the type and its
+  loading, the scripts' variables and triggers, motion, the AI's frame, trailers, pose, visuals,
+  mesh properties, skinning, radio text, weather, built-in variables and the exporter's winding),
+  with its tests in `vehicle/tests.rs`. The code moved unchanged; `vehicle.rs` keeps the
+  `VehicleInstance` struct, its construction and update, and re-exports the public items at their
+  old paths. The submodules, `articulation` and `physics_bridge` included, import what they use
+  instead of `use super::*`.
 - Ten modules of `omsi-app` (`cli`, `duty_start`, `input_script`, `input/editor_input`,
   `launcher_link`, `memory`, `online`, `services`, `traffic_link`, `world_load`) import what they
   use from where it is defined instead of taking everything from the crate root with `use super::*`.

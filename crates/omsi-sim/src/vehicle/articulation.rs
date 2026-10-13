@@ -7,9 +7,13 @@
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle.
 
-use super::physics_bridge::PartWheelVars;
-use super::*;
 use crate::rigid::{BodyInputs, Joint, RigidBody};
+use glam::{DVec3, Mat4, Vec3};
+use omsi_script::Program;
+use omsi_vehicle::Vehicle;
+use super::physics_bridge::PartWheelVars;
+use super::trailer::{body_reversed, ARTICULATION_SIGN, TrailerPart};
+use super::VehicleInstance;
 
 /// A part's own body and the variables its wheels are written to.
 pub(super) struct PartBody {
@@ -498,8 +502,12 @@ impl TrailerPart {
 #[cfg(test)]
 mod tests {
     use super::super::tests::coupling_test_type;
+    use super::super::vehicle_type::VehicleType;
     use super::*;
+    use crate::host::VehicleHost;
+    use crate::physics::Controls;
     use crate::rigid::GroundProbe;
+    use std::sync::Arc;
 
     /// The two sections of an articulated bus: a front section on two free-rolling axles and a
     /// pusher's rear section on one driven axle and the joint.
