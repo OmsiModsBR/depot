@@ -12,13 +12,14 @@ use crate::passes::{
     encode_batches, encode_batches_filtered, one_sided_primitive, post_pass, Batch, PIPE_BLEND,
     PIPE_BLEND_NO_WRITE, PIPE_KINDS,
 };
-#[cfg(test)]
-use crate::RenderOptions;
 use crate::renderer::Renderer;
 #[cfg(test)]
 use crate::scene::MaterialId;
 use crate::scene::{Camera, CameraUniform, Scene, Vertex};
 use crate::sky::{atmosphere, PROBE_MIPS};
+use crate::targets::PuddleTargets;
+#[cfg(test)]
+use crate::RenderOptions;
 use glam::{DVec3, Mat4, Vec3};
 #[cfg(test)]
 use omsi_geometry::MeshData;
@@ -349,26 +350,6 @@ impl Pipelines {
     }
 }
 
-pub(crate) struct Targets {
-    size: (u32, u32),
-    source_depth: wgpu::Texture,
-    hit_depth: wgpu::Texture,
-    hit_depth_view: wgpu::TextureView,
-    vehicle_view: wgpu::TextureView,
-    vehicle_depth: wgpu::TextureView,
-    trace: wgpu::TextureView,
-    blur: wgpu::TextureView,
-    filtered: wgpu::TextureView,
-    pub(crate) view: wgpu::TextureView,
-    trace_bg: wgpu::BindGroup,
-    blur_x_bg: wgpu::BindGroup,
-    blur_y_bg: wgpu::BindGroup,
-    resolve_bg: wgpu::BindGroup,
-    pub(crate) down_bg: wgpu::BindGroup,
-    pub(crate) tonemap_bg: [wgpu::BindGroup; 2],
-    pub(crate) classic_bg: wgpu::BindGroup,
-}
-
 fn trace_size(w: u32, h: u32) -> (u32, u32) {
     let scale = 0.5_f32.min((MAX_TRACE_PIXELS / (w.max(1) as f32 * h.max(1) as f32)).sqrt());
     (
@@ -377,7 +358,7 @@ fn trace_size(w: u32, h: u32) -> (u32, u32) {
     )
 }
 
-impl Targets {
+impl PuddleTargets {
     /// `picture`, `mask` and `glow`: the size's high-range picture, its screen mask and its
     /// first glow level.
     fn new(
@@ -562,7 +543,7 @@ impl Renderer {
         if hdr.puddles.as_ref().is_none_or(|t| {
             t.source_depth != *self.targets.ao.as_ref().unwrap().depth_view.texture()
         }) {
-            let targets = Targets::new(self, &hdr.view, &hdr.mask, &hdr.up[0], w, h);
+            let targets = PuddleTargets::new(self, &hdr.view, &hdr.mask, &hdr.up[0], w, h);
             log::info!(
                 "puddle reflections: {}x{} rays, at most 48 steps; resolve {w}x{h}",
                 targets.size.0,

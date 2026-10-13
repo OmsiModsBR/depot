@@ -20,8 +20,8 @@ presents to the window or reads a texture back on its own.
    Entry           api                          (only pub; nothing imports from it)
 8  Orchestration   renderer
    Outputs         output                       (window, image, xr, triple, diagnostics)
-7  Targets         targets                      (their bind groups use the passes' layouts)
-6  Effects         effects
+7  Effects         effects                      (draw into the targets with the passes' parts)
+6  Targets         targets                      (their bind groups use the passes' layouts)
 5  Passes          passes
 4  Scene           scene
 3  Sky             sky                          (the sky follows the light model)
@@ -37,8 +37,8 @@ presents to the window or reads a texture back on its own.
 | Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic | in place (`api/`: `renderer`, `scene`, `assets`, `lights`, `types`); the methods still carry their whole bodies, which move to their domains in the next steps, and `RenderOptions` is still in `renderer/options.rs` |
 | 8 | `renderer` | The internal state of `Renderer`, building it, the frame (`FrameContext` and its stages), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `build`, `prepare`, `frame`, `lists`, `encode`): `Renderer::build` calls one constructor per sub-struct, and `render_inner` runs `begin_frame` (the `FrameContext`), `draw_lists` (visibility and batches), `ShadowResources::schedule`, `encode_frame` and `submit_frame`, which hands the frame to an `Output`; opening the renderer is still in `api/renderer.rs` |
 | Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, presenting with upscale, FXAA, overlay and HUD), `image` (`render_to_image`, texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) | in place (`output/`: `destination` (`Output`: `Window`, `Texture`, `XrEye`, `TriplePanel`), `window` (with `Presenter`), `image`, `triple`, `diagnostics` (with `Diagnostics`)); the XR methods are still in `api/renderer.rs` and the exposure log in `lighting/exposure.rs` |
-| 7 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO | in place (`targets/`) |
-| 6 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`) |
+| 7 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`) |
+| 6 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO, the puddles' reflection targets | in place (`targets/`) |
 | 5 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow` (with the cascades' ranges), `depth` (prepass and SSAO), `sky`, `main`, `glass`, `reflections`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) | in place (`passes/`), each pass with its own struct (`ShadowResources`, `PrepassPipelines`, `SsaoPass`, `FogLampsPass`, `SpriteResources`, `PostPipelines`, `Exposure`); `shadow`, `sky` and `fog_lamps` encode on their own struct, while `depth`, `main`, `glass`, `reflections` and `post` still take `&Renderer` because they call other `Renderer` methods or the `Presenter` |
 | 4 | `scene` | `Scene`, `Instance`, `RenderPhase`, the camera, the views' geometry (`TripleScreen`, `ScreenView`, `ViewCulling`), bounds, visibility (culling and level of detail) and the logic behind the per-instance settings | in place (`scene/`, with the shared bind group `Layouts` and the `CullHistory`); visibility (culling, level of detail) runs in `renderer/lists.rs` |
 | 3 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, the clouds' noise textures, reflection probe) | in place (`sky/`, the GPU resources in `SkyResources`) |

@@ -1,7 +1,7 @@
 //! The enhanced path's high-range colour targets of one size: the HDR chain, the glow's
 //! levels and the bind groups of the passes between them.
 
-use crate::effects::puddles;
+use super::PuddleTargets;
 use crate::gpu::{rt_gbuf, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
 use crate::renderer::Renderer;
 
@@ -32,7 +32,7 @@ pub(crate) struct HdrTargets {
     /// Classic shading is presented directly, without the Enhanced tone curve.
     pub(crate) classic_bg: wgpu::BindGroup,
     /// Allocated only when wet roads need scene reflections in the main view.
-    pub(crate) puddles: Option<puddles::Targets>,
+    pub(crate) puddles: Option<PuddleTargets>,
 }
 
 /// Glow levels of the enhanced post path.
