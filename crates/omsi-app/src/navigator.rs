@@ -2444,7 +2444,7 @@ pub struct CityMap {
     /// Where the pointer is over the map (window pixels), and the street found under it (for a point of about
     /// two metres: not looked up again while it stays on it).
     hover: Option<(f32, f32)>,
-    hover_cache: Option<((i64, i64), Option<crate::map_surface::Street>)>,
+    hover_cache: Option<((i64, i64, i64), Option<crate::map_surface::Street>)>,
     target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.
     roads: Option<(u64, u32, DVec2)>,
@@ -3120,13 +3120,15 @@ impl Navigator {
             return None;
         }
         let pos = self.map_point(x, y)?;
-        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64);
+        // (the search reach follows the zoom, so the zoom is part of the key)
+        let reach = (self.city.mpp * 10.0).clamp(8.0, 40.0);
+        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, (reach * 100.0).round() as i64);
         if let Some((k, name)) = &self.city.hover_cache {
             if *k == key {
                 return name.clone();
             }
         }
-        let name = self.surface.as_ref().and_then(|s| s.street_info(pos, (self.city.mpp * 10.0).clamp(8.0, 40.0)));
+        let name = self.surface.as_ref().and_then(|s| s.street_info(pos, reach));
         self.city.hover_cache = Some((key, name.clone()));
         name
     }
