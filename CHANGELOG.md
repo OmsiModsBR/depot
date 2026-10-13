@@ -7,6 +7,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app`'s LAN, launcher and plugin modules read their `OMSI_*` variables through
+  `omsi_cfg::flags`. What a phone's `env.txt` may set now comes from the register (the variables
+  marked `env_txt`, `omsi-render`'s switches among them) instead of a list of its own, and a test
+  pins that set. `OMSI_NO_PRESENCE` and `OMSI_TILE_DIST`, which nothing reads any more, are no
+  longer taken from `env.txt` (the log lists them as skipped). `docs/ENVIRONMENT.md` lists the
+  declared variables and is made from the register; a test fails when it is out of date.
 - The rest of `omsi-app` outside LAN and the launcher (the offscreen run, the window's events,
   start-up, settings, cameras, VR, input scripts) reads its `OMSI_*` variables through
   `omsi_cfg::flags`, where 73 more are now declared; the variables the game sets for itself
