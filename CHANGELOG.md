@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app`'s world modules (`scene`, `tiles`, `lights`, `rain`, `puddles`, `ground_gap`,
+  `memory`, `weather_setup`, `world_load`) read their 66 `OMSI_*` variables through
+  `omsi_cfg::flags`, where they are now declared. No behaviour change.
 - `omsi-cfg` gets `flags`, the register of the `OMSI_*` environment variables: each is declared
   once with the kind of value it takes, who it is for (user, path, diagnostic, test, internal),
   the module that reads it, whether a phone's `env.txt` may set it and what it does. The crates

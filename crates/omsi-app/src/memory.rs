@@ -55,9 +55,7 @@ pub(crate) fn physical_memory() -> Option<u64> {
 /// eighth of the machine's memory (2 GB on a 16 GB Mac - Ahlheim's main station needs
 /// about 1.5).
 pub(crate) fn texture_budget(settings: &settings::Settings) -> u64 {
-    let mb = omsi_cfg::env::var("OMSI_TEXTURE_MEMORY")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
+    let mb = omsi_cfg::flags::TEXTURE_MEMORY.number::<u64>()
         .unwrap_or(settings.texture_memory as u64);
     if mb > 0 {
         // (a budget the graphics card cannot hold is taken down to what it can: the
@@ -100,7 +98,7 @@ pub fn release_free_memory() {
                 let t = Instant::now();
                 // SAFETY: a null zone asks every malloc zone; the call only returns free pages
                 let freed = unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
-                if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+                if omsi_cfg::flags::PROFILE.is_set() {
                     log::info!(
                         "heap: {:.0} MB of free pages given back in {:.0} ms",
                         freed as f64 / 1e6,

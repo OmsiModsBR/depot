@@ -80,7 +80,7 @@ pub struct GroundGap {
 
 impl GroundGap {
     pub fn from_env() -> Option<GroundGap> {
-        let path = omsi_cfg::env::var("OMSI_GROUND_GAP").ok()?;
+        let path = omsi_cfg::flags::GROUND_GAP.text()?;
         let file = (path != "-").then(|| std::fs::File::create(&path).ok()).flatten();
         let mut g = GroundGap {
             file,
@@ -88,7 +88,7 @@ impl GroundGap {
             player: Stats::default(),
             ai: Stats::default(),
             heights: HashMap::new(),
-            radius: omsi_cfg::env::var("OMSI_GROUND_GAP_RADIUS").ok().and_then(|v| v.parse().ok()).unwrap_or(150.0),
+            radius: omsi_cfg::flags::GROUND_GAP_RADIUS.number().unwrap_or(150.0),
         };
         if let Some(f) = g.file.as_mut() {
             let _ = writeln!(f, "t,who,wheel,x,y,tyre_z,drawn_z,wheel_ground_z,gap,body_z");
@@ -223,7 +223,7 @@ impl GroundGap {
 /// the drawn ground (from 3 m over the lane, as OMSI's wheels ask it) lies over or under
 /// the lane's own height - what an AI car's wheels meet where it follows its lane.
 pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
-    if omsi_cfg::env::var_os("OMSI_GROUND_LANES").is_none() {
+    if !omsi_cfg::flags::GROUND_LANES.is_set() {
         return;
     }
     let mut hist = [0usize; 12];
