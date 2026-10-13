@@ -32,23 +32,24 @@ presents to the window or reads a texture back on its own.
 ```
 ## Domains
 
-| Layer | Domain | Owns | Lives today in |
-| --- | --- | --- | --- |
-| Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic | in place (`api/`: `renderer`, `scene`, `assets`, `lights`, `types`); the methods still carry their whole bodies, which move to their domains in the next steps, and `RenderOptions` is still in `renderer/options.rs` |
-| 8 | `renderer` | The internal state of `Renderer`, building it, the asset life cycle on it (uploads, materials, freed slots), the frame (`FrameContext` and its stages, with the lights, coronas, smoke and sky uploaded for it), ending by handing the frame to an `output` destination | in place (`renderer/`: `state`, `options`, `build`, `assets`, `prepare`, `frame`, `lights`, `sky`, `lists`, `targets`, `passes`, `effects`, `reflections`, `encode`, `output`): `Renderer::build` calls one constructor per sub-struct, and `render_inner` runs `begin_frame` (the `FrameContext`), `draw_lists` (visibility and batches), `ShadowResources::schedule`, `encode_frame` and `submit_frame`, which hands the frame to an `Output`; the domains below take the parts they use (`MainParts`, `PostParts`, `RtParts`, `PuddleParts`, `GroupParts`), built here; opening the renderer is still in `api/renderer.rs` |
-| Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, the `Presenter`: presenting with upscale, FXAA, overlay and HUD), `image` (texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels' culling), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) | in place (`output/`: `destination` (`Output`: `Window`, `Texture`, `XrEye`, `TriplePanel`), `window` (with `Presenter`), `image`, `triple`, `diagnostics` (with `Diagnostics`)); `SurfaceState`'s methods are in `api/surface.rs`, rendering an image in `renderer/output.rs`; the XR methods are still in `api/renderer.rs` and the exposure log in `lighting/exposure.rs` |
-| 7 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` | in place (`effects/`): `RayTracer` and the puddles' `Pipelines` prepare and encode with the parts the renderer hands them; the puddles' reflections are run from `renderer/reflections.rs` |
-| 6 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow` (with the cascades' ranges), `depth` (prepass and SSAO), `sky`, `main`, `glass`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) | in place (`passes/`), each pass with its own struct (`ShadowResources`, `PrepassPipelines`, `SsaoPass`, `FogLampsPass`, `SpriteResources`, `PostPipelines`, `Exposure`); `main`, `glass` and `post` are functions given their parts |
-| 5 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO, the puddles' reflection targets | in place (`targets/`: `TargetCache` makes each size's targets with the layouts it is given) |
-| 4 | `scene` | `Scene`, `Instance`, `RenderPhase`, the camera, the views' geometry (`TripleScreen`, `ScreenView`, `ViewCulling`), bounds, visibility (culling and level of detail) and the logic behind the per-instance settings | in place (`scene/`, with the shared bind group `Layouts` and the `CullHistory`); visibility (culling, level of detail) runs in `renderer/lists.rs` |
-| 3 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, the clouds' noise textures, reflection probe) | in place (`sky/`, the GPU resources in `SkyResources`) |
-| 2 | `assets` | The ids (`MeshId`, `TextureId`, `MaterialId`) and `Vertex`, meshes (`GpuMesh`, `MeshPage`), textures (`GpuTexture`, uploads, mip chains, fitting), materials (`Material`, `MaterialExtra`, `PbrMaps`, `BindKey`) and their life cycle (free, recycle, `Freed`, pending mesh writes) | in place (`assets/`, the state in `AssetStore`); `buffer_init` went to `gpu/buffers.rs`, the scene's instance slots to `scene.rs`, glass and render-to-texture to `passes.rs` and `frame.rs` |
-| 2 | `lighting` | The light model (`Lighting`, `PointLight`, `Corona`, `SmokeParticle`, `LightMode`), its GPU records (`GpuPointLight`, `GpuCorona`), the light grid and lamp shadows, the tile light map atlas | in place (`lighting/`, the atlas in `LightMapAtlas`) |
-| 1 | `shaders` | The WGSL sources, grouped `common/` (included by several shaders), `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, `assets/`, and the code that assembles them | in place (`shaders/`) |
-| 0 | `gpu` | Opening the device (adapters, limits, the remembered fallbacks, `DevicePoller`), what the device can do (GL backend, `ArrayPath`, VRAM), `GpuArray`, errors (`catch`, device lost, out of memory), the render targets' formats (`DEPTH_FORMAT`, `HDR_FORMAT`, the masks and G-buffer, `color_targets`) | in place (`gpu/`, the device's callbacks, encoder pool and poller in `GpuContext`, the samplers in `Samplers`); the adapter and device opening is still in `Renderer::new_on` (`api/renderer.rs`) |
+| Layer | Domain | Owns |
+| --- | --- | --- |
+| Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic |
+| 8 | `renderer` | The internal state of `Renderer`, building it, the asset life cycle on it (uploads, materials, freed slots), the frame (`FrameContext` and its stages, with the lights, coronas, smoke and sky uploaded for it), ending by handing the frame to an `output` destination |
+| Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, the `Presenter`: presenting with upscale, FXAA, overlay and HUD), `image` (texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels' culling), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) |
+| 7 | `effects` | Self-contained features with their own pipelines and targets: `rt` (ray tracing), `puddles` |
+| 6 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow` (with the cascades' ranges), `depth` (prepass and SSAO), `sky`, `main`, `glass`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) |
+| 5 | `targets` | The render targets and their per-size caches: HDR, MSAA, depth, AO, the puddles' reflection targets |
+| 4 | `scene` | `Scene`, `Instance`, `RenderPhase`, the camera, the views' geometry (`TripleScreen`, `ScreenView`, `ViewCulling`), bounds, visibility (culling and level of detail) and the logic behind the per-instance settings |
+| 3 | `sky` | The atmosphere and the clouds' noise (CPU only, no `wgpu`), and the sky's GPU resources (look-up table, the clouds' noise textures, reflection probe) |
+| 2 | `assets` | The ids (`MeshId`, `TextureId`, `MaterialId`) and `Vertex`, meshes (`GpuMesh`, `MeshPage`), textures (`GpuTexture`, uploads, mip chains, fitting), materials (`Material`, `MaterialExtra`, `PbrMaps`, `BindKey`) and their life cycle (free, recycle, `Freed`, pending mesh writes) |
+| 2 | `lighting` | The light model (`Lighting`, `PointLight`, `Corona`, `SmokeParticle`, `LightMode`), its GPU records (`GpuPointLight`, `GpuCorona`), the light grid and lamp shadows, the tile light map atlas |
+| 1 | `shaders` | The WGSL sources, grouped `common/` (included by several shaders), `scene/`, `sky/`, `post/`, `lights/`, `effects/`, `output/`, `assets/`, and the code that assembles them |
+| 0 | `gpu` | Opening the device (adapters, limits, the remembered fallbacks, `DevicePoller`), what the device can do (GL backend, `ArrayPath`, VRAM), `GpuArray`, errors (`catch`, device lost, out of memory), the render targets' formats (`DEPTH_FORMAT`, `HDR_FORMAT`, the masks and G-buffer, `color_targets`) |
 
-The "Lives today in" column shrinks as each domain reaches its folder; when it is empty, this
-column goes.
+Not yet in place: opening the adapter and device, and the headset's methods, are still in
+`api/renderer.rs`; the exposure log is in `lighting/exposure.rs`; visibility (culling, level of
+detail) runs in `renderer/lists.rs`. None of these imports out of layer.
 
 ## Rules
 
@@ -64,8 +65,7 @@ column goes.
    `use super::*`: the import list is the domain's dependency map. Nothing imports from `api`;
    only `renderer` and `api` import from `output`. The globs left in `lib.rs` serve only the tests
    (`tests.rs`, `tests_units.rs`) and go when those move to their domains.
-   `scripts/check-render-layers.sh` lists the imports that break this rule (informational on CI
-   for now).
+   `scripts/check-render-layers.sh` lists the imports that break this rule, and CI fails on any.
 4. **Smallest visibility.** `pub(super)` inside a domain, `pub(crate)` only for what another
    domain uses.
 5. **A pass keeps its parts together.** Pipelines, uniform, layout and encoding sit in the
