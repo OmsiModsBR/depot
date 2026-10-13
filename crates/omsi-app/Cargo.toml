@@ -52,7 +52,7 @@ env_logger.workspace = true
 rayon.workspace = true
 omsi-net = { path = "../omsi-net" }
 omsi-ui = { path = "../omsi-ui" }
-omsi-launcher-core = { path = "../omsi-launcher-core" }
+omsi-launcher-core = { path = "../omsi-launcher-core", features = ["lan"] }
 serde.workspace = true
 hashbrown.workspace = true
 parking_lot.workspace = true

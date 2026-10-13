@@ -2700,6 +2700,7 @@ fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
             a.extend(["--lan-host".into(), "0".into()]);
         } else if let Some(target) = lan.strip_prefix("join:") {
             let target = target.trim();
+            #[cfg(feature = "lan")]
             omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
             a.extend(["--lan-join".into(), if target.is_empty() { "auto".into() } else { target.to_string() }]);
         } else {
@@ -2744,7 +2745,15 @@ pub fn launch(d: &Duty) -> Result<Launched> {
 
 /// What a LAN join field means (or what is wrong with it), and the sessions hosted here.
 pub fn check_join(text: &str) -> Value {
-    match omsi_net::describe_join(text) {
+    #[cfg(feature = "lan")]
+    let described = omsi_net::describe_join(text);
+    // (built without LAN play: nothing to join, and the game ignores `--lan-join`)
+    #[cfg(not(feature = "lan"))]
+    let described: Result<String, String> = {
+        let _ = text;
+        Err("LAN play is not in this build".to_string())
+    };
+    match described {
         Ok(d) => json!({ "ok": true, "text": d, "local": instances::local_hosts() }),
         Err(e) => json!({ "ok": false, "text": e, "local": instances::local_hosts() }),
     }
