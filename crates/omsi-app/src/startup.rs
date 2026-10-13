@@ -161,9 +161,11 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 
 /// Use the native supported API for both windowed and offscreen rendering.
 pub(crate) fn graphics_instance() -> wgpu::Instance {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    let descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         // the dedicated server draws nothing: wgpu's no-op device takes every call
+        let mut descriptor = descriptor;
         descriptor.backends = wgpu::Backends::NOOP;
         descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
         return wgpu::Instance::new(descriptor);

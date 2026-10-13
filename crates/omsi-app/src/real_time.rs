@@ -96,12 +96,15 @@ pub(crate) fn started_synced() -> bool {
 
 /// A dedicated server runs on the real time (`real_time` in its server.cfg): its clock
 /// cannot be set or sped up.
+#[cfg(feature = "server")]
 static SERVER_REAL: AtomicBool = AtomicBool::new(false);
 
+#[cfg(feature = "server")]
 pub(crate) fn set_server_real(on: bool) {
     SERVER_REAL.store(on, Ordering::Relaxed);
 }
 
+#[cfg(feature = "server")]
 pub(crate) fn server_real() -> bool {
     SERVER_REAL.load(Ordering::Relaxed)
 }

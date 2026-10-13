@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The offscreen run, the game's start-up and the window's graphics set-up in `omsi-app` keep their
+  LAN code behind the `lan` feature, and the dedicated server's code (`server.rs`, the server admin
+  commands, the server's status page and clock) moves behind the `server` feature. Without `server`,
+  `ServerCfg` is an empty type, so the server paths are compiled out; `--server` already stopped
+  with a message. `lan` is still on by default. No behaviour change.
 - The game's frame and menus in `omsi-app` keep their LAN code behind the `lan` feature: the chat,
   the other players' buses, walkers, name tags and map arrows, the host's clock and weather, the
   server admin list and the session's goodbye. Without `lan`, `lan_off.rs` answers "no session"

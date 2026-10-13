@@ -1666,6 +1666,7 @@ impl ApplicationHandler for App {
                         if let Some(t) = self.traffic.as_mut() {
                             others.extend(t.cars.iter_mut().map(|c| (c.id, "ai", &mut c.vehicle)));
                         }
+                        #[cfg(feature = "lan")]
                         others.extend(self.online.remotes.remotes.iter_mut().map(|(id, r)| ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())));
                         let mut io = crate::plugins::Io { vehicle: self.player.as_mut().map(|p| &mut p.vehicle), others, dt, message: None, info, commands: Vec::new(), keys, events };
                         plugins.frame(&mut io);

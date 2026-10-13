@@ -159,10 +159,11 @@ impl VoiceServer {
 /// The voice server this game names when it hosts: a dedicated server's `server.cfg`, else
 /// `~/.openomsi/voice.cfg`.
 pub(crate) fn hosted() -> Option<VoiceServer> {
-    match crate::server::SERVER_VOICE.get() {
-        Some(v) => v.clone(),
-        None => VoiceServer::host_file(),
+    #[cfg(feature = "server")]
+    if let Some(v) = crate::server::SERVER_VOICE.get() {
+        return v.clone();
     }
+    VoiceServer::host_file()
 }
 
 fn parse_kv(text: &str) -> std::collections::HashMap<String, String> {
