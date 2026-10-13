@@ -61,9 +61,12 @@ built    = #2a2a2a
 - `grid`: the author's tile size in metres (section 3). Required.
 - The data files have fixed names (section 1), so the manifest does not name them.
 - `credit`: shown on the city map and in the launcher. Required when the data needs attribution.
+- `terrain_offset`: metres added to the height of every contour line when the game says it (default 0). The
+  contour lines of a package are heights **above sea level** (section 8.3, "Terrain view"); this key is only for a
+  package whose lines are in the editor's own heights.
 - Colours are optional hints. The game has a **dark** and a **light** look; a colour key colours
   the dark map (`water = #rrggbb`) and its `light_` twin the light one (`light_water = #rrggbb`).
-  Keys: `land water river green grass forest sport farm built rail rail_edge border`. A key left
+  Keys: `land water river green grass forest sport farm built rail rail_edge border contour`. A key left
   out takes the game's own colour for that look. Layers are **semantic**, so the game decides
   the final colour.
 
@@ -120,6 +123,8 @@ u32  n_labels  ; n_labels x { u8 kind, u8 rank, u32 name, f32 x, f32 y }    name
   | 2 | border | | 0 |
   | 3 | street | | its rank 0-5 |
   | 4 | street with limits | its speed limit, km/h (0 = none) | the limit of heavy vehicles, km/h (0 = the same, or none) |
+  | 5 | contour line | its height above sea level, metres | 0 |
+  | 6 | index contour line (every fifth), same | its height | 0 |
 
   A **street** (class 3 or 4) is not drawn: its points are only looked up to tell the player which street
   they are on and the street under the pointer (the nearest piece within 30 m, or within a reach that grows
@@ -212,6 +217,15 @@ no road) in a small box, with its limits when the package says them (class 4 of 
 The limit of the street the player is on is shown as a **road sign** beside the "you are on" chip (and, smaller,
 the limit of heavy vehicles when it is another). A generator takes the limits from `maxspeed` and `maxspeed:hgv`
 of the real streets where they exist; a street without a limit is class 3 and shows none.
+
+**Terrain view.** Classes 5 and 6 of the lines (section 4) are the contour lines of the real terrain, heights
+above sea level. A package with them gets a **Terrain** button on the city map (and a setting, `nav_contours`).
+In that view the map shows only what is of the terrain and of the game: water, rivers, the rails, the game's own
+roads and the contour lines, with none of the built-up blocks, green areas or borders behind. The lines are faint
+from afar, so that the streets stand out, and stronger up close; up close the height is written on the index
+lines, in a faint colour. With the terrain view on, the height of the street the player is on and of the street
+under the pointer are written beside their names (interpolated between the two nearest contour lines of
+different heights). The generators take the heights from public elevation tiles for the area of the map.
 
 ### 8.4 Bus lines (`lines.lin`)
 

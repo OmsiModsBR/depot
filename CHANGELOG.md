@@ -91,6 +91,13 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- City map terrain view: a **Terrain** button (and the setting `nav_contours`) shows the contour lines of the terrain
+  from a map package that carries them (new line classes 5 and 6 of `docs/MAP_PACKAGE.md` section 4), the height
+  written on the index lines, and the height of the street the player is on and of the street under the pointer.
+  The view shows only water, rivers, rails, the game's roads and the contour lines. New manifest keys
+  `terrain_offset` and `contour` (colour). Packages without contour lines behave as before. Source: maintainer
+  (Leo, `lmonteirotech`), fork lmonteirotech/openOMSI branch `local/lines-timetable` (the contour part of
+  `d09111f` and `ae77b95`), MIT. Not validated against real OMSI 2 content; only build and automated tests were run.
 - City map: the street under the pointer (any street the map's package names, also where the game has no road)
   in a small box, and the speed limit of the street the player is on as a road sign (and the limit of heavy
   vehicles when it is another), from a new line class of the package, "street with limits" (class 4 of

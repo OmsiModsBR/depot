@@ -39,6 +39,9 @@ const LINE_STREET: u8 = 3;
 /// A named street that also says its limits: `width` is the limit (km/h, 0 = none), `flags` the limit of heavy
 /// vehicles (km/h, 0 = the same, or none).
 const LINE_STREET_LIMITS: u8 = 4;
+/// A contour line of the terrain (`width` is its height in metres) and an index contour (every fifth: drawn heavier).
+const LINE_CONTOUR: u8 = 5;
+const LINE_CONTOUR_INDEX: u8 = 6;
 
 /// A street found by place: its name and its speed limits (km/h, 0 = not said).
 #[derive(Clone, Debug, PartialEq)]
@@ -67,6 +70,7 @@ pub struct Palette {
     pub rail: Color,
     pub rail_edge: Color,
     pub border: Color,
+    pub contour: Color,
 }
 
 impl Palette {
@@ -84,6 +88,7 @@ impl Palette {
             rail: Color::hex(0x7d8a95),
             rail_edge: Color::hex(0x0c1013),
             border: Color::hex(0xb592d6),
+            contour: Color::rgba(190, 150, 100, 0.8),
         }
     }
 
@@ -101,6 +106,7 @@ impl Palette {
             rail: Color::hex(0x8c877b),
             rail_edge: Color::hex(0xf4f1ea),
             border: Color::hex(0x9070a8),
+            contour: Color::rgba(150, 105, 60, 0.85),
         }
     }
 
@@ -118,6 +124,7 @@ impl Palette {
             "rail" => self.rail = c,
             "rail_edge" => self.rail_edge = c,
             "border" => self.border = c,
+            "contour" => self.contour = c,
             _ => {}
         }
     }
@@ -252,6 +259,12 @@ pub struct MapSurface {
     regions: Vec<Region>,
     lines: Vec<LineInfo>,
     has_streets: bool,
+    /// The package carries the terrain's contour lines.
+    has_contours: bool,
+    /// Added to the heights of the contour lines when the manifest says so (some maps' heights are relative).
+    terrain_offset: f32,
+    /// Where the index contours are written (a point and a height about every 700 m of them), made on first use.
+    contour_marks: std::sync::OnceLock<Vec<(DVec2, i32)>>,
 }
 
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
@@ -323,6 +336,7 @@ impl MapSurface {
             Color::hex(0x1e7b34),
         ];
         let mut brt_lines: Vec<String> = Vec::new();
+        let mut terrain_offset = 0.0f32;
         let (mut dark, mut light) = (Palette::dark(), Palette::light());
         for line in text.lines() {
             let line = line.trim();
@@ -342,6 +356,7 @@ impl MapSurface {
                 "player_free" => player_colors[0] = parse_color(v).unwrap_or(player_colors[0]),
                 "player_line" => player_colors[1] = parse_color(v).unwrap_or(player_colors[1]),
                 "player_brt" => player_colors[2] = parse_color(v).unwrap_or(player_colors[2]),
+                "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
                 "brt_lines" => {
                     brt_lines = v
                         .split(',')
@@ -381,6 +396,8 @@ impl MapSurface {
                 s.load_markers(&dir);
                 s.load_regions(&dir);
                 s.load_lines(&dir);
+                s.terrain_offset = terrain_offset;
+                s.has_contours = s.index.iter().any(|e| s.data.get(e.at..e.at + e.len).is_some_and(chunk_has_contours));
                 s.has_streets = s.index.iter().any(|e| {
                     s.data
                         .get(e.at..e.at + e.len)
@@ -473,6 +490,9 @@ impl MapSurface {
             regions: Vec::new(),
             lines: Vec::new(),
             has_streets: false,
+            has_contours: false,
+            terrain_offset: 0.0,
+            contour_marks: std::sync::OnceLock::new(),
         })
     }
 
@@ -521,6 +541,72 @@ impl MapSurface {
 
     pub fn lines(&self) -> &[LineInfo] {
         &self.lines
+    }
+
+    /// The package carries contour lines (the city map then has a button for them).
+    pub fn has_contours(&self) -> bool {
+        self.has_contours
+    }
+
+    /// The height at a game position, from the two nearest contour lines of different heights (between them it is
+    /// interpolated by distance), plus the manifest's `terrain_offset`; None where no contour is near.
+    pub fn altitude_at(&self, pos: DVec2) -> Option<f32> {
+        if !self.has_contours {
+            return None;
+        }
+        let a = self.world_to_author(pos) - self.origin;
+        let (cx, cy) = ((a.x / self.chunk).floor() as i32, (a.y / self.chunk).floor() as i32);
+        let mut found: Vec<(f64, f32)> = Vec::new();
+        for dx in -2..=2 {
+            for dy in -2..=2 {
+                if let Some(&i) = self.by_key.get(&(cx + dx, cy + dy)) {
+                    let e = &self.index[i];
+                    if let Some(body) = self.data.get(e.at..e.at + e.len) {
+                        let _ = contours_in_chunk(body, a, &mut found);
+                    }
+                }
+            }
+        }
+        found.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let (d1, h1) = *found.first()?;
+        if d1 > 1500.0 {
+            return None;
+        }
+        let h = match found.iter().find(|(_, h)| (*h - h1).abs() > 0.01) {
+            Some(&(d2, h2)) if d1 + d2 > 1e-6 => h1 + (h2 - h1) * (d1 / (d1 + d2)) as f32,
+            _ => h1,
+        };
+        Some(h + self.terrain_offset)
+    }
+
+    /// Where the heights of the index contours are written on the city map: a point and the height, about every
+    /// 700 m along each index line.
+    pub fn contour_marks(&self) -> &[(DVec2, i32)] {
+        self.contour_marks.get_or_init(|| {
+            let mut out = Vec::new();
+            for e in &self.index {
+                let Some(body) = self.data.get(e.at..e.at + e.len) else { continue };
+                let _ = self.walk(
+                    body,
+                    |_, _| {},
+                    |(class, w), pts| {
+                        if class != LINE_CONTOUR_INDEX {
+                            return;
+                        }
+                        let (mut run, mut next) = (0.0, 150.0);
+                        for s in pts.windows(2) {
+                            run += (s[1] - s[0]).length();
+                            if run >= next {
+                                out.push(((s[0] + s[1]) * 0.5, (w + self.terrain_offset).round() as i32));
+                                next = run + 700.0;
+                            }
+                        }
+                    },
+                    |_| {},
+                );
+            }
+            out
+        })
     }
 
     /// The package can say where the player is (municipality outlines or named streets).
@@ -824,7 +910,7 @@ impl MapSurface {
     /// The surface as vertices (relative to `anchor`, drawn under the roads): built-up
     /// land, green, water, then rivers, rail and borders. `near` limits it to the chunks
     /// within a radius of a point (the tilted navigator); None builds the whole map.
-    pub fn build(&self, p: &mut Painter, anchor: DVec2, near: Option<(DVec2, f64)>, light: bool) {
+    pub fn build(&self, p: &mut Painter, anchor: DVec2, near: Option<(DVec2, f64)>, light: bool, contours: bool) {
         let rel = |q: DVec2| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
         let mut tris: [Vec<[DVec2; 3]>; FILL_CLASSES] = Default::default();
         let mut lines: Vec<(u8, f32, Vec<DVec2>)> = Vec::new();
@@ -862,12 +948,16 @@ impl MapSurface {
             (FILL_WATER, pal.water),
         ];
         for (class, color) in order {
+            // (the terrain view: no built-up land, no green, only water)
+            if contours && class != FILL_WATER {
+                continue;
+            }
             for t in &tris[class as usize] {
                 p.world_poly(&[rel(t[0]), rel(t[1]), rel(t[2])], color);
             }
         }
         // rivers under rail under borders; a river's width tells river from stream
-        for want in [LINE_RIVER, LINE_RAIL, LINE_BORDER] {
+        for want in [LINE_RIVER, LINE_RAIL, LINE_BORDER].into_iter().filter(|w| !contours || *w != LINE_BORDER) {
             for (class, w, pts) in lines.iter().filter(|l| l.0 == want) {
                 let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
                 match *class {
@@ -879,6 +969,17 @@ impl MapSurface {
                         p.ribbon(&v, 2.2, 1.6, pal.rail, false);
                     }
                     _ => p.ribbon(&v, 1.4, 1.4, pal.border.alpha(0.7), false),
+                }
+            }
+        }
+        // the terrain's contour lines (on request), the index lines heavier
+        if contours {
+            for (class, _, pts) in lines.iter().filter(|l| l.0 == LINE_CONTOUR || l.0 == LINE_CONTOUR_INDEX) {
+                let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
+                if *class == LINE_CONTOUR_INDEX {
+                    p.ribbon(&v, 1.9, 1.5, pal.contour, false);
+                } else {
+                    p.ribbon(&v, 1.0, 1.0, pal.contour.alpha(0.5), false);
                 }
             }
         }
@@ -910,6 +1011,65 @@ fn dist_to_segment(p: DVec2, a: DVec2, b: DVec2) -> f64 {
         0.0
     };
     (a + ab * t - p).length()
+}
+
+/// The contour lines of a chunk near `p` (author-grid metres from the file's origin): per line its nearest distance
+/// and its height.
+fn contours_in_chunk(body: &[u8], p: DVec2, found: &mut Vec<(f64, f32)>) -> Option<()> {
+    let mut r = Rd { b: body, i: 0 };
+    for _ in 0..r.u32()? {
+        r.u8()?;
+        let n = r.u32()? as usize;
+        r.take(n.checked_mul(24)?)?;
+    }
+    for _ in 0..r.u32()? {
+        let class = r.u8()?;
+        r.u8()?;
+        let width = r.f32()?;
+        r.u32()?;
+        let n = r.u32()? as usize;
+        if class != LINE_CONTOUR && class != LINE_CONTOUR_INDEX {
+            r.take(n.checked_mul(8)?)?;
+            continue;
+        }
+        let (mut prev, mut best): (Option<DVec2>, f64) = (None, f64::MAX);
+        for _ in 0..n {
+            let q = DVec2::new(r.f32()? as f64, r.f32()? as f64);
+            if let Some(a) = prev {
+                best = best.min(dist_to_segment(p, a, q));
+            }
+            prev = Some(q);
+        }
+        if best < f64::MAX {
+            found.push((best, width));
+        }
+    }
+    Some(())
+}
+
+/// Whether a chunk has contour lines (class 5 or 6).
+fn chunk_has_contours(body: &[u8]) -> bool {
+    let mut r = Rd { b: body, i: 0 };
+    let scan = |r: &mut Rd| -> Option<bool> {
+        for _ in 0..r.u32()? {
+            r.u8()?;
+            let n = r.u32()? as usize;
+            r.take(n.checked_mul(24)?)?;
+        }
+        for _ in 0..r.u32()? {
+            let class = r.u8()?;
+            r.u8()?;
+            r.f32()?;
+            r.u32()?;
+            let n = r.u32()? as usize;
+            if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
+                return Some(true);
+            }
+            r.take(n.checked_mul(8)?)?;
+        }
+        Some(false)
+    };
+    scan(&mut r).unwrap_or(false)
 }
 
 /// Whether a chunk has named streets (class 3 lines).
@@ -1144,7 +1304,7 @@ mod tests {
     fn a_valid_file_builds_and_names_its_places() {
         let s = open(sample()).expect("valid");
         let mut p = Painter::new();
-        s.build(&mut p, DVec2::new(1000.0, 2000.0), None, false);
+        s.build(&mut p, DVec2::new(1000.0, 2000.0), None, false, false);
         // one triangle (3 vertices) and a river ribbon
         assert!(p.verts.len() >= 3 + 6);
         let l = s.labels();
@@ -1161,6 +1321,7 @@ mod tests {
             DVec2::ZERO,
             Some((DVec2::new(1.0e7, 1.0e7), 500.0)),
             true,
+            false,
         );
         assert!(p.verts.is_empty());
     }
@@ -1311,6 +1472,41 @@ mod tests {
         street_in_chunk(&b, DVec2::new(40.0, 5.0), &mut best).unwrap();
         let (d, name, speed, heavy) = best.unwrap();
         assert!((d - 5.0).abs() < 1e-6 && name == 3 && speed == 50 && heavy == 30);
+    }
+
+    /// A chunk body with two contour lines (heights 100 and 120, one index) as parallel horizontal lines.
+    fn contour_chunk() -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend(0u32.to_le_bytes());
+        b.extend(2u32.to_le_bytes());
+        for (class, h, y) in [(LINE_CONTOUR, 100.0f32, 0.0f32), (LINE_CONTOUR_INDEX, 120.0, 100.0)] {
+            b.extend([class, 0]);
+            b.extend(h.to_le_bytes());
+            b.extend(u32::MAX.to_le_bytes());
+            b.extend(2u32.to_le_bytes());
+            for v in [0.0f32, y, 200.0, y] {
+                b.extend(v.to_le_bytes());
+            }
+        }
+        b.extend(0u32.to_le_bytes());
+        b
+    }
+
+    #[test]
+    fn contour_lines_are_found_and_give_a_height_between_them() {
+        let b = contour_chunk();
+        assert!(chunk_has_contours(&b));
+        assert!(!chunk_has_streets(&b));
+        let mut found = Vec::new();
+        contours_in_chunk(&b, DVec2::new(50.0, 25.0), &mut found).unwrap();
+        found.sort_by(|x, y| x.0.total_cmp(&y.0));
+        // 25 m from the 100 m line and 75 m from the 120 m one: a quarter of the way up
+        assert_eq!(found.len(), 2);
+        assert!((found[0].0 - 25.0).abs() < 1e-6 && found[0].1 == 100.0);
+        let (d1, h1) = found[0];
+        let (d2, h2) = found[1];
+        let h = h1 + (h2 - h1) * (d1 / (d1 + d2)) as f32;
+        assert!((h - 105.0).abs() < 1e-4);
     }
 
     #[test]

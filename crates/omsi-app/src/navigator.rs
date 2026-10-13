@@ -281,14 +281,17 @@ struct LinesText {
     count: &'static str,
     /// The limit of heavy vehicles, when it is not the same.
     heavy: &'static str,
+    /// The terrain view's button, and the height in a chip.
+    terrain: &'static str,
+    elev: &'static str,
     /// Decimals with a comma.
     comma: bool,
 }
 
 fn lines_text(lang: &str) -> LinesText {
     match lang.to_ascii_uppercase().as_str() {
-        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", heavy: "pesados", comma: true },
-        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", heavy: "heavy", comma: false },
+        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", heavy: "pesados", terrain: "Relevo", elev: "alt.", comma: true },
+        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", heavy: "heavy", terrain: "Terrain", elev: "elev.", comma: false },
     }
 }
 
@@ -424,6 +427,8 @@ pub struct Navigator {
     surface_version: u64,
     /// The surface is drawn (the `nav_surface` setting).
     pub show_surface: bool,
+    /// The terrain view of the city map (contour lines, when the map's package carries them): a button on the map.
+    pub show_contours: bool,
     /// The map's marker pictures as a texture of the navigator's own GPU state.
     icon_tex: Option<usize>,
     /// The municipality and the street the bus is on (from the package), refreshed now and then.
@@ -431,6 +436,8 @@ pub struct Navigator {
     loc_street: Option<String>,
     /// The limit of the street the bus is on (km/h) and that of heavy vehicles, 0 when not said.
     loc_limit: (u32, u32),
+    /// The height where the bus is (the terrain view only).
+    loc_alt: Option<f32>,
     /// The light look of the maps (the `nav_light` setting).
     pub light: bool,
     /// The small map's surface mesh (buffer 6): the surface version and anchor it was built for, and its size.
@@ -559,10 +566,12 @@ impl Navigator {
             surface_labels: Vec::new(),
             surface_version: 0,
             show_surface: true,
+            show_contours: false,
             icon_tex: None,
             loc_city: None,
             loc_street: None,
             loc_limit: (0, 0),
+            loc_alt: None,
             light: false,
             surface_mesh: None,
             building: None,
@@ -1093,6 +1102,7 @@ impl Navigator {
                 Some(sf) => sf.locate(f.bus.truncate()),
                 None => (None, None),
             };
+            self.loc_alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|sf| sf.altitude_at(f.bus.truncate()));
             self.loc_limit = self.surface.as_ref().filter(|s| self.show_surface && s.has_location()).and_then(|sf| sf.street_info(f.bus.truncate(), 30.0)).map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
@@ -1198,7 +1208,7 @@ impl Navigator {
             let key = self.surface_version * 2 + self.light as u64;
             if self.surface_mesh.map(|m| m.0 != key || m.1 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light);
+                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light, false);
                 self.surface_mesh = Some((key, anchor, p.len()));
                 surface_verts = Some(p.verts);
             }
@@ -2353,7 +2363,7 @@ pub struct CityMap {
     /// Where the pointer is over the map (window pixels), and the street found under it (for a point of about
     /// two metres: not looked up again while it stays on it).
     hover: Option<(f32, f32)>,
-    hover_cache: Option<((i64, i64), Option<crate::map_surface::Street>)>,
+    hover_cache: Option<((i64, i64, bool), (Option<crate::map_surface::Street>, Option<f32>))>,
     target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.
     roads: Option<(u64, u32, DVec2)>,
@@ -2729,6 +2739,7 @@ impl Navigator {
         }
         match hit {
             Some(4) => self.city.lines.open = !self.city.lines.open,
+            Some(5) => self.show_contours = !self.show_contours,
             Some(0) => self.city.follow = true,
             Some(1) => self.city.mpp = (self.city.mpp / 1.6).max(0.25),
             Some(2) => self.city.mpp = (self.city.mpp * 1.6).min(self.max_mpp()),
@@ -2768,22 +2779,23 @@ impl Navigator {
 
     /// The name of the street under the pointer, from the map's package: any street the package names, also where
     /// the game has no road (not while the map is dragged or the pointer is on the lines panel).
-    fn hover_street(&mut self) -> Option<crate::map_surface::Street> {
+    fn hover_street(&mut self) -> Option<(Option<crate::map_surface::Street>, Option<f32>)> {
         let (x, y) = self.city.hover?;
         let r = self.city.rect;
         if self.city.drag.is_some() || (self.city.lines.open && self.city.lines.panel.is_some_and(|p| p.contains(Vec2::new(x - r[0], y - r[1])))) {
             return None;
         }
         let pos = self.map_point(x, y)?;
-        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64);
-        if let Some((k, name)) = &self.city.hover_cache {
+        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, self.show_contours);
+        if let Some((k, found)) = &self.city.hover_cache {
             if *k == key {
-                return name.clone();
+                return Some(found.clone()).filter(|f| f.0.is_some() || f.1.is_some());
             }
         }
-        let name = self.surface.as_ref().and_then(|s| s.street_info(pos, (self.city.mpp * 10.0).clamp(8.0, 40.0)));
-        self.city.hover_cache = Some((key, name.clone()));
-        name
+        let street = self.surface.as_ref().and_then(|s| s.street_info(pos, (self.city.mpp * 10.0).clamp(8.0, 40.0)));
+        let alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|s| s.altitude_at(pos));
+        self.city.hover_cache = Some((key, (street.clone(), alt)));
+        Some((street, alt)).filter(|f| f.0.is_some() || f.1.is_some())
     }
 
     /// The wheel over the map: zoom, keeping the point under the cursor where it is.
@@ -2880,10 +2892,10 @@ impl Navigator {
         // the map's surface (buffer 7), once per surface and anchor
         let mut surface_verts = None;
         if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
-            let key = self.surface_version * 2 + self.light as u64;
+            let key = self.surface_version * 4 + self.light as u64 + 2 * self.show_contours as u64;
             if self.city.surface.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, None, self.light);
+                sf.build(&mut p, anchor, None, self.light, self.show_contours);
                 self.city.surface = Some((key, p.len(), anchor));
                 surface_verts = Some(p.verts);
             }
@@ -3043,7 +3055,7 @@ impl Navigator {
             ui.rounded(r, 4.0 * s, *color);
             ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, LINE_TEXT);
         }
-        if self.show_surface && self.surface.is_some() {
+        if self.show_surface && self.surface.is_some() && !self.show_contours {
             // the municipalities' names as a watermark: big, faint, inside their outlines (the box
             // the package computed); out of sight when zoomed in, where the streets' names take over
             if let Some(sf) = self.surface.clone() {
@@ -3093,6 +3105,22 @@ impl Navigator {
                     ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at + o * s, Align::Center, halo);
                 }
                 ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at, Align::Center, if l.kind == 0 { ink_dim } else { ink });
+            }
+            // the terrain view: the height written on the index contours, semi-transparent
+            if self.show_contours && self.city.mpp < 40.0 {
+                if let Some(sf) = self.surface.clone() {
+                    let px = 11.5 * s;
+                    let col = if self.light { Color::rgba(110, 72, 34, 0.62) } else { Color::rgba(236, 206, 156, 0.55) };
+                    let mut shown: Vec<Vec2> = Vec::new();
+                    for (at, height) in sf.contour_marks() {
+                        let p = to_screen(at.extend(0.0));
+                        if !win.pad(30.0 * s, 30.0 * s).contains(p) || shown.iter().any(|q| (*q - p).length() < 120.0 * s) {
+                            continue;
+                        }
+                        shown.push(p);
+                        ui.text(&mut self.atlas, &self.fonts, &format!("{height} m"), px, Weight::Medium, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
+                    }
+                }
             }
             // the data's attribution (the map's licence asks for it)
             if let Some(sf) = self.surface.as_ref().filter(|s| !s.credit.is_empty()) {
@@ -3218,6 +3246,18 @@ impl Navigator {
             ui.icon(&mut self.atlas, "route", Vec2::new(r.x + 17.0 * s, r.center().y), 17.0 * s, TEXT);
             ui.text_in(&mut self.atlas, &self.fonts, lt.lines, 13.5 * s, Weight::Bold, Rect::new(r.x + 30.0 * s, r.y, r.w - 32.0 * s, r.h), Align::Center, TEXT);
             self.city.buttons.push((r, 4));
+            bx = r.x - bs - 8.0 * s;
+        }
+        // the terrain view: a toggle (only where the package carries contour lines), a mountain pictogram and a label
+        if self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
+            let bw = (self.fonts.width(lt.terrain, 13.5 * s, Weight::Bold) + 44.0 * s).max(92.0 * s);
+            let r = Rect::new(bx + bs - bw, head.y + (head.h - bs) * 0.5, bw, bs);
+            ui.rounded(r, 5.0 * s, if self.show_contours { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
+            let (cx, cy) = (r.x + 18.0 * s, r.center().y + 6.0 * s);
+            ui.tri(Vec2::new(cx - 12.0 * s, cy), Vec2::new(cx - 2.0 * s, cy - 13.0 * s), Vec2::new(cx + 6.0 * s, cy), TEXT, TEXT, TEXT);
+            ui.tri(Vec2::new(cx - 3.0 * s, cy), Vec2::new(cx + 6.0 * s, cy - 9.0 * s), Vec2::new(cx + 14.0 * s, cy), TEXT_DIM, TEXT_DIM, TEXT_DIM);
+            ui.text_in(&mut self.atlas, &self.fonts, lt.terrain, 13.5 * s, Weight::Bold, Rect::new(r.x + 32.0 * s, r.y, r.w - 34.0 * s, r.h), Align::Center, TEXT);
+            self.city.buttons.push((r, 5));
         }
         // where the bus is: the municipality and the street, from the package
         if self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location()) {
@@ -3231,7 +3271,8 @@ impl Navigator {
                 y += 28.0 * s;
             }
             if let Some(st) = self.loc_street.clone() {
-                let t = self.fonts.fit(&format!("{}: {}", lt.you_are_on, st), 12.0 * s, Weight::Medium, w * 0.38);
+                let alt = self.loc_alt.map_or(String::new(), |a| format!("  ·  {} {:.0} m", lt.elev, a));
+                let t = self.fonts.fit(&format!("{}: {}{}", lt.you_are_on, st, alt), 12.0 * s, Weight::Medium, w * 0.45);
                 let tw = self.fonts.width(&t, 12.0 * s, Weight::Medium) + 20.0 * s;
                 let r = Rect::new(pad, y, tw, 22.0 * s);
                 ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
@@ -3255,14 +3296,21 @@ impl Navigator {
                 y += if limit > 0 { 38.0 * s } else { 26.0 * s };
             }
             // the street under the pointer, with its limits (smaller)
-            if let Some(st) = self.hover_street() {
-                let mut text = st.name.clone();
-                if st.speed > 0 {
-                    text += &format!("  ·  {} km/h", st.speed);
+            if let Some((st, alt)) = self.hover_street() {
+                let mut parts: Vec<String> = Vec::new();
+                if let Some(st) = &st {
+                    parts.push(st.name.clone());
+                    if st.speed > 0 {
+                        parts.push(format!("{} km/h", st.speed));
+                    }
+                    if st.heavy > 0 {
+                        parts.push(format!("{} {}", lt.heavy, st.heavy));
+                    }
                 }
-                if st.heavy > 0 {
-                    text += &format!("  ·  {} {}", lt.heavy, st.heavy);
+                if let Some(a) = alt {
+                    parts.push(format!("{} {:.0} m", lt.elev, a));
                 }
+                let text = parts.join("  ·  ");
                 let t = self.fonts.fit(&text, 11.5 * s, Weight::Bold, w * 0.42);
                 let tw = self.fonts.width(&t, 11.5 * s, Weight::Bold) + 20.0 * s;
                 let r = Rect::new(pad, y, tw, 21.0 * s);
