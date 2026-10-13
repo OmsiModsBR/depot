@@ -9,7 +9,9 @@
 //! per wheel, `Wheel_Rotation` (rad), `Wheel_RotationSpeed` (rpm), `Axle_Steering` (rad) and
 //! `Axle_Suspension` (m). The driver's controls go to `Throttle`, `Brake` and `Clutch`.
 
-use super::*;
+use glam::{Quat, Vec3};
+use super::trailer::TrailerPart;
+use super::VehicleInstance;
 
 /// What the scripts left for the physics this frame.
 pub(super) struct DriveInputs {
