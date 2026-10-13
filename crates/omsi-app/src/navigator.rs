@@ -3147,28 +3147,28 @@ impl Navigator {
                     }
                 }
             }
-            // the compass: where real north lies on the screen; a click changes how the map is turned
-            {
-                let r = 24.0 * s;
-                let c = Vec2::new(w - 36.0 * s - r, h - 62.0 * s - r);
-                let red = Color::rgba(226, 70, 62, 1.0);
-                let grey = Color::rgba(190, 196, 204, 1.0);
-                ui.rounded(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, Color::rgba(10, 12, 16, 0.78));
-                ui.rounded_border(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, 1.0, Color::WHITE.alpha(0.25));
-                let ang = (north.to_radians() - phi) as f32; // clockwise from the screen's up
-                let dir = Vec2::new(ang.sin(), -ang.cos());
-                let side = Vec2::new(-dir.y, dir.x);
-                ui.tri(c + dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), red, red, red);
-                ui.tri(c - dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), grey, grey, grey);
-                ui.text(&mut self.atlas, &self.fonts, "N", 10.5 * s, Weight::Bold, c + dir * (1.18 * r) + Vec2::new(0.0, 4.0 * s), Align::Center, TEXT);
-                ui.text(&mut self.atlas, &self.fonts, lines_text(f.language).orient[self.orient.min(2) as usize], 10.5 * s, Weight::Medium, Vec2::new(c.x, c.y + r + 13.0 * s), Align::Center, TEXT_DIM);
-                // (listed with the buttons on the next frame, after they are cleared)
-                self.city.compass = Some(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r + 16.0 * s));
-            }
             // the data's attribution (the map's licence asks for it)
             if let Some(sf) = self.surface.as_ref().filter(|s| !s.credit.is_empty()) {
                 ui.text(&mut self.atlas, &self.fonts, &sf.credit, 10.5 * s, Weight::Medium, Vec2::new(w - 12.0 * s, h - 8.0 * s), Align::Right, if self.light { Color::hex(0x5b564c).alpha(0.8) } else { TEXT_DIM.alpha(0.7) });
             }
+        }
+        // the compass: where real north lies on the screen; a click changes how the map is turned
+        {
+            let r = 24.0 * s;
+            let c = Vec2::new(w - 36.0 * s - r, h - 62.0 * s - r);
+            let red = Color::rgba(226, 70, 62, 1.0);
+            let grey = Color::rgba(190, 196, 204, 1.0);
+            ui.rounded(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, Color::rgba(10, 12, 16, 0.78));
+            ui.rounded_border(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, 1.0, Color::WHITE.alpha(0.25));
+            let ang = (north.to_radians() - phi) as f32; // clockwise from the screen's up
+            let dir = Vec2::new(ang.sin(), -ang.cos());
+            let side = Vec2::new(-dir.y, dir.x);
+            ui.tri(c + dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), red, red, red);
+            ui.tri(c - dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), grey, grey, grey);
+            ui.text(&mut self.atlas, &self.fonts, "N", 10.5 * s, Weight::Bold, c + dir * (1.18 * r) + Vec2::new(0.0, 4.0 * s), Align::Center, TEXT);
+            ui.text(&mut self.atlas, &self.fonts, lines_text(f.language).orient[self.orient.min(2) as usize], 10.5 * s, Weight::Medium, Vec2::new(c.x, c.y + r + 13.0 * s), Align::Center, TEXT_DIM);
+            // (listed with the buttons on the next frame, after they are cleared)
+            self.city.compass = Some(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r + 16.0 * s));
         }
         if let (Some(st), true) = (self.streets.clone(), self.city.mpp < 3.2 && self.global.is_some()) {
             let px = 12.0 * s;
@@ -3180,7 +3180,9 @@ impl Navigator {
                 let name = &st.names[*id as usize];
                 let tw = self.fonts.width(name, px, Weight::Medium);
                 // (upright: turned at most a quarter either way)
-                let mut ang = -*a;
+                let mut ang = -(*a + phi as f32);
+                // (the turn of the view can take it past half a turn: back to -pi..pi first)
+                ang = (ang + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
                 if ang > std::f32::consts::FRAC_PI_2 {
                     ang -= std::f32::consts::PI;
                 } else if ang <= -std::f32::consts::FRAC_PI_2 {
