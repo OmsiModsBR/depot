@@ -23,7 +23,7 @@ pub(crate) use buffers::buffer_init;
 pub(crate) use caps::{
     dedicated_vram_mb, gl_worker_turn, sixteen_texture_units, vulkan_vram_mb, GL_BACKEND,
 };
-pub(crate) use context::{GpuContext, Layouts, Samplers};
+pub(crate) use context::{GpuContext, Samplers};
 pub(crate) use errors::{gpu_error_text, CATCHING};
 pub(crate) use open::{
     basic_pipelines, fallback_load, fallback_store, DevicePoller, BASIC_PIPELINES,

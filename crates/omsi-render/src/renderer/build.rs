@@ -1,7 +1,7 @@
 //! Making everything the renderer draws with, once at start (`Renderer::build`).
 use crate::assets::AssetStore;
 use crate::gpu::GpuContext;
-use crate::gpu::Layouts;
+use crate::scene::Layouts;
 use crate::gpu::Samplers;
 use crate::lighting::LightMapAtlas;
 use crate::output::Diagnostics;

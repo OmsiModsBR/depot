@@ -5,13 +5,6 @@
 use super::open::DevicePoller;
 use std::sync::Arc;
 
-/// The bind group layouts the scene's shaders share.
-pub(crate) struct Layouts {
-    pub(crate) camera_layout: wgpu::BindGroupLayout,
-    pub(crate) material_layout: wgpu::BindGroupLayout,
-    pub(crate) sky_layout: wgpu::BindGroupLayout,
-}
-
 /// The samplers the materials and the lighting share.
 pub(crate) struct Samplers {
     pub(crate) sampler: wgpu::Sampler,

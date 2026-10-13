@@ -5,6 +5,7 @@
 mod bounds;
 mod camera;
 mod instances;
+mod layouts;
 mod model;
 mod triple;
 mod visibility;
@@ -16,4 +17,5 @@ pub use triple::{panel_width, ScreenView, TripleScreen};
 pub(crate) use bounds::InstanceBounds;
 pub(crate) use bounds::{point_in_vehicle_box, CULL_BLOCK};
 pub(crate) use camera::{camera_layout_entries, CameraUniform, ENHANCED_CAMERA_TEXTURES};
+pub(crate) use layouts::Layouts;
 pub(crate) use visibility::CullHistory;
