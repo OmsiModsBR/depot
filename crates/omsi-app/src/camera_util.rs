@@ -1,6 +1,11 @@
 //! Camera helpers: the default and follow cameras, picking rays, the orbit distance, and the mirrors.
 
-use super::*;
+use crate::cli::Args;
+use crate::player::Player;
+use crate::scene::{self, World};
+use crate::traffic;
+use glam::{DVec3, Vec3};
+use omsi_render::{Camera, Renderer, Scene};
 
 /// Default camera from `[mapcam]`: tile x, tile y, x, z, y, yaw, pitch, distance.
 pub(crate) fn default_camera(world: &World) -> Camera {

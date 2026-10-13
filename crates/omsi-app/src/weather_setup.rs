@@ -1,6 +1,11 @@
 //! The weather of a session: its `.owt` file, the sky and clouds it makes, and how wet the streets are.
 
-use super::*;
+use crate::cli::Args;
+use crate::lights;
+use crate::scene;
+use crate::startup::{CLASSIC, CLOUDS, ENHANCED};
+use omsi_render::{Renderer, Scene};
+use std::path::Path;
 
 pub(crate) const CUSTOM_CLOUDS: [&str; 5] = ["No clouds", "Cumulus 1", "Cumulus 2", "Cumulus 3", "Overcast 1"];
 pub(crate) const CUSTOM_PRECIP: [&str; 3] = ["None", "Rain", "Snow"];

@@ -1,6 +1,14 @@
 //! The keyboard: a key press in the game, the menus, the choosers and the text fields.
 
-use super::*;
+use crate::app::App;
+use crate::keys;
+use crate::player::{digit_of, fallback_action};
+use crate::situation::apply_situation;
+use crate::startup::shift_held_now;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{KeyCode, PhysicalKey};
+#[cfg(feature = "lan")]
+use crate::lan;
 
 /// Printable fallback for a route number when the window backend supplies no text event.
 /// Normal typing uses the actual text event so Shift/layout-specific symbols are kept.

@@ -1,6 +1,11 @@
 //! Where a session starts from: the clock, the depot (`.hof`), a saved situation and writing one.
 
-use super::*;
+use anyhow::{anyhow, Result};
+use crate::cli::{Args, parse_time};
+use crate::player::Player;
+use crate::scene::{self, World};
+use omsi_render::Camera;
+use std::path::{Path, PathBuf};
 
 /// The depot file of a vehicle for this map: `--hof`, else the hof named by the map's
 /// `[aigroup_depot]`, else the first .hof next to the .bus file.
