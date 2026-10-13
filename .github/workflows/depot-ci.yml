@@ -95,10 +95,9 @@ jobs:
       - name: rustfmt (informational)
         continue-on-error: true
         run: cargo fmt --all -- --check
-      # The layers of omsi-render (crates/omsi-render/ARCHITECTURE.md): prints the imports that
-      # point up or sideways. Informational until the last step of the render plan.
-      - name: omsi-render layers (informational)
-        continue-on-error: true
+      # The layers of omsi-render (crates/omsi-render/ARCHITECTURE.md): fails on an import that
+      # points up or sideways.
+      - name: omsi-render layers
         run: scripts/check-render-layers.sh --strict
       # LAN play, the dedicated server and the plugins are off in the game's build (features
       # `lan`, `server` and `plugins` of omsi-app, docs/removed/MULTIPLAYER_DISABLED.md): their
