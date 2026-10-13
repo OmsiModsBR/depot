@@ -98,7 +98,8 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("picture"),
             });
-        self.encode_shadow_maps(
+        self.shadows.encode_shadow_maps(
+            self.options.shadow_size,
             scene,
             &mut shadow_encoder,
             &shadow_batches,
@@ -124,17 +125,18 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        self.encode_sky_cube(
+        self.sky.encode_sky_cube(
             scene,
             &mut prepass_encoder,
             enhanced,
             lead_view,
             probe_redraw,
             redraw_near,
+            self.instant_exposure,
             &clock.tset,
             &mut clock.timed,
         );
-        self.encode_probe(
+        self.sky.encode_probe(
             scene,
             &mut prepass_encoder,
             probe_redraw,
@@ -185,7 +187,9 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        self.encode_fog_lamps(
+        self.fog_lamps.encode_fog_lamps(
+            &self.queue,
+            &self.targets,
             scene,
             &mut encoder,
             lighting,
@@ -242,7 +246,8 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        self.encode_present(
+        self.presenter.encode_present(
+            &self.queue,
             scene,
             &mut encoder,
             &scene_target,

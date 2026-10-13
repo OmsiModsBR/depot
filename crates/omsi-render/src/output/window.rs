@@ -493,68 +493,6 @@ impl Renderer {
         }
     }
 
-    /// With a render scale: the smaller picture scaled up to the window, the overlays on top
-    /// at full size.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_present(
-        &self,
-        scene: &Scene,
-        encoder: &mut wgpu::CommandEncoder,
-        scene_target: &Option<(wgpu::TextureView, wgpu::BindGroup)>,
-        target: &wgpu::TextureView,
-        overlays: &[(TextureId, [f32; 4])],
-        width: u32,
-        height: u32,
-        full_w: u32,
-        vanilla_fxaa: bool,
-        tset: &Option<wgpu::QuerySet>,
-        timed: &mut Vec<&'static str>,
-    ) {
-        if let Some((_, bg)) = &scene_target {
-            // --- the smaller picture scaled up to the window, the HUD on top at full size;
-            // the smaller the picture, the more it is sharpened
-            let sharpen = (1.0 - width as f32 / full_w as f32) * 2.0;
-            self.queue.write_buffer(
-                &self.presenter.upscale_buf,
-                0,
-                bytemuck::cast_slice(&[
-                    width as f32,
-                    height as f32,
-                    sharpen.clamp(0.0, 0.8),
-                    if vanilla_fxaa { 1.0 } else { 0.0 },
-                ]),
-            );
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("upscale"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: pass_timer(tset.as_ref(), timed, "upscale"),
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.presenter.upscale_pipeline);
-            pass.set_bind_group(0, bg, &[]);
-            pass.draw(0..3, 0..1);
-            if !overlays.is_empty() {
-                pass.set_pipeline(&self.presenter.overlay_pipeline_1x);
-                for (k, _) in overlays.iter().enumerate() {
-                    if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg, &[]);
-                        pass.draw(0..6, 0..1);
-                    }
-                }
-            }
-        }
-    }
-
     pub(crate) fn picture_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene picture"),
@@ -596,6 +534,71 @@ pub(crate) struct Presenter {
     pub(crate) upscale_buf: wgpu::Buffer,
     pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
     pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
+}
+
+impl Presenter {
+    /// With a render scale: the smaller picture scaled up to the window, the overlays on top
+    /// at full size.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode_present(
+        &self,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+        encoder: &mut wgpu::CommandEncoder,
+        scene_target: &Option<(wgpu::TextureView, wgpu::BindGroup)>,
+        target: &wgpu::TextureView,
+        overlays: &[(TextureId, [f32; 4])],
+        width: u32,
+        height: u32,
+        full_w: u32,
+        vanilla_fxaa: bool,
+        tset: &Option<wgpu::QuerySet>,
+        timed: &mut Vec<&'static str>,
+    ) {
+        if let Some((_, bg)) = &scene_target {
+            // --- the smaller picture scaled up to the window, the HUD on top at full size;
+            // the smaller the picture, the more it is sharpened
+            let sharpen = (1.0 - width as f32 / full_w as f32) * 2.0;
+            queue.write_buffer(
+                &self.upscale_buf,
+                0,
+                bytemuck::cast_slice(&[
+                    width as f32,
+                    height as f32,
+                    sharpen.clamp(0.0, 0.8),
+                    if vanilla_fxaa { 1.0 } else { 0.0 },
+                ]),
+            );
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("upscale"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: pass_timer(tset.as_ref(), timed, "upscale"),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.upscale_pipeline);
+            pass.set_bind_group(0, bg, &[]);
+            pass.draw(0..3, 0..1);
+            if !overlays.is_empty() {
+                pass.set_pipeline(&self.overlay_pipeline_1x);
+                for (k, _) in overlays.iter().enumerate() {
+                    if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
+                        pass.set_bind_group(0, bg, &[]);
+                        pass.draw(0..6, 0..1);
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Presenter {

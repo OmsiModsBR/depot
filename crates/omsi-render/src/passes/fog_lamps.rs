@@ -2,10 +2,10 @@
 
 use crate::gpu::{array_path, basic_pipelines, pass_timer, ArrayPath};
 use crate::lighting::Lighting;
-use crate::renderer::Renderer;
 use crate::scene::Scene;
 use crate::shaders::fog_lamps_shader_source;
 use crate::sky::enhanced_weather_fog;
+use crate::targets::TargetCache;
 use glam::Mat4;
 
 #[repr(C)]
@@ -134,12 +134,14 @@ pub(crate) fn fog_lamps_pipelines(
     }
 }
 
-impl Renderer {
+impl FogLampsPass {
     /// The lamps' light in the weather's fog and the sun's shafts between the shadows, over the
     /// picture before its glow and metering.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_fog_lamps(
         &self,
+        queue: &wgpu::Queue,
+        targets: &TargetCache,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
         lighting: &Lighting,
@@ -169,8 +171,8 @@ impl Renderer {
         if enhanced && prepass_on && with_overlays && masked_frame && (fog_lamps || shafts || glare)
         {
             if let (Some(pipes), Some(ao), Some(cam_bg)) = (
-                self.fog_lamps.fog_lamps_pipeline.as_ref(),
-                self.targets.ao.as_ref(),
+                self.fog_lamps_pipeline.as_ref(),
+                targets.ao.as_ref(),
                 scene.camera_bind_group.as_ref(),
             ) {
                 if let Some(fog_bg) = ao.fog_bg.as_ref() {
@@ -200,12 +202,8 @@ impl Renderer {
                             droplets,
                         ],
                     };
-                    self.queue.write_buffer(
-                        &self.fog_lamps.fog_lamps_buf,
-                        0,
-                        bytemuck::bytes_of(&u),
-                    );
-                    let h = &self.targets.hdr_targets[&(width, height)];
+                    queue.write_buffer(&self.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
+                    let h = &targets.hdr_targets[&(width, height)];
                     let view = h
                         .puddles
                         .as_ref()

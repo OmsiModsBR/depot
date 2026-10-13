@@ -4,7 +4,7 @@ use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
 use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer};
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::renderer::{
-    Renderer, DEPTH_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
+    DEPTH_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
 };
 use crate::scene::Scene;
 use glam::{DVec3, Mat4, Vec3};
@@ -187,12 +187,13 @@ pub(crate) fn shadow_pipelines(
     )
 }
 
-impl Renderer {
+impl ShadowResources {
     /// The sun's shadow maps (the near and far cascades, the close one beside the near) and
     /// the street lamps' maps under the far one.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_shadow_maps(
         &self,
+        shadow_size: u32,
         scene: &Scene,
         shadow_encoder: &mut wgpu::CommandEncoder,
         shadow_batches: &[Vec<Batch>; 4],
@@ -208,9 +209,9 @@ impl Renderer {
                 continue;
             }
             let view = if cascade == 0 {
-                &self.shadows.shadow_view
+                &self.shadow_view
             } else {
-                &self.shadows.shadow_view_far
+                &self.shadow_view_far
             };
             let keep_near = cascade == 0 && !redraw_near;
             let mut pass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -243,27 +244,27 @@ impl Renderer {
             pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
             if cascade == 0 {
                 // the atlas: near cascade on the left half, close cascade on the right
-                let sz = self.options.shadow_size as f32;
+                let sz = shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[0], |pipe| {
-                    &self.shadows.shadow_pipelines[pipe as usize]
+                    &self.shadow_pipelines[pipe as usize]
                 });
-                let csz = self.options.shadow_size.min(SHADOW_CLOSE_MAX) as f32;
+                let csz = shadow_size.min(SHADOW_CLOSE_MAX) as f32;
                 pass.set_viewport(sz, 0.0, csz, csz, 0.0, 1.0);
                 if keep_near {
                     // (the near half is last frame's: only the close part is cleared)
-                    pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
+                    pass.set_pipeline(&self.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
                     pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[2], |pipe| {
-                    &self.shadows.shadow_pipelines[4 + pipe as usize]
+                    &self.shadow_pipelines[4 + pipe as usize]
                 });
             } else {
-                let sz = self.options.shadow_size as f32;
+                let sz = shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[cascade], |pipe| {
-                    &self.shadows.shadow_pipelines[cascade * 2 + pipe as usize]
+                    &self.shadow_pipelines[cascade * 2 + pipe as usize]
                 });
             }
         }
@@ -274,7 +275,7 @@ impl Renderer {
                 label: Some("lamp shadows"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.shadows.shadow_view_far,
+                    view: &self.shadow_view_far,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -285,15 +286,15 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            let sz = self.options.shadow_size as f32;
+            let sz = shadow_size as f32;
             let tile = sz / LAMP_SHADOWS as f32;
             for k in 0..lamp_shadows.len() {
                 pass.set_viewport(k as f32 * tile, sz, tile, tile, 0.0, 1.0);
-                pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
+                pass.set_pipeline(&self.shadow_clear_pipeline);
                 pass.draw(0..3, 0..1);
                 pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 encode_batches(&mut pass, scene, &shadow_batches[3], |pipe| {
-                    &self.shadows.shadow_pipelines[6 + 2 * k + pipe as usize]
+                    &self.shadow_pipelines[6 + 2 * k + pipe as usize]
                 });
             }
         }
