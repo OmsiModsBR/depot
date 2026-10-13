@@ -304,6 +304,16 @@ fn removed_path(path: Option<&str>, removed: &[String]) -> bool {
     path.is_some_and(|p| removed.iter().any(|r| r.eq_ignore_ascii_case(p)))
 }
 
+/// How long after the game starts the controller list is still looked up every few seconds
+/// while it is empty (older wheel drivers list their device a while after Windows starts it,
+/// without a notification). Later a device plugged in is found by Windows' notifications:
+/// looking again every 5 s for the whole session was suspected of a periodic hitch (#93).
+const LATE_SCAN_WINDOW: Duration = Duration::from_secs(60);
+
+fn late_scan_window_open(since_start: Duration) -> bool {
+    since_start < LATE_SCAN_WINDOW
+}
+
 /// The wait before the next attempt at a device that would not open: 1 s, doubling, at most 30 s.
 fn retry_delay(tries: u32) -> Duration {
     Duration::from_secs((1u64 << tries.min(5)).min(30))
@@ -581,6 +591,7 @@ impl DirectInput {
                 log::info!("game controllers: Windows gives no device notifications - looking for new ones every 3 s");
             }
             let mut seen = HID_CHANGES.load(Ordering::Relaxed);
+            let started = Instant::now();
             let mut last = Instant::now();
             let mut empty = initially_empty;
             // (a device plugged in raises several notifications: look once they settle)
@@ -615,9 +626,9 @@ impl DirectInput {
                 }
                 if window.is_none() && last.elapsed() > Duration::from_secs(3) {
                     pending = Some(Instant::now() - Duration::from_secs(1));
-                } else if empty && last.elapsed() > Duration::from_secs(5) {
+                } else if empty && last.elapsed() > Duration::from_secs(5) && late_scan_window_open(started.elapsed()) {
                     // Some older wheel drivers appear after the first enumeration
-                    // without sending a HID arrival notification.
+                    // without sending a HID arrival notification - only in the first minute (#93).
                     pending = Some(Instant::now() - Duration::from_secs(1));
                 }
                 if pending.is_some_and(|t| t.elapsed() > Duration::from_millis(300)) {
@@ -1312,6 +1323,16 @@ impl Drop for DirectInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With no controller, the periodic lookup stops after the first minute; the
+    /// notifications of Windows still find a device plugged in later.
+    #[test]
+    fn the_periodic_controller_lookup_stops_after_the_first_minute() {
+        assert!(late_scan_window_open(Duration::ZERO));
+        assert!(late_scan_window_open(Duration::from_secs(59)));
+        assert!(!late_scan_window_open(Duration::from_secs(60)));
+        assert!(!late_scan_window_open(Duration::from_secs(3600)));
+    }
 
     #[test]
     fn failed_opens_back_off_to_half_a_minute() {
