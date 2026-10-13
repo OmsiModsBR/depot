@@ -1,13 +1,13 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
 
-use crate::gpu::array_layout_entry;
+use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
+use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer};
+use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
+use crate::renderer::{
+    Renderer, DEPTH_FORMAT, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
+};
 use crate::scene::Scene;
 use glam::{DVec3, Mat4, Vec3};
-
-use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
-use crate::gpu::{basic_pipelines, pass_timer};
-use crate::lighting::{LampShadow, FAR_MAP_ASPECT, LAMP_SHADOWS};
-use crate::renderer::{Renderer, DEPTH_FORMAT, SHADOW_CLOSE_MAX};
 
 /// The sun's shadow maps (near and far), their sampler, and the pipelines drawn into them:
 /// the clearing one and one per kind and cascade.
@@ -367,6 +367,168 @@ impl ShadowResources {
             shadow_sampler,
             shadow_layout,
             shadow_pipelines,
+        }
+    }
+}
+
+/// The sun's shadows of one picture (see `ShadowResources::schedule`).
+#[derive(Clone, Copy)]
+pub(crate) struct ShadowSchedule {
+    /// By night the moon casts them (Enhanced).
+    pub(crate) moon_shadows: bool,
+    /// The picture has sun shadows at all, and draws its maps (not taken from the first eye).
+    pub(crate) shadows: bool,
+    pub(crate) draw_shadows: bool,
+    /// The near and far cascades are drawn anew this frame.
+    pub(crate) redraw_near: bool,
+    pub(crate) redraw_far: bool,
+    /// The near, far and close cascades' light matrices.
+    pub(crate) light_view_proj: Mat4,
+    pub(crate) light_view_proj_far: Mat4,
+    pub(crate) light_view_proj_close: Mat4,
+}
+
+impl ShadowResources {
+    /// Which cascades this picture draws and with which light matrices: the near one every
+    /// other frame, the far one every fourth or when the camera has left it, the close one
+    /// every frame; a headset's second eye takes the first eye's.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn schedule(
+        &self,
+        shadow_size: u32,
+        render_origin: DVec3,
+        lighting: &Lighting,
+        cam_rel: Vec3,
+        enhanced_frame: bool,
+        with_overlays: bool,
+        projection: Option<Mat4>,
+        second_eye: bool,
+    ) -> ShadowSchedule {
+        // sun shadow map: an orthographic box around the camera, looking along the sun (by
+        // night along the moon, see `Lighting::casts_moon_shadows`)
+        let moon_shadows = enhanced_frame && lighting.casts_moon_shadows();
+        let sun = if moon_shadows {
+            lighting.moon_dir.normalize_or_zero()
+        } else {
+            lighting.sun_dir.normalize_or_zero()
+        };
+        let shadows = (with_overlays || projection.is_some())
+            && (lighting.casts_sun_shadows() || moon_shadows);
+        let shared_xr_shadows = if second_eye && shadows {
+            self.xr_shadow_cache
+                .get()
+                .filter(|(origin, previous_sun, _, _, _)| {
+                    *origin == render_origin && *previous_sun == sun
+                })
+        } else {
+            None
+        };
+        let draw_shadows = shadows && shared_xr_shadows.is_none();
+        let light_matrix = |range: f32| {
+            // Snap the centre to whole texels so the map does not shimmer while driving.
+            let texel = range * 2.0 / shadow_size as f32;
+            let up = if sun.z.abs() > 0.95 { Vec3::Y } else { Vec3::Z };
+            let raw = cam_rel;
+            let view0 = Mat4::look_at_rh(sun * 900.0, Vec3::ZERO, up);
+            let ls = view0.transform_point3(raw);
+            let snapped = Vec3::new(
+                (ls.x / texel).round() * texel,
+                (ls.y / texel).round() * texel,
+                ls.z,
+            );
+            let center = view0.inverse().transform_point3(snapped);
+            let view = Mat4::look_at_rh(center + sun * 900.0, center, up);
+            let proj = Mat4::orthographic_rh(-range, range, -range, range, 1.0, 2200.0);
+            proj * view
+        };
+        // The near cascade (140 m, 4096 texels at the top setting: the costliest shadow
+        // pass, a third of it the trees' leaf cards) is drawn every other frame and kept
+        // for the next, with the light matrix it was drawn with; the close one - the bus
+        // and everything within 30 m - every frame. Redrawn at once when the camera has
+        // jumped, the sun has moved or the render origin has (its matrix is relative to it).
+        let near_wanted = light_matrix(SHADOW_RANGE);
+        let (near_m, near_age, near_origin, near_sun) = self.shadow_near_cache.get();
+        let near_jumped =
+            (near_m.project_point3(cam_rel) - near_wanted.project_point3(cam_rel)).length() > 0.03;
+        let redraw_near = draw_shadows
+            && (near_age >= 1
+                || near_jumped
+                || near_m == Mat4::IDENTITY
+                || near_origin != render_origin
+                || near_sun.dot(sun) < 0.99999
+                || omsi_cfg::env::var_os("OMSI_SHADOW_NEAR_EVERY_FRAME").is_some());
+        let light_view_proj = if let Some((_, _, near, _, _)) = shared_xr_shadows {
+            near
+        } else if !shadows {
+            near_wanted
+        } else if redraw_near {
+            self.shadow_near_cache
+                .set((near_wanted, 0, render_origin, sun));
+            near_wanted
+        } else {
+            self.shadow_near_cache
+                .set((near_m, near_age + 1, near_origin, near_sun));
+            near_m
+        };
+        let light_view_proj_close = shared_xr_shadows
+            .map(|(_, _, _, _, close)| close)
+            .unwrap_or_else(|| light_matrix(SHADOW_RANGE_CLOSE));
+        // The far cascade (700 m, metre-sized texels) is drawn every 4th frame, or at once
+        // when the camera has left the middle of the one drawn, the sun has moved or the
+        // render origin has jumped (its matrix is relative to that). Drawn every frame it
+        // was 0.6 ms of GPU time for a picture that hardly changes; a car in it is a few
+        // texels, and a tile streamed in waits three frames at most for its shadow.
+        let far_wanted = light_matrix(SHADOW_RANGE_FAR);
+        let (far_m, far_age, far_origin, far_sun) = self.shadow_far_cache.get();
+        let far_moved =
+            (far_m.project_point3(cam_rel) - far_wanted.project_point3(cam_rel)).length() > 0.12;
+        let redraw_far = draw_shadows
+            && (far_age >= 3
+                || far_moved
+                || far_m == Mat4::IDENTITY
+                || far_origin != render_origin
+                || far_sun.dot(sun) < 0.99999
+                || omsi_cfg::env::var_os("OMSI_SHADOW_FAR_EVERY_FRAME").is_some());
+        if redraw_far && omsi_cfg::env::var_os("OMSI_DEBUG_SHADOW_FAR").is_some() {
+            log::info!(
+                "far shadow redrawn: age {far_age} moved {far_moved} origin {} sun {:.6}",
+                far_origin != render_origin,
+                far_sun.dot(sun)
+            );
+        }
+        // The desktop view and the first XR eye maintain this cache; mirrors and
+        // the second XR eye leave it alone.
+        let light_view_proj_far = if let Some((_, _, _, far, _)) = shared_xr_shadows {
+            far
+        } else if !shadows {
+            far_wanted
+        } else if redraw_far {
+            self.shadow_far_cache
+                .set((far_wanted, 0, render_origin, sun));
+            far_wanted
+        } else {
+            self.shadow_far_cache
+                .set((far_m, far_age + 1, far_origin, far_sun));
+            far_m
+        };
+        if projection.is_some() && !second_eye && shadows {
+            self.xr_shadow_cache.set(Some((
+                render_origin,
+                sun,
+                light_view_proj,
+                light_view_proj_far,
+                light_view_proj_close,
+            )));
+        }
+        ShadowSchedule {
+            moon_shadows,
+            shadows,
+            draw_shadows,
+            redraw_near,
+            redraw_far,
+            light_view_proj,
+            light_view_proj_far,
+            light_view_proj_close,
         }
     }
 }

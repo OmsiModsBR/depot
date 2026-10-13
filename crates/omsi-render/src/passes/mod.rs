@@ -27,4 +27,4 @@ pub(crate) use main::{PassPipelines, SpriteResources};
 #[cfg(test)]
 pub(crate) use post::PostUniform;
 pub(crate) use post::{post_pipelines, Exposure, PostPipelines};
-pub(crate) use shadow::ShadowResources;
+pub(crate) use shadow::{ShadowResources, ShadowSchedule};

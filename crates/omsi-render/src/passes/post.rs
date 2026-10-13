@@ -3,11 +3,10 @@
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
 use crate::gpu::{float_tex, pass_timer};
-use crate::renderer::Renderer;
-use crate::sky::atmosphere;
-
 use crate::lighting::{meter_tuning, tone_contrast, Lighting};
+use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
+use crate::sky::atmosphere;
 
 /// The enhanced path's post passes (post.wgsl `PostParams`).
 #[repr(C)]

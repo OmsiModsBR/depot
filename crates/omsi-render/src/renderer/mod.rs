@@ -2,7 +2,9 @@
 //! preparing it and recording its passes, ending by handing it to an `output` destination.
 
 mod build;
+mod encode;
 mod frame;
+mod lists;
 mod options;
 mod prepare;
 mod state;

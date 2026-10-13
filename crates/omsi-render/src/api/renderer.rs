@@ -8,6 +8,7 @@ use crate::gpu::{
     BASIC_PIPELINES, GL_BACKEND,
 };
 use crate::lighting::Lighting;
+use crate::output::Output;
 use crate::renderer::{scene_scale_for, RenderOptions, Renderer, DEPTH_FORMAT, MASK_FORMAT, MSAA};
 use crate::scene::{panel_width, Camera, Scene, TextureId, TripleScreen};
 use anyhow::anyhow;
@@ -798,7 +799,13 @@ impl Renderer {
             self.culling.triple_culling = Default::default();
         }
         self.render_inner(
-            scene, target, width, height, camera, lighting, true, None, None, false,
+            scene,
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            Output::Window,
         );
     }
 
@@ -892,10 +899,10 @@ impl Renderer {
                 height,
                 &views[i].camera,
                 lighting,
-                true,
-                None,
-                Some(views[i].projection),
-                turn != 0,
+                Output::TriplePanel {
+                    projection: views[i].projection,
+                    later: turn != 0,
+                },
             );
             self.swap_triple_culling(i);
         }
@@ -968,10 +975,10 @@ impl Renderer {
             height,
             camera,
             lighting,
-            false,
-            None,
-            Some(projection),
-            second_eye,
+            Output::XrEye {
+                projection,
+                second: second_eye,
+            },
         );
     }
 
@@ -1223,10 +1230,7 @@ impl Renderer {
             h,
             camera,
             lighting,
-            false,
-            Some(id),
-            None,
-            false,
+            Output::Texture { exclude: id },
         );
         self.texture_aspect = None;
     }

@@ -1,14 +1,13 @@
 //! The main pass: the scene's pipelines and drawing the scene into the picture.
 
-use crate::assets::upload_texture;
-use crate::gpu::pass_timer;
-use crate::lighting::Lighting;
-use crate::renderer::Renderer;
-
 use super::draw::{
     encode_batches, encode_batches_filtered, main_pipeline, Batch, PIPE_ALPHA_TEST, PIPE_BLEND,
     PIPE_BLEND_NO_WRITE,
 };
+use crate::assets::upload_texture;
+use crate::gpu::pass_timer;
+use crate::lighting::Lighting;
+use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
 use crate::shaders::{snowfall_flakes, SnowUniform};
 

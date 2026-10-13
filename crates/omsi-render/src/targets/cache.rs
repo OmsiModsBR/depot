@@ -3,9 +3,8 @@
 
 use super::ao::AoTargets;
 use super::hdr::HdrTargets;
-use std::collections::HashMap;
-
 use crate::renderer::{Renderer, DEPTH_FORMAT};
+use std::collections::HashMap;
 
 impl Renderer {
     /// Before a new size's targets are made: let go of the sizes nobody asked for lately

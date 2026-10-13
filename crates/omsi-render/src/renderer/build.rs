@@ -1,27 +1,23 @@
 //! Making everything the renderer draws with, once at start (`Renderer::build`).
 
 use super::options::RenderOptions;
+use super::state::{color_targets, Renderer, DEPTH_FORMAT, RT_GBUF};
 use crate::assets::{AssetStore, TexAddressing};
-use crate::gpu::{GpuContext, Samplers};
+use crate::effects::{puddles, rt};
+use crate::gpu::{basic_pipelines, sixteen_texture_units, GpuContext, Samplers, GL_BACKEND};
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
-use crate::passes::{Exposure, ShadowResources, SpriteResources};
-use crate::scene::{CullHistory, Layouts};
-use crate::sky::{EnhancedUniform, SkyResources};
-use crate::targets::TargetCache;
-
-use super::state::{color_targets, Renderer, DEPTH_FORMAT, RT_GBUF};
-use crate::effects::{puddles, rt};
-use crate::gpu::{basic_pipelines, sixteen_texture_units, GL_BACKEND};
-use crate::passes::{ao_pipelines, fog_lamps_pipelines, post_pipelines, prepass_pipelines};
 use crate::passes::{
-    one_sided_primitive, PassPipelines, PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE,
-    PIPE_KINDS, PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
+    ao_pipelines, fog_lamps_pipelines, one_sided_primitive, post_pipelines, prepass_pipelines,
+    Exposure, PassPipelines, ShadowResources, SpriteResources, PIPE_ALPHA_TEST, PIPE_BLEND,
+    PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
 };
-use crate::scene::{CameraUniform, Vertex};
+use crate::scene::{CameraUniform, CullHistory, Layouts, Vertex};
 use crate::shaders::{
     corona_shader_source, scene_shader_source, sky_shader_source, snow_shader_source,
 };
+use crate::sky::{EnhancedUniform, SkyResources};
+use crate::targets::TargetCache;
 
 impl Renderer {
     /// The pipelines, samplers and fixed textures of a renderer whose options are settled.

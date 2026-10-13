@@ -3,18 +3,17 @@
 
 use super::options::RenderOptions;
 use crate::assets::{AssetStore, TexAddressing};
+use crate::effects::{puddles, rt};
 use crate::gpu::{GpuContext, Samplers};
 use crate::lighting::LightMapAtlas;
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::{
-    Exposure, FogLampsPass, PrepassPipelines, ShadowResources, SpriteResources, SsaoPass,
+    Exposure, FogLampsPass, PassPipelines, PostPipelines, PrepassPipelines, ShadowResources,
+    SpriteResources, SsaoPass,
 };
 use crate::scene::{CullHistory, Layouts};
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
-
-use crate::effects::{puddles, rt};
-use crate::passes::{PassPipelines, PostPipelines};
 
 pub struct Renderer {
     pub device: wgpu::Device,
