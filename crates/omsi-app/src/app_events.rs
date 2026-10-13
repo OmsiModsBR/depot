@@ -31,6 +31,15 @@ fn vr_mirror_updates(budget: &mut f32, dt: f32, rate: f32, mirrors: usize) -> us
     updates
 }
 
+/// Whether the tile under `at` has its wheel surfaces loaded (always, without a world). A
+/// vehicle whose tile is not is held where it is: stepped, it falls through the world.
+fn ground_loaded_at(world: Option<&crate::scene::World>, at: glam::DVec3) -> bool {
+    world.is_none_or(|w| {
+        let k = ((at.x / omsi_map::tile_size()).floor() as i32, (at.y / omsi_map::tile_size()).floor() as i32);
+        w.surfaces.read().contains_key(&k)
+    })
+}
+
 fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     // (three levels, far apart, and a wide band between going down and up again: every
     // step makes the picture's targets anew - hundreds of MB with MSAA and HDR - and a
@@ -935,11 +944,8 @@ impl ApplicationHandler for App {
                     // terrain alone: the terrain comes first while the tile is placed, and a
                     // parked bus taken over after a restart fell through its yard onto the
                     // ground below before the surfaces came, as OMSI holds it, #1279)
-                    let ground_here = self.world.as_ref().is_none_or(|w| {
-                        let at = p.vehicle.position;
-                        let k = ((at.x / omsi_map::tile_size()).floor() as i32, (at.y / omsi_map::tile_size()).floor() as i32);
-                        w.surfaces.read().contains_key(&k)
-                    });
+                    let world = self.world.as_deref();
+                    let ground_here = ground_loaded_at(world, p.vehicle.position);
                     if !self.paused && ground_here {
                         p.tick(
                             dt,
@@ -996,7 +1002,9 @@ impl ApplicationHandler for App {
                     // player's bus meets them
                     let mut placed_boxes = Vec::new();
                     for q in self.placed.iter_mut() {
-                        if !self.paused {
+                        // (held where it stands while its tile is not loaded: it fell through the
+                        // world, and the fallen height was saved, #33)
+                        if !self.paused && ground_loaded_at(world, q.vehicle.position) {
                             q.vehicle.update(dt);
                         }
                         q.sync_transforms(r, scene, false);
@@ -1383,8 +1391,9 @@ impl ApplicationHandler for App {
                 // on foot without a bus of one's own: the vehicles one placed still stand, run
                 // their scripts and are drawn where they are (the player's frame did it)
                 if let (None, Some(r), Some(scene)) = (self.player.as_ref(), self.renderer.as_ref(), self.scene.as_mut()) {
+                    let world = self.world.as_deref();
                     for q in self.placed.iter_mut() {
-                        if !self.paused {
+                        if !self.paused && ground_loaded_at(world, q.vehicle.position) {
                             q.vehicle.update(dt);
                         }
                         q.sync_transforms(r, scene, false);
