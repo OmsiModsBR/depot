@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The last `omsi-app` modules that took the crate root's names with `use super::*` (`app_events`,
+  `offscreen`, `startup`, `android`, `input/` and its `mouse`) import them from where they are
+  defined, and the crate root keeps only the imports and globs something still uses.
 - `actions`, `app`, `player` and `humans_pax` in `omsi-app` import what they use from where it is
   defined instead of `use super::*`; the crate root drops the imports nothing uses any more.
 - Nine more modules of `omsi-app` (`camera_util`, `input/keyboard`, `input/menus`, `server`,

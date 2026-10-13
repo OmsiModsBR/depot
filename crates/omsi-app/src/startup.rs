@@ -1,6 +1,9 @@
 //! Start-up: finding the OMSI 2 installation, the graphics instance, the build, the allocator and the console.
 
-use super::*;
+use anyhow::{Result, anyhow};
+use omsi_render::Renderer;
+use std::path::{Path, PathBuf};
+use winit::keyboard::KeyCode;
 
 /// CPU seconds this process has used so far (all threads), from `ps`.
 pub(crate) fn process_cpu_seconds() -> Option<f64> {

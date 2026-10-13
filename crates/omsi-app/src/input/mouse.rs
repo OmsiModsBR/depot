@@ -1,7 +1,13 @@
 //! The mouse and the VR pointer: clicks, the cursor, looking around and zooming, and what
 //! is under the cursor.
 
-use super::*;
+use crate::app::App;
+use crate::camera_util::{ORBIT_MAX, ORBIT_MIN, cursor_ray, pixel_angle};
+use omsi_render::Camera;
+use winit::keyboard::KeyCode;
+// (its look tests also check two of the keyboard's helpers)
+#[cfg(test)]
+use super::keyboard::{key_left_free, route_char};
 
 /// How far (m) a click reaches a page (`[htmltexture]`) on a scenery object.
 pub(crate) const HTML_OBJECT_REACH: f32 = 4.0;

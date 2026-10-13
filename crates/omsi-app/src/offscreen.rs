@@ -1,6 +1,46 @@
 //! The offscreen run: a scripted session rendered to pictures (`--offscreen`).
 
-use super::*;
+use anyhow::Result;
+use crate::actions::dump_display_textures;
+use crate::camera_util::{
+    cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
+};
+use crate::career;
+use crate::cli::{Args, parse_time, parse_triggers};
+use crate::describe;
+use crate::diagnostics::{log_physics, standing_reasons};
+use crate::hud;
+use crate::humans;
+use crate::lights;
+use crate::memory::texture_budget;
+use crate::money;
+use crate::navigator;
+use crate::player::Player;
+use crate::puddles;
+use crate::quit;
+use crate::rain;
+use crate::scene::{self, World};
+use crate::schedule;
+use crate::services::{at_petrol_station, run_services};
+use crate::settings;
+use crate::situation::{build_situation, start_clock, ticket_key_name};
+use crate::spawn::spawn_player;
+use crate::startup::graphics_instance;
+use crate::traffic;
+use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
+use crate::weather_setup::{
+    apply_weather, cloud_drift_at, initial_wetness, load_weather, precip_of, setup_sky,
+    weather_lighting,
+};
+use crate::world_load::load_world;
+use glam::{DVec3, Vec3};
+use omsi_render::{Camera, Renderer};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+#[cfg(feature = "lan")]
+use crate::lan;
+#[cfg(feature = "lan")]
+use crate::traffic_link::lan_outlines;
 
 pub(crate) fn run_offscreen(
     args: &Args,
