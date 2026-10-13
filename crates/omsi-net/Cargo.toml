@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 omsi-content = { path = "../omsi-content" }
+omsi-cfg = { path = "../omsi-cfg" }
 log.workspace = true
 ureq.workspace = true
 flate2.workspace = true

@@ -150,7 +150,7 @@ impl VehicleInstance {
                 front.wheel_impacts.push(crate::rigid::Impact { point, obstacle: usize::MAX, ..*hit });
             }
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAILER").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAILER.is_set() {
             for j in &joints {
                 let (alpha, beta) = j.angles(&bodies);
                 log::info!("joint {}: gap {:.3} m, alpha {:.1}, beta {:.1}", j.follow - 1, j.gap(&bodies), alpha.to_degrees(), beta.to_degrees());
@@ -228,7 +228,7 @@ impl TrailerPart {
             self.mesh_transforms[i] = a.update(dt, &main.state.vars);
         }
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAILER").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAILER.is_set() {
             for (i, m) in self.ty.meshes.iter().enumerate() {
                 let file = &self.ty.model.meshes[m.def_index].file;
                 if file.to_ascii_lowercase().contains("rad") {
@@ -432,7 +432,7 @@ impl TrailerPart {
         if !ai && on_track.is_none() && dt > 0.0 && shows {
             self.spring_wheels(main, rot);
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAILER").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAILER.is_set() {
             log::info!(
                 "trailer: rest {:?} sag {:?} lift {lift:.3} ground {ground_z:?} z {:.3}",
                 self.rest,

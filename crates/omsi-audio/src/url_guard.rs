@@ -19,8 +19,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 
 /// Whether plain `http` stations are allowed (`OMSI_RADIO_ALLOW_HTTP=1`).
 pub fn http_allowed() -> bool {
-    omsi_cfg::env::var("OMSI_RADIO_ALLOW_HTTP")
-        .is_ok_and(|v| matches!(v.trim(), "1" | "true" | "yes"))
+    omsi_cfg::flags::RADIO_ALLOW_HTTP
+        .text()
+        .is_some_and(|v| matches!(v.trim(), "1" | "true" | "yes"))
 }
 
 /// Whether `ip` is an address on the public internet.

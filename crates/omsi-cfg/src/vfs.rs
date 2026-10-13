@@ -707,7 +707,7 @@ pub fn mount_dir_zips(dir: &Path) -> Vec<PathBuf> {
 /// Mount every archive listed in `OMSI_CONTENT_ZIP` (separated like `PATH`) as a content
 /// root. Returns the mount points.
 pub fn mount_env_zips() -> Vec<PathBuf> {
-    let Some(v) = std::env::var_os("OMSI_CONTENT_ZIP") else {
+    let Some(v) = crate::flags::CONTENT_ZIP.os() else {
         return Vec::new();
     };
     let mut out = Vec::new();

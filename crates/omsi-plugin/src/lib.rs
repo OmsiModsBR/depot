@@ -462,14 +462,14 @@ impl HostConfig {
     /// The host next to the running program and, off Windows, `wine` from the path.
     pub fn detect() -> HostConfig {
         let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-        let host32 = std::env::var_os("OMSI_PLUGIN_HOST32")
-            .map(PathBuf::from)
+        let host32 = omsi_cfg::flags::PLUGIN_HOST32
+            .path()
             .or_else(|| exe_dir.map(|d| d.join("omsi-plugin-host32.exe")))
             .filter(|p| p.is_file());
         let runner = if cfg!(windows) {
             None
         } else {
-            std::env::var_os("OMSI_WINE").map(PathBuf::from).or_else(|| {
+            omsi_cfg::flags::WINE.path().or_else(|| {
                 // the path, then where Homebrew and the Wine app bundles put it (a game
                 // started from Finder gets a path without /opt/homebrew/bin)
                 let from_path: Vec<PathBuf> = std::env::var_os("PATH")

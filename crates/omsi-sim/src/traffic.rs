@@ -934,7 +934,7 @@ impl Network {
                     }
                 }
             }
-            if found.is_empty() && omsi_cfg::env::var_os("OMSI_DEBUG_UNLINKED").is_some() {
+            if found.is_empty() && omsi_cfg::flags::DEBUG_UNLINKED.is_set() {
                 // a lane end with a start of its kind near it that was not taken
                 for dx in -1..=1 {
                     for dy in -1..=1 {

@@ -473,7 +473,7 @@ thread_local! {
 /// busy for two and a half minutes, and the displays stayed blank until the duty was set
 /// directly after that. `OMSI_IBIS_BUDGET` (seconds) changes it.
 fn trial_budget() -> std::time::Duration {
-    let s = omsi_cfg::env::var("OMSI_IBIS_BUDGET").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(10.0);
+    let s = omsi_cfg::flags::IBIS_BUDGET.number::<f64>().unwrap_or(10.0);
     std::time::Duration::from_secs_f64(s.max(0.1))
 }
 
@@ -746,7 +746,7 @@ impl Typist {
 }
 
 fn debug() -> bool {
-    omsi_cfg::env::var_os("OMSI_DEBUG_IBIS").is_some()
+    omsi_cfg::flags::DEBUG_IBIS.is_set()
 }
 
 fn goal_met(u: &Unit, t: &Target, var: &dyn Fn(VarId) -> Option<f32>) -> bool {
