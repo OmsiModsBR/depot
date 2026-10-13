@@ -36,7 +36,7 @@ pub(crate) fn is_omsi_root(p: &Path) -> bool {
 pub(crate) fn fatal_dialog(title: &str, text: &str) {
     log::error!("{title}: {text}");
     // started from a terminal (the message is right there) or by a test harness
-    if std::io::IsTerminal::is_terminal(&std::io::stderr()) || omsi_cfg::env::var_os("OMSI_BACKGROUND").is_some() {
+    if std::io::IsTerminal::is_terminal(&std::io::stderr()) || omsi_cfg::flags::BACKGROUND.is_set() {
         return;
     }
     #[cfg(target_os = "macos")]
@@ -100,7 +100,7 @@ pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::Hash
 }
 
 pub(crate) fn content_dir() -> Option<PathBuf> {
-    if let Some(d) = omsi_cfg::env::var_os("OMSI_CONTENT") {
+    if let Some(d) = omsi_cfg::flags::CONTENT.os() {
         return Some(PathBuf::from(d));
     }
     let exe = std::env::current_exe().ok()?;
@@ -140,7 +140,7 @@ pub(crate) fn root_memo() -> Option<PathBuf> {
 /// Find the OMSI 2 installation without being told where it is.
 pub(crate) fn find_root() -> Option<PathBuf> {
     let mut first: Vec<PathBuf> = Vec::new();
-    if let Some(p) = omsi_cfg::env::var_os("OMSI_ROOT").map(PathBuf::from) {
+    if let Some(p) = omsi_cfg::flags::ROOT.os().map(PathBuf::from) {
         first.push(p);
     }
     if let Some(memo) = root_memo() {
@@ -205,7 +205,7 @@ pub(crate) fn backend_order() -> Vec<wgpu::Backends> {
     let wanted = if settings.vr_requested() {
         "dx12".to_owned()
     } else {
-        omsi_cfg::env::var("OMSI_BACKEND").ok().unwrap_or(settings.graphics_api)
+        omsi_cfg::flags::BACKEND.text().unwrap_or(settings.graphics_api)
     };
     let all: Vec<wgpu::Backends> = if cfg!(windows) {
         vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN, wgpu::Backends::GL]
@@ -443,7 +443,7 @@ pub(crate) static CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 pub(crate) fn restart_with_allocator_settings() {
     use std::os::unix::process::CommandExt;
     if std::env::var_os("MallocLargeCache").is_some()
-        || omsi_cfg::env::var_os("OMSI_KEEP_ALLOCATOR").is_some()
+        || omsi_cfg::flags::KEEP_ALLOCATOR.is_set()
     {
         return;
     }

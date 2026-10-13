@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The rest of `omsi-app` outside LAN and the launcher (the offscreen run, the window's events,
+  start-up, settings, cameras, VR, input scripts) reads its `OMSI_*` variables through
+  `omsi_cfg::flags`, where 73 more are now declared; the variables the game sets for itself
+  (`OMSI_SAFE_GPU`, `OMSI_BACKEND`, `OMSI_CONTENT` on phones) are named through it too. No
+  behaviour change.
 - `omsi-app`'s traffic, people, timetable and driver modules (`traffic`, `humans`, `schedule`,
   `navigator`, `driver`, `bus_service`, `spawn`, `player`, `on_foot`, `route_arrows`, `career`,
   `services`) read their `OMSI_*` variables through `omsi_cfg::flags`, where 44 more are now
