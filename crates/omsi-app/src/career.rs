@@ -200,7 +200,7 @@ impl Career {
             self.harsh_cool = 1.0;
             self.harsh += 1;
             self.penalise(JOLT_WEIGHT);
-            if omsi_cfg::env::var_os("OMSI_DEBUG_CAREER").is_some() {
+            if omsi_cfg::flags::DEBUG_CAREER.is_set() {
                 log::info!("jolt after {:.0} m: along {along:+.1} across {across:+.1} m/s2 at {:.0} km/h", self.metres, v * 3.6);
             }
             if riders > 0 {

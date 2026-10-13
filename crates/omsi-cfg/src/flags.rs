@@ -325,6 +325,102 @@ flags! {
     /// The windows' rain drawn with OMSI 2's texture, not as a film of drops.
     TEXTURE_RAIN = "OMSI_TEXTURE_RAIN", Switch, Diagnostic, "omsi-app::scene";
 
+    // --- omsi-app: diagnostics of traffic, people, timetables and the driver
+
+    /// Log the navigator's search for a way back to the route.
+    DEBUG_NAV = "OMSI_DEBUG_NAV", Switch, Diagnostic, "omsi-app::navigator", env_txt;
+    /// Log the lanes of the network that start or end near this point (`x,y[,r]`), and how
+    /// they link.
+    NAV_PROBE = "OMSI_NAV_PROBE", Text, Diagnostic, "omsi-app::navigator";
+    /// The navigator's city map at this many metres per pixel (0.25 to 20), for pictures to
+    /// compare.
+    NAV_MAP_MPP = "OMSI_NAV_MAP_MPP", Number, Diagnostic, "omsi-app::navigator";
+    /// Log these lanes (indices, or `at:x,y,r` for the street lanes near a point).
+    DEBUG_LANES = "OMSI_DEBUG_LANES", Text, Diagnostic, "omsi-app::traffic";
+    /// Log the traffic lights of these crossings (indices, or `near`).
+    DEBUG_LIGHTS = "OMSI_DEBUG_LIGHTS", Text, Diagnostic, "omsi-app::traffic";
+    /// Log the AI vehicle with this id, every frame.
+    DEBUG_CAR = "OMSI_DEBUG_CAR", Number, Diagnostic, "omsi-app::traffic";
+    /// Log the AI types' wheels as they stand at start.
+    DEBUG_WHEELS = "OMSI_DEBUG_WHEELS", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log why a car at a junction waits.
+    DEBUG_JUNCTION = "OMSI_DEBUG_JUNCTION", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log why a car standing behind something does not go round it.
+    DEBUG_PASS = "OMSI_DEBUG_PASS", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log the cars standing behind an obstacle for over 20 s, and why they wait at junctions.
+    DEBUG_STUCK = "OMSI_DEBUG_STUCK", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log the AI cars placed and taken away round the camera.
+    DEBUG_POPULATION = "OMSI_DEBUG_POPULATION", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log the timetable buses' doors twice a second.
+    DEBUG_DOORS = "OMSI_DEBUG_DOORS", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log the coupled parts of trains and articulated vehicles off the level of what pulls
+    /// them.
+    DEBUG_TRAILERS = "OMSI_DEBUG_TRAILERS", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log the AI vehicles that overlap the player's or one another.
+    CHECK_OVERLAP = "OMSI_CHECK_OVERLAP", Switch, Diagnostic, "omsi-app::traffic";
+    /// Write every AI vehicle's state, frame by frame, to this CSV file.
+    TRACE_AI = "OMSI_TRACE_AI", Path, Diagnostic, "omsi-app::traffic";
+    /// `OMSI_TRACE_AI` writes the timetable buses only.
+    TRACE_AI_BUSES = "OMSI_TRACE_AI_BUSES", Switch, Diagnostic, "omsi-app::traffic";
+    /// The chance per population pass (about 2 s, 0.035 by default) that a parked car
+    /// drives off.
+    PARKED_PULL_OUT = "OMSI_PARKED_PULL_OUT", Number, Diagnostic, "omsi-app::traffic";
+    /// The chance per population pass (about 2 s, 0.04 by default) that a car parks.
+    PARK_IN = "OMSI_PARK_IN", Number, Diagnostic, "omsi-app::traffic";
+    /// The vehicle groups the map keeps to some roads drive everywhere.
+    TRAFFIC_ALL_GROUPS = "OMSI_TRAFFIC_ALL_GROUPS", Switch, Diagnostic, "omsi-app::traffic";
+    /// AI cars on their way and the plain ground sampler, as before (to compare).
+    AI_WAY_ONLY = "OMSI_AI_WAY_ONLY", Switch, Diagnostic, "omsi-app::traffic";
+    /// Log where the timetable's routes leave a gap between lanes.
+    DEBUG_ROUTES = "OMSI_DEBUG_ROUTES", Switch, Diagnostic, "omsi-app::schedule";
+    /// Log every step of the trip of this name (and check the trips' routes offscreen).
+    CHECK_TRIPS = "OMSI_CHECK_TRIPS", Text, Diagnostic, "omsi-app::schedule";
+    /// Log what the stops' departure boards show.
+    DEBUG_BOARDS = "OMSI_DEBUG_BOARDS", Switch, Diagnostic, "omsi-app::schedule";
+    /// How long (s) a vehicle set nobody uses is kept, in place of the default.
+    FLEET_IDLE = "OMSI_FLEET_IDLE", Number, Test, "omsi-app::schedule";
+    /// How far ahead (minutes, 25 by default) the fleet is read.
+    FLEET_AHEAD = "OMSI_FLEET_AHEAD", Number, Test, "omsi-app::schedule";
+    /// Log the timetable buses serving or passing their stops.
+    DEBUG_STOPS = "OMSI_DEBUG_STOPS", Switch, Diagnostic, "omsi-app::bus_service";
+    /// Log the passengers: who waits, boards and leaves, and why.
+    DEBUG_PAX = "OMSI_DEBUG_PAX", Switch, Diagnostic, "omsi-app::humans";
+    /// Log the people's types and what `OMSI_DEBUG_PAX` logs.
+    DEBUG_HUMANS = "OMSI_DEBUG_HUMANS", Switch, Diagnostic, "omsi-app::humans";
+    /// Log the people kept out of walls.
+    DEBUG_WALLS = "OMSI_DEBUG_WALLS", Switch, Diagnostic, "omsi-app::humans";
+    /// Log the passengers in a bus standing off its walkways.
+    CHECK_WALLS = "OMSI_CHECK_WALLS", Switch, Diagnostic, "omsi-app::humans";
+    /// Log, every two seconds, the people on foot with a walkable surface over their heads.
+    CHECK_GROUND = "OMSI_CHECK_GROUND", Switch, Diagnostic, "omsi-app::humans";
+    /// Log the people drawn with their arms out (the rest pose).
+    CHECK_TPOSE = "OMSI_CHECK_TPOSE", Switch, Diagnostic, "omsi-app::humans";
+    /// Send a few pedestrians across the signalised crossing nearest this point (`x,y`).
+    PAX_CROSS = "OMSI_PAX_CROSS", Text, Diagnostic, "omsi-app::humans";
+    /// This many people waiting at every stop.
+    PAX_WAITING = "OMSI_PAX_WAITING", Number, Diagnostic, "omsi-app::humans";
+    /// Write the passengers' steps to this file.
+    TRACE_PAX = "OMSI_TRACE_PAX", Path, Diagnostic, "omsi-app::humans";
+    /// Log the player walking: the doors and seats near and where the avatar is drawn.
+    DEBUG_FOOT = "OMSI_DEBUG_FOOT", Switch, Diagnostic, "omsi-app::on_foot";
+    /// Log how the driver's arms reach the wheel and the levers.
+    DEBUG_DRIVER = "OMSI_DEBUG_DRIVER", Switch, Diagnostic, "omsi-app::driver";
+    /// Both of the driver's hands held at these wheel angles (`left,right`), for close-ups.
+    DRIVER_HANDS = "OMSI_DRIVER_HANDS", Text, Diagnostic, "omsi-app::driver";
+    /// The mesh the driver's hand takes as the gear lever (part of its name).
+    DRIVER_SHIFTER = "OMSI_DRIVER_SHIFTER", Text, Diagnostic, "omsi-app::driver";
+    /// Log the player vehicle's meshes (and, for the ones whose file contains this text, the
+    /// part of the texture each slot shows).
+    DEBUG_MESHES = "OMSI_DEBUG_MESHES", Text, Diagnostic, "omsi-app::spawn";
+    /// Log the player vehicle's mesh properties (and the timetable buses' display variables).
+    DEBUG_PROPS = "OMSI_DEBUG_PROPS", Switch, Diagnostic, "omsi-app::spawn";
+    /// Write each wheel's suspension travel, frame by frame, to this CSV file (window runs).
+    SUSP_TRACE_WINDOW = "OMSI_SUSP_TRACE_WINDOW", Path, Diagnostic, "omsi-app::player";
+    /// Log the jolts that cost points in the career.
+    DEBUG_CAREER = "OMSI_DEBUG_CAREER", Switch, Diagnostic, "omsi-app::career";
+    /// Log the petrol stations and how far the bus is from them.
+    DEBUG_SERVICES = "OMSI_DEBUG_SERVICES", Switch, Diagnostic, "omsi-app::services";
+
     // --- tests and example programs
 
     /// The installed content for the tests, when `OMSI_ROOT` is not set.

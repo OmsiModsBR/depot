@@ -302,9 +302,7 @@ const STOP_REACH: f64 = 25.0;
 const FLEET_AHEAD: f64 = 25.0 * 60.0;
 /// [`FLEET_AHEAD`], or `OMSI_FLEET_AHEAD` minutes (for tests).
 fn fleet_ahead() -> f64 {
-    omsi_cfg::env::var("OMSI_FLEET_AHEAD")
-        .ok()
-        .and_then(|v| v.parse::<f64>().ok())
+    omsi_cfg::flags::FLEET_AHEAD.number::<f64>()
         .map(|m| m * 60.0)
         .unwrap_or(FLEET_AHEAD)
 }
@@ -755,7 +753,7 @@ impl Schedule {
             }
         }
         let tile_coords = world.global.raw_tiles.clone();
-        if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if omsi_cfg::flags::PROFILE.is_set() {
             let mut seen: HashSet<*const VehicleType> = HashSet::new();
             let mut bytes = 0usize;
             for t in depots
@@ -891,7 +889,7 @@ impl Schedule {
                     continue;
                 }
                 let (k, j) = candidates[(mix(h) % candidates.len() as u64) as usize];
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!("car_use: line {} tour {} -> {} #{}", line.name, t.number, vehicles[k].0.def.path.display(), vehicles[k].1[j].number);
                 }
                 self.used_numbers.insert((group.clone(), vehicles[k].1[j].number.trim().to_string()));
@@ -1097,12 +1095,12 @@ impl Schedule {
                 // it) off the road at once rather than letting it drive on
                 traffic.remove_car(world, renderer, scene, id);
                 self.car_departure.remove(&id);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!("scheduled bus {id}: the last trip of its tour is over: removed");
                 }
             } else if !taken {
                 traffic.release(ci);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!("scheduled bus {id}: trip over, no next trip of its tour to take on here: it drives off");
                 }
             }
@@ -1324,7 +1322,7 @@ impl Schedule {
             last = Some(best);
         }
         skip_detours(net, &mut out);
-        if omsi_cfg::env::var_os("OMSI_DEBUG_ROUTES").is_some() {
+        if omsi_cfg::flags::DEBUG_ROUTES.is_set() {
             // where consecutive lanes of the route do not join (a gap, or a change within the
             // same spline, which is a lane change)
             let lanes: Vec<usize> = out
@@ -1350,7 +1348,7 @@ impl Schedule {
         }
         let waiting = out.iter().filter(|s| **s == Slot::Waiting).count();
         let absent = out.iter().filter(|s| **s == Slot::Absent).count();
-        if absent > 0 || omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if absent > 0 || omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             log::debug!("route: {} of {} steps on loaded lanes, {waiting} on tiles still to come, {absent} not in the map", out.len() - waiting - absent, out.len());
         }
         out
@@ -1604,7 +1602,7 @@ impl Schedule {
             if let Some(ty) = self.fleet_reading.remove(&key) {
                 let t = std::time::Instant::now();
                 world.precache_vehicle(renderer, scene, &ty, key.1);
-                if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+                if omsi_cfg::flags::PROFILE.is_set() {
                     log::info!(
                         "timetable fleet: {} (scheme {:?}) uploaded ahead in {:.1} ms",
                         ty.def
@@ -1630,9 +1628,7 @@ impl Schedule {
             .chain(traffic.random_sets().into_iter().map(|(t, s)| (t.def.path.clone(), s)))
             .collect();
         // (OMSI_FLEET_IDLE=<s> shortens the wait, for tests)
-        let idle = omsi_cfg::env::var("OMSI_FLEET_IDLE")
-            .ok()
-            .and_then(|v| v.parse::<f32>().ok())
+        let idle = omsi_cfg::flags::FLEET_IDLE.number::<f32>()
             .map(std::time::Duration::from_secs_f32)
             .unwrap_or(FLEET_IDLE);
         if world.trim_vehicle_sets(renderer, scene, &keep, idle) > 0 {
@@ -1769,7 +1765,7 @@ impl Schedule {
             }
             trips += 1;
             // `OMSI_CHECK_TRIPS=<trip name>`: every step of that trip
-            if omsi_cfg::env::var("OMSI_CHECK_TRIPS").map(|v| v.eq_ignore_ascii_case(&trip.name)).unwrap_or(false) {
+            if omsi_cfg::flags::CHECK_TRIPS.text().map(|v| v.eq_ignore_ascii_case(&trip.name)).unwrap_or(false) {
                 for (k, (st, sl)) in steps.iter().zip(&slots).enumerate() {
                     let cands: Vec<String> = st
                         .key
@@ -2053,7 +2049,7 @@ impl Schedule {
                                 .map(|p| (p.0 - here).length() < 30.0)
                                 .unwrap_or(false)
                         });
-                        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                             let nearest = self
                                 .served
                                 .iter()
@@ -2292,7 +2288,7 @@ impl Schedule {
         day_time: f64,
         onto: Option<usize>,
     ) -> Placed {
-        let profile = omsi_cfg::env::var_os("OMSI_PROFILE").is_some();
+        let profile = omsi_cfg::flags::PROFILE.is_set();
         let t_spawn = std::time::Instant::now();
         let trip = &self.data.trips[self.departures[i].trip];
         let trip_name = trip.name.clone();
@@ -2456,7 +2452,7 @@ impl Schedule {
             }
         }
         stops.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             let len: f32 = section.iter().map(|&l| net.lanes[l].length()).sum();
             log::info!("trip {trip_name}: {} stations {:?}, route {} of {} steps ({} lanes, {len:.0} m) from step {start}, bus on step {at} (leg {leg}, {:.0} %), stops {:?}", stations.len(), stations, end - start, steps.len(), section.len(), frac * 100.0, stops);
         }
@@ -2483,7 +2479,7 @@ impl Schedule {
                         traffic.turn_train(world, renderer, scene, ci, l, s, &section[..k], reverse);
                     }
                     _ => {
-                        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                             log::info!("trip {trip_name}: train {} would turn round, but its last car at ({:.1}, {:.1}) is not on the trip's way (nearest {:?}); its front at ({:.1}, {:.1}) on lane {}", c.id, tail.x, tail.y, found.map(|f| (f.0, f.1, f.2, f.3)), c.vehicle.position.x, c.vehicle.position.y, c.state.lane);
                             for &l in section.iter().take(4).chain(std::iter::once(&c.state.lane)) {
                                 let ln = &net.lanes[l];
@@ -2516,7 +2512,7 @@ impl Schedule {
                         Some((_, p, t)) => (p[..p.len() - 1].to_vec(), t),
                         None => {
                             log::debug!("trip {trip_name}: the tour's bus has no way from where it stands");
-                            if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                            if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                                 let ln = &net.lanes[lane0];
                                 log::info!("trip {trip_name}: tour bus on lane {lane0} {:?} at s {s0:.1} of {:.1}, ({:.1}, {:.1}) -> ({:.1}, {:.1}), next {:?}", ln.key, ln.length(), ln.start().x, ln.start().y, ln.end().x, ln.end().y, ln.next);
                                 for &l in section.iter().take(4) {
@@ -4482,7 +4478,7 @@ impl Schedule {
             let mut list = self.stop_list(stop, now, &on_road, duty, player_hof);
             list.sort_by(|a, b| a.0.total_cmp(&b.0));
             list.truncate(8);
-            if omsi_cfg::env::var_os("OMSI_DEBUG_BOARDS").is_some() {
+            if omsi_cfg::flags::DEBUG_BOARDS.is_set() {
                 log::info!(
                     "board of stop {stop} at {:.0} s: {:?}",
                     now,

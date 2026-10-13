@@ -649,7 +649,7 @@ impl DriverFigure {
                 // An arm stretched out straight to the rim says the seat is too far back (the
                 // hands had just reached it): how far the wrists are from a driver's bent arms.
                 let excess = if posed.ok { self.arm_excess(&posed.elbow, &posed.wrist) } else { 0.0 };
-                if omsi_cfg::env::var_os("OMSI_DEBUG_DRIVER").is_some() {
+                if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
                     log::info!("driver settle {round}: excess {excess:.3} slide {:.2} grips {:?} wrists {:?} elbows {:?} neck {:?} hip {:?}", self.slide, try_input.grips, posed.wrist, posed.elbow, posed.neck, posed.hip);
                 }
                 // the hand's frame follows the forearm: pose again until both settle
@@ -693,7 +693,7 @@ impl DriverFigure {
             return self.update(renderer, scene, v, render, dt, show, mirror_only);
         }
         let targets = self.hand_targets(v, dt);
-        if let (Some(t), true) = (&targets, omsi_cfg::env::var_os("OMSI_DEBUG_DRIVER").is_some()) {
+        if let (Some(t), true) = (&targets, omsi_cfg::flags::DEBUG_DRIVER.is_set()) {
             log::info!("HANDT {dt:.4} {:?} {:?} {:?} {:?} seen {:.1} {}", t.grips[0].to_array(), t.frames[0].0.to_array(), t.frames[0].1.to_array(), t.grips[1].to_array(), self.hands[0].seen(self.theta).0, self.hands[0].mv.is_some());
         }
         let input = self.pose_input(targets.as_ref(), fwd);
@@ -703,7 +703,7 @@ impl DriverFigure {
         if posed.ok {
             self.keep_elbows(&posed.elbow);
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_DRIVER").is_some() {
+        if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
             log::info!("HANDP {dt:.4} {:?} {:?} {:?} lean {:.2}", posed.wrist[0].to_array(), posed.elbow[0].to_array(), self.grip_fix[0].to_array(), self.lean);
         }
         if let (Some(t), true) = (&targets, posed.ok) {
@@ -712,7 +712,7 @@ impl DriverFigure {
             let tubes = t.tubes.map(|q| self.to_person(q));
             let holding = [0, 1].map(|k| self.hands[k].mv.is_none());
             let off = self.correct_grips(&posed.bones, tubes, 1.0 - (-dt / FIX_EASE).exp(), holding);
-            if omsi_cfg::env::var_os("OMSI_DEBUG_DRIVER").is_some() {
+            if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
                 log::info!("driver: grip off the rim {off:.3} m, fix {:?}", self.grip_fix);
             }
         }
@@ -728,7 +728,7 @@ impl DriverFigure {
                 self.lean = (self.lean - 4.0 * dt).max(self.base_lean);
             }
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_DRIVER").is_some() {
+        if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
             if let Some(g) = input.grips {
                 log::info!(
                     "driver: wheel {:.0} deg (sign {}), hands at {:.0} {:.0}{}{}, lean {:.1}, miss {:.3} {:.3}",
@@ -882,7 +882,7 @@ impl DriverFigure {
     /// off it); held still a while, the wheel gets its hands back at their rest.
     fn steer_hands(&mut self, theta: f32, dt: f32) {
         // OMSI_DRIVER_HANDS=<left>,<right>: both hands held at these angles (grip close-ups)
-        if let Some(a) = omsi_cfg::env::var("OMSI_DRIVER_HANDS").ok().and_then(|s| {
+        if let Some(a) = omsi_cfg::flags::DRIVER_HANDS.text().and_then(|s| {
             let v: Vec<f32> = s.split(',').filter_map(|x| x.trim().parse().ok()).collect();
             (v.len() == 2).then(|| [v[0], v[1]])
         }) {
@@ -1469,8 +1469,7 @@ fn find_shifter(v: &VehicleInstance, hip: Vec3, heading: f32) -> Option<Shifter>
     // "Antrieb" is what OMSI models usually call the gearbox / its lever.
     const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe"];
     const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
-    let forced = omsi_cfg::env::var("OMSI_DRIVER_SHIFTER")
-        .ok()
+    let forced = omsi_cfg::flags::DRIVER_SHIFTER.text()
         .map(|s| s.trim().to_ascii_lowercase())
         .filter(|s| !s.is_empty());
     // OMSI_DRIVER_SHIFTER=off: no lever, both hands on the wheel
