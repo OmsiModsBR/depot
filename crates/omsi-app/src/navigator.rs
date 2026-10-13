@@ -3270,17 +3270,19 @@ impl Navigator {
             let route_of = |st: &LinesView, i: usize| sf.lines().get(i).and_then(|l| l.routes.get(st.route.get(&i).copied().unwrap_or(0).min(l.routes.len().saturating_sub(1))));
             if std::mem::take(&mut self.city.lines.fit) {
                 if let Some(r) = self.city.lines.focus.or(self.city.lines.selected.last().copied()).and_then(|i| route_of(&self.city.lines, i)) {
+                    // (the bounds as the screen sees them: in the turned view's own axes)
                     let (mut lo, mut hi) = (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN));
                     for q in &r.pts {
-                        lo = lo.min(*q);
-                        hi = hi.max(*q);
+                        let q = rot(*q, self.city.phi);
+                        lo = lo.min(q);
+                        hi = hi.max(q);
                     }
                     if lo.x <= hi.x {
                         let (free_w, free_h) = (((w - 332.0 * s) - 60.0 * s).max(300.0) as f64, (h - 44.0 * s - 60.0 * s).max(200.0) as f64);
                         let mpp = (((hi.x - lo.x) / free_w).max((hi.y - lo.y) / free_h) * 1.12).clamp(0.25, self.max_mpp());
                         self.city.mpp = mpp;
                         // (the panel takes the right side: the way is centred in what is left)
-                        self.city.center = (lo + hi) * 0.5 + rot(DVec2::new(166.0 * s as f64 * mpp, 0.0), -self.city.phi);
+                        self.city.center = rot((lo + hi) * 0.5 + DVec2::new(166.0 * s as f64 * mpp, 0.0), -self.city.phi);
                         self.city.follow = false;
                     }
                 }
@@ -3428,11 +3430,11 @@ impl Navigator {
             ui.rounded(r, 4.0 * s, *color);
             ui.text_in(&mut self.atlas, &self.fonts, &l, px, Weight::Bold, r, Align::Center, LINE_TEXT);
         }
-        if self.show_surface && self.surface.is_some() && !self.show_contours {
+        if self.show_surface && self.surface.is_some() {
             // the municipalities' names as a watermark: big, faint, inside their outlines (the box
             // the package computed); out of sight when zoomed in, where the streets' names take over,
             // and when the view is turned (the names are written upright)
-            if let Some(sf) = self.surface.clone().filter(|_| phi.abs() < 1e-6) {
+            if let Some(sf) = self.surface.clone().filter(|_| !self.show_contours && phi.abs() < 1e-6) {
                 let col = if self.light { Color::rgba(70, 58, 44, 0.26) } else { Color::WHITE.alpha(0.15) };
                 for r in sf.regions().iter().filter(|r| r.box_w > 0.0) {
                     let p = to_screen(r.label.extend(0.0));
@@ -3719,7 +3721,10 @@ impl Navigator {
         if have_lines && self.city.lines.open {
             if let (true, Some(sf), Some(i)) = (self.city.lines.sheet, self.surface.clone(), self.city.lines.focus) {
                 let (cc, cm) = (self.city.center, self.city.mpp);
-                let at = move |q: DVec3| Vec2::new((w as f64 * 0.5 + (q.x - cc.x) / cm) as f32, (h as f64 * 0.5 - (q.y - cc.y) / cm) as f32);
+                let at = move |q: DVec3| {
+                    let d = rot(q.truncate() - cc, phi);
+                    Vec2::new((w as f64 * 0.5 + d.x / cm) as f32, (h as f64 * 0.5 - d.y / cm) as f32)
+                };
                 self.sheet_labels(&mut ui, &sf, i, s, &at, (w, h));
             }
             self.lines_panel(&mut ui, w, h, s, head.h, &lt, &on_line);
