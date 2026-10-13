@@ -6844,6 +6844,7 @@ impl Traffic {
     }
 
     /// The AI on the roads: (cars, buses, cars asleep far from everybody, parked cars).
+    #[cfg(feature = "server")]
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let buses = self.cars.iter().filter(|c| c.is_bus()).count();
         (self.cars.len() - buses, buses, self.dormant.len(), self.parked.values().map(Vec::len).sum())

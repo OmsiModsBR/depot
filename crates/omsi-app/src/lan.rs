@@ -971,6 +971,7 @@ fn port_of_gateway() -> Option<u16> {
 }
 
 /// A server run: what its status page says now.
+#[cfg(feature = "server")]
 pub fn update_server_info(players: usize, time: &str, weather: &str) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
@@ -986,6 +987,7 @@ pub fn update_server_info(players: usize, time: &str, weather: &str) {
 }
 
 /// A server run: its shared world now, for `GET /status`.
+#[cfg(feature = "server")]
 pub fn update_server_world(world: omsi_net::ws::WorldCounts) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
@@ -997,6 +999,7 @@ pub fn update_server_world(world: omsi_net::ws::WorldCounts) {
 }
 
 /// A server run: the players `GET /players` lists now.
+#[cfg(feature = "server")]
 pub fn update_server_players(list: Vec<omsi_net::ws::PlayerInfo>) {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
@@ -1008,6 +1011,7 @@ pub fn update_server_players(list: Vec<omsi_net::ws::PlayerInfo>) {
 }
 
 /// A server run: the admin commands that came to the web gateway's `POST /admin`.
+#[cfg(feature = "server")]
 pub fn take_local_admin() -> Vec<String> {
     if let Ok(w) = WS_PATH.lock() {
         if let Some(g) = w.as_ref().and_then(|w| w.gateway.as_ref()) {
@@ -2462,8 +2466,14 @@ fn remote_type(
     pose: &Pose,
     player: Option<&Player>,
 ) -> Option<(Arc<omsi_sim::VehicleType>, bool)> {
+    #[cfg(feature = "server")]
     let allowed = crate::server::SERVER_VEHICLES.get().filter(|l| !l.is_empty());
-    let loaded = if allowed.is_none_or(|l| crate::server::allows(l, &pose.bus)) {
+    #[cfg(feature = "server")]
+    let offered = allowed.is_none_or(|l| crate::server::allows(l, &pose.bus));
+    // (only a dedicated server has a `vehicles` list)
+    #[cfg(not(feature = "server"))]
+    let (allowed, offered): (Option<&Vec<String>>, bool) = (None, true);
+    let loaded = if offered {
         remote_bus_file(args, &pose.bus).and_then(|path| omsi_sim::VehicleType::load(&args.root, &path).map_err(|e| e.to_string()))
     } else {
         Err("the server does not offer it".to_string())

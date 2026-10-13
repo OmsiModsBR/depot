@@ -264,6 +264,7 @@ fn response(challenge: &str, password: &str) -> String {
 }
 
 /// Equal strings, compared in time independent of where they differ.
+#[cfg(feature = "server")]
 fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
@@ -421,6 +422,7 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
 }
 
 /// The administration of a dedicated server (`omsi --server`): what it keeps.
+#[cfg(feature = "server")]
 #[derive(Default)]
 pub(crate) struct ServerAdmin {
     pub password: String,
@@ -444,12 +446,14 @@ pub(crate) struct ServerAdmin {
 }
 
 /// A dedicated server admin's order for the AI traffic.
+#[cfg(feature = "server")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum TrafficOrder {
     Density(usize),
     Clear,
 }
 
+#[cfg(feature = "server")]
 impl TrafficOrder {
     /// `clear`, or a density (held to 0 .. the top of the game menu's Traffic steps, the
     /// same limit as server.cfg's `traffic`: it was 100 here, 120 in the menu, #1327).
@@ -462,9 +466,12 @@ impl TrafficOrder {
 }
 
 /// Wrong answers within `LOCK_WINDOW` that lock the administration for everybody.
+#[cfg(feature = "server")]
 const LOCK_AFTER: usize = 5;
+#[cfg(feature = "server")]
 const LOCK_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
 
+#[cfg(feature = "server")]
 impl ServerAdmin {
     /// Forget the rights and challenges of players no longer in the session.
     pub fn prune(&mut self, lan: &LanSession) {
@@ -480,15 +487,18 @@ impl ServerAdmin {
 }
 
 /// A weather file an admin may choose: a `Weather/….owt` path, nothing above it.
+#[cfg(feature = "server")]
 fn weather_file_ok(file: &str) -> bool {
     let f = file.replace('\\', "/").to_ascii_lowercase();
     f.starts_with("weather/") && f.ends_with(".owt") && !f.contains("..") && f.matches('/').count() == 1
 }
 
 /// Who the commands of the web gateway's `POST /admin` come from: no player has this id.
+#[cfg(feature = "server")]
 pub(crate) const LOCAL_ADMIN: u32 = u32::MAX;
 
 /// A command a player sent the dedicated server.
+#[cfg(feature = "server")]
 pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &mut ServerAdmin, positions: &dyn Fn(u32) -> Option<(glam::DVec3, f64)>) {
     let (verb, arg) = text.split_once(' ').unwrap_or((text, ""));
     match verb {
@@ -722,7 +732,7 @@ mod notice_target_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod traffic_order_tests {
     use super::TrafficOrder;
 
@@ -739,7 +749,7 @@ mod traffic_order_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod weather_file_tests {
     use super::weather_file_ok;
 

@@ -2186,6 +2186,7 @@ impl Humans {
     }
 
     /// Everybody: (walking, waiting at a stop, in a bus).
+    #[cfg(feature = "server")]
     pub fn counts(&self) -> (usize, usize, usize) {
         let (mut walking, mut waiting, mut aboard) = (0, 0, 0);
         for p in &self.people {
