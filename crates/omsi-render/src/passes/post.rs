@@ -239,7 +239,7 @@ pub(crate) fn encode_enhanced_post(
             // curve's contrast (post.wgsl `natural_tone`)
             d: {
                 let contrast = tone_contrast(ctx.adaptation.exposure.unwrap_or(0.0));
-                if rt_frame && omsi_cfg::env::var_os("OMSI_NO_RT_GRADE").is_none() {
+                if rt_frame && !omsi_cfg::flags::NO_RT_GRADE.is_set() {
                     [1.0, 0.08, 0.0, contrast]
                 } else {
                     [0.0, 0.0, 0.0, contrast]
@@ -249,10 +249,7 @@ pub(crate) fn encode_enhanced_post(
         ctx.queue
             .write_buffer(&ctx.post.post_buf, 0, bytemuck::bytes_of(&pu));
         // (a mirror's small picture goes without FXAA)
-        let fxaa = with_overlays
-            && ctx.fxaa
-            && ctx.msaa <= 1
-            && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
+        let fxaa = with_overlays && ctx.fxaa && ctx.msaa <= 1 && !omsi_cfg::flags::NO_FXAA.is_set();
         if let Some(h) = ctx.targets.hdr_targets.get(&(width, height)) {
             let puddles = h.puddles.as_ref().filter(|_| puddles_on);
             let levels = h.down.len();
