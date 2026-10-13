@@ -46,7 +46,7 @@ pub fn warm_up(world: &World, ty: &Arc<VehicleType>, hof: Option<Arc<omsi_vehicl
             .ok()
             .map(|i| (i.width, i.height, i.rgba))
     });
-    if omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+    if omsi_cfg::flags::PROFILE.is_set() {
         log::info!(
             "  first start of {}: {:.1} ms",
             ty.def.path.display(),
@@ -858,7 +858,7 @@ fn place_body(
 /// The `OMSI_TRACE_AI` file, with its header written.
 fn open_trace() -> Option<std::io::BufWriter<std::fs::File>> {
     use std::io::Write;
-    let path = omsi_cfg::env::var_os("OMSI_TRACE_AI")?;
+    let path = omsi_cfg::flags::TRACE_AI.os()?;
     let mut f = std::io::BufWriter::new(
         std::fs::File::create(&path)
             .map_err(|e| log::warn!("OMSI_TRACE_AI: {e}"))
@@ -1206,7 +1206,7 @@ impl Traffic {
             // though 865 paths ask for the one and 462 around Falkensee for the other.
             // `OMSI_TRAFFIC_ALL_GROUPS=1` lets such groups drive everywhere (and, on a map
             // without the file, every group, not only the default one).
-            let all_groups = omsi_cfg::env::var_os("OMSI_TRAFFIC_ALL_GROUPS").is_some();
+            let all_groups = omsi_cfg::flags::TRAFFIC_ALL_GROUPS.is_set();
             let unscheduled: Option<Vec<(String, i32)>> =
                 omsi_cfg::CfgFile::read(&world.map_dir.join("unsched_vehgroups.txt"))
                     .ok()
@@ -1310,7 +1310,7 @@ impl Traffic {
         // of the map's TTData runs there. Mixing the depot fleet into the random pool put
         // the map's one bus type on every road of the map - on Grundorf that is a single
         // articulated GN92, which is why it seemed to be a type of our own choosing.
-        if let Ok(list) = omsi_cfg::env::var("OMSI_DEBUG_LANES") {
+        if let Some(list) = omsi_cfg::flags::DEBUG_LANES.text() {
             // lane indices, or `at:x,y,r` for the street lanes passing within r m of a point
             // (the indices change from run to run on a map whose tiles load in parallel)
             let chosen: Vec<usize> = match list.strip_prefix("at:") {
@@ -1359,7 +1359,7 @@ impl Traffic {
                 log::info!("lane {i}: {} {:?} rev {} turn {} prio {} len {:.1} start ({:.1}, {:.1}) end ({:.1}, {:.1}) next {:?} light {:?} crossings {:?} {}", l.name, l.key, l.reversed, l.turn, l.priority, l.length(), l.start().x, l.start().y, l.end().x, l.end().y, l.next, l.traffic_light, net.crossings.get(i), samples.join(" "));
             }
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_WHEELS").is_some() {
+        if omsi_cfg::flags::DEBUG_WHEELS.is_set() {
             for (t, ..) in &types {
                 let v = VehicleInstance::new(
                     t.clone(),
@@ -1424,7 +1424,7 @@ impl Traffic {
             })
             .count();
         log::info!("traffic: {inner_lights} lit paths inside crossings (a car already in the crossing is not held there again)");
-        let light_log = omsi_cfg::env::var("OMSI_DEBUG_LIGHTS").ok();
+        let light_log = omsi_cfg::flags::DEBUG_LIGHTS.text();
         let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
         let lanes = 0..net.lanes.len();
         let street_weight = net.lanes.iter().filter_map(street_lane_weight).sum();
@@ -1485,7 +1485,7 @@ impl Traffic {
             logged_hard: Default::default(),
             light_log,
             light_prev,
-            debug_population: omsi_cfg::env::var_os("OMSI_DEBUG_POPULATION").is_some(),
+            debug_population: omsi_cfg::flags::DEBUG_POPULATION.is_set(),
             framed_spawns: Vec::new(),
             player: None,
             player_priority: false,
@@ -1708,7 +1708,7 @@ impl Traffic {
         // (a bus 2.5 m wide that stands up to 0.35 m further over than the car: bus and car
         // are rarely both in the middle of the lane)
         let r = omsi_sim::ai_motion::pull_out_room(&ty.def, (front, rear, half_width), 1.6, 3.3);
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             log::info!(
                 "pull-out room of {}: {r:.2} m (front {front:.2}, half width {half_width:.2})",
                 ty.def
@@ -1899,14 +1899,14 @@ impl Traffic {
             let hr = (h as f64).to_radians();
             let right = DVec3::new(hr.cos(), -hr.sin(), 0.0);
             let lat = (p - q).dot(right) as f32;
-            if lat.abs() < 0.9 && omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+            if lat.abs() < 0.9 && omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                 let lane = &self.net.lanes[l];
                 log::info!("parked car at ({:.1}, {:.1}) stands in lane {l} ({} {:?}, width {:.1}, heading {:.0} there, s {s:.1} of {:.1}, {lat:+.2} m to the side)", p.x, p.y, lane.name, lane.key, lane.width, h, lane.length());
             }
             self.parked.entry(l).or_default().push((s, lat));
             on_lanes += 1;
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             log::info!("traffic: {new_cars} parked cars placed, {on_lanes} more stand in or beside a lane ({} in all, {} not beside one)", self.parked.values().map(|v| v.len()).sum::<usize>(), self.parked_waiting.len());
         }
     }
@@ -2159,7 +2159,7 @@ impl Traffic {
                 i += 1;
             }
         }
-        if off_ground > 0 && omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if off_ground > 0 && omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             log::info!("traffic: {off_ground} vehicles taken away with the tiles under them");
         }
         if (asleep > 0 || !self.dormant.is_empty()) && self.debug_population {
@@ -2227,11 +2227,11 @@ impl Traffic {
     /// slows down, stops beside the space, moves over into it and stands there as the
     /// parked car it was. Called with every population pass (about every two seconds).
     pub fn park_in(&mut self, world: &World, center: DVec3) {
-        let forced = omsi_cfg::env::var("OMSI_PARK_IN").ok().and_then(|v| v.parse::<f64>().ok());
+        let forced = omsi_cfg::flags::PARK_IN.number::<f64>();
         if self.rand_f() >= forced.unwrap_or(0.04) {
             return;
         }
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() || forced.is_some();
+        let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set() || forced.is_some();
         let taken: hashbrown::HashSet<i64> = self.cars.iter().filter_map(|c| c.park.map(|p| p.key)).collect();
         let mut spots = world.free_parking();
         spots.retain(|(k, p)| !taken.contains(k) && (30.0..260.0).contains(&(p.pos - center).truncate().length()));
@@ -2300,12 +2300,12 @@ impl Traffic {
     /// the parking position, indicating, and pulls out into its lane once the road behind
     /// it is clear. Called with every population pass (about every two seconds).
     pub fn pull_out_parked(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, center: DVec3) {
-        let forced = omsi_cfg::env::var("OMSI_PARKED_PULL_OUT").ok().and_then(|v| v.parse::<f64>().ok());
+        let forced = omsi_cfg::flags::PARKED_PULL_OUT.number::<f64>();
         // about one car a minute
         if self.rand_f() >= forced.unwrap_or(0.035) {
             return;
         }
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() || forced.is_some();
+        let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set() || forced.is_some();
         let mut candidates: Vec<(i64, crate::scene::ParkedObject)> = world
             .parked_objects
             .lock()
@@ -2779,7 +2779,7 @@ impl Traffic {
         // coupled part (an articulated bus's rear, a lorry's trailer) asks it too, with the
         // height it is at - the plain sampler gave it the deck of a bridge over its road
         // (`OMSI_AI_WAY_ONLY=1`: on the way and the plain sampler, as before - A/B runs)
-        vehicle.contact = (kind == LaneKind::Street && omsi_cfg::env::var_os("OMSI_AI_WAY_ONLY").is_none()).then(|| {
+        vehicle.contact = (kind == LaneKind::Street && !omsi_cfg::flags::AI_WAY_ONLY.is_set()).then(|| {
             std::sync::Arc::new(crate::scene::DriveGround {
                 terrains: world.terrains.clone(),
                 surfaces: world.surfaces.clone(),
@@ -2885,7 +2885,7 @@ impl Traffic {
             }
         }
         let body = place_body(&self.net, &state, &mut vehicle, motion_kind(kind));
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             let pos = vehicle.position;
             log::info!(
                 "spawn {} on lane {lane} s={s:.1} at ({:.1}, {:.1}, {:.1}) heading {:.0}",
@@ -3463,7 +3463,7 @@ impl Traffic {
     ) {
         let st = &self.cars[i].state;
         let stuck = self.cars[i].stopped;
-        if stuck > 20.0 && standing && omsi_cfg::env::var_os("OMSI_DEBUG_STUCK").is_some() && (self.time * 0.2).fract() < 0.01 {
+        if stuck > 20.0 && standing && omsi_cfg::flags::DEBUG_STUCK.is_set() && (self.time * 0.2).fract() < 0.01 {
             let lane = &self.net.lanes[st.lane];
             log::info!("t={:.1}: car {} behind an obstacle {:.1} m for {stuck:.0} s: change {:?} route {} cooldown {:.1} light {} yielding {} left {:?} right {:?} left clear {:?}", self.time, self.cars[i].id, gap.unwrap_or(-1.0), st.change.map(|c| (c.to, c.t, c.wait, c.bypass, c.length)), st.route.len(), st.change_cooldown, self.cars[i].light_hold, self.cars[i].yielding, lane.left, lane.right, lane.left.map(|l| { let s_side = st.s / lane.length().max(1.0) * self.net.lanes[l].length(); (self.open_to(i, l), self.lane_clear(i, l, s_side, 12.0, 30.0, by_lane), self.can_merge(i, l, s_side, by_lane)) }));
         }
@@ -3514,7 +3514,7 @@ impl Traffic {
                 let net = &self.net;
                 self.cars[i].state.start_bypass(net, side, dir);
                 self.cars[i].stopped = 0.0;
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!("t={:.1}: car {} pulls out round an obstacle {d:.0} m ahead after {stuck:.0} s: lane {} -> {}", self.time, self.cars[i].id, lane_idx, side);
                 }
                 return;
@@ -3564,7 +3564,7 @@ impl Traffic {
         let gap = lead.gap;
         // (`OMSI_DEBUG_PASS`: why a car standing behind something does not go round it,
         // twice a second)
-        let debug_pass = omsi_cfg::env::var_os("OMSI_DEBUG_PASS").is_some()
+        let debug_pass = omsi_cfg::flags::DEBUG_PASS.is_set()
             && (self.time * 2.0).floor() != ((self.time - self.last_dt) * 2.0).floor();
         let (id_dbg, t_dbg) = (car.id, self.time);
         let skip = |why: String| {
@@ -3776,7 +3776,7 @@ impl Traffic {
         } else {
             PULL_OUT_CLEARANCE
         };
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some();
+        let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set();
         let mut chosen = None;
         let mut best_seen = f64::MIN;
         let mut tried: Vec<String> = Vec::new();
@@ -3858,7 +3858,7 @@ impl Traffic {
         if debug {
             log::info!("t={:.1}: car {id} passes a standing obstacle {real:.2} m ahead on the oncoming lane {opp} ({side:.1} m to the left, S-curve {ramp:.1} m, {t_need:.1} s out there)", self.time);
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_PASS").is_some() {
+        if omsi_cfg::flags::DEBUG_PASS.is_set() {
             // what it saw coming on the oncoming side
             let lanes = self.net.upstream(opp, from, 150.0, 48);
             let seen: Vec<String> = lanes
@@ -4058,7 +4058,7 @@ impl Traffic {
         let shallow = st.lateral * self.net.oncoming_sign() < p.side - car.half_width - 1.45;
         let abortable = shallow && st.odometer + stop_d + 0.4 < p.block;
         let id = car.id;
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some();
+        let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set();
         if !abortable {
             if debug && (self.time * 2.0).floor() != ((self.time - self.last_dt) * 2.0).floor() {
                 log::info!("t={:.1}: car {id} is out passing with car {who} coming in {t:.1} s, {r:.1} m to go ({t_me:.1} s): finishing", self.time);
@@ -4122,7 +4122,7 @@ impl Traffic {
                     let net = &self.net;
                     self.cars[i].state.turn_wish = turn;
                     self.cars[i].state.start_change(net, side, turn);
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                    if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                         log::info!("t={:.1}: car {} takes the {} turn lane: {} -> {} ({:.0} m to the junction)", self.time, self.cars[i].id, if turn == 1 { "left" } else { "right" }, lane_idx, side, to_junction);
                     }
                     return;
@@ -4153,7 +4153,7 @@ impl Traffic {
                     if self.last_overtaker.is_none() {
                         self.last_overtaker = Some((self.cars[i].id, self.time));
                     }
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                    if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                         log::info!("t={:.1}: car {} overtakes: obstacle {d:.0} m at {:.0} km/h, lane {} -> {} ({} {:?}) at ({:.1}, {:.1})", self.time, self.cars[i].id, v * 3.6, lane_idx, left, self.net.lanes[lane_idx].name, self.net.lanes[lane_idx].key, self.cars[i].vehicle.position.x, self.cars[i].vehicle.position.y);
                     }
                     return;
@@ -4170,7 +4170,7 @@ impl Traffic {
             {
                 let net = &self.net;
                 self.cars[i].state.start_change(net, right, keep_dir);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!(
                         "t={:.1}: car {} keeps right: lane {} -> {} at ({:.1}, {:.1})",
                         self.time,
@@ -4482,7 +4482,7 @@ impl Traffic {
         // physically in the way
         let mut ruled = false;
         let mut soft: Vec<usize> = Vec::new();
-        let explain = omsi_cfg::env::var_os("OMSI_DEBUG_JUNCTION").is_some() || omsi_cfg::env::var_os("OMSI_DEBUG_STUCK").is_some();
+        let explain = omsi_cfg::flags::DEBUG_JUNCTION.is_set() || omsi_cfg::flags::DEBUG_STUCK.is_set();
         let mut why: Vec<String> = Vec::new();
         let mut stop_at = if jn.inside { None } else { Some(entry) };
         let me_id = car.id;
@@ -4733,7 +4733,7 @@ impl Traffic {
         // the others' way, and the junction was locked for good, timetable buses and all)
         if blocked && exit_full && !hard && !ruled_before_exit && soft.is_empty() && wait > GRIDLOCK_WAIT && !contested {
             blocked = false;
-            if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+            if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                 log::info!("t={:.1}: car {} squeezes into a full exit after {wait:.0} s (gridlock)", self.time, self.cars[i].id);
             }
         }
@@ -4747,7 +4747,7 @@ impl Traffic {
             });
             if wins {
                 blocked = false;
-                if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                     log::info!("t={:.1}: car {} ends a wait of {wait:.1} s at a junction ({} waiting on it)", self.time, self.cars[i].id, soft.len());
                 }
             }
@@ -4831,7 +4831,7 @@ impl Traffic {
             pairs.push((go, other));
         }
         for (go, other) in pairs {
-            if omsi_cfg::env::var_os("OMSI_DEBUG_STUCK").is_some() {
+            if omsi_cfg::flags::DEBUG_STUCK.is_set() {
                 log::info!("t={:.1}: cars {} and {} each waited for the other: {} drives off", self.time, self.cars[go].id, other, self.cars[go].id);
             }
             self.cars[go].ignore_lead = Some((other, self.time as f64 + 5.0));
@@ -5236,7 +5236,7 @@ impl Traffic {
             .enumerate()
             .map(|(i, c)| (c.id, i))
             .collect();
-        let debug = omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some();
+        let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set();
         // where every car is: its lane with its lateral place (and the lane a passing car
         // is over on, where it counts for the oncoming traffic)
         let mut by_lane: HashMap<usize, Vec<(usize, f32, f32, bool)>> = HashMap::new();
@@ -5935,7 +5935,7 @@ impl Traffic {
                         stopped: car.stopped,
                         passing: car.passing.is_some(),
                         kerb_swerve,
-                        debug: debug || omsi_cfg::env::var_os("OMSI_DEBUG_PAX").is_some(),
+                        debug: debug || omsi_cfg::flags::DEBUG_PAX.is_set(),
                     };
                     if let Some(at) = service.step(&mut car.state, &mut car.vehicle, &ctx) {
                         stop_at = Some(stop_at.map(|x| x.min(at)).unwrap_or(at));
@@ -6179,7 +6179,7 @@ impl Traffic {
                     );
                 }
             }
-            if omsi_cfg::env::var("OMSI_DEBUG_CAR").ok().and_then(|v| v.parse::<u64>().ok()) == Some(car.id) {
+            if omsi_cfg::flags::DEBUG_CAR.number::<u64>() == Some(car.id) {
                 let up: Vec<usize> = car.state.upcoming().take(4).collect();
                 log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
             }
@@ -6212,7 +6212,7 @@ impl Traffic {
                 // waiting at a stop: dark until it is about to pull away
                 car.state.blinker = 0;
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_DOORS").is_some() && car.is_bus() && (self.time * 2.0).floor() != ((self.time - dt) * 2.0).floor() {
+            if omsi_cfg::flags::DEBUG_DOORS.is_set() && car.is_bus() && (self.time * 2.0).floor() != ((self.time - dt) * 2.0).floor() {
                 let v = &car.vehicle;
                 let g = |n: &str| v.var(n).map(|x| format!("{x:.2}")).unwrap_or("-".into());
                 let st = g("AI_Scheduled_AtStation");
@@ -6278,7 +6278,7 @@ impl Traffic {
                     _ => jobs.push(vec![w]),
                 }
             }
-            let profile = omsi_cfg::env::var_os("OMSI_PROFILE").is_some();
+            let profile = omsi_cfg::flags::PROFILE.is_set();
             // (a few cars per job: every job handed out wakes a worker, and the waking cost
             // the main thread more than a car's work)
             jobs.into_par_iter().flatten_iter()
@@ -6326,7 +6326,7 @@ impl Traffic {
             (t_par - t_plan).as_secs_f64(),
             t_par.elapsed().as_secs_f64(),
         ];
-        if omsi_cfg::env::var_os("OMSI_DEBUG_TRAILERS").is_some() {
+        if omsi_cfg::flags::DEBUG_TRAILERS.is_set() {
             // coupled parts off the level of what pulls them (#140: trains' and articulated
             // buses' rear parts under bridges)
             for c in &self.cars {
@@ -6374,7 +6374,7 @@ impl Traffic {
                 let _ = writeln!(f, "{:.3},0,player,{:.3},{:.3},{:.3},{:.3},0,0,0,{:.3},-1,0,0,0,0,0,0,0,0,0,0,{hl:.2},{hl:.2},{hw:.2},0,,0,None", self.time, c.x, c.y, c.z, h, v);
             }
             // (`OMSI_TRACE_AI_BUSES=1`: the timetable buses only)
-            let buses_only = omsi_cfg::env::var_os("OMSI_TRACE_AI_BUSES").is_some();
+            let buses_only = omsi_cfg::flags::TRACE_AI_BUSES.is_set();
             for (c, fr) in self.cars.iter().zip(&frames) {
                 let Some(fr) = fr else { continue };
                 if buses_only && !c.is_bus() {
@@ -6388,7 +6388,7 @@ impl Traffic {
                 let _ = writeln!(f, "{:.3},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{:.2},{},{},{:.2},{:.2},{},{:.2},{},{},{},{:.2},{:.2},{:.2},{},{},{:.1},{:?},{:.3}", self.time, c.id, v.ty.def.path.file_stem().unwrap_or_default().to_string_lossy(), v.position.x, v.position.y, v.position.z, v.heading, v.pitch, v.bank, fr.steer_deg, c.state.speed, c.state.lane, c.state.s, fr.blinker, self.net.lanes[c.state.lane].turn, lane_heading, c.state.lateral, c.at_station() as i32, c.state.acc, c.yielding as i32, c.light_hold as i32, c.passing.is_some() as i32, c.state.front, c.state.rear, c.half_width, c.is_bus() as i32, c.why.0, c.why.1.min(999.0), c.bus.as_ref().map(|b| b.phase), self.net.lanes[c.state.lane].at(c.state.s).0.z);
             }
         }
-        if omsi_cfg::env::var_os("OMSI_CHECK_OVERLAP").is_some() {
+        if omsi_cfg::flags::CHECK_OVERLAP.is_set() {
             self.check_overlaps(player, &others);
         }
         for i in remove.into_iter().rev() {
@@ -6546,7 +6546,7 @@ impl Traffic {
         muffled: bool,
     ) {
         let freed = audio.trim_clips(std::time::Duration::from_secs(60));
-        if freed > 0 && omsi_cfg::env::var_os("OMSI_PROFILE").is_some() {
+        if freed > 0 && omsi_cfg::flags::PROFILE.is_set() {
             log::info!(
                 "sound clips: {:.1} MB nobody used for a minute let go",
                 freed as f64 / 1e6
@@ -7064,7 +7064,7 @@ impl Traffic {
                             self.parked.insert(p.lane, vec![(p.s, p.lat)]);
                         }
                     }
-                    if omsi_cfg::env::var_os("OMSI_DEBUG_TRAFFIC").is_some() {
+                    if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
                         log::info!("car {} has parked (space {})", c.id, p.key);
                     }
                     self.orphan_sounds.extend(c.sounds);
@@ -7084,7 +7084,7 @@ impl Traffic {
         // offscreen run syncs only for its pictures)
         let dt = std::mem::take(&mut self.lamp_dt);
         let near = self.viewer.map(|v| v.pos);
-        let debug_lamps = omsi_cfg::env::var_os("OMSI_DEBUG_LAMPS").is_some();
+        let debug_lamps = omsi_cfg::flags::DEBUG_LAMPS.is_set();
         for lamp in world.light_objects.lock().iter_mut() {
             if debug_lamps && lamp.animated {
                 log::info!("moving lamp at ({:.1}, {:.1}), {:.0} m from the viewer", lamp.pos.x, lamp.pos.y, near.map(|p| (lamp.pos - p).length()).unwrap_or(0.0));

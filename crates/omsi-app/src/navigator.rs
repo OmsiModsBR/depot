@@ -51,6 +51,8 @@ const DOT: Color = Color::rgba(70, 140, 255, 1.0);
 const TROLLEY: Color = Color::rgba(46, 184, 92, 1.0);
 const BUS: Color = Color::rgba(226, 58, 52, 1.0);
 const TRAM: Color = Color::rgba(240, 190, 30, 1.0);
+const METRO: Color = Color::rgba(150, 96, 230, 1.0);
+const TRAIN: Color = Color::rgba(236, 132, 56, 1.0);
 const LINE_TEXT: Color = Color::rgba(15, 15, 15, 1.0);
 /// The other players of a LAN session or server: an arrow the way they face, with their name.
 const PLAYER: Color = Color::rgba(190, 96, 255, 1.0);
@@ -58,9 +60,9 @@ const PLAYER: Color = Color::rgba(190, 96, 255, 1.0);
 /// What a traffic vehicle is on the map: a trolleybus (its model has trolley poles to
 /// raise, `cp_SHTANGALEV` or `shtanga_lev_rot`), a tram, a bus (one on a timetable or
 /// showing a line), or any other car; and the line it shows, if it is public transport.
-fn traffic_kind(c: &crate::traffic::AiCar) -> (Color, Option<String>) {
+fn traffic_kind(c: &crate::traffic::AiCar, surface: Option<&crate::map_surface::MapSurface>, line_of: Option<&dyn Fn(u64) -> Option<String>>) -> (Color, Option<String>, Icon) {
     let v = &c.vehicle;
-    let line = v
+    let shown = v
         .ty
         .program
         .str_var("SetLineTo")
@@ -68,16 +70,24 @@ fn traffic_kind(c: &crate::traffic::AiCar) -> (Color, Option<String>) {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && s != "0");
     let trolley = v.var("cp_SHTANGALEV").is_some() || v.var("shtanga_lev_rot").is_some();
-    let color = if c.is_rail() {
-        TRAM
-    } else if trolley {
+    if c.is_rail() {
+        // a tram, a metro train or a train, by what the map says its vehicles are (the others: a tram)
+        let kind = surface.and_then(|s| s.rail_kind(&v.ty.def.path.to_string_lossy()));
+        let (color, icon) = match kind {
+            Some(crate::map_surface::MODAL_METRO) => (METRO, Icon::Metro),
+            Some(crate::map_surface::MODAL_RAIL) => (TRAIN, Icon::Train),
+            _ => (TRAM, Icon::Tram),
+        };
+        return (color, shown.or_else(|| line_of.and_then(|f| f(c.id))), icon);
+    }
+    let color = if trolley {
         TROLLEY
-    } else if c.bus.is_some() || line.is_some() {
+    } else if c.bus.is_some() || shown.is_some() {
         BUS
     } else {
-        return (DOT, None);
+        return (DOT, None, Icon::Road);
     };
-    (color, line)
+    (color, shown, Icon::Road)
 }
 /// `v` turned anticlockwise by `a` radians.
 fn rot(v: DVec2, a: f64) -> DVec2 {
@@ -101,23 +111,50 @@ fn player_triangle(ui: &mut Painter, at: Vec2, angle: f32, side: f32, fill: Colo
     tri(1.0, fill, ui);
 }
 
-/// A bus, trolleybus or tram on the map as a pictogram, not a dot: a body with a cut front and
-/// a windscreen, turned to the way it heads (`heading`: degrees clockwise from north), a dark
-/// edge round it. `min_px` keeps it readable from far away; the line number is drawn beside it.
-fn vehicle_icon(p: &mut Painter, at: Vec3, heading: f64, color: Color, long: bool, min_px: f32) {
+/// What a vehicle looks like on the map: a road vehicle (bus, trolleybus), a tram, a metro train, a train.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Icon {
+    Road,
+    Tram,
+    Metro,
+    Train,
+}
+
+/// A bus, trolleybus, tram, metro train or train on the map as a pictogram, not a dot, turned to the way it
+/// heads (`heading`: degrees clockwise from north), a dark edge round it, a windscreen where it can be driven
+/// from. A road vehicle has a cut front; a tram is long and cut at both ends, with a joint in the middle; a metro
+/// train is longer, square at both ends with a wide windscreen; a train is the longest, narrow, with a pointed nose.
+/// `min_px` keeps it readable from far away; the line is written beside it.
+fn vehicle_icon(p: &mut Painter, at: Vec3, heading: f64, color: Color, icon: Icon, min_px: f32) {
     let h = heading.to_radians() as f32;
     let (sn, cs) = h.sin_cos();
     // local: x to the right, y forward; turned onto the world (x east, y north)
     let turn = |v: Vec2| Vec2::new(v.x * cs + v.y * sn, -v.x * sn + v.y * cs);
-    let l = if long { 1.5 } else { 1.0 };
-    let body = |k: f32| -> Vec<Vec2> {
-        [(-0.34, -1.0), (0.34, -1.0), (0.34, 0.55), (0.2, 1.0), (-0.2, 1.0), (-0.34, 0.55)].iter().map(|&(x, y)| turn(Vec2::new(x * k, y * l * k))).collect()
+    let (body, glass): (&[(f32, f32)], &[&[(f32, f32)]]) = match icon {
+        Icon::Road => (&[(-0.34, -1.0), (0.34, -1.0), (0.34, 0.55), (0.2, 1.0), (-0.2, 1.0), (-0.34, 0.55)], &[&[(-0.24, 0.5), (0.24, 0.5), (0.15, 0.8), (-0.15, 0.8)]]),
+        Icon::Tram => (
+            &[(-0.2, -1.6), (0.2, -1.6), (0.34, -1.25), (0.34, 1.25), (0.2, 1.6), (-0.2, 1.6), (-0.34, 1.25), (-0.34, -1.25)],
+            &[&[(-0.22, 1.1), (0.22, 1.1), (0.14, 1.4), (-0.14, 1.4)], &[(-0.22, -1.1), (0.22, -1.1), (0.14, -1.4), (-0.14, -1.4)]],
+        ),
+        Icon::Metro => (
+            &[(-0.26, -2.0), (0.26, -2.0), (0.3, -1.85), (0.3, 1.85), (0.26, 2.0), (-0.26, 2.0), (-0.3, 1.85), (-0.3, -1.85)],
+            &[&[(-0.22, 1.62), (0.22, 1.62), (0.22, 1.85), (-0.22, 1.85)], &[(-0.22, -1.62), (0.22, -1.62), (0.22, -1.85), (-0.22, -1.85)]],
+        ),
+        Icon::Train => (&[(-0.28, -2.3), (0.28, -2.3), (0.28, 1.6), (0.0, 2.4), (-0.28, 1.6)], &[&[(-0.16, 1.55), (0.16, 1.55), (0.0, 2.05)]]),
     };
+    let shape = |k: f32| -> Vec<Vec2> { body.iter().map(|&(x, y)| turn(Vec2::new(x * k, y * k))).collect() };
     let (m, px) = (6.0, min_px);
-    p.world_shape(at, &body(1.28), m, px * 1.28, Color::rgba(8, 8, 8, 0.92));
-    p.world_shape(at, &body(1.0), m, px, color);
-    let glass: Vec<Vec2> = [(-0.24, 0.5), (0.24, 0.5), (0.15, 0.8), (-0.15, 0.8)].iter().map(|&(x, y)| turn(Vec2::new(x, y * l))).collect();
-    p.world_shape(at, &glass, m, px, Color::rgba(240, 244, 248, 0.9));
+    p.world_shape(at, &shape(1.28), m, px * 1.28, Color::rgba(8, 8, 8, 0.92));
+    p.world_shape(at, &shape(1.0), m, px, color);
+    for g in glass {
+        let g: Vec<Vec2> = g.iter().map(|&(x, y)| turn(Vec2::new(x, y))).collect();
+        p.world_shape(at, &g, m, px, Color::rgba(240, 244, 248, 0.9));
+    }
+    if icon == Icon::Tram {
+        // the joint of the two sections
+        let joint: Vec<Vec2> = [(-0.34, -0.06), (0.34, -0.06), (0.34, 0.06), (-0.34, 0.06)].iter().map(|&(x, y)| turn(Vec2::new(x, y))).collect();
+        p.world_shape(at, &joint, m, px, Color::rgba(8, 8, 8, 0.8));
+    }
 }
 
 /// The route by how busy its roads are: empty, light, busy, heavy, jammed.
@@ -227,6 +264,10 @@ pub struct NavFrame<'a> {
     /// Seconds of the day and weekday (0 = Monday).
     pub time: f64,
     pub weekday: i32,
+    /// The date of the session (yyyymmdd): which form of each line holds (a map with eras).
+    pub date: i32,
+    /// The line a timetable vehicle runs (by car id), for the trains that show none of their own.
+    pub car_line: Option<&'a dyn Fn(u64) -> Option<String>>,
     pub language: &'a str,
     /// Window size in physical pixels.
     pub screen: (f32, f32),
@@ -292,14 +333,26 @@ struct LinesText {
     /// The terrain view's button, and the height in a chip.
     terrain: &'static str,
     elev: &'static str,
+    timetable: &'static str,
+    /// Tick every line of the tab on show, and clear them.
+    /// Said in the card while no line is open: how to open one.
+    hint: [&'static str; 2],
+    /// The lists by kind of vehicle: bus, tram, metro, rail.
+    modals: [&'static str; 4],
+    tick_all: &'static str,
+    tick_none: &'static str,
+    towards: &'static str,
+    /// Monday to Friday, Saturday, Sunday.
+    days: [&'static str; 3],
+    predicted: &'static str,
     /// Decimals with a comma.
     comma: bool,
 }
 
 fn lines_text(lang: &str) -> LinesText {
     match lang.to_ascii_uppercase().as_str() {
-        "PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", heavy: "pesados", orient: ["Mapa", "Norte", "Rumo"], terrain: "Relevo", elev: "alt.", comma: true },
-        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", heavy: "heavy", orient: ["Map", "North", "Heading"], terrain: "Terrain", elev: "elev.", comma: false },
+"PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", heavy: "pesados", terrain: "Relevo", orient: ["Mapa", "Norte", "Rumo"], elev: "alt.", comma: true },
+        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", heavy: "heavy", terrain: "Terrain", orient: ["Map", "North", "Heading"], elev: "elev.", comma: false },
     }
 }
 
@@ -322,8 +375,21 @@ enum LinesHit {
     Focus(usize),
     /// The filter tab: 0 all, 1 BRT, 2 express, 3 feeders.
     Filter(u8),
+    /// The kind of vehicle on show: 0 bus, 1 tram, 2 metro, 3 rail.
+    Modal(u8),
     /// The route of the line in focus (0 = route 1).
     RoutePick(usize),
+    /// The timetable in place of the list, and back.
+    Sheet,
+    /// A day group (a weekday: 0, 5, 6) and a departure (its time, s).
+    Day(usize),
+    Dep(u32),
+    /// Back from a departure's stops to the departures.
+    Back,
+    /// Tick every line of the tab on show, or clear them when all are ticked.
+    All,
+    /// A stop of the departure on show (its map object): the view goes to it.
+    Stop(i64),
 }
 
 /// The lines panel of the city map: which lines are ticked and what is on show.
@@ -332,11 +398,14 @@ struct LinesView {
     open: bool,
     /// Lines ticked, in the order they were ticked.
     selected: Vec<usize>,
-    /// The line the data card is about.
+    /// The line the data card is about (opened by a double click).
     focus: Option<usize>,
+    /// The last line clicked in the list and when (the navigator's clock), to tell a double click.
+    last_click: Option<(usize, f32)>,
     /// The route chosen for a line (index into its routes).
     route: HashMap<usize, usize>,
     filter: u8,
+    modal: u8,
     /// First row of the list on show.
     scroll: f32,
     /// Bumped whenever the choice changes: the ways are drawn again.
@@ -349,6 +418,12 @@ struct LinesView {
     hits: Vec<(Rect, LinesHit)>,
     /// The view is moved to the line just ticked at the next frame.
     fit: bool,
+    /// The timetable on show (of the route chosen: a route is a direction), its day (None: today's) and the
+    /// departure picked (s of the day); `jump` takes the list to the next departure.
+    sheet: bool,
+    day: Option<usize>,
+    dep: Option<u32>,
+    jump: bool,
 }
 
 /// The route being followed: the lanes, how far along the bus is, and whether it was
@@ -453,7 +528,7 @@ pub struct Navigator {
     /// The small map's surface mesh (buffer 6): the surface version and anchor it was built for, and its size.
     surface_mesh: Option<(u64, DVec2, u32)>,
     #[allow(clippy::type_complexity)]
-    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets, Option<crate::map_surface::MapSurface>)>>,
+    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets, Option<crate::map_surface::MapSurface>, Vec<std::path::PathBuf>)>>,
     pub global_version: u64,
     roads: Option<Roads>,
     route: Route,
@@ -492,6 +567,11 @@ pub struct Navigator {
     /// Seconds of delay the jams ahead on the route cost.
     jam_cost: f32,
     first: bool,
+    /// The game's time of day (s) and weekday (0 = Monday), as of the last frame: the lines panel's timetable.
+    day_clock: (f64, i32),
+    date: i32,
+    /// The eras in force (Chrono folders), for the timetable.
+    chrono: Vec<std::path::PathBuf>,
 }
 
 /// The duty as the navigator shows it: line, terminus, the stops from the next one on,
@@ -608,6 +688,9 @@ impl Navigator {
             dist_t: 0.0,
             jam_cost: 0.0,
             first: true,
+            day_clock: (0.0, 0),
+            date: 0,
+            chrono: Vec::new(),
         }
     }
 
@@ -627,7 +710,7 @@ impl Navigator {
                 confirm_road_surfaces(&mut net, &m.road_surfaces);
                 probe_lanes(&net);
                 let streets = build_streets(&net, &m.signs);
-                let _ = tx.send((net, m.places, streets, surface));
+                let _ = tx.send((net, m.places, streets, surface, world.chrono_dirs.read().clone()));
             })
             .ok();
         self.building = Some(rx);
@@ -644,6 +727,11 @@ impl Navigator {
         self.global = Some(global);
         self.stop_pos = std::sync::Arc::new(map.places);
         self.global_version += 1;
+    }
+
+    /// The eras in force, given at once (an offscreen picture).
+    pub fn set_chrono(&mut self, dirs: Vec<std::path::PathBuf>) {
+        self.chrono = dirs;
     }
 
     /// The map's package, given at once (an offscreen picture reads it on its own thread).
@@ -826,7 +914,7 @@ impl Navigator {
         };
         // (from the depot to the first stop may be a long way; back onto the route is not)
         let way = way_back(net, f.bus, f.heading, &r.lanes[lo..hi], if r.joined { 6000.0 } else { 30_000.0 });
-        if way.is_none() && omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
+        if way.is_none() && omsi_cfg::flags::DEBUG_NAV.is_set() {
             let info: Vec<_> = r.lanes[lo..hi].iter().map(|&l| (l, net.lanes[l].kind, net.lanes[l].name.clone(), net.lanes.iter().filter(|x| x.next.contains(&l)).count(), net.lanes[l].start())).collect();
             log::info!("navigator: off the route for {:.1} s and no way back found; targets {info:?}", r.off_for);
         }
@@ -1048,8 +1136,11 @@ impl Navigator {
             self.shown = target;
         }
         self.time += f.dt;
+        self.day_clock = (f.time, f.weekday);
+        self.date = f.date;
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets, surface)) = rx.try_recv() {
+            if let Ok((net, pos, streets, surface, chrono)) = rx.try_recv() {
+                self.chrono = chrono;
                 log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
                 self.streets = Some(std::sync::Arc::new(streets));
                 self.set_surface(surface);
@@ -1065,7 +1156,7 @@ impl Navigator {
             }
         }
         // stops whose tiles are not loaded: their place from the map
-        if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() && self.time < 0.15 {
+        if omsi_cfg::flags::DEBUG_NAV.is_set() && self.time < 0.15 {
             log::info!("navigator: stops {:?}", f.stops.iter().map(|s| (s.name.clone(), s.object_id, s.position != DVec3::ZERO, self.stop_pos.contains_key(&s.object_id))).collect::<Vec<_>>());
         }
         let f2;
@@ -1078,7 +1169,7 @@ impl Navigator {
         self.follow(f);
         self.bus_at = f.bus;
         self.stop_spots = f.stops.iter().take(3).map(|st| (st.position, st.name.clone(), f.heading, st.object_id)).collect();
-        if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() && (self.time % 1.0) < f.dt {
+        if omsi_cfg::flags::DEBUG_NAV.is_set() && (self.time % 1.0) < f.dt {
             log::info!("navigator: route {} lanes (complete {}, provisional {}, at {}, on it {}, off for {:.1} s), {} stops ahead, next {:?}, key {:?}", self.route.lanes.len(), self.route.complete, self.route.provisional, self.route.progress, self.route.on_route, self.route.off_for, f.stops.len(), f.stops.first().map(|s| (s.name.clone(), s.position.x.round(), s.position.y.round())), self.route.key);
         }
         self.update_congestion(f);
@@ -1203,7 +1294,7 @@ impl Navigator {
                 let mut p = Painter::new();
                 let t0 = std::time::Instant::now();
                 build_roads(&mut p, net, anchor, self.light);
-                if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
+                if omsi_cfg::flags::DEBUG_NAV.is_set() {
                     log::info!("navigator: roads around ({:.0}, {:.0}) in {:.1} ms: {} vertices", anchor.x, anchor.y, t0.elapsed().as_secs_f64() * 1000.0, p.verts.len());
                 }
                 road_verts = Some(p.verts);
@@ -1290,12 +1381,12 @@ impl Navigator {
                 if c.gone || (c.vehicle.position - f.bus).truncate().length() > self.zoom * 3.5 + 150.0 {
                     continue;
                 }
-                let (color, line) = traffic_kind(c);
+                let (color, line, icon) = traffic_kind(c, self.surface.as_deref(), f.car_line);
                 if color == DOT {
                     dy.world_disc(rel(c.vehicle.position), 1.7, 3.6, Color::rgba(8, 8, 8, 0.9));
                     dy.world_disc(rel(c.vehicle.position), 1.2, 2.6, color);
                 } else {
-                    vehicle_icon(&mut dy, rel(c.vehicle.position), c.vehicle.heading, color, c.is_rail(), 7.0);
+                    vehicle_icon(&mut dy, rel(c.vehicle.position), c.vehicle.heading, color, icon, 7.0);
                 }
                 if let Some(l) = line {
                     lines.push((c.vehicle.position, color, l));
@@ -1631,7 +1722,7 @@ fn congestion_on(net: &Network, traffic: &Network, c: &HashMap<usize, f32>) -> H
 
 impl<'a> NavFrame<'a> {
     fn clone_ref(&self) -> NavFrame<'a> {
-        NavFrame { traffic: self.traffic, players: self.players.clone(), bus: self.bus, heading: self.heading, speed_kmh: self.speed_kmh, outside_temp: self.outside_temp, inside_temp: self.inside_temp, line: self.line.clone(), terminus: self.terminus.clone(), stops: self.stops.clone(), delay: self.delay, passengers: self.passengers, time: self.time, weekday: self.weekday, language: self.language, screen: self.screen, ui_scale: self.ui_scale, follow_window: self.follow_window, dt: self.dt, stop_requested: self.stop_requested, info_rect: self.info_rect }
+        NavFrame { traffic: self.traffic, players: self.players.clone(), bus: self.bus, heading: self.heading, speed_kmh: self.speed_kmh, outside_temp: self.outside_temp, inside_temp: self.inside_temp, line: self.line.clone(), terminus: self.terminus.clone(), stops: self.stops.clone(), delay: self.delay, passengers: self.passengers, time: self.time, weekday: self.weekday, date: self.date, car_line: self.car_line, language: self.language, screen: self.screen, ui_scale: self.ui_scale, follow_window: self.follow_window, dt: self.dt, stop_requested: self.stop_requested, info_rect: self.info_rect }
     }
 }
 
@@ -1923,7 +2014,7 @@ fn lanes_near(net: &Network, c: DVec2, radius: f64) -> Vec<usize> {
 /// `OMSI_NAV_PROBE=x,y[,r]`: the lanes of the map's network that start or end within r
 /// metres (25) of a point - how they link, to see why a route cannot reach a place.
 fn probe_lanes(net: &Network) {
-    let Ok(v) = omsi_cfg::env::var("OMSI_NAV_PROBE") else { return };
+    let Some(v) = omsi_cfg::flags::NAV_PROBE.text() else { return };
     let f: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
     if f.len() < 2 {
         return;
@@ -2149,7 +2240,7 @@ fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> Streets {
         }
     }
     let straight = |l: &omsi_sim::traffic::Lane| l.kind == LaneKind::Street && omsi_sim::traffic::wrap_deg(l.end_heading() - l.start_heading()).abs() < 30.0;
-    let debug = omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some();
+    let debug = omsi_cfg::flags::DEBUG_NAV.is_set();
     let mut hist = [0u32; 12];
     let mut seeds: Vec<(usize, u32)> = Vec::new();
     for (pos, rot, name) in signs {
@@ -2286,7 +2377,7 @@ pub(crate) fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize],
         .collect();
     let pick = |max_d: f64, max_a: f64| cands.iter().filter(|c| c.1 < max_d && c.2 < max_a).min_by(|a, b| (a.1 + a.2 * 0.1).total_cmp(&(b.1 + b.2 * 0.1))).map(|c| c.0);
     let start = pick(14.0, 70.0).or_else(|| pick(80.0, 100.0)).or_else(|| pick(80.0, 181.0));
-    if omsi_cfg::env::var_os("OMSI_DEBUG_NAV").is_some() {
+    if omsi_cfg::flags::DEBUG_NAV.is_set() {
         log::info!("navigator: way search from {:?} ({} street lanes within 90 m) to {} route lanes", start, cands.len(), ahead.len());
     }
     let start = start?;
@@ -2378,7 +2469,7 @@ pub struct CityMap {
     phi: f64,
     /// Where the compass is this frame (it is drawn after the buttons are listed, and takes its place in the list on the next one).
     compass: Option<Rect>,
-    hover_cache: Option<((i64, i64, bool), (Option<crate::map_surface::Street>, Option<f32>))>,
+    hover_cache: Option<((i64, i64, i64, bool), (Option<crate::map_surface::Street>, Option<f32>))>,
     target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.
     roads: Option<(u64, u32, DVec2)>,
@@ -2464,10 +2555,27 @@ impl Navigator {
             self.city.follow = true;
             if self.city.mpp <= 0.0 {
                 // For repeatable offscreen GPS comparisons at a chosen zoom.
-                self.city.mpp = omsi_cfg::env::var("OMSI_NAV_MAP_MPP").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite() && (0.25..=20.0).contains(v)).unwrap_or(2.5);
+                self.city.mpp = omsi_cfg::flags::NAV_MAP_MPP.number::<f64>().filter(|v| v.is_finite() && (0.25..=20.0).contains(v)).unwrap_or(2.5);
             }
         }
         self.city.drag = None;
+    }
+
+    /// Offscreen pictures (`OMSI_NAV_LINES=number[;direction;HH:MM]`): the lines panel on a line, its
+    /// timetable and a departure picked.
+    pub fn debug_lines(&mut self, spec: &str) {
+        let mut it = spec.split(';');
+        let n = it.next().unwrap_or("");
+        let Some(i) = self.surface.as_ref().and_then(|s| s.lines().iter().position(|l| l.number == n)) else { return };
+        let st = &mut self.city.lines;
+        (st.open, st.selected, st.focus, st.fit, st.version) = (true, vec![i], Some(i), true, st.version + 1);
+        if let Some(d) = it.next() {
+            (st.sheet, st.jump) = (true, true);
+            st.route.insert(i, d.parse().unwrap_or(0));
+            if let Some((h, m)) = it.next().and_then(|t| t.split_once(':')) {
+                st.dep = Some(h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60);
+            }
+        }
     }
 
     pub fn map_open(&self) -> bool {
@@ -2563,8 +2671,35 @@ impl Navigator {
     /// A click on the lines panel.
     fn lines_click(&mut self, h: LinesHit) {
         let n = self.surface.as_ref().map_or(0, |s| s.lines().len());
+        let shown = if matches!(h, LinesHit::All) { self.shown_lines() } else { Vec::new() };
         let st = &mut self.city.lines;
+        // (a click on a line leaves the list where it is: the player is scrolled down it)
+        if matches!(h, LinesHit::Toggle(_) | LinesHit::Focus(_)) {
+            (st.dep, st.jump) = (None, true);
+        }
         match h {
+            LinesHit::Sheet => (st.sheet, st.dep, st.jump, st.scroll) = (!st.sheet, None, true, 0.0),
+            LinesHit::Day(d) => (st.day, st.dep, st.jump, st.scroll) = (Some(d), None, true, 0.0),
+            LinesHit::Dep(t) => (st.dep, st.scroll) = (Some(t), 0.0),
+            LinesHit::Back => (st.dep, st.jump, st.scroll) = (None, true, 0.0),
+            LinesHit::All => {
+                if shown.iter().all(|i| st.selected.contains(i)) {
+                    st.selected.retain(|i| !shown.contains(i));
+                } else {
+                    let new: Vec<usize> = shown.iter().copied().filter(|i| !st.selected.contains(i)).collect();
+                    st.selected.extend(&new);
+                }
+                st.focus = st.focus.filter(|f| st.selected.contains(f));
+                st.version += 1;
+            }
+            LinesHit::Stop(id) => {
+                if let Some(p) = self.stop_pos.get(&id) {
+                    self.city.center = p.truncate();
+                    self.city.follow = false;
+                    self.city.mpp = self.city.mpp.min(3.0);
+                }
+            }
+            LinesHit::Modal(k) => (st.modal, st.filter, st.scroll) = (k, 0, 0.0),
             LinesHit::Filter(k) => {
                 st.filter = k;
                 st.scroll = 0.0;
@@ -2573,26 +2708,36 @@ impl Navigator {
                 if let Some(p) = st.selected.iter().position(|&x| x == i) {
                     st.selected.remove(p);
                     if st.focus == Some(i) {
-                        st.focus = st.selected.last().copied();
+                        st.focus = None;
                     }
                 } else {
                     st.selected.push(i);
-                    st.focus = Some(i);
                     st.fit = true;
                 }
                 st.version += 1;
             }
+            // a click on the name ticks the line (both its routes are drawn); a double click opens it
             LinesHit::Focus(i) if i < n => {
-                if st.selected.contains(&i) {
+                let double = st.last_click.is_some_and(|(j, t)| j == i && self.time - t < 0.45);
+                st.last_click = Some((i, self.time));
+                if double {
+                    if !st.selected.contains(&i) {
+                        st.selected.push(i);
+                    }
                     st.focus = Some(i);
+                } else if let Some(p) = st.selected.iter().position(|&x| x == i) {
+                    st.selected.remove(p);
+                    if st.focus == Some(i) {
+                        st.focus = None;
+                    }
                 } else {
                     st.selected.push(i);
-                    st.focus = Some(i);
-                    st.fit = true;
-                    st.version += 1;
                 }
+                st.fit = true;
+                st.version += 1;
             }
             LinesHit::RoutePick(r) => {
+                (st.dep, st.jump, st.scroll) = (None, true, 0.0);
                 if let Some(i) = st.focus {
                     st.route.insert(i, r);
                     st.version += 1;
@@ -2613,7 +2758,8 @@ impl Navigator {
         let pw = (332.0 * s).min(w * 0.42);
         let x0 = w - pw - 12.0 * s;
         let top = head_h + 12.0 * s;
-        let card_h = 178.0 * s;
+        let focus = self.city.lines.focus.filter(|&i| i < lines.len());
+        let card_h = if focus.is_some() { 178.0 * s } else { 84.0 * s };
         let ink = Color::rgba(22, 26, 33, 0.95);
         let pad = 14.0 * s;
         let mut hits: Vec<(Rect, LinesHit)> = Vec::new();
@@ -2629,10 +2775,23 @@ impl Navigator {
         // --- the data card
         let card = Rect::new(x0, top, pw, card_h);
         ui.rounded(card, 8.0 * s, ink);
-        let focus = self.city.lines.focus.filter(|&i| i < lines.len());
         ui.text(&mut self.atlas, &self.fonts, lt.line_data, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        if focus.is_none() {
+            ui.icon(&mut self.atlas, "touch_app", Vec2::new(x0 + pad + 14.0 * s, top + 54.0 * s), 26.0 * s, Color::hex(0x6f9bd6));
+            for (k, t) in lt.hint.iter().enumerate() {
+                ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(t, 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, pw - 2.0 * pad - 40.0 * s), 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, Vec2::new(x0 + pad + 36.0 * s, top + (50.0 + 18.0 * k as f32) * s), Align::Left, if k == 0 { TEXT } else { TEXT_DIM });
+            }
+        }
         if let Some(i) = focus {
             let l = &lines[i];
+            if sf.times(&self.chrono).line(&l.number).is_some() {
+                let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
+                let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
+                ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                ui.icon(&mut self.atlas, "schedule", Vec2::new(rr.x + 15.0 * s, rr.center().y), 14.0 * s, TEXT);
+                ui.text_in(&mut self.atlas, &self.fonts, lt.timetable, 11.5 * s, Weight::Bold, Rect::new(rr.x + 24.0 * s, rr.y, rr.w - 26.0 * s, rr.h), Align::Center, TEXT);
+                hits.push((rr, LinesHit::Sheet));
+            }
             let ri = self.city.lines.route.get(&i).copied().unwrap_or(0).min(l.routes.len().saturating_sub(1));
             let r = &l.routes[ri];
             ui.rect(Rect::new(x0, top + 6.0 * s, 4.0 * s, card_h - 12.0 * s), line_color(i));
@@ -2649,7 +2808,7 @@ impl Navigator {
                 ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(label, 10.0 * s, Weight::Medium, colw - 6.0 * s), 10.0 * s, Weight::Medium, Vec2::new(sx, top + 92.0 * s), Align::Left, TEXT_DIM);
                 ui.text(&mut self.atlas, &self.fonts, value, 17.0 * s, Weight::Bold, Vec2::new(sx, top + 114.0 * s), Align::Left, TEXT);
             }
-            let meta = format!("{}  ·  {}  ·  {}", r.days, r.model, if r.circular { lt.circular } else { lt.out_back });
+            let meta = [r.days.as_str(), r.model.as_str(), if r.circular { lt.circular } else { lt.out_back }].into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
             let meta = self.fonts.fit(&meta, 11.0 * s, Weight::Medium, pw - 2.0 * pad - 4.0 * s);
             ui.text(&mut self.atlas, &self.fonts, &meta, 11.0 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 138.0 * s), Align::Left, TEXT_DIM);
             let n = on_line.get(&i).copied().unwrap_or(0);
@@ -2673,20 +2832,61 @@ impl Navigator {
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
         ui.rounded(list_panel, 8.0 * s, ink);
+        if let Some(i) = focus.filter(|&i| self.city.lines.sheet && sf.times(&self.chrono).line(&lines[i].number).is_some()) {
+            let rows = self.sheet_panel(ui, &sf, i, list_panel, s, lt, &mut hits);
+            self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
+            self.city.lines.list = Some(rows);
+            self.city.lines.hits = hits;
+            return;
+        }
         ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
-        ui.text(&mut self.atlas, &self.fonts, &format!("{} {}", lines.len(), lt.count), 10.5 * s, Weight::Medium, Vec2::new(x0 + pw - pad, ly + 20.0 * s), Align::Right, TEXT_DIM);
-        let mut tx = x0 + pad;
-        for (k, label) in [(0u8, lt.all), (GROUP_BRT_TAB, lt.brt), (GROUP_EXPRESS_TAB, lt.express), (GROUP_FEEDER_TAB, lt.feeders)] {
-            let tw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 16.0 * s;
-            let rr = Rect::new(tx, ly + 30.0 * s, tw, 22.0 * s);
-            ui.rounded(rr, 4.0 * s, if self.city.lines.filter == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
-            ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
-            hits.push((rr, LinesHit::Filter(k)));
-            tx += tw + 6.0 * s;
+        let dated: Vec<usize> = (0..lines.len()).filter(|&i| sf.line_on(i, self.date)).collect();
+        let mut present = [false; 4];
+        for &i in &dated {
+            present[(lines[i].modal as usize).min(3)] = true;
+        }
+        if !present[self.city.lines.modal.min(3) as usize] {
+            self.city.lines.modal = present.iter().position(|&p| p).unwrap_or(0) as u8;
+        }
+        let shown = self.shown_lines();
+        ui.text(&mut self.atlas, &self.fonts, &format!("{} {}", shown.len(), lt.count), 10.5 * s, Weight::Medium, Vec2::new(x0 + pad + self.fonts.width(lt.map_lines, 10.5 * s, Weight::Bold) + 10.0 * s, ly + 20.0 * s), Align::Left, TEXT_DIM);
+        let all_on = !shown.is_empty() && shown.iter().all(|i| self.city.lines.selected.contains(i));
+        let label = if all_on { lt.tick_none } else { lt.tick_all };
+        let bw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 20.0 * s;
+        let br = Rect::new(x0 + pw - pad - bw, ly + 6.0 * s, bw, 22.0 * s);
+        ui.rounded(br, 4.0 * s, if all_on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+        ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, br, Align::Center, TEXT);
+        hits.push((br, LinesHit::All));
+        let mut ty = ly + 30.0 * s;
+        // a tab for each kind of vehicle the map has lines of
+        if present.iter().filter(|&&p| p).count() > 1 {
+            let mut tx = x0 + pad;
+            for k in (0..4u8).filter(|&k| present[k as usize]) {
+                let label = lt.modals[k as usize];
+                let tw = self.fonts.width(label, 12.0 * s, Weight::Bold) + 20.0 * s;
+                let rr = Rect::new(tx, ty, tw, 24.0 * s);
+                ui.rounded(rr, 4.0 * s, if self.city.lines.modal == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                ui.text_in(&mut self.atlas, &self.fonts, label, 12.0 * s, Weight::Bold, rr, Align::Center, TEXT);
+                hits.push((rr, LinesHit::Modal(k)));
+                tx += tw + 6.0 * s;
+            }
+            ty += 30.0 * s;
+        }
+        // the groups of the buses
+        if self.city.lines.modal == crate::map_surface::MODAL_BUS {
+            let mut tx = x0 + pad;
+            for (k, label) in [(0u8, lt.all), (GROUP_BRT_TAB, lt.brt), (GROUP_EXPRESS_TAB, lt.express), (GROUP_FEEDER_TAB, lt.feeders)] {
+                let tw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 16.0 * s;
+                let rr = Rect::new(tx, ty, tw, 22.0 * s);
+                ui.rounded(rr, 4.0 * s, if self.city.lines.filter == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
+                hits.push((rr, LinesHit::Filter(k)));
+                tx += tw + 6.0 * s;
+            }
+            ty += 28.0 * s;
         }
         let row_h = 27.0 * s;
-        let rows = Rect::new(x0, ly + 60.0 * s, pw, (list_panel.bottom() - ly - 66.0 * s).max(row_h));
-        let shown: Vec<usize> = (0..lines.len()).filter(|&i| self.city.lines.filter == 0 || lines[i].group == self.city.lines.filter).collect();
+        let rows = Rect::new(x0, ty + 2.0 * s, pw, (list_panel.bottom() - ty - 8.0 * s).max(row_h));
         let vis = ((rows.h / row_h).floor() as usize).max(1);
         let max_scroll = shown.len().saturating_sub(vis) as f32;
         self.city.lines.scroll = self.city.lines.scroll.clamp(0.0, max_scroll);
@@ -2735,6 +2935,151 @@ impl Navigator {
         self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
         self.city.lines.list = Some(rows);
         self.city.lines.hits = hits;
+    }
+
+    /// The lines the list shows: those that hold on the session's date, of the kind of vehicle chosen and (buses)
+    /// of the group chosen.
+    fn shown_lines(&self) -> Vec<usize> {
+        let Some(sf) = self.surface.as_ref() else { return Vec::new() };
+        let (modal, filter) = (self.city.lines.modal, self.city.lines.filter);
+        (0..sf.lines().len()).filter(|&i| sf.line_on(i, self.date) && sf.lines()[i].modal == modal && (modal != crate::map_surface::MODAL_BUS || filter == 0 || sf.lines()[i].group == filter)).collect()
+    }
+
+    /// The day group the timetable shows: the picked one, else today's (Monday to Friday, Saturday, Sunday).
+    fn sheet_day(&self) -> usize {
+        self.city.lines.day.unwrap_or(if self.day_clock.1 <= 4 { 0 } else { self.day_clock.1 as usize })
+    }
+
+    /// The direction (in the sheet) of the route chosen for line `i`: route 1, route 2.
+    fn sheet_dir(&self, sheet: &crate::line_times::Sheet, i: usize, sf: &crate::map_surface::MapSurface) -> usize {
+        let order = sheet.order(sf.lines()[i].routes.first().map_or("", |r| r.itinerary.as_str()));
+        let r = self.city.lines.route.get(&i).copied().unwrap_or(0);
+        order.get(r).or(order.last()).copied().unwrap_or(0)
+    }
+
+    /// The timetable of the line in focus in place of the list: its directions and day groups, the
+    /// departures by the hour and - once one is picked - when its bus is at each stop (the same times are
+    /// written on the map). Returns the scrolling area.
+    #[allow(clippy::too_many_arguments)]
+    fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
+        use crate::line_times::clock;
+        let sheet = sf.times(&self.chrono).line(&sf.lines()[i].number).expect("the caller checked");
+        let (x0, y0, pw, pad) = (area.x, area.y, area.w, 14.0 * s);
+        let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
+        let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
+        let deps = sheet.departures(dir, day);
+        let pick = self.city.lines.dep.and_then(|t| deps.iter().copied().find(|d| d.t as u32 == t));
+        ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", lt.timetable, lt.towards).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        if pick.is_some() {
+            let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
+            ui.rounded(rr, 4.0 * s, tab(false));
+            ui.icon(&mut self.atlas, "arrow_back", rr.center(), 16.0 * s, TEXT);
+            hits.push((rr, LinesHit::Back));
+        }
+        // the route (the card's buttons choose it) and where it goes, then the day groups
+        let r = self.city.lines.route.get(&i).copied().unwrap_or(0);
+        let head = self.fonts.fit(&format!("{} {}  ·  {}", lt.route, r + 1, sheet.dirs[dir].to), 14.5 * s, Weight::Bold, pw - 2.0 * pad);
+        ui.text(&mut self.atlas, &self.fonts, &head, 14.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 48.0 * s), Align::Left, TEXT);
+        let mut cx = x0 + pad;
+        for (label, d) in lt.days.iter().zip([0usize, 5, 6]) {
+            let cw = self.fonts.width(label, 13.0 * s, Weight::Bold) + 20.0 * s;
+            let rr = Rect::new(cx, y0 + 60.0 * s, cw, 26.0 * s);
+            ui.rounded(rr, 4.0 * s, tab(d == day));
+            ui.text_in(&mut self.atlas, &self.fonts, label, 13.0 * s, Weight::Bold, rr, Align::Center, TEXT);
+            hits.push((rr, LinesHit::Day(d)));
+            cx += cw + 6.0 * s;
+        }
+        let rows = Rect::new(x0, y0 + 100.0 * s, pw, (area.bottom() - y0 - 106.0 * s - if pick.is_some() { 20.0 * s } else { 0.0 }).max(40.0 * s));
+        let scroll_bar = |ui: &mut Painter, scroll: f32, max: f32, vis: usize, total: usize, row_h: f32| {
+            if max > 0.0 {
+                let track = Rect::new(x0 + pw - 7.0 * s, rows.y, 3.0 * s, vis as f32 * row_h);
+                ui.rounded(track, 1.5 * s, Color::WHITE.alpha(0.08));
+                let (th, tp) = (track.h * vis as f32 / total as f32, scroll / max);
+                ui.rounded(Rect::new(track.x, track.y + (track.h - th) * tp, track.w, th.max(14.0 * s)), 1.5 * s, Color::WHITE.alpha(0.35));
+            }
+        };
+        if let Some(d) = pick {
+            // the stops the bus calls at, with the time it is there
+            let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();
+            let row_h = 31.0 * s;
+            let vis = ((rows.h / row_h).floor() as usize).max(1);
+            let max = stops.len().saturating_sub(vis) as f32;
+            self.city.lines.scroll = self.city.lines.scroll.clamp(0.0, max);
+            for (n, (k, st)) in stops.iter().enumerate().skip(self.city.lines.scroll.round() as usize).take(vis).enumerate() {
+                let rr = Rect::new(x0 + 4.0 * s, rows.y + n as f32 * row_h, pw - 14.0 * s, row_h);
+                let w = if k == 0 || k + 1 == stops.len() { Weight::Bold } else { Weight::Medium };
+                ui.text_in(&mut self.atlas, &self.fonts, &clock(st.at), 14.5 * s, Weight::Bold, Rect::new(x0 + pad, rr.y, 58.0 * s, row_h), Align::Left, TEXT);
+                let nw = pw - 2.0 * pad - 64.0 * s;
+                ui.text_in(&mut self.atlas, &self.fonts, &self.fonts.fit(st.name, 14.0 * s, w, nw), 14.0 * s, w, Rect::new(x0 + pad + 62.0 * s, rr.y, nw, row_h), Align::Left, TEXT);
+                hits.push((rr, LinesHit::Stop(st.id)));
+            }
+            scroll_bar(ui, self.city.lines.scroll, max, vis, stops.len(), row_h);
+            ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(lt.predicted, 11.0 * s, Weight::Medium, pw - 2.0 * pad), 11.0 * s, Weight::Medium, Vec2::new(x0 + pad, area.bottom() - 10.0 * s), Align::Left, TEXT_DIM);
+        } else {
+            // the departures by the hour; the next one after the game's clock is lit
+            let per = (((pw - 2.0 * pad - 44.0 * s) / (43.0 * s)).floor() as usize).max(1);
+            let mut lines: Vec<(bool, i64, Vec<&crate::line_times::Dep>)> = Vec::new();
+            for d in &deps {
+                let h = (d.t / 3600.0) as i64;
+                match lines.last_mut() {
+                    Some((_, lh, v)) if *lh == h && v.len() < per => v.push(d),
+                    _ => lines.push((lines.last().is_none_or(|l| l.1 != h), h, vec![d])),
+                }
+            }
+            let next = deps.iter().find(|d| d.t >= self.day_clock.0 as f32).map(|d| d.t as u32);
+            let row_h = 36.0 * s;
+            let vis = ((rows.h / row_h).floor() as usize).max(1);
+            let max = lines.len().saturating_sub(vis) as f32;
+            if std::mem::take(&mut self.city.lines.jump) {
+                self.city.lines.scroll = lines.iter().position(|l| l.2.iter().any(|d| Some(d.t as u32) == next)).unwrap_or(0) as f32;
+            }
+            self.city.lines.scroll = self.city.lines.scroll.clamp(0.0, max);
+            if lines.is_empty() {
+                ui.text_in(&mut self.atlas, &self.fonts, "—", 16.0 * s, Weight::Bold, rows, Align::Center, TEXT_DIM);
+            }
+            for (n, (first, h, v)) in lines.iter().skip(self.city.lines.scroll.round() as usize).take(vis).enumerate() {
+                let ry = rows.y + n as f32 * row_h;
+                if *first {
+                    ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", h % 24), 16.0 * s, Weight::Bold, Rect::new(x0 + pad, ry, 38.0 * s, row_h), Align::Left, TEXT);
+                }
+                for (k, d) in v.iter().enumerate() {
+                    let rr = Rect::new(x0 + pad + 42.0 * s + k as f32 * 43.0 * s, ry + 3.0 * s, 39.0 * s, row_h - 6.0 * s);
+                    ui.rounded(rr, 4.0 * s, tab(Some(d.t as u32) == next));
+                    ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", (d.t / 60.0).round() as i64 % 60), 14.5 * s, Weight::Bold, rr, Align::Center, TEXT);
+                    hits.push((rr, LinesHit::Dep(d.t as u32)));
+                }
+            }
+            scroll_bar(ui, self.city.lines.scroll, max, vis, lines.len(), row_h);
+        }
+        rows
+    }
+
+    /// The departure picked, on the map: a dot and the time at each stop it calls at, as many as fit
+    /// (the ends first); the stops are where the map's own stop objects stand.
+    fn sheet_labels(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, s: f32, to_screen: &dyn Fn(DVec3) -> Vec2, view: (f32, f32)) {
+        let Some(sheet) = sf.times(&self.chrono).line(&sf.lines()[i].number) else { return };
+        let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
+        let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
+        let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();
+        let n = stops.len();
+        let mut placed: Vec<Rect> = Vec::new();
+        for k in [0, n.saturating_sub(1)].into_iter().chain(1..n.saturating_sub(1)) {
+            let Some(p) = stops.get(k).and_then(|st| self.stop_pos.get(&st.id)) else { continue };
+            let c = to_screen(*p);
+            if c.x < 0.0 || c.y < 0.0 || c.x > view.0 || c.y > view.1 {
+                continue;
+            }
+            let t = crate::line_times::clock(stops[k].at);
+            let r = Rect::new(c.x + 8.0 * s, c.y - 26.0 * s, self.fonts.width(&t, 13.5 * s, Weight::Bold) + 14.0 * s, 22.0 * s);
+            if placed.iter().any(|q| r.x < q.right() + 3.0 * s && q.x < r.right() + 3.0 * s && r.y < q.bottom() + 3.0 * s && q.y < r.bottom() + 3.0 * s) {
+                continue;
+            }
+            placed.push(r);
+            ui.rounded(Rect::new(c.x - 5.0 * s, c.y - 5.0 * s, 10.0 * s, 10.0 * s), 5.0 * s, Color::rgba(8, 8, 8, 0.9));
+            ui.rounded(Rect::new(c.x - 3.5 * s, c.y - 3.5 * s, 7.0 * s, 7.0 * s), 3.5 * s, Color::WHITE);
+            ui.rounded(r, 4.0 * s, Color::rgba(10, 12, 16, 0.92));
+            ui.text_in(&mut self.atlas, &self.fonts, &t, 13.5 * s, Weight::Bold, r, Align::Center, TEXT);
+        }
     }
 
     /// A mouse press while the map is open: on it, a drag or a button; outside, it closes.
@@ -2801,13 +3146,15 @@ impl Navigator {
             return None;
         }
         let pos = self.map_point(x, y)?;
-        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, self.show_contours);
+        // (the search reach follows the zoom, so the zoom is part of the key)
+        let reach = (self.city.mpp * 10.0).clamp(8.0, 40.0);
+        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, (reach * 100.0).round() as i64, self.show_contours);
         if let Some((k, found)) = &self.city.hover_cache {
             if *k == key {
                 return Some(found.clone()).filter(|f| f.0.is_some() || f.1.is_some());
             }
         }
-        let street = self.surface.as_ref().and_then(|s| s.street_info(pos, (self.city.mpp * 10.0).clamp(8.0, 40.0)));
+        let street = self.surface.as_ref().and_then(|s| s.street_info(pos, reach));
         let alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|s| s.altitude_at(pos));
         self.city.hover_cache = Some((key, (street.clone(), alt)));
         Some((street, alt)).filter(|f| f.0.is_some() || f.1.is_some())
@@ -2922,7 +3269,7 @@ impl Navigator {
         if let (true, Some(sf)) = (self.city.lines.open, self.surface.clone()) {
             let route_of = |st: &LinesView, i: usize| sf.lines().get(i).and_then(|l| l.routes.get(st.route.get(&i).copied().unwrap_or(0).min(l.routes.len().saturating_sub(1))));
             if std::mem::take(&mut self.city.lines.fit) {
-                if let Some(r) = self.city.lines.focus.and_then(|i| route_of(&self.city.lines, i)) {
+                if let Some(r) = self.city.lines.focus.or(self.city.lines.selected.last().copied()).and_then(|i| route_of(&self.city.lines, i)) {
                     let (mut lo, mut hi) = (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN));
                     for q in &r.pts {
                         lo = lo.min(*q);
@@ -2942,13 +3289,15 @@ impl Navigator {
             if self.city.lines.mesh.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
                 for &i in &self.city.lines.selected {
-                    let Some(r) = route_of(&self.city.lines, i) else { continue };
+                    let Some(l) = sf.lines().get(i) else { continue };
                     let c = line_color(i);
-                    let v: Vec<Vec3> = r.pts.iter().map(|q| rel(q.extend(0.0))).collect();
-                    p.ribbon(&v, 7.0, 3.4, c.alpha(0.62), false);
-                    for q in &r.stops {
-                        p.world_disc(rel(q.extend(0.0)), 4.5, 3.6, Color::rgba(8, 8, 8, 0.85));
-                        p.world_disc(rel(q.extend(0.0)), 3.0, 2.4, Color::WHITE.alpha(0.95));
+                    for r in &l.routes {
+                        let v: Vec<Vec3> = r.pts.iter().map(|q| rel(q.extend(0.0))).collect();
+                        p.ribbon(&v, 7.0, 3.4, c.alpha(0.62), false);
+                        for q in &r.stops {
+                            p.world_disc(rel(q.extend(0.0)), 4.5, 3.6, Color::rgba(8, 8, 8, 0.85));
+                            p.world_disc(rel(q.extend(0.0)), 3.0, 2.4, Color::WHITE.alpha(0.95));
+                        }
                     }
                 }
                 self.city.lines.mesh = Some((key, p.len(), anchor));
@@ -3022,7 +3371,7 @@ impl Navigator {
         }
         if let Some(t) = f.traffic.filter(|_| self.show_ai) {
             for car in t.cars.iter().filter(|c| !c.gone) {
-                let (mut color, line) = traffic_kind(car);
+                let (mut color, line, icon) = traffic_kind(car, self.surface.as_deref(), f.car_line);
                 // a car on a ticked line: in that line's colour, with a ring round it
                 if let Some(&(idx, c)) = line.as_deref().and_then(|l| ticked.get(l.trim())) {
                     color = c;
@@ -3033,7 +3382,7 @@ impl Navigator {
                     dots.world_disc(rel(car.vehicle.position), 2.2, 3.4, Color::rgba(8, 8, 8, 0.9));
                     dots.world_disc(rel(car.vehicle.position), 1.5, 2.3, color);
                 } else {
-                    vehicle_icon(&mut dots, rel(car.vehicle.position), car.vehicle.heading, color, car.is_rail(), 7.5);
+                    vehicle_icon(&mut dots, rel(car.vehicle.position), car.vehicle.heading, color, icon, 7.5);
                 }
                 if let Some(l) = line {
                     lines.push((car.vehicle.position, color, l));
@@ -3368,6 +3717,11 @@ impl Navigator {
             }
         }
         if have_lines && self.city.lines.open {
+            if let (true, Some(sf), Some(i)) = (self.city.lines.sheet, self.surface.clone(), self.city.lines.focus) {
+                let (cc, cm) = (self.city.center, self.city.mpp);
+                let at = move |q: DVec3| Vec2::new((w as f64 * 0.5 + (q.x - cc.x) / cm) as f32, (h as f64 * 0.5 - (q.y - cc.y) / cm) as f32);
+                self.sheet_labels(&mut ui, &sf, i, s, &at, (w, h));
+            }
             self.lines_panel(&mut ui, w, h, s, head.h, &lt, &on_line);
         }
         // a scale bar, bottom left
@@ -3716,12 +4070,14 @@ mod tests {
     #[test]
     fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
         let mut bus = Painter::new();
-        vehicle_icon(&mut bus, Vec3::ZERO, 90.0, Color::WHITE, false, 7.0);
+        vehicle_icon(&mut bus, Vec3::ZERO, 90.0, Color::WHITE, Icon::Road, 7.0);
         // an edge and a body of six corners (four triangles each), a windscreen of four (two)
         assert_eq!(bus.verts.len(), (4 + 4 + 2) * 3);
-        // a tram is longer, not made of more
-        let mut tram = Painter::new();
-        vehicle_icon(&mut tram, Vec3::ZERO, 0.0, Color::WHITE, true, 7.0);
-        assert_eq!(tram.verts.len(), bus.verts.len());
+        // every kind is made of whole triangles, and none is empty
+        for icon in [Icon::Tram, Icon::Metro, Icon::Train] {
+            let mut p = Painter::new();
+            vehicle_icon(&mut p, Vec3::ZERO, 0.0, Color::WHITE, icon, 7.0);
+            assert!(!p.verts.is_empty() && p.verts.len() % 3 == 0, "{icon:?}");
+        }
     }
 }

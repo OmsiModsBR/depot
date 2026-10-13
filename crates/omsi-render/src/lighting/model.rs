@@ -315,14 +315,14 @@ impl Lighting {
             && self.sun_dir.normalize_or_zero().z < -0.1
             && self.moon_dir.normalize_or_zero().z > 0.1
             && self.moon_illum > 0.25
-            && omsi_cfg::env::var_os("OMSI_NO_SHADOWS").is_none()
+            && !omsi_cfg::flags::NO_SHADOWS.is_set()
     }
 
     pub fn casts_sun_shadows(&self) -> bool {
         self.shadows
             && self.sun_dir.normalize_or_zero().z > -0.02
             && self.sun_intensity > 0.05
-            && omsi_cfg::env::var_os("OMSI_NO_SHADOWS").is_none()
+            && !omsi_cfg::flags::NO_SHADOWS.is_set()
     }
 }
 
@@ -429,12 +429,7 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
 /// the bus in these views.
 pub(crate) fn debug_view() -> f32 {
     static VIEW: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *VIEW.get_or_init(|| {
-        omsi_cfg::env::var("OMSI_DEBUG_ENHANCED")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0.0)
-    })
+    *VIEW.get_or_init(|| omsi_cfg::flags::DEBUG_ENHANCED.number().unwrap_or(0.0))
 }
 
 /// Hermite step from 0 at `e0` to 1 at `e1` (as WGSL's `smoothstep`).

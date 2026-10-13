@@ -638,14 +638,8 @@ impl Pipelines {
             projection_trace: [
                 proj.z_axis.z,
                 proj.w_axis.z,
-                omsi_cfg::env::var("OMSI_DEBUG_PUDDLES")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0.0),
-                omsi_cfg::env::var("OMSI_PUDDLE_THICKNESS")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0.12),
+                omsi_cfg::flags::DEBUG_PUDDLES.number().unwrap_or(0.0),
+                omsi_cfg::flags::PUDDLE_THICKNESS.number().unwrap_or(0.12),
             ],
             vehicle_plane: plane,
             vehicle_info: [
@@ -719,7 +713,7 @@ impl Pipelines {
             });
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
             pass.set_bind_group(2, &pipelines.vehicle_bg, &[]);
-            if omsi_cfg::env::var_os("OMSI_NO_PUDDLE_VEHICLE").is_none() {
+            if !omsi_cfg::flags::NO_PUDDLE_VEHICLE.is_set() {
                 if let Some(first) = vehicle_batches.first() {
                     pass.set_bind_group(
                         1,
@@ -749,7 +743,7 @@ impl Pipelines {
                 depth_or_array_layers: 1,
             },
         );
-        if omsi_cfg::env::var_os("OMSI_NO_PUDDLE_GLASS_DEPTH").is_none()
+        if !omsi_cfg::flags::NO_PUDDLE_GLASS_DEPTH.is_set()
             && batches
                 .iter()
                 .any(|b| reflection_glass(&scene.materials[b.material as usize].uniform))
@@ -826,7 +820,7 @@ fn reflection_plane(point: DVec3, normal: Vec3, origin: DVec3) -> glam::Vec4 {
 
 fn vehicle_origins(lighting: &Lighting, camera: &Camera) -> Vec<DVec3> {
     if lighting.puddle_ground.is_none()
-        || omsi_cfg::env::var_os("OMSI_NO_PUDDLE_VEHICLE").is_some()
+        || omsi_cfg::flags::NO_PUDDLE_VEHICLE.is_set()
         || !lighting
             .inside
             .is_some_and(|(o, _, _)| o.distance(camera.position) < 60.0)

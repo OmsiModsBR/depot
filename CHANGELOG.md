@@ -7,6 +7,27 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-render` reads its `OMSI_*` variables through `omsi_cfg::flags`, where its 45 remaining
+  settings and diagnostics are now declared, so `docs/ENVIRONMENT.md` lists every variable the game
+  reads.
+- `omsi-app`'s LAN, launcher and plugin modules read their `OMSI_*` variables through
+  `omsi_cfg::flags`. What a phone's `env.txt` may set now comes from the register (the variables
+  marked `env_txt`, `omsi-render`'s switches among them) instead of a list of its own, and a test
+  pins that set. `OMSI_NO_PRESENCE` and `OMSI_TILE_DIST`, which nothing reads any more, are no
+  longer taken from `env.txt` (the log lists them as skipped). `docs/ENVIRONMENT.md` lists the
+  declared variables and is made from the register; a test fails when it is out of date.
+- The rest of `omsi-app` outside LAN and the launcher (the offscreen run, the window's events,
+  start-up, settings, cameras, VR, input scripts) reads its `OMSI_*` variables through
+  `omsi_cfg::flags`, where 73 more are now declared; the variables the game sets for itself
+  (`OMSI_SAFE_GPU`, `OMSI_BACKEND`, `OMSI_CONTENT` on phones) are named through it too. No
+  behaviour change.
+- `omsi-app`'s traffic, people, timetable and driver modules (`traffic`, `humans`, `schedule`,
+  `navigator`, `driver`, `bus_service`, `spawn`, `player`, `on_foot`, `route_arrows`, `career`,
+  `services`) read their `OMSI_*` variables through `omsi_cfg::flags`, where 44 more are now
+  declared. No behaviour change.
+- `omsi-app`'s world modules (`scene`, `tiles`, `lights`, `rain`, `puddles`, `ground_gap`,
+  `memory`, `weather_setup`, `world_load`) read their 66 `OMSI_*` variables through
+  `omsi_cfg::flags`, where they are now declared. No behaviour change.
 - `omsi-cfg` gets `flags`, the register of the `OMSI_*` environment variables: each is declared
   once with the kind of value it takes, who it is for (user, path, diagnostic, test, internal),
   the module that reads it, whether a phone's `env.txt` may set it and what it does. The crates
@@ -91,6 +112,20 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- Lines panel timetables: double-clicking a line on the city map shows its departures by direction and day
+  (Monday to Friday, Saturday, Sunday) and, for a chosen departure, when the bus is at each stop, also written
+  on the map at the stops. The times come from the map's own timetable (`TTData`), the same figures the AI
+  buses run by, and nothing is added to the package. Lines carry a kind of vehicle (bus, tram, metro, rail)
+  with a tab for each, and a form of a line can have dates (eras), so only the forms in force on the session's
+  date are shown. Select all / Clear, one click ticks both directions, trams, metro trains and trains have
+  their own icons on the map, and the manifest can name which rail vehicles are which. Documented in
+  `docs/MAP_PACKAGE.md`. Source: maintainer (Leo, `lmonteirotech`), fork lmonteirotech/openOMSI branch
+  `local/lines-timetable` (commits `5327426`, `0999942`, `d287e0c`, `161fab8`), MIT. Not validated against
+  real OMSI 2 content; only build and automated tests were run. One test of the train icon was corrected
+  (it compared the train's triangle count with the bus's, which is lower).
+  `docs/MAP_PACKAGE.md` now names `tools/mapgen` of lmonteirotech/openomsi-map-packages as the supported way
+  to build packages, and `tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package
+  (no OpenStreetMap or OMSI 2 data) for trying the Lines panel.
 - City map orientation: a compass on the city map shows where north lies and a click turns the map between
   **Map** (as the package draws it), **North** up and **Heading** up. New setting `nav_orientation` (`map`,
   `north`, `heading`; a row in the game settings) and new manifest key `north` (degrees from the map's up to real

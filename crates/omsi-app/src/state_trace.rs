@@ -33,7 +33,7 @@ pub(crate) struct StateTrace {
 impl StateTrace {
     /// The trace `OMSI_STATE_TRACE` asks for, if any.
     pub(crate) fn from_env() -> Option<StateTrace> {
-        let path = omsi_cfg::env::var("OMSI_STATE_TRACE").ok().filter(|p| !p.trim().is_empty())?;
+        let path = omsi_cfg::flags::STATE_TRACE.text().filter(|p| !p.trim().is_empty())?;
         Some(StateTrace { path: PathBuf::from(path), text: String::new() })
     }
 

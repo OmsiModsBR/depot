@@ -12,7 +12,7 @@ pub(crate) fn load() -> Plugins {
     if true {
         return Plugins::default();
     }
-    if omsi_cfg::env::var_os("OMSI_NO_PLUGINS").is_some() {
+    if omsi_cfg::flags::NO_PLUGINS.is_set() {
         return Plugins::default();
     }
     // (never from content another machine sent: a LAN host's mods are data only)

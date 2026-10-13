@@ -479,7 +479,7 @@ impl App {
         }
         // OMSI_BACKGROUND=1: a test window that does not take the keyboard from whoever is
         // working at the screen (OMSI_INPUT drives the handlers directly, it needs no focus)
-        if omsi_cfg::env::var_os("OMSI_BACKGROUND").is_some() {
+        if omsi_cfg::flags::BACKGROUND.is_set() {
             attrs = attrs.with_active(false);
         }
         let window = match given {

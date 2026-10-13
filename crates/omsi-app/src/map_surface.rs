@@ -205,6 +205,12 @@ pub struct Region {
     poly: Vec<DVec2>,
 }
 
+/// What kind of vehicle a line is for (`lines.lin`): each has its own list in the lines panel.
+pub const MODAL_BUS: u8 = 0;
+pub const MODAL_TRAM: u8 = 1;
+pub const MODAL_METRO: u8 = 2;
+pub const MODAL_RAIL: u8 = 3;
+
 /// Kinds of bus line (`lines.lin`).
 pub const GROUP_BRT: u8 = 1;
 pub const GROUP_EXPRESS: u8 = 2;
@@ -229,6 +235,11 @@ pub struct RouteInfo {
 pub struct LineInfo {
     pub number: String,
     pub group: u8,
+    pub modal: u8,
+    /// The dates (yyyymmdd) this form of the line runs from and to; 0 is open. A map with eras has a record
+    /// for each form a line took.
+    pub from: u32,
+    pub to: u32,
     pub name: String,
     pub routes: Vec<RouteInfo>,
 }
@@ -267,6 +278,12 @@ pub struct MapSurface {
     terrain_offset: f32,
     /// Where the index contours are written (a point and a height about every 700 m of them), made on first use.
     contour_marks: std::sync::OnceLock<Vec<(DVec2, i32)>>,
+    /// What the map says its rail vehicles are: (a part of the vehicle file's path, MODAL_*), from the manifest's
+    /// `tram_vehicles`, `metro_vehicles` and `rail_vehicles`. A rail vehicle named by none is drawn as a tram.
+    rail_kinds: Vec<(String, u8)>,
+    /// The map, for its timetable (read when the lines panel first asks).
+    map_dir: std::path::PathBuf,
+    times: std::sync::OnceLock<crate::line_times::LineTimes>,
 }
 
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
@@ -340,6 +357,7 @@ impl MapSurface {
         let mut brt_lines: Vec<String> = Vec::new();
         let mut terrain_offset = 0.0f32;
         let mut north = 0.0f32;
+        let mut kinds: Vec<(String, u8)> = Vec::new();
         let (mut dark, mut light) = (Palette::dark(), Palette::light());
         for line in text.lines() {
             let line = line.trim();
@@ -361,6 +379,14 @@ impl MapSurface {
                 "player_brt" => player_colors[2] = parse_color(v).unwrap_or(player_colors[2]),
                 "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
                 "north" => north = v.parse().ok().filter(|n: &f32| n.is_finite()).unwrap_or(0.0),
+                "tram_vehicles" | "metro_vehicles" | "rail_vehicles" => {
+                    let modal = match k.as_str() {
+                        "tram_vehicles" => MODAL_TRAM,
+                        "metro_vehicles" => MODAL_METRO,
+                        _ => MODAL_RAIL,
+                    };
+                    kinds.extend(v.split(',').map(|p| p.trim().to_lowercase()).filter(|p| !p.is_empty()).map(|p| (p, modal)));
+                }
                 "brt_lines" => {
                     brt_lines = v
                         .split(',')
@@ -397,12 +423,14 @@ impl MapSurface {
                         brt_lines,
                     });
                 }
+                s.rail_kinds = kinds;
                 s.load_markers(&dir);
                 s.load_regions(&dir);
                 s.load_lines(&dir);
                 s.terrain_offset = terrain_offset;
                 s.north = north;
                 s.has_contours = s.index.iter().any(|e| s.data.get(e.at..e.at + e.len).is_some_and(chunk_has_contours));
+                s.map_dir = map_dir.to_path_buf();
                 s.has_streets = s.index.iter().any(|e| {
                     s.data
                         .get(e.at..e.at + e.len)
@@ -499,6 +527,9 @@ impl MapSurface {
             north: 0.0,
             terrain_offset: 0.0,
             contour_marks: std::sync::OnceLock::new(),
+            map_dir: Default::default(),
+            rail_kinds: Vec::new(),
+            times: std::sync::OnceLock::new(),
         })
     }
 
@@ -618,6 +649,24 @@ impl MapSurface {
             }
             out
         })
+    }
+
+    /// What kind of rail vehicle a vehicle file is, by what the map says (MODAL_TRAM, METRO or RAIL); None when
+    /// the map does not name it.
+    pub fn rail_kind(&self, vehicle_path: &str) -> Option<u8> {
+        let p = vehicle_path.to_lowercase().replace('\\', "/");
+        self.rail_kinds.iter().find(|(part, _)| p.contains(part.as_str())).map(|k| k.1)
+    }
+
+    /// Whether line record `i` holds on `date` (yyyymmdd; 0 = not known: all do).
+    pub fn line_on(&self, i: usize, date: i32) -> bool {
+        let l = &self.lines[i];
+        date <= 0 || ((l.from == 0 || l.from as i32 <= date) && (l.to == 0 || date <= l.to as i32))
+    }
+
+    /// The map's timetable (`TTData`, with the eras in force): departures and the time at each stop, per line.
+    pub fn times(&self, chrono: &[std::path::PathBuf]) -> &crate::line_times::LineTimes {
+        self.times.get_or_init(|| crate::line_times::LineTimes::load(&self.map_dir, chrono))
     }
 
     /// The package can say where the player is (municipality outlines or named streets).
@@ -1208,9 +1257,18 @@ fn parse_lines(text: &str, to_world: &dyn Fn(f64, f64) -> DVec2) -> Vec<LineInfo
                     "EXP" => GROUP_EXPRESS,
                     _ => GROUP_FEEDER,
                 };
+                let date = |k: usize| f.get(k).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
                 out.push(LineInfo {
                     number: f[1].trim().to_string(),
                     group,
+                    modal: match f.get(4).map(|m| m.trim()) {
+                        Some("tram") => MODAL_TRAM,
+                        Some("metro") => MODAL_METRO,
+                        Some("rail") => MODAL_RAIL,
+                        _ => MODAL_BUS,
+                    },
+                    from: date(5),
+                    to: date(6),
                     name: f[3].trim().to_string(),
                     routes: Vec::new(),
                 });
@@ -1427,6 +1485,26 @@ mod tests {
             ),
             (2, 35, false)
         );
+    }
+
+    #[test]
+    fn lines_carry_a_kind_of_vehicle_and_the_dates_they_run() {
+        let text = "RLIN\t1\nORIGEM\t0\t0\nL\t1\tALI\tBus\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tT1\tALI\tTram\ttram\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tM1\tALI\tMetro\tmetro\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tR1\tALI\tTrain\trail\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\t7\tALI\tOld\tbus\t0\t19991231\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
+        let lines = parse_lines(text, &|x, y| DVec2::new(x, y));
+        let kinds: Vec<u8> = lines.iter().map(|l| l.modal).collect();
+        assert_eq!(
+            kinds,
+            [MODAL_BUS, MODAL_TRAM, MODAL_METRO, MODAL_RAIL, MODAL_BUS, MODAL_BUS]
+        );
+        // a line with no kind or dates is a bus line open at both ends
+        assert_eq!((lines[0].from, lines[0].to), (0, 0));
+        assert_eq!((lines[4].from, lines[4].to), (0, 19991231));
+        assert_eq!((lines[5].from, lines[5].to), (20000101, 0));
     }
 
     #[test]

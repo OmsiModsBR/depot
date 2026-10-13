@@ -346,7 +346,7 @@ impl BusService {
 
     /// Arrived at the front stop: what now.
     fn arrive(&mut self, ctx: &Ctx, depart: f64, at: (usize, f32)) {
-        if omsi_cfg::env::var_os("OMSI_DEBUG_STOPS").is_some() {
+        if omsi_cfg::flags::DEBUG_STOPS.is_set() {
             log::info!("t={:.1}: timetable bus {} serves its stop {:?}", ctx.day_time, ctx.id, self.stops.front().map(|s| s.id));
         }
         let layover = std::mem::take(&mut self.layover);
@@ -506,7 +506,7 @@ impl BusService {
                 self.serve = Some(rail || self.must_serve(&stop, ctx.day_time) || ctx.wanted.unwrap_or(true));
             }
             if self.serve == Some(false) {
-                if ctx.debug || omsi_cfg::env::var_os("OMSI_DEBUG_STOPS").is_some() {
+                if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
                     log::info!("t={:.1}: timetable bus {} passes its stop {}: nobody gets off or on", ctx.day_time, ctx.id, stop.id);
                 }
                 self.stops.pop_front();
@@ -550,7 +550,7 @@ impl BusService {
             self.near_d = d;
             if d < -2.0 {
                 // missed it
-                if ctx.debug || omsi_cfg::env::var_os("OMSI_DEBUG_STOPS").is_some() {
+                if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
                     log::info!("t={:.1}: timetable bus {} missed its stop ({:.1} m past, {:.1} m/s, stood {:.1} s, passing {})", ctx.day_time, ctx.id, -d, speed, ctx.stopped, ctx.passing);
                 }
                 self.stops.pop_front();

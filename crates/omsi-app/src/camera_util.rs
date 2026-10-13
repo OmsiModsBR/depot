@@ -96,8 +96,7 @@ pub(crate) fn look_of(args: &Args) -> (f32, f32) {
 /// How far the offscreen outside camera sits from the vehicle: 18 m, or `OMSI_ORBIT_DIST`
 /// metres for close-ups (a headlight, a door) together with `--look`.
 pub(crate) fn offscreen_orbit() -> f32 {
-    omsi_cfg::env::var("OMSI_ORBIT_DIST")
-        .ok()
+    omsi_cfg::flags::ORBIT_DIST.text()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(18.0)
 }
@@ -202,7 +201,7 @@ pub(crate) fn follow_camera(traffic: Option<&traffic::Traffic>, id: u64) -> Opti
     // the picture; `yaw` may be a list a/b/c, one per snapshot (--snapshots); a sixth value
     // 1 reads the offset as east, north, up and the yaw as a compass heading, so the view
     // does not turn with the car
-    if let Ok(v) = omsi_cfg::env::var("OMSI_FOLLOW_CAM") {
+    if let Some(v) = omsi_cfg::flags::FOLLOW_CAM.text() {
         thread_local!(static CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
         let mut fields: Vec<String> = v.split(',').map(|x| x.trim().to_string()).collect();
         if let Some(yaws) = fields.get_mut(3).filter(|y| y.contains('/')) {
@@ -390,7 +389,7 @@ pub(crate) fn render_mirrors(
     // (By the sun's darkness, Envir_Brightness's ramp from +6 to -6 degrees: `night` is
     // whole at sunset already, from +10 degrees on, and rain raises it by day, and the
     // mirrors were a fifth of the window's light through the whole dusk, #432.)
-    if lighting.enhanced && omsi_cfg::env::var_os("OMSI_MIRROR_ENHANCED").is_none() {
+    if lighting.enhanced && !omsi_cfg::flags::MIRROR_ENHANCED.is_set() {
         let alt = lighting.sun_dir.z.clamp(-1.0, 1.0).asin().to_degrees();
         let dark = 1.0 - ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
         let k = 1.0 - MIRROR_NIGHT_DIM * dark;
@@ -423,7 +422,7 @@ pub(crate) fn render_mirrors(
         };
         let (eye, yaw, pitch, roll) = *at;
         let pitch = pitch.clamp(-89.0, 89.0);
-        if omsi_cfg::env::var_os("OMSI_DEBUG_MIRRORS").is_some() {
+        if omsi_cfg::flags::DEBUG_MIRRORS.is_set() {
             log::info!("mirror {i}: eye {:.2},{:.2},{:.2} yaw {yaw:.1} pitch {pitch:.1} roll {roll:.2} fov {:.0} ({} of {} in view)", eye.x, eye.y, eye.z, c.fov, seen.len(), cams.len());
         }
         let cam = Camera {

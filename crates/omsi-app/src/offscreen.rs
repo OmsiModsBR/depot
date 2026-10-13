@@ -79,7 +79,7 @@ pub(crate) fn run_offscreen(
         });
         #[cfg(not(feature = "lan"))]
         s.precache(&world, &renderer, &mut scene, traffic.as_mut(), parse_time(&args.time));
-        if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::env::var_os("OMSI_CHECK_TRIPS").is_some()) {
+        if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::flags::CHECK_TRIPS.is_set()) {
             s.check_routes(&world, t);
         }
     }
@@ -88,7 +88,7 @@ pub(crate) fn run_offscreen(
     if let Some(p) = player.as_mut() {
         p.vehicle.host.auto_clutch = if settings.auto_clutch { 1.0 } else { 0.0 };
         // OMSI_PAX_CAM=n: `--view pax` from the bus's n-th passenger camera
-        if let Some(k) = omsi_cfg::env::var("OMSI_PAX_CAM").ok().and_then(|v| v.parse().ok()) {
+        if let Some(k) = omsi_cfg::flags::PAX_CAM.number() {
             p.cam_choice.1 = k;
         }
     }
@@ -268,7 +268,7 @@ pub(crate) fn run_offscreen(
     // test harness for crashes, kerbs and reversing: OMSI_DRIVE_PROFILE="t throttle brake
     // [steer]/ …" holds piecewise constant pedals from each t on, OMSI_DRIVE_V0 gives the
     // bus a speed (km/h) on the first frame, OMSI_DEBUG_PHYSICS=secs logs the pose
-    let drive_profile: Vec<[f32; 4]> = omsi_cfg::env::var("OMSI_DRIVE_PROFILE")
+    let drive_profile: Vec<[f32; 4]> = omsi_cfg::flags::DRIVE_PROFILE.text()
         .unwrap_or_default()
         .split(['/', ';'])
         .filter_map(|s| {
@@ -279,12 +279,8 @@ pub(crate) fn run_offscreen(
             (v.len() >= 3).then(|| [v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0)])
         })
         .collect();
-    let drive_v0: Option<f32> = omsi_cfg::env::var("OMSI_DRIVE_V0")
-        .ok()
-        .and_then(|v| v.parse().ok());
-    let physics_log: f32 = omsi_cfg::env::var("OMSI_DEBUG_PHYSICS")
-        .ok()
-        .and_then(|v| v.parse().ok())
+    let drive_v0: Option<f32> = omsi_cfg::flags::DRIVE_V0.number();
+    let physics_log: f32 = omsi_cfg::flags::DEBUG_PHYSICS.number()
         .unwrap_or(0.0);
     let mut last_reasons: Vec<String> = Vec::new();
     if args.autostart && !args.is_resuming() {
@@ -313,7 +309,7 @@ pub(crate) fn run_offscreen(
     // within 400 m of the start (lane, s, x, y, lane z, ground z, the id of an object whose
     // collision mesh stands in the way there) - two builds compared on
     // the same map show where a change of the ground rules adds or removes a bump
-    if let (Ok(path), Some(t)) = (omsi_cfg::env::var("OMSI_GROUND_SAMPLE"), traffic.as_ref()) {
+    if let (Some(path), Some(t)) = (omsi_cfg::flags::GROUND_SAMPLE.text(), traffic.as_ref()) {
         use std::io::Write;
         let Ok(mut f) = std::fs::File::create(&path) else { return Err(anyhow::anyhow!("OMSI_GROUND_SAMPLE: cannot write {path}")) };
         let collision = world.collision.lock().clone();
@@ -352,7 +348,7 @@ pub(crate) fn run_offscreen(
     // LAN in an offscreen run too, so that one game's view of another can be rendered
     // (`OMSI_LAN_AUDIO=1`: with the other buses' sounds, heard at the camera - for the logs)
     #[cfg(feature = "lan")]
-    let lan_audio = (lan_off.is_some() && omsi_cfg::env::var_os("OMSI_LAN_AUDIO").is_some())
+    let lan_audio = (lan_off.is_some() && omsi_cfg::flags::LAN_AUDIO.is_set())
         .then(omsi_audio::AudioEngine::new);
     #[cfg(feature = "lan")]
     if let (Some(l), Some(p)) = (lan_off.as_mut(), player.as_mut()) {
@@ -589,7 +585,7 @@ pub(crate) fn run_offscreen(
                 // viewer whenever a car was put inside its frustum (behind something), with
                 // where on the picture it stands - to see that it really is hidden
                 let framed = std::mem::take(&mut t.framed_spawns);
-                if !framed.is_empty() && omsi_cfg::env::var_os("OMSI_POPULATION_SHOTS").is_some() {
+                if !framed.is_empty() && omsi_cfg::flags::POPULATION_SHOTS.is_set() {
                     t.sync(&world, &renderer, &mut scene);
                     if let Some(p) = player.as_mut() {
                         p.sync_transforms(
@@ -792,7 +788,7 @@ pub(crate) fn run_offscreen(
                 // and brake on the speed) - to drive it round a map's roundabouts and bends
                 // and see where it falls through or leaves the road; each lane taken is the
                 // straightest on
-                if let (Some(kmh), Some(net)) = (omsi_cfg::env::var("OMSI_AUTOPILOT").ok().and_then(|v| v.parse::<f32>().ok()), traffic.as_ref().map(|t| &t.net)) {
+                if let (Some(kmh), Some(net)) = (omsi_cfg::flags::AUTOPILOT.number::<f32>(), traffic.as_ref().map(|t| &t.net)) {
                     let v = &player.vehicle;
                     let h = v.heading.to_radians();
                     let fwd = DVec3::new(h.sin(), h.cos(), 0.0);
@@ -844,7 +840,7 @@ pub(crate) fn run_offscreen(
                 }
                 player.vehicle.update(dt);
                 // OMSI_DEBUG_VARS with OMSI_DEBUG_VARS_EVERY=<s>: the variables through the drive
-                if let (Ok(list), Some(every)) = (omsi_cfg::env::var("OMSI_DEBUG_VARS"), omsi_cfg::env::var("OMSI_DEBUG_VARS_EVERY").ok().and_then(|v| v.parse::<f32>().ok())) {
+                if let (Some(list), Some(every)) = (omsi_cfg::flags::DEBUG_VARS.text(), omsi_cfg::flags::DEBUG_VARS_EVERY.number::<f32>()) {
                     if (t_s / every).floor() != ((t_s - dt) / every).floor() {
                         let vals: Vec<String> = list.split(',').map(str::trim).map(|v| format!("{v}={:.2}", player.vehicle.var(v).unwrap_or(f32::NAN))).collect();
                         log::info!("t={t_s:.1}: {}", vals.join(" "));
@@ -852,7 +848,7 @@ pub(crate) fn run_offscreen(
                 }
                 // OMSI_JOINT_ANGLE=degrees: the rear section held at that angle to the front
                 // one (the joint and its bellows seen bent, without driving a curve)
-                if let Some(a) = omsi_cfg::env::var("OMSI_JOINT_ANGLE").ok().and_then(|v| v.trim().parse::<f64>().ok()) {
+                if let Some(a) = omsi_cfg::flags::JOINT_ANGLE.text().and_then(|v| v.trim().parse::<f64>().ok()) {
                     let v = &mut player.vehicle;
                     let (pos, rot, heading) = (v.position, v.body_rotation(), v.heading);
                     if let Some(t) = v.trailers.first_mut() {
@@ -864,7 +860,7 @@ pub(crate) fn run_offscreen(
                 crate::rail_drive::frame(player, traffic.as_ref().map(|t| &t.net), &world, dt);
                 // (the autopilot's log: where the bus is against the ground under it, twice a
                 // second, and at once when the ground is not under it any more)
-                if omsi_cfg::env::var_os("OMSI_AUTOPILOT").is_some() {
+                if omsi_cfg::flags::AUTOPILOT.is_set() {
                     let at = player.vehicle.position;
                     let under = crate::scene::drive_probe(&world.terrains, &world.surfaces, at.x, at.y, at.z + 1.5).below;
                     let lost = under.is_none_or(|g| at.z < g - 0.6);
@@ -879,7 +875,7 @@ pub(crate) fn run_offscreen(
                 }
                 // OMSI_SUSP_TRACE=<csv>: every frame, the body's height and vertical speed and
                 // each wheel's travel, load and the ground under it (bumps and hops)
-                if let Ok(path) = omsi_cfg::env::var("OMSI_SUSP_TRACE") {
+                if let Some(path) = omsi_cfg::flags::SUSP_TRACE.text() {
                     use std::io::Write;
                     static TRACE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
                     let mut f = TRACE.lock().unwrap_or_else(|e| e.into_inner());
@@ -902,7 +898,7 @@ pub(crate) fn run_offscreen(
                 }
                 // OMSI_WHEEL_TRACE: the deepest a drawn tyre goes into the road (or floats
                 // over it), once a second while driving
-                if omsi_cfg::env::var_os("OMSI_WHEEL_TRACE").is_some() {
+                if omsi_cfg::flags::WHEEL_TRACE.is_set() {
                     let lows = tyre_lows(&player.vehicle, &world);
                     if let Some((p, d)) = lows.iter().min_by(|a, b| a.1.total_cmp(&b.1)) {
                         wheel_worst = match wheel_worst {
@@ -953,7 +949,7 @@ pub(crate) fn run_offscreen(
                 // `OMSI_TRACE_VARS=a,b,$c`: the listed variables every half second of the run
                 // (a leading `$` reads a string variable) - how a start-up sequence unfolds
                 if i % 15 == 0 {
-                    if let Ok(list) = omsi_cfg::env::var("OMSI_TRACE_VARS") {
+                    if let Some(list) = omsi_cfg::flags::TRACE_VARS.text() {
                         let vals: Vec<String> = list
                             .split(',')
                             .map(str::trim)
@@ -1163,7 +1159,7 @@ pub(crate) fn run_offscreen(
         }
         // the tyres' spray, frame by frame as the window throws it (the camera that matters
         // for its detail: the followed car's, else the player's bus)
-        if spray_wet > 0.0 && omsi_cfg::env::var_os("OMSI_NO_SPRAY").is_none() {
+        if spray_wet > 0.0 && !omsi_cfg::flags::NO_SPRAY.is_set() {
             let eye = traffic
                 .as_ref()
                 .and_then(|t| follow_id(args, Some(t)).and_then(|id| follow_camera(Some(t), id)))
@@ -1296,7 +1292,7 @@ pub(crate) fn run_offscreen(
                     out.file_stem().and_then(|s| s.to_str()).unwrap_or("snap")
                 ));
                 image::save_buffer(&path, &pixels, w, h, image::ColorType::Rgba8)?;
-                if omsi_cfg::env::var_os("OMSI_BLEND_AB").is_some() {
+                if omsi_cfg::flags::BLEND_AB.is_set() {
                     // the same moment with the blended draws in the old order (by origin
                     // distance only), for a before/after picture of the draw order
                     renderer.blend_by_origin = true;
@@ -1370,7 +1366,7 @@ pub(crate) fn run_offscreen(
                 log::info!("nearest AI vehicle to the player: {near:.1} m");
             }
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_STUCK").is_some() {
+        if omsi_cfg::flags::DEBUG_STUCK.is_set() {
             for l in t.stuck_report() {
                 log::info!("stuck: {l}");
             }
@@ -1379,7 +1375,7 @@ pub(crate) fn run_offscreen(
             log::info!(
                 "traffic health: {stuck} stuck for over a minute, {overlapping} pairs overlapping"
             );
-            if omsi_cfg::env::var_os("OMSI_DEBUG_STUCK").is_some() {
+            if omsi_cfg::flags::DEBUG_STUCK.is_set() {
                 for c in t.cars.iter().filter(|c| c.stopped > 30.0) {
                     log::info!("  waiting {:.0} s: car {} ({}) lane {} at ({:.1}, {:.1}) lead {:?} why {:?} {:.1} junction {}", c.stopped, c.id, c.vehicle.ty.def.type_name, c.state.lane, c.vehicle.position.x, c.vehicle.position.y, c.lead_car, c.why.0, c.why.1, c.junction_why);
                 }
@@ -1400,7 +1396,7 @@ pub(crate) fn run_offscreen(
         log::info!("traffic: {} vehicles ({buses} of them buses), {} waiting at red lights, mean speed {:.1} km/h", t.cars.len(), t.held_at_red, t.cars.iter().map(|c| c.state.speed).sum::<f32>() / t.cars.len().max(1) as f32 * 3.6);
         for c in t.cars.iter().filter(|c| c.is_bus()) {
             log::info!("scheduled {} at ({:.1}, {:.1}, {:.1}) heading {:.0} speed {:.1} km/h, {} stops left, at_station={} dwell={:.1} delay={:+.0} s", c.vehicle.ty.def.type_name, c.vehicle.position.x, c.vehicle.position.y, c.vehicle.position.z, c.vehicle.heading, c.state.speed * 3.6, c.bus.as_ref().map(|b| b.stops.len()).unwrap_or(0), c.at_station(), c.standing_for(t.day_time), c.bus.as_ref().map(|b| b.delay).unwrap_or(0.0));
-            if omsi_cfg::env::var_os("OMSI_DEBUG_PROPS").is_some() {
+            if omsi_cfg::flags::DEBUG_PROPS.is_set() {
                 for v in [
                     "Matrix_Nr",
                     "Matrix_TerminusL1",
@@ -1451,7 +1447,7 @@ pub(crate) fn run_offscreen(
             }
             // OMSI_DEBUG_REST: where the bus came to rest against the ground under it (a
             // bus sunk into the road, or hanging over it, after spawning)
-            if omsi_cfg::env::var_os("OMSI_DEBUG_REST").is_some() {
+            if omsi_cfg::flags::DEBUG_REST.is_set() {
                 let p = player.vehicle.position;
                 log::info!(
                     "rest: entry {} bus at ({:.1}, {:.1}, {:.2}) heading {:.0}; road/ground there {:?}, walk {:?}, spawned at z {:.2}",
@@ -1468,13 +1464,13 @@ pub(crate) fn run_offscreen(
                 let wheels: Vec<String> = tyre_lows(v, &world).iter().map(|(_, d)| format!("{d:+.3}")).collect();
                 log::info!("rest wheels: {} lowest tyre points against the road: [{}]", v.ty.def.type_name, wheels.join(", "));
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
+            if omsi_cfg::flags::DEBUG_HUMANS.is_set() {
                 log::info!(
                     "people per cabin path link: {:?}",
                     player.vehicle.host.humans_on_path_link
                 );
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_PROPS").is_some() {
+            if omsi_cfg::flags::DEBUG_PROPS.is_set() {
                 if let Some(probe) = player.vehicle.host.ground_probe.clone() {
                     log::info!(
                         "ground probe: at the origin {:+.2} m, 1 m up {:+.2}, 1 m down {:+.2}",
@@ -1488,7 +1484,7 @@ pub(crate) fn run_offscreen(
                 let e = DRIVE_EXTREMES.lock();
                 log::info!("drive extremes: pitch {:.1} (at ({:.1}, {:.1}, {:.1}), {:.1} s) bank {:.1}, origin {:+.2}..{:+.2} m over the ground", e.0, e.4 .0.x, e.4 .0.y, e.4 .0.z, e.4 .1, e.1, e.3, e.2);
             }
-            if let Ok(list) = omsi_cfg::env::var("OMSI_DEBUG_VARS") {
+            if let Some(list) = omsi_cfg::flags::DEBUG_VARS.text() {
                 for v in list.split(',').map(str::trim).filter(|v| !v.is_empty()) {
                     log::info!(
                         "after drive: {v} = {:?} / {:?}",
@@ -1497,7 +1493,7 @@ pub(crate) fn run_offscreen(
                     );
                 }
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_PROPS").is_some() {
+            if omsi_cfg::flags::DEBUG_PROPS.is_set() {
                 for v in [
                     "IBIS_mode",
                     "IBIS_RouteIndex",
@@ -1548,7 +1544,7 @@ pub(crate) fn run_offscreen(
                         st.mipmaps
                     );
                 }
-                if let Ok(dir) = omsi_cfg::env::var("OMSI_DUMP_SCRIPTTEX") {
+                if let Some(dir) = omsi_cfg::flags::DUMP_SCRIPTTEX.text() {
                     dump_display_textures(&player.vehicle, Path::new(&dir));
                 }
                 log::info!(
@@ -1570,7 +1566,7 @@ pub(crate) fn run_offscreen(
                 player.vehicle.host.coll_energy,
                 player.vehicle.host.coll_pos
             );
-            if omsi_cfg::env::var_os("OMSI_DEBUG_COLLISION").is_some() {
+            if omsi_cfg::flags::DEBUG_COLLISION.is_set() {
                 if let Some(cw) = player.vehicle.collision.as_ref() {
                     let p = player.vehicle.position;
                     let mut near: Vec<(f64, &omsi_sim::collision::Obb)> = cw
@@ -1591,7 +1587,7 @@ pub(crate) fn run_offscreen(
                     );
                 }
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_PHYSICS").is_some() {
+            if omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
                 let gaps = |v: &omsi_sim::VehicleInstance| {
                     v.wheel_ground_gaps()
                         .iter()
@@ -1729,7 +1725,7 @@ pub(crate) fn run_offscreen(
                 // Aim at each of them in turn and say which one would actually be operated:
                 // a switch that cannot be hit where it is drawn, or that hands the click to
                 // its neighbour, is unusable with the mouse however good the rest is.
-                if omsi_cfg::env::var_os("OMSI_CLICK_ALL").is_some() {
+                if omsi_cfg::flags::CLICK_ALL.is_set() {
                     let spread = pixel_angle(&cam, h as f32) * 6.0;
                     let (mut hit, mut wrong, mut missed) = (0, 0, 0);
                     for (ev, sx, sy) in &switches {
@@ -1760,7 +1756,7 @@ pub(crate) fn run_offscreen(
                 // compared before and after: a switch whose trigger the script does not
                 // define, or that changes nothing, is a switch that does nothing when
                 // clicked.
-                if omsi_cfg::env::var_os("OMSI_TRIGGER_ALL").is_some() {
+                if omsi_cfg::flags::TRIGGER_ALL.is_set() {
                     let names: Vec<String> = {
                         let mut v: Vec<String> = player
                             .vehicle
@@ -1873,7 +1869,7 @@ pub(crate) fn run_offscreen(
                             silent.push(name.clone());
                         } else {
                             ok += 1;
-                            if omsi_cfg::env::var_os("OMSI_DEBUG_TRIGGERS").is_some() {
+                            if omsi_cfg::flags::DEBUG_TRIGGERS.is_set() {
                                 let names: Vec<&str> = changed
                                     .iter()
                                     .take(6)
@@ -1915,7 +1911,7 @@ pub(crate) fn run_offscreen(
                     matches!(args.view.as_str(), "driver" | "pax"),
                 );
                 player.sync_driver(&renderer, &mut scene, 1.0 / 30.0, settings.driver, args.view == "driver");
-                if let Ok(names) = omsi_cfg::env::var("OMSI_DEBUG_VARS") {
+                if let Some(names) = omsi_cfg::flags::DEBUG_VARS.text() {
                     for n in names.split(',') {
                         log::info!("after click: {n} = {:?}", player.vehicle.var(n.trim()));
                     }
@@ -1957,7 +1953,7 @@ pub(crate) fn run_offscreen(
             h.paid,
             h.change_due
         );
-        if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
+        if omsi_cfg::flags::DEBUG_HUMANS.is_set() {
             let centre = player_ref
                 .as_ref()
                 .map(|p| p.vehicle.position)
@@ -1970,7 +1966,7 @@ pub(crate) fn run_offscreen(
                 log::info!("  {k} at ({:.1}, {:.1}, {:.1})", p.x, p.y, p.z);
             }
         }
-        if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
+        if omsi_cfg::flags::DEBUG_HUMANS.is_set() {
             for p in &h.people {
                 log::info!(
                     "  {:?} at ({:.1}, {:.1}, {:.1})",
@@ -1992,7 +1988,7 @@ pub(crate) fn run_offscreen(
                 p.vehicle.var("haltewunsch"),
                 p.vehicle.motion().velocity_kmh()
             );
-            if omsi_cfg::env::var_os("OMSI_DEBUG_HUMANS").is_some() {
+            if omsi_cfg::flags::DEBUG_HUMANS.is_set() {
                 for (id, pos, rot, name) in world.bus_stops.lock().iter() {
                     log::info!(
                         "  bus stop {id} '{name}' at ({:.1}, {:.1}) heading {rot:.0}",
@@ -2012,7 +2008,7 @@ pub(crate) fn run_offscreen(
         }
     }
     // OMSI_CHECK_ENTRIES: is there anything to stand on where a player is put down?
-    if omsi_cfg::env::var_os("OMSI_CHECK_ENTRIES").is_some() {
+    if omsi_cfg::flags::CHECK_ENTRIES.is_set() {
         let mut bare = 0;
         for ep in &world.global.entry_points {
             let Some((pos, rot)) = world.entry_point_place(ep) else {
@@ -2044,7 +2040,7 @@ pub(crate) fn run_offscreen(
     }
     // OMSI_CHECK_OBSTACLES: sweep a bus-sized box along every driving lane and list the
     // obstacle boxes it runs into - the "invisible walls" a player meets on an open road
-    if omsi_cfg::env::var_os("OMSI_CHECK_OBSTACLES").is_some() {
+    if omsi_cfg::flags::CHECK_OBSTACLES.is_set() {
         if let Some(t) = traffic.as_ref() {
             let boxes = world.collision.lock().clone();
             // (parked cars stand beside the lanes by design; the traffic steers round them)
@@ -2081,7 +2077,7 @@ pub(crate) fn run_offscreen(
             }
             log::info!("obstacle check: {probes} lane points, {} obstacle boxes stand on a driving lane", hits.len());
             // `OMSI_LANES_NEAR=x,y,r`: the driving lanes passing there (where to put a test bus)
-            if let Ok(v) = omsi_cfg::env::var("OMSI_LANES_NEAR") {
+            if let Some(v) = omsi_cfg::flags::LANES_NEAR.text() {
                 let v: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
                 if v.len() == 3 {
                     let c = glam::DVec2::new(v[0], v[1]);
@@ -2104,7 +2100,7 @@ pub(crate) fn run_offscreen(
     // OMSI_CHECK_WHEELS: probe the ground along the wheel tracks of every driving lane as a
     // tyre does - a face a little over the road there is an invisible wall to the wheels, a
     // ground far off the lane's height a hump or a hole
-    if omsi_cfg::env::var_os("OMSI_CHECK_WHEELS").is_some() {
+    if omsi_cfg::flags::CHECK_WHEELS.is_set() {
         if let Some(t) = traffic.as_ref() {
             let (mut points, mut walls, mut steps) = (0usize, Vec::new(), Vec::new());
             for l in t.net.lanes.iter().filter(|l| l.kind == omsi_sim::traffic::LaneKind::Street && !l.invisible) {
@@ -2151,7 +2147,7 @@ pub(crate) fn run_offscreen(
         }
     }
     // What the map says about traffic on its roads
-    if omsi_cfg::env::var_os("OMSI_CHECK_ROADS").is_some() {
+    if omsi_cfg::flags::CHECK_ROADS.is_set() {
         if let Some(t) = traffic.as_ref() {
             let street: Vec<&omsi_sim::traffic::Lane> = t
                 .net
@@ -2173,7 +2169,7 @@ pub(crate) fn run_offscreen(
     }
     // OMSI_CHECK_ROADS: walk every driving lane and report where no road surface is drawn
     // under it, which is what "the road is missing here" looks like from the driver's seat
-    if omsi_cfg::env::var_os("OMSI_CHECK_ROADS").is_some() {
+    if omsi_cfg::flags::CHECK_ROADS.is_set() {
         if let Some(t) = traffic.as_ref() {
             let mut checked = 0usize;
             let mut naked = 0usize;
@@ -2384,7 +2380,7 @@ pub(crate) fn run_offscreen(
             runs.sort_by(|a, b| b.1.total_cmp(&a.1));
             log::info!("road check: {naked} of {checked} points along the driving lanes have no road surface under them ({:.1}%)", naked as f32 / checked.max(1) as f32 * 100.0);
             // OMSI_CHECK_SPLINES: chained splines whose ends do not meet in height
-            if omsi_cfg::env::var_os("OMSI_CHECK_SPLINES").is_some() {
+            if omsi_cfg::flags::CHECK_SPLINES.is_set() {
                 let ends = crate::scene::SPLINE_ENDS.lock();
                 let mut bad: Vec<(f64, String)> = Vec::new();
                 for (id, (a, b, prev, next, file)) in ends.iter() {
@@ -2429,7 +2425,7 @@ pub(crate) fn run_offscreen(
     // OMSI_PROBE_GRID=x,y,half,step: the wheels' ground on a square grid around (x, y), as
     // rows of centimetres relative to the middle ('.' where it is the same, '#' where the
     // ground there is more than 5 cm lower: a gap in the road the wheels fall through)
-    if let Ok(spec) = omsi_cfg::env::var("OMSI_PROBE_GRID") {
+    if let Some(spec) = omsi_cfg::flags::PROBE_GRID.text() {
         let v: Vec<f64> = spec.split(',').filter_map(|t| t.trim().parse().ok()).collect();
         if v.len() >= 4 {
             let (cx, cy, half, step) = (v[0], v[1], v[2], v[3].max(0.001));
@@ -2453,7 +2449,7 @@ pub(crate) fn run_offscreen(
     }
     // OMSI_PROBE=x0,y0,x1,y1[,n]: print the terrain height and the road surface height
     // along a line, to see where the ground comes through a road
-    if let Ok(spec) = omsi_cfg::env::var("OMSI_PROBE") {
+    if let Some(spec) = omsi_cfg::flags::PROBE.text() {
         let v: Vec<f64> = spec
             .split(',')
             .filter_map(|t| t.trim().parse().ok())
@@ -2523,9 +2519,7 @@ pub(crate) fn run_offscreen(
     let weather = crate::weather_model::refresh(&clock).unwrap_or(weather);
     // a run starts with the roads already in the state this weather would leave them
     let mut wetness = initial_wetness(&weather);
-    if let Some(v) = omsi_cfg::env::var("OMSI_WETNESS")
-        .ok()
-        .and_then(|v| v.parse().ok())
+    if let Some(v) = omsi_cfg::flags::WETNESS.number()
     {
         wetness = v;
     }
@@ -2550,7 +2544,7 @@ pub(crate) fn run_offscreen(
     lighting.glass_wind = player_ref.as_ref().or(player.as_ref()).map(|p| crate::lights::vehicle_velocity(&p.vehicle)).unwrap_or_default();
     // OMSI_CONDENSATION=<minutes>,<people>[,engine 0/1]: the cabin air and the condensation
     // on the player's glass after that long with that many aboard
-    if let (Ok(spec), Some(p)) = (omsi_cfg::env::var("OMSI_CONDENSATION"), player_ref.as_ref().or(player.as_ref())) {
+    if let (Some(spec), Some(p)) = (omsi_cfg::flags::CONDENSATION.text(), player_ref.as_ref().or(player.as_ref())) {
         let mut it = spec.split(',').map(|x| x.trim().parse::<f32>().unwrap_or(0.0));
         let (minutes, people, engine) = (it.next().unwrap_or(15.0), it.next().unwrap_or(30.0) as usize, it.next().unwrap_or(1.0) > 0.5);
         let mut ci = crate::condensation::inputs_for(&p.vehicle, &weather, people, 0);
@@ -2563,7 +2557,7 @@ pub(crate) fn run_offscreen(
         lighting.condensation = cabin.appearance();
     }
     // OMSI_GLASS_WIND=<m/s>: the rain on the glass as the bus would meet it at that speed
-    if let (Some(v), Some(p)) = (omsi_cfg::env::var("OMSI_GLASS_WIND").ok().and_then(|v| v.parse::<f32>().ok()), player_ref.as_ref().or(player.as_ref())) {
+    if let (Some(v), Some(p)) = (omsi_cfg::flags::GLASS_WIND.number::<f32>(), player_ref.as_ref().or(player.as_ref())) {
         let h = p.vehicle.heading.to_radians();
         lighting.glass_wind = glam::Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v;
     }
@@ -2722,13 +2716,13 @@ pub(crate) fn run_offscreen(
         // the navigator, as the window shows it (its camera settled first)
         if settings.navigator {
             let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
-            nav.schedule = omsi_cfg::env::var_os("OMSI_NAV_SCHEDULE").is_some();
+            nav.schedule = omsi_cfg::flags::NAV_SCHEDULE.is_set();
             nav.show_ai = settings.nav_ai;
             nav.show_surface = settings.nav_surface;
             nav.light = settings.nav_light;
             nav.show_contours = settings.nav_contours;
-            nav.orient = match omsi_cfg::env::var("OMSI_NAV_ORIENT").unwrap_or_else(|_| settings.nav_orientation.clone()).as_str() { "north" => 1, "heading" => 2, _ => 0 };
-            if omsi_cfg::env::var_os("OMSI_NAV_MAP").is_some() {
+            nav.orient = match settings.nav_orientation.as_str() { "north" => 1, "heading" => 2, _ => 0 };
+            if omsi_cfg::flags::NAV_MAP.is_set() {
                 nav.toggle_map();
             }
             if traffic.is_none() {
@@ -2736,6 +2730,10 @@ pub(crate) fn run_offscreen(
             }
             nav.set_map(world.navigation_map());
             nav.set_surface(crate::map_surface::MapSurface::open(&world.map_dir));
+            nav.set_chrono(world.chrono_dirs.read().clone());
+            if let Ok(v) = omsi_cfg::env::var("OMSI_NAV_LINES") {
+                nav.debug_lines(&v);
+            }
             let (line, terminus, stops, trip) = navigator::duty_parts(duty.as_ref());
             if let (Some((key, name)), Some(sch)) = (trip, schedule.as_ref()) {
                 let lanes = sch.trip_route_in(nav.map_net().unwrap(), &name);
@@ -2743,6 +2741,7 @@ pub(crate) fn run_offscreen(
                 nav.set_route(&key, lanes, true, g);
             }
             let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
+            let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
             let frame = navigator::NavFrame {
                 traffic: traffic.as_ref(),
                 #[cfg(feature = "lan")]
@@ -2762,6 +2761,8 @@ pub(crate) fn run_offscreen(
                 stop_requested: navigator::stop_requested(&p.vehicle),
                 time: clock.time,
                 weekday: clock.weekday(),
+                date: clock.date_code(),
+                car_line: Some(&car_line),
                 language: &settings.language,
                 screen: (viewport[2], viewport[3]),
                 ui_scale: settings.ui_scale,
@@ -2779,14 +2780,14 @@ pub(crate) fn run_offscreen(
     // OMSI_ROAD_PHOTO: photograph the road network from above, point by point, and say
     // where the picture shows grass although the map says there is a carriageway. This is
     // the only check that asks what is actually drawn rather than what the data says.
-    if omsi_cfg::env::var_os("OMSI_ROAD_PHOTO").is_some() {
+    if omsi_cfg::flags::ROAD_PHOTO.is_set() {
         if let Some(t) = traffic.as_ref() {
             let mut points: Vec<DVec3> = Vec::new();
             let mut headings: Vec<f64> = Vec::new();
             // OMSI_ROAD_PHOTO_SLANT=<m>: from a driver's eye that far back along the lane
             // (2.6 m up) instead of from above - terrain a few millimetres over the road
             // shows only at a slant
-            let slant: Option<f64> = omsi_cfg::env::var("OMSI_ROAD_PHOTO_SLANT").ok().and_then(|v| v.parse().ok());
+            let slant: Option<f64> = omsi_cfg::flags::ROAD_PHOTO_SLANT.number();
             for l in t
                 .net
                 .lanes
@@ -2797,9 +2798,7 @@ pub(crate) fn run_offscreen(
                 let mut s = 3.0f32;
                 // the carriageway itself, and the verge a few metres to either side, which
                 // in a city street is paved too
-                let side: f64 = omsi_cfg::env::var("OMSI_ROAD_PHOTO_SIDE")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
+                let side: f64 = omsi_cfg::flags::ROAD_PHOTO_SIDE.number()
                     .unwrap_or(0.0);
                 while s < len {
                     let (p, h) = l.at(s);
@@ -2810,7 +2809,7 @@ pub(crate) fn run_offscreen(
                 }
             }
             // a spread sample so one long street cannot dominate
-            let cap: usize = omsi_cfg::env::var("OMSI_ROAD_PHOTO_N").ok().and_then(|v| v.parse().ok()).unwrap_or(400);
+            let cap: usize = omsi_cfg::flags::ROAD_PHOTO_N.number().unwrap_or(400);
             let step = (points.len() / cap.max(1)).max(1);
             let sample: Vec<(DVec3, f64)> = points.iter().copied().zip(headings.iter().copied()).step_by(step).collect();
             let (mut green, mut checked) = (0usize, 0usize);
@@ -2846,7 +2845,7 @@ pub(crate) fn run_offscreen(
                 let (pw, ph) = (48u32, 48u32);
                 // OMSI_HOLE_PHOTO: the same place from above down to 25 m under the lane -
                 // what shows the sky there is a hole through the world
-                if omsi_cfg::env::var_os("OMSI_HOLE_PHOTO").is_some() {
+                if omsi_cfg::flags::HOLE_PHOTO.is_set() {
                     // (at a slant: the lower half of the picture only, which is all under the
                     // horizon)
                     let deep = if slant.is_some() { Camera { near: 0.3, far: 400.0, ..cam } } else { Camera { near: 20.0, far: 65.0, ..cam } };
@@ -2874,7 +2873,7 @@ pub(crate) fn run_offscreen(
                     }
                 }
             }
-            if omsi_cfg::env::var_os("OMSI_HOLE_PHOTO").is_some() {
+            if omsi_cfg::flags::HOLE_PHOTO.is_set() {
                 holes.sort_by(|a, b| b.0.cmp(&a.0));
                 log::info!("hole photo: {} of {checked} places show the sky through the ground", holes.len());
                 for (n, p, c) in holes.iter().take(40) {
@@ -2899,9 +2898,7 @@ pub(crate) fn run_offscreen(
     // OMSI_BENCH=n: the final picture drawn n more times as a window frame would be (one
     // mirror, then the view), with the median CPU time of the drawing calls and of the wait
     // for the GPU - medians shrug off what else the machine is doing
-    if let Some(n) = omsi_cfg::env::var("OMSI_BENCH")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
+    if let Some(n) = omsi_cfg::flags::BENCH.number::<usize>()
     {
         let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("bench"),
@@ -2930,7 +2927,7 @@ pub(crate) fn run_offscreen(
             let _ = omsi_render::wait_gpu(&renderer.device, None);
             cpu.push(drawn * 1000.0);
             gpu.push(t.elapsed().as_secs_f64() * 1000.0);
-            if omsi_cfg::env::var_os("OMSI_BENCH_FRAMES").is_some() {
+            if omsi_cfg::flags::BENCH_FRAMES.is_set() {
                 log::info!("bench frame {k}: drawing {:.2} ms, GPU wait {:.2} ms", drawn * 1000.0, gpu[k]);
             }
         }
@@ -2962,9 +2959,9 @@ pub(crate) fn run_offscreen(
     // (OMSI_BUDGET_FROM=x,y[,MB]: the budget is met from there first, as if the camera had
     // been there, then - with the budget raised to MB - the textures that come near again
     // with the camera are read back)
-    if omsi_cfg::env::var_os("OMSI_TEXTURE_MEMORY").is_some() {
+    if omsi_cfg::flags::TEXTURE_MEMORY.is_set() {
         world.set_texture_budget(texture_budget(&settings));
-        let from: Vec<f64> = omsi_cfg::env::var("OMSI_BUDGET_FROM")
+        let from: Vec<f64> = omsi_cfg::flags::BUDGET_FROM.text()
             .unwrap_or_default()
             .split(',')
             .filter_map(|v| v.trim().parse::<f64>().ok())
@@ -2984,7 +2981,7 @@ pub(crate) fn run_offscreen(
     world.finish_texture_upgrades(&renderer, &mut scene);
     // OMSI_WARM_FRAMES=n: n frames drawn before the picture, for what reads the frame
     // before it (the rain on the glass looks through the last picture)
-    for _ in 0..omsi_cfg::env::var("OMSI_WARM_FRAMES").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(0) {
+    for _ in 0..omsi_cfg::flags::WARM_FRAMES.number::<usize>().unwrap_or(0) {
         let _ = renderer.render_to_image(&mut scene, w, h, &camera, &lighting)?;
     }
     let t0 = Instant::now();
@@ -2992,7 +2989,7 @@ pub(crate) fn run_offscreen(
         render_mirrors(&mut renderer, &mut scene, &world, p, &lighting, None, None);
     }
     if let Some(p) = player_ref.as_ref() {
-        let mode = omsi_cfg::env::var("OMSI_MIRROR_HUD").ok().and_then(|v| v.parse::<u8>().ok()).unwrap_or(settings.mirror_hud);
+        let mode = omsi_cfg::flags::MIRROR_HUD.number::<u8>().unwrap_or(settings.mirror_hud);
         let mut panels = crate::mirror_hud::MirrorHud::default();
         panels.set_aspects(world.mirror_aspect.lock().clone());
         panels.set_glass(world.mirror_glass.lock().clone());
@@ -3100,7 +3097,7 @@ fn triple_extent(settings: &crate::settings::Settings, cam: &Camera, w: u32, h: 
 }
 
 fn vehicle_camera(player: &Player, camera: &mut Camera) {
-    let Ok(spec) = omsi_cfg::env::var("OMSI_CAM_VEHICLE") else { return };
+    let Some(spec) = omsi_cfg::flags::CAM_VEHICLE.text() else { return };
     let v: Vec<f32> = spec
         .split(',')
         .filter_map(|s| s.trim().parse().ok())

@@ -46,8 +46,7 @@ const MIN_FILL: f32 = 0.25;
 pub fn debug_level() -> u32 {
     static ON: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        omsi_cfg::env::var("OMSI_DEBUG_CAMERA")
-            .ok()
+        omsi_cfg::flags::DEBUG_CAMERA.text()
             .map(|v| v.trim().parse().unwrap_or(1))
             .unwrap_or(0)
     })

@@ -37,7 +37,7 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
-        if omsi_cfg::env::var_os("OMSI_DEBUG_SKY").is_some() {
+        if omsi_cfg::flags::DEBUG_SKY.is_set() {
             log::info!("sky: sun {:?} (altitude {:.1}°) sky {:?} ground {:?} exposure {:.3} table scale {:.4} haze {:.2} overcast {:.2} rain {:.2} sun visibility {:.2} moon {:?} (altitude {:.1}°, lit {:.2}) city glow {:.2}", st.sun, st.input.sun_dir.z.asin().to_degrees(), st.sky_horizontal, st.ground, st.exposure, st.lut_scale, st.input.haze, st.input.overcast, st.input.rain, st.input.sun_visibility, st.moon_light, st.input.moon_dir.normalize_or_zero().z.asin().to_degrees(), st.input.moon_illum, st.input.city_glow);
         }
         if let Some(p) = self.sky.probe.as_mut() {
@@ -105,7 +105,7 @@ impl Renderer {
             } else {
                 1.0 - (-dt / 0.7).exp()
             };
-            if omsi_cfg::env::var_os("OMSI_DEBUG_SKY").is_some() {
+            if omsi_cfg::flags::DEBUG_SKY.is_set() {
                 // (what share of the sky's directions are clear, against the cover asked for)
                 let mut clear = 0;
                 let mut n = 0;
@@ -258,16 +258,12 @@ impl Renderer {
             sun_disc: st.sun_disc.extend(dt).to_array(),
             debug: [
                 debug_view(),
-                omsi_cfg::env::var("OMSI_PUDDLE_F0")
-                    .ok()
-                    .and_then(|v| v.parse::<f32>().ok())
+                omsi_cfg::flags::PUDDLE_F0
+                    .number::<f32>()
                     .filter(|v| v.is_finite())
                     .unwrap_or(0.08)
                     .clamp(0.02, 0.2),
-                omsi_cfg::env::var("OMSI_ENV_PHOTO")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(1.0),
+                omsi_cfg::flags::ENV_PHOTO.number().unwrap_or(1.0),
                 // the tone curve's contrast, which self-lit pictures undo (`display_level`)
                 tone_contrast(log_exposure),
             ],

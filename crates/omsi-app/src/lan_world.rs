@@ -340,7 +340,7 @@ impl LanWorld {
     ) {
         if !self.trace_opened {
             self.trace_opened = true;
-            self.trace = omsi_cfg::env::var("OMSI_LAN_TRACE").ok().and_then(|p| {
+            self.trace = omsi_cfg::flags::LAN_TRACE.text().and_then(|p| {
                 std::fs::File::create(p)
                     .ok()
                     .map(std::io::BufWriter::new)
@@ -869,7 +869,7 @@ impl LanWorld {
             view.bytes += n as u64;
         }
         self.log_t -= dt;
-        if self.log_t <= 0.0 && omsi_cfg::env::var_os("OMSI_DEBUG_LAN").is_some() {
+        if self.log_t <= 0.0 && omsi_cfg::flags::DEBUG_LAN.is_set() {
             self.log_t = 4.0;
             for (peer, up) in &self.ups {
                 let aboard = up.tracks.values().filter(|t| t.samples.last().map(|s| matches!(s.v.place, PersonPlace::Aboard { .. })).unwrap_or(false)).count();
@@ -1338,7 +1338,7 @@ impl LanWorld {
             }
         }
         self.log_t -= dt;
-        if self.log_t <= 0.0 && omsi_cfg::env::var_os("OMSI_DEBUG_LAN").is_some() {
+        if self.log_t <= 0.0 && omsi_cfg::flags::DEBUG_LAN.is_set() {
             self.log_t = 4.0;
             let m = &mut self.mirror;
             let ids_hash = m

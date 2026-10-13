@@ -414,7 +414,7 @@ impl Settings {
 impl Settings {
     /// The launcher setting, with the old environment switch kept for existing VR runs.
     pub fn vr_requested(&self) -> bool {
-        cfg!(windows) && (self.vr || omsi_cfg::env::var_os("OMSI_OPENXR").is_some())
+        cfg!(windows) && (self.vr || omsi_cfg::flags::OPENXR.is_set())
     }
 
     /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
@@ -434,13 +434,13 @@ impl Settings {
         let Some(p) = Self::path() else { return Settings::default() };
         let mut text = std::fs::read_to_string(&p).unwrap_or_default();
         // OMSI_GRAPHICS=vanilla|vanilla_plus|enhanced: another renderer for one run
-        if let Ok(g) = omsi_cfg::env::var("OMSI_GRAPHICS") {
+        if let Some(g) = omsi_cfg::flags::GRAPHICS.text() {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
-        if let Some(n) = omsi_cfg::env::var("OMSI_SAFE_GPU").ok().and_then(|v| v.parse::<u32>().ok()).filter(|n| *n > 0) {
+        if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
             s.apply_safe_gpu(n);
         }
         log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics, s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
@@ -758,9 +758,9 @@ impl Settings {
 
     /// Windy trees, unless `OMSI_WINDY_TREES=0`/`1` says otherwise (A/B renders).
     pub fn windy_trees(&self) -> bool {
-        match omsi_cfg::env::var("OMSI_WINDY_TREES") {
-            Ok(v) => v.trim() != "0",
-            Err(_) => self.windy_trees,
+        match omsi_cfg::flags::WINDY_TREES.text() {
+            Some(v) => v.trim() != "0",
+            None => self.windy_trees,
         }
     }
 

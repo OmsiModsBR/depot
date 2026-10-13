@@ -163,7 +163,7 @@ pub fn vehicle_lights(
     let body = v.body_rotation();
     // headlights: the spotlight selected by Spot_Select
     // (OMSI_SPOT_SELECT=n: that spotlight on, for checking the headlights in a picture)
-    let forced = omsi_cfg::env::var("OMSI_SPOT_SELECT").ok().and_then(|s| s.trim().parse::<f32>().ok());
+    let forced = omsi_cfg::flags::SPOT_SELECT.text().and_then(|s| s.trim().parse::<f32>().ok());
     if let Some(sel) = forced.or_else(|| v.var("Spot_Select")) {
         if sel >= 0.0 {
             if let Some(sp) = ty.model.spotlights.get(sel as usize) {
@@ -500,7 +500,7 @@ pub fn collect(
             }
         }
     }
-    if omsi_cfg::env::var_os("OMSI_DEBUG_PARTICLES").is_some() {
+    if omsi_cfg::flags::DEBUG_PARTICLES.is_set() {
         if let Some(p) = scene.smoke.first() {
             log::info!("smoke: {} particles from objects, first at ({:.1}, {:.1}, {:.1}) size {:.2} alpha {:.2}", scene.smoke.len(), p.position.x, p.position.y, p.position.z, p.size, p.alpha);
         }
@@ -533,13 +533,13 @@ pub fn collect(
         c.beam_width = vis.max(1.0);
         c.size > 0.05
     });
-    if omsi_cfg::env::var_os("OMSI_DEBUG_CONES").is_some() {
+    if omsi_cfg::flags::DEBUG_CONES.is_set() {
         log::info!("cones: visibility {vis:.0} m, dark {night:.2}, {} cones of {} coronas", scene.coronas.iter().filter(|c| c.beam).count(), scene.coronas.len());
         for c in scene.coronas.iter().filter(|c| c.beam).take(4) {
             log::info!("  cone at ({:.1}, {:.1}, {:.1}) dir {:?} radius {:.2} half angles {:.0}/{:.0} deg tex {}", c.position.x, c.position.y, c.position.z, c.direction, c.size, c.inner_cos.to_degrees(), c.cone_cos.to_degrees(), c.texture);
         }
     }
-    if omsi_cfg::env::var_os("OMSI_DEBUG_LIGHT").is_some() {
+    if omsi_cfg::flags::DEBUG_LIGHT.is_set() {
         scene.lights.push(PointLight {
             position: camera_pos + DVec3::new(0.0, 15.0, -2.0),
             radius: 40.0,

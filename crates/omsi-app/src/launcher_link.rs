@@ -7,7 +7,7 @@ use super::*;
 /// source tree, or in ~/.openomsi.
 pub(crate) fn find_launcher() -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
-    if let Some(p) = omsi_cfg::env::var_os("OMSI_LAUNCHER") {
+    if let Some(p) = omsi_cfg::flags::LAUNCHER.os() {
         cands.push(PathBuf::from(p));
     }
     if let Ok(exe) = std::env::current_exe() {
