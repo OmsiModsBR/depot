@@ -310,8 +310,14 @@ fn removed_path(path: Option<&str>, removed: &[String]) -> bool {
 /// looking again every 5 s for the whole session was suspected of a periodic hitch (#93).
 const LATE_SCAN_WINDOW: Duration = Duration::from_secs(60);
 
+/// The wait between those lookups.
+const LATE_SCAN_PERIOD: Duration = Duration::from_secs(5);
+
+/// Whether a lookup may still be made `since_start` after the game started. The window is
+/// one period longer than a minute, so that a last lookup is made at or after the minute
+/// and a device that appeared before then is found.
 fn late_scan_window_open(since_start: Duration) -> bool {
-    since_start < LATE_SCAN_WINDOW
+    since_start < LATE_SCAN_WINDOW + LATE_SCAN_PERIOD
 }
 
 /// The wait before the next attempt at a device that would not open: 1 s, doubling, at most 30 s.
@@ -626,7 +632,7 @@ impl DirectInput {
                 }
                 if window.is_none() && last.elapsed() > Duration::from_secs(3) {
                     pending = Some(Instant::now() - Duration::from_secs(1));
-                } else if empty && last.elapsed() > Duration::from_secs(5) && late_scan_window_open(started.elapsed()) {
+                } else if empty && last.elapsed() > LATE_SCAN_PERIOD && late_scan_window_open(started.elapsed()) {
                     // Some older wheel drivers appear after the first enumeration
                     // without sending a HID arrival notification - only in the first minute (#93).
                     pending = Some(Instant::now() - Duration::from_secs(1));
@@ -1330,7 +1336,9 @@ mod tests {
     fn the_periodic_controller_lookup_stops_after_the_first_minute() {
         assert!(late_scan_window_open(Duration::ZERO));
         assert!(late_scan_window_open(Duration::from_secs(59)));
-        assert!(!late_scan_window_open(Duration::from_secs(60)));
+        // one more lookup at or after the minute: a device that appeared before it is found
+        assert!(late_scan_window_open(Duration::from_secs(60)));
+        assert!(!late_scan_window_open(Duration::from_secs(65)));
         assert!(!late_scan_window_open(Duration::from_secs(3600)));
     }
 
