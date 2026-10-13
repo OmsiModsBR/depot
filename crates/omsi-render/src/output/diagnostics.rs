@@ -2,7 +2,6 @@
 
 use crate::gpu::GPU_TIMER_PASSES;
 use crate::lighting::ExposureLog;
-use crate::renderer::Renderer;
 use std::sync::Arc;
 
 /// GPU time per render pass from timestamp queries (OMSI_GPU_TIMERS). One frame is timed
@@ -117,11 +116,11 @@ impl GpuTimers {
     }
 }
 
-impl Renderer {
+impl Diagnostics {
     /// Take in the pass times of the last timed frame once its readback has arrived.
-    pub(crate) fn collect_gpu_timers(&mut self) {
-        let period = self.queue.get_timestamp_period() as f64;
-        for t in self.diagnostics.gpu_timers.iter_mut().flatten() {
+    pub(crate) fn collect_gpu_timers(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let period = queue.get_timestamp_period() as f64;
+        for t in self.gpu_timers.iter_mut().flatten() {
             t.collect(period);
             // The last frame's stamps are read in a command buffer of their own, submitted
             // after that frame's: resolved in the frame's own buffer, the end stamp of its
@@ -129,14 +128,12 @@ impl Renderer {
             if t.unresolved {
                 t.unresolved = false;
                 let n = t.pending.len() as u32 * 2;
-                let mut enc = self
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("pass timers"),
-                    });
+                let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("pass timers"),
+                });
                 enc.resolve_query_set(&t.set, 0..n, &t.resolve, 0);
                 enc.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, n as u64 * 8);
-                self.queue.submit([enc.finish()]);
+                queue.submit([enc.finish()]);
                 let ready = t.ready.clone();
                 t.read.map_async(wgpu::MapMode::Read, .., move |r| {
                     ready.store(r.is_ok(), std::sync::atomic::Ordering::Relaxed)

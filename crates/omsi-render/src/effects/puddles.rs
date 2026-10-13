@@ -1,6 +1,7 @@
 //! Bounded screen-space puddles, with a small planar capture of the player's vehicle
 //! for its complete geometry. Both use at most 518400 pixels.
 
+use crate::assets::AssetStore;
 use crate::assets::MaterialUniform;
 #[cfg(test)]
 use crate::assets::{AlphaMode, MaterialExtra};
@@ -9,17 +10,16 @@ use crate::gpu::{pass_timer, DEPTH_FORMAT, HDR_FORMAT};
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
 use crate::passes::{
-    encode_batches, encode_batches_filtered, one_sided_primitive, post_pass, Batch, PIPE_BLEND,
-    PIPE_BLEND_NO_WRITE, PIPE_KINDS,
+    encode_batches, encode_batches_filtered, one_sided_primitive, post_pass, Batch, Exposure,
+    PostPipelines, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS,
 };
-use crate::renderer::Renderer;
 #[cfg(test)]
 use crate::scene::MaterialId;
 use crate::scene::{Camera, CameraUniform, Scene, Vertex};
-use crate::sky::{atmosphere, PROBE_MIPS};
-use crate::targets::PuddleTargets;
+use crate::sky::{atmosphere, SkyResources, PROBE_MIPS};
+use crate::targets::{PuddleTargets, TargetCache};
 #[cfg(test)]
-use crate::RenderOptions;
+use crate::{RenderOptions, Renderer};
 use glam::{DVec3, Mat4, Vec3};
 #[cfg(test)]
 use omsi_geometry::MeshData;
@@ -76,6 +76,19 @@ pub(crate) struct Pipelines {
     chassis: wgpu::RenderPipeline,
     vehicle_params: wgpu::Buffer,
     vehicle_bg: wgpu::BindGroup,
+}
+
+/// What the puddles' reflections take from the rest of the renderer: the device, the post
+/// passes' layout and sampler, the placeholder textures, the sky's probe and state, the
+/// adapted exposure, and the presenter's bind group for a picture.
+pub(crate) struct PuddleParts<'a> {
+    pub(crate) device: &'a wgpu::Device,
+    pub(crate) queue: &'a wgpu::Queue,
+    pub(crate) post: &'a PostPipelines,
+    pub(crate) assets: &'a AssetStore,
+    pub(crate) sky: &'a SkyResources,
+    pub(crate) adaptation: &'a Exposure,
+    pub(crate) picture_group: &'a dyn Fn(&wgpu::TextureView) -> wgpu::BindGroup,
 }
 
 impl Pipelines {
@@ -361,18 +374,20 @@ fn trace_size(w: u32, h: u32) -> (u32, u32) {
 impl PuddleTargets {
     /// `picture`, `mask` and `glow`: the size's high-range picture, its screen mask and its
     /// first glow level.
+    #[allow(clippy::too_many_arguments)]
     fn new(
-        r: &Renderer,
+        ctx: &PuddleParts,
+        pipelines: &Pipelines,
+        ao_depth: &wgpu::TextureView,
         picture: &wgpu::TextureView,
         mask: &wgpu::TextureView,
         glow: &wgpu::TextureView,
         w: u32,
         h: u32,
     ) -> Self {
-        let pipelines = r.puddles.as_ref().unwrap();
         let size = trace_size(w, h);
-        let source_depth = r.targets.ao.as_ref().unwrap().depth_view.texture().clone();
-        let hit_depth = r.device.create_texture(&wgpu::TextureDescriptor {
+        let source_depth = ao_depth.texture().clone();
+        let hit_depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("puddle hit depth including glass"),
             size: wgpu::Extent3d {
                 width: w,
@@ -391,7 +406,7 @@ impl PuddleTargets {
         });
         let hit_depth_view = hit_depth.create_view(&Default::default());
         let target = |label, (width, height)| {
-            r.device
+            ctx.device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
                     size: wgpu::Extent3d {
@@ -412,7 +427,7 @@ impl PuddleTargets {
         };
         let trace = target("puddle reflection rays", size);
         let vehicle_view = target("puddle player vehicle", size);
-        let vehicle_depth = r
+        let vehicle_depth = ctx
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("puddle player vehicle depth"),
@@ -437,7 +452,7 @@ impl PuddleTargets {
             resource: wgpu::BindingResource::TextureView(view),
         };
         let group = |ray_view| {
-            r.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("puddle reflections"),
                 layout: &pipelines.layout,
                 entries: &[
@@ -447,36 +462,36 @@ impl PuddleTargets {
                     },
                     binding(1, picture),
                     binding(2, mask),
-                    binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
+                    binding(3, ao_depth),
                     binding(4, ray_view),
                     wgpu::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&ctx.post.post_sampler),
                     },
-                    binding(6, &r.sky.probe.as_ref().unwrap().view),
+                    binding(6, &ctx.sky.probe.as_ref().unwrap().view),
                     binding(7, &hit_depth_view),
                     binding(8, &vehicle_view),
                 ],
             })
         };
         // The trace target must never appear in its own bind group, including unused slots.
-        let trace_bg = group(&r.assets.black_texture.view);
+        let trace_bg = group(&ctx.assets.black_texture.view);
         let blur_x_bg = group(&trace);
         let blur_y_bg = group(&blur);
         let resolve_bg = group(&filtered);
         let post_group = |base, adapt, screen_mask| {
-            r.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("post with puddle reflections"),
-                layout: &r.post.post_layout,
+                layout: &ctx.post.post_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: r.post.post_buf.as_entire_binding(),
+                        resource: ctx.post.post_buf.as_entire_binding(),
                     },
                     binding(1, &view),
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&r.post.post_sampler),
+                        resource: wgpu::BindingResource::Sampler(&ctx.post.post_sampler),
                     },
                     binding(3, base),
                     binding(4, adapt),
@@ -486,14 +501,14 @@ impl PuddleTargets {
         };
         let down_bg = post_group(
             mask,
-            &r.assets.white_texture.view,
-            &r.assets.black_texture.view,
+            &ctx.assets.white_texture.view,
+            &ctx.assets.black_texture.view,
         );
         let tonemap_bg = [
-            post_group(glow, &r.adaptation.adapt_views[0], mask),
-            post_group(glow, &r.adaptation.adapt_views[1], mask),
+            post_group(glow, &ctx.adaptation.adapt_views[0], mask),
+            post_group(glow, &ctx.adaptation.adapt_views[1], mask),
         ];
-        let classic_bg = r.picture_group(&view);
+        let classic_bg = (ctx.picture_group)(&view);
         Self {
             size,
             source_depth,
@@ -516,9 +531,14 @@ impl PuddleTargets {
     }
 }
 
-impl Renderer {
-    pub(crate) fn prepare_puddle_reflections(
-        &mut self,
+impl Pipelines {
+    /// This frame's puddle uniforms, and the size's reflection targets when they are new or
+    /// stale. False when the frame cannot have puddle reflections.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare(
+        &self,
+        ctx: &PuddleParts,
+        targets: &mut TargetCache,
         w: u32,
         h: u32,
         camera: &Camera,
@@ -528,28 +548,38 @@ impl Renderer {
         lighting: &Lighting,
         ro: DVec3,
     ) -> bool {
-        if self.puddles.is_none()
-            || self.targets.ao.is_none()
-            || self.sky.probe.is_none()
-            || (cu.post[0] > 0.5 && self.sky.sky_state.is_none())
+        if targets.ao.is_none()
+            || ctx.sky.probe.is_none()
+            || (cu.post[0] > 0.5 && ctx.sky.sky_state.is_none())
         {
             return false;
         }
-        let Some(hdr) = self.targets.hdr_targets.get(&(w, h)) else {
+        let Some(hdr) = targets.hdr_targets.get(&(w, h)) else {
             return false;
         };
         // A previously used size can outlive the AO depth after a resize/another view.
         // Rebind the current receiver texture instead of tracing against an old frame.
-        if hdr.puddles.as_ref().is_none_or(|t| {
-            t.source_depth != *self.targets.ao.as_ref().unwrap().depth_view.texture()
-        }) {
-            let targets = PuddleTargets::new(self, &hdr.view, &hdr.mask, &hdr.up[0], w, h);
+        if hdr
+            .puddles
+            .as_ref()
+            .is_none_or(|t| t.source_depth != *targets.ao.as_ref().unwrap().depth_view.texture())
+        {
+            let made = PuddleTargets::new(
+                ctx,
+                self,
+                &targets.ao.as_ref().unwrap().depth_view,
+                &hdr.view,
+                &hdr.mask,
+                &hdr.up[0],
+                w,
+                h,
+            );
             log::info!(
                 "puddle reflections: {}x{} rays, at most 48 steps; resolve {w}x{h}",
-                targets.size.0,
-                targets.size.1
+                made.size.0,
+                made.size.1
             );
-            self.targets.hdr_targets.get_mut(&(w, h)).unwrap().puddles = Some(targets);
+            targets.hdr_targets.get_mut(&(w, h)).unwrap().puddles = Some(made);
         }
         let vp = Mat4::from_cols_array_2d(&cu.view_proj);
         let proj = projection.unwrap_or_else(|| {
@@ -557,7 +587,7 @@ impl Renderer {
         });
         let enhanced = cu.post[0] > 0.5;
         let surround = if enhanced {
-            let st = self.sky.sky_state.as_ref().unwrap();
+            let st = ctx.sky.sky_state.as_ref().unwrap();
             [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z]
                 .into_iter()
                 .map(|n| atmosphere::sh_irradiance(&st.sh, n))
@@ -568,7 +598,7 @@ impl Renderer {
             lighting.secondary * 0.5 + lighting.sun_color * lighting.sun_intensity * 0.35
         };
         let pre = if enhanced {
-            self.adaptation.exposure.unwrap_or(0.0).exp()
+            ctx.adaptation.exposure.unwrap_or(0.0).exp()
         } else {
             1.0
         };
@@ -603,7 +633,7 @@ impl Renderer {
                 PROBE_MIPS as f32,
             ],
             sky: (surround * pre)
-                .extend(self.sky.probe.as_ref().unwrap().scale * pre)
+                .extend(ctx.sky.probe.as_ref().unwrap().scale * pre)
                 .to_array(),
             projection_trace: [
                 proj.z_axis.z,
@@ -632,21 +662,20 @@ impl Renderer {
             ],
             vehicle_parts: parts,
         };
-        self.queue.write_buffer(
-            &self.puddles.as_ref().unwrap().vehicle_params,
+        ctx.queue.write_buffer(
+            &self.vehicle_params,
             0,
             bytemuck::bytes_of(&VehicleUniform { plane, parts }),
         );
-        self.queue.write_buffer(
-            &self.puddles.as_ref().unwrap().params,
-            0,
-            bytemuck::bytes_of(&u),
-        );
+        ctx.queue
+            .write_buffer(&self.params, 0, bytemuck::bytes_of(&u));
         true
     }
 
-    pub(crate) fn encode_puddle_reflections(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode(
         &self,
+        targets: &TargetCache,
         encoder: &mut wgpu::CommandEncoder,
         w: u32,
         h: u32,
@@ -658,8 +687,8 @@ impl Renderer {
         queries: Option<&wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
-        let pipelines = self.puddles.as_ref().unwrap();
-        let targets = self.targets.hdr_targets[&(w, h)].puddles.as_ref().unwrap();
+        let pipelines = self;
+        let targets = targets.hdr_targets[&(w, h)].puddles.as_ref().unwrap();
         // Select only this vehicle's existing draw entries. AI instances can share meshes
         // and batches with it; selecting a mesh alone would reflect all of them at one height.
         let origins = vehicle_origins(lighting, camera);

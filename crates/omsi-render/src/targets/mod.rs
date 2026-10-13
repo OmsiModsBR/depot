@@ -8,3 +8,10 @@ mod puddles;
 
 pub(crate) use cache::TargetCache;
 pub(crate) use puddles::PuddleTargets;
+
+/// A pass's bind group layout and uniform buffer, for the bind groups a target is read through.
+#[derive(Clone, Copy)]
+pub(crate) struct GroupParts<'a> {
+    pub(crate) layout: &'a wgpu::BindGroupLayout,
+    pub(crate) buf: &'a wgpu::Buffer,
+}

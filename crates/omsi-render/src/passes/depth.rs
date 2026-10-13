@@ -2,8 +2,8 @@
 
 use super::draw::{encode_batches, one_sided_primitive, Batch};
 use crate::gpu::{pass_timer, DEPTH_FORMAT};
-use crate::renderer::Renderer;
 use crate::scene::{Camera, Scene};
+use crate::targets::TargetCache;
 use glam::Mat4;
 
 #[repr(C)]
@@ -204,12 +204,15 @@ pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
     }
 }
 
-impl Renderer {
+impl SsaoPass {
     /// The depth prepass and the ambient occlusion (single-sampled, with the camera's
-    /// projection).
+    /// projection), into the targets' AO textures.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_prepass_and_ao(
-        &mut self,
+        &self,
+        queue: &wgpu::Queue,
+        prepass: &PrepassPipelines,
+        targets: &TargetCache,
         scene: &Scene,
         prepass_encoder: &mut wgpu::CommandEncoder,
         prepass_batches: &[Batch],
@@ -220,7 +223,6 @@ impl Renderer {
         height: u32,
         prepass_on: bool,
         ao_on: bool,
-        rt_frame: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
@@ -239,9 +241,8 @@ impl Renderer {
                 ],
                 shift: [proj.z_axis.x, proj.z_axis.y, 0.0, 0.0],
             };
-            self.queue
-                .write_buffer(&self.ssao.ao_buf, 0, bytemuck::bytes_of(&u));
-            let ao = self.targets.ao.as_ref().unwrap();
+            queue.write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u));
+            let ao = targets.ao.as_ref().unwrap();
             {
                 let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("depth prepass"),
@@ -260,17 +261,12 @@ impl Renderer {
                 });
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
                 encode_batches(&mut pass, scene, &prepass_batches, |pipe| {
-                    &self.prepass.prepass_pipelines[pipe as usize]
+                    &prepass.prepass_pipelines[pipe as usize]
                 });
             }
             for (pipe, bg, target, pass_label) in [
-                (&self.ssao.ssao_pipeline, &ao.ssao_bg, &ao.ao_view, "ssao"),
-                (
-                    &self.ssao.blur_pipeline,
-                    &ao.blur_bg,
-                    &ao.blur_view,
-                    "ssao blur",
-                ),
+                (&self.ssao_pipeline, &ao.ssao_bg, &ao.ao_view, "ssao"),
+                (&self.blur_pipeline, &ao.blur_bg, &ao.blur_view, "ssao blur"),
             ] {
                 let Some(pipe) = pipe.as_ref().filter(|_| ao_on) else {
                     break;
@@ -295,9 +291,6 @@ impl Renderer {
                 pass.set_bind_group(0, bg, &[]);
                 pass.draw(0..3, 0..1);
             }
-        }
-        if rt_frame {
-            self.encode_ray_tracing(prepass_encoder, scene, tset.as_ref(), timed);
         }
     }
 }

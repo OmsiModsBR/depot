@@ -2,12 +2,8 @@
 //! and the HUD.
 
 use crate::gpu::{buffer_init, pass_timer, DEPTH_FORMAT};
-use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
-use std::collections::HashMap;
 use std::sync::Arc;
-
-use anyhow::{Context, Result};
 
 /// Helper for windowed rendering.
 pub struct SurfaceState<'w> {
@@ -37,82 +33,6 @@ impl Drop for SurfaceState<'_> {
             // SAFETY: dropped only here, once
             unsafe { std::mem::ManuallyDrop::drop(&mut self.surface) };
         }
-    }
-}
-
-impl<'w> SurfaceState<'w> {
-    pub fn new(
-        instance: &wgpu::Instance,
-        window: Arc<winit_window::Window>,
-        renderer: &Renderer,
-        width: u32,
-        height: u32,
-    ) -> Result<Self> {
-        Self::new_with(instance, window, renderer, width, height, true)
-    }
-
-    /// `vsync` false lets the frames go out as fast as they are drawn.
-    pub fn new_with(
-        instance: &wgpu::Instance,
-        window: Arc<winit_window::Window>,
-        renderer: &Renderer,
-        width: u32,
-        height: u32,
-        vsync: bool,
-    ) -> Result<Self> {
-        let surface = instance.create_surface(window).context("create_surface")?;
-        let mut config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: renderer.format(),
-            width: width.max(1),
-            height: height.max(1),
-            present_mode: if vsync {
-                wgpu::PresentMode::AutoVsync
-            } else {
-                wgpu::PresentMode::AutoNoVsync
-            },
-            // (two frames in flight keep the graphics chip busy while the next frame is
-            // recorded: with one, the whole loop serialized behind the vsync'd drawable -
-            // on Apple silicon a frame cost GPU + CPU instead of the larger of the two,
-            // 50 ms where 24 of them were GPU. The price is one more frame of input
-            // delay, 33 ms at 60 Hz.)
-            desired_maximum_frame_latency: 2,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-        };
-        config.width = width.max(1);
-        config.height = height.max(1);
-        surface.configure(&renderer.device, &config);
-        Ok(SurfaceState {
-            surface: std::mem::ManuallyDrop::new(surface),
-            config,
-            lost: renderer.gpu.device_lost.clone(),
-        })
-    }
-
-    pub fn resize(&mut self, renderer: &Renderer, width: u32, height: u32) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
-        // (not after a lost device: see `drop`)
-        if renderer.device_lost().is_some() {
-            return;
-        }
-        self.surface.configure(&renderer.device, &self.config);
-    }
-
-    pub fn set_vsync(&mut self, renderer: &Renderer, enabled: bool) {
-        let mode = if enabled {
-            wgpu::PresentMode::AutoVsync
-        } else {
-            wgpu::PresentMode::AutoNoVsync
-        };
-        if self.config.present_mode == mode || renderer.device_lost().is_some() {
-            return;
-        }
-        self.config.present_mode = mode;
-        // (two frames in flight: see `new_with`)
-        self.config.desired_maximum_frame_latency = 2;
-        self.surface.configure(&renderer.device, &self.config);
     }
 }
 
@@ -435,86 +355,6 @@ pub(crate) fn snap_rect(r: [f32; 4]) -> [f32; 4] {
     [x0, y0, x1, y1]
 }
 
-impl Renderer {
-    pub(crate) fn prepare_overlays(&self, scene: &mut Scene, full_w: u32, full_h: u32) {
-        let overlays = &scene.overlays;
-        // the HUD's rect buffers and bind groups live on between frames: making them
-        // anew for every overlay of every frame was a steady stream of GPU allocations
-        scene.overlay_res.truncate(overlays.len());
-        for (k, (tex, r)) in overlays.iter().copied().enumerate() {
-            let r = snap_rect(r);
-            let ndc = [
-                r[0] / full_w as f32 * 2.0 - 1.0,
-                1.0 - r[1] / full_h as f32 * 2.0,
-                r[2] / full_w as f32 * 2.0 - 1.0,
-                1.0 - r[3] / full_h as f32 * 2.0,
-                scene.premultiplied.contains(&tex) as u8 as f32,
-                scene.transposed.contains(&tex) as u8 as f32,
-                0.0,
-                0.0,
-            ];
-            if let Some((_, buf, _, last)) = scene.overlay_res.get_mut(k).filter(|o| o.0 == tex) {
-                if *last != ndc {
-                    self.queue.write_buffer(buf, 0, bytemuck::cast_slice(&ndc));
-                    *last = ndc;
-                }
-                continue;
-            }
-            let buf = buffer_init(
-                &self.device,
-                &self.queue,
-                Some("overlay rect"),
-                bytemuck::cast_slice(&ndc),
-                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            );
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("overlay"),
-                layout: &self.presenter.overlay_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&scene.textures[tex].view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
-                    },
-                ],
-            });
-            if k < scene.overlay_res.len() {
-                scene.overlay_res[k] = (tex, buf, bg, ndc);
-            } else {
-                scene.overlay_res.push((tex, buf, bg, ndc));
-            }
-        }
-    }
-
-    pub(crate) fn picture_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
-        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene picture"),
-            layout: &self.presenter.upscale_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.presenter.upscale_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.post.post_sampler),
-                },
-            ],
-        })
-    }
-}
-
 /// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the
 /// headset's UI.
 pub(crate) struct Presenter {
@@ -532,8 +372,37 @@ pub(crate) struct Presenter {
     pub(crate) panel_pipeline: wgpu::RenderPipeline,
     pub(crate) upscale_layout: wgpu::BindGroupLayout,
     pub(crate) upscale_buf: wgpu::Buffer,
-    pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
     pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
+}
+
+impl Presenter {
+    /// The bind group of a picture the upscale and copy pipelines read (`sampler`: the post
+    /// passes' sampler).
+    pub(crate) fn picture_group(
+        &self,
+        device: &wgpu::Device,
+        sampler: &wgpu::Sampler,
+        view: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene picture"),
+            layout: &self.upscale_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.upscale_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
+    }
 }
 
 impl Presenter {
@@ -618,10 +487,78 @@ impl Presenter {
             panel_pipeline,
             upscale_layout,
             upscale_buf,
-            scale_targets: HashMap::new(),
             triple_targets: None,
             overlay_pipeline_1x,
             xr_ui_pipeline,
+        }
+    }
+}
+
+impl Presenter {
+    /// The HUD overlays' rect buffers and bind groups for this frame, kept between frames.
+    /// `sampler`: the one the overlays' pictures are read with.
+    pub(crate) fn prepare_overlays(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        sampler: &wgpu::Sampler,
+        scene: &mut Scene,
+        full_w: u32,
+        full_h: u32,
+    ) {
+        let overlays = &scene.overlays;
+        // the HUD's rect buffers and bind groups live on between frames: making them
+        // anew for every overlay of every frame was a steady stream of GPU allocations
+        scene.overlay_res.truncate(overlays.len());
+        for (k, (tex, r)) in overlays.iter().copied().enumerate() {
+            let r = snap_rect(r);
+            let ndc = [
+                r[0] / full_w as f32 * 2.0 - 1.0,
+                1.0 - r[1] / full_h as f32 * 2.0,
+                r[2] / full_w as f32 * 2.0 - 1.0,
+                1.0 - r[3] / full_h as f32 * 2.0,
+                scene.premultiplied.contains(&tex) as u8 as f32,
+                scene.transposed.contains(&tex) as u8 as f32,
+                0.0,
+                0.0,
+            ];
+            if let Some((_, buf, _, last)) = scene.overlay_res.get_mut(k).filter(|o| o.0 == tex) {
+                if *last != ndc {
+                    queue.write_buffer(buf, 0, bytemuck::cast_slice(&ndc));
+                    *last = ndc;
+                }
+                continue;
+            }
+            let buf = buffer_init(
+                device,
+                queue,
+                Some("overlay rect"),
+                bytemuck::cast_slice(&ndc),
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            );
+            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("overlay"),
+                layout: &self.overlay_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&scene.textures[tex].view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                ],
+            });
+            if k < scene.overlay_res.len() {
+                scene.overlay_res[k] = (tex, buf, bg, ndc);
+            } else {
+                scene.overlay_res.push((tex, buf, bg, ndc));
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ mod assets;
 mod lights;
 mod renderer;
 mod scene;
+mod surface;
 mod types;
 
 pub use types::*;

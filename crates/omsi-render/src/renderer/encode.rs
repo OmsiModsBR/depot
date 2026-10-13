@@ -111,7 +111,10 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        self.encode_prepass_and_ao(
+        self.ssao.encode_prepass_and_ao(
+            &self.queue,
+            &self.prepass,
+            &self.targets,
             scene,
             &mut prepass_encoder,
             &prepass_batches,
@@ -122,10 +125,17 @@ impl Renderer {
             height,
             prepass_on,
             ao_on,
-            rt_frame,
             &clock.tset,
             &mut clock.timed,
         );
+        if rt_frame {
+            self.encode_ray_tracing(
+                &mut prepass_encoder,
+                scene,
+                clock.tset.as_ref(),
+                &mut clock.timed,
+            );
+        }
         self.sky.encode_sky_cube(
             scene,
             &mut prepass_encoder,

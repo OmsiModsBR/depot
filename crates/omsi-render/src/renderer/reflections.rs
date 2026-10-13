@@ -1,8 +1,10 @@
-//! The reflections (Enhanced+): resolving the surfaces and tracing what they reflect.
+//! The frame's reflections (Enhanced+): resolving the surfaces, and the traced reflections or
+//! the puddles' rays for what they reflect.
 
-use super::draw::Batch;
+use super::Renderer;
+use crate::effects::puddles::PuddleParts;
 use crate::lighting::Lighting;
-use crate::renderer::Renderer;
+use crate::passes::Batch;
 use crate::scene::{Camera, CameraUniform, Scene, TextureId};
 use glam::{DVec3, Mat4};
 
@@ -94,9 +96,31 @@ impl Renderer {
             && main_batches
                 .iter()
                 .any(|b| scene.materials[b.material as usize].uniform.params2[2] > 0.0)
-            && self.prepare_puddle_reflections(
-                width, height, camera, aspect, projection, &cu, lighting, ro,
-            );
+            && self.puddles.as_ref().is_some_and(|pipelines| {
+                let (presenter, device, sampler) =
+                    (&self.presenter, &self.device, &self.post.post_sampler);
+                let parts = PuddleParts {
+                    device: &self.device,
+                    queue: &self.queue,
+                    post: &self.post,
+                    assets: &self.assets,
+                    sky: &self.sky,
+                    adaptation: &self.adaptation,
+                    picture_group: &|v| presenter.picture_group(device, sampler, v),
+                };
+                pipelines.prepare(
+                    &parts,
+                    &mut self.targets,
+                    width,
+                    height,
+                    camera,
+                    aspect,
+                    projection,
+                    &cu,
+                    lighting,
+                    ro,
+                )
+            });
         if puddles_on {
             // (the vehicle the camera is in is drawn into the puddles' picture as well)
             let all: Vec<Batch>;
@@ -106,7 +130,8 @@ impl Renderer {
                 all = main_batches.iter().chain(cab_batches).cloned().collect();
                 &all
             };
-            self.encode_puddle_reflections(
+            self.puddles.as_ref().unwrap().encode(
+                &self.targets,
                 encoder,
                 width,
                 height,
