@@ -25,7 +25,7 @@ One folder, with a fixed name and fixed file names, inside the map's own folder 
     surface.oms             the pre-built map surface and the named streets (section 4)
     markers.cfg             optional: icons on the map (section 8.1)
     regions.cfg             optional: municipalities, their names as a watermark, where the player is (8.3)
-    lines.lin               optional: the bus lines, for the lines panel (8.4)
+    lines.lin               optional: the lines (bus, tram, metro, rail) of every era, for the lines panel (8.4)
     icons/                  optional: the pictures markers.cfg names
     LICENSE.txt             optional: the licence of the data, for people (the game does not read it)
 ```
@@ -61,6 +61,9 @@ built    = #2a2a2a
 - `grid`: the author's tile size in metres (section 3). Required.
 - The data files have fixed names (section 1), so the manifest does not name them.
 - `credit`: shown on the city map and in the launcher. Required when the data needs attribution.
+- `tram_vehicles`, `metro_vehicles`, `rail_vehicles`: comma separated parts of vehicle file paths
+  (lower case, `/`, e.g. `vehicles/a3/`). A rail vehicle whose path contains one is drawn as a tram, a metro
+  train or a train on the maps (section 8.6); a rail vehicle named by none is drawn as a tram.
 - Colours are optional hints. The game has a **dark** and a **light** look; a colour key colours
   the dark map (`water = #rrggbb`) and its `light_` twin the light one (`light_water = #rrggbb`).
   Keys: `land water river green grass forest sport farm built rail rail_edge border`. A key left
@@ -144,6 +147,13 @@ openOMSI only reads. The files are made beforehand by the map author's own tools
 author has (OpenStreetMap, a GIS, a hand-made map): the format asks for nothing but the files of
 section 1, so any source and any tool will do.
 
+**The supported way to build a package** is the generator `tools/mapgen` of
+[lmonteirotech/openomsi-map-packages](https://github.com/lmonteirotech/openomsi-map-packages): it reads the map
+itself (tiles, timetables, eras), locates it against OpenStreetMap when it can and writes the whole folder of
+section 1, with a report of what it found. That repository also holds the real packages (their data is under
+the ODbL and is not part of this repository). To try the Lines panel without any real data,
+`tools/synthetic-package/make_synthetic_package.py` writes a tiny invented package.
+
 The upstream example packages (derived from OpenStreetMap data under the ODbL, one of them with line data from a third-party map author) are deliberately not included in Depot: their data licence and provenance have not been reviewed here. See the changelog entry for the origin of this feature.
 
 ## 8. What the package carries besides the surface
@@ -197,28 +207,50 @@ zoomed out (it gives way to street names when zoomed in). With the regions and t
 the game shows a **"municipality · street"** row under the next stop on the small map, and the
 same two names in a chip on the city map. Without them, none of it appears.
 
-### 8.4 Bus lines (`lines.lin`)
+### 8.4 Lines (`lines.lin`)
 
-Tab separated, one record per line, `#` comments. Positions are relative to `ORIGEM` (metres of the
+Tab separated, one record per line form, `#` comments. Positions are relative to `ORIGEM` (metres of the
 author's grid).
 
 ```
 RLIN	1
 ORIGEM	0.0	0.0
-L	110	BRT	North - Central          line: number, kind (BRT, EXP, ALI), name
+L	110	BRT	North - Central	bus	0	0         line: number, group (BRT, EXP, ALI), name, kind of vehicle, from, to
 R	18.9	35	35	0	Every day	Articulated	North Terminal - Central Terminal     route: km, stops, minutes, circular 0/1, days, model, itinerary
 P	1250.4 4428.6 1320.0 4330.8 ...                                       the way
 S	1260.8 4409.6 1310.0 4341.5 ...                                       the stops
 ```
 
-A line has one or two routes (`R`, `P`, `S` repeat). With the file, the city map gets a **Lines**
-button: a panel with the data of the line in focus (length, stops, trip time, days, model, route 1
-or 2), the list of the map's lines with filters (All, BRT, Express, Feeders) and a tick box each.
-Ticked lines are drawn on the map, each in its own colour, with their stops; the vehicles running
-a ticked line (read from the line they show) take its colour and a ring, and the card counts them.
-The game's own route of the active trip is unchanged. Without the file, no button.
+- `kind of vehicle` (4th field after the name, optional): `bus` (default), `tram`, `metro` or `rail`. The lines
+  panel has a tab for each kind the map has lines of, so that buses, trams, metro and trains are never mixed;
+  the groups BRT, Express and Feeders are the buses'.
+- `from`, `to` (optional, `yyyymmdd`, 0 = open): the dates this **form** of the line runs. A map with eras (a
+  line renumbered, rerouted, started or dropped) has one record for each form of a line, and the panel shows only
+  the forms that hold on the date of the game session.
+- A line form has one or two routes (`R`, `P`, `S` repeat): **a route is a direction**. Route 1 is the one whose
+  destination is the last name of its itinerary; route 2 is the other way.
+- With the file, the city map gets a **Lines** button: a panel with the list of the map's lines (filters, a
+  tick box each, **Select all / Clear** for the tab on show). One click on a line ticks it and draws **both
+  routes** on the map, each line in its own colour, with their stops; the vehicles running a ticked line (read
+  from the line they show) take its colour and a ring. A **double click** opens the line: its data (length,
+  stops, trip time, days, model), the buttons Route 1 and Route 2, and the **timetable**.
+- **The timetable is not in the package.** It is the map's own (`TTData`, with the eras in force): for the route
+  chosen, the departures by the hour for Monday to Friday, Saturday or Sunday, with the next one after the
+  game's clock lit. Picking a departure lists the time the bus is at each stop it calls at (the same figures the
+  AI buses run by) and writes them on the map at the stops. A map without a timetable for a line shows no
+  timetable button for it. Without the file, no Lines button.
+
+The game's own route of the active trip is unchanged.
 
 ### 8.5 What is the map's own
 
 Everything in the package is the map author's: its surface, icons, regions, lines and colours. The code in
 openOMSI is generic and carries none of it.
+
+### 8.6 Vehicles on the map
+
+Buses and trolleybuses, trams, metro trains and trains are drawn as their own pictograms (a road vehicle with a
+cut front; a tram, long and cut at both ends with a joint; a metro train, longer and square-ended with a wide
+windscreen; a train, the longest and narrow with a pointed nose), each with the line it shows. Which rail
+vehicle is which is said by the manifest (`tram_vehicles`, `metro_vehicles`, `rail_vehicles`, section 2); a
+timetable train that shows no line of its own gets the line of its trip.

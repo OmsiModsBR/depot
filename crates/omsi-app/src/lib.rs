@@ -65,6 +65,7 @@ mod quit;
 mod condensation;
 mod rain;
 mod scene;
+mod line_times;
 mod schedule;
 mod schedule_paper;
 mod real_time;
