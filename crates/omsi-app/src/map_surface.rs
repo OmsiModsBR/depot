@@ -36,6 +36,18 @@ const LINE_RAIL: u8 = 1;
 const LINE_BORDER: u8 = 2;
 /// A named street: not drawn, only looked up ("you are on ...").
 const LINE_STREET: u8 = 3;
+/// A named street that also says its limits: `width` is the limit (km/h, 0 = none), `flags` the limit of heavy
+/// vehicles (km/h, 0 = the same, or none).
+const LINE_STREET_LIMITS: u8 = 4;
+
+/// A street found by place: its name and its speed limits (km/h, 0 = not said).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Street {
+    pub name: String,
+    pub speed: u32,
+    /// For heavy vehicles, when it is not the same.
+    pub heavy: u32,
+}
 
 /// What the author's manifest may colour (`water = #rrggbb`, and `light_water = ...` for the
 /// light map); a key left out keeps the default of that look.
@@ -186,6 +198,12 @@ pub struct Region {
     poly: Vec<DVec2>,
 }
 
+/// What kind of vehicle a line is for (`lines.lin`): each has its own list in the lines panel.
+pub const MODAL_BUS: u8 = 0;
+pub const MODAL_TRAM: u8 = 1;
+pub const MODAL_METRO: u8 = 2;
+pub const MODAL_RAIL: u8 = 3;
+
 /// Kinds of bus line (`lines.lin`).
 pub const GROUP_BRT: u8 = 1;
 pub const GROUP_EXPRESS: u8 = 2;
@@ -210,6 +228,11 @@ pub struct RouteInfo {
 pub struct LineInfo {
     pub number: String,
     pub group: u8,
+    pub modal: u8,
+    /// The dates (yyyymmdd) this form of the line runs from and to; 0 is open. A map with eras has a record
+    /// for each form a line took.
+    pub from: u32,
+    pub to: u32,
     pub name: String,
     pub routes: Vec<RouteInfo>,
 }
@@ -240,6 +263,12 @@ pub struct MapSurface {
     regions: Vec<Region>,
     lines: Vec<LineInfo>,
     has_streets: bool,
+    /// What the map says its rail vehicles are: (a part of the vehicle file's path, MODAL_*), from the manifest's
+    /// `tram_vehicles`, `metro_vehicles` and `rail_vehicles`. A rail vehicle named by none is drawn as a tram.
+    rail_kinds: Vec<(String, u8)>,
+    /// The map, for its timetable (read when the lines panel first asks).
+    map_dir: std::path::PathBuf,
+    times: std::sync::OnceLock<crate::line_times::LineTimes>,
 }
 
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
@@ -311,6 +340,7 @@ impl MapSurface {
             Color::hex(0x1e7b34),
         ];
         let mut brt_lines: Vec<String> = Vec::new();
+        let mut kinds: Vec<(String, u8)> = Vec::new();
         let (mut dark, mut light) = (Palette::dark(), Palette::light());
         for line in text.lines() {
             let line = line.trim();
@@ -330,6 +360,14 @@ impl MapSurface {
                 "player_free" => player_colors[0] = parse_color(v).unwrap_or(player_colors[0]),
                 "player_line" => player_colors[1] = parse_color(v).unwrap_or(player_colors[1]),
                 "player_brt" => player_colors[2] = parse_color(v).unwrap_or(player_colors[2]),
+                "tram_vehicles" | "metro_vehicles" | "rail_vehicles" => {
+                    let modal = match k.as_str() {
+                        "tram_vehicles" => MODAL_TRAM,
+                        "metro_vehicles" => MODAL_METRO,
+                        _ => MODAL_RAIL,
+                    };
+                    kinds.extend(v.split(',').map(|p| p.trim().to_lowercase()).filter(|p| !p.is_empty()).map(|p| (p, modal)));
+                }
                 "brt_lines" => {
                     brt_lines = v
                         .split(',')
@@ -366,9 +404,11 @@ impl MapSurface {
                         brt_lines,
                     });
                 }
+                s.rail_kinds = kinds;
                 s.load_markers(&dir);
                 s.load_regions(&dir);
                 s.load_lines(&dir);
+                s.map_dir = map_dir.to_path_buf();
                 s.has_streets = s.index.iter().any(|e| {
                     s.data
                         .get(e.at..e.at + e.len)
@@ -461,6 +501,9 @@ impl MapSurface {
             regions: Vec::new(),
             lines: Vec::new(),
             has_streets: false,
+            map_dir: Default::default(),
+            rail_kinds: Vec::new(),
+            times: std::sync::OnceLock::new(),
         })
     }
 
@@ -511,6 +554,24 @@ impl MapSurface {
         &self.lines
     }
 
+    /// What kind of rail vehicle a vehicle file is, by what the map says (MODAL_TRAM, METRO or RAIL); None when
+    /// the map does not name it.
+    pub fn rail_kind(&self, vehicle_path: &str) -> Option<u8> {
+        let p = vehicle_path.to_lowercase().replace('\\', "/");
+        self.rail_kinds.iter().find(|(part, _)| p.contains(part.as_str())).map(|k| k.1)
+    }
+
+    /// Whether line record `i` holds on `date` (yyyymmdd; 0 = not known: all do).
+    pub fn line_on(&self, i: usize, date: i32) -> bool {
+        let l = &self.lines[i];
+        date <= 0 || ((l.from == 0 || l.from as i32 <= date) && (l.to == 0 || date <= l.to as i32))
+    }
+
+    /// The map's timetable (`TTData`, with the eras in force): departures and the time at each stop, per line.
+    pub fn times(&self, chrono: &[std::path::PathBuf]) -> &crate::line_times::LineTimes {
+        self.times.get_or_init(|| crate::line_times::LineTimes::load(&self.map_dir, chrono))
+    }
+
     /// The package can say where the player is (municipality outlines or named streets).
     pub fn has_location(&self) -> bool {
         !self.regions.is_empty() || self.has_streets
@@ -530,6 +591,12 @@ impl MapSurface {
             .iter()
             .find(|r| point_in_poly(&r.poly, pos))
             .map(|r| r.name.clone());
+        (region, self.street_info(pos, 30.0).map(|s| s.name))
+    }
+
+    /// The named street within `reach` metres of a game position, with its limits (read from the chunks around,
+    /// nothing kept).
+    pub fn street_info(&self, pos: DVec2, reach: f64) -> Option<Street> {
         let mut street = None;
         if self.has_streets {
             let a = self.world_to_author(pos) - self.origin;
@@ -537,7 +604,7 @@ impl MapSurface {
                 (a.x / self.chunk).floor() as i32,
                 (a.y / self.chunk).floor() as i32,
             );
-            let mut best: Option<(f64, u32)> = None;
+            let mut best: Option<(f64, u32, u32, u32)> = None;
             for dx in -1..=1 {
                 for dy in -1..=1 {
                     let Some(&i) = self.by_key.get(&(cx + dx, cy + dy)) else {
@@ -550,11 +617,11 @@ impl MapSurface {
                 }
             }
             street = best
-                .filter(|b| b.0 <= 30.0)
-                .map(|b| self.name(b.1))
-                .filter(|n| !n.is_empty());
+                .filter(|b| b.0 <= reach)
+                .map(|b| Street { name: self.name(b.1), speed: b.2, heavy: if b.3 == b.2 { 0 } else { b.3 } })
+                .filter(|s| !s.name.is_empty());
         }
-        (region, street)
+        street
     }
 
     /// The colours of the dark or the light map.
@@ -776,7 +843,7 @@ impl MapSurface {
             let w = r.f32()?;
             let _name = r.u32()?;
             let n = r.u32()? as usize;
-            if class == LINE_STREET {
+            if class == LINE_STREET || class == LINE_STREET_LIMITS {
                 // a street to look up, not to draw: its points are not turned into game metres
                 r.take(n.checked_mul(8)?)?;
                 continue;
@@ -909,7 +976,7 @@ fn chunk_has_streets(body: &[u8]) -> bool {
             r.f32()?;
             r.u32()?;
             let n = r.u32()? as usize;
-            if class == LINE_STREET {
+            if class == LINE_STREET || class == LINE_STREET_LIMITS {
                 return Some(true);
             }
             r.take(n.checked_mul(8)?)?;
@@ -920,8 +987,8 @@ fn chunk_has_streets(body: &[u8]) -> bool {
 }
 
 /// The nearest street piece of a chunk to `p` (author-grid metres from the file's origin):
-/// `best` is (distance, name index), kept when nearer than what it holds.
-fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Option<()> {
+/// `best` is (distance, name index, limit, heavy limit), kept when nearer than what it holds.
+fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32, u32, u32)>) -> Option<()> {
     let mut r = Rd { b: body, i: 0 };
     for _ in 0..r.u32()? {
         r.u8()?;
@@ -930,11 +997,12 @@ fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Opti
     }
     for _ in 0..r.u32()? {
         let class = r.u8()?;
-        r.u8()?;
-        r.f32()?;
+        let flags = r.u8()?;
+        let width = r.f32()?;
         let name = r.u32()?;
         let n = r.u32()? as usize;
-        if class != LINE_STREET {
+        let (speed, heavy) = if class == LINE_STREET_LIMITS { (width.max(0.0).round() as u32, flags as u32) } else { (0, 0) };
+        if class != LINE_STREET && class != LINE_STREET_LIMITS {
             r.take(n.checked_mul(8)?)?;
             continue;
         }
@@ -944,7 +1012,7 @@ fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32)>) -> Opti
             if let Some(a) = prev {
                 let d = dist_to_segment(p, a, q);
                 if best.is_none_or(|b| d < b.0) {
-                    *best = Some((d, name));
+                    *best = Some((d, name, speed, heavy));
                 }
             }
             prev = Some(q);
@@ -1018,9 +1086,18 @@ fn parse_lines(text: &str, to_world: &dyn Fn(f64, f64) -> DVec2) -> Vec<LineInfo
                     "EXP" => GROUP_EXPRESS,
                     _ => GROUP_FEEDER,
                 };
+                let date = |k: usize| f.get(k).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
                 out.push(LineInfo {
                     number: f[1].trim().to_string(),
                     group,
+                    modal: match f.get(4).map(|m| m.trim()) {
+                        Some("tram") => MODAL_TRAM,
+                        Some("metro") => MODAL_METRO,
+                        Some("rail") => MODAL_RAIL,
+                        _ => MODAL_BUS,
+                    },
+                    from: date(5),
+                    to: date(6),
                     name: f[3].trim().to_string(),
                     routes: Vec::new(),
                 });
@@ -1239,6 +1316,26 @@ mod tests {
     }
 
     #[test]
+    fn lines_carry_a_kind_of_vehicle_and_the_dates_they_run() {
+        let text = "RLIN\t1\nORIGEM\t0\t0\nL\t1\tALI\tBus\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tT1\tALI\tTram\ttram\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tM1\tALI\tMetro\tmetro\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\tR1\tALI\tTrain\trail\t0\t0\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\t7\tALI\tOld\tbus\t0\t19991231\nR\t1\t2\t3\t0\td\t\tA - B\nP\t0 0 5 5\n\
+L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
+        let lines = parse_lines(text, &|x, y| DVec2::new(x, y));
+        let kinds: Vec<u8> = lines.iter().map(|l| l.modal).collect();
+        assert_eq!(
+            kinds,
+            [MODAL_BUS, MODAL_TRAM, MODAL_METRO, MODAL_RAIL, MODAL_BUS, MODAL_BUS]
+        );
+        // a line with no kind or dates is a bus line open at both ends
+        assert_eq!((lines[0].from, lines[0].to), (0, 0));
+        assert_eq!((lines[4].from, lines[4].to), (0, 19991231));
+        assert_eq!((lines[5].from, lines[5].to), (20000101, 0));
+    }
+
+    #[test]
     fn regions_say_where_a_point_is() {
         let text = "# c\nregion = Alfa | 5 | 5 | 8 | 2 | 0,0 10,0 10,10 0,10\nregion = Beta | 0 | 0 | 0 | 0 | 20,0 30,0 30,10\nregion = Ruim | 0 | 0 | 0 | 0 | 1,1\n";
         let r = parse_regions(text, &|x, y| DVec2::new(x, y));
@@ -1269,8 +1366,29 @@ mod tests {
         assert!(chunk_has_streets(&b));
         let mut best = None;
         street_in_chunk(&b, DVec2::new(40.0, 12.0), &mut best).unwrap();
-        let (d, name) = best.unwrap();
-        assert!((d - 12.0).abs() < 1e-6 && name == 7);
+        let (d, name, speed, heavy) = best.unwrap();
+        assert!((d - 12.0).abs() < 1e-6 && name == 7 && speed == 0 && heavy == 0);
+    }
+
+    #[test]
+    fn a_street_with_limits_says_them() {
+        // one street of two points, name index 3, limit 50 (the width), 30 for heavy vehicles (the flags)
+        let mut b = Vec::new();
+        b.extend(0u32.to_le_bytes());
+        b.extend(1u32.to_le_bytes());
+        b.extend([LINE_STREET_LIMITS, 30]);
+        b.extend(50.0f32.to_le_bytes());
+        b.extend(3u32.to_le_bytes());
+        b.extend(2u32.to_le_bytes());
+        for v in [0.0f32, 0.0, 100.0, 0.0] {
+            b.extend(v.to_le_bytes());
+        }
+        b.extend(0u32.to_le_bytes());
+        assert!(chunk_has_streets(&b));
+        let mut best = None;
+        street_in_chunk(&b, DVec2::new(40.0, 5.0), &mut best).unwrap();
+        let (d, name, speed, heavy) = best.unwrap();
+        assert!((d - 5.0).abs() < 1e-6 && name == 3 && speed == 50 && heavy == 30);
     }
 
     #[test]
