@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-app`'s crate root no longer gathers its modules' names with `use module::*`: it imports
+  what it uses itself, and the modules that reached names through it (`crate::App`, `crate::Args`,
+  `crate::start_clock`, the launcher's showroom with `use super::super::*`, …) name the module that
+  defines them.
 - The last `omsi-app` modules that took the crate root's names with `use super::*` (`app_events`,
   `offscreen`, `startup`, `android`, `input/` and its `mouse`) import them from where they are
   defined, and the crate root keeps only the imports and globs something still uses.

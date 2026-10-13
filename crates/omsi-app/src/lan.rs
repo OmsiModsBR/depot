@@ -706,7 +706,7 @@ pub fn player_name(args: &Args) -> String {
 
 /// Our world as the other side sees it.
 pub fn world_info(args: &Args) -> omsi_net::WorldInfo {
-    let clock = crate::start_clock(args);
+    let clock = crate::situation::start_clock(args);
     omsi_net::WorldInfo {
         map: args.map.replace('\\', "/"),
         date: date_of(&clock),
@@ -2505,9 +2505,9 @@ fn new_remote(
 ) -> Option<RemoteVehicle> {
     let (ty, stand_in) = remote_type(args, pose, player)?;
     let mut host =
-        omsi_sim::VehicleHost::new(clock.cloned().unwrap_or_else(|| crate::start_clock(args)));
+        omsi_sim::VehicleHost::new(clock.cloned().unwrap_or_else(|| crate::situation::start_clock(args)));
     host.font_lib = Some(world.fonts.clone());
-    let hof = crate::find_hof(args, world, &ty);
+    let hof = crate::situation::find_hof(args, world, &ty);
     host.hof = hof.clone();
     let scheme = if pose.paint.is_empty() {
         None

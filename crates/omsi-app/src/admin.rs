@@ -20,7 +20,7 @@
 //! `weather cycle`, `weather set <Weather/file.owt>`.
 
 use crate::teleport::teleport;
-use crate::App;
+use crate::app::App;
 use omsi_net::{LanSession, Role};
 
 /// The clock speeds offered.

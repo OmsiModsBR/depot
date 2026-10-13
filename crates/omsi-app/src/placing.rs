@@ -4,7 +4,7 @@
 //! down and Escape takes it away again. Where it would stand in another vehicle, the click
 //! is refused and the HUD says why.
 
-use crate::App;
+use crate::app::App;
 use glam::DVec3;
 use omsi_sim::collision::Obb;
 use winit::keyboard::KeyCode;

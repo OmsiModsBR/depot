@@ -1074,7 +1074,7 @@ pub(crate) fn focused(plugins: &Option<omsi_plugin::Plugins>) -> bool {
     plugins.as_ref().is_some_and(|p| p.ui.borrow().focused())
 }
 
-impl crate::App {
+impl crate::app::App {
     /// Whether the plugins' panels have the mouse (`omsi.ui.focus`).
     pub(crate) fn plugin_focus(&self) -> bool {
         focused(&self.plugins)
