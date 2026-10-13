@@ -622,7 +622,7 @@ impl ApplicationHandler for App {
                     t.others.extend(own_outlines(self.player.as_ref(), &self.placed));
                     if !self.paused {
                         t.player_priority = self.player.as_ref().and_then(|p| p.vehicle.var("TrafficPriority")).is_some_and(|v| v > 0.5);
-                        t.player_blinker = self.player.as_ref().map(|p| lan::indicator(&p.vehicle)).unwrap_or(0);
+                        t.player_blinker = self.player.as_ref().map(|p| crate::traffic_link::indicator(&p.vehicle)).unwrap_or(0);
                         t.tick(dt, self.player.as_ref().map(|p| player_outline(p)));
                         if let Some(w) = self.world.as_ref() {
                             w.set_switches(&t.switch_requests());
@@ -1000,7 +1000,7 @@ impl ApplicationHandler for App {
                             q.vehicle.update(dt);
                         }
                         q.sync_transforms(r, scene, false);
-                        let f = crate::lan::footprint_of(&q.vehicle, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
+                        let f = crate::traffic_link::vehicle_box(&q.vehicle, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
                         placed_boxes.push(omsi_sim::collision::Obb {
                             center: glam::DVec2::new(f.x, f.y),
                             half: glam::DVec2::new(f.width as f64 * 0.5, f.length as f64 * 0.5),
@@ -1601,7 +1601,7 @@ impl ApplicationHandler for App {
                     }
                 }
                 if !self.paused {
-                    crate::admin::guard_fall(self, dt);
+                    crate::teleport::guard_fall(self, dt);
                 }
                 self.placing_frame();
                 // the host sends every edit of the map again now and then (players join)

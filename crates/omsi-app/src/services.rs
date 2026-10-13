@@ -26,7 +26,7 @@ pub(crate) fn run_export(args: &Args, out: &PathBuf) -> Result<()> {
 /// Does the vehicle's box overlap one of the loaded `[petrolstation]` objects? That is
 /// OMSI's test for the pump, the wash and a repair without travel time.
 pub(crate) fn at_petrol_station(world: &World, v: &omsi_sim::VehicleInstance) -> bool {
-    let f = crate::lan::footprint_of(v, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
+    let f = crate::traffic_link::vehicle_box(v, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
     let me = omsi_sim::collision::Obb {
         center: glam::DVec2::new(f.x, f.y),
         half: glam::DVec2::new(f.width as f64 * 0.5, f.length as f64 * 0.5),

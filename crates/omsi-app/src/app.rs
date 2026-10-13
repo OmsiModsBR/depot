@@ -241,7 +241,7 @@ pub(crate) struct App {
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
     /// Where the bus last stood on the ground (and facing where): it is put back there when
-    /// it falls through the world (see `admin::guard_fall`).
+    /// it falls through the world (see `teleport::guard_fall`).
     pub(crate) safe_pose: Option<(glam::DVec3, f64)>,
     /// Seconds since `safe_pose` was taken.
     pub(crate) safe_age: f32,
@@ -1105,7 +1105,7 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
             text.push_str(&format!("  {t}\n"));
         }
     }
-    let Some(dir) = crate::lan::data_dir() else { return };
+    let Some(dir) = crate::settings::data_dir() else { return };
     let path = dir.join("missing_content.txt");
     let _ = std::fs::write(&path, text);
     let objects = files.iter().filter(|(_, w)| *w != "spline").count();

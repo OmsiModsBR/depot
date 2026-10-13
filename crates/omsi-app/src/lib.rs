@@ -112,6 +112,7 @@ mod spawn;
 mod stock_keys;
 mod startup;
 mod state_trace;
+mod teleport;
 mod traffic_link;
 mod tutorial;
 mod weather_setup;

@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- Helpers the game uses outside LAN play move out of the LAN modules of `omsi-app`: the teleport and
+  the fall-through guard to `teleport.rs`, clearing the AI traffic, the vehicle's box
+  (`vehicle_box`, which `lan::footprint_of` now wraps) and its indicator state to `traffic_link.rs`,
+  and the `~/.depot` folder (`data_dir`) to `settings.rs`. No behaviour change.
 - The seven LAN fields of `omsi-app`'s `App` (`lan`, `remotes`, `voice`, `remote_walkers`,
   `inside_remote`, `is_admin`, `remote_added`) move into one `Online` struct, `App::online`, so the
   `lan` feature can switch them off together. No behaviour change.
