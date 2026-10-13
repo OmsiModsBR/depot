@@ -32,7 +32,16 @@
 //! People do not avoid each other: somebody within 0.6 m in front stops them,
 //! a person facing them makes them turn aside once, and that is all.
 
-use super::*;
+use super::{
+    debug_pax, doorways_taken, places_taken, BusId, BusNow, Cabin, DoorWants, Humans, Leg, PedWalk,
+    Place, Seat, State, LEFT_HAND,
+};
+use crate::scene::World;
+use glam::{DVec2, DVec3, Vec3};
+use hashbrown::{HashMap, HashSet};
+use omsi_render::{Renderer, Scene};
+use omsi_sim::VehicleInstance;
+use std::sync::Arc;
 
 /// OMSI's tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2471,6 +2480,9 @@ impl Humans {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::humans::CabinAir;
+    use glam::Mat4;
+    use std::path::Path;
 
     #[test]
     fn arriving_ai_uses_the_timetable_stop_not_a_neighbour() {

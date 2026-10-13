@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `actions`, `app`, `player` and `humans_pax` in `omsi-app` import what they use from where it is
+  defined instead of `use super::*`; the crate root drops the imports nothing uses any more.
 - Nine more modules of `omsi-app` (`camera_util`, `input/keyboard`, `input/menus`, `server`,
   `situation`, `spawn`, `touch`, `weather_setup`, `weather_time`) import what they use from where it
   is defined instead of `use super::*`.
