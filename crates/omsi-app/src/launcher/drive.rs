@@ -621,6 +621,7 @@ fn paint_line(l: &Launcher) -> String {
 /// The chosen day and weather in one line.
 fn start_line(l: &Launcher) -> String {
     // on a server: its clock and its weather, whatever this machine has chosen
+    #[cfg(feature = "lan")]
     if let Some(i) = l.state.joined_server.as_ref().and_then(|a| l.state.server_info.get(a)).and_then(|x| x.1.as_ref().ok()) {
         let weather = if i.weather.is_empty() {
             omsi_ui::tr("the map's (the server's)").into_owned()
@@ -1083,6 +1084,7 @@ fn trip_duration(first: f64, last: f64) -> String {
 }
 
 /// The name of the server the Drive page is joined to (see the Multiplayer page).
+#[cfg(feature = "lan")]
 fn joined_server_name(l: &Launcher) -> Option<String> {
     let a = l.state.joined_server.as_ref()?;
     let entry = l.state.servers.iter().find(|s| &s.address == a);
@@ -1090,8 +1092,15 @@ fn joined_server_name(l: &Launcher) -> Option<String> {
     Some(entry.map(|e| e.name.clone()).filter(|n| !n.is_empty()).or_else(|| info.map(|i| i.name.clone())).unwrap_or_else(|| a.clone()))
 }
 
+/// Without LAN play the Drive page is never joined to a server.
+#[cfg(not(feature = "lan"))]
+fn joined_server_name(_l: &Launcher) -> Option<String> {
+    None
+}
+
 fn step_time(l: &mut Launcher, r: Rect) {
     let mut y = r.y;
+    #[cfg(feature = "lan")]
     if let Some(name) = joined_server_name(l) {
         // the server's world: nothing to choose here
         let info = l.state.joined_server.as_ref().and_then(|a| l.state.server_info.get(a)).and_then(|x| x.1.as_ref().ok()).cloned();

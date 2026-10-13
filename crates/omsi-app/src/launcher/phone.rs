@@ -88,7 +88,11 @@ pub fn draw(l: &mut Launcher) {
         (Tab::More, Some(p)) => embedded(l, p, body, true),
         (Tab::More, None) => more(l, body),
         (Tab::Mods, _) => embedded(l, Page::Mods, body, false),
+        #[cfg(feature = "lan")]
         (Tab::Online, _) => online(l, body),
+        // (the Online tab is hidden without LAN play)
+        #[cfg(not(feature = "lan"))]
+        (Tab::Online, _) => {}
         (Tab::Play, _) => play(l, body),
     }
     tab_bar(l, Rect::new(0.0, size.y - TAB_H, size.x, TAB_H));
@@ -243,6 +247,7 @@ fn play(l: &mut Launcher, body: Rect) {
         }
     }
     // on a server: which (and the way back to driving alone)
+    #[cfg(feature = "lan")]
     if let Some(sn) = l.state.joined_server.clone() {
         let title = l.state.server_info.get(&sn).and_then(|x| x.1.as_ref().ok()).map(|i| i.name.clone()).unwrap_or(sn);
         let b = Rect::new(pr.x + 10.0, pr.y + 10.0, (l.ui.width(&title, 12.5, Weight::Bold) + 70.0).min(pr.w - 20.0), 34.0);
@@ -371,7 +376,10 @@ fn sheet(l: &mut Launcher, s: Sheet, full: Rect) {
         Sheet::Time => time_sheet(l, list),
         Sheet::Start => start_sheet(l, list),
         Sheet::Roadbook => roadbook_sheet(l, list),
+        #[cfg(feature = "lan")]
         Sheet::Servers => servers_sheet(l, list),
+        #[cfg(not(feature = "lan"))]
+        Sheet::Servers => false,
     };
     // (the bar drawn last: the list scrolls under it)
     if bar(l, barr, title, search) || back {
@@ -676,6 +684,7 @@ fn roadbook_sheet(l: &mut Launcher, r: Rect) -> bool {
     false
 }
 
+#[cfg(feature = "lan")]
 fn servers_sheet(l: &mut Launcher, r: Rect) -> bool {
     let inner = r.pad(10.0, 8.0);
     let row = Rect::new(inner.x, inner.y, inner.w, ROW);
@@ -1015,6 +1024,7 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
     done
 }
 
+#[cfg(feature = "lan")]
 fn online(l: &mut Launcher, body: Rect) {
     let inner = body.pad(12.0, 12.0);
     // (multiplayer is disabled in this version: nothing to join, nothing is asked)
@@ -1145,6 +1155,7 @@ fn online(l: &mut Launcher, body: Rect) {
     }
 }
 
+#[cfg(feature = "lan")]
 fn join(l: &mut Launcher, address: &str) {
     l.state.ask_server(address, 5.0);
     l.state.join_server(address, super::state::JoinProto::Auto);
@@ -1188,7 +1199,10 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
     l.ui.push_clip(Rect::new(body.x, body.y + top, body.w, body.h - top), 0.0);
     match page {
         Page::Drive => super::drive::draw(l, content),
+        #[cfg(feature = "lan")]
         Page::Multiplayer => super::multiplayer::draw(l, content),
+        #[cfg(not(feature = "lan"))]
+        Page::Multiplayer => {}
         Page::Profile => super::pages::profile(l, content),
         Page::Settings => super::pages::settings(l, content),
         Page::Controls => super::pages::controls(l, content),

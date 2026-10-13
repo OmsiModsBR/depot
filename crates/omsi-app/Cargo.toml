@@ -21,6 +21,11 @@ path = "src/main.rs"
 [features]
 # the OMSI plugins (`plugins/*.opl`) and the Lua plugins' panels
 plugins = ["dep:omsi-plugin"]
+default = ["lan"]
+# LAN play: the session, its voice chat, the admin commands and the host's mods
+lan = ["dep:omsi-net", "omsi-launcher-core/lan"]
+# the dedicated server (`--server`), which hosts a LAN session
+server = ["lan"]
 
 [build-dependencies]
 winresource.workspace = true
@@ -50,9 +55,9 @@ clap.workspace = true
 log.workspace = true
 env_logger.workspace = true
 rayon.workspace = true
-omsi-net = { path = "../omsi-net" }
+omsi-net = { path = "../omsi-net", optional = true }
 omsi-ui = { path = "../omsi-ui" }
-omsi-launcher-core = { path = "../omsi-launcher-core", features = ["lan"] }
+omsi-launcher-core = { path = "../omsi-launcher-core" }
 serde.workspace = true
 hashbrown.workspace = true
 parking_lot.workspace = true
