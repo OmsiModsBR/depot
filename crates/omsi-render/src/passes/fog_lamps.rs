@@ -163,8 +163,8 @@ impl FogLampsPass {
         let shafts = lighting.shadows && lighting.sun_dir.z > 0.0;
         let glare = lighting.sun_dir.z > -0.01
             && lighting.sun_intensity > 0.0
-            && omsi_cfg::env::var_os("OMSI_NO_GLARE").is_none();
-        if omsi_cfg::env::var_os("OMSI_DEBUG_FOG_LAMPS").is_some() {
+            && !omsi_cfg::flags::NO_GLARE.is_set();
+        if omsi_cfg::flags::DEBUG_FOG_LAMPS.is_set() {
             log::info!("fog lamps: enhanced {enhanced} prepass {prepass_on} overlays {with_overlays} masked {masked_frame} fog {:.5} lights {} shafts {shafts} glare {glare}", enhanced_weather_fog(lighting), scene.lights.len());
         }
         if enhanced && prepass_on && with_overlays && masked_frame && (fog_lamps || shafts || glare)

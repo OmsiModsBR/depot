@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-render` reads its `OMSI_*` variables through `omsi_cfg::flags`, where its 45 remaining
+  settings and diagnostics are now declared, so `docs/ENVIRONMENT.md` lists every variable the game
+  reads.
 - `omsi-app`'s LAN, launcher and plugin modules read their `OMSI_*` variables through
   `omsi_cfg::flags`. What a phone's `env.txt` may set now comes from the register (the variables
   marked `env_txt`, `omsi-render`'s switches among them) instead of a list of its own, and a test
