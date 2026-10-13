@@ -58,6 +58,7 @@ pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u
 }
 
 /// The LAN players' buses as obstacles for the AI traffic (their speed as last sent).
+#[cfg(feature = "lan")]
 pub(crate) fn lan_outlines(game: &lan::LanGame) -> Vec<(u32, traffic::PlayerBox)> {
     game.remotes
         .iter()

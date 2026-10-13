@@ -30,6 +30,23 @@ impl App {
         self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
     }
 
+    /// Whether this game is in a LAN session at all (hosting or joined).
+    pub(crate) fn in_lan_session(&self) -> bool {
+        self.online.lan.is_some()
+    }
+
+    /// The weather `spec` for the players, when this game hosts a session.
+    pub(crate) fn share_weather_as_host(&mut self, spec: &str) {
+        if let Some(l) = self.online.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
+            l.set_weather(spec);
+        }
+    }
+
+    /// Whether a dedicated server said we administer it (`admin`).
+    pub(crate) fn is_server_admin(&self) -> bool {
+        self.online.is_admin
+    }
+
     /// Whether this game hosts a LAN session.
     pub(crate) fn is_lan_host(&self) -> bool {
         self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host)

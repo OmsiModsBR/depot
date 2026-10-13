@@ -84,6 +84,7 @@ impl App {
 
     /// The host's edits to the other players' games (`all`: every edit of the session,
     /// sent again every ten seconds for the ones who joined since).
+    #[cfg(feature = "lan")]
     pub(crate) fn editor_broadcast(&mut self, all: bool) {
         let (Some(ed), Some(w)) = (self.editor.as_ref(), self.world.as_ref()) else {
             if all {
