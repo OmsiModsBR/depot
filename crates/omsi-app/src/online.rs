@@ -1,6 +1,8 @@
 //! The LAN session and voice chat, each frame.
 
-use super::*;
+use crate::app::App;
+use crate::lan;
+use winit::keyboard::KeyCode;
 
 /// The LAN session and what the game keeps of the other players in it. None of it does
 /// anything while multiplayer is switched off (`docs/removed/MULTIPLAYER_DISABLED.md`).

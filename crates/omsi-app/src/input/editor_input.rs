@@ -1,6 +1,7 @@
 //! The object editor's keys, mouse and wheel (the editor itself is `crate::editor`).
 
-use super::*;
+use crate::app::App;
+use winit::keyboard::KeyCode;
 
 impl App {
     /// A key while the game menu is open.

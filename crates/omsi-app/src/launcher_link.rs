@@ -1,7 +1,9 @@
 //! Another launcher program (`OMSI_LAUNCHER=<program>`): the game's own window is the
 //! launcher now (`launcher`), this only starts a different one when asked to.
 
-use super::*;
+use anyhow::{anyhow, Result};
+use crate::startup::root_memo;
+use std::path::PathBuf;
 
 /// The launcher binary: next to this program, or the launcher's own build folder in the
 /// source tree, or in ~/.openomsi.

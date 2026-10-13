@@ -6,7 +6,14 @@
 //! A first stop no entry point leads to - Spandau's line 13 enters the map 6 m before
 //! Zitadellenweg, at the end of the road - is left out: the duty starts at the next one.
 
-use super::*;
+use crate::cli::{Args, parse_time};
+use crate::navigator;
+use crate::scene::World;
+use crate::schedule;
+use crate::situation::start_clock;
+use glam::DVec3;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 /// The world `place_on_duty` opened, for `open_world` to go on with: map file, date and the
 /// world with its map index and navigation map already made (it was opened twice at every
