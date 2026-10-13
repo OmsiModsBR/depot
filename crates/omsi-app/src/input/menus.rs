@@ -17,8 +17,15 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
 ];
 
 /// Whether the session was started on a server (`--lan-join https://…`).
+/// Without LAN play the game joins nothing (`--lan-join` is ignored).
 pub(crate) fn on_server(args: &crate::Args) -> bool {
-    args.lan_join.as_deref().map(|t| omsi_net::ws::ws_url(t).is_some()).unwrap_or(false)
+    #[cfg(feature = "lan")]
+    return args.lan_join.as_deref().map(|t| omsi_net::ws::ws_url(t).is_some()).unwrap_or(false);
+    #[cfg(not(feature = "lan"))]
+    {
+        let _ = args;
+        false
+    }
 }
 
 /// The game menu's lines for a session with these arguments.
@@ -63,7 +70,7 @@ impl App {
         // steering key let go in the menu went on turning the wheel to full lock once the
         // menu closed (a throttle key went on accelerating, a door button stayed pressed)
         self.release_vehicle_keys();
-        if self.online.lan.is_none() {
+        if !self.in_lan_session() {
             self.paused = true;
         }
         self.game_menu = Some(0);
@@ -421,13 +428,13 @@ impl crate::App {
         }
         let host = self.is_lan_host();
         // the server code: a line to copy it, right under "World options" (only in a LAN session or on a server)
-        if self.online.lan.is_some() || on_server(&self.args) {
+        if self.in_lan_session() || on_server(&self.args) {
             if let Some(w) = v.iter().position(|x| x.0 == "world") {
                 v.insert(w + 1, ("copycode", "Copy server code"));
                 at = at.max(w + 2);
             }
         }
-        if host || self.online.is_admin {
+        if host || self.is_server_admin() {
             let before_quit = v.iter().position(|x| x.0 == "quit").unwrap_or(v.len()).max(at);
             v.insert(before_quit, ("admin", "Administration..."));
         }
@@ -435,6 +442,7 @@ impl crate::App {
     }
 
     /// Put the session's server code on the clipboard.
+    #[cfg(feature = "lan")]
     pub(crate) fn copy_server_code(&mut self) {
         // (the host's code; a player or a server's join code or address as it was entered)
         let Some(code) = self.online.lan.as_ref().and_then(|l| l.code()).map(|c| c.encode()).or_else(|| self.args.lan_join.clone()).filter(|c| !c.trim().is_empty()) else {

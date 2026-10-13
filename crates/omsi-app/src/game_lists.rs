@@ -1660,6 +1660,7 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         // clock runs at real time while it is on, at its time speed again after)
         "time_sync" => {
             app.settings.time_sync = on;
+            #[cfg(feature = "lan")]
             if let Some(l) = app.online.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
                 l.clock_speed = if on { 1.0 } else { app.settings.time_speed.clamp(1.0, 30.0) };
             }
@@ -2614,7 +2615,7 @@ fn world_pages(app: &App) -> Vec<Page> {
                     time.push(button("On time with the timetable", &text, "Move the clock so that the vehicle is on time", "clock_ontime"));
                 }
             }
-            if app.online.lan.is_none() {
+            if !app.in_lan_session() {
                 time.extend(slider_row(app, "speed", "Time speed", "How fast the world's clock runs", &|v| format!("x{v}")));
             }
         }

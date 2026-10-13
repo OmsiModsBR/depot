@@ -262,6 +262,7 @@ impl App {
                 add(&c.vehicle);
             }
         }
+        #[cfg(feature = "lan")]
         for rm in self.online.remotes.remotes.values() {
             add(rm.vehicle());
         }
@@ -1145,6 +1146,7 @@ impl App {
     }
 
     /// The pose other players see of this one on foot (None at the wheel).
+    #[cfg(feature = "lan")]
     pub(crate) fn walker_pose(&self) -> Option<omsi_net::Walker> {
         let f = self.on_foot.as_ref()?;
         // aboard a player's bus (ours or another's): where in it, so that the others draw
@@ -1169,6 +1171,7 @@ impl App {
     }
 
     /// Other players on foot: their avatars.
+    #[cfg(feature = "lan")]
     pub(crate) fn sync_remote_walkers(&mut self) {
         let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self.online.remotes.remotes.iter().map(|(id, r)| (*id, r.last.walker, r.last.figure.clone())).collect();
         if walkers.iter().all(|w| w.1.is_none()) && self.online.remote_walkers.is_empty() {

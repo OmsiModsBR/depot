@@ -349,6 +349,7 @@ pub(crate) struct App {
     pub(crate) cursor_kind: u8,
     pub(crate) settings: settings::Settings,
     /// The LAN session and everything of the other players (`online::Online`).
+    #[cfg(feature = "lan")]
     pub(crate) online: crate::online::Online,
     /// Frames longer than 50 ms (stutters) and the worst frame, for the exit summary.
     pub(crate) spikes: u32,
@@ -559,6 +560,7 @@ impl App {
     /// Load the map, vehicle and traffic according to `args`.
     pub(crate) fn load_world_now(&mut self, event_loop: &ActiveEventLoop) {
         // a joining player loads the host's date, time, weather and season (after the menu)
+        #[cfg(feature = "lan")]
         if let Some(l) = self.online.lan.as_mut() {
             lan::adopt_host_world(&mut self.args, l, &mut self.online.remotes);
         }
@@ -750,6 +752,7 @@ impl App {
                 // (and a player who joins another's game sees the host's people)
                 if self.args.passengers || self.args.lan_join.is_some() {
                     let mut h = humans::Humans::new(&self.args.root);
+                    #[cfg(feature = "lan")]
                     if let Some(lan) = self.online.lan.as_ref() {
                         h.set_lan_seed(lan::population_seed(lan));
                     }
@@ -784,6 +787,7 @@ impl App {
                         Ok(mut t) => {
                             t.lights_only = !populated;
                             t.no_timetable_buses = self.args.no_timetable_buses;
+                            #[cfg(feature = "lan")]
                             if let Some(lan) = self.online.lan.as_ref() {
                                 t.set_lan_seed(lan::population_seed(lan));
                             }
@@ -862,6 +866,7 @@ impl App {
                         n.add_lanes(std::mem::take(&mut *w.lanes.lock()));
                     }
                 }
+                #[cfg(feature = "lan")]
                 if let (Some(lan), Some(p)) = (self.online.lan.as_mut(), self.player.as_mut()) {
                     lan::settle_spawn(
                         lan,
@@ -1016,6 +1021,7 @@ impl App {
         let mut centers: Vec<DVec3> = self.camera.iter().map(|c| c.position).collect();
         centers.extend(self.player.iter().map(|p| p.vehicle.position));
         // a LAN host simulates the world around every player: the ground and the roads there
+        #[cfg(feature = "lan")]
         if self.is_lan_host() {
             centers.extend(self.online.remotes.remotes.values().map(|r| r.vehicle().position));
         }

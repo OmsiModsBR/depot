@@ -9,9 +9,11 @@
 //! calls `android_main` (see `android.rs`), which runs the launcher and the game in one
 //! window of one process.
 
+#[cfg(feature = "lan")]
 mod admin;
 #[cfg(steam)]
 mod steam;
+#[cfg(feature = "lan")]
 mod voice;
 mod head_idle;
 mod headtrack;
@@ -44,7 +46,9 @@ mod hud;
 mod humans;
 mod journey;
 mod keys;
+#[cfg(feature = "lan")]
 mod lan;
+#[cfg(feature = "lan")]
 mod lan_world;
 mod lights;
 mod launcher;
@@ -91,13 +95,16 @@ mod duty_start;
 mod input;
 mod input_script;
 mod launcher_link;
+#[cfg(feature = "lan")]
 mod lan_mods;
 mod memory;
 mod offscreen;
 mod ground_gap;
 mod on_foot;
+#[cfg(feature = "lan")]
 mod online;
 mod route_arrows;
+#[cfg(feature = "lan")]
 mod server;
 mod player;
 #[cfg(feature = "plugins")]
@@ -106,6 +113,10 @@ mod plugin_ui;
 mod plugins;
 #[cfg(not(feature = "plugins"))]
 mod plugins_off;
+#[cfg(not(feature = "lan"))]
+mod lan_off;
+#[cfg(not(feature = "lan"))]
+use lan_off::{admin, lan};
 mod services;
 mod situation;
 mod spawn;
@@ -632,6 +643,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         metar_next: 0.0,
         cursor_kind: 0,
         settings,
+        #[cfg(feature = "lan")]
         online: Default::default(),
         spikes: 0,
         worst_ms: 0.0,

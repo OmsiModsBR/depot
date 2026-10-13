@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- The game's frame and menus in `omsi-app` keep their LAN code behind the `lan` feature: the chat,
+  the other players' buses, walkers, name tags and map arrows, the host's clock and weather, the
+  server admin list and the session's goodbye. Without `lan`, `lan_off.rs` answers "no session"
+  (as `plugins_off.rs` does for plugins). `lan` is still on by default. No behaviour change.
 - `omsi-app` gets the features `lan` and `server` (`server` implies `lan`). `lan` is on by default
   for now, so nothing changes yet. The launcher's server browser (the Multiplayer page, the phone's
   Online tab and saved servers, the joined server's banner and clock) is the first part behind `lan`.

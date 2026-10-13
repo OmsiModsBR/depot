@@ -793,7 +793,8 @@ impl App {
             return;
         }
         // a click on the chat opens its input box (and is the chat's, not the cockpit's)
-        if pressed && self.online.lan.is_some() && self.settings.chat {
+        #[cfg(feature = "lan")]
+        if pressed && self.in_lan_session() && self.settings.chat {
             if self.ui.as_ref().map(|u| u.chat.hovered).unwrap_or(false) {
                 self.online.remotes.chat.open();
                 return;
@@ -803,6 +804,7 @@ impl App {
         }
         // in another player's bus: a passenger, whose clicks work nothing of it (they
         // went to the driver's game, which worked its switches for them)
+        #[cfg(feature = "lan")]
         if self.view == "foot" && self.online.inside_remote.is_some() {
             return;
         }
