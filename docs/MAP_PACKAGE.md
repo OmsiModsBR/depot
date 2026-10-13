@@ -64,6 +64,9 @@ built    = #2a2a2a
 - `terrain_offset`: metres added to the height of every contour line when the game says it (default 0). The
   contour lines of a package are heights **above sea level** (section 8.3, "Terrain view"); this key is only for a
   package whose lines are in the editor's own heights.
+- `north`: degrees, clockwise from the map's own up to real north (default 0: the map is drawn with north up). The
+  game uses it for the city map's compass and for the **North up** view (section 8.3, "Orientation"). A value that
+  is not a finite number counts as 0.
 - Colours are optional hints. The game has a **dark** and a **light** look; a colour key colours
   the dark map (`water = #rrggbb`) and its `light_` twin the light one (`light_water = #rrggbb`).
   Keys: `land water river green grass forest sport farm built rail rail_edge border contour`. A key left
@@ -226,6 +229,13 @@ from afar, so that the streets stand out, and stronger up close; up close the he
 lines, in a faint colour. With the terrain view on, the height of the street the player is on and of the street
 under the pointer are written beside their names (interpolated between the two nearest contour lines of
 different heights). The generators take the heights from public elevation tiles for the area of the map.
+
+**Orientation.** The city map can be turned three ways: **Map** (as the package draws it, the default), **North**
+(real north up, using the manifest's `north`) and **Heading** (the way the vehicle faces is up). A compass at the
+bottom right of the map shows where north lies and names the current way; a click on it goes to the next one. The
+setting `nav_orientation` (`map`, `north` or `heading`) chooses the way the map starts. Dragging, zooming, the
+pointer's street and the vehicle arrows follow the turn; the municipalities' watermark names are not shown while
+the map is turned, because they are written upright.
 
 ### 8.4 Bus lines (`lines.lin`)
 
