@@ -32,7 +32,7 @@ pub fn gl_backend() -> bool {
 /// any device (with OMSI_GPU_ARRAYS, to try it without such a chip).
 pub(crate) fn sixteen_texture_units() -> bool {
     array_path() != ArrayPath::Storage
-        && (gl_backend() || omsi_cfg::env::var_os("OMSI_GL_TEXTURE_UNITS").is_some())
+        && (gl_backend() || omsi_cfg::flags::GL_TEXTURE_UNITS.is_set())
 }
 
 /// Wait until the GPU has done `submission` (None: everything submitted so far).

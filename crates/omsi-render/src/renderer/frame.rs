@@ -162,7 +162,7 @@ impl Renderer {
         let (with_overlays, exclude_texture, projection, second_eye) = output.flags();
         // test hook for a lost device (a driver reset): its resources are taken away and
         // the session has to end in order
-        if omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref() == Ok("lost")
+        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("lost")
             && with_overlays
             && self.started.elapsed().as_secs_f32() > 3.0
             && self.device_lost().is_none()
@@ -187,7 +187,7 @@ impl Renderer {
         {
             return None;
         }
-        if omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref() == Ok("frame")
+        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("frame")
             && self.options.msaa > 1
             && self.started.elapsed().as_secs_f32() > 3.0
         {
@@ -251,17 +251,16 @@ impl Renderer {
             && self.options.msaa <= 1
             && !(lighting.enhanced
                 && self.hdr_pass.is_some()
-                && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none())
-            && omsi_cfg::env::var_os("OMSI_NO_FXAA").is_none();
+                && !omsi_cfg::flags::NO_ENHANCED.is_set())
+            && !omsi_cfg::flags::NO_FXAA.is_set();
         // Rain films are drawn after copying the clean current-frame scene. Classic
         // graphics need a sampleable scene target too, even without puddles or scaling.
-        let enhanced_view = lighting.enhanced
-            && self.hdr_pass.is_some()
-            && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none();
+        let enhanced_view =
+            lighting.enhanced && self.hdr_pass.is_some() && !omsi_cfg::flags::NO_ENHANCED.is_set();
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
-            && omsi_cfg::env::var_os("OMSI_NO_GLASS_PICTURE").is_none();
+            && !omsi_cfg::flags::NO_GLASS_PICTURE.is_set();
         let scaled =
             (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view);
         let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if scaled {
@@ -285,10 +284,8 @@ impl Renderer {
         let lead_view = (with_overlays || xr_view) && !second_eye;
         let enhanced_frame = lighting.enhanced
             && self.hdr_pass.is_some()
-            && omsi_cfg::env::var_os("OMSI_NO_ENHANCED").is_none()
-            && (with_overlays
-                || xr_view
-                || omsi_cfg::env::var_os("OMSI_MIRROR_ENHANCED").is_some());
+            && !omsi_cfg::flags::NO_ENHANCED.is_set()
+            && (with_overlays || xr_view || omsi_cfg::flags::MIRROR_ENHANCED.is_set());
         // the mirrors are drawn by the same path as the window (their picture graded with
         // the window's exposure, see the post passes)
         let enhanced = enhanced_frame;
@@ -300,7 +297,7 @@ impl Renderer {
             && lighting.wetness * (1.0 - lighting.snow.clamp(0.0, 1.0)) > 0.05
             && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0)
             && debug_view() == 0.0
-            && omsi_cfg::env::var_os("OMSI_NO_PUDDLE_REFLECTIONS").is_none();
+            && !omsi_cfg::flags::NO_PUDDLE_REFLECTIONS.is_set();
         let reflection_frame = !enhanced && puddles_wanted && self.reflection_pass.is_some();
         let masked_frame = enhanced || reflection_frame;
         let (grid, lamp_shadows) = self.prepare_lights(
@@ -328,12 +325,12 @@ impl Renderer {
             && enhanced
             && with_overlays
             && projection.is_none()
-            && omsi_cfg::env::var_os("OMSI_NO_RT_FRAME").is_none();
+            && !omsi_cfg::flags::NO_RT_FRAME.is_set();
         let ao_on = with_overlays
             && self.rt.is_none()
             && self.options.ssao
             && self.ssao.ssao_pipeline.is_some()
-            && omsi_cfg::env::var_os("OMSI_NO_AO").is_none();
+            && !omsi_cfg::flags::NO_AO.is_set();
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling, see `share_depth`)
         let prepass_on =
@@ -612,7 +609,7 @@ impl Renderer {
                 aspect,
                 ground,
             ));
-            if omsi_cfg::env::var_os("OMSI_DEBUG_VIEW_LAMPS").is_some() {
+            if omsi_cfg::flags::DEBUG_VIEW_LAMPS.is_set() {
                 log::info!(
                     "view lamps: {:.6}",
                     self.adaptation.view_lamps.unwrap_or(0.0)
@@ -632,7 +629,7 @@ impl Renderer {
             if changed {
                 self.sky.city_glow = Some(step.exp());
             }
-            if omsi_cfg::env::var_os("OMSI_DEBUG_SKY").is_some() && changed {
+            if omsi_cfg::flags::DEBUG_SKY.is_set() && changed {
                 log::info!(
                     "sky glow from the lamps: {raw:.3} (taken {:.3})",
                     step.exp()

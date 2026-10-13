@@ -239,7 +239,7 @@ pub(crate) struct DayAir {
 pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
     static FIXED: std::sync::OnceLock<Option<Vec<f32>>> = std::sync::OnceLock::new();
     let fixed = FIXED.get_or_init(|| {
-        let v = omsi_cfg::env::var("OMSI_DAY_AIR").ok()?;
+        let v = omsi_cfg::flags::DAY_AIR.text()?;
         Some(
             v.split(',')
                 .filter_map(|x| x.trim().parse::<f32>().ok())

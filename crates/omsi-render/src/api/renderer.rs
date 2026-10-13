@@ -72,14 +72,14 @@ impl Renderer {
         let info = adapter.get_info();
         let (asked_format, asked_options) = (format, options);
         // test hooks for an adapter that cannot be opened: an error, or wgpu going down
-        match omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref() {
-            Ok("open") => {
+        match omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() {
+            Some("open") => {
                 return Err(anyhow!(
                     "test: {} refused (OMSI_FAKE_GPU_ERROR=open)",
                     info.name
                 ))
             }
-            Ok("open-panic") => panic!(
+            Some("open-panic") => panic!(
                 "test: {} went down while being opened (OMSI_FAKE_GPU_ERROR=open-panic)",
                 info.name
             ),
@@ -129,7 +129,7 @@ impl Renderer {
         let intel_vulkan_safe = cfg!(windows)
             && info.backend == wgpu::Backend::Vulkan
             && info.vendor == 0x8086
-            && omsi_cfg::env::var_os("OMSI_INTEL_FULL_GPU").is_none();
+            && !omsi_cfg::flags::INTEL_FULL_GPU.is_set();
         let options = if intel_vulkan_safe {
             log::warn!(
                 "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
@@ -155,7 +155,7 @@ impl Renderer {
             info.backend == wgpu::Backend::Gl,
             std::sync::atomic::Ordering::Relaxed,
         );
-        let full = omsi_cfg::env::var_os("OMSI_FULL_GPU").is_some();
+        let full = omsi_cfg::flags::FULL_GPU.is_set();
         let weak = !full
             && (info.backend == wgpu::Backend::Gl
                 // (a phone's chip, whatever type its driver reports: some say "other")
@@ -208,9 +208,9 @@ impl Renderer {
         }
         // OMSI_GPU_LIMITS=default|downlevel: the WebGPU defaults (or the downlevel ones) and
         // nothing more, whatever this machine could do - to find what a stricter driver refuses
-        match omsi_cfg::env::var("OMSI_GPU_LIMITS").as_deref() {
-            Ok("default") => limits = wgpu::Limits::default(),
-            Ok("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
+        match omsi_cfg::flags::GPU_LIMITS.text().as_deref() {
+            Some("default") => limits = wgpu::Limits::default(),
+            Some("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
             _ => {}
         }
         // the shadow atlas is two maps wide: no wider than the card draws
@@ -269,12 +269,12 @@ impl Renderer {
         } else {
             wgpu::Features::empty()
         };
-        if omsi_cfg::env::var_os("OMSI_GPU_TIMERS").is_some() {
+        if omsi_cfg::flags::GPU_TIMERS.is_set() {
             required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
         }
         // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
         // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons)
-        if omsi_cfg::env::var_os("OMSI_NO_BC").is_none() {
+        if !omsi_cfg::flags::NO_BC.is_set() {
             required_features |= adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;
         }
         if intel_vulkan_safe {
@@ -292,7 +292,7 @@ impl Renderer {
             && adapter
                 .features()
                 .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-            && omsi_cfg::env::var_os("OMSI_NO_RT").is_none();
+            && !omsi_cfg::flags::NO_RT.is_set();
         if ray_query {
             required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
             limits = limits.using_acceleration_structure_values(adapter.limits());
@@ -307,9 +307,9 @@ impl Renderer {
         // OMSI_GPU_ARRAYS=textures|nostorage takes those paths on any device
         let downlevel = adapter.get_downlevel_capabilities().flags;
         let storage = limits.max_storage_buffers_per_shader_stage;
-        let path = match omsi_cfg::env::var("OMSI_GPU_ARRAYS").as_deref() {
-            Ok("textures") => ArrayPath::VertexTextures,
-            Ok("nostorage") => ArrayPath::NoStorage,
+        let path = match omsi_cfg::flags::GPU_ARRAYS.text().as_deref() {
+            Some("textures") => ArrayPath::VertexTextures,
+            Some("nostorage") => ArrayPath::NoStorage,
             _ if !downlevel.contains(wgpu::DownlevelFlags::FRAGMENT_STORAGE) || storage < 2 => {
                 ArrayPath::NoStorage
             }
@@ -389,9 +389,7 @@ impl Renderer {
         let bc = device
             .features()
             .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
-        let compress = bc
-            && options.compress_textures
-            && omsi_cfg::env::var_os("OMSI_NO_TEXCOMPRESS").is_none();
+        let compress = bc && options.compress_textures && !omsi_cfg::flags::NO_TEXCOMPRESS.is_set();
         omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
         log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
         // Every pipeline is built under an error scope of every kind and the renderer built
@@ -445,7 +443,7 @@ impl Renderer {
                 RenderOptions { msaa, ..options },
             );
             // (test hook: OMSI_FAKE_GPU_ERROR=pipeline fails a pipeline until the basic ones)
-            if !basic && omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref() == Ok("pipeline") {
+            if !basic && omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("pipeline") {
                 let _ = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some("test"),
                     source: wgpu::ShaderSource::Wgsl("fn broken( {".into()),
@@ -504,9 +502,9 @@ impl Renderer {
         // the ones a picture can do without (`basic_pipelines`); lost even so, the next
         // graphics interface is tried.
         // (test hook: OMSI_FAKE_GPU_ERROR=lost-build loses the first device so)
-        if let (Ok(r), Ok("lost-build")) = (
+        if let (Ok(r), Some("lost-build")) = (
             made.as_ref(),
-            omsi_cfg::env::var("OMSI_FAKE_GPU_ERROR").as_deref(),
+            omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref(),
         ) {
             if !basic_pipelines() {
                 *r.gpu.device_lost.lock().unwrap_or_else(|e| e.into_inner()) =
@@ -666,7 +664,7 @@ impl Renderer {
         if !scene.dirty {
             // only what moved or changed since the last frame
             if !scene.changed.is_empty() {
-                if omsi_cfg::env::var_os("OMSI_DEBUG_DRAWS").is_some() {
+                if omsi_cfg::flags::DEBUG_DRAWS.is_set() {
                     log::info!(
                         "prepare: {} changed instances of {}",
                         scene.changed.len(),

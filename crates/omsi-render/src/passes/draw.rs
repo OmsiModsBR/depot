@@ -398,7 +398,7 @@ pub(crate) fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
 pub(crate) fn culls_back_faces(scene: &Scene, inst: &Instance) -> bool {
     static NO_CULL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     scene.meshes[inst.mesh].one_sided
-        && !*NO_CULL.get_or_init(|| omsi_cfg::env::var_os("OMSI_NO_CULL").is_some())
+        && !*NO_CULL.get_or_init(|| omsi_cfg::flags::NO_CULL.is_set())
         && glam::Mat3::from_mat4(inst.transform).determinant() > 0.0
 }
 

@@ -10,6 +10,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Ten modules of `omsi-app` (`cli`, `duty_start`, `input_script`, `input/editor_input`,
   `launcher_link`, `memory`, `online`, `services`, `traffic_link`, `world_load`) import what they
   use from where it is defined instead of taking everything from the crate root with `use super::*`.
+- `omsi-render` reads its `OMSI_*` variables through `omsi_cfg::flags`, where its 45 remaining
+  settings and diagnostics are now declared, so `docs/ENVIRONMENT.md` lists every variable the game
+  reads.
 - `omsi-app`'s LAN, launcher and plugin modules read their `OMSI_*` variables through
   `omsi_cfg::flags`. What a phone's `env.txt` may set now comes from the register (the variables
   marked `env_txt`, `omsi-render`'s switches among them) instead of a list of its own, and a test
