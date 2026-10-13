@@ -20,7 +20,8 @@
 //! `OMSI_INSTANCE`, else the process id.
 
 use crate::scene::{self, World};
-use crate::{Args, Player};
+use crate::cli::Args;
+use crate::player::Player;
 use glam::DVec3;
 use omsi_net::{Footprint, LanEvent, LanSession, PartPose, Pose, Role};
 use omsi_render::{Renderer, Scene};
@@ -1522,7 +1523,7 @@ fn adopt_at_runtime(
         theirs.day_of_year = None;
         theirs.season = (!hw.season.trim().is_empty()).then(|| hw.season.trim().to_string());
         theirs.weather = weather.clone();
-        let want = crate::season_folder(&theirs, &world.global).1;
+        let want = crate::world_load::season_folder(&theirs, &world.global).1;
         if want != omsi_texture::season_folder() {
             warnings.push(format!("the host's season ({}) differs from the one loaded here ({}) - start the game again to see it", want.as_deref().unwrap_or("summer"), omsi_texture::season_folder().as_deref().unwrap_or("summer")));
         }

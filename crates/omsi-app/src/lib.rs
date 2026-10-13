@@ -157,35 +157,23 @@ pub(crate) fn ui_language(code: &str) {
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use glam::{DVec3, Vec3};
-use omsi_render::{Camera, Renderer};
-use scene::World;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, ElementState, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::WindowId;
+use winit::event_loop::EventLoop;
 use app::*;
 use camera_util::*;
 use cli::*;
-use diagnostics::*;
 use duty_start::*;
-use actions::*;
 use input_script::*;
 use launcher_link::*;
 use memory::*;
 use offscreen::*;
-use player::*;
 use services::*;
 use situation::*;
 use spawn::*;
 use startup::*;
-use traffic_link::*;
 use weather_setup::*;
-use world_load::*;
 
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
@@ -704,6 +692,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::DVec3;
+    use omsi_render::Camera;
 
     #[test]
     fn streaming_starts_around_the_bus() {

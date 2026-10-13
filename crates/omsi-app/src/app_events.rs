@@ -54,7 +54,35 @@ fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     }
 }
 
-use super::*;
+use crate::app::{App, FrozenMirrors};
+use crate::camera_util::{ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN, render_mirrors};
+use crate::describe;
+use crate::diagnostics::{log_physics, standing_reasons};
+use crate::humans;
+use crate::lights;
+use crate::navigator;
+use crate::player::Player;
+use crate::puddles;
+use crate::quit;
+use crate::startup::process_cpu_seconds;
+use crate::traffic;
+use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
+use crate::ui;
+use crate::weather_setup::{
+    apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
+};
+use glam::{DVec3, Vec3};
+use omsi_render::Camera;
+use std::time::Instant;
+use winit::application::ApplicationHandler;
+use winit::event::{DeviceEvent, ElementState, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::WindowId;
+#[cfg(feature = "lan")]
+use crate::lan;
+#[cfg(feature = "lan")]
+use crate::traffic_link::lan_outlines;
 
 /// How fast a stick turns the head, fully pushed (degrees a second, see `Analog::look`).
 const LOOK_STICK_DEG_S: f32 = 120.0;
