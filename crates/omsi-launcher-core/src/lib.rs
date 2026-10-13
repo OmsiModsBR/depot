@@ -100,8 +100,8 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if !configured.trim().is_empty() {
         first.push(PathBuf::from(configured.trim()));
     }
-    if let Some(p) = std::env::var_os("OMSI_ROOT") {
-        first.push(PathBuf::from(p));
+    if let Some(p) = omsi_cfg::flags::ROOT.path() {
+        first.push(p);
     }
     if let Ok(t) = std::fs::read_to_string(home().join(".depot-root")) {
         first.push(PathBuf::from(t.trim()));
@@ -257,8 +257,8 @@ fn root() -> Result<PathBuf> {
 pub fn content_dir() -> Option<PathBuf> {
     // the same rules as the game: $OMSI_CONTENT, else the folder of the game binary (beside
     // the bundle when the binary sits inside a macOS .app)
-    let dir = match std::env::var_os("OMSI_CONTENT") {
-        Some(d) => PathBuf::from(d),
+    let dir = match omsi_cfg::flags::CONTENT.path() {
+        Some(d) => d,
         None => {
             let c = load_config_raw();
             let game = find_game(&c.game)?;

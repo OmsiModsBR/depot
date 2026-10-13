@@ -193,7 +193,7 @@ fn read_addresses() -> Vec<LocalAddr> {
     let routed = default_route_ip();
     list.sort_by_key(|a| (a.kind.rank(), Some(a.ip) != routed, a.interface.clone()));
     list.dedup_by_key(|a| a.ip);
-    if let Ok(v) = std::env::var("OMSI_LAN_IP") {
+    if let Some(v) = omsi_cfg::flags::LAN_IP.text() {
         let forced: Vec<Ipv4Addr> = v
             .split([',', ' ', ';'])
             .filter_map(|s| s.trim().parse().ok())
@@ -204,7 +204,7 @@ fn read_addresses() -> Vec<LocalAddr> {
                 0,
                 LocalAddr {
                     ip,
-                    interface: "OMSI_LAN_IP".into(),
+                    interface: omsi_cfg::flags::LAN_IP.name.into(),
                     kind: classify(ip, ""),
                     broadcast: None,
                 },

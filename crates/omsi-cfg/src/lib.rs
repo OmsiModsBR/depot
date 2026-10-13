@@ -24,6 +24,7 @@
 use std::path::{Path, PathBuf};
 
 pub mod codepage;
+pub mod flags;
 pub mod install_search;
 mod keywords;
 pub mod limits;

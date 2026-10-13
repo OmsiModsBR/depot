@@ -368,9 +368,9 @@ impl AiBody {
         let turn = (u.x * w.y - u.y * w.x).atan2(u.dot(w)).abs() as f32;
         let bend_k = if look > 0.1 { 2.0 * turn / look } else { 0.0 };
         let need = (bend_k * self.wheelbase).atan().to_degrees() * 1.15;
-        let limit = if std::env::var_os("OMSI_AI_MODEL_LOCK").is_some() { self.max_steer } else { self.max_steer.max(need.min(60.0)) };
+        let limit = if omsi_cfg::flags::AI_MODEL_LOCK.is_set() { self.max_steer } else { self.max_steer.max(need.min(60.0)) };
         // OMSI_DEBUG_AI_WIDE: every tenth of a second a car stands over 1.5 m beside its way
-        if std::env::var_os("OMSI_DEBUG_AI_WIDE").is_some() {
+        if omsi_cfg::flags::DEBUG_AI_WIDE.is_set() {
             let off = ((target - self.rear).dot(right)).abs();
             if off > 1.5 {
                 static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

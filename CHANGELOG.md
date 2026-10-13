@@ -7,6 +7,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- `omsi-cfg` gets `flags`, the register of the `OMSI_*` environment variables: each is declared
+  once with the kind of value it takes, who it is for (user, path, diagnostic, test, internal),
+  the module that reads it, whether a phone's `env.txt` may set it and what it does. The crates
+  outside `omsi-app` and `omsi-render` (`omsi-sim`, `omsi-net`, `omsi-plugin`,
+  `omsi-launcher-core`, `omsi-audio`, `omsi-map`, `omsi-script`, `omsi-geometry`, `omsi-cfg`) read
+  their 33 variables through it. Tests check that no path or program can come from `env.txt`.
+  The reads that went straight to the process environment now go through `omsi_cfg::env`'s
+  cache, like the rest. No behaviour change.
 - `omsi-app`'s `lan` feature is now off by default, so the game's build no longer carries LAN play,
   the dedicated server or `omsi-net` (as with `plugins` and `omsi-plugin`). The LAN helpers left in
   shared modules are marked as used only with `lan`, and the off twin of `ask_server` goes.

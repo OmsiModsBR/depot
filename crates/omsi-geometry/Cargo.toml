@@ -7,6 +7,7 @@ description = "Geometry generation: spline curves and profile extrusion, terrain
 
 [dependencies]
 omsi-map = { path = "../omsi-map" }
+omsi-cfg = { path = "../omsi-cfg" }
 omsi-scenery = { path = "../omsi-scenery" }
 omsi-o3d = { path = "../omsi-o3d" }
 glam.workspace = true

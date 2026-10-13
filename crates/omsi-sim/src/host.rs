@@ -938,5 +938,5 @@ mod tests {
 
 fn debug_text() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| omsi_cfg::env::var_os("OMSI_DEBUG_TEXT").is_some())
+    *ON.get_or_init(|| omsi_cfg::flags::DEBUG_TEXT.is_set())
 }

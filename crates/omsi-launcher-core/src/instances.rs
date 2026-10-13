@@ -275,7 +275,7 @@ pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Re
     let file = std::fs::File::create(&log).with_context(|| format!("creating {}", log.display()))?;
     let err = file.try_clone()?;
     let id = format!("{}-{}-{}", now_secs(), std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
-    let child = std::process::Command::new(game).args(args).env("OMSI_INSTANCE", &id).stdout(file).stderr(err).spawn().with_context(|| format!("starting {}", game.display()))?;
+    let child = std::process::Command::new(game).args(args).env(omsi_cfg::flags::INSTANCE.name, &id).stdout(file).stderr(err).spawn().with_context(|| format!("starting {}", game.display()))?;
     let pid = child.id();
     let process_started = process_start(pid);
     CHILDREN.lock().unwrap_or_else(|e| e.into_inner()).push((id.clone(), child));

@@ -1863,7 +1863,7 @@ impl VehicleInstance {
                 // a brush that takes less than a kilojoule is no accident (a broken post is), and
                 // a car still inside the bus from the frame before is the same accident
                 let o = &obstacles[hit.obstacle];
-                if hit.speed >= crate::rigid::CRASH_SPEED && omsi_cfg::env::var_os("OMSI_DEBUG_PHYSICS").is_some() {
+                if hit.speed >= crate::rigid::CRASH_SPEED && omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
                     log::info!("  hit obstacle {} at ({:.1}, {:.1}) z {:.2}..{:.2} half {:.2}x{:.2} heading {:.0}, {:.1} km/h", o.id, o.center.x, o.center.y, o.z0, o.z1, o.half.x, o.half.y, o.heading.to_degrees(), hit.speed * 3.6);
                 }
                 if hit.speed < crate::rigid::CRASH_SPEED
@@ -1880,7 +1880,7 @@ impl VehicleInstance {
             self.touching = touching;
         }
         if let Some(hit) = worst {
-            if omsi_cfg::env::var_os("OMSI_DEBUG_PHYSICS").is_some() {
+            if omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
                 log::info!(
                     "impact at {:.1} km/h, {:.1} kJ, body point ({:.2}, {:.2}, {:.2}){}",
                     hit.speed * 3.6,
@@ -2544,7 +2544,7 @@ impl VehicleInstance {
         }
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
         static DEBUG_ANIM: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-        if let Some(want) = DEBUG_ANIM.get_or_init(|| omsi_cfg::env::var("OMSI_DEBUG_ANIM").ok()) {
+        if let Some(want) = DEBUG_ANIM.get_or_init(|| omsi_cfg::flags::DEBUG_ANIM.text()) {
             for (i, m) in self.ty.meshes.iter().enumerate() {
                 let file = &self.ty.model.meshes[m.def_index].file;
                 if file

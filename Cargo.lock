@@ -3196,6 +3196,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "log",
+ "omsi-cfg",
  "omsi-map",
  "omsi-o3d",
  "omsi-scenery",
@@ -3257,6 +3258,7 @@ dependencies = [
  "flate2",
  "libc",
  "log",
+ "omsi-cfg",
  "omsi-content",
  "ring",
  "sha2",
@@ -3282,6 +3284,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "mlua",
+ "omsi-cfg",
 ]
 
 [[package]]
