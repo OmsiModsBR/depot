@@ -4,11 +4,11 @@
 
 #[allow(unused_imports)]
 use omsi_render::{
-    catch, catching, fit_texture, gl_backend, panel_width, prepare_mesh, prepare_meshes,
+    catch, catching, fit_texture, gl_backend, panel_width, poll_gpu, prepare_mesh, prepare_meshes,
     prepare_texture, wait_gpu, winit_window, AlphaMode, Camera, Corona, GpuMesh, GpuTexture,
-    Instance, LightMode, Lighting, Material, MaterialExtra, MaterialId, MeshId, PbrMaps,
-    PointLight, PreparedMesh, PreparedTexture, RenderOptions, RenderPhase, Renderer, Scene,
-    ScreenView, SmokeParticle, SurfaceState, TexAddressing, TextureId, TripleScreen, Vertex,
+    GpuWaitError, Instance, LightMode, Lighting, Material, MaterialExtra, MaterialId, MeshId,
+    PbrMaps, PointLight, PreparedMesh, PreparedTexture, RenderOptions, RenderPhase, Renderer,
+    Scene, ScreenView, SmokeParticle, SurfaceState, TexAddressing, TextureId, TripleScreen, Vertex,
     ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, AUTO_SCALE_PIXELS, DEPTH_FORMAT, LAMP_CODE_STRIDE,
     LM_ATLAS_TILES, LM_TILE_PX, MAX_LAMPS_PER_MESH, MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE,
     SHADOW_RANGE_FAR, SHADOW_SIZE,

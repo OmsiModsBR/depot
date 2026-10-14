@@ -1,6 +1,6 @@
 //! A frame delivered as an image or into a texture: reading the pixels back.
 
-use crate::gpu::wait_gpu;
+use crate::gpu::{read_buffer_with, wait_gpu};
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 
@@ -47,22 +47,13 @@ pub(crate) fn read_texture(
         },
     );
     let idx = queue.submit([enc.finish()]);
-    let slice = buf.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    wait_gpu(device, Some(idx)).map_err(|e| anyhow!("poll: {e:?}"))?;
-    rx.recv()
-        .context("map")?
-        .map_err(|e| anyhow!("map: {e:?}"))?;
-    let data = slice.get_mapped_range();
+    // (a device lost on the way is an error here, not wgpu's panic)
+    let data = read_buffer_with(&buf, || wait_gpu(device, Some(idx)))
+        .map_err(|e| anyhow!("read back: {e}"))?;
     let mut out = Vec::with_capacity((row_bytes * height) as usize);
     for row in 0..height {
         let start = (row * bpr) as usize;
         out.extend_from_slice(&data[start..start + row_bytes as usize]);
     }
-    drop(data);
-    buf.unmap();
     Ok(out)
 }

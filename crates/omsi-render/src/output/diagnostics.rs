@@ -1,6 +1,6 @@
 //! The numbers a frame leaves behind: GPU time per pass (OMSI_GPU_TIMERS).
 
-use crate::gpu::GPU_TIMER_PASSES;
+use crate::gpu::{catch, GPU_TIMER_PASSES};
 use crate::lighting::ExposureLog;
 use std::sync::Arc;
 
@@ -119,7 +119,11 @@ impl GpuTimers {
 impl Diagnostics {
     /// Take in the pass times of the last timed frame once its readback has arrived.
     pub(crate) fn collect_gpu_timers(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let period = queue.get_timestamp_period() as f64;
+        // (DirectX 12 asks the driver, and a removed device's answer is a panic in wgpu-hal:
+        // no times then - the frame sees the device lost)
+        let Some(period) = catch(|| queue.get_timestamp_period() as f64) else {
+            return;
+        };
         for t in self.gpu_timers.iter_mut().flatten() {
             t.collect(period);
             // The last frame's stamps are read in a command buffer of their own, submitted

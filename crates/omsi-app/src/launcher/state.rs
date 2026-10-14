@@ -1472,6 +1472,30 @@ mod crash_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A device lost in the middle of a frame (#48): wgpu's panic over it is caught and only
+    /// warned of, and the report names the loss - not the panic - as what ended the game. A
+    /// card that hung when the game closed after a clean end is no crash.
+    #[test]
+    fn a_loss_caught_mid_frame_is_reported_as_the_loss() {
+        let dir = std::env::temp_dir().join(format!("depot-crash-lost-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let p = dir.join("game.log");
+        std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
+            [t ERROR omsi_render::gpu::lost] the graphics device was lost (Unknown: Parent device is lost)\n\
+            [t WARN openomsi_game] caught by the renderer: panicked at lost.rs:1:1:\n\
+            \x20   Error in Device::poll: Parent device is lost\n\
+            [t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Parent device is lost)\n\
+            [t INFO openomsi_game::app_events] game ends\n").unwrap();
+        let (what, _) = super::crash_of(&p).unwrap();
+        assert!(what.contains("ending the session: the graphics device was lost"), "{what}");
+        assert!(!what.contains("Device::poll") && !what.contains("game ends"), "{what}");
+        std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
+            [t INFO openomsi_game::app_events] game ends\n\
+            [t WARN openomsi_game] the graphics device did not close in order (the game had ended already)\n").unwrap();
+        assert!(super::crash_of(&p).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The report says what the game ran on (the start of the log), and its title is the
     /// error alone, not the records after it (#1187).
     #[test]

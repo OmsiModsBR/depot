@@ -6,7 +6,8 @@ pub use crate::assets::{
     Material, MaterialExtra, PbrMaps, PreparedMesh, PreparedTexture, TexAddressing,
 };
 pub use crate::gpu::{
-    catch, catching, gl_backend, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, DEPTH_FORMAT, MSAA,
+    catch, catching, gl_backend, poll_gpu, wait_gpu, GpuWaitError, ADAPTER_TEXTURE_MB,
+    ADAPTER_VRAM_MB, DEPTH_FORMAT, MSAA,
 };
 pub use crate::lighting::{
     Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,

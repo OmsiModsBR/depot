@@ -40,6 +40,16 @@ fn ground_loaded_at(world: Option<&crate::scene::World>, at: glam::DVec3) -> boo
     })
 }
 
+/// The textures' budget (bytes) after the card ran out of memory with `now` (0 = none yet):
+/// 600 MB to start with, then three fifths of it each time, never under 300 MB.
+fn reduced_texture_budget(now: u64) -> u64 {
+    if now == 0 {
+        600_000_000
+    } else {
+        (now * 3 / 5).max(300_000_000)
+    }
+}
+
 fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     // (three levels, far apart, and a wide band between going down and up again: every
     // step makes the picture's targets anew - hundreds of MB with MSAA and HDR - and a
@@ -362,19 +372,18 @@ impl ApplicationHandler for App {
                     let d = (t - self.clock.time + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
                     self.shift_clock(d);
                 }
-                // the graphics device is gone (a driver reset, an external card unplugged):
-                // nothing can be drawn again - end the session the ordinary way, so that the
-                // summary, the personnel file and the LAN goodbye are not lost
                 // the card ran out of memory: fewer textures (the finest levels of the far
                 // ones go), before the driver gives the device up
                 if self.renderer.as_ref().is_some_and(|r| r.take_out_of_memory()) {
                     if let Some(w) = self.world.as_ref() {
-                        let now = w.texture_budget_bytes();
-                        let less = if now == 0 { 600_000_000 } else { (now * 3 / 5).max(300_000_000) };
+                        let less = reduced_texture_budget(w.texture_budget_bytes());
                         w.set_texture_budget(less);
                         log::warn!("the graphics card ran out of memory: textures kept to {:.0} MB from now on", less as f64 / 1e6);
                     }
                 }
+                // the graphics device is gone (a driver reset, an external card unplugged):
+                // nothing can be drawn again - end the session the ordinary way, so that the
+                // summary, the personnel file and the LAN goodbye are not lost
                 if let Some(why) = self.renderer.as_ref().and_then(|r| r.device_lost()) {
                     if self.restart_after_device_loss() {
                         log::warn!("device lost ({why}): the game goes on in a new start");
@@ -3002,7 +3011,7 @@ impl ApplicationHandler for App {
                         if omsi_cfg::flags::PROFILE_GPU.is_set() {
                             // wait for the GPU here, so that its time shows as a stage of its own
                             let __t = Instant::now();
-                            let _ = omsi_render::wait_gpu(&r.device, None);
+                            let _ = r.wait_gpu(None);
                             *self.profile.entry("gpu").or_default() += __t.elapsed().as_secs_f64();
                         }
                         let __t = Instant::now();
@@ -3015,7 +3024,10 @@ impl ApplicationHandler for App {
                                 frame.present();
                             }
                             None => {
-                                let _ = omsi_render::wait_gpu(&r.device, None);
+                                // (a device lost in this frame: wgpu's panic in this wait
+                                // ended the game before the next frame could end the
+                                // session in order, #48 - now it only marks the loss)
+                                let _ = r.wait_gpu(None);
                             }
                         }
                         *self.profile.entry("present").or_default() += __t.elapsed().as_secs_f64();
@@ -3028,7 +3040,9 @@ impl ApplicationHandler for App {
                         // window on Ahlheim grew by 100 MB a second (5.6 GB after 55 s).
                         let __t = Instant::now();
                         r.queue.submit(std::iter::empty::<wgpu::CommandBuffer>());
-                        let _ = r.device.poll(wgpu::PollType::Poll);
+                        // (this is where a frame whose window could not be had - the device
+                        // lost in it - came: polled unguarded, it was the end of the game)
+                        let _ = r.poll_gpu();
                         *self.profile.entry("present").or_default() += __t.elapsed().as_secs_f64();
                         if let Some(rest) =
                             std::time::Duration::from_millis(16).checked_sub(now.elapsed())
@@ -3667,6 +3681,28 @@ mod governor_tests {
         assert!(render_scale_step(35.0, 0.1) > 0.0);
         assert!(render_scale_step(35.0, 0.6) < 0.0);
         assert!(render_scale_step(60.0, 0.6) > 0.0);
+    }
+}
+
+#[cfg(test)]
+mod out_of_memory_tests {
+    use super::reduced_texture_budget;
+
+    #[test]
+    fn the_first_shortage_sets_a_budget() {
+        assert_eq!(reduced_texture_budget(0), 600_000_000);
+    }
+
+    #[test]
+    fn each_later_shortage_takes_two_fifths_off() {
+        assert_eq!(reduced_texture_budget(1_000_000_000), 600_000_000);
+        assert_eq!(reduced_texture_budget(600_000_000), 360_000_000);
+    }
+
+    #[test]
+    fn the_budget_never_goes_under_300_mb() {
+        assert_eq!(reduced_texture_budget(360_000_000), 300_000_000);
+        assert_eq!(reduced_texture_budget(300_000_000), 300_000_000);
     }
 }
 

@@ -162,9 +162,29 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     omsi_cfg::find_original_install(&first)
 }
 
+/// Of the card's memory budget (as DirectX 12 and Vulkan's memory budget report it), the
+/// percentage from which wgpu refuses to make a texture or a buffer, as an "out of memory"
+/// the game gets over (the texture left out, fewer textures from then on). Without it the
+/// driver itself ran out, and wgpu takes that - in a submit, a present - as the device
+/// lost (#48). Not a threshold for losing the device: that stays the driver's.
+pub(crate) const RESOURCE_MEMORY_PERCENT: u8 = 95;
+
+/// The instance's settings for `backends` (None: wgpu's default set).
+pub(crate) fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::InstanceDescriptor {
+    let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
+    if let Some(b) = backends {
+        d.backends = b;
+    }
+    d.memory_budget_thresholds = wgpu::MemoryBudgetThresholds {
+        for_resource_creation: Some(RESOURCE_MEMORY_PERCENT),
+        for_device_loss: None,
+    };
+    d
+}
+
 /// Use the native supported API for both windowed and offscreen rendering.
 pub(crate) fn graphics_instance() -> wgpu::Instance {
-    let descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    let descriptor = instance_descriptor(None);
     #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         // the dedicated server draws nothing: wgpu's no-op device takes every call
@@ -236,9 +256,7 @@ fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
 }
 
 fn backend_instance(b: wgpu::Backends) -> wgpu::Instance {
-    let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
-    d.backends = b;
-    wgpu::Instance::new(d)
+    wgpu::Instance::new(instance_descriptor(Some(b)))
 }
 
 /// The renderer for a window: on `instance` if it can, else on the next graphics interface
@@ -487,6 +505,31 @@ mod own_key_tests {
         }
         assert!(super::own_bindings(root, 0).is_empty());
         assert!(super::own_bindings(root, omsi_content::input::KEY_SHIFT).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod instance_tests {
+    use super::{instance_descriptor, RESOURCE_MEMORY_PERCENT};
+
+    /// Resources past the card's budget are refused as an "out of memory" the game gets
+    /// over, before the driver runs out (#48); losing the device stays the driver's call.
+    #[test]
+    fn every_instance_refuses_resources_past_the_memory_budget() {
+        for backends in [None, Some(wgpu::Backends::VULKAN), Some(wgpu::Backends::DX12)] {
+            let d = instance_descriptor(backends);
+            assert_eq!(d.memory_budget_thresholds.for_resource_creation, Some(RESOURCE_MEMORY_PERCENT));
+            assert_eq!(d.memory_budget_thresholds.for_device_loss, None);
+        }
+    }
+
+    #[test]
+    fn the_backends_asked_for_are_kept() {
+        assert_eq!(instance_descriptor(Some(wgpu::Backends::GL)).backends, wgpu::Backends::GL);
+        assert_eq!(
+            instance_descriptor(None).backends,
+            wgpu::InstanceDescriptor::new_without_display_handle().backends
+        );
     }
 }
 

@@ -3,7 +3,7 @@
 //! (`lists.rs`) and the passes (`encode.rs`) follow, and the commands are submitted at the end.
 
 use super::state::Renderer;
-use crate::gpu::HDR_FORMAT;
+use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, HDR_FORMAT};
 use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
 use crate::passes::{Batch, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
@@ -175,17 +175,30 @@ impl Renderer {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = Some("test".into());
         }
+        // test hook for a device the driver loses while the game runs (`lost-poll`): its loss
+        // handler is told and the poll of it panics in wgpu, as on Vulkan - the panic is
+        // caught, and the frame below sees the device lost
+        if with_overlays && fake_poll_loss(self.started) {
+            let _ = guarded_poll(Some(&self.gpu.device_lost), true, || {
+                self.device.poll(wgpu::PollType::Poll)
+            });
+        }
         // the device is gone: nothing can be drawn, and the readbacks (the exposure meter)
         // would find their buffers taken away - "Error in Buffer::get_mapped_range:
         // Validation Error" ended the game instead of the session ending in order
-        if self
-            .gpu
-            .device_lost
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some()
-        {
+        if lost_why(&self.gpu.device_lost).is_some() {
             return None;
+        }
+        // test hook for a card out of memory: reported once, as a texture it could not make
+        // is, so that the game keeps fewer textures (`take_out_of_memory`)
+        if with_overlays
+            && fake_due(
+                omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref(),
+                "oom",
+                self.started.elapsed().as_secs_f32(),
+            )
+        {
+            self.gpu.errors.fake_out_of_memory_once();
         }
         if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("frame")
             && self.options.msaa > 1

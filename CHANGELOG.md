@@ -186,6 +186,15 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   `crates/omsi-app/tests/golden/offscreen_synthetic/`. Test and CI only; no behaviour change.
 
 ### Fixed
+- A graphics device the driver gives up in the middle of a frame (a driver reset, the card
+  removed, the card out of memory) no longer closes the game: the session ends in order (or
+  starts again with safer graphics) as it did when the loss was seen between two frames. wgpu
+  panics instead of failing in a few places - waiting for the device, reading a buffer back,
+  letting the device go at the end - and those panics are now caught and taken as the device
+  lost (#48). The card's memory budget is enforced when textures and buffers are made (95 %),
+  so running short is an "out of memory" the game gets over, and an "out of memory" that
+  switched the multisampling off now also cuts the textures (it was forgotten in the switch).
+  `OMSI_FAKE_GPU_ERROR=lost-poll` and `=oom` test both ways.
 - AI buses of a depot group whose depot file exists nowhere (Mapa Transcol's garages, whose buses carry
   only `Transcol.hof`) drove with a blank destination sign. They now run with the first depot file of their
   own folder, as a plain group's buses do, and a bus with no depot file at all is logged as a warning (#58).

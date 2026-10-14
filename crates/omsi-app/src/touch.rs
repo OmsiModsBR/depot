@@ -1104,9 +1104,8 @@ impl Touch {
         let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
         enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
         r.queue.submit([enc.finish()]);
-        buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        omsi_render::wait_gpu(&r.device, None).ok();
-        let data = buf.slice(..).get_mapped_range();
+        // (a device lost on the way: no picture, instead of wgpu's panic in reading it back)
+        let data = r.read_buffer(&buf).ok()?;
         let mut out = vec![0u8; (w * h * 4) as usize];
         for y in 0..h as usize {
             let row = &data[y * stride as usize..y * stride as usize + w as usize * 4];
