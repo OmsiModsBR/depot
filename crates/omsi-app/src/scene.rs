@@ -14868,7 +14868,7 @@ fn night_texture_exists(rel: &str, dirs: &[&Path]) -> bool {
     // (`night_texture_name` writes backslashes: "\\Users\\...", "C:\\...")
     let norm = rel.trim().replace('\\', "/");
     if norm.starts_with('/') || norm.as_bytes().get(1) == Some(&b':') {
-        return omsi_cfg::vfs::is_file(Path::new(&norm));
+        return omsi_cfg::is_in_content_roots(Path::new(&norm)) && omsi_cfg::vfs::is_file(Path::new(&norm));
     }
     omsi_texture::find_texture(rel, dirs).is_some()
 }

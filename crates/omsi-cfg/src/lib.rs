@@ -702,6 +702,26 @@ pub fn mirrored_dirs(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// Does `path` lie under one of the content roots? A content file may name a full path (a
+/// paint scheme's picture, as its author's machine had it); only one that is in our own
+/// content is followed, never one that points at another place or another computer.
+pub fn is_in_content_roots(path: &Path) -> bool {
+    let s = path.to_string_lossy();
+    // (a network path `\\\\host\\share` or `//host/share` is never content, whatever the roots)
+    if s.starts_with("\\\\") || s.starts_with("//") {
+        return false;
+    }
+    // (`..` would leave the root after the lexical check below; no root registered: nothing
+    // is inside of anything)
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return false;
+    }
+    owner_root(path, &content_roots()).is_some()
+}
+
 /// The content root `path` belongs to: the deepest one that contains it. An archive
 /// mounted from `<content>/Archives` lies inside the content folder, and a path inside the
 /// archive is the archive's, not the content folder's.
@@ -878,6 +898,12 @@ pub fn read_dir_merged(rel: &str) -> Vec<PathBuf> {
 pub fn resolve_path(base: &Path, rel: &str) -> PathBuf {
     let rel = windows_components(rel);
     let rel = rel.as_slice();
+    // a drive or stream (`C:`, `x.bmp:y`) or a NUL in a name: `Path::join` takes a drive
+    // component for a new root on Windows, which would leave the folder; no file has such a
+    // name, so it names nothing
+    if rel.iter().any(|c| c.contains([':', '\0'])) {
+        return base.join("?invalid-content-name");
+    }
     // a mod's copy first: the same place under a content root of higher priority than the
     // one `base` belongs to
     let roots = content_roots();
@@ -1149,6 +1175,27 @@ pub fn ensure_content_layout(dir: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn foreign_names_resolve_to_nothing() {
+        let base = std::env::temp_dir().join("omsi-foreign-names-base");
+        for name in ["C:\\x.bmp", "a\\C:evil\\x.bmp", "x.bmp:stream", "a\0b"] {
+            let p = resolve_path(&base, name);
+            assert!(
+                p.starts_with(&base) && !vfs::exists(&p),
+                "{name}: {}",
+                p.display()
+            );
+        }
+        // a network path has its empty parts dropped: it lands under `base`, not on the host
+        let p = resolve_path(&base, "\\\\host\\share\\x.bmp");
+        assert!(p.starts_with(&base), "{}", p.display());
+        assert!(!is_in_content_roots(Path::new("\\\\host\\share\\x.bmp")));
+        assert!(!is_in_content_roots(Path::new("//host/share/x.bmp")));
+        assert!(!is_in_content_roots(Path::new(
+            "/content/root/../private.png"
+        )));
+    }
 
     #[test]
     fn writable_check() {

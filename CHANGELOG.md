@@ -6,6 +6,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Fixed
+- A content file can no longer make the game look at another computer or another drive: names
+  with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
+  full path (or a network path) is followed only when it lies inside the content folders.
+
 ### Changed
 - `omsi-sim`'s `vehicle.rs` is split by subject into `vehicle/` submodules (the type and its
   loading, the scripts' variables and triggers, motion, the AI's frame, trailers, pose, visuals,

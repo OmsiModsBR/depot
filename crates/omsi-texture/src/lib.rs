@@ -492,7 +492,7 @@ fn texture_index(top: &str) -> HashMap<String, Vec<PathBuf>> {
 fn find_texture_in_season(name: &str, dirs: &[&Path], season: Option<&str>) -> Option<PathBuf> {
     // a file named in full (a paint scheme's picture, resolved in its scheme's folder)
     let full = Path::new(name.trim());
-    if full.is_absolute() {
+    if full.is_absolute() && omsi_cfg::is_in_content_roots(full) {
         if let (Some(parent), Some(file)) =
             (full.parent(), full.file_name().and_then(|f| f.to_str()))
         {
@@ -920,6 +920,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("omsi-dds-priority-{}", std::process::id()));
         let local = dir.join("local");
         let global = dir.join("global");
+        // (a full path is followed only inside the content roots)
+        omsi_cfg::add_content_root(dir.clone());
         std::fs::create_dir_all(&local).unwrap();
         std::fs::create_dir_all(&global).unwrap();
         for ext in ["png", "jpg", "tga", "bmp"] {
@@ -958,6 +960,7 @@ mod tests {
             Some(local.join("local_only.png"))
         );
         assert_eq!(find_texture_uncached("missing.png", &[&local]), None);
+        omsi_cfg::remove_content_root(&dir);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
