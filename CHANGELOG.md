@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- Passengers no longer board an articulated bus by its last door alone (#44): walking up while
+  the doors were still shut, everybody made for the rear door with a button, and they stayed there
+  once the driver opened the others. With a door open, a shut door with a button now draws nobody
+  and people walk to the nearest open one; with every door shut the button door is still the one
+  to wait at. (Same change as openOMSI 3bebe136, #2509, MIT.)
 - A sound started by a trigger whose `[volcurve]` the script moves right after (a door or
   window clap, a door hit) keeps the loudest volume its curves gave it since the trigger fired,
   as OMSI 2 holds it, instead of falling silent the frame after it starts (#131).
