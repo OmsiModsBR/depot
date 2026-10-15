@@ -76,6 +76,7 @@ const VARIED: &[(&str, &str)] = &[
     ("vol_ai", "0.4"),
     ("vol_scenery", "0.7"),
     ("doppler", "0"),
+    ("muffle_outside", "1"),
     ("mirror_hud", "2"),
     ("mirror_size", "512"),
     ("mirror_refresh", "eco"),

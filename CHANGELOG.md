@@ -12,6 +12,12 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   once the driver opened the others. With a door open, a shut door with a button now draws nobody
   and people walk to the nearest open one; with every door shut the button door is still the one
   to wait at. (Same change as openOMSI 3bebe136, #2509, MIT.)
+- A sound started by a trigger whose `[volcurve]` the script moves right after (a door or
+  window clap, a door hit) keeps the loudest volume its curves gave it since the trigger fired,
+  as OMSI 2 holds it, instead of falling silent the frame after it starts (#131).
+- A bus coming to the player no longer plays the triggers its `{init}` fired before its sounds
+  existed (the stock scripts fire `ev_engineshutdown` while setting the engine up); the
+  announcements' file triggers are kept.
 - A content file can no longer make the game look at another computer or another drive: names
   with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
   full path (or a network path) is followed only when it lies inside the content folders.
@@ -144,6 +150,13 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- "Muffle outside sounds" (Options and launcher, Sound; `muffle_outside` in the settings, off
+  by default): from a cab, other vehicles' sounds and the bus's own outside sounds go through a
+  low-pass, 450 Hz with the bus shut up to 7.2 kHz with a door or window open.
+- `sound_levels <sound.cfg> lint` lists what is likely to sound wrong whatever the state (`[3d]`
+  without a range, a loop without a reference value, variable names with spaces, odd
+  `[viewpoint]` values) and notes the cab/outside pairs; `OMSI_DEBUG_SOUND` shows
+  `Snd_OutsideVol` and the viewpoint of what is heard and warns of a `[3d]` with range 0.
 - Lines panel timetables: double-clicking a line on the city map shows its departures by direction and day
   (Monday to Friday, Saturday, Sunday) and, for a chosen departure, when the bus is at each stop, also written
   on the map at the stops. The times come from the map's own timetable (`TTData`), the same figures the AI
