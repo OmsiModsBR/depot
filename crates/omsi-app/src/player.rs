@@ -134,9 +134,9 @@ pub(crate) struct Player {
     /// Coupled-part mesh currently pressed.  Articulated buses keep the rear controls in
     /// the trailer model, while their mouse events are still handled by the lead vehicle.
     pub(crate) pressed_trailer_mesh: Option<(usize, usize)>,
-    /// Set while the camera looks at the bus from outside (F3): a switch behind a wall or a
-    /// window of the bus is out of reach there, and is neither named, clicked nor turned.
-    pub(crate) occlude_controls: bool,
+    /// The camera is one of the bus's interior cameras (the last `sync_transforms`): which
+    /// meshes are drawn by `[viewpoint]`, and so which can be clicked or stand in the way.
+    pub(crate) view_inside: bool,
     /// The press on `pressed_mesh`: whether the script has a trigger for the click itself,
     /// and how far the mouse has been dragged since (px).
     pub(crate) press_info: (bool, f32),
@@ -1720,12 +1720,11 @@ impl Player {
     ///
     /// `spread` is the half-angle of those rings in radians; the window passes the angle
     /// six pixels subtend, so aiming is equally forgiving at any resolution.
+    ///
+    /// A switch behind another mesh of the bus (a panel, a wall, a window, the steering
+    /// wheel) is out of reach from every camera, as the click lands on what is in front.
     pub(crate) fn pick(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
-        let i = pick_in(&self.vehicle, origin, dir, spread)?;
-        if self.occlude_controls && self.control_hidden(origin, dir, None, i) {
-            return None;
-        }
-        Some(i)
+        pick_in(&self.vehicle, origin, dir, spread, self.view_inside)
     }
 
     /// The page (`[htmltexture]`) under a ray and where it lands on it: the script texture
@@ -1742,11 +1741,7 @@ impl Player {
 
     /// The same forgiving pick as `pick`, for the coupled sections of an articulated bus.
     pub(crate) fn pick_trailer(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
-        let (ti, i) = pick_trailer_in(&self.vehicle, origin, dir, spread)?;
-        if self.occlude_controls && self.control_hidden(origin, dir, Some(ti), i) {
-            return None;
-        }
-        Some((ti, i))
+        pick_trailer_in(&self.vehicle, origin, dir, spread, self.view_inside)
     }
 
     /// Exact surface under a VR pointer, including meshes without a mouse event.
@@ -1762,32 +1757,6 @@ impl Player {
     /// How far along a ray the bus (any visible mesh, trailers too) is.
     pub(crate) fn body_hit(&self, origin: DVec3, dir: Vec3) -> Option<f32> {
         Some(self.nearest_hits(origin, dir).0).filter(|t| t.is_finite())
-    }
-
-    /// Seen from outside: the body of the bus (a wall, a window) is hit before the control
-    /// mesh `i` (of coupled part `trailer`, or of the bus itself), so it cannot be reached.
-    fn control_hidden(&self, origin: DVec3, dir: Vec3, trailer: Option<usize>, i: usize) -> bool {
-        let (ty, position, xf) = match trailer {
-            None => (&self.vehicle.ty, self.vehicle.position, self.vehicle.mesh_local_transform(i)),
-            Some(ti) => {
-                let t = &self.vehicle.trailers[ti];
-                (&t.ty, t.position, t.mesh_local_transform(i))
-            }
-        };
-        let Some(&(c, r)) = ty.mesh_bounds.get(i) else {
-            return false;
-        };
-        let dir = dir.normalize_or_zero();
-        let o = (origin - position).as_vec3();
-        let scale = xf
-            .x_axis
-            .truncate()
-            .length()
-            .max(xf.y_axis.truncate().length())
-            .max(xf.z_axis.truncate().length());
-        let along = (xf.transform_point3(c) - o).dot(dir);
-        let nearest = self.nearest_hits(origin, dir).0;
-        nearest < along - r * scale - 0.1
     }
 
     /// The nearest hit of a ray on the bus, and the nearest on a mesh with a mouse event
@@ -2366,6 +2335,7 @@ impl Player {
     /// `inside`: the camera is one of the vehicle's interior cameras. `[viewpoint]` bits:
     /// 1 = visible from outside, 2 = visible from inside, 4 = visible on AI vehicles; 0 = always.
     pub(crate) fn sync_transforms(&mut self, renderer: &Renderer, scene: &mut Scene, inside: bool) {
+        self.view_inside = inside;
         sync_vehicle_transforms(renderer, scene, &mut self.vehicle, &mut self.render, &mut self.trailer_renders, inside);
     }
 
@@ -2694,7 +2664,7 @@ pub(crate) fn sync_vehicle_transforms(
     vehicle.trailers = trailers;
 }
 
-pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, inside: bool) -> Option<usize> {
     let o = (origin - vehicle.position).as_vec3();
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
@@ -2717,7 +2687,8 @@ pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: V
     // hundreds of meshes; calculating their posed transforms three times made
     // hovering over its controls needlessly expensive.
     let candidates: Vec<(usize, glam::Mat4, Vec<u32>)> = vehicle.ty.meshes.iter().enumerate().filter_map(|(i, vm)| {
-        if vehicle.ty.model.meshes[vm.def_index].mouse_event.is_none() || !vehicle.mesh_props[i].visible {
+        let def = &vehicle.ty.model.meshes[vm.def_index];
+        if def.mouse_event.is_none() || !vehicle.mesh_props[i].visible || !drawn_from(def.viewpoint, inside) {
             return None;
         }
         let xf = vehicle.mesh_local_transform(i);
@@ -2732,7 +2703,7 @@ pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: V
         // nearest prefer the mesh whose centre the ray aims at. Aachen ibox D10/D11/D12 are
         // tilted, overlap by ~6 mm, and sit ~16 mm apart along Z — a 2 mm depth-only pick
         // let backspace (D10) steal digit 0 (D11) whenever both boxes were hit.
-        let mut hits: Vec<(f32, f32, usize)> = Vec::new();
+        let mut hits: Vec<(f32, f32, usize, usize)> = Vec::new();
         for (i, xf, tris) in &candidates {
             let (i, xf) = (*i, *xf);
             let vm = &vehicle.ty.meshes[i];
@@ -2746,13 +2717,13 @@ pub(crate) fn pick_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: V
                     (p - dir * along).length_squared()
                 })
                 .unwrap_or(0.0);
-            for d in dirs {
+            for (k, d) in dirs.iter().enumerate() {
                 if let Some(t) = omsi_geometry::ray_triangles(o, *d, &vm.data, &xf, tris) {
-                    hits.push((t, lateral, i));
+                    hits.push((t, lateral, i, k));
                 }
             }
         }
-        if let Some(i) = best_mouseevent_hit(&hits) {
+        if let Some(i) = best_unblocked_hit(hits, |k| nearest_blocker(vehicle, origin, dirs[k], inside)) {
             return Some(i);
         }
     }
@@ -2781,9 +2752,108 @@ pub(crate) fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
         .map(|h| h.2)
 }
 
+/// A mesh with this `[viewpoint]` is drawn from an interior camera (`inside`) or from outside:
+/// bit 1 outside, bit 2 inside, 0 always.
+pub(crate) fn drawn_from(viewpoint: i32, inside: bool) -> bool {
+    viewpoint == 0 || viewpoint & if inside { 2 } else { 1 } != 0
+}
+
+/// How much nearer (m) another mesh must be than a switch along the ray to take its click: a
+/// switch lying on its panel, or a ring ray grazing the panel at its edge, stays reachable.
+pub(crate) const MOUSEEVENT_BLOCK_MARGIN: f32 = 0.005;
+
+/// How far along a ray from `origin` the nearest mesh without a mouse event is, on the bus or
+/// any coupled part, of those drawn from this camera (infinite: none). Switches standing in
+/// front of each other are settled by [`best_mouseevent_hit`]; this is what else is in the way.
+fn nearest_blocker(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, inside: bool) -> f32 {
+    let mut nearest = f32::INFINITY;
+    let mut part = |ty: &omsi_sim::VehicleType, props: &[omsi_sim::vehicle::MeshProps], position: DVec3, xf: &dyn Fn(usize) -> glam::Mat4| {
+        let o = (origin - position).as_vec3();
+        for (i, vm) in ty.meshes.iter().enumerate() {
+            let def = &ty.model.meshes[vm.def_index];
+            if def.mouse_event.is_some() || !props[i].visible || !drawn_from(def.viewpoint, inside) {
+                continue;
+            }
+            let transform = xf(i);
+            if !ray_may_hit(ty, i, &transform, o, dir, 0.0) {
+                continue;
+            }
+            if let Some(t) = omsi_geometry::ray_mesh(o, dir, &vm.data, &transform) {
+                if t > 0.02 && t < nearest {
+                    nearest = t;
+                }
+            }
+        }
+    };
+    part(&vehicle.ty, &vehicle.mesh_props, vehicle.position, &|i| vehicle.mesh_local_transform(i));
+    for t in &vehicle.trailers {
+        part(&t.ty, &t.mesh_props, t.position, &|i| t.mesh_local_transform(i));
+    }
+    nearest
+}
+
+/// Among ray hits `(t, lateral², id, ray)`, the switch [`best_mouseevent_hit`] picks, unless
+/// `blocker(ray)` (how far along that ray the nearest other mesh is) says something stands in
+/// front of it: then that hit is dropped and the next one tried. Each ray is traced once.
+pub(crate) fn best_unblocked_hit(mut hits: Vec<(f32, f32, usize, usize)>, mut blocker: impl FnMut(usize) -> f32) -> Option<usize> {
+    let mut traced: Vec<(usize, f32)> = Vec::new();
+    loop {
+        let plain: Vec<(f32, f32, usize)> = hits.iter().enumerate().map(|(n, h)| (h.0, h.1, n)).collect();
+        let n = best_mouseevent_hit(&plain)?;
+        let (t, _, id, ray) = hits[n];
+        let b = match traced.iter().find(|(r, _)| *r == ray) {
+            Some(&(_, b)) => b,
+            None => {
+                let b = blocker(ray);
+                traced.push((ray, b));
+                b
+            }
+        };
+        if b >= t - MOUSEEVENT_BLOCK_MARGIN {
+            return Some(id);
+        }
+        hits.swap_remove(n);
+    }
+}
+
 #[cfg(test)]
 mod mouseevent_pick_tests {
-    use super::{best_mouseevent_hit, MOUSEEVENT_PICK_DEPTH_BAND};
+    use super::{best_mouseevent_hit, best_unblocked_hit, drawn_from, MOUSEEVENT_PICK_DEPTH_BAND};
+
+    #[test]
+    fn a_switch_behind_a_panel_is_not_picked() {
+        // the ray meets a panel 0.3 m away before the switch 0.5 m away
+        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.3), None);
+    }
+
+    #[test]
+    fn a_switch_on_its_panel_is_picked() {
+        // the panel the switch is mounted on lies just behind it, or flush with it
+        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.5), Some(7));
+        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.52), Some(7));
+        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| f32::INFINITY), Some(7));
+    }
+
+    #[test]
+    fn a_hidden_switch_gives_way_to_one_seen_by_another_ray() {
+        // ray 0 (nearer switch) is blocked by a window, ray 1 reaches a switch farther off
+        let hits = vec![(0.4, 0.0, 1, 0), (0.6, 0.0, 2, 1)];
+        let mut traced = Vec::new();
+        let pick = best_unblocked_hit(hits, |r| {
+            traced.push(r);
+            if r == 0 { 0.2 } else { f32::INFINITY }
+        });
+        assert_eq!(pick, Some(2));
+        assert_eq!(traced, vec![0, 1]);
+    }
+
+    #[test]
+    fn viewpoint_bits_decide_what_each_camera_sees() {
+        assert!(drawn_from(0, true) && drawn_from(0, false));
+        assert!(drawn_from(1, false) && !drawn_from(1, true));
+        assert!(drawn_from(2, true) && !drawn_from(2, false));
+        assert!(drawn_from(3, true) && drawn_from(3, false));
+    }
 
     #[test]
     fn aachen_ibox_d11_wins_when_d10_is_closer_but_off_aim() {
@@ -2864,7 +2934,7 @@ pub(crate) fn pick_html_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, d
 /// The same forgiving pick as `pick`, but for the coupled sections of an articulated
 /// bus.  The old picker only searched the lead vehicle, so GN92's rear door opener and
 /// every other button in the second section could never receive a click.
-pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
+pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3, dir: Vec3, spread: f32, inside: bool) -> Option<(usize, usize)> {
     let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
     let up = dir.cross(right).normalize_or_zero();
     let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];
@@ -2885,7 +2955,8 @@ pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3
     let candidates: Vec<(usize, usize, glam::Mat4, Vec<u32>)> = vehicle.trailers.iter().enumerate().flat_map(|(ti, trailer)| {
         let o = (origin - trailer.position).as_vec3();
         trailer.ty.meshes.iter().enumerate().filter_map(move |(i, vm)| {
-            if trailer.ty.model.meshes[vm.def_index].mouse_event.is_none() || !trailer.mesh_props[i].visible {
+            let def = &trailer.ty.model.meshes[vm.def_index];
+            if def.mouse_event.is_none() || !trailer.mesh_props[i].visible || !drawn_from(def.viewpoint, inside) {
                 return None;
             }
             let xf = trailer.mesh_local_transform(i);
@@ -2897,7 +2968,7 @@ pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3
         })
     }).collect();
     for dirs in &rings {
-        let mut hits: Vec<(f32, f32, usize)> = Vec::new();
+        let mut hits: Vec<(f32, f32, usize, usize)> = Vec::new();
         let mut id_of: Vec<(usize, usize)> = Vec::new();
         for (ti, i, xf, tris) in &candidates {
             let (ti, i, xf) = (*ti, *i, *xf);
@@ -2914,15 +2985,15 @@ pub(crate) fn pick_trailer_in(vehicle: &omsi_sim::VehicleInstance, origin: DVec3
                     (p - dir * along).length_squared()
                 })
                 .unwrap_or(0.0);
-            for d in dirs {
+            for (k, d) in dirs.iter().enumerate() {
                 if let Some(t) = omsi_geometry::ray_triangles(o, *d, &vm.data, &xf, tris) {
                     let id = id_of.len();
                     id_of.push((ti, i));
-                    hits.push((t, lateral, id));
+                    hits.push((t, lateral, id, k));
                 }
             }
         }
-        if let Some(id) = best_mouseevent_hit(&hits) {
+        if let Some(id) = best_unblocked_hit(hits, |k| nearest_blocker(vehicle, origin, dirs[k], inside)) {
             return Some(id_of[id]);
         }
     }
