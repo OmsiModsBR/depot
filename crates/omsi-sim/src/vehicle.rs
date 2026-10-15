@@ -39,6 +39,11 @@ use physics_bridge::OmsiFrames;
 #[cfg(test)]
 use physics_bridge::scripts_acceleration;
 
+/// How far over a point `GetHeightAbovePoint` still takes a face as the ground under it (m):
+/// a kerb the kneeling sensor has dipped under reads negative, as the scripts expect; a
+/// canopy or a bridge deck over the bus is out of reach.
+const GROUND_PROBE_UP: f64 = 0.6;
+
 pub struct VehicleInstance {
     /// `A_Trans_*` taken over OMSI's frames (see [`OmsiFrames`]).
     a_trans: OmsiFrames,
@@ -552,16 +557,26 @@ impl VehicleInstance {
     /// 0.3 m). Read the other way round (ground minus point) the sensor sat at 0, the
     /// right-hand bellows of an Urbino never let their air out and the bus leant 1.7° to
     /// the left all the way.
-    fn update_ground_probe(&mut self) {
-        if self.ground.is_none() {
+    ///
+    /// The ground is the highest face at or a little over the point ([`GROUND_PROBE_UP`]),
+    /// asked of the faces the wheels stand on: the plain sampler knows only x and y and gives
+    /// the highest face there, so a bus stopped under a canopy measured up to its roof, read
+    /// some -4 m and could not lower its lift or ramp (#95). The plain sampler stays the
+    /// answer where there are no faces to ask or none under the point.
+    pub(crate) fn update_ground_probe(&mut self) {
+        let Some(g) = self.ground.clone() else {
             return;
-        }
+        };
         let rot = self.body_rotation();
         let pos = self.position;
-        let g = self.ground.clone().unwrap();
+        let contact = self.contact.clone();
         self.host.ground_probe = Some(std::sync::Arc::new(move |x, y, z| {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
-            match g(w.x, w.y) {
+            let under = contact
+                .as_ref()
+                .and_then(|c| crate::rigid::Ground::probe(&**c, w.x, w.y, w.z + GROUND_PROBE_UP).below)
+                .or_else(|| g(w.x, w.y));
+            match under {
                 Some(h) => (w.z - h) as f32,
                 None => 0.0,
             }

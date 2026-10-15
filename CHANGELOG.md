@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- A bus stopped under a canopy or a bridge measures the ground under its lift and ramp again,
+  not the roof over them: `GetHeightAbovePoint` asks the faces the wheels stand on for the
+  highest one at or just over the point (a kerb still counts), where the plain height sampler
+  gave the highest face there and the lift could not be lowered (#95).
 - A content file can no longer make the game look at another computer or another drive: names
   with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
   full path (or a network path) is followed only when it lies inside the content folders.
