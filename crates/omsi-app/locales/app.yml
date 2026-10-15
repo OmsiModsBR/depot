@@ -25493,3 +25493,9 @@ _version: 2
   ru: "Мышь на панелях плагинов · Esc возвращает её"
   uk: "Миша на панелях плагінів · Esc повертає її"
   pl: "Mysz jest na panelach wtyczek · Esc ją oddaje"
+"Muffle outside sounds":
+  pt: "Abafar os sons de fora"
+  pt-pt: "Abafar os sons de fora"
+"From the cab, the sounds of outside the bus are dulled, less so with a door or window open":
+  pt: "Na cabine, os sons de fora do ônibus ficam abafados, menos com uma porta ou janela aberta"
+  pt-pt: "Na cabine, os sons de fora do autocarro ficam abafados, menos com uma porta ou janela aberta"

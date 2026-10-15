@@ -37,6 +37,11 @@ struct RuntimeSound {
     last_gain: f32,
     /// The buffer's playback rate relative to the clip, as last taken by `SetFrequency`.
     last_pitch: f32,
+    /// The loudest the curves have made a triggered entry since its trigger fired: OMSI 2
+    /// never lets such a sound get quieter while it plays (`TSound` +0x2c, reset when the
+    /// trigger fires, peak hold @0x7507bc), so a door sound whose curve follows the door keeps
+    /// its tail when the door stops (#131).
+    peak: f32,
 }
 
 impl RuntimeSound {
@@ -49,8 +54,20 @@ impl RuntimeSound {
             active_since: None,
             last_gain: 1.0,
             last_pitch: 1.0,
+            peak: 0.0,
         }
     }
+}
+
+/// A triggered entry's volume this frame (the entry's volume times its curves): never below
+/// what it has been since its trigger fired (`fired`: this frame, which forgets the old peak).
+fn peak_hold(peak: &mut f32, vol: f32, fired: bool) -> f32 {
+    if fired {
+        *peak = 0.0;
+    }
+    let v = vol.max(*peak);
+    *peak = v;
+    v
 }
 
 pub struct SoundSet {
@@ -174,6 +191,9 @@ struct Eval {
     pitch: f32,
     /// `[viewpoint]` (or the global stop) silences it: a playing voice is stopped.
     wrong_view: bool,
+    /// Cut-off (Hz) of the low-pass the voice is played through, 0 for none: an outside
+    /// sound heard in a cab with the `muffle_outside` setting on (see [`MUFFLE_OUTSIDE`]).
+    lowpass_hz: f32,
 }
 
 impl SoundSet {
@@ -236,7 +256,8 @@ impl SoundSet {
 
     /// The camera is in a cab view (driver or passenger, of any vehicle): called every frame
     /// on every sound set. An AI vehicle is then heard at `0.2 + Snd_OutsideVol` of the
-    /// player's bus - no filter, no other change.
+    /// player's bus - no other change, and no filter unless the `muffle_outside` setting is
+    /// on ([`MUFFLE_OUTSIDE`]).
     pub fn set_muffled(&mut self, muffled: bool) {
         self.muffled = muffled;
         for (_, p) in &mut self.parts {
@@ -329,7 +350,7 @@ impl SoundSet {
             s.clip = Some(clip.clone());
             s.last_gain = 1.0;
             s.last_pitch = 1.0;
-            let e = ctx.eval(s, var, object_to_world);
+            let e = ctx.eval(s, var, object_to_world, true);
             if e.audible && !e.wrong_view {
                 s.voice =
                     Some(engine.play(clip.clone(), ctx.params(s, &e, false, object_to_world)));
@@ -418,7 +439,8 @@ impl SoundSet {
     /// middle of the script, so the volume they start with is that of the moment:
     /// the SD200's door hits read `doorSpeed_<n>`, which the door script reverses right
     /// after firing them - read at the frame's end they were silent (#676). From the next
-    /// frame on the volume follows the curves as they stand, like every other entry's.
+    /// frame on the volume follows the curves as they stand, but never below the loudest
+    /// they have made it since the trigger fired (see [`peak_hold`], #131).
     pub fn update_fired(
         &mut self,
         engine: &AudioEngine,
@@ -473,8 +495,13 @@ impl SoundSet {
                 s.last_gain = 1.0;
             }
             let eval_now = |ctx: &Ctx, s: &mut RuntimeSound| match fired_by {
-                Some(t) => ctx.eval(s, &|n| at_fire(t, n).or_else(|| var(n)), object_to_world),
-                None => ctx.eval(s, var, object_to_world),
+                Some(t) => ctx.eval(
+                    s,
+                    &|n| at_fire(t, n).or_else(|| var(n)),
+                    object_to_world,
+                    true,
+                ),
+                None => ctx.eval(s, var, object_to_world, false),
             };
             let mut e = eval_now(&ctx, s);
             // (a trigger that fires while an `[onlyone]` voice still plays, or an entry that is
@@ -576,7 +603,15 @@ impl SoundSet {
                     "no clip".into()
                 };
             } else if !ctx.view_lets_through(s.def.viewpoint) {
-                why = format!("viewpoint {} (listener {})", s.def.viewpoint, ctx.view);
+                why = format!(
+                    "viewpoint {} (listener {}, Snd_OutsideVol {:.2})",
+                    s.def.viewpoint,
+                    ctx.view,
+                    outside_vol()
+                );
+            } else if s.def.pos.is_some() && s.def.range <= 0.0 {
+                // (`min(range / distance, 1)` is 0 at any distance but 0)
+                why = "[3d] range 0: silent anywhere but at its position".into();
             } else if let Some(c) =
                 s.def.conditions.iter().find(|c| {
                     s.def.triggers.is_empty() && !c.holds(var(&c.variable).unwrap_or(0.0))
@@ -598,9 +633,10 @@ impl SoundSet {
             }
             let playing = s.voice.and_then(|id| engine.voice_state(id));
             match (playing, why.is_empty()) {
-                (Some((p, heard)), _) => {
-                    out.push(format!("{file}: {heard:.3} heard, pitch {:.2}", p.pitch))
-                }
+                (Some((p, heard)), _) => out.push(format!(
+                    "{file}: {heard:.3} heard, pitch {:.2}, viewpoint {}",
+                    p.pitch, s.def.viewpoint
+                )),
                 (None, true) => out.push(format!("{file}: ready, silent")),
                 (None, false) => out.push(format!("{file}: off - {why}")),
             }
@@ -631,7 +667,7 @@ impl SoundSet {
                         std::time::Instant::now() - std::time::Duration::from_secs(5)
                     });
                 }
-                let e = ctx.eval(s, var, object_to_world);
+                let e = ctx.eval(s, var, object_to_world, true);
                 let dist = s
                     .def
                     .pos
@@ -699,11 +735,16 @@ impl Ctx {
 
     /// One entry this frame: its volume and pitch as DirectSound
     /// takes them, and whether it can be started.
+    ///
+    /// `fired`: the entry's trigger fired this frame. A triggered entry's volume (after its
+    /// curves, before distance and the cab's share of outside sound) never falls below its
+    /// peak since then ([`peak_hold`]).
     fn eval(
         &self,
         s: &mut RuntimeSound,
         var: &dyn Fn(&str) -> Option<f32>,
         object_to_world: &Mat4,
+        fired: bool,
     ) -> Eval {
         let def = &s.def;
         if !self.view_lets_through(def.viewpoint) {
@@ -712,6 +753,7 @@ impl Ctx {
                 audible: false,
                 pitch: s.last_pitch,
                 wrong_view: true,
+                lowpass_hz: 0.0,
             };
         }
         let triggered = !def.triggers.is_empty();
@@ -744,6 +786,9 @@ impl Ctx {
                 vol *= curve(&vc.points, x);
             }
         }
+        if triggered {
+            vol = peak_hold(&mut s.peak, vol, fired);
+        }
         // `[3d]`: full up to the range, then range / distance
         let dist_gain =
             pos.map(|p| crate::mixer::distance_gain(def.range, (p - self.listener).length()));
@@ -751,12 +796,15 @@ impl Ctx {
             vol *= g;
         }
         // an AI vehicle (view 4) heard from a cab: through the player's bus's bodywork
+        let mut lowpass_hz = 0.0;
         if self.view & 4 != 0 && self.cab {
             vol *= 0.2 + outside_vol();
+            lowpass_hz = muffled_cutoff();
         }
         // the player's bus's outside sound heard in its cab: through what is open
         if def.viewpoint & 2 == 0 && def.viewpoint != 0 && self.view == 2 {
             vol *= outside_vol();
+            lowpass_hz = muffled_cutoff();
         }
         let (gain, audible) = direct_sound_volume(vol, s.last_gain);
         s.last_gain = gain;
@@ -782,6 +830,7 @@ impl Ctx {
             audible,
             pitch,
             wrong_view: false,
+            lowpass_hz,
         }
     }
 
@@ -805,7 +854,7 @@ impl Ctx {
             // keeps its file's rate)
             doppler: self.doppler && s.def.is_loop,
             range: s.def.range,
-            lowpass_hz: 0.0,
+            lowpass_hz: e.lowpass_hz,
             important: s.def.important,
         }
     }
@@ -830,6 +879,24 @@ fn outside_vol() -> f32 {
     f32::from_bits(OUTSIDE_VOL.load(std::sync::atomic::Ordering::Relaxed))
 }
 
+/// The `muffle_outside` setting: the sounds of outside the bus heard from a cab - other
+/// vehicles' and the player's bus's own outside sounds - are played through a low-pass, as
+/// the game did before it computed sound as OMSI 2 does (which has no filter, so it is off by
+/// default).
+pub static MUFFLE_OUTSIDE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Cut-off (Hz) of that low-pass, 0 with the setting off: 450 Hz with the bus shut, up to 7.2
+/// kHz with doors or the driver's window open (`Snd_OutsideVol` 0.5), where the outside comes
+/// in unfiltered.
+fn muffled_cutoff() -> f32 {
+    if MUFFLE_OUTSIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        450.0 * (1.0 + 30.0 * outside_vol().clamp(0.0, 0.5))
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -847,7 +914,7 @@ mod tests {
 
     fn eval(c: &Ctx, def: SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> Eval {
         let mut s = RuntimeSound::new(def, None);
-        c.eval(&mut s, var, &Mat4::IDENTITY)
+        c.eval(&mut s, var, &Mat4::IDENTITY, false)
     }
 
     #[test]
@@ -924,10 +991,156 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            eval(&ctx(1, false), cab, &none).wrong_view,
+            eval(&ctx(1, false), cab.clone(), &none).wrong_view,
             "a cab sound stays in"
         );
+        // the low-pass of the `muffle_outside` setting: off, nothing is filtered
+        let ai = |volume: f32| SoundEntry {
+            volume,
+            viewpoint: 4,
+            ..Default::default()
+        };
+        assert_eq!(eval(&ctx(4, true), ai(0.5), &none).lowpass_hz, 0.0);
+        assert_eq!(
+            eval(&ctx(2, true), engine_out.clone(), &none).lowpass_hz,
+            0.0
+        );
+        MUFFLE_OUTSIDE.store(true, std::sync::atomic::Ordering::Relaxed);
+        // on: outside sounds heard in the cab - 450 Hz shut, 7.2 kHz with the doors open
+        set_outside_open(Some(0.5));
+        assert!((eval(&ctx(2, true), engine_out.clone(), &none).lowpass_hz - 7200.0).abs() < 1.0);
+        assert!((eval(&ctx(4, true), ai(0.5), &none).lowpass_hz - 7200.0).abs() < 1.0);
+        set_outside_open(Some(0.01));
+        assert!((eval(&ctx(4, true), ai(0.5), &none).lowpass_hz - 585.0).abs() < 1.0);
+        // never what belongs to the cab or what plays everywhere (the indicator relay), nor
+        // anything heard from outside
+        let everywhere = |viewpoint: i32| SoundEntry {
+            volume: 0.8,
+            viewpoint,
+            ..Default::default()
+        };
+        assert_eq!(eval(&ctx(2, true), cab, &none).lowpass_hz, 0.0);
+        assert_eq!(eval(&ctx(2, true), everywhere(0), &none).lowpass_hz, 0.0);
+        assert_eq!(eval(&ctx(2, true), everywhere(3), &none).lowpass_hz, 0.0);
+        assert_eq!(
+            eval(&ctx(1, false), engine_out.clone(), &none).lowpass_hz,
+            0.0
+        );
+        assert_eq!(eval(&ctx(4, false), ai(0.5), &none).lowpass_hz, 0.0);
+        MUFFLE_OUTSIDE.store(false, std::sync::atomic::Ordering::Relaxed);
+        viewpoint_matrix(&none);
         set_outside_open(None);
+    }
+
+    /// What `[viewpoint]` lets through, for every value of a stock `sound.cfg` (none or 0, 1,
+    /// 2, 3, 5) and the 4 the bit model also has, from every view (1 the player's bus seen
+    /// from outside, 2 from its cab, 4 another vehicle) and with the bus shut
+    /// (`Snd_OutsideVol` 0) or open (0.5): the entry's volume is 1, `None` is silent.
+    ///
+    /// `2` is the cab alone, `3` the player's two views, `5` the outside and other vehicles,
+    /// as the `omsi-sound-cfg` reference has them. Two things go beyond it, both meant:
+    /// * an entry without `[viewpoint]` (or `0`, which 46 stock entries say) is heard in
+    ///   every view, other vehicles included, not only as a `3`;
+    /// * an outside entry (`1`, `5`, and `4`, which no stock vehicle uses) is heard in the
+    ///   cab at `Snd_OutsideVol` while the bus is open - the SD200's exterior engine - and a
+    ///   twin pair, `2` for the cab and `5` for outside, then plays twice there.
+    ///
+    /// Called from `the_cab_hears_outside_through_what_is_open`: `Snd_OutsideVol` is global.
+    fn viewpoint_matrix(none: &dyn Fn(&str) -> Option<f32>) {
+        // (view, listener's camera in a cab, vp, expected factor at Snd_OutsideVol 0 and 0.5)
+        type Row = (i32, bool, i32, Option<f32>, Option<f32>);
+        let table: [Row; 24] = [
+            (1, false, 0, Some(1.0), Some(1.0)),
+            (1, false, 1, Some(1.0), Some(1.0)),
+            (1, false, 2, None, None),
+            (1, false, 3, Some(1.0), Some(1.0)),
+            (1, false, 4, None, None),
+            (1, false, 5, Some(1.0), Some(1.0)),
+            (2, true, 0, Some(1.0), Some(1.0)),
+            (2, true, 1, None, Some(0.5)),
+            (2, true, 2, Some(1.0), Some(1.0)),
+            (2, true, 3, Some(1.0), Some(1.0)),
+            (2, true, 4, None, Some(0.5)),
+            (2, true, 5, None, Some(0.5)),
+            (4, false, 0, Some(1.0), Some(1.0)),
+            (4, false, 1, None, None),
+            (4, false, 2, None, None),
+            (4, false, 3, None, None),
+            (4, false, 4, Some(1.0), Some(1.0)),
+            (4, false, 5, Some(1.0), Some(1.0)),
+            (4, true, 0, Some(0.2), Some(0.7)),
+            (4, true, 1, None, None),
+            (4, true, 2, None, None),
+            (4, true, 3, None, None),
+            (4, true, 4, Some(0.2), Some(0.7)),
+            (4, true, 5, Some(0.2), Some(0.7)),
+        ];
+        for (open, pick) in [(0.0, 0usize), (0.5, 1)] {
+            set_outside_open(Some(open));
+            for &(view, cab, vp, shut, opened) in &table {
+                let want = if pick == 0 { shut } else { opened };
+                let def = SoundEntry {
+                    volume: 1.0,
+                    viewpoint: vp,
+                    ..Default::default()
+                };
+                let e = eval(&ctx(view, cab), def, none);
+                let at = format!("view {view} cab {cab} viewpoint {vp} at {open}");
+                match want {
+                    None => assert!(e.wrong_view, "{at}: heard"),
+                    Some(f) => {
+                        assert!(!e.wrong_view, "{at}: silenced");
+                        assert!((e.gain - f).abs() < 1e-3, "{at}: {}", e.gain);
+                    }
+                }
+            }
+        }
+    }
+
+    /// An engine, its fan and its telemetry read the same variable (`engine_n`): each entry
+    /// takes its own volume from it, none gets in another's way.
+    #[test]
+    fn sounds_that_read_the_same_variable_all_play() {
+        let entry = |points: Vec<(f32, f32)>| SoundEntry {
+            volume: 1.0,
+            vol_curves: vec![VolCurve {
+                variable: "engine_n".into(),
+                points,
+            }],
+            ..Default::default()
+        };
+        let engine_n = |n: &str| (n == "engine_n").then_some(1000.0);
+        let c = ctx(1, false);
+        let engine = eval(&c, entry(vec![(0.0, 0.0), (1000.0, 1.0)]), &engine_n);
+        let fan = eval(&c, entry(vec![(0.0, 0.0), (2000.0, 1.0)]), &engine_n);
+        let telemetry = eval(&c, entry(vec![(0.0, 1.0), (3000.0, 1.0)]), &engine_n);
+        assert!(engine.audible && fan.audible && telemetry.audible);
+        assert!((engine.gain - 1.0).abs() < 1e-3);
+        assert!((fan.gain - 0.5).abs() < 1e-3);
+        assert!((telemetry.gain - 1.0).abs() < 1e-3);
+    }
+
+    /// A `[3d]` sound is full up to its range and falls as range / distance beyond it: with
+    /// a range of 0 nothing is left at any distance.
+    #[test]
+    fn a_3d_sound_with_no_range_is_silent_away_from_its_position() {
+        let at = |range: f32| SoundEntry {
+            volume: 1.0,
+            pos: Some([10.0, 0.0, 0.0]),
+            range,
+            ..Default::default()
+        };
+        let none = |_: &str| None;
+        assert!(!eval(&ctx(1, false), at(0.0), &none).audible);
+        assert!(eval(&ctx(1, false), at(5.0), &none).audible);
+        let flat = SoundEntry {
+            volume: 1.0,
+            ..Default::default()
+        };
+        assert!(
+            eval(&ctx(1, false), flat, &none).audible,
+            "without [3d]: everywhere"
+        );
     }
 
     #[test]
@@ -974,12 +1187,12 @@ mod tests {
             })),
         );
         let c = ctx(1, false);
-        let e = c.eval(&mut s, &|_| Some(1.0), &Mat4::IDENTITY);
+        let e = c.eval(&mut s, &|_| Some(1.0), &Mat4::IDENTITY, false);
         assert!(!e.audible, "44 Hz");
-        let e = c.eval(&mut s, &|_| Some(2000.0), &Mat4::IDENTITY);
+        let e = c.eval(&mut s, &|_| Some(2000.0), &Mat4::IDENTITY, false);
         assert!(e.audible && (e.pitch - 2.0).abs() < 1e-4);
         // 6 x 44100 = 264 600 Hz: refused, the rate stays at 2x
-        let e = c.eval(&mut s, &|_| Some(6000.0), &Mat4::IDENTITY);
+        let e = c.eval(&mut s, &|_| Some(6000.0), &Mat4::IDENTITY, false);
         assert!(e.audible && (e.pitch - 2.0).abs() < 1e-4, "{}", e.pitch);
     }
 
@@ -1018,6 +1231,78 @@ mod tests {
             parts: Vec::new(),
         };
         assert_eq!(set.curve_triggers(), vec!["ev_doorhitclose_0".to_string()]);
+    }
+
+    /// A door sound whose curve follows the door: fired with the door at 0.7, the door closed
+    /// the next frame - OMSI 2 holds the peak (0x7507bc), so the sound keeps its tail instead
+    /// of falling silent the frame after it starts (#131).
+    #[test]
+    fn a_triggered_sound_keeps_its_peak_while_it_plays() {
+        let door = |at: f32| move |n: &str| (n == "door").then_some(at);
+        let entry = |triggers: Vec<String>| SoundEntry {
+            volume: 1.0,
+            triggers,
+            vol_curves: vec![VolCurve {
+                variable: "door".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
+            ..Default::default()
+        };
+        let id = Mat4::IDENTITY;
+        let c = ctx(2, true);
+        let mut s = RuntimeSound::new(entry(vec!["ev_door".into()]), None);
+        let e = c.eval(&mut s, &door(0.7), &id, true);
+        assert!((e.gain - 0.7).abs() < 1e-3, "{}", e.gain);
+        // the door stops: the curve reads 0, the sound does not get quieter
+        let e = c.eval(&mut s, &door(0.0), &id, false);
+        assert!((e.gain - 0.7).abs() < 1e-3 && e.audible, "{}", e.gain);
+        // a louder moment raises the peak
+        let e = c.eval(&mut s, &door(1.0), &id, false);
+        assert!((e.gain - 1.0).abs() < 1e-3, "{}", e.gain);
+        // fired again quieter: the old peak is forgotten
+        let e = c.eval(&mut s, &door(0.3), &id, true);
+        assert!((e.gain - 0.3).abs() < 1e-3, "{}", e.gain);
+        // heard from the wrong view it stays silent and keeps no peak
+        let mut cab = RuntimeSound::new(
+            SoundEntry {
+                viewpoint: 2,
+                ..entry(vec!["ev_door".into()])
+            },
+            None,
+        );
+        assert!(
+            ctx(1, false)
+                .eval(&mut cab, &door(1.0), &id, true)
+                .wrong_view
+        );
+        assert_eq!(cab.peak, 0.0);
+        // an entry without a trigger follows its curve, up and down (the engine's loops)
+        let mut lp = RuntimeSound::new(entry(Vec::new()), None);
+        assert!((c.eval(&mut lp, &door(0.7), &id, false).gain - 0.7).abs() < 1e-3);
+        assert_eq!(c.eval(&mut lp, &door(0.0), &id, false).gain, 0.0);
+    }
+
+    /// The same through a whole sound set: a triggered door sound started at the curve's
+    /// peak keeps playing at it on the frames after, when the script has moved the
+    /// variable back to where the curve reads 0 (#131).
+    #[test]
+    fn a_triggered_voice_is_not_turned_down_by_its_curve_after_it_starts() {
+        let engine = AudioEngine::silent();
+        let mut set = set_of(SoundEntry {
+            volume: 1.0,
+            triggers: vec!["ev_door".into()],
+            vol_curves: vec![VolCurve {
+                variable: "v".into(),
+                points: vec![(0.0, 0.0), (1.0, 1.0)],
+            }],
+            ..Default::default()
+        });
+        step(&mut set, &engine, 1.0, &["ev_door".to_string()]);
+        assert_eq!(voice_gain(&set, &engine), Some(1.0));
+        // (the running voice is updated, not restarted: the remembered gain is what it is given)
+        step(&mut set, &engine, 0.0, &[]);
+        assert!(set.sounds[0].voice.is_some_and(|id| engine.is_playing(id)));
+        assert_eq!(set.sounds[0].last_gain, 1.0);
     }
 
     /// The stock IBIS announces Spandau's "Falkenseer Ch/Stadtrandstr" with the file
