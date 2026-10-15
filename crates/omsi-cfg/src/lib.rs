@@ -702,9 +702,6 @@ pub fn mirrored_dirs(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// The content root `path` belongs to: the deepest one that contains it. An archive
-/// mounted from `<content>/Archives` lies inside the content folder, and a path inside the
-/// archive is the archive's, not the content folder's.
 /// Does `path` lie under one of the content roots? A content file may name a full path (a
 /// paint scheme's picture, as its author's machine had it); only one that is in our own
 /// content is followed, never one that points at another place or another computer.
@@ -714,11 +711,20 @@ pub fn is_in_content_roots(path: &Path) -> bool {
     if s.starts_with("\\\\") || s.starts_with("//") {
         return false;
     }
-    // (before any root is registered - a tool, a test - there is nothing to be inside of)
-    let roots = content_roots();
-    roots.is_empty() || owner_root(path, &roots).is_some()
+    // (`..` would leave the root after the lexical check below; no root registered: nothing
+    // is inside of anything)
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return false;
+    }
+    owner_root(path, &content_roots()).is_some()
 }
 
+/// The content root `path` belongs to: the deepest one that contains it. An archive
+/// mounted from `<content>/Archives` lies inside the content folder, and a path inside the
+/// archive is the archive's, not the content folder's.
 fn owner_root<'a>(path: &Path, roots: &'a [PathBuf]) -> Option<&'a PathBuf> {
     roots
         .iter()
@@ -1186,6 +1192,9 @@ mod tests {
         assert!(p.starts_with(&base), "{}", p.display());
         assert!(!is_in_content_roots(Path::new("\\\\host\\share\\x.bmp")));
         assert!(!is_in_content_roots(Path::new("//host/share/x.bmp")));
+        assert!(!is_in_content_roots(Path::new(
+            "/content/root/../private.png"
+        )));
     }
 
     #[test]
