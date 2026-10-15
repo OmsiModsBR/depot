@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- Splines that declare `[matl_alpha] 2` on a DXT3 / DXT5 texture whose alpha is 255 throughout
+  (DavidM's walls and bridges, used across Krefrath) are drawn opaque and write depth again: they
+  went into the blended pass without depth writes, so a wall further away showed over the wall in
+  front and the road under a bridge showed through its deck. The same holds for surface objects.
 - A content file can no longer make the game look at another computer or another drive: names
   with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
   full path (or a network path) is followed only when it lies inside the content folders.

@@ -78,6 +78,26 @@ impl TextureData {
         total
     }
 
+    /// Whether a texel of the finest level is less than fully opaque. A DXT3 / DXT5 file
+    /// (`has_alpha` from its format alone) whose alpha is 255 throughout draws as a texture
+    /// without alpha would: the walls and bridges of DavidM's splines, `[matl_alpha] 2` on
+    /// such DXT5 textures, went into the blended pass without depth writes, and the wall
+    /// behind showed over the wall in front.
+    pub fn alpha_in_use(&self) -> bool {
+        if !self.has_alpha {
+            return false;
+        }
+        let Some(top) = self.levels.first() else {
+            return false;
+        };
+        match self.format {
+            PixelFormat::Rgba8 => top.chunks_exact(4).any(|p| p[3] < 255),
+            PixelFormat::Bc1 => top.chunks_exact(8).any(bc::bc1_block_has_alpha),
+            PixelFormat::Bc2 => top.chunks_exact(16).any(bc::bc2_block_has_alpha),
+            PixelFormat::Bc3 => top.chunks_exact(16).any(bc::bc3_block_has_alpha),
+        }
+    }
+
     /// Bytes held on the CPU.
     pub fn cpu_bytes(&self) -> usize {
         self.levels.iter().map(|l| l.len()).sum()
@@ -570,6 +590,46 @@ mod tests {
         let f = dds(b"DXT5", 8, 8, 4, &blocks[..80]);
         let (t, _) = load_gpu_bytes(&f, Path::new("x.dds"), on).unwrap();
         assert_eq!(t.levels.len(), 2);
+    }
+
+    /// A DXT3 / DXT5 file whose alpha is 255 throughout uses none of it, in blocks and
+    /// decoded alike; one texel below 255 is enough to use it.
+    #[test]
+    fn alpha_in_use_reads_the_texels_not_the_format() {
+        let colour = [0x1F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        // as DavidM's spline textures have it: endpoints 0 and 5 in the six-value mode,
+        // every texel index 7 (255)
+        let mut opaque5 = vec![0x00, 0x05, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        opaque5.extend_from_slice(&colour);
+        // both endpoints 255 in the eight-value mode
+        let mut full5 = vec![0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        full5.extend_from_slice(&colour);
+        // the six-value block with one texel at index 6 (0)
+        let mut cut5 = opaque5.clone();
+        cut5[2] = 0xFE;
+        let mut opaque3 = vec![0xFF; 8];
+        opaque3.extend_from_slice(&colour);
+        let mut cut3 = opaque3.clone();
+        cut3[7] = 0x7F;
+        let cases: [(&[u8; 4], Vec<u8>, bool); 5] = [
+            (b"DXT5", [opaque5.clone(), full5.clone()].concat(), false),
+            (b"DXT5", [opaque5, cut5].concat(), true),
+            (b"DXT5", [full5.clone(), full5].concat(), false),
+            (b"DXT3", [opaque3.clone(), opaque3.clone()].concat(), false),
+            (b"DXT3", [opaque3, cut3].concat(), true),
+        ];
+        for (fourcc, blocks, used) in cases {
+            let f = dds(fourcc, 8, 4, 1, &blocks);
+            for bc in [true, false] {
+                let o = GpuOptions {
+                    bc,
+                    compress: false,
+                };
+                let (t, _) = load_gpu_bytes(&f, Path::new("x.dds"), o).unwrap();
+                assert!(t.has_alpha);
+                assert_eq!(t.alpha_in_use(), used, "{fourcc:?} bc {bc}");
+            }
+        }
     }
 
     #[test]
