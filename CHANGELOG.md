@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- Passengers no longer board an articulated bus by its last door alone (#44): walking up while
+  the doors were still shut, everybody made for the rear door with a button, and they stayed there
+  once the driver opened the others. With a door open, a shut door with a button now draws nobody
+  and people walk to the nearest open one; with every door shut the button door is still the one
+  to wait at. (Same change as openOMSI 3bebe136, #2509, MIT.)
 - A content file can no longer make the game look at another computer or another drive: names
   with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
   full path (or a network path) is followed only when it lies inside the content folders.

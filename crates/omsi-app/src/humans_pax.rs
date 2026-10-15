@@ -668,11 +668,15 @@ fn weighted_dist(a: Vec3, b: Vec3, w: f32) -> f32 {
 impl Cabin {
     /// The point of `list` nearest `p` (height weighed by 5). `level`: only
     /// points at most 2 m below `p` and not above it. `open`/`flags` (entries): a shut
-    /// door counts only with a button; `avoid`: a passenger buying a ticket skips
-    /// `{noticketsale}` doors. Nothing found: the first of the list, or the search again
-    /// without `avoid`.
+    /// door counts only with a button, and only while no door of the list is open - with
+    /// one open, people walk to it instead of waiting at a shut one (#44: OMSI let them
+    /// stand at a shut button door with the others open, and an articulated bus whose
+    /// rear door has the button boarded by that door alone); `avoid`: a passenger buying
+    /// a ticket skips `{noticketsale}` doors. Nothing found: the first of the list, or the
+    /// search again without `avoid`.
     pub(super) fn omsi_nearest(&self, p: Vec3, list: &[Option<usize>], avoid: bool, level: bool, flags: Option<&[(bool, bool)]>, open: Option<&[bool]>) -> Option<usize> {
         let pts = &self.graph.points;
+        let any_open = open.is_some_and(|o| list.iter().enumerate().any(|(k, pt)| pt.is_some() && o.get(k).copied().unwrap_or(false)));
         let mut best = 1e12f32;
         let mut found: Option<usize> = None;
         for (k, pt) in list.iter().enumerate() {
@@ -683,7 +687,7 @@ impl Cabin {
             }
             let d = weighted_dist(p, *q, 5.0);
             let shut_ok = match open {
-                Some(o) if o.len() >= list.len() && !o[k] => flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1)),
+                Some(o) if o.len() >= list.len() && !o[k] => !any_open && flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1)),
                 _ => true,
             };
             if !shut_ok {
