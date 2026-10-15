@@ -6499,6 +6499,59 @@ mod tests {
         assert_eq!(jointed.nearest_stamper(Vec3::new(1.1, -8.0, 0.4)), Some(0));
     }
 
+    /// #44: an articulated bus whose rear door has a button. Everybody walking up while the
+    /// doors are still shut makes for that door - the only one worth waiting at -, and
+    /// they stayed there once the driver opened the others, the bus boarded by its last
+    /// door alone. With a door open, a shut one with a button draws nobody.
+    #[test]
+    fn with_a_door_open_nobody_waits_at_a_shut_button_door() {
+        let dir = std::env::temp_dir().join(format!("omsi-artic-entries-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+        // the front section: a front door (point 0) and a middle one (point 3) on an aisle
+        // to the joint; the rear section: a door with a button (point 2) behind it
+        write("paths_front.cfg", "[pathpnt]\n1.1\n4\n0.4\n[pathpnt]\n0\n4\n0.5\n[pathpnt]\n0\n-4\n0.5\n[pathpnt]\n1.1\n-2\n0.4\n[pathlink]\n0\n1\n[pathlink]\n1\n2\n[pathlink]\n3\n2\n");
+        write("cabin_front.cfg", "[entry]\n0\n[entry]\n3\n[exit]\n3\n[linkToPrevVeh]\n2\n[passpos]\n-0.5\n2\n1.0\n0.45\n0\n");
+        write("paths_rear.cfg", "[pathpnt]\n0\n3\n0.5\n[pathpnt]\n0\n-2\n0.5\n[pathpnt]\n1.1\n-2\n0.4\n[pathlink]\n0\n1\n[pathlink]\n1\n2\n");
+        write("cabin_rear.cfg", "[entry]\n2\n{withbutton}\n[exit]\n2\n[linkToNextVeh]\n0\n[passpos]\n-0.5\n-1\n1.0\n0.45\n0\n");
+        let def = |cabin: &str, paths: &str, coupling: Option<f32>| omsi_vehicle::Vehicle {
+            path: dir.join("bus.bus"),
+            passenger_cabin: Some(cabin.into()),
+            paths: Some(paths.into()),
+            bounding_box: Some([2.5, 9.0, 3.0, 0.0, 0.0, 1.5]),
+            coupling_front_character: coupling.map(|kind| [30.0, -10.0, 10.0, kind]),
+            ..Default::default()
+        };
+        let front = def("cabin_front.cfg", "paths_front.cfg", None);
+        let rear = def("cabin_rear.cfg", "paths_rear.cfg", Some(1.0));
+        let cabin = Cabin::load_train(&[(&front, Vec3::ZERO, f32::INFINITY), (&rear, Vec3::new(0.0, -10.0, 0.0), -5.0)]).expect("cabin");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!((cabin.parts.len(), cabin.groups), (2, 1), "one saloon of two sections");
+        let entries = cabin.entry_points();
+        assert_eq!(entries, [Some(0), Some(3), Some(6)]);
+        let flags = cabin.entry_flags();
+        assert_eq!(flags.iter().map(|f| f.1).collect::<Vec<_>>(), [false, false, true], "the rear door has the button");
+        // by the front door, by the middle one, and level with the rear one (bus frame)
+        let (by_front, by_middle, by_rear) = (Vec3::new(1.6, 4.0, 0.0), Vec3::new(1.6, -2.0, 0.0), Vec3::new(1.6, -12.0, 0.0));
+        let nearest = |p: Vec3, open: &[bool]| cabin.omsi_nearest(p, &entries, false, false, Some(&flags), Some(open));
+        // every door shut: the button door is the one to wait at, from wherever
+        for p in [by_front, by_middle, by_rear] {
+            assert_eq!(nearest(p, &[false, false, false]), Some(6));
+        }
+        // the front sections' doors open, the rear one shut: each to the nearest open door
+        // (they walked on to the shut rear door)
+        assert_eq!(nearest(by_front, &[true, true, false]), Some(0));
+        assert_eq!(nearest(by_middle, &[true, true, false]), Some(3));
+        assert_eq!(nearest(by_rear, &[true, true, false]), Some(3));
+        // every door open: the nearest
+        assert_eq!(nearest(by_front, &[true, true, true]), Some(0));
+        assert_eq!(nearest(by_middle, &[true, true, true]), Some(3));
+        assert_eq!(nearest(by_rear, &[true, true, true]), Some(6));
+        // one section's door in a list narrowed to another's (#718) does not count as open
+        let narrowed = [None, None, Some(6)];
+        assert_eq!(cabin.omsi_nearest(by_front, &narrowed, false, false, Some(&flags), Some(&[true, true, false])), Some(6));
+    }
+
     /// #722: a validator by each door - every `[stamper]` is kept, and a passenger stamps at
     /// the one nearest where they came in (OMSI kept the file's last one only).
     #[test]

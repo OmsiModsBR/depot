@@ -1555,6 +1555,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "vr" => s.vr,
         "vr_desktop_mirror" => s.vr_desktop_mirror,
         "doppler" => s.doppler,
+        "muffle_outside" => s.muffle_outside,
         "steering_linear" => s.steering_linear,
         "pad_steer_linear" => s.pad_steer_linear,
         "arrows_switch_cams" => s.arrows_switch_cams,
@@ -1843,6 +1844,10 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         "doppler" => {
             app.settings.doppler = on;
             Some(("doppler", bit))
+        }
+        "muffle_outside" => {
+            app.settings.muffle_outside = on;
+            Some(("muffle_outside", bit))
         }
         "steering_linear" => {
             app.settings.steering_linear = on;
@@ -2267,6 +2272,7 @@ fn sync_live(app: &mut App) {
     crate::startup::SOUND_AI.store(s.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
     crate::startup::SOUND_SCENERY.store(s.vol_scenery.to_bits(), std::sync::atomic::Ordering::Relaxed);
     omsi_audio::DOPPLER.store(s.doppler, std::sync::atomic::Ordering::Relaxed);
+    omsi_audio::MUFFLE_OUTSIDE.store(s.muffle_outside, std::sync::atomic::Ordering::Relaxed);
     if let Some(n) = app.navigator.as_mut() {
         n.arrows = s.nav_arrows;
     }
@@ -2424,6 +2430,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "vol_ai", "Traffic", "How loud the other vehicles are", &pct),
         slider_row(app, "vol_scenery", "Surroundings", "How loud the sounds of the scenery are", &pct),
         switch_row(app, "doppler", "Doppler effect", "Approaching sounds higher, receding ones lower"),
+        switch_row(app, "muffle_outside", "Muffle outside sounds", "From the cab, the sounds of outside the bus are dulled, less so with a door or window open"),
         pick("pax_voices", "Passenger voices", "What passengers say"),
     ]
         .into_iter()
