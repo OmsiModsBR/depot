@@ -873,6 +873,32 @@ mod tests {
         assert!(out.iter().all(|x| (*x - 0.5).abs() < 1e-3), "{out:?}");
     }
 
+    /// The low-pass of `VoiceParams::lowpass_hz` (the `muffle_outside` setting): a high
+    /// tone, the clip's Nyquist frequency, is all but gone at 450 Hz and passes whole without
+    /// a cut-off.
+    #[test]
+    fn a_low_pass_takes_the_high_tones_out() {
+        let tone: Vec<i16> = (0..64)
+            .map(|i| if i % 2 == 0 { 16_384 } else { -16_384 })
+            .collect();
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: tone,
+        });
+        let loudest = |lowpass_hz: f32| {
+            let s = shared();
+            let mut v = voice(clip.clone(), 1.0);
+            v.params.lowpass_hz = lowpass_hz;
+            s.voices.lock().push(v);
+            let mut out = vec![0.0f32; 512];
+            s.render(&mut out);
+            out[256..].iter().fold(0.0f32, |m, x| m.max(x.abs()))
+        };
+        assert!(loudest(0.0) > 0.4, "no filter: the tone as it is");
+        assert!(loudest(450.0) < 0.05, "450 Hz: the tone is gone");
+    }
+
     #[test]
     fn parameters_arrive_with_the_next_block() {
         let clip = Arc::new(Clip {

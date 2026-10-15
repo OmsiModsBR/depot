@@ -2,7 +2,9 @@
 //! state: `sound_levels <sound.cfg> <inside|outside|ai> <cab 0|1> <Snd_OutsideVol> <x,y,z>
 //! <vars file>` (the listener in the vehicle's own coordinates; the vars file holds
 //! `name value` lines, e.g. from `OMSI_DEBUG_VARS`). `sound_levels <sound.cfg> vars` lists
-//! the variables the entries read.
+//! the variables the entries read. `sound_levels <sound.cfg> lint` says what is likely to
+//! sound wrong whatever the state: `[3d]` without a range, a loop without a reference,
+//! odd `[viewpoint]` values and, as a note (`-v` lists them), the interior/exterior pairs.
 
 use glam::{Mat4, Vec3};
 use omsi_audio::{AudioEngine, SoundSet};
@@ -25,6 +27,10 @@ fn main() {
             add(&s.pitch_variable);
         }
         println!("{}", names.join(","));
+        return;
+    }
+    if a.get(2).map(String::as_str) == Some("lint") {
+        lint(&cfg, a.get(3).map(String::as_str) == Some("-v"));
         return;
     }
     let view = a[2].as_str();
@@ -74,6 +80,100 @@ fn main() {
             ng,
             np
         );
+    }
+}
+
+/// What a sound configuration gets wrong whatever the state: see the reference for
+/// `[viewpoint]` - none or 0 everywhere, 1 outside, 2 the cab, 3 both of the player's views,
+/// 4 other vehicles, 5 outside and other vehicles.
+fn lint(cfg: &omsi_vehicle::SoundCfg, verbose: bool) {
+    let mut counts: std::collections::BTreeMap<i32, usize> = Default::default();
+    let mut found = 0;
+    let mut say = |k: usize, def: &omsi_vehicle::SoundEntry, what: String| {
+        found += 1;
+        println!("{k:>4} {}: {what}", def.file.trim());
+    };
+    for (k, def) in cfg.sounds.iter().enumerate() {
+        *counts.entry(def.viewpoint).or_default() += 1;
+        if def.pos.is_some() && def.range <= 0.0 {
+            say(k, def, "[3d] range 0: silent at any distance".into());
+        }
+        if def.is_loop && def.pitch_ref == 0.0 {
+            say(
+                k,
+                def,
+                "[loopsound] reference value 0: its pitch is never valid".into(),
+            );
+        }
+        if def.pitch_variable != def.pitch_variable.trim()
+            || def
+                .vol_curves
+                .iter()
+                .any(|c| c.variable != c.variable.trim())
+        {
+            say(
+                k,
+                def,
+                "a variable name with spaces around it never matches".into(),
+            );
+        }
+        if !(0..=5).contains(&def.viewpoint) {
+            say(
+                k,
+                def,
+                format!(
+                    "[viewpoint] {}: not a value the game documents",
+                    def.viewpoint
+                ),
+            );
+        }
+        if def.viewpoint == 4 {
+            say(k, def, "[viewpoint] 4 is for other vehicles only, yet heard in the player's cab while the bus is open".into());
+        }
+    }
+    // an entry for the cab and one for outside that name the same sample or trigger: with a
+    // door or window open (Snd_OutsideVol over 0.01) both play in the cab. The stock buses
+    // are built so (the outside engine heard through an open door), so it is a note, not a
+    // finding.
+    let mut pairs = 0;
+    for (i, x) in cfg.sounds.iter().enumerate() {
+        if x.viewpoint != 2 {
+            continue;
+        }
+        for (j, y) in cfg.sounds.iter().enumerate() {
+            let outside = y.viewpoint != 0 && y.viewpoint & 2 == 0;
+            let same_file = x.file.trim().eq_ignore_ascii_case(y.file.trim());
+            let same_trigger = x.triggers.iter().any(|t| {
+                y.triggers
+                    .iter()
+                    .any(|u| t.trim().eq_ignore_ascii_case(u.trim()))
+            });
+            if outside && (same_file || same_trigger) {
+                pairs += 1;
+                if verbose {
+                    println!(
+                        "{i:>4} {} (viewpoint 2) and {j} (viewpoint {}): play together in the cab while it is open",
+                        x.file.trim(),
+                        y.viewpoint
+                    );
+                }
+            }
+        }
+    }
+    let by_view: Vec<String> = counts
+        .iter()
+        .map(|(v, n)| match v {
+            0 => format!("none/0: {n}"),
+            _ => format!("{v}: {n}"),
+        })
+        .collect();
+    println!(
+        "{} entries; [viewpoint] {}; {found} findings",
+        cfg.sounds.len(),
+        by_view.join(", ")
+    );
+    if pairs > 0 {
+        println!("note: {pairs} cab/outside pairs naming the same sample or trigger play together in the cab while Snd_OutsideVol is over 0.01 (`lint -v` lists them)");
     }
 }
 

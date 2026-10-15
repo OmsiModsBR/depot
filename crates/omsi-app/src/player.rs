@@ -1699,6 +1699,10 @@ impl Player {
                     // (the variables its triggered sounds' volume curves read are kept as
                     // they stand when the trigger fires, see `SoundSet::update_fired`)
                     self.vehicle.host.snapshot_triggers = ss.curve_triggers().into_iter().collect();
+                    // the bus is silent as it comes to the player: what its `{init}` fired
+                    // (the stock scripts fire `ev_engineshutdown`) or a bus left standing
+                    // collected is not heard now
+                    self.vehicle.host.forget_fired_sound_triggers();
                     self.sounds = Some(ss);
                 }
                 Err(e) => log::warn!("{e}"),
