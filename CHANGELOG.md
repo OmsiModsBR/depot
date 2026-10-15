@@ -10,6 +10,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - A content file can no longer make the game look at another computer or another drive: names
   with a drive or stream (`C:`, `x.bmp:y`) or a NUL resolve to nothing, and a texture named by a
   full path (or a network path) is followed only when it lies inside the content folders.
+- A `[mouseevent]` mesh behind another mesh of the bus (a panel, a wall, a window, the steering
+  wheel) can no longer be clicked, hovered or turned with the wheel, from any camera: the ray
+  through the cursor has to reach it first. Only the outside camera checked this before, and only
+  against the mesh's bounding sphere. Meshes a camera does not draw (`[viewpoint]`) neither block
+  nor take clicks from it.
 
 ### Changed
 - `omsi-sim`'s `vehicle.rs` is split by subject into `vehicle/` submodules (the type and its
