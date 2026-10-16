@@ -30,7 +30,13 @@ pub const GAP: f32 = 12.0;
 
 /// Relative luminance of an opaque colour (WCAG 2.x).
 pub fn luminance(c: Color) -> f32 {
-    let lin = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    let lin = |v: f32| {
+        if v <= 0.03928 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
     0.2126 * lin(c.0[0]) + 0.7152 * lin(c.0[1]) + 0.0722 * lin(c.0[2])
 }
 
@@ -52,7 +58,10 @@ mod tests {
             }
             // (dim text on a selected row measures 4.26, a little under the 4.5 target: kept as
             // the launcher has always drawn it, to be raised with the new look)
-            assert!(contrast(TEXT_DIM, surface) >= 4.2, "dim text on {surface:?}");
+            assert!(
+                contrast(TEXT_DIM, surface) >= 4.2,
+                "dim text on {surface:?}"
+            );
             assert!(contrast(ACCENT, surface) >= 4.5, "accent on {surface:?}");
         }
     }
