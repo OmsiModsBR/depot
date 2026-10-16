@@ -55,11 +55,6 @@ pub(super) const BODY_DAMPING: f32 = 1.5;
 /// The body is set back on its wheels when its up axis leans further than this (its z, the
 /// cosine of 72.5°): the safety net against tipping over on bad ground. *tuned*
 pub(super) const TIP_OVER: f32 = 0.3;
-/// Height (m) of the centre of gravity when `[schwerpunkt]` gives none. *fallback*
-pub(super) const DEFAULT_COG_HEIGHT: f32 = 1.0;
-/// Rolling resistance as a share of the weight when `[rollwiderstand]` gives none. *physics*
-/// (a bus tyre on asphalt), *fallback*
-pub(super) const ROLLING_COEFFICIENT: f32 = 0.008;
 /// The grip of a dry road (μ), the body's until the vehicle sets the road's own (the dry
 /// value of `vehicle::road_grip`). *tuned*
 pub(super) const DRY_GRIP: f32 = 0.85;
@@ -68,8 +63,8 @@ pub(super) const DRY_GRIP: f32 = 0.85;
 
 /// The furthest a wheel or an axle turns (rad, about 60°). *tuned*
 pub(super) const MAX_STEER: f32 = 1.05;
-/// The range of the full lock (deg): a file's is held to it, and one without a usable
-/// `[inv_min_turnradius]` gets the least, the old default. *fallback*
+/// The range of the kinematic model's full lock (deg): a file's is held to it, and one
+/// without a usable `[inv_min_turnradius]` gets the least, the old default. *fallback*
 pub(super) const LOCK_DEG_MIN: f32 = 10.0;
 pub(super) const LOCK_DEG_MAX: f32 = 60.0;
 
@@ -80,18 +75,14 @@ pub const DROOP: f32 = 0.15;
 /// The bump stop (m): the most a spring is pressed when its rate does not say
 /// (`achse_maxforce` over it), and where a deflated air suspension rests. *tuned*
 pub const BUMP: f32 = 0.24;
-/// The axle's spring (kN/m), damper (kN s/m) and the load its strut is built for (kN) when
-/// `achse_feder`, `achse_daempfer` or `achse_maxforce` is missing or zero. *fallback*
-pub(super) const DEFAULT_SPRING: f32 = 150.0;
-pub(super) const DEFAULT_DAMPER: f32 = 12.0;
-pub(super) const DEFAULT_MAX_FORCE: f32 = 200.0;
-/// Where the tyres stand across, as a share of half `achse_maxwidth`, when `achse_minwidth`
-/// does not say (with it, halfway between the two widths). *fallback*
+/// Where the kinematic model's parts (the AI's copies) stand their tyres across, as a share of
+/// half `achse_maxwidth`, when `achse_minwidth` does not say (with it, halfway between the two
+/// widths). *fallback*
 pub(super) const TRACK_SHARE: f32 = 0.85;
 /// `achse_inertia_inv` where a `[newachse]` does not say (OMSI LoadFromFile: 0.002). *OMSI*
 pub const DEFAULT_INERTIA_INV: f32 = 0.002;
-/// The least static load a wheel takes, as a share of an even split of the weight, however
-/// far the centre of gravity lies from its axle. *tuned*
+/// The least static load a wheel of the kinematic model (the AI's copies) takes, as a share of
+/// an even split of the weight, however far the centre of gravity lies from its axle. *tuned*
 pub(super) const MIN_LOAD_SHARE: f32 = 0.2;
 /// How high over the model origin's plane OMSI 2's ground query looks from (m): a wheel
 /// that finds nothing within its climb looks again from there. *OMSI*
@@ -210,3 +201,23 @@ pub(crate) const AI_AXLE_STEER_MAX: f32 = 1.2;
 pub(crate) const AI_STEER_ARM_MIN: f32 = 0.5;
 /// The longest frame the kinematic model steps (s): a longer one is cut to it. *tuned*
 pub(crate) const KINEMATIC_DT_MAX: f32 = 0.1;
+
+/// The values the player's physics once gave a `.bus` file that leaves one out or gives one
+/// out of range. The player's vehicle now reads its file as OMSI does (`spec`); these are kept,
+/// unused, behind the `model-fallbacks` feature until the physics is validated in game, and
+/// then deleted.
+#[cfg(feature = "model-fallbacks")]
+#[allow(dead_code)]
+pub(super) mod fallbacks {
+    /// The axle's spring (kN/m), damper (kN s/m) and the load its strut is built for (kN) when
+    /// `achse_feder`, `achse_daempfer` or `achse_maxforce` is missing or zero. *fallback*
+    pub const DEFAULT_SPRING: f32 = 150.0;
+    pub const DEFAULT_DAMPER: f32 = 12.0;
+    pub const DEFAULT_MAX_FORCE: f32 = 200.0;
+    /// Rolling resistance as a share of the weight when `[rollwiderstand]` gives none.
+    /// *physics* (a bus tyre on asphalt), *fallback*
+    pub const ROLLING_COEFFICIENT: f32 = 0.008;
+    /// Height (m) of the centre of gravity when `[schwerpunkt]` gives none (the `[cog]`'s
+    /// height first). *fallback*
+    pub const DEFAULT_COG_HEIGHT: f32 = 1.0;
+}

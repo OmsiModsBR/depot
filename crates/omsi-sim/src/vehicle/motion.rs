@@ -22,9 +22,13 @@ impl VehicleInstance {
         &self.motion
     }
 
-    /// The vehicle's mass (kg, at least 500).
+    /// The vehicle's mass (kg) as the model that moves it has it: the rigid body's
+    /// (`rigid::mass_kg`), the kinematic model's (`rigid::kinematic_mass_kg`).
     pub fn mass_kg(&self) -> f32 {
-        crate::physics::mass_kg(&self.ty.def)
+        match &self.dynamics {
+            Dynamics::Rigid(rb) => rb.mass(),
+            Dynamics::Kinematic(k) => k.mass_kg,
+        }
     }
 
     /// The vehicle's rigid body, when it runs on one (the player's vehicle).
@@ -102,8 +106,9 @@ impl VehicleInstance {
     /// variables back for the next script frame.
     /// Switch the player vehicle to rigid-body dynamics at its current pose.
     pub fn enable_rigid_body(&mut self) {
-        let mut rb =
-            crate::rigid::RigidBody::from_definition(&self.ty.def, &self.ty.hub_heights(0));
+        // (its hubs from the `.bus` alone, a tyre radius over the model origin's plane where
+        // OMSI's springs stand: neither the model's wheels nor their animation move them)
+        let mut rb = crate::rigid::RigidBody::from_definition(&self.ty.def, &[]);
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -314,11 +319,12 @@ impl VehicleInstance {
                     .filter(|(_, a)| a.driven)
                     .map(|(i, _)| i)
                     .collect();
-                let wheel_load = |a: usize| t.rest.get(a).map(|r| r.1).unwrap_or(0.0) * 2.0;
+                let loads = crate::rigid::wheel_rest_loads(def);
+                let wheel_load = |a: usize| loads.get(a).copied().unwrap_or(0.0) * 2.0;
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: crate::rigid::coupled_mass_kg(def),
+                    mass: crate::rigid::mass_kg(def),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()

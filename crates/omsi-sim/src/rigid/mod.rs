@@ -42,8 +42,8 @@ pub use collide::Impact;
 pub use ground::{Ground, GroundProbe, WallFace};
 pub use params::{BUMP, CLIMB, CRASH_SPEED, DEFAULT_INERTIA_INV, DROOP, HUB_REACH, WALL_HEIGHT};
 pub(crate) use params::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN, AI_STEER_RATE, AI_STEER_RATE_HEAVY, KINEMATIC_DT_MAX};
-pub use spec::{ai_rotation_point, mass_kg, wheel_rest_loads, wheel_rest_loads_supported, AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
-pub(crate) use spec::{coupled_mass_kg, coupled_rolling_resistance};
+pub use spec::{ai_rotation_point, kinematic_mass_kg, kinematic_rest_sag, kinematic_wheel_rest_loads, mass_kg, wheel_rest_loads, wheel_rest_loads_supported, AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
+pub(crate) use spec::coupled_rolling_resistance;
 pub use train::{hang_followers, place_train, support_rest_loads, point_load_shares, step_train, BodyInputs, Joint, JointKind};
 pub use wheel::RigidWheel;
 

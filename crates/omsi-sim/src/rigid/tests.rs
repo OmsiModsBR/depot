@@ -547,3 +547,106 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
     assert!(rb.position.is_finite() && (rb.position - at).length() < 1e-9, "{:?}", rb.position);
     assert_eq!(rb.velocity, Vec3::ZERO);
 }
+
+#[test]
+fn the_mass_is_in_tonnes_whatever_the_number() {
+    // as OMSI reads `[mass]`: a file that gives kilograms weighs a thousand times as much, a
+    // light one keeps its weight, and a file without one weighs 1 t
+    let kilograms = Vehicle { mass: 10_200.0, ..bus() };
+    assert_eq!(mass_kg(&kilograms), 10_200_000.0);
+    assert_eq!(mass_kg(&Vehicle { mass: 0.2, ..bus() }), 200.0);
+    assert_eq!(mass_kg(&Vehicle { mass_missing: true, ..bus() }), 1000.0);
+    assert_eq!(RigidBody::from_definition(&kilograms, &[]).mass(), 10_200_000.0);
+    // the kinematic model (the AI's copies) reads it as it always has
+    assert_eq!(kinematic_mass_kg(&kilograms), 10_200.0);
+    assert_eq!(kinematic_mass_kg(&Vehicle { mass: 0.2, ..bus() }), 500.0);
+}
+
+#[test]
+fn the_moments_of_inertia_are_in_tonne_square_metres() {
+    // no unit guess, no minimum: a file's 6000 is 6000 t m², its 0.05 is 50 kg m², and a file
+    // without the section gets OMSI's 100 t m² about each axis
+    let i = |moi: [f32; 3]| PhysicsSpec::from(&Vehicle { moment_of_inertia: moi, ..bus() }).inertia;
+    assert_eq!(i([6000.0, 90.0, 400.0]), Vec3::new(6_000_000.0, 90_000.0, 400_000.0));
+    assert_eq!(i([0.05, 0.05, 0.05]), Vec3::splat(50.0));
+    assert_eq!(i([0.0; 3]), Vec3::splat(100_000.0));
+}
+
+#[test]
+fn an_axle_without_springs_carries_nothing() {
+    // OMSI's `[newachse]` leaves `achse_feder`, `achse_daempfer` and `achse_maxforce` at zero
+    // when the file names none: the strut pushes nothing and the body sinks to the ground
+    let mut def = bus();
+    for a in def.axles.iter_mut() {
+        (a.spring, a.damper, a.max_force) = (0.0, 0.0, 0.0);
+    }
+    let spec = AxleSpec::of(&def.axles[0]);
+    assert_eq!((spec.spring, spec.damper, spec.max_force), (0.0, 0.0, 0.0));
+    assert_eq!(PhysicsSpec::from(&def).body_freq, 0.0);
+    let mut rb = RigidBody::from_definition(&def, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &road(1e9, 0.0));
+    assert!(rb.wheels.iter().all(|w| w.load() == 0.0), "{:?}", rb.wheels.iter().map(|w| w.load()).collect::<Vec<_>>());
+    assert!(rb.position().z.is_finite());
+}
+
+#[test]
+fn rolling_resistance_is_the_files_force() {
+    // `[rollwiderstand]` is a force spread over the wheels, whatever the weight; a file
+    // without one rolls without it, as in OMSI
+    assert_eq!(PhysicsSpec::from(&bus()).rolling_resistance, 1000.0);
+    assert_eq!(PhysicsSpec::from(&Vehicle { rolling_resistance: 0.0, ..bus() }).rolling_resistance, 0.0);
+    assert_eq!(RigidBody::from_definition(&Vehicle { rolling_resistance: 0.0, ..bus() }, &[]).rolling_resistance(), 0.0);
+}
+
+#[test]
+fn the_centre_of_gravity_is_as_high_as_schwerpunkt() {
+    // `[schwerpunkt]` is the lever the weight shifts by; `[cog]`'s height places OMSI's
+    // collision box, not the weight, and a file without either has its weight on the ground
+    let cog = |def: Vehicle| PhysicsSpec::from(&def).cog.z;
+    assert_eq!(cog(bus()), 1.2);
+    assert_eq!(cog(Vehicle { cog_height: 0.0, cog: Some([0.0, 0.5, 0.9]), ..bus() }), 0.0);
+    assert_eq!(cog(Vehicle { cog_height: 0.0, ..bus() }), 0.0);
+}
+
+#[test]
+fn the_wheels_stand_where_the_axle_says() {
+    // no minimum radius or width and no share of the outer width: the tyres stand halfway
+    // between `achse_minwidth` and `achse_maxwidth`, the strut pushes at half the outer width
+    let a = Axle { long: 1.0, max_width: 0.4, min_width: 0.0, wheel_diameter: 0.2, spring: 100.0, max_force: 10.0, damper: 1.0, driven: false, inertia_inv: 0.0 };
+    let spec = AxleSpec::of(&a);
+    assert_eq!((spec.radius, spec.outer, spec.track), (0.1, 0.2, 0.1));
+    // the kinematic model's parts stand as they always have
+    assert_eq!((spec.kinematic_radius, spec.kinematic_track), (0.15, 0.3 * 0.85));
+}
+
+#[test]
+fn the_lock_is_the_files_turning_radius() {
+    // `[inv_min_turnradius]` as it is: no range, and a file without one does not steer
+    let spec = PhysicsSpec::from(&Vehicle { inv_min_turn_radius: 0.5, ..bus() });
+    assert_eq!(spec.inv_min_turn_radius, 0.5);
+    assert!(spec.max_steer_deg > 70.0, "{}", spec.max_steer_deg);
+    let none = PhysicsSpec::from(&Vehicle { inv_min_turn_radius: 0.0, ..bus() });
+    assert_eq!((none.inv_min_turn_radius, none.max_steer_deg), (0.0, 0.0));
+    let mut rb = RigidBody::from_definition(&Vehicle { inv_min_turn_radius: 0.0, ..bus() }, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    for _ in 0..60 {
+        rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 1.0, &road(1e9, 0.0));
+    }
+    assert_eq!(rb.kappa(), 0.0);
+    // the kinematic model keeps its lock
+    assert_eq!((spec.kinematic_max_steer_deg, none.kinematic_max_steer_deg), (60.0, 10.0));
+}
+
+#[test]
+fn a_wheel_far_from_the_weight_carries_nothing() {
+    // the centre of gravity behind the rear axle: the front wheels carry nothing (an OMSI
+    // strut only pushes), not a fifth of an even share
+    let def = Vehicle { cog: Some([0.0, -4.0, 1.2]), ..bus() };
+    let loads = wheel_rest_loads(&def);
+    assert_eq!(loads[0], 0.0);
+    let (loads, _) = wheel_rest_loads_supported(&Vehicle { cog: Some([0.0, -8.0, 1.2]), ..bus() }, 6.0);
+    assert_eq!(loads[0], 0.0, "{loads:?}");
+    // the kinematic model's parts keep their least share
+    assert!(kinematic_wheel_rest_loads(&def)[0] > 0.0);
+}

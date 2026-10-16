@@ -187,6 +187,13 @@ fn mesh_path(root: &Path, dir: &Path, model_dir: &Path, file: &str) -> PathBuf {
     first
 }
 
+/// The couplings an AI copy's parts join at where its file declares none: 4 m ahead of and
+/// behind its origin, 0.3 m up (see [`VehicleType::load_ai`]).
+pub(super) fn ai_couplings(def: &mut Vehicle) {
+    def.coupling_front.get_or_insert(omsi_vehicle::vehicle::Coupling { pos: [0.0, 4.0, 0.3] });
+    def.coupling_back.get_or_insert(omsi_vehicle::vehicle::Coupling { pos: [0.0, -4.0, 0.3] });
+}
+
 impl VehicleType {
     pub fn load(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, true)
@@ -215,13 +222,24 @@ impl VehicleType {
     /// A type for AI copies: its meshes are measured (the tyres) and let go - nothing but
     /// the upload to the GPU needs them, and a timetable fleet kept half a gigabyte of
     /// vertices on the CPU. [`VehicleType::mesh_data`] reads a mesh again.
+    ///
+    /// A file without `[coupling_front]` or `[coupling_back]` couples an AI copy's parts 4 m
+    /// ahead of or behind its origin, 0.3 m up, as it always has; the player's vehicle couples
+    /// it at the origin, where OMSI keeps a coupling the file does not declare.
+    /// And a `[boundingbox]` much longer or wider than the model is cut down to the model's
+    /// for an AI copy; the player's vehicle keeps the declared one.
     pub fn load_ai(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, false)
     }
 
     fn load_with(root: &Path, bus_file: &Path, keep_meshes: bool) -> Result<VehicleType> {
-        let def =
+        // (the types without their meshes are the AI's copies)
+        let ai_copy = !keep_meshes;
+        let mut def =
             Vehicle::load(bus_file).with_context(|| format!("loading {}", bus_file.display()))?;
+        if ai_copy {
+            ai_couplings(&mut def);
+        }
         let dir = def.dir().to_path_buf();
         let model_rel = def.model.clone().context("vehicle has no [model]")?;
         let model_path = omsi_cfg::resolve_path(&dir, &model_rel);
@@ -376,9 +394,10 @@ impl VehicleType {
         // A `[boundingbox]` much longer or wider than the model itself: the W906 Sprinter mod
         // declares 12 m for a 7 m van (copied from a bus), and the walkers ran into an
         // invisible wall metres ahead of its nose and behind its tail, the traffic kept its
-        // distance from nothing. The box is cut down to the model (never made bigger).
-        let mut def = def;
-        if let Some(bb) = def.bounding_box.as_mut() {
+        // distance from nothing. An AI copy's box is cut down to the model (never made
+        // bigger); the player's vehicle keeps the box its file declares, as OMSI does - a
+        // box that does not fit the model is the model's to fix.
+        if let Some(bb) = def.bounding_box.as_mut().filter(|_| ai_copy) {
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
             for m in &meshes {
                 for p in &m.data.positions {
@@ -461,7 +480,9 @@ impl VehicleType {
             .collect()
     }
 
-    /// Unloaded hub height per axle for the physics: the model's wheel centre, raised by what
+    /// Unloaded hub height per axle for the kinematic model (the AI's copies and the parts
+    /// that follow them; the player's rigid body takes its hubs from the `.bus` alone): the
+    /// model's wheel centre, raised by what
     /// the `.bus` tyre is larger than the modelled one. The tyre then touches the road exactly
     /// where the physics puts the contact - the stock SD202's wheels are modelled 1.6 cm
     /// below the model's ground plane and stood that much in the asphalt. A model that says
@@ -471,7 +492,7 @@ impl VehicleType {
     /// plane) cannot show them sitting up in their arches: that axle hangs its wheels as much
     /// lower as the load compresses the spring, and the body keeps its unloaded height.
     pub fn hub_heights(&self, first_axle: usize) -> Vec<Option<f32>> {
-        let loads = crate::rigid::wheel_rest_loads(&self.def);
+        let loads = crate::rigid::kinematic_wheel_rest_loads(&self.def);
         self.def
             .axles
             .iter()
@@ -479,7 +500,7 @@ impl VehicleType {
             .enumerate()
             .map(|(a, (axle, g))| {
                 let axle = crate::rigid::AxleSpec::of(axle);
-                let r = axle.radius;
+                let r = axle.kinematic_radius;
                 let model = g
                     .map(|(z, r_mesh)| z + (r - r_mesh))
                     .filter(|z| (z - r).abs() <= 0.08);

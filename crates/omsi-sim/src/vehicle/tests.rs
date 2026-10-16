@@ -245,11 +245,19 @@ fn bogie_couplings_agree_with_spawn_placement_and_following() {
 
 #[test]
 fn coupling_defaults_and_non_bogie_rail_bounds_are_preserved() {
+    // a coupling the file does not declare is at the model origin, as OMSI keeps it
+    let mut ty = coupling_test_type(None);
+    let def = &mut Arc::get_mut(&mut ty).unwrap().def;
+    def.coupling_front = None;
+    def.coupling_back = None;
+    assert_eq!(coupling_points(&ty, false, &ty, false), (Vec3::ZERO, Vec3::ZERO));
+    // an AI copy's type couples where it always has
     for bogies in [None, Some(5.0), Some(-5.0)] {
         let mut ty = coupling_test_type(bogies);
         let def = &mut Arc::get_mut(&mut ty).unwrap().def;
         def.coupling_front = None;
         def.coupling_back = None;
+        super::vehicle_type::ai_couplings(def);
         let (back, front) = coupling_points(&ty, false, &ty, false);
         let sign = if bogies == Some(-5.0) { -1.0 } else { 1.0 };
         let z = if bogies.is_some() { 0.0 } else { 0.3 };
