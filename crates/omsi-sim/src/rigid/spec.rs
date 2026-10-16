@@ -11,7 +11,7 @@
 
 use super::params::{
     DEFAULT_COG_HEIGHT, DEFAULT_INERTIA_INV,
-    GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE, ROLLING_COEFFICIENT, TRACK_SHARE,
+    GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE, TRACK_SHARE,
 };
 use glam::Vec3;
 use omsi_vehicle::{Axle, Vehicle};
@@ -108,10 +108,10 @@ pub struct PhysicsSpec {
     pub inertia: Vec3,
     /// Centre of gravity (m, right, forward, up from the model origin).
     pub cog: Vec3,
-    /// Rolling resistance (N): the file's, or a bus tyre's share of the weight.
+    /// Rolling resistance (N): `[rollwiderstand]` as the file gives it, a force spread over
+    /// the wheels whatever the weight, and none for a file without one (OMSI's reading). The
+    /// kinematic model's as well.
     pub rolling_resistance: f32,
-    /// `[rollwiderstand]` as the file gives it (N), the kinematic model's.
-    pub file_rolling_resistance: f32,
     /// `[rot_pnt_long]` as the file gives it.
     pub rot_pnt_long: f32,
     /// The frontmost axle (m along the body; `f32::MIN` without axles).
@@ -150,8 +150,7 @@ impl PhysicsSpec {
             kinematic_mass_kg: kinematic_mass_kg(def),
             inertia,
             cog: Vec3::new(cog_xy.0, cog_xy.1, cog_z),
-            rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { ROLLING_COEFFICIENT * mass * GRAVITY },
-            file_rolling_resistance: def.rolling_resistance,
+            rolling_resistance: def.rolling_resistance,
             rot_pnt_long: def.rot_pnt_long,
             front_long,
             max_steer_deg,

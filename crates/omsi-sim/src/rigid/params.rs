@@ -57,9 +57,6 @@ pub(super) const BODY_DAMPING: f32 = 1.5;
 pub(super) const TIP_OVER: f32 = 0.3;
 /// Height (m) of the centre of gravity when `[schwerpunkt]` gives none. *fallback*
 pub(super) const DEFAULT_COG_HEIGHT: f32 = 1.0;
-/// Rolling resistance as a share of the weight when `[rollwiderstand]` gives none. *physics*
-/// (a bus tyre on asphalt), *fallback*
-pub(super) const ROLLING_COEFFICIENT: f32 = 0.008;
 /// The grip of a dry road (μ), the body's until the vehicle sets the road's own (the dry
 /// value of `vehicle::road_grip`). *tuned*
 pub(super) const DRY_GRIP: f32 = 0.85;
@@ -217,4 +214,7 @@ pub(super) mod fallbacks {
     pub const DEFAULT_SPRING: f32 = 150.0;
     pub const DEFAULT_DAMPER: f32 = 12.0;
     pub const DEFAULT_MAX_FORCE: f32 = 200.0;
+    /// Rolling resistance as a share of the weight when `[rollwiderstand]` gives none.
+    /// *physics* (a bus tyre on asphalt), *fallback*
+    pub const ROLLING_COEFFICIENT: f32 = 0.008;
 }

@@ -589,3 +589,12 @@ fn an_axle_without_springs_carries_nothing() {
     assert!(rb.wheels.iter().all(|w| w.load() == 0.0), "{:?}", rb.wheels.iter().map(|w| w.load()).collect::<Vec<_>>());
     assert!(rb.position().z.is_finite());
 }
+
+#[test]
+fn rolling_resistance_is_the_files_force() {
+    // `[rollwiderstand]` is a force spread over the wheels, whatever the weight; a file
+    // without one rolls without it, as in OMSI
+    assert_eq!(PhysicsSpec::from(&bus()).rolling_resistance, 1000.0);
+    assert_eq!(PhysicsSpec::from(&Vehicle { rolling_resistance: 0.0, ..bus() }).rolling_resistance, 0.0);
+    assert_eq!(RigidBody::from_definition(&Vehicle { rolling_resistance: 0.0, ..bus() }, &[]).rolling_resistance(), 0.0);
+}
