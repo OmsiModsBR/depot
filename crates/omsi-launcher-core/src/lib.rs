@@ -1945,6 +1945,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
     v["info_bar"] = json!(false);
+    // minutes between the automatic saves of the last situation (0: off)
+    v["autosave_minutes"] = json!(5);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
     // outside sounds heard from a cab go through a low-pass
@@ -2038,6 +2040,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_orientation" => v[&k] = json!(if matches!(val, "north" | "heading") { val } else { "map" }),
             "info_bar" => v[&k] = json!(b(val)),
+            "autosave_minutes" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5)),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
@@ -2393,6 +2396,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let orientation = v.get("nav_orientation").and_then(|x| x.as_str()).unwrap_or("map");
     text.push_str(&format!("nav_orientation={}\n", if matches!(orientation, "north" | "heading") { orientation } else { "map" }));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
+    text.push_str(&format!("autosave_minutes={}\n", n("autosave_minutes", 5).clamp(0, 60)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
@@ -3215,6 +3219,11 @@ mod tests {
         let on = settings_from_text(Some("info_bar=1\n"));
         assert_eq!(on["info_bar"], json!(true));
         assert!(settings_to_text(&on, None).lines().any(|l| l == "info_bar=1"));
+        // (the minutes between automatic saves: five unless set, 0 for off, and kept)
+        assert_eq!(settings_from_text(None)["autosave_minutes"], json!(5));
+        let off = settings_from_text(Some("autosave_minutes=0\n"));
+        assert_eq!(off["autosave_minutes"], json!(0));
+        assert!(settings_to_text(&off, None).lines().any(|l| l == "autosave_minutes=0"));
     }
 
     /// The opacity is the whole interface's now: a file of an older build, where it was the

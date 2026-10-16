@@ -164,6 +164,7 @@ const VARIED: &[(&str, &str)] = &[
     ("chat_size", "1.5"),
     ("notes", "0"),
     ("info_bar", "1"),
+    ("autosave_minutes", "10"),
     ("shadow_casters", "omsi"),
     ("post_aa", "off"),
     ("drive_keys", "wasd"),
