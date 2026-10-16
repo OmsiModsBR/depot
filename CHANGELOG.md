@@ -7,6 +7,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- A bus stopped under a canopy or a bridge measures the ground under its lift and ramp again,
+  not the roof over them: `GetHeightAbovePoint` (OMSI's name, kept for compatibility, though it
+  measures under the point) asks the faces the wheels stand on for the highest one at or below
+  the point, where the plain height sampler gave the highest face there and the lift could not
+  be lowered (#95).
 - Splines that declare `[matl_alpha] 2` on a DXT3 / DXT5 texture whose alpha is 255 throughout
   (DavidM's walls and bridges, used across Krefrath) are drawn opaque and write depth again: they
   went into the blended pass without depth writes, so a wall further away showed over the wall in

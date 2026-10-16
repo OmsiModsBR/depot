@@ -552,16 +552,27 @@ impl VehicleInstance {
     /// 0.3 m). Read the other way round (ground minus point) the sensor sat at 0, the
     /// right-hand bellows of an Urbino never let their air out and the bus leant 1.7° to
     /// the left all the way.
-    fn update_ground_probe(&mut self) {
-        if self.ground.is_none() {
+    ///
+    /// Despite its name (OMSI's, kept for the vehicles that call it), the function measures
+    /// *under* the point: the ground is the highest face at or below it, asked of the faces
+    /// the wheels stand on. The plain sampler knows only x and y and gives the highest face
+    /// there, so a bus stopped under a canopy measured up to its roof, read some -4 m and
+    /// could not lower its lift or ramp (#95). The plain sampler stays the answer where
+    /// there are no faces to ask or none under the point.
+    pub(crate) fn update_ground_probe(&mut self) {
+        let Some(g) = self.ground.clone() else {
             return;
-        }
+        };
         let rot = self.body_rotation();
         let pos = self.position;
-        let g = self.ground.clone().unwrap();
+        let contact = self.contact.clone();
         self.host.ground_probe = Some(std::sync::Arc::new(move |x, y, z| {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
-            match g(w.x, w.y) {
+            let under = contact
+                .as_ref()
+                .and_then(|c| crate::rigid::Ground::probe(&**c, w.x, w.y, w.z).below)
+                .or_else(|| g(w.x, w.y));
+            match under {
                 Some(h) => (w.z - h) as f32,
                 None => 0.0,
             }

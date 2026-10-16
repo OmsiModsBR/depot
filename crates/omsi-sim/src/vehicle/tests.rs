@@ -1021,6 +1021,43 @@ fn a_wheels_ground_is_the_road_under_it_not_the_highest_face() {
     assert_eq!(wheel_ground(None, Some(plain), wheel), Some(deck));
 }
 
+/// #95: `GetHeightAbovePoint` (OMSI's name, kept for compatibility) measures the height of
+/// the point over what lies *under* it, not up to a roof over it. The plain sampler knows
+/// only x and y and gives the highest face there: a bus stopped under a canopy read the
+/// canopy, its lift sensor got a large negative height and the lift and ramp could not be
+/// lowered. Only faces at or below the point count.
+#[test]
+fn the_ground_probe_reads_the_ground_under_a_roof() {
+    let (road, kerb, roof) = (0.0f64, 0.15f64, 4.5f64);
+    let mut v = VehicleInstance::new(coupling_test_type(None), VehicleHost::new(crate::SimClock::default()));
+    v.position = DVec3::new(100.0, 200.0, road);
+    // a kerb right of x = 1 m (world), a canopy over everything
+    let faces = move |x: f64, _y: f64, top: f64| {
+        let kerb = if x > 101.0 { kerb } else { road };
+        crate::rigid::GroundProbe {
+            below: [road, kerb, roof].into_iter().filter(|h| *h <= top).reduce(f64::max),
+            above: (roof > top).then_some(roof),
+        }
+    };
+    v.contact = Some(Arc::new(faces));
+    v.ground = Some(Arc::new(move |_x: f64, _y: f64| Some(roof)));
+    v.update_ground_probe();
+    let probe = v.host.ground_probe.clone().expect("probe");
+    assert!((probe(0.0, 0.0, 0.3) - 0.3).abs() < 1e-4, "lift sensor read {}", probe(0.0, 0.0, 0.3));
+    assert!((probe(0.0, 0.0, 0.0)).abs() < 1e-4);
+    // over the kerb: the kerb; below its top: what lies under the point, the road
+    assert!((probe(1.5, 0.0, 0.25) - 0.10).abs() < 1e-4, "kerb read {}", probe(1.5, 0.0, 0.25));
+    assert!((probe(1.5, 0.0, 0.10) - 0.10).abs() < 1e-4, "under the kerb read {}", probe(1.5, 0.0, 0.10));
+    // a point up on the canopy itself stands on it
+    assert!((probe(0.0, 0.0, 4.6) - 0.1).abs() < 1e-4);
+    // no face probe (a vehicle with only the plain sampler): as before
+    v.contact = None;
+    v.ground = Some(Arc::new(move |_x: f64, _y: f64| Some(road)));
+    v.update_ground_probe();
+    let probe = v.host.ground_probe.clone().expect("probe");
+    assert!((probe(0.0, 0.0, 0.3) - 0.3).abs() < 1e-4);
+}
+
 /// The resolved property plan gives what `compute_mesh_props` gives, for a stock bus
 /// with its variables set to changing values, and after an engine variable joins.
 #[test]
