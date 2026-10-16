@@ -2,6 +2,7 @@
 
 pub mod cabin;
 pub mod hof;
+pub mod hof_check;
 pub mod paths;
 pub mod sound;
 pub mod vehicle;
