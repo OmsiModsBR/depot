@@ -22,9 +22,13 @@ impl VehicleInstance {
         &self.motion
     }
 
-    /// The vehicle's mass (kg, at least 500).
+    /// The vehicle's mass (kg) as the model that moves it has it: the rigid body's
+    /// (`rigid::mass_kg`), the kinematic model's (`rigid::kinematic_mass_kg`).
     pub fn mass_kg(&self) -> f32 {
-        crate::physics::mass_kg(&self.ty.def)
+        match &self.dynamics {
+            Dynamics::Rigid(rb) => rb.mass(),
+            Dynamics::Kinematic(k) => k.mass_kg,
+        }
     }
 
     /// The vehicle's rigid body, when it runs on one (the player's vehicle).
@@ -318,7 +322,7 @@ impl VehicleInstance {
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: crate::rigid::coupled_mass_kg(def),
+                    mass: crate::rigid::mass_kg(def),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()

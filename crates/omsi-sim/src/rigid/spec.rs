@@ -16,24 +16,23 @@ use super::params::{
 use glam::Vec3;
 use omsi_vehicle::{Axle, Vehicle};
 
-/// `[mass]` in kilograms: tonnes, or kilograms in a few files (a value of 100 or more).
-fn file_mass_kg(def: &Vehicle) -> f32 {
-    if def.mass < 100.0 {
-        def.mass * 1000.0
+/// `[mass]` in kilograms, as OMSI reads it: in tonnes, whatever the number (a file that gives
+/// kilograms weighs a thousand times as much), and 1 t for a file without one. The rigid
+/// body's, its static loads' and a coupled part's.
+pub fn mass_kg(def: &Vehicle) -> f32 {
+    if def.mass_missing {
+        1000.0
     } else {
-        def.mass
+        def.mass * 1000.0
     }
 }
 
-/// The vehicle's mass (kg), at least 500 kg: the rigid body's, its static loads' and the
-/// kinematic model's.
-pub fn mass_kg(def: &Vehicle) -> f32 {
-    file_mass_kg(def).max(500.0)
-}
-
-/// The mass (kg) a part coupled behind the body hands it (`CoupledPart::mass`): no floor.
-pub(crate) fn coupled_mass_kg(def: &Vehicle) -> f32 {
-    file_mass_kg(def).max(0.0)
+/// `[mass]` in kilograms as the kinematic model (the AI's copies) reads it: tonnes, or
+/// kilograms in a few files (a value of 100 or more), at least 500 kg. Kept apart from
+/// [`mass_kg`] until the AI's physics is taken up again.
+pub fn kinematic_mass_kg(def: &Vehicle) -> f32 {
+    let kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
+    kg.max(500.0)
 }
 
 /// The rolling resistance (N) a part coupled behind the body hands it: the file's, none when
@@ -97,6 +96,8 @@ impl AxleSpec {
 pub struct PhysicsSpec {
     /// Mass (kg, see [`mass_kg`]).
     pub mass_kg: f32,
+    /// The kinematic model's (kg, see [`kinematic_mass_kg`]).
+    pub kinematic_mass_kg: f32,
     /// Moments of inertia (kg m²) about the body's right, forward and up axes: pitch, roll and
     /// yaw. `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame: about
     /// the lateral axis (pitch), the vertical one (yaw) and the longitudinal one (roll) - roll
@@ -144,6 +145,7 @@ impl PhysicsSpec {
         let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { DEFAULT_SPRING }).sum();
         PhysicsSpec {
             mass_kg: mass,
+            kinematic_mass_kg: kinematic_mass_kg(def),
             inertia,
             cog: Vec3::new(cog_xy.0, cog_xy.1, cog_z),
             rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { ROLLING_COEFFICIENT * mass * GRAVITY },
@@ -163,7 +165,16 @@ impl PhysicsSpec {
 /// The static load on each wheel of each axle (N): the weight shared so that the axle loads
 /// balance the centre of gravity (a least-squares split when there are more than two axles).
 pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    let mass = mass_kg(def);
+    rest_loads(def, mass_kg(def))
+}
+
+/// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them:
+/// with its mass ([`kinematic_mass_kg`]).
+pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
+    rest_loads(def, kinematic_mass_kg(def))
+}
+
+fn rest_loads(def: &Vehicle, mass: f32) -> Vec<f32> {
     let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
     let g = GRAVITY;
     let n = (def.axles.len() * 2).max(1) as f32;

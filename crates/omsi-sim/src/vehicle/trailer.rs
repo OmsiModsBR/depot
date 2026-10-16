@@ -361,7 +361,7 @@ impl TrailerPart {
             .map(|a| crate::rigid::AxleSpec::of(a).shown_radius)
             .unwrap_or(0.5);
         let n = ty.meshes.len();
-        let loads = crate::rigid::wheel_rest_loads(&ty.def);
+        let loads = crate::rigid::kinematic_wheel_rest_loads(&ty.def);
         let rest = ty
             .def
             .axles

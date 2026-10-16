@@ -105,7 +105,7 @@ impl KinematicModel {
         // (the rigid body's lock: inv_min_turnradius = tan(alpha_max) / s → alpha_max, with s
         // from the front axle to `[rot_pnt_long]`)
         let spec = PhysicsSpec::from(def);
-        KinematicModel { mass_kg: spec.mass_kg, rolling_resistance: spec.file_rolling_resistance, wheelbase: spec.wheelbase, max_steer_deg: spec.max_steer_deg }
+        KinematicModel { mass_kg: spec.kinematic_mass_kg, rolling_resistance: spec.file_rolling_resistance, wheelbase: spec.wheelbase, max_steer_deg: spec.max_steer_deg }
     }
 
     /// Advance `m` one step, the driver steering at `steering`. `drive_torque` is `M_Wheel`,

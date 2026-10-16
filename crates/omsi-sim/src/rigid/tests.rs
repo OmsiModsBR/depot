@@ -547,3 +547,17 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
     assert!(rb.position.is_finite() && (rb.position - at).length() < 1e-9, "{:?}", rb.position);
     assert_eq!(rb.velocity, Vec3::ZERO);
 }
+
+#[test]
+fn the_mass_is_in_tonnes_whatever_the_number() {
+    // as OMSI reads `[mass]`: a file that gives kilograms weighs a thousand times as much, a
+    // light one keeps its weight, and a file without one weighs 1 t
+    let kilograms = Vehicle { mass: 10_200.0, ..bus() };
+    assert_eq!(mass_kg(&kilograms), 10_200_000.0);
+    assert_eq!(mass_kg(&Vehicle { mass: 0.2, ..bus() }), 200.0);
+    assert_eq!(mass_kg(&Vehicle { mass_missing: true, ..bus() }), 1000.0);
+    assert_eq!(RigidBody::from_definition(&kilograms, &[]).mass(), 10_200_000.0);
+    // the kinematic model (the AI's copies) reads it as it always has
+    assert_eq!(kinematic_mass_kg(&kilograms), 10_200.0);
+    assert_eq!(kinematic_mass_kg(&Vehicle { mass: 0.2, ..bus() }), 500.0);
+}
