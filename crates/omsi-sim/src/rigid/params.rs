@@ -55,8 +55,6 @@ pub(super) const BODY_DAMPING: f32 = 1.5;
 /// The body is set back on its wheels when its up axis leans further than this (its z, the
 /// cosine of 72.5°): the safety net against tipping over on bad ground. *tuned*
 pub(super) const TIP_OVER: f32 = 0.3;
-/// Height (m) of the centre of gravity when `[schwerpunkt]` gives none. *fallback*
-pub(super) const DEFAULT_COG_HEIGHT: f32 = 1.0;
 /// The grip of a dry road (μ), the body's until the vehicle sets the road's own (the dry
 /// value of `vehicle::road_grip`). *tuned*
 pub(super) const DRY_GRIP: f32 = 0.85;
@@ -217,4 +215,7 @@ pub(super) mod fallbacks {
     /// Rolling resistance as a share of the weight when `[rollwiderstand]` gives none.
     /// *physics* (a bus tyre on asphalt), *fallback*
     pub const ROLLING_COEFFICIENT: f32 = 0.008;
+    /// Height (m) of the centre of gravity when `[schwerpunkt]` gives none (the `[cog]`'s
+    /// height first). *fallback*
+    pub const DEFAULT_COG_HEIGHT: f32 = 1.0;
 }

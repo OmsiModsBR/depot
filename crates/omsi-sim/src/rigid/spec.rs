@@ -10,7 +10,7 @@
 //! together is behaviour, for its own change.
 
 use super::params::{
-    DEFAULT_COG_HEIGHT, DEFAULT_INERTIA_INV,
+    DEFAULT_INERTIA_INV,
     GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE, TRACK_SHARE,
 };
 use glam::Vec3;
@@ -106,7 +106,9 @@ pub struct PhysicsSpec {
     /// comment's order the SD202 rolled on 80 t m² instead of 300, twice as fast, and every
     /// uneven patch rocked it like a boat.
     pub inertia: Vec3,
-    /// Centre of gravity (m, right, forward, up from the model origin).
+    /// Centre of gravity (m, right, forward, up from the model origin). Its height is
+    /// `[schwerpunkt]`, the lever the weight shifts by as OMSI has it, and none for a file
+    /// without one: the body then leans into no acceleration.
     pub cog: Vec3,
     /// Rolling resistance (N): `[rollwiderstand]` as the file gives it, a force spread over
     /// the wheels whatever the weight, and none for a file without one (OMSI's reading). The
@@ -138,7 +140,6 @@ impl PhysicsSpec {
         let moi = if def.moment_of_inertia == [0.0; 3] { [100.0; 3] } else { def.moment_of_inertia };
         let inertia = Vec3::new(moi[0], moi[2], moi[1]) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
-        let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(DEFAULT_COG_HEIGHT) };
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
@@ -149,7 +150,7 @@ impl PhysicsSpec {
             mass_kg: mass,
             kinematic_mass_kg: kinematic_mass_kg(def),
             inertia,
-            cog: Vec3::new(cog_xy.0, cog_xy.1, cog_z),
+            cog: Vec3::new(cog_xy.0, cog_xy.1, def.cog_height),
             rolling_resistance: def.rolling_resistance,
             rot_pnt_long: def.rot_pnt_long,
             front_long,

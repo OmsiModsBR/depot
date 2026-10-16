@@ -598,3 +598,13 @@ fn rolling_resistance_is_the_files_force() {
     assert_eq!(PhysicsSpec::from(&Vehicle { rolling_resistance: 0.0, ..bus() }).rolling_resistance, 0.0);
     assert_eq!(RigidBody::from_definition(&Vehicle { rolling_resistance: 0.0, ..bus() }, &[]).rolling_resistance(), 0.0);
 }
+
+#[test]
+fn the_centre_of_gravity_is_as_high_as_schwerpunkt() {
+    // `[schwerpunkt]` is the lever the weight shifts by; `[cog]`'s height places OMSI's
+    // collision box, not the weight, and a file without either has its weight on the ground
+    let cog = |def: Vehicle| PhysicsSpec::from(&def).cog.z;
+    assert_eq!(cog(bus()), 1.2);
+    assert_eq!(cog(Vehicle { cog_height: 0.0, cog: Some([0.0, 0.5, 0.9]), ..bus() }), 0.0);
+    assert_eq!(cog(Vehicle { cog_height: 0.0, ..bus() }), 0.0);
+}
