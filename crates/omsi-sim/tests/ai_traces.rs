@@ -1,5 +1,5 @@
 //! Traces of the AI traffic's motion, the safety net of its refactor (Trilha F, F0): the
-//! body that follows a lane (`ai_motion::AiBody` on the road, on rails and in the air), what
+//! body that follows a lane (`ai::AiBody` on the road, on rails and in the air), what
 //! the planner works out with it to pull out and back in, the kinematic model, the static
 //! pose of an AI copy (`ai_rest_offset`) and the frame that hands the motion to the scripts
 //! (`VehicleInstance::update_ai`), written out frame by frame.
@@ -18,7 +18,7 @@
 use glam::{DVec2, DVec3, Vec3};
 use omsi_model::Model;
 use omsi_script::Program;
-use omsi_sim::ai_motion::{back_in_ramp, pull_out_ramps, pull_out_room, rotation_point, straight_pull_out, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT};
+use omsi_sim::ai::{back_in_ramp, pull_out_ramps, pull_out_room, rotation_point, straight_pull_out, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT};
 use omsi_sim::collision::Obb;
 use omsi_sim::physics::VehicleMotion;
 use omsi_sim::rigid::{Ground, GroundProbe};
@@ -233,7 +233,7 @@ mod scenarios {
         Axle { long, max_width: width, min_width: width * 0.75, wheel_diameter: 0.6, spring, max_force: 0.0, damper, driven, inertia_inv: 0.0 }
     }
 
-    /// A Golf (`ai_motion`'s tests' `golf()`).
+    /// A Golf (`ai`'s tests' `golf()`).
     pub fn car() -> Vehicle {
         Vehicle {
             mass: 1.0,
