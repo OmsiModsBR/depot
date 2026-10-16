@@ -184,6 +184,16 @@ impl VehicleHost {
         self.html_departure_wants.push(key);
     }
 
+    /// Forget the sound triggers fired so far, and the variables kept with them. A bus is
+    /// silent as it is put down: what its `{init}` and first steps fired (the stock scripts
+    /// fire `ev_engineshutdown` while setting the engine up) happened before anyone could
+    /// listen, and OMSI 2's sound set does not exist yet to hear it. The `(T.F.)` file
+    /// triggers, the announcements, are left as they are.
+    pub fn forget_fired_sound_triggers(&mut self) {
+        self.fired_triggers.clear();
+        self.fired_trigger_vars.clear();
+    }
+
     pub fn new(clock: SimClock) -> Self {
         // the weather is there before {init} runs: made at 0 °C (the value before the first
         // weather update) every engine was cold, and the PAZ's carburettor engine, which
@@ -739,6 +749,23 @@ mod tests {
     use super::*;
     use crate::scripttex::ScriptTexture;
     use omsi_script::{compile, CompileInput, Vm};
+
+    /// A bus put down fires triggers while its `{init}` runs, before any sound set exists:
+    /// they are forgotten, the announcements are not, and a trigger fired later is kept.
+    #[test]
+    fn sound_triggers_fired_before_the_sounds_exist_are_forgotten() {
+        let mut host = VehicleHost::new(SimClock::default());
+        host.snapshot_triggers.insert("ev_engineshutdown".to_string());
+        host.sound_trigger_vars("ev_EngineShutdown", NameId::default(), &[1.0, 2.0]);
+        host.sound_trigger_file("ev_announce", "Announcements\\stop.wav");
+        assert_eq!(host.fired_triggers.len(), 1);
+        assert_eq!(host.fired_trigger_vars.len(), 1);
+        host.forget_fired_sound_triggers();
+        assert!(host.fired_triggers.is_empty() && host.fired_trigger_vars.is_empty());
+        assert_eq!(host.fired_file_triggers.len(), 1, "announcements stay");
+        host.sound_trigger("ev_enginestart", NameId::default());
+        assert_eq!(host.fired_triggers, vec!["ev_enginestart".to_string()]);
+    }
 
     #[test]
     fn departure_wants_keep_the_stops_asked_most_recently() {
