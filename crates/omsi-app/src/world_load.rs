@@ -5,7 +5,7 @@ use crate::camera_util::default_camera;
 use crate::cli::{Args, parse_cam};
 use crate::scene::World;
 use crate::situation::start_clock;
-use crate::weather_setup::load_weather;
+use crate::weather_setup::weather_snow;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};
 use std::time::Instant;
@@ -15,8 +15,8 @@ use std::time::Instant;
 /// whatever the calendar says - with snow on the road (`[snowOnRoad]`) into the snowy
 /// roads of `WinterSnowfall` too (see `omsi_texture::season_chain`).
 pub(crate) fn season_folder(args: &Args, global: &omsi_map::GlobalCfg) -> (i32, Option<String>) {
-    let weather = load_weather(args);
-    season_folder_on(args, global, start_clock(args).day_of_year, weather.snow, weather.snow_on_road)
+    let (snow, snow_on_road) = weather_snow(args);
+    season_folder_on(args, global, start_clock(args).day_of_year, snow, snow_on_road)
 }
 
 /// [`season_folder`] on day `day_of_year` in weather that is snowy or not (the date moves on

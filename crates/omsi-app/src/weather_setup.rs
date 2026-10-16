@@ -127,27 +127,14 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
         return w;
     }
     crate::weather_model::stop();
-    let rel = args
-        .weather
-        .clone()
-        .filter(|w| !crate::weather_cycle::is_cycle(Some(w)))
-        .unwrap_or_else(|| "Weather/#CAVOK.owt".into());
+    let rel = chosen_weather(args);
     if let Some(w)=CustomWeather::parse(&rel).map(|c|c.to_weather()){
         log::info!("weather custom: fog range {} m, precip {:?}, temp {:?}",w.fog.0,w.precip,w.temp);
         scene::SNOW_WEATHER.store(w.snow,std::sync::atomic::Ordering::Relaxed);
         omsi_sim::host::set_ambient_weather(w.temp.0,w.temp.1);
         return w;
     }
-    // OMSI 2's current weather: `metar:<ICAO>` fetches the airport's report
-    let loaded = if rel.starts_with(REPORT) {
-        // a report the host or server tells (see `report_wire`): its values, no download
-        Ok(from_report(&rel).unwrap_or_else(|| omsi_content::weather::from_metar("", "CAVOK")))
-    } else {
-        match rel.strip_prefix("metar:").or_else(|| rel.strip_prefix("METAR:")) {
-            Some(icao) => Ok(fetch_metar(icao.trim())),
-            None => omsi_content::weather::Weather::load(&omsi_cfg::resolve_path(&args.root, &rel)),
-        }
-    };
+    let loaded = read_weather(args, &rel);
     match loaded {
         Ok(w) => {
             log::info!(
@@ -179,6 +166,46 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
             }
         }
     }
+}
+
+/// The weather file `args` choose (a cycle's or no choice: the clear #CAVOK).
+fn chosen_weather(args: &Args) -> String {
+    args.weather
+        .clone()
+        .filter(|w| !crate::weather_cycle::is_cycle(Some(w)))
+        .unwrap_or_else(|| "Weather/#CAVOK.owt".into())
+}
+
+/// The weather `rel` names, read and nothing more: a report the host or server tells, a
+/// station's METAR (`metar:<ICAO>`) or an .owt file.
+fn read_weather(args: &Args, rel: &str) -> Result<omsi_content::weather::Weather, omsi_cfg::CfgError> {
+    // OMSI 2's current weather: `metar:<ICAO>` fetches the airport's report
+    if rel.starts_with(REPORT) {
+        // a report the host or server tells (see `report_wire`): its values, no download
+        Ok(from_report(rel).unwrap_or_else(|| omsi_content::weather::from_metar("", "CAVOK")))
+    } else {
+        match rel.strip_prefix("metar:").or_else(|| rel.strip_prefix("METAR:")) {
+            Some(icao) => Ok(fetch_metar(icao.trim())),
+            None => omsi_content::weather::Weather::load(&omsi_cfg::resolve_path(&args.root, rel)),
+        }
+    }
+}
+
+/// Whether the weather `args` choose has snow, and snow on the road - without starting the
+/// weather model or telling the vehicles and the sky (as [`load_weather`] does): the season
+/// of the textures asks for it before the session's weather is loaded, and for another
+/// player's weather too.
+pub(crate) fn weather_snow(args: &Args) -> (bool, bool) {
+    let w = if crate::weather_model::is_natural(args.weather.as_deref()) {
+        crate::weather_model::WeatherModel::new(&crate::situation::start_clock(args), &omsi_sim::daylight::place()).weather()
+    } else {
+        let rel = chosen_weather(args);
+        match CustomWeather::parse(&rel) {
+            Some(c) => c.to_weather(),
+            None => read_weather(args, &rel).unwrap_or_default(),
+        }
+    };
+    (w.snow, w.snow_on_road)
 }
 
 /// Sky gradient textures from envir.cfg uploaded into the scene.
@@ -572,13 +599,26 @@ pub(crate) fn metar_airports(root:&std::path::Path)->Vec<(String,String)>{
 /// The weather of an airport's METAR report (aviationweather.gov), or a clear day when it
 /// cannot be had (no network, an unknown station).
 pub(crate) fn fetch_metar(icao: &str) -> omsi_content::weather::Weather {
-    match try_metar(icao) {
+    // A station reports about twice an hour: the same station asked again within a few
+    // minutes (the season of the textures, then the session's weather) gets the report it
+    // already has rather than a second download that holds up the start.
+    static LAST: std::sync::Mutex<Option<(String, std::time::Instant, omsi_content::weather::Weather)>> = std::sync::Mutex::new(None);
+    const FRESH: std::time::Duration = std::time::Duration::from_secs(600);
+    let key = icao.trim().to_ascii_uppercase();
+    if let Some((k, at, w)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if *k == key && at.elapsed() < FRESH {
+            return w.clone();
+        }
+    }
+    let w = match try_metar(icao) {
         Some(w) => w,
         None => {
             log::warn!("current weather at {icao}: no METAR report could be had; a clear day instead");
-            omsi_content::weather::from_metar(icao, "CAVOK")
+            return omsi_content::weather::from_metar(icao, "CAVOK");
         }
-    }
+    };
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, std::time::Instant::now(), w.clone()));
+    w
 }
 
 /// The request for a station's METAR report. The code comes from a setting, a server or a
@@ -689,5 +729,23 @@ mod metar_url_tests {
         assert_eq!(percent_encode("EDDB"), "EDDB");
         assert_eq!(percent_encode("a&b=c d/é"), "a%26b%3Dc%20d%2F%C3%A9");
         assert_eq!(percent_encode("-._~"), "-._~");
+    }
+}
+
+#[cfg(test)]
+mod weather_snow_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn the_snow_of_a_chosen_weather_is_read_without_loading_it() {
+        let mut args = Args::parse_from(["depot"]);
+        args.weather = Some("custom:t=-5;snow=1;snowroad=1".into());
+        assert_eq!(weather_snow(&args), (true, true));
+        args.weather = Some("custom:t=10;snow=0".into());
+        assert_eq!(weather_snow(&args), (false, false));
+        // a file that is not there: no snow, and no weather taken up
+        args.weather = Some("Weather/does-not-exist.owt".into());
+        assert_eq!(weather_snow(&args), (false, false));
     }
 }
