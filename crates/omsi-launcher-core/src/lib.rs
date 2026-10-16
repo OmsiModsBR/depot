@@ -2898,6 +2898,12 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
             v
         }
         "instances" => serde_json::to_value(instances::list())?,
+        // bloated depot (.hof) files of the installation, with every place each one is
+        // installed; `{"name": "Map.hof"}` limits the search to that file name. Read only.
+        "hof_check" => hof_check(&s("name"))?,
+        // repairs one group found by `hof_check` (`{"key": <key>, "confirm": true}`): a
+        // backup of every copy is made beside it first. Nothing is written without confirm.
+        "hof_fix" => hof_fix(&a)?,
         "stop" => {
             let by_itself = instances::stop(a.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32)?;
             json!({ "stopped": true, "ended_by_itself": by_itself })
@@ -3450,4 +3456,58 @@ mod nav_orientation_tests {
         v["nav_contours"] = json!(false);
         assert_eq!(settings_from_text(Some(&settings_to_text(&v, Some("nav_contours=1\n"))))["nav_contours"], json!(false));
     }
+}
+
+fn hof_group_json(g: &omsi_vehicle::hof_check::Group) -> Value {
+    json!({
+        "file": g.file_name,
+        "key": g.key,
+        "bytes": g.bytes,
+        "largest_list": g.inflation.largest,
+        "entries": g.inflation.total_entries,
+        "repaired_bytes": g.repaired.map(|r| r.0),
+        "repaired_entries": g.repaired.map(|r| r.1),
+        "repairable": g.repaired.is_some(),
+        "paths": g.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
+    })
+}
+
+fn hof_check(name: &str) -> Result<Value> {
+    let root = PathBuf::from(load_config().root);
+    if !is_omsi_root(&root) {
+        return Err(anyhow!("no OMSI folder is configured"));
+    }
+    let only = (!name.trim().is_empty()).then(|| name.trim());
+    let groups = omsi_vehicle::hof_check::scan_install(&root, only);
+    Ok(json!({ "root": root.display().to_string(), "groups": groups.iter().map(hof_group_json).collect::<Vec<_>>() }))
+}
+
+fn hof_fix(a: &Value) -> Result<Value> {
+    if a.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(anyhow!("hof_fix writes files: pass \"confirm\": true after the user agreed"));
+    }
+    let key = a.get("key").and_then(|v| v.as_u64()).ok_or_else(|| anyhow!("missing \"key\" (from hof_check)"))?;
+    let root = PathBuf::from(load_config().root);
+    if !is_omsi_root(&root) {
+        return Err(anyhow!("no OMSI folder is configured"));
+    }
+    let name = a.get("name").and_then(|v| v.as_str()).filter(|n| !n.trim().is_empty());
+    let group = omsi_vehicle::hof_check::scan_install(&root, name)
+        .into_iter()
+        .find(|g| g.key == key)
+        .ok_or_else(|| anyhow!("that file is no longer found as it was checked"))?;
+    let results: Vec<Value> = group
+        .paths
+        .iter()
+        .map(|p| {
+            use omsi_vehicle::hof_check::FileResult as R;
+            let (status, detail) = match omsi_vehicle::hof_check::fix_file(p, Some(key)) {
+                R::Fixed { backup, bytes_before, bytes_after } => ("fixed", format!("{bytes_before} -> {bytes_after} bytes, backup {}", backup.display())),
+                R::Skipped(why) => ("skipped", why),
+                R::Failed(why) => ("failed", why),
+            };
+            json!({ "path": p.display().to_string(), "status": status, "detail": detail })
+        })
+        .collect();
+    Ok(json!({ "file": group.file_name, "results": results }))
 }
