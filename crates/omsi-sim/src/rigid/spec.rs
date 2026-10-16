@@ -180,14 +180,17 @@ impl PhysicsSpec {
 
 /// The static load on each wheel of each axle (N): the weight shared so that the axle loads
 /// balance the centre of gravity (a least-squares split when there are more than two axles).
+/// A wheel carries no less than nothing - an OMSI strut only pushes -, however far the centre
+/// of gravity lies from its axle.
 pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    rest_loads(def, mass_kg(def))
+    rest_loads(def, mass_kg(def), 0.0)
 }
 
 /// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them:
-/// with its mass ([`kinematic_mass_kg`]).
+/// with its mass ([`kinematic_mass_kg`]), each wheel taking at least a share of an even split
+/// (`MIN_LOAD_SHARE`).
 pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    rest_loads(def, kinematic_mass_kg(def))
+    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE)
 }
 
 /// How far each axle's spring sits down under the vehicle's weight and how far its tyre
@@ -209,7 +212,7 @@ pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)
         .collect()
 }
 
-fn rest_loads(def: &Vehicle, mass: f32) -> Vec<f32> {
+fn rest_loads(def: &Vehicle, mass: f32, least_share: f32) -> Vec<f32> {
     let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
     let g = GRAVITY;
     let n = (def.axles.len() * 2).max(1) as f32;
@@ -223,7 +226,7 @@ fn rest_loads(def: &Vehicle, mass: f32) -> Vec<f32> {
     } else {
         (mass * g / n, 0.0)
     };
-    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * MIN_LOAD_SHARE)).collect()
+    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * least_share)).collect()
 }
 
 /// The least-squares split of a load `total` with its centre at `centre` over points at
@@ -252,9 +255,8 @@ pub fn wheel_rest_loads_supported(def: &Vehicle, support_long: f32) -> (Vec<f32>
     let mut points: Vec<(f32, f32)> = def.axles.iter().map(|a| (a.long, 2.0)).collect();
     points.push((support_long, 1.0));
     let (a, b) = split(&points, weight, cog_y);
-    let n = points.iter().map(|p| p.1).sum::<f32>();
     let joint = (a + b * support_long).clamp(0.0, weight);
-    (def.axles.iter().map(|x| (a + b * x.long).max(weight / n * 0.2)).collect(), joint)
+    (def.axles.iter().map(|x| (a + b * x.long).max(0.0)).collect(), joint)
 }
 
 /// The line an AI vehicle turns about (`[rot_pnt_long]`, normally the rear axle) and the

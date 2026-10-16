@@ -637,3 +637,16 @@ fn the_lock_is_the_files_turning_radius() {
     // the kinematic model keeps its lock
     assert_eq!((spec.kinematic_max_steer_deg, none.kinematic_max_steer_deg), (60.0, 10.0));
 }
+
+#[test]
+fn a_wheel_far_from_the_weight_carries_nothing() {
+    // the centre of gravity behind the rear axle: the front wheels carry nothing (an OMSI
+    // strut only pushes), not a fifth of an even share
+    let def = Vehicle { cog: Some([0.0, -4.0, 1.2]), ..bus() };
+    let loads = wheel_rest_loads(&def);
+    assert_eq!(loads[0], 0.0);
+    let (loads, _) = wheel_rest_loads_supported(&Vehicle { cog: Some([0.0, -8.0, 1.2]), ..bus() }, 6.0);
+    assert_eq!(loads[0], 0.0, "{loads:?}");
+    // the kinematic model's parts keep their least share
+    assert!(kinematic_wheel_rest_loads(&def)[0] > 0.0);
+}

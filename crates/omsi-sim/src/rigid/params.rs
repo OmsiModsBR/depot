@@ -81,8 +81,8 @@ pub const BUMP: f32 = 0.24;
 pub(super) const TRACK_SHARE: f32 = 0.85;
 /// `achse_inertia_inv` where a `[newachse]` does not say (OMSI LoadFromFile: 0.002). *OMSI*
 pub const DEFAULT_INERTIA_INV: f32 = 0.002;
-/// The least static load a wheel takes, as a share of an even split of the weight, however
-/// far the centre of gravity lies from its axle. *tuned*
+/// The least static load a wheel of the kinematic model (the AI's copies) takes, as a share of
+/// an even split of the weight, however far the centre of gravity lies from its axle. *tuned*
 pub(super) const MIN_LOAD_SHARE: f32 = 0.2;
 /// How high over the model origin's plane OMSI 2's ground query looks from (m): a wheel
 /// that finds nothing within its climb looks again from there. *OMSI*

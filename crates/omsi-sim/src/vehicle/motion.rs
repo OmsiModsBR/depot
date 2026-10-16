@@ -319,7 +319,8 @@ impl VehicleInstance {
                     .filter(|(_, a)| a.driven)
                     .map(|(i, _)| i)
                     .collect();
-                let wheel_load = |a: usize| t.rest.get(a).map(|r| r.1).unwrap_or(0.0) * 2.0;
+                let loads = crate::rigid::wheel_rest_loads(def);
+                let wheel_load = |a: usize| loads.get(a).copied().unwrap_or(0.0) * 2.0;
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
