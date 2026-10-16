@@ -11,7 +11,7 @@
 //! copies, and the AI's body keep their old readings, floors and all, in fields and functions
 //! of their own (`kinematic_*`, [`AiSpec`]) until the AI's physics is taken up again; the
 //! values the player's vehicle no longer uses are kept behind the `model-fallbacks` feature
-//! (`params::fallbacks`).
+//! (`params::fallbacks`) until the physics is validated in game.
 
 use super::params::{
     DEFAULT_INERTIA_INV,
@@ -113,11 +113,9 @@ pub struct PhysicsSpec {
     /// The kinematic model's (kg, see [`kinematic_mass_kg`]).
     pub kinematic_mass_kg: f32,
     /// Moments of inertia (kg m²) about the body's right, forward and up axes: pitch, roll and
-    /// yaw, from the file's t m² with no unit guess and no minimum. `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame: about
-    /// the lateral axis (pitch), the vertical one (yaw) and the longitudinal one (roll) - roll
-    /// takes the third value, yaw the second, whatever the SDK's comment says. Read in the
-    /// comment's order the SD202 rolled on 80 t m² instead of 300, twice as fast, and every
-    /// uneven patch rocked it like a boat.
+    /// yaw, from the file's t m² with no unit guess and no minimum. `[momentofintertia]` gives
+    /// them in that order - about the lateral, the longitudinal and the vertical axis, as the
+    /// SDK's comment says ("um x, y und z-Achse, also Quer-, Längs- und Hochachse").
     pub inertia: Vec3,
     /// Centre of gravity (m, right, forward, up from the model origin). Its height is
     /// `[schwerpunkt]`, the lever the weight shifts by as OMSI has it, and none for a file
@@ -154,7 +152,7 @@ impl PhysicsSpec {
         // in t m², as OMSI reads it whatever the numbers, and 100 t m² about each axis for a
         // file without the section (OMSI's default; this parser leaves it at zero)
         let moi = if def.moment_of_inertia == [0.0; 3] { [100.0; 3] } else { def.moment_of_inertia };
-        let inertia = Vec3::new(moi[0], moi[2], moi[1]) * 1000.0;
+        let inertia = Vec3::from(moi) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
@@ -356,8 +354,8 @@ impl AiSpec {
             damper[2] += w.c * w.lat * w.lat;
         }
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
-        // (pitch and roll: the first and the third value, as OMSI reads them - see
-        // `PhysicsSpec::inertia`)
+        // (pitch and roll: the first and the third value, as the player's body once read them;
+        // OMSI's roll is the second - see `PhysicsSpec::inertia`)
         let mut inertia = [def.moment_of_inertia[0] * unit, def.moment_of_inertia[2] * unit];
         if inertia[0] <= 0.0 {
             inertia[0] = mass * (front_long * front_long + rear_long * rear_long) * 0.5;
