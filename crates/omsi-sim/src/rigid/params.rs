@@ -75,8 +75,9 @@ pub const DROOP: f32 = 0.15;
 /// The bump stop (m): the most a spring is pressed when its rate does not say
 /// (`achse_maxforce` over it), and where a deflated air suspension rests. *tuned*
 pub const BUMP: f32 = 0.24;
-/// Where the tyres stand across, as a share of half `achse_maxwidth`, when `achse_minwidth`
-/// does not say (with it, halfway between the two widths). *fallback*
+/// Where the kinematic model's parts (the AI's copies) stand their tyres across, as a share of
+/// half `achse_maxwidth`, when `achse_minwidth` does not say (with it, halfway between the two
+/// widths). *fallback*
 pub(super) const TRACK_SHARE: f32 = 0.85;
 /// `achse_inertia_inv` where a `[newachse]` does not say (OMSI LoadFromFile: 0.002). *OMSI*
 pub const DEFAULT_INERTIA_INV: f32 = 0.002;

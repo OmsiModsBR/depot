@@ -46,17 +46,24 @@ pub(crate) fn coupled_rolling_resistance(def: &Vehicle) -> f32 {
 pub struct AxleSpec {
     /// Along the body (m, forward positive).
     pub long: f32,
-    /// The tyre's radius (m) the physics stands on, at least 0.15 m.
+    /// The tyre's radius (m) the physics drives with: half `achse_raddurchmesser`, as OMSI
+    /// divides by it.
     pub radius: f32,
+    /// The tyre's radius (m) the kinematic model's parts stand on (the AI's copies), at least
+    /// 0.15 m.
+    pub kinematic_radius: f32,
     /// The tyre's radius (m) the wheels are shown and turned with (`VehicleMotion::at_rest`,
     /// a trailer's wheels), at least 0.1 m.
     pub shown_radius: f32,
     /// Half of `achse_maxwidth` (m), as the wheels are shown.
     pub half_width: f32,
-    /// Where the strut pushes the body across (m: half the outer width, at least 0.3) and where
-    /// the tyres stand (the middle of the band between the two widths).
+    /// Where the strut pushes the body across (m: half `achse_maxwidth`) and where the tyres
+    /// stand (the middle of the band between the two widths), as OMSI puts them.
     pub outer: f32,
     pub track: f32,
+    /// Where the kinematic model's parts (the AI's copies) put the tyres across: the middle of
+    /// the band, or 0.85 of the outer half-width (at least 0.3 m) without an inner width.
+    pub kinematic_track: f32,
     /// Spring (N/m), damper (N s/m) and the strut's largest force (N) of each wheel, as the
     /// file gives them: a file without them has none, as in OMSI (no spring carries nothing,
     /// no largest force lets the strut push nothing).
@@ -73,15 +80,17 @@ pub struct AxleSpec {
 
 impl AxleSpec {
     pub fn of(a: &Axle) -> AxleSpec {
-        let outer = (a.max_width / 2.0).max(0.3);
-        let track = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * TRACK_SHARE };
+        let kinematic_outer = (a.max_width / 2.0).max(0.3);
+        let kinematic_track = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { kinematic_outer * TRACK_SHARE };
         AxleSpec {
             long: a.long,
-            radius: (a.wheel_diameter / 2.0).max(0.15),
+            radius: a.wheel_diameter / 2.0,
+            kinematic_radius: (a.wheel_diameter / 2.0).max(0.15),
             shown_radius: (a.wheel_diameter / 2.0).max(0.1),
             half_width: a.max_width / 2.0,
-            outer,
-            track,
+            outer: a.max_width / 2.0,
+            track: (a.max_width + a.min_width) / 4.0,
+            kinematic_track,
             spring: a.spring * 1000.0,
             damper: a.damper * 1000.0,
             max_force: a.max_force * 1000.0,
@@ -187,7 +196,7 @@ pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)
         .enumerate()
         .map(|(a, axle)| {
             let axle = AxleSpec::of(axle);
-            let r = axle.radius;
+            let r = axle.kinematic_radius;
             let z = hubs.get(a).copied().flatten().unwrap_or(r);
             let sag = loads.get(a).copied().unwrap_or(0.0) / axle.sag_spring;
             (sag.min(super::BUMP), r - z)

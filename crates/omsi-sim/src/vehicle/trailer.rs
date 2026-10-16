@@ -370,7 +370,7 @@ impl TrailerPart {
             .enumerate()
             .map(|(a, (axle, z))| {
                 let axle = crate::rigid::AxleSpec::of(axle);
-                let r = axle.radius;
+                let r = axle.kinematic_radius;
                 (r - z.unwrap_or(r), loads.get(a).copied().unwrap_or(0.0), axle.sag_spring)
             })
             .collect();

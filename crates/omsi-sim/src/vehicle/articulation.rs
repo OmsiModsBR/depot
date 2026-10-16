@@ -476,9 +476,9 @@ impl TrailerPart {
             }
             let Some(def) = self.ty.def.axles.get(a) else { continue };
             let def = crate::rigid::AxleSpec::of(def);
-            let r = def.radius;
+            let r = def.kinematic_radius;
             let hub = r - offset;
-            let across = def.track;
+            let across = def.kinematic_track;
             let mut sides = [None, None];
             for (si, x) in [-across, across].into_iter().enumerate() {
                 let p = self.position + rot.transform_point3(Vec3::new(x, def.long, hub)).as_dvec3();

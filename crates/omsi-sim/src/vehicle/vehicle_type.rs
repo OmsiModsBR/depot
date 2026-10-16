@@ -479,7 +479,7 @@ impl VehicleType {
             .enumerate()
             .map(|(a, (axle, g))| {
                 let axle = crate::rigid::AxleSpec::of(axle);
-                let r = axle.radius;
+                let r = axle.kinematic_radius;
                 let model = g
                     .map(|(z, r_mesh)| z + (r - r_mesh))
                     .filter(|z| (z - r).abs() <= 0.08);

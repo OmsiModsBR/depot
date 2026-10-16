@@ -608,3 +608,14 @@ fn the_centre_of_gravity_is_as_high_as_schwerpunkt() {
     assert_eq!(cog(Vehicle { cog_height: 0.0, cog: Some([0.0, 0.5, 0.9]), ..bus() }), 0.0);
     assert_eq!(cog(Vehicle { cog_height: 0.0, ..bus() }), 0.0);
 }
+
+#[test]
+fn the_wheels_stand_where_the_axle_says() {
+    // no minimum radius or width and no share of the outer width: the tyres stand halfway
+    // between `achse_minwidth` and `achse_maxwidth`, the strut pushes at half the outer width
+    let a = Axle { long: 1.0, max_width: 0.4, min_width: 0.0, wheel_diameter: 0.2, spring: 100.0, max_force: 10.0, damper: 1.0, driven: false, inertia_inv: 0.0 };
+    let spec = AxleSpec::of(&a);
+    assert_eq!((spec.radius, spec.outer, spec.track), (0.1, 0.2, 0.1));
+    // the kinematic model's parts stand as they always have
+    assert_eq!((spec.kinematic_radius, spec.kinematic_track), (0.15, 0.3 * 0.85));
+}
