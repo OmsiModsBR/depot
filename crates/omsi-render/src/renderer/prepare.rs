@@ -221,25 +221,14 @@ impl Renderer {
             ..self.options
         };
         RT_BUFFERS.store(false, std::sync::atomic::Ordering::Relaxed);
-        // (the meshes' shared pages stay on, as after the multisampling fallback below)
-        let mesh_pages = self.assets.mesh_pages;
-        let mut rebuilt = Self::build(
+        let rebuilt = Self::build(
             self.device.clone(),
             self.queue.clone(),
             self.adapter_name.clone(),
             self.gpu.format,
             options,
         );
-        rebuilt.assets.mesh_pages = mesh_pages;
-        // (what the old device context noted goes on: an "out of memory" that switched the
-        // multisampling off still has to cut the textures, #48)
-        rebuilt.gpu.inherit(&self.gpu);
-        *self = rebuilt;
-        scene.dirty = true;
-        scene.model_buf = None;
-        scene.params_buf = None;
-        scene.camera_bind_group = None;
-        scene.shadow_bind_group = None;
+        self.take_over(rebuilt, scene);
     }
 
     /// Rebuild the pipelines and targets without multisampling after a GPU error with it.
@@ -267,23 +256,107 @@ impl Renderer {
             msaa: 1,
             ..self.options
         };
-        let mesh_pages = self.assets.mesh_pages;
-        let mut rebuilt = Self::build(
+        let rebuilt = Self::build(
             self.device.clone(),
             self.queue.clone(),
             self.adapter_name.clone(),
             self.gpu.format,
             options,
         );
-        rebuilt.assets.mesh_pages = mesh_pages;
+        self.take_over(rebuilt, scene);
+    }
+
+    /// Put `rebuilt` (the same device, other options) in this renderer's place, with what the
+    /// game handed this one: the coronas' and the smoke's pictures, the tile light maps and
+    /// where they lie, and the settings changed while it ran. The game uploads these once
+    /// (at the start, or as the tiles come), so a fresh renderer would draw the coronas
+    /// without their pictures and the nights without the light pools from then on.
+    fn take_over(&mut self, mut rebuilt: Renderer, scene: &mut Scene) {
+        // (the meshes' shared pages stay on)
+        rebuilt.assets.mesh_pages = self.assets.mesh_pages;
         // (what the old device context noted goes on: an "out of memory" that switched the
         // multisampling off still has to cut the textures, #48)
         rebuilt.gpu.inherit(&self.gpu);
+        // (the pictures' bind groups stay valid: the device hands out the same bind group
+        // layout for identical entries, as for the scene's materials)
+        rebuilt.sprites.corona_textures = std::mem::take(&mut self.sprites.corona_textures);
+        std::mem::swap(
+            &mut rebuilt.sprites.smoke_bind_group,
+            &mut self.sprites.smoke_bind_group,
+        );
+        std::mem::swap(&mut rebuilt.light_map, &mut self.light_map);
+        rebuilt.env_heading.set(self.env_heading.get());
+        rebuilt.dynamic_scale.set(self.dynamic_scale.get());
+        rebuilt.blend_by_origin = self.blend_by_origin;
+        rebuilt.shadow_blobs = self.shadow_blobs;
         *self = rebuilt;
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
         scene.camera_bind_group = None;
         scene.shadow_bind_group = None;
+    }
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::*;
+
+    fn noop_renderer() -> Renderer {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        pollster::block_on(Renderer::new_with(
+            &instance,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("noop renderer")
+    }
+
+    #[test]
+    fn a_fallback_keeps_what_the_game_uploaded() {
+        let img = omsi_texture::Image {
+            width: 2,
+            height: 2,
+            rgba: vec![255; 16],
+            has_alpha: true,
+        };
+        for rt in [false, true] {
+            let mut r = noop_renderer();
+            let mut scene = r.new_scene();
+            r.set_corona_texture(3, &img);
+            r.set_light_map_tile((1, 2), Some(&img));
+            r.set_light_map_place(100.0, 200.0, 300.0);
+            r.set_dynamic_scale(0.7);
+            r.set_env_heading(Some(12.0));
+            r.shadow_blobs = !r.shadow_blobs;
+            r.blend_by_origin = true;
+            let blobs = r.shadow_blobs;
+            if rt {
+                r.fall_back_without_ray_tracing(&mut scene);
+            } else {
+                r.fall_back_to_single_sample(&mut scene);
+            }
+            assert!(
+                r.sprites
+                    .corona_textures
+                    .get(3)
+                    .is_some_and(|t| t.is_some()),
+                "rt {rt}"
+            );
+            assert_eq!(r.light_map.lm_place.get(), (100.0, 200.0, 300.0));
+            assert_eq!(r.dynamic_scale(), 0.7);
+            assert_eq!(r.env_heading.get(), Some(12.0));
+            assert_eq!(r.shadow_blobs, blobs);
+            assert!(r.blend_by_origin);
+            assert!(scene.dirty && scene.camera_bind_group.is_none());
+        }
     }
 }
