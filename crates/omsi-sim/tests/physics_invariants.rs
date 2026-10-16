@@ -35,13 +35,13 @@ fn three_axles() -> Vehicle {
 /// The weight and its moment about the model origin (along y) that the wheels' static
 /// loads carry: what `wheels` hold and where.
 fn carried(rb: &RigidBody) -> (f32, f32) {
-    let load: f32 = rb.wheels.iter().map(|w| w.rest_load).sum();
-    let moment: f32 = rb.wheels.iter().map(|w| w.rest_load * w.attach.y).sum();
+    let load: f32 = rb.wheels().iter().map(|w| w.rest_load()).sum();
+    let moment: f32 = rb.wheels().iter().map(|w| w.rest_load() * w.attach().y).sum();
     (load, moment)
 }
 
 fn reach(rb: &RigidBody) -> f32 {
-    rb.wheels.iter().map(|w| w.attach.y.abs()).fold(0.0, f32::max)
+    rb.wheels().iter().map(|w| w.attach().y.abs()).fold(0.0, f32::max)
 }
 
 /// I1: standing, the static loads of the wheels carry the weight, Σ 2 L_e = m g, and
@@ -50,10 +50,10 @@ fn reach(rb: &RigidBody) -> f32 {
 fn i1_the_static_loads_carry_and_balance_the_weight() {
     for (name, def) in [("two axles", bus()), ("three axles", three_axles()), ("centre of gravity forward", Vehicle { cog: Some([0.0, 0.9, 1.2]), ..bus() })] {
         let rb = RigidBody::from_definition(&def, &[]);
-        let weight = rb.mass * G;
+        let weight = rb.mass() * G;
         let (load, moment) = carried(&rb);
         assert!((load - weight).abs() <= 1e-5 * weight, "{name}: the wheels carry {load} N of {weight} N");
-        let want = weight * rb.cog.y;
+        let want = weight * rb.cog().y;
         assert!((moment - want).abs() <= 1e-5 * weight * reach(&rb), "{name}: moment {moment} N m, the weight's {want} N m");
     }
 }
@@ -97,7 +97,7 @@ fn i1_with_a_joint_the_wheels_carry_both_sections() {
     let at = Vec3::from(rear.coupling_front.as_ref().unwrap().pos);
     let joints = vec![Joint::new(0, 1, &rear, back, at)];
     support_rest_loads(&mut bodies, &joints, &[&front, &rear]);
-    let weights: Vec<f32> = bodies.iter().map(|b| b.mass * G).collect();
+    let weights: Vec<f32> = bodies.iter().map(|b| b.mass() * G).collect();
     let total: f32 = weights.iter().sum();
     let (front_load, front_moment) = carried(&bodies[0]);
     let (rear_load, rear_moment) = carried(&bodies[1]);
@@ -106,9 +106,9 @@ fn i1_with_a_joint_the_wheels_carry_both_sections() {
     let joint = weights[1] - rear_load;
     assert!(joint > 0.0 && (front_load - weights[0] - joint).abs() <= 1e-5 * total, "joint {joint} N, front wheels {front_load} N");
     let tol = 1e-5 * total * reach(&bodies[0]).max(reach(&bodies[1]));
-    let want = weights[1] * bodies[1].cog.y - joint * at.y;
+    let want = weights[1] * bodies[1].cog().y - joint * at.y;
     assert!((rear_moment - want).abs() <= tol, "rear section: moment {rear_moment}, want {want}");
-    let want = weights[0] * bodies[0].cog.y + joint * back.y;
+    let want = weights[0] * bodies[0].cog().y + joint * back.y;
     assert!((front_moment - want).abs() <= tol, "front section: moment {front_moment}, want {want}");
 }
 
@@ -130,12 +130,12 @@ fn i4_holding_the_bus_follows_its_wheels() {
             rb.step(dt, 0.0, &brakes, 0.0, &flat);
         }
         let v = kmh / 3.6;
-        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
-        for w in rb.wheels.iter_mut() {
-            w.spin = v / w.radius;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * v);
+        for w in rb.wheels_mut() {
+            w.set_spin(v / w.radius());
         }
-        let r = rb.wheels.iter().find(|w| w.driven).map(|w| w.radius).unwrap();
-        let hold = |rb: &RigidBody| ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * r;
+        let r = rb.wheels().iter().find(|w| w.driven()).map(|w| w.radius()).unwrap();
+        let hold = |rb: &RigidBody| ((v - rb.forward_speed()) * rb.mass() * 2.0 + rb.rolling_resistance()) * r;
         for _ in 0..120 {
             let m = hold(&rb);
             rb.step(dt, m, &brakes, 0.0, &flat);
@@ -145,9 +145,9 @@ fn i4_holding_the_bus_follows_its_wheels() {
         for k in 0..360 {
             let m = hold(&rb);
             rb.step(dt, m, &brakes, steer, &flat);
-            if k >= 300 && rb.holding {
+            if k >= 300 && rb.holding() {
                 held += 1;
-                let ratio = rb.omega.z.abs() / (rb.forward_speed() * rb.kappa).abs();
+                let ratio = rb.omega().z.abs() / (rb.forward_speed() * rb.kappa()).abs();
                 worst = worst.max((ratio - 1.0).abs());
             }
         }

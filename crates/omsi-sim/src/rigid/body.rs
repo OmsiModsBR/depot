@@ -197,6 +197,57 @@ impl RigidBody {
         &self.wheel_impacts
     }
 
+    /// The steering angle (deg).
+    pub fn steer_deg(&self) -> f32 {
+        self.steer_deg
+    }
+
+    /// The curvature the steering asks for this step (1/m, positive to the right).
+    pub fn kappa(&self) -> f32 {
+        self.kappa
+    }
+
+    /// Whether the tyres hold across (OMSI's holding state) rather than slide.
+    pub fn holding(&self) -> bool {
+        self.holding
+    }
+
+    /// The rolling resistance (N).
+    pub fn rolling_resistance(&self) -> f32 {
+        self.rolling_resistance
+    }
+
+    /// The grip of the road under the body (the surface's friction).
+    pub fn friction(&self) -> f32 {
+        self.friction
+    }
+
+    /// The parts coupled behind.
+    pub fn coupled(&self) -> &[CoupledPart] {
+        &self.coupled
+    }
+
+    /// The obstacles (by id) the body was put down inside, `None` until the first collision check after `place`.
+    pub fn spawned_inside(&self) -> Option<&[i64]> {
+        self.spawned_inside.as_deref()
+    }
+
+    /// The wheels, to set what a test or a script changes on them (see the setters of
+    /// [`RigidWheel`]).
+    pub fn wheels_mut(&mut self) -> &mut [RigidWheel] {
+        &mut self.wheels
+    }
+
+    /// Sets the velocity of the centre of gravity (m/s, world).
+    pub fn set_velocity(&mut self, v: Vec3) {
+        self.velocity = v;
+    }
+
+    /// Sets the grip of the road under the body.
+    pub fn set_friction(&mut self, friction: f32) {
+        self.friction = friction;
+    }
+
     /// Model origin (the point the renderer places) in the world.
     pub fn origin(&self) -> DVec3 {
         self.position - self.orientation.mul_vec3(self.cog).as_dvec3()

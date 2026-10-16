@@ -134,6 +134,61 @@ impl RigidWheel {
         self.step_force
     }
 
+    /// The wheel's own turning (rad/s).
+    pub fn spin(&self) -> f32 {
+        self.spin
+    }
+
+    /// Whether the wheel slips (spins or skids).
+    pub fn slipping(&self) -> bool {
+        self.slipping
+    }
+
+    /// Whether a brake stopped the wheel.
+    pub fn locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Whether the wheel is driven.
+    pub fn driven(&self) -> bool {
+        self.driven
+    }
+
+    /// The wheel's steering angle this step (rad, positive to the right).
+    pub fn steer(&self) -> f32 {
+        self.steer
+    }
+
+    /// The compression at which the tyre would just touch the ground, last substep.
+    pub fn touch(&self) -> Option<f32> {
+        self.touch
+    }
+
+    /// Whether `ground_z` came from the ground (not yet after `RigidBody::place`).
+    pub fn ground_seen(&self) -> bool {
+        self.ground_seen
+    }
+
+    /// The wheel's revolutions per minute.
+    pub fn rpm(&self) -> f32 {
+        self.rpm
+    }
+
+    /// The wheel's turn about its axle (deg).
+    pub fn rotation_deg(&self) -> f32 {
+        self.rotation_deg
+    }
+
+    /// Sets the wheel's own turning (rad/s).
+    pub fn set_spin(&mut self, spin: f32) {
+        self.spin = spin;
+    }
+
+    /// Sets `Axle_Springfactor_*`, the spring's scale by the bellows pressure.
+    pub fn set_spring_factor(&mut self, factor: f32) {
+        self.spring_factor = factor;
+    }
+
     /// The faces the tyre is up against.
     pub fn walls(&self) -> &[WallFace] {
         &self.walls
