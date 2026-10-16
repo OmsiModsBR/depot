@@ -2081,17 +2081,14 @@ fn moved_most(rest: &[Option<f32>; 8], now: &[Option<f32>; 8], exclude: &[usize]
 }
 
 /// Write the devices to the content folder's `Inputs/gamectrler.cfg` (OMSI 2's own is only
-/// read; the game takes the content folder's first).
+/// read; the game takes the content folder's first). Without a writable content folder there
+/// is nowhere the game would read it from, so nothing is saved.
 fn save_gamectrler(devices: &[crate::controllers::DeviceCfg]) -> Result<std::path::PathBuf, String> {
-    let candidate = core::content_dir().unwrap_or_else(core::data_dir).join("Inputs");
-    let dir = if (candidate.exists() || std::fs::create_dir_all(&candidate).is_ok()) && omsi_cfg::is_writable(&candidate) {
-        candidate
-    } else {
-        core::data_dir().join("Inputs")
-    };
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let p = dir.join("gamectrler.cfg");
-    std::fs::write(&p, crate::controllers::cfg_text(devices)).map_err(|e| e.to_string())?;
+    let dir = core::content_dir()
+        .filter(|c| (c.exists() || std::fs::create_dir_all(c).is_ok()) && omsi_cfg::is_writable(c))
+        .ok_or("No writable Project Depot content folder was found")?;
+    let p = dir.join("Inputs").join("gamectrler.cfg");
+    crate::controllers::save_cfg_to(&p, devices)?;
     omsi_cfg::content_changed();
     Ok(p)
 }

@@ -1018,7 +1018,9 @@ pub(crate) fn save_cfg(devices: &[DeviceCfg]) -> Result<(), String> {
     Ok(())
 }
 
-fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), String> {
+/// Write `devices` to `path` if they read back the same, through a temporary file so a
+/// failed write never leaves half a file behind.
+pub(crate) fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), String> {
     let text = cfg_text(devices);
     if cfg_text(&parse_cfg(&text)) != text {
         return Err("Controller configuration did not pass its round-trip check".into());
