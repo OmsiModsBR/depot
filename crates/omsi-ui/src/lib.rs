@@ -15,6 +15,7 @@ pub mod i18n;
 pub mod icons;
 pub mod paint;
 pub mod text;
+pub mod theme;
 
 pub use atlas::{Atlas, Sprite};
 pub use gpu::{Draw, Gpu, Layer};
