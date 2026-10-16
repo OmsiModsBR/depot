@@ -99,7 +99,7 @@ pub struct PhysicsSpec {
     /// The kinematic model's (kg, see [`kinematic_mass_kg`]).
     pub kinematic_mass_kg: f32,
     /// Moments of inertia (kg m²) about the body's right, forward and up axes: pitch, roll and
-    /// yaw. `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame: about
+    /// yaw, from the file's t m² with no unit guess and no minimum. `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame: about
     /// the lateral axis (pitch), the vertical one (yaw) and the longitudinal one (roll) - roll
     /// takes the third value, yaw the second, whatever the SDK's comment says. Read in the
     /// comment's order the SD202 rolled on 80 t m² instead of 300, twice as fast, and every
@@ -132,9 +132,10 @@ pub struct PhysicsSpec {
 impl PhysicsSpec {
     pub fn from(def: &Vehicle) -> PhysicsSpec {
         let mass = mass_kg(def);
-        let moi = def.moment_of_inertia;
-        let scale = if moi[0] < 5000.0 { 1000.0 } else { 1.0 };
-        let inertia = Vec3::new((moi[0] * scale).max(100.0), (moi[2] * scale).max(100.0), (moi[1] * scale).max(100.0));
+        // in t m², as OMSI reads it whatever the numbers, and 100 t m² about each axis for a
+        // file without the section (OMSI's default; this parser leaves it at zero)
+        let moi = if def.moment_of_inertia == [0.0; 3] { [100.0; 3] } else { def.moment_of_inertia };
+        let inertia = Vec3::new(moi[0], moi[2], moi[1]) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(DEFAULT_COG_HEIGHT) };
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);

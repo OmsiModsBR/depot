@@ -561,3 +561,13 @@ fn the_mass_is_in_tonnes_whatever_the_number() {
     assert_eq!(kinematic_mass_kg(&kilograms), 10_200.0);
     assert_eq!(kinematic_mass_kg(&Vehicle { mass: 0.2, ..bus() }), 500.0);
 }
+
+#[test]
+fn the_moments_of_inertia_are_in_tonne_square_metres() {
+    // no unit guess, no minimum: a file's 6000 is 6000 t m², its 0.05 is 50 kg m², and a file
+    // without the section gets OMSI's 100 t m² about each axis
+    let i = |moi: [f32; 3]| PhysicsSpec::from(&Vehicle { moment_of_inertia: moi, ..bus() }).inertia;
+    assert_eq!(i([6000.0, 90.0, 400.0]), Vec3::new(6_000_000.0, 400_000.0, 90_000.0));
+    assert_eq!(i([0.05, 0.05, 0.05]), Vec3::splat(50.0));
+    assert_eq!(i([0.0; 3]), Vec3::splat(100_000.0));
+}
