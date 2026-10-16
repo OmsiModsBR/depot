@@ -26,9 +26,10 @@ pub(super) struct PartBody {
 impl PartBody {
     fn new(t: &TrailerPart, program: &Program) -> PartBody {
         // (its hubs from the `.bus` alone, as the lead body's - see `enable_rigid_body`)
-        let mut rb = RigidBody::from_definition(&t.ty.def, &[]);
-        // the line the part turns about, as the kinematic part has it (see `TrailerPart::new_ex`)
-        rb.rot_pnt_long = t.axle_long;
+        // (it turns about its own `[rot_pnt_long]` as the file gives it, 0 included, as
+        // OMSI's sections do; the kinematic part's line, `TrailerPart::axle_long`, takes the
+        // farthest axle for a 0)
+        let rb = RigidBody::from_definition(&t.ty.def, &[]);
         let vars = (0..rb.wheels.len())
             .map(|i| {
                 let (axle, side) = (t.first_axle + i / 2, ["L", "R"][i % 2]);
@@ -581,6 +582,21 @@ mod tests {
         assert!(gap(&v) < 0.02, "{}", gap(&v));
         assert!((v.trailers[0].heading - 180.0).abs() < 0.5, "{}", v.trailers[0].heading);
         assert!(v.trailers[0].position.y > 50.0, "{:?}", v.trailers[0].position);
+    }
+
+    /// A rear section turns about its own `[rot_pnt_long]`, 0 as well: its body does not move
+    /// the line to its axle as the kinematic part does.
+    #[test]
+    fn the_rear_section_turns_about_its_own_line() {
+        let (front, mut rear) = sections();
+        Arc::get_mut(&mut rear).unwrap().def.rot_pnt_long = 0.0;
+        let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+        v.contact = Some(flat());
+        v.attach_trailer(rear);
+        v.enable_rigid_body();
+        frames(&mut v, 1.0 / 60.0, &|_| 0.0);
+        assert_eq!(v.trailers[0].axle_long, -0.4);
+        assert_eq!(v.trailers[0].rigid().expect("the rear section has a body").rot_pnt_long, 0.0);
     }
 
     /// Uncoupled, the front section carries its own weight on its own wheels again, not the
