@@ -25,7 +25,8 @@ pub(super) struct PartBody {
 
 impl PartBody {
     fn new(t: &TrailerPart, program: &Program) -> PartBody {
-        let mut rb = RigidBody::from_definition(&t.ty.def, &t.ty.hub_heights(t.first_axle));
+        // (its hubs from the `.bus` alone, as the lead body's - see `enable_rigid_body`)
+        let mut rb = RigidBody::from_definition(&t.ty.def, &[]);
         // the line the part turns about, as the kinematic part has it (see `TrailerPart::new_ex`)
         rb.rot_pnt_long = t.axle_long;
         let vars = (0..rb.wheels.len())

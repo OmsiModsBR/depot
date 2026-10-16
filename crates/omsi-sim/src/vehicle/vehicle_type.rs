@@ -461,7 +461,9 @@ impl VehicleType {
             .collect()
     }
 
-    /// Unloaded hub height per axle for the physics: the model's wheel centre, raised by what
+    /// Unloaded hub height per axle for the kinematic model (the AI's copies and the parts
+    /// that follow them; the player's rigid body takes its hubs from the `.bus` alone): the
+    /// model's wheel centre, raised by what
     /// the `.bus` tyre is larger than the modelled one. The tyre then touches the road exactly
     /// where the physics puts the contact - the stock SD202's wheels are modelled 1.6 cm
     /// below the model's ground plane and stood that much in the asphalt. A model that says

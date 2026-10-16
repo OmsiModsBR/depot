@@ -105,7 +105,8 @@ pub struct RigidBody {
 
 impl RigidBody {
     /// `hub_heights[a]`: unloaded hub height of axle `a` above the model origin; the tyre
-    /// radius when the model does not say (see `VehicleType::wheel_geometry`).
+    /// radius when not given. The player's vehicle gives none: OMSI's springs stand on the
+    /// model origin's plane, whatever the model's wheels look like.
     pub fn from_definition(def: &Vehicle, hub_heights: &[Option<f32>]) -> RigidBody {
         let spec = PhysicsSpec::from(def);
         let mass = spec.mass_kg;

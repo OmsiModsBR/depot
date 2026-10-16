@@ -106,8 +106,9 @@ impl VehicleInstance {
     /// variables back for the next script frame.
     /// Switch the player vehicle to rigid-body dynamics at its current pose.
     pub fn enable_rigid_body(&mut self) {
-        let mut rb =
-            crate::rigid::RigidBody::from_definition(&self.ty.def, &self.ty.hub_heights(0));
+        // (its hubs from the `.bus` alone, a tyre radius over the model origin's plane where
+        // OMSI's springs stand: neither the model's wheels nor their animation move them)
+        let mut rb = crate::rigid::RigidBody::from_definition(&self.ty.def, &[]);
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
