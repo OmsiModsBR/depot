@@ -226,6 +226,8 @@ impl VehicleType {
     /// A file without `[coupling_front]` or `[coupling_back]` couples an AI copy's parts 4 m
     /// ahead of or behind its origin, 0.3 m up, as it always has; the player's vehicle couples
     /// it at the origin, where OMSI keeps a coupling the file does not declare.
+    /// And a `[boundingbox]` much longer or wider than the model is cut down to the model's
+    /// for an AI copy; the player's vehicle keeps the declared one.
     pub fn load_ai(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, false)
     }
@@ -392,9 +394,10 @@ impl VehicleType {
         // A `[boundingbox]` much longer or wider than the model itself: the W906 Sprinter mod
         // declares 12 m for a 7 m van (copied from a bus), and the walkers ran into an
         // invisible wall metres ahead of its nose and behind its tail, the traffic kept its
-        // distance from nothing. The box is cut down to the model (never made bigger).
-        let mut def = def;
-        if let Some(bb) = def.bounding_box.as_mut() {
+        // distance from nothing. An AI copy's box is cut down to the model (never made
+        // bigger); the player's vehicle keeps the box its file declares, as OMSI does - a
+        // box that does not fit the model is the model's to fix.
+        if let Some(bb) = def.bounding_box.as_mut().filter(|_| ai_copy) {
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
             for m in &meshes {
                 for p in &m.data.positions {
