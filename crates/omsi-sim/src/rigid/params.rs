@@ -204,7 +204,8 @@ pub(crate) const KINEMATIC_DT_MAX: f32 = 0.1;
 
 /// The values the player's physics once gave a `.bus` file that leaves one out or gives one
 /// out of range. The player's vehicle now reads its file as OMSI does (`spec`); these are kept,
-/// unused, behind the `model-fallbacks` feature.
+/// unused, behind the `model-fallbacks` feature until the physics is validated in game, and
+/// then deleted.
 #[cfg(feature = "model-fallbacks")]
 #[allow(dead_code)]
 pub(super) mod fallbacks {
