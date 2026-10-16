@@ -165,7 +165,8 @@ jobs:
           exit "$status"
 
   # Blocking on pull requests: the vehicle physics of the change against its base, frame by
-  # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md). A change that only moves code
+  # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md): the player's vehicle and the AI
+  # traffic's motion (physics_traces.rs, ai_traces.rs). A change that only moves code
   # leaves every trace identical. One meant to alter the physics carries the `physics-delta`
   # label: the job then lists where the traces differ without failing, for the review to
   # check against the change the pull request predicts.
@@ -215,16 +216,15 @@ jobs:
           fi
           exit "$status"
 
-  # Informational for now: the offscreen run's state against the base, frame by frame
-  # (scripts/offscreen-trace-diff.sh, docs/QUALITY.md) on the software Vulkan adapter. A change
-  # that only moves code leaves the trace identical. One meant to alter the behaviour carries
-  # the `offscreen-delta` label: the job then lists where the traces differ without failing.
-  # It becomes blocking once two parity pull requests in a row passed it without a false alarm.
+  # Blocking on pull requests: the offscreen run's state against the base, frame by frame
+  # (scripts/offscreen-trace-diff.sh, docs/QUALITY.md) on the software Vulkan adapter, the
+  # AI cars in real traffic included. A change that only moves code leaves the trace
+  # identical. One meant to alter the behaviour carries the `offscreen-delta` label: the job
+  # then lists where the traces differ without failing.
   offscreen-traces:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    continue-on-error: true
     permissions:
       contents: read
       pull-requests: read
