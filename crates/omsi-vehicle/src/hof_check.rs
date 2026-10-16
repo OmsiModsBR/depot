@@ -315,7 +315,8 @@ pub fn content_key(bytes: &[u8]) -> u64 {
     })
 }
 
-/// A bloated depot file and every place it is installed with the very same content.
+/// A bloated depot file and every place it is installed with the very same content (under
+/// whatever file name: `key` identifies the group on its own).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Group {
     pub file_name: String,
@@ -360,7 +361,7 @@ pub fn scan_install(root: &Path, only_name: Option<&str>) -> Vec<Group> {
         }
     }
     files.sort();
-    let mut groups: HashMap<(String, u64), Group> = HashMap::new();
+    let mut groups: HashMap<u64, Group> = HashMap::new();
     for p in files {
         let name = p
             .file_name()
@@ -379,7 +380,7 @@ pub fn scan_install(root: &Path, only_name: Option<&str>) -> Vec<Group> {
         }
         let key = content_key(&bytes);
         groups
-            .entry((name.to_ascii_lowercase(), key))
+            .entry(key)
             .or_insert_with(|| Group {
                 file_name: name,
                 bytes: bytes.len() as u64,
@@ -628,6 +629,27 @@ mod tests {
             Err(FixError::NothingToFix)
         );
         assert_eq!(fix_bytes(&[0xFF, 0xFE, 0x41, 0]), Err(FixError::Utf16));
+    }
+
+    #[test]
+    fn identical_content_under_different_names_is_one_group() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("depot-hofgroup-{stamp}"));
+        let d = root.join("Vehicles/BusA");
+        std::fs::create_dir_all(&d).unwrap();
+        let big = depot(512, 2);
+        let other = depot(256, 3);
+        std::fs::write(d.join("One.hof"), &big).unwrap();
+        std::fs::write(d.join("Two.hof"), &big).unwrap();
+        std::fs::write(d.join("Three.hof"), &other).unwrap();
+        let groups = scan_install(&root, None);
+        assert_eq!(groups.len(), 2);
+        assert_ne!(groups[0].key, groups[1].key);
+        assert_eq!(groups.iter().map(|g| g.paths.len()).sum::<usize>(), 3);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
