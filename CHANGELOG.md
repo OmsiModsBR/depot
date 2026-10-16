@@ -7,6 +7,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- Splines that declare `[matl_alpha] 2` on a DXT3 / DXT5 texture whose alpha is 255 throughout
+  (DavidM's walls and bridges, used across Krefrath) are drawn opaque and write depth again: they
+  went into the blended pass without depth writes, so a wall further away showed over the wall in
+  front and the road under a bridge showed through its deck. The same holds for surface objects.
 - Passengers no longer board an articulated bus by its last door alone (#44): walking up while
   the doors were still shut, everybody made for the rear door with a button, and they stayed there
   once the driver opened the others. With a door open, a shut door with a button now draws nobody
