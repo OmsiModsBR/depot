@@ -10,7 +10,7 @@
 //! together is behaviour, for its own change.
 
 use super::params::{
-    DEFAULT_COG_HEIGHT, DEFAULT_DAMPER, DEFAULT_INERTIA_INV, DEFAULT_MAX_FORCE, DEFAULT_SPRING,
+    DEFAULT_COG_HEIGHT, DEFAULT_INERTIA_INV,
     GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE, ROLLING_COEFFICIENT, TRACK_SHARE,
 };
 use glam::Vec3;
@@ -57,8 +57,9 @@ pub struct AxleSpec {
     /// the tyres stand (the middle of the band between the two widths).
     pub outer: f32,
     pub track: f32,
-    /// Spring (N/m), damper (N s/m) and the strut's largest force (N) of each wheel, with the
-    /// defaults of a file without them.
+    /// Spring (N/m), damper (N s/m) and the strut's largest force (N) of each wheel, as the
+    /// file gives them: a file without them has none, as in OMSI (no spring carries nothing,
+    /// no largest force lets the strut push nothing).
     pub spring: f32,
     pub damper: f32,
     pub max_force: f32,
@@ -81,9 +82,9 @@ impl AxleSpec {
             half_width: a.max_width / 2.0,
             outer,
             track,
-            spring: if a.spring > 0.0 { a.spring * 1000.0 } else { DEFAULT_SPRING * 1000.0 },
-            damper: if a.damper > 0.0 { a.damper * 1000.0 } else { DEFAULT_DAMPER * 1000.0 },
-            max_force: if a.max_force > 0.0 { a.max_force * 1000.0 } else { DEFAULT_MAX_FORCE * 1000.0 },
+            spring: a.spring * 1000.0,
+            damper: a.damper * 1000.0,
+            max_force: a.max_force * 1000.0,
             sag_spring: if a.spring > 0.0 { a.spring * 1000.0 } else { 150_000.0 },
             inertia_inv: if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV },
             driven: a.driven,
@@ -143,7 +144,7 @@ impl PhysicsSpec {
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
         let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
         let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 { def.inv_min_turn_radius } else { max_steer_deg.to_radians().tan() / s };
-        let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { DEFAULT_SPRING }).sum();
+        let springs: f32 = def.axles.iter().map(|a| 2.0 * a.spring).sum();
         PhysicsSpec {
             mass_kg: mass,
             kinematic_mass_kg: kinematic_mass_kg(def),
@@ -173,6 +174,25 @@ pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
 /// with its mass ([`kinematic_mass_kg`]).
 pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
     rest_loads(def, kinematic_mass_kg(def))
+}
+
+/// How far each axle's spring sits down under the vehicle's weight and how far its tyre
+/// reaches below the hub (m), as the kinematic model (the AI's copies) stands on them: with
+/// its mass and the springs a file without them once had (`AxleSpec::sag_spring`), from the
+/// unloaded hub heights `hubs` (`VehicleType::hub_heights`).
+pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)> {
+    let loads = kinematic_wheel_rest_loads(def);
+    def.axles
+        .iter()
+        .enumerate()
+        .map(|(a, axle)| {
+            let axle = AxleSpec::of(axle);
+            let r = axle.radius;
+            let z = hubs.get(a).copied().flatten().unwrap_or(r);
+            let sag = loads.get(a).copied().unwrap_or(0.0) / axle.sag_spring;
+            (sag.min(super::BUMP), r - z)
+        })
+        .collect()
 }
 
 fn rest_loads(def: &Vehicle, mass: f32) -> Vec<f32> {

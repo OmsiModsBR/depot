@@ -322,18 +322,7 @@ impl VehicleInstance {
                 ]
             })
             .collect();
-        let rest_sag: Vec<(f32, f32)> = {
-            let rb = crate::rigid::RigidBody::from_definition(&ty.def, &ty.hub_heights(0));
-            (0..motion.wheels.len())
-                .map(|a| {
-                    let w = &rb.wheels[a * 2];
-                    (
-                        w.rest_compression().min(crate::rigid::BUMP),
-                        w.radius - w.attach.z,
-                    )
-                })
-                .collect()
-        };
+        let rest_sag = crate::rigid::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
         // An AI copy has no rigid body: it stands on the contact plane of its wheels
         // (`ai::AiBody`), and what the modelled tyre reaches below its hub less than
         // the model thinks lifts it. An axle the model does not move with `Axle_Suspension`

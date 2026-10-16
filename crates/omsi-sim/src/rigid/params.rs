@@ -80,11 +80,6 @@ pub const DROOP: f32 = 0.15;
 /// The bump stop (m): the most a spring is pressed when its rate does not say
 /// (`achse_maxforce` over it), and where a deflated air suspension rests. *tuned*
 pub const BUMP: f32 = 0.24;
-/// The axle's spring (kN/m), damper (kN s/m) and the load its strut is built for (kN) when
-/// `achse_feder`, `achse_daempfer` or `achse_maxforce` is missing or zero. *fallback*
-pub(super) const DEFAULT_SPRING: f32 = 150.0;
-pub(super) const DEFAULT_DAMPER: f32 = 12.0;
-pub(super) const DEFAULT_MAX_FORCE: f32 = 200.0;
 /// Where the tyres stand across, as a share of half `achse_maxwidth`, when `achse_minwidth`
 /// does not say (with it, halfway between the two widths). *fallback*
 pub(super) const TRACK_SHARE: f32 = 0.85;
@@ -210,3 +205,16 @@ pub(crate) const AI_AXLE_STEER_MAX: f32 = 1.2;
 pub(crate) const AI_STEER_ARM_MIN: f32 = 0.5;
 /// The longest frame the kinematic model steps (s): a longer one is cut to it. *tuned*
 pub(crate) const KINEMATIC_DT_MAX: f32 = 0.1;
+
+/// The values the player's physics once gave a `.bus` file that leaves one out or gives one
+/// out of range. The player's vehicle now reads its file as OMSI does (`spec`); these are kept,
+/// unused, behind the `model-fallbacks` feature.
+#[cfg(feature = "model-fallbacks")]
+#[allow(dead_code)]
+pub(super) mod fallbacks {
+    /// The axle's spring (kN/m), damper (kN s/m) and the load its strut is built for (kN) when
+    /// `achse_feder`, `achse_daempfer` or `achse_maxforce` is missing or zero. *fallback*
+    pub const DEFAULT_SPRING: f32 = 150.0;
+    pub const DEFAULT_DAMPER: f32 = 12.0;
+    pub const DEFAULT_MAX_FORCE: f32 = 200.0;
+}

@@ -571,3 +571,21 @@ fn the_moments_of_inertia_are_in_tonne_square_metres() {
     assert_eq!(i([0.05, 0.05, 0.05]), Vec3::splat(50.0));
     assert_eq!(i([0.0; 3]), Vec3::splat(100_000.0));
 }
+
+#[test]
+fn an_axle_without_springs_carries_nothing() {
+    // OMSI's `[newachse]` leaves `achse_feder`, `achse_daempfer` and `achse_maxforce` at zero
+    // when the file names none: the strut pushes nothing and the body sinks to the ground
+    let mut def = bus();
+    for a in def.axles.iter_mut() {
+        (a.spring, a.damper, a.max_force) = (0.0, 0.0, 0.0);
+    }
+    let spec = AxleSpec::of(&def.axles[0]);
+    assert_eq!((spec.spring, spec.damper, spec.max_force), (0.0, 0.0, 0.0));
+    assert_eq!(PhysicsSpec::from(&def).body_freq, 0.0);
+    let mut rb = RigidBody::from_definition(&def, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &road(1e9, 0.0));
+    assert!(rb.wheels.iter().all(|w| w.load() == 0.0), "{:?}", rb.wheels.iter().map(|w| w.load()).collect::<Vec<_>>());
+    assert!(rb.position().z.is_finite());
+}

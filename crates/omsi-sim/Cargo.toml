@@ -22,5 +22,10 @@ omsi-texture = { path = "../omsi-texture" }
 omsi-html = { path = "../omsi-html" }
 parking_lot = { workspace = true }
 
+[features]
+# The values the player's physics once gave a `.bus` file that leaves one out, kept unused
+# (`rigid::params::fallbacks`).
+model-fallbacks = []
+
 [dev-dependencies]
 omsi-audio = { path = "../omsi-audio" }
