@@ -238,7 +238,7 @@ pub struct AiWheelSpec {
     pub c: f32,
 }
 
-/// The `.bus` file as the AI's body (`ai_motion::AiBody`) reads it: its own mass, springs and
+/// The `.bus` file as the AI's body (`ai::AiBody`) reads it: its own mass, springs and
 /// inertia, kept apart from the rigid body's until the AI's physics is taken up again.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AiSpec {

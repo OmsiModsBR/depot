@@ -1787,7 +1787,7 @@ const JOINT_BLEND: f32 = 6.0;
 const SIGNAL_BEFORE_CHANGE: f32 = 1.2;
 
 /// One AI vehicle moving on the network: where it is along its lanes and which way it is
-/// going. The body that follows this way is `ai_motion::AiBody`.
+/// going. The body that follows this way is `ai::AiBody`.
 #[derive(Debug, Clone)]
 pub struct AiState {
     pub traffic_pool: Option<(usize, std::sync::Arc<Vec<i32>>)>,

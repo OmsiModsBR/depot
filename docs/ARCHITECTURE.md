@@ -23,7 +23,7 @@ state.
 | `mc_d3d_classes` (Direct3D 9)          | `omsi-render` (wgpu)          | the vanilla picture complete (materials, lights, night maps, reflections, mirrors, shadow cascades); `enhanced` is a physically based renderer of its own |
 | `mc_Form_Main`, main loop              | `omsi-app`                    | offscreen + window, start menu, HUD, tile streaming; the original's dialogs are the launcher |
 | vehicle runtime                        | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
-| AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai_motion` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `rigid` + `physics` (wheels, collisions) |
+| AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `rigid` + `physics` (wheels, collisions) |
 | Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game's own window (wgpu, `omsi-ui`): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
 | - (no original counterpart)            | `omsi-net`, `omsi-app::lan`   | LAN play: UDP session, bit-packed vehicle states, chat |
 
@@ -322,7 +322,7 @@ time, each merge saying which side of a conflict was kept and why. By area:
   `OMSI_DEBUG_SKY`, `OMSI_ENV_PHOTO=0` and the `sky_report` test check it.
 * **AI traffic: motion.** A road vehicle is a bicycle model steered by pure pursuit along
   smoothed lanes, with Ackermann steering, per-wheel rolling and a body on its springs
-  over the blended road surface (`omsi-sim::ai_motion`); trains ride on their outer axles
+  over the blended road surface (`omsi-sim::ai`); trains ride on their outer axles
   and aircraft fly their paths.
 * **AI traffic: rules.** Light programs run on a cycle clock with the stock state codes,
   stop and jump points and requests; following is IDM with gentle stop-line braking; right

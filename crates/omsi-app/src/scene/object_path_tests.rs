@@ -1,6 +1,6 @@
 //! Artificial object paths.
 use super::*;
-use omsi_sim::ai_motion::{AiBody, MotionKind};
+use omsi_sim::ai::{AiBody, MotionKind};
 use omsi_sim::traffic::{AiState, Network};
 use omsi_vehicle::{Axle, Vehicle};
 

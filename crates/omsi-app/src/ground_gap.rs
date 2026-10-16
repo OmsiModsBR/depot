@@ -189,7 +189,7 @@ impl GroundGap {
                     continue;
                 }
                 // (a car out of view keeps its animations as they were, and is not drawn)
-                if !matches!(c.body.kind, omsi_sim::ai_motion::MotionKind::Road) || !v.ai_visuals {
+                if !matches!(c.body.kind, omsi_sim::ai::MotionKind::Road) || !v.ai_visuals {
                     continue;
                 }
                 let id = c.id * 8;

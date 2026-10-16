@@ -160,7 +160,7 @@ flags! {
     /// Log the IBIS's search for a way to type a duty in.
     DEBUG_IBIS = "OMSI_DEBUG_IBIS", Switch, Diagnostic, "omsi-sim::ibis";
     /// Log, every tenth of a second, an AI car standing over 1.5 m beside its way.
-    DEBUG_AI_WIDE = "OMSI_DEBUG_AI_WIDE", Switch, Diagnostic, "omsi-sim::ai_motion";
+    DEBUG_AI_WIDE = "OMSI_DEBUG_AI_WIDE", Switch, Diagnostic, "omsi-sim::ai";
     /// Log the gap and the angles of the joints of articulated buses and trailers.
     DEBUG_TRAILER = "OMSI_DEBUG_TRAILER", Switch, Diagnostic, "omsi-sim::vehicle::articulation";
     /// Warn at every write of a NaN or an infinity into a script variable.
@@ -168,7 +168,7 @@ flags! {
     /// Every mesh on its own, without `[animparent]`, to compare.
     NO_ANIMPARENT = "OMSI_NO_ANIMPARENT", Switch, Diagnostic, "omsi-sim::anim";
     /// AI cars steer no further than their model's lock, to compare.
-    AI_MODEL_LOCK = "OMSI_AI_MODEL_LOCK", Switch, Diagnostic, "omsi-sim::ai_motion";
+    AI_MODEL_LOCK = "OMSI_AI_MODEL_LOCK", Switch, Diagnostic, "omsi-sim::ai";
     /// The one tile size of 371.9 m for maps on world coordinates, to compare.
     OLD_WORLD_GRID = "OMSI_OLD_WORLD_GRID", Switch, Diagnostic, "omsi-map";
     /// The ground cut away under the roads, to compare.

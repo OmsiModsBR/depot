@@ -12,7 +12,7 @@ use anyhow::Result;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 use omsi_render::{Renderer, Scene};
-use omsi_sim::ai_motion::{
+use omsi_sim::ai::{
     back_in_ramp, pull_out_ramps, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
     PULL_OUT_CLEARANCE,
 };
@@ -1699,7 +1699,7 @@ impl Traffic {
     }
 
     /// How far behind something standing a vehicle of `ty` stops so that it can pull out
-    /// round it later (`omsi_sim::ai_motion::pull_out_room` against a standing bus with the
+    /// round it later (`omsi_sim::ai::pull_out_room` against a standing bus with the
     /// oncoming lane 3.3 m over; by vehicle file).
     fn pull_out_room(&mut self, ty: &VehicleType, front: f32, rear: f32, half_width: f32) -> f32 {
         if let Some(&r) = self.pull_out_rooms.get(&ty.def.path) {
@@ -1707,7 +1707,7 @@ impl Traffic {
         }
         // (a bus 2.5 m wide that stands up to 0.35 m further over than the car: bus and car
         // are rarely both in the middle of the lane)
-        let r = omsi_sim::ai_motion::pull_out_room(&ty.def, (front, rear, half_width), 1.6, 3.3);
+        let r = omsi_sim::ai::pull_out_room(&ty.def, (front, rear, half_width), 1.6, 3.3);
         if omsi_cfg::flags::DEBUG_TRAFFIC.is_set() {
             log::info!(
                 "pull-out room of {}: {r:.2} m (front {front:.2}, half width {half_width:.2})",

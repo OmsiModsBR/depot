@@ -197,7 +197,7 @@ pub(super) const INSIDE_REACH: f64 = 6.0;
 pub(super) const INSIDE_FRAMES: f64 = 2.0;
 
 // The AI traffic and the kinematic model. (They stay as they are while the AI's physics is
-// paused: see `crate::ai_motion`.)
+// paused: see `crate::ai`.)
 
 /// How fast an AI driver turns the front wheels (deg/s): a vehicle over `AI_HEAVY_MASS` (kg)
 /// the slower rate. *tuned*
