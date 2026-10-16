@@ -4,10 +4,14 @@
 //! the rigid body, the coupled parts, the kinematic model and the AI's body -, so a heuristic
 //! changes in one place.
 //!
-//! The values are as each model has always read them, floors and all, and where two models
-//! read the same line differently each has its own field with its own name (a coupled part's
-//! mass has no floor, the AI's body has its own mass, springs and inertia). Bringing them
-//! together is behaviour, for its own change.
+//! The player's vehicle reads its file as OMSI does: in tonnes, kN and metres, with no guess
+//! at units, no minimum and nothing invented for a value the file leaves out (OMSI's own
+//! defaults aside: 1 t, 100 t m² about each axis, an `achse_inertia_inv` of 0.002). A model
+//! configured wrongly behaves wrongly, as in OMSI. The kinematic model, which drives the AI's
+//! copies, and the AI's body keep their old readings, floors and all, in fields and functions
+//! of their own (`kinematic_*`, [`AiSpec`]) until the AI's physics is taken up again; the
+//! values the player's vehicle no longer uses are kept behind the `model-fallbacks` feature
+//! (`params::fallbacks`).
 
 use super::params::{
     DEFAULT_INERTIA_INV,
