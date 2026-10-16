@@ -49,7 +49,7 @@ pub use wheel::RigidWheel;
 
 // (what `train` takes from the stages)
 use body::body_damping;
-use tyre::{lin, Lateral, Substep};
+use tyre::{lin, Lateral, Substep, Work};
 
 #[cfg(test)]
 mod tests;

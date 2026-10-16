@@ -12,7 +12,7 @@
 //! A body alone is a train of one, solved exactly as before.
 
 use super::spec::{split, wheel_rest_loads_supported};
-use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, BUMP};
+use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, Work, BUMP};
 use super::params::{BAUMGARTE, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEPS_MAX, SUBSTEPS_MIN, SUBSTEP_DT};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -343,8 +343,9 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     let driven = bodies.iter().map(|b| b.wheels.iter().filter(|w| w.driven).count() + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()).sum::<usize>().max(1) as f32;
     let slices = (dt / SLICE_DT).ceil().max(1.0) as usize;
     let mut impacts: Vec<Vec<Impact>> = vec![Vec::new(); bodies.len()];
+    let mut scratch = SolverScratch::new(bodies.len());
     for _ in 0..slices {
-        slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe);
+        slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe, &mut scratch);
         for (b, impacts) in bodies.iter_mut().zip(impacts.iter_mut()) {
             // OMSI damps the body's pitch and roll - never its yaw - by sin(x)/x each frame,
             // x = 1.5 x sqrt(springs / mass) x frame. Its
@@ -386,8 +387,26 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     }
 }
 
+/// What the solver works in, a body each (and a joint each for `rows`): filled anew every
+/// substep, kept across the substeps and slices of a step rather than allocated for each.
+struct SolverScratch {
+    subs: Vec<Substep>,
+    lats: Vec<Lateral>,
+    works: Vec<Work>,
+    rows: Vec<JointRows>,
+}
+
+impl SolverScratch {
+    fn new(n: usize) -> SolverScratch {
+        fn each<T: Default>(n: usize) -> Vec<T> {
+            (0..n).map(|_| T::default()).collect()
+        }
+        SolverScratch { subs: each(n), lats: each(n), works: each(n), rows: Vec::new() }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, scratch: &mut SolverScratch) {
     let n = bodies.len();
     // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
     // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
@@ -408,15 +427,21 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
     let mut accel = vec![Vec3::ZERO; n];
     let passes = if joints.is_empty() { PASSES } else { JOINT_PASSES };
     for _ in 0..substeps {
-        let mut subs: Vec<Substep> = (0..n).map(|i| bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe)).collect();
-        let mut lats: Vec<Lateral> = (0..n).map(|i| bodies[i].lateral_start(&subs[i], h)).collect();
-        let mut rows: Vec<JointRows> = joints.iter().map(|j| JointRows::new(j, bodies, &subs, &lats, h)).collect();
+        let SolverScratch { subs, lats, works, rows } = &mut *scratch;
+        for i in 0..n {
+            bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe, &mut subs[i], &mut works[i]);
+        }
+        for i in 0..n {
+            bodies[i].lateral_start(&subs[i], h, &mut lats[i]);
+        }
+        rows.clear();
+        rows.extend(joints.iter().map(|j| JointRows::new(j, bodies, subs, lats, h)));
         for _ in 0..passes {
             for i in 0..n {
                 bodies[i].lateral_pass(&subs[i], &mut lats[i], h);
             }
             for (j, r) in joints.iter().zip(rows.iter_mut()) {
-                r.solve(j, &mut lats);
+                r.solve(j, lats);
             }
         }
         for i in 0..n {

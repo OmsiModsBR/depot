@@ -13,15 +13,14 @@ impl RigidBody {
     /// Each wheel on its strut - the strut's, the step's and the walls' forces added to `force`
     /// and `torque`, a wheel off the ground turning by its drive and brake - and the tyres on
     /// the ground (`found`: the slope each stands on and where it touches) as contacts for the
-    /// tyre forces.
+    /// tyre forces, onto `contacts`.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn wheel_contacts(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], found: &[Option<(f32, f32)>], force: &mut Vec3, torque: &mut Vec3, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Vec<Contact> {
+    pub(super) fn wheel_contacts(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], found: &[Option<(f32, f32)>], force: &mut Vec3, torque: &mut Vec3, probe: &dyn Fn(f64, f64, f64) -> GroundProbe, contacts: &mut Vec<Contact>) {
         let rot = self.orientation;
         let up = rot.mul_vec3(Vec3::Z);
         let n_wheels = self.wheels.len().max(1) as f32;
         let (position, cog) = (self.position, self.cog);
         let omega_world = rot.mul_vec3(self.omega);
-        let mut contacts: Vec<Contact> = Vec::with_capacity(self.wheels.len());
         for (i, w) in self.wheels.iter_mut().enumerate() {
             let TyreFrame { fwd, right, fwd_h, hub0, hub } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
@@ -130,6 +129,5 @@ impl RigidBody {
                 wheel: Some(i),
             });
         }
-        contacts
     }
 }
