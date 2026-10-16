@@ -70,6 +70,15 @@ pub fn saturation(t: f32) -> f32 {
     216.7 * e / (t + 273.15)
 }
 
+/// The dew point (°C) of air at `t` °C holding `vapour` g/m³ of water: [`saturation`] the
+/// other way round. A weather gives its humidity as that density (`Weather::temp.1`,
+/// OMSI's `Weather_AbsHum`), not as a dew point.
+pub fn dew_point(t: f32, vapour: f32) -> f32 {
+    let e = vapour.max(1e-3) * (t + 273.15) / 216.7;
+    let x = (e / 6.1094).ln();
+    243.04 * x / (17.625 - x)
+}
+
 /// The heating's thermostat (°C) and the band over which it turns from off to full (K).
 const HEATED: f32 = 20.0;
 const THERMOSTAT_BAND: f32 = 2.0;
@@ -233,7 +242,7 @@ pub fn inputs_for(v: &omsi_sim::VehicleInstance, w: &omsi_content::weather::Weat
     let [x, y, z] = v.ty.def.bounding_box.map(|bb| [bb[0], bb[1], bb[2]]).unwrap_or([2.5, 12.0, 3.1]);
     CabinInputs {
         outside: w.temp.0,
-        dew_point: w.temp.1.min(w.temp.0),
+        dew_point: dew_point(w.temp.0, w.temp.1).min(w.temp.0),
         speed: crate::lights::vehicle_velocity(v).length(),
         engine: omsi_sim::startup::engine_running(v),
         people: riders + 1,
@@ -264,6 +273,19 @@ mod tests {
 
     fn milky(c: &CabinAir, k: usize) -> f32 {
         1.0 - (-c.appearance()[k]).exp()
+    }
+
+    #[test]
+    fn the_dew_point_comes_from_the_weathers_humidity() {
+        for t in [-10.0, 0.0, 7.0, 25.0] {
+            assert!((dew_point(t, saturation(t)) - t).abs() < 0.05, "{t}");
+        }
+        // OMSI's own "Starker Schneefall": -6 °C, dew point -7.96 - as the loaded weather
+        // has it, about 3 g/m³, which is not a dew point of 3 °C (nor saturated air)
+        let abs = omsi_content::weather::absolute_humidity(-6.0, -7.96);
+        assert!((dew_point(-6.0, abs) + 7.96).abs() < 0.5, "{}", dew_point(-6.0, abs));
+        let abs = omsi_content::weather::absolute_humidity(7.0, 6.0);
+        assert!((dew_point(7.0, abs) - 6.0).abs() < 0.3, "{}", dew_point(7.0, abs));
     }
 
     #[test]
