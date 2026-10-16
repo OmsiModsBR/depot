@@ -748,6 +748,7 @@ impl App {
                         situation_vars: o.vars.clone(),
                         situation_strvars: o.strvars.clone(),
                         situation_odometer_km: o.odometer_km,
+                        situation_script_textures: o.script_textures.clone(),
                         situation_others: Vec::new(),
                         line: None,
                         tour: None,

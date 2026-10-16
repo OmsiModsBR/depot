@@ -339,6 +339,7 @@ impl App {
             situation_vars: Vec::new(),
             situation_strvars: Vec::new(),
             situation_odometer_km: None,
+            situation_script_textures: None,
             situation_others: Vec::new(),
             line: None,
             tour: None,
@@ -426,6 +427,7 @@ impl App {
             situation_vars: Vec::new(),
             situation_strvars: Vec::new(),
             situation_odometer_km: None,
+            situation_script_textures: None,
             situation_others: Vec::new(),
             line: None,
             tour: None,
@@ -1168,6 +1170,7 @@ impl App {
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.placed, cam, self.duty.as_ref(), "Last situation");
         match sit.save(&out) {
             Ok(()) => {
+                crate::situation::save_script_textures(&out, &self.situation_vehicles());
                 log::info!("saved the last situation {}", out.display());
                 Some(out)
             }
@@ -1176,6 +1179,12 @@ impl App {
                 None
             }
         }
+    }
+
+    /// The vehicles a situation saves, in the order `build_situation` writes them: the
+    /// one driven, then the ones placed besides it.
+    fn situation_vehicles(&self) -> Vec<&omsi_sim::VehicleInstance> {
+        self.player.iter().chain(self.placed.iter()).map(|p| &p.vehicle).collect()
     }
 
     /// The graphics device was lost (the driver reset the card: it ran out of memory, or a
@@ -1229,6 +1238,7 @@ impl App {
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.placed, cam, self.duty.as_ref(), "Quicksave");
         match save_or_fallback(&sit, &out, Path::new("Situations").join("quicksave.osn").as_path()) {
             Ok(out) => {
+                crate::situation::save_script_textures(&out, &self.situation_vehicles());
                 log::info!("saved situation {} ({} vehicles)", out.display(), sit.vehicles.len());
                 self.service_msg = Some(("Situation saved (quicksave)".into(), 3.0));
             }
@@ -1270,6 +1280,7 @@ impl App {
         let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.placed, cam, self.duty.as_ref(), &name);
         match save_or_fallback(&sit, &out, rel_dir.join(format!("Slot {n}.osn")).as_path()) {
             Ok(out) => {
+                crate::situation::save_script_textures(&out, &self.situation_vehicles());
                 log::info!("saved situation {} ({} vehicles)", out.display(), sit.vehicles.len());
                 self.service_msg = Some((format!("Saved as slot {n}: the launcher continues from it"), 4.0));
             }

@@ -7,6 +7,13 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- Destination signs, IBIS screens and ticket printer output come back with a saved situation
+  (#34): the scripts draw them only when something changes, so the variables alone brought
+  them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
+  OMSI 2 does, `<situation>.osn_<vehicle>_<texture>.dds` (A8R8G8B8, the vehicle counted in the
+  order the file lists them), and loaded back after the scripts' init at the file's own size.
+  Situations saved by OMSI 2 itself bring their displays back as well. A missing file leaves
+  the texture as the scripts draw it; a damaged one leaves it empty with a line in the log.
 - A bus stopped under a canopy or a bridge measures the ground under its lift and ramp again,
   not the roof over them: `GetHeightAbovePoint` (OMSI's name, kept for compatibility, though it
   measures under the point) asks the faces the wheels stand on for the highest one at or below

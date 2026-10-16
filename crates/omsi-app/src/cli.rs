@@ -198,6 +198,10 @@ pub(crate) struct Args {
     /// The saved bus odometer, applied after spawning so initialization cannot replace it.
     #[arg(skip)]
     pub(crate) situation_odometer_km: Option<f64>,
+    /// The saved script textures' files without `_<n>.dds` (`<situation>.osn_<vehicle>`),
+    /// drawn back into the bus after spawning (`situation::restore_script_textures`).
+    #[arg(skip)]
+    pub(crate) situation_script_textures: Option<std::path::PathBuf>,
     /// Saved ordinal in the current timetable trip; absent in older situations.
     #[arg(skip)]
     pub(crate) situation_next_stop: Option<usize>,
@@ -328,4 +332,5 @@ pub(crate) struct SituationOther {
     pub vars: Vec<(String, f32)>,
     pub strvars: Vec<(String, String)>,
     pub odometer_km: Option<f64>,
+    pub script_textures: Option<std::path::PathBuf>,
 }

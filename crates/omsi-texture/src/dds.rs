@@ -341,6 +341,46 @@ pub(crate) fn decode_block(block: &[u8], kind: u8) -> [[u8; 4]; 16] {
     out
 }
 
+/// Write an RGBA picture as an uncompressed A8R8G8B8 DDS with one mip level: the format
+/// D3DX writes for OMSI's script textures and reads back with any D3DX version.
+pub fn encode_a8r8g8b8(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
+    let n = width as usize * height as usize * 4;
+    let mut b = vec![0u8; 128];
+    b[..4].copy_from_slice(b"DDS ");
+    let mut put = |o: usize, v: u32| b[o..o + 4].copy_from_slice(&v.to_le_bytes());
+    put(4, 124); // header size
+    put(8, 0x1 | 0x2 | 0x4 | 0x8 | 0x1000); // CAPS | HEIGHT | WIDTH | PITCH | PIXELFORMAT
+    put(12, height);
+    put(16, width);
+    put(20, width * 4); // pitch
+    put(28, 1); // mip levels
+    put(76, 32); // pixel format size
+    put(80, 0x1 | 0x40); // ALPHAPIXELS | RGB
+    put(88, 32);
+    put(92, 0x00ff_0000);
+    put(96, 0x0000_ff00);
+    put(100, 0x0000_00ff);
+    put(104, 0xff00_0000);
+    put(108, 0x1000); // DDSCAPS_TEXTURE
+    b.reserve(n);
+    for px in rgba[..n.min(rgba.len())].chunks_exact(4) {
+        b.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+    }
+    b
+}
+
+#[cfg(test)]
+mod encode_tests {
+    #[test]
+    fn an_encoded_picture_reads_back_the_same() {
+        let rgba: Vec<u8> = (0..3 * 2 * 4).map(|v| (v * 9) as u8).collect();
+        let img = super::decode(&super::encode_a8r8g8b8(3, 2, &rgba)).unwrap();
+        assert_eq!((img.width, img.height), (3, 2));
+        assert_eq!(img.rgba, rgba);
+        assert!(img.has_alpha);
+    }
+}
+
 #[cfg(test)]
 mod dx10_tests {
     #[test]

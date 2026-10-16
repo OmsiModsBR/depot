@@ -494,6 +494,13 @@ pub(crate) fn spawn_player(
         if let Some(km) = args.situation_odometer_km {
             p.vehicle.set_odometer_km(km);
         }
+        // (after the scripts' init, which starts the textures afresh)
+        if let Some(prefix) = &args.situation_script_textures {
+            let n = crate::situation::restore_script_textures(&mut p.vehicle, prefix);
+            if n > 0 {
+                log::info!("situation: {n} script texture(s) restored");
+            }
+        }
         log::info!(
             "situation: {numeric} of {} variables and {textual} of {} strings restored",
             args.situation_vars.len(),
