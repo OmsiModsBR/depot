@@ -362,9 +362,10 @@ impl ApplicationHandler for App {
                 #[cfg(windows)]
                 self.poll_vr_cursor_position();
                 // OMSI's autosave of the last situation: every few minutes of play (five unless
-                // the settings say otherwise, 0 turns it off)
+                // the settings say otherwise, 0 turns it off); the play time runs faster with the
+                // time speed raised, so the interval is stretched to stay in real minutes
                 let autosave_minutes = self.settings.autosave_minutes;
-                if autosave_minutes > 0 && !self.paused && self.player.is_some() && self.clock.run_time - self.autosave_t >= f64::from(autosave_minutes) * 60.0 {
+                if autosave_minutes > 0 && !self.paused && self.player.is_some() && self.clock.run_time - self.autosave_t >= f64::from(autosave_minutes) * 60.0 * self.time_speed().max(1.0) {
                     self.autosave_t = self.clock.run_time;
                     self.save_last_situation();
                 }
