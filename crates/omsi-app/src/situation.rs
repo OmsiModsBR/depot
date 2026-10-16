@@ -95,6 +95,7 @@ pub(crate) fn apply_situation(args: &mut Args) -> Result<()> {
 
 pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &mut Args) {
     args.situation_odometer_km = None;
+    args.situation_script_textures = None;
     args.map = sit.map.replace('\\', "/");
     // A map from an archive was saved as its whole path (`\Users\…\Archives\x.zip\Maps\
     // Novi Sad\global.cfg`), which then went after the root and the game closed at once:
@@ -169,6 +170,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
             args.paint = Some(format!("{}", *c as i64));
         }
         args.situation_strvars = v.string_vars.clone();
+        args.situation_script_textures = script_texture_prefix(&sit.path, i);
         log::info!(
             "situation: player {} at {:?} line {:?} tour {:?} hof {:?}, {} vars",
             v.file,
@@ -188,7 +190,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         .iter()
         .enumerate()
         .filter(|(i, v)| Some(*i) != mine && v.coupled_with.is_none())
-        .map(|(_, v)| {
+        .map(|(i, v)| {
             let (x, y) = omsi_map::tile_local_to_world(v.tile.0, v.tile.1, v.pos[0], v.pos[2]);
             let paint = v
                 .vars
@@ -204,12 +206,90 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
                 vars: v.vars.iter().map(|(n, x)| (n.clone(), *x as f32)).collect(),
                 strvars: v.string_vars.clone(),
                 odometer_km: saved_odometer_km(v, legacy_odometer_ids),
+                script_textures: script_texture_prefix(&sit.path, i),
             }
         })
         .collect();
     if !args.situation_others.is_empty() {
         log::info!("situation: {} more vehicle(s) placed", args.situation_others.len());
     }
+}
+
+/// The files of a vehicle's `[scripttexture]` images saved with a situation, as OMSI
+/// names them: the situation file's whole name, then `_<vehicle>_<texture>.dds`
+/// (`Slot 1.osn_0_2.dds`), the vehicle counted in the order the file lists them. Without
+/// `_<texture>.dds`; None for a situation not read from a file.
+fn script_texture_prefix(osn: &Path, vehicle: usize) -> Option<PathBuf> {
+    let name = osn.file_name()?.to_string_lossy();
+    Some(osn.with_file_name(format!("{name}_{vehicle}")))
+}
+
+fn script_texture_file(prefix: &Path, texture: usize) -> PathBuf {
+    let name = prefix.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    prefix.with_file_name(format!("{name}_{texture}.dds"))
+}
+
+/// Write the `[scripttexture]` images of the situation's vehicles (in the order
+/// `build_situation` wrote them) next to `osn`, as OMSI does: what the displays show
+/// (destination signs, the IBIS, the ticket printer) is drawn by the scripts only when
+/// something changes, so the variables alone bring them back empty (#34). The images of an
+/// earlier save under the same name go first: a later bus does not get another's. The
+/// number of images written.
+pub(crate) fn save_script_textures(osn: &Path, vehicles: &[&omsi_sim::VehicleInstance]) -> usize {
+    if let (Some(dir), Some(name)) = (osn.parent(), osn.file_name().map(|n| n.to_string_lossy().into_owned())) {
+        let stale = |f: &str| {
+            f.strip_prefix(name.as_str())
+                .and_then(|r| r.strip_prefix('_'))
+                .and_then(|r| r.strip_suffix(".dds"))
+                .and_then(|r| r.split_once('_'))
+                .is_some_and(|(a, b)| [a, b].iter().all(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())))
+        };
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if stale(&e.file_name().to_string_lossy()) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    let mut written = 0;
+    for (v, vehicle) in vehicles.iter().enumerate() {
+        let Some(prefix) = script_texture_prefix(osn, v) else { continue };
+        for (i, st) in vehicle.host.script_textures.iter().enumerate() {
+            let file = script_texture_file(&prefix, i);
+            let dds = omsi_texture::dds::encode_a8r8g8b8(st.width, st.height, st.shown());
+            match std::fs::write(&file, dds) {
+                Ok(()) => written += 1,
+                Err(e) => log::warn!("situation: script texture {}: {e}", file.display()),
+            }
+        }
+    }
+    written
+}
+
+/// Draw a vehicle's saved `[scripttexture]` images back into it, as OMSI loads them: each
+/// file there takes its texture's place at the file's own size (`ScriptTexture::load`); a
+/// texture without a file stays as the scripts left it, and a file that cannot be read
+/// leaves it empty, with a line in the log. The number restored.
+pub(crate) fn restore_script_textures(vehicle: &mut omsi_sim::VehicleInstance, prefix: &Path) -> usize {
+    let mut restored = 0;
+    for (i, st) in vehicle.host.script_textures.iter_mut().enumerate() {
+        let file = script_texture_file(prefix, i);
+        let Ok(bytes) = std::fs::read(&file) else { continue };
+        match omsi_texture::dds::decode(&bytes) {
+            Ok(img) if img.width <= omsi_sim::scripttex::MAX_SCRIPT_TEXTURE_SIDE && img.height <= omsi_sim::scripttex::MAX_SCRIPT_TEXTURE_SIDE => {
+                st.load(img.width, img.height, &img.rgba);
+                restored += 1;
+            }
+            Ok(img) => {
+                log::warn!("situation: script texture {} is {}x{}, above {}; left empty", file.display(), img.width, img.height, omsi_sim::scripttex::MAX_SCRIPT_TEXTURE_SIDE);
+                st.clear();
+            }
+            Err(e) => {
+                log::warn!("situation: script texture {} could not be read ({e}); left empty", file.display());
+                st.clear();
+            }
+        }
+    }
+    restored
 }
 
 /// The lowest height (m) a saved vehicle can plausibly stand at. A vehicle that fell through
@@ -596,5 +676,94 @@ mod tests {
         let mut args = Args::parse_from(["depot"]);
         args.situation_odometer_km = Some(75556.639);
         assert!(args.is_resuming());
+    }
+
+    /// A vehicle with `[scripttexture]`s of these sizes and no scripts.
+    fn with_script_textures(sizes: &[(i32, i32)]) -> omsi_sim::VehicleInstance {
+        let mut model = omsi_model::Model::default();
+        model.script_textures = sizes.to_vec();
+        let ty = std::sync::Arc::new(omsi_sim::VehicleType {
+            def: Default::default(),
+            model,
+            model_dir: PathBuf::new(),
+            program: Default::default(),
+            meshes: Vec::new(),
+            paint_schemes: Vec::new(),
+            texchanges: Vec::new(),
+            wheel_meshes: Vec::new(),
+            suspension_axles: Vec::new(),
+            missing_packs: Vec::new(),
+            mesh_bounds: Vec::new(),
+            mesh_boxes: Vec::new(),
+        });
+        omsi_sim::VehicleInstance::new(ty, omsi_sim::VehicleHost::new(Default::default()))
+    }
+
+    /// #34: what the scripts drew (an IBIS, a destination sign) comes back with the
+    /// situation, in OMSI's files next to it, for each vehicle saved; a missing or damaged
+    /// file leaves its texture empty.
+    #[test]
+    fn script_textures_come_back_with_the_situation() {
+        let dir = std::env::temp_dir().join(format!("depot_sit_scripttex_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let osn = dir.join("Slot 1.osn");
+        let mut player = with_script_textures(&[(4, 2), (8, 8)]);
+        let mut placed = with_script_textures(&[(2, 2)]);
+        player.host.script_textures[0].color = [200, 100, 50, 255];
+        player.host.script_textures[0].rect(1, 0, 2, 1);
+        placed.host.script_textures[0].color = [1, 2, 3, 4];
+        placed.host.script_textures[0].rect(0, 0, 1, 1);
+        let drawn = player.host.script_textures[0].rgba.clone();
+        // a file of an earlier save under the same name, for a texture this save has not
+        std::fs::write(dir.join("Slot 1.osn_0_7.dds"), b"old").unwrap();
+        assert_eq!(save_script_textures(&osn, &[&player, &placed]), 3);
+        assert!(dir.join("Slot 1.osn_0_0.dds").is_file());
+        assert!(dir.join("Slot 1.osn_1_0.dds").is_file());
+        assert!(!dir.join("Slot 1.osn_0_7.dds").exists());
+
+        // the situation as read back: each vehicle finds its own files
+        let mut args = Args::parse_from(["depot"]);
+        let sit = omsi_content::situation::Situation {
+            path: osn.clone(),
+            vehicles: vec![
+                omsi_content::situation::SituationVehicle { is_my_vehicle: true, ..Default::default() },
+                omsi_content::situation::SituationVehicle::default(),
+            ],
+            ..Default::default()
+        };
+        apply_situation_parsed(&sit, &mut args);
+        let mine = args.situation_script_textures.clone().unwrap();
+        let other = args.situation_others[0].script_textures.clone().unwrap();
+
+        let mut back = with_script_textures(&[(4, 2), (8, 8)]);
+        assert_eq!(restore_script_textures(&mut back, &mine), 2);
+        assert_eq!(back.host.script_textures[0].rgba, drawn);
+        assert!(back.host.script_textures[0].take_upload().is_some(), "goes up to the GPU");
+        let mut back_placed = with_script_textures(&[(2, 2)]);
+        assert_eq!(restore_script_textures(&mut back_placed, &other), 1);
+        assert_eq!(back_placed.host.script_textures[0].get(1, 1), [1, 2, 3, 4]);
+
+        // a damaged file: an empty texture and a line in the log, no panic
+        std::fs::write(dir.join("Slot 1.osn_0_0.dds"), b"DDS broken").unwrap();
+        std::fs::remove_file(dir.join("Slot 1.osn_0_1.dds")).unwrap();
+        let mut damaged = with_script_textures(&[(4, 2), (8, 8)]);
+        damaged.host.script_textures[0].color = [9, 9, 9, 9];
+        damaged.host.script_textures[0].rect(0, 0, 3, 1);
+        assert_eq!(restore_script_textures(&mut damaged, &mine), 0);
+        assert!(damaged.host.script_textures[0].rgba.iter().all(|b| *b == 0));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A buffer the script keeps locked saves the image it last released, not its
+    /// half-drawn next one.
+    #[test]
+    fn a_locked_texture_saves_what_it_shows() {
+        let mut st = omsi_sim::scripttex::ScriptTexture::new(2, 1);
+        st.put(0, 0, [1, 1, 1, 1]);
+        st.unlock();
+        st.locked = true;
+        st.put(1, 0, [2, 2, 2, 2]);
+        assert_eq!(st.shown(), &[1, 1, 1, 1, 0, 0, 0, 0]);
     }
 }

@@ -94,6 +94,15 @@ impl ScriptTexture {
         }
     }
 
+    /// The image the displays show: the one last released by `STUnlock` while the script
+    /// keeps drawing into a locked buffer, else the buffer itself. What a situation saves.
+    pub fn shown(&self) -> &[u8] {
+        match &self.pending {
+            Some(p) if self.locked => p,
+            _ => &self.rgba,
+        }
+    }
+
     pub fn put(&mut self, x: i32, y: i32, c: [u8; 4]) {
         if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
             return;
