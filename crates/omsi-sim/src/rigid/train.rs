@@ -12,21 +12,11 @@
 //! A body alone is a train of one, solved exactly as before.
 
 use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, BUMP};
+use super::params::{BAUMGARTE, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEPS_MAX, SUBSTEPS_MIN, SUBSTEP_DT};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 use std::borrow::Cow;
 
-/// How much of a joint's error a substep takes away (Baumgarte), and the fastest it does so
-/// (m/s, rad/s): a part put down a little off its joint is drawn to it, not thrown.
-const BAUMGARTE: f32 = 0.2;
-const MAX_BIAS: f32 = 1.0;
-/// Passes over the constraints of a substep: the tyres' alone take 8 (OMSI 2's hold across
-/// converges within them); with joints the sections share their tyres through the joint, which
-/// takes a few more.
-const PASSES: usize = 8;
-const JOINT_PASSES: usize = 16;
-/// The joint's limits are looked at from this far (rad) inside them.
-const LIMIT_WINDOW: f32 = 0.3;
 
 /// What a joint lets turn besides the vertical and the transverse axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,7 +324,7 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     // a long frame (below 20 fps) is stepped in slices of at most 50 ms, so that the
     // body covers the whole frame the clock, the odometer and the scripts count (it was
     // cut to 50 ms: at 10 fps the bus went half as far as the time went on)
-    let dt = if dt.is_finite() { dt.clamp(0.0, 0.25) } else { 0.0 };
+    let dt = if dt.is_finite() { dt.clamp(0.0, FRAME_DT_MAX) } else { 0.0 };
     // A script's value that is no number - a bus's `M_Wheel` or a brake force of 0/0 or
     // 1/0 - put the whole body at NaN within a step: the bus vanished and the steering's
     // clamp stopped the game a frame later ("min > max, or either was NaN", #1045).
@@ -350,7 +340,7 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     // driven wheels of its own (a pusher's front section) was pushed by nothing: the
     // count was clamped to one and the torque went to wheels that do not drive.
     let driven = bodies.iter().map(|b| b.wheels.iter().filter(|w| w.driven).count() + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()).sum::<usize>().max(1) as f32;
-    let slices = (dt / 0.05).ceil().max(1.0) as usize;
+    let slices = (dt / SLICE_DT).ceil().max(1.0) as usize;
     let mut impacts: Vec<Vec<Impact>> = vec![Vec::new(); bodies.len()];
     for _ in 0..slices {
         slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe);
@@ -412,7 +402,7 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
     // (substeps of at most ~4 ms whatever the frame: a frame held up by loading - 50 ms -
     // made 12 ms substeps, too long for the stiff tyres, and the body hopped on its
     // springs for no reason the driver could see)
-    let substeps = ((dt / 0.0042).ceil() as usize).clamp(4, 16);
+    let substeps = ((dt / SUBSTEP_DT).ceil() as usize).clamp(SUBSTEPS_MIN, SUBSTEPS_MAX);
     let h = dt / substeps as f32;
     let mut accel = vec![Vec3::ZERO; n];
     let passes = if joints.is_empty() { PASSES } else { JOINT_PASSES };

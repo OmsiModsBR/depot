@@ -118,7 +118,7 @@ impl KinematicModel {
     /// `brake_forces` the per-wheel brake forces in the same order as `m.wheels`. Returns the
     /// displacement along the vehicle's forward axis and the heading change in degrees.
     pub fn step(&self, m: &mut VehicleMotion, steering: f32, dt: f32, drive_torque: f32, brake_forces: &[f32]) -> (f32, f32) {
-        let dt = dt.clamp(0.0, 0.1);
+        let dt = dt.clamp(0.0, crate::rigid::KINEMATIC_DT_MAX);
         // steering
         let target = steering.clamp(-1.0, 1.0) * self.max_steer_deg;
         let rate = self.max_steer_deg * 2.5 * dt;

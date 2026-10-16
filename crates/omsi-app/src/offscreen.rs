@@ -2343,7 +2343,11 @@ pub(crate) fn run_offscreen(
             // and a half more (up to the hub and 5 cm the wheels used to climb anyway).
             {
                 let r = 0.47f64;
-                let (climb, hub, overhead) = (omsi_sim::rigid::CLIMB as f64 * r, r + 0.05, r + 1.5);
+                let (climb, hub, overhead) = (
+                    omsi_sim::rigid::CLIMB as f64 * r,
+                    r + omsi_sim::rigid::HUB_REACH,
+                    r + omsi_sim::rigid::WALL_HEIGHT,
+                );
                 let (mut rolled, mut steep, mut high) = (0usize, 0usize, 0usize);
                 let mut faces: Vec<(DVec3, f64, f32)> = Vec::new();
                 // (a lane's own height is not always its road's: on some ramps it runs a metre

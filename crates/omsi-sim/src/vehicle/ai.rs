@@ -2,6 +2,7 @@
 
 use super::physics_bridge::driven_rpm;
 use super::VehicleInstance;
+use crate::rigid::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
 
 /// Motion state handed to `VehicleInstance::update_ai`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -87,8 +88,8 @@ impl VehicleInstance {
                 let across = 1.0 - ws.lat * k;
                 // (the axle's angle, the same for both sides, as OMSI hands it to the
                 // scripts: see `RigidBody::axle_steer`)
-                let steer = if arm > 0.5 {
-                    (arm * k).atan().clamp(-1.2, 1.2)
+                let steer = if arm > AI_STEER_ARM_MIN {
+                    (arm * k).atan().clamp(-AI_AXLE_STEER_MAX, AI_AXLE_STEER_MAX)
                 } else {
                     0.0
                 };

@@ -9,6 +9,31 @@
 //! the envelope's own geometry (see `ground::tyre_line`) and the floors that keep a
 //! division away from zero or a broken file's values in range.
 
+// The step.
+
+/// The longest frame stepped (s): a longer one (a hitch, a frame after loading) is cut to it.
+/// *tuned*
+pub(super) const FRAME_DT_MAX: f32 = 0.25;
+/// A frame is stepped in slices of at most this (s), each with its own steering and pitch and
+/// roll damping: a long frame (below 20 fps) covers the whole time the clock counts. *tuned*
+pub(super) const SLICE_DT: f32 = 0.05;
+/// A slice is cut into substeps of about this (s), at least `SUBSTEPS_MIN` and at most
+/// `SUBSTEPS_MAX` of them: 12 ms substeps were too long for the stiff tyres. *tuned*
+pub(super) const SUBSTEP_DT: f32 = 0.0042;
+pub(super) const SUBSTEPS_MIN: usize = 4;
+pub(super) const SUBSTEPS_MAX: usize = 16;
+/// Passes over the constraints of a substep: the tyres' alone take 8 (OMSI 2's hold across
+/// converges within them); with joints the sections share their tyres through the joint, which
+/// takes a few more. *tuned*
+pub(super) const PASSES: usize = 8;
+pub(super) const JOINT_PASSES: usize = 16;
+/// How much of a joint's error a substep takes away (Baumgarte), and the fastest it does so
+/// (m/s, rad/s): a part put down a little off its joint is drawn to it, not thrown. *tuned*
+pub(super) const BAUMGARTE: f32 = 0.2;
+pub(super) const MAX_BIAS: f32 = 1.0;
+/// The joint's limits are looked at from this far (rad) inside them. *tuned*
+pub(super) const LIMIT_WINDOW: f32 = 0.3;
+
 // The body.
 
 /// Gravity (m/s²). *physics*
@@ -124,7 +149,7 @@ pub const CLIMB: f32 = 0.8;
 /// Right after `place`, which knows no ground, and when nothing lower is found, a tyre takes
 /// the ground up to this far (m) over its hub: a body set down a little too low is lifted.
 /// *tuned*
-pub(super) const HUB_REACH: f64 = 0.05;
+pub const HUB_REACH: f64 = 0.05;
 /// Half the width of a tyre, in radii (a 275 mm bus tyre on a 0.47 m radius). *physics*
 pub(super) const HALF_WIDTH: f32 = 0.3;
 
@@ -136,7 +161,7 @@ pub(super) const SIDE_REACH: f32 = 2.0;
 pub(super) const FACE_SPAN: f32 = 0.2;
 /// A face this far above the axle next to the tyre is a wall, not something far overhead.
 /// *tuned*
-pub(super) const WALL_HEIGHT: f64 = 1.5;
+pub const WALL_HEIGHT: f64 = 1.5;
 /// A face is kept while the hub is less than this many radii from it, and while the ground
 /// this far (m) behind its line is still the face and this far before it still clear.
 /// *tuned*
@@ -170,3 +195,18 @@ pub(super) const CLEARANCE: f32 = 0.001;
 pub(super) const INSIDE_DEPTH: f64 = 0.5;
 pub(super) const INSIDE_REACH: f64 = 6.0;
 pub(super) const INSIDE_FRAMES: f64 = 2.0;
+
+// The AI traffic and the kinematic model. (They stay as they are while the AI's physics is
+// paused: see `crate::ai_motion`.)
+
+/// How fast an AI driver turns the front wheels (deg/s): a vehicle over `AI_HEAVY_MASS` (kg)
+/// the slower rate. *tuned*
+pub(crate) const AI_STEER_RATE_HEAVY: f32 = 25.0;
+pub(crate) const AI_STEER_RATE: f32 = 40.0;
+pub(crate) const AI_HEAVY_MASS: f32 = 6000.0;
+/// The axle angle an AI vehicle hands its scripts is held to this (rad), and an axle closer
+/// than `AI_STEER_ARM_MIN` (m) to the `[rot_pnt_long]` line is not steered. *tuned*
+pub(crate) const AI_AXLE_STEER_MAX: f32 = 1.2;
+pub(crate) const AI_STEER_ARM_MIN: f32 = 0.5;
+/// The longest frame the kinematic model steps (s): a longer one is cut to it. *tuned*
+pub(crate) const KINEMATIC_DT_MAX: f32 = 0.1;

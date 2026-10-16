@@ -209,7 +209,7 @@ impl AiBody {
         let tonnes = def.mass < 100.0;
         let mass = (if tonnes { def.mass * 1000.0 } else { def.mass }).max(300.0);
         let unit = if tonnes { 1000.0 } else { 1.0 };
-        let heavy = mass > 6000.0;
+        let heavy = mass > crate::rigid::AI_HEAVY_MASS;
         // inv_min_turnradius = tan(max angle) / wheelbase
         let max_steer = if def.inv_min_turn_radius > 0.0 { (def.inv_min_turn_radius * wheelbase).atan().to_degrees().clamp(15.0, 55.0) } else { 35.0 };
         let mut wheels = Vec::new();
@@ -273,7 +273,7 @@ impl AiBody {
             front_long,
             rear_long,
             max_steer,
-            steer_rate: if heavy { 25.0 } else { 40.0 },
+            steer_rate: if heavy { crate::rigid::AI_STEER_RATE_HEAVY } else { crate::rigid::AI_STEER_RATE },
             wheels,
             axle_count,
             mass,
