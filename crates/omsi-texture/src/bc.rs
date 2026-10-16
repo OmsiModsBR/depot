@@ -712,6 +712,32 @@ pub fn bc1_block_has_alpha(blk: &[u8]) -> bool {
     (0..16).any(|i| (bits >> (2 * i)) & 3 == 3)
 }
 
+/// Whether a DXT3 block has a texel that is not fully opaque (explicit 4-bit alpha).
+pub fn bc2_block_has_alpha(blk: &[u8]) -> bool {
+    blk[..8].iter().any(|&b| b != 0xff)
+}
+
+/// Whether a DXT5 block has a texel that is not fully opaque: an index in use whose
+/// interpolated alpha is below 255.
+pub fn bc3_block_has_alpha(blk: &[u8]) -> bool {
+    let (a0, a1) = (blk[0] as u32, blk[1] as u32);
+    let mut bits = 0u64;
+    for (i, &b) in blk[2..8].iter().enumerate() {
+        bits |= (b as u64) << (8 * i);
+    }
+    let value = |i: u32| -> u32 {
+        match (i, a0 > a1) {
+            (0, _) => a0,
+            (1, _) => a1,
+            (i, true) => ((8 - i) * a0 + (i - 1) * a1) / 7,
+            (6, false) => 0,
+            (7, false) => 255,
+            (i, false) => ((6 - i) * a0 + (i - 1) * a1) / 5,
+        }
+    };
+    (0..16).any(|t| value(((bits >> (3 * t)) & 7) as u32) < 255)
+}
+
 fn srgb_to_linear_table() -> &'static [f32; 256] {
     static T: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
     T.get_or_init(|| {

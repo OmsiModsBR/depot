@@ -1013,6 +1013,9 @@ pub struct TileGpu {
 struct TexEntry {
     id: TextureId,
     alpha: bool,
+    /// Has an alpha channel, but every texel is fully opaque (see
+    /// [`omsi_texture::gpu::TextureData::alpha_in_use`]).
+    opaque_alpha: bool,
     users: usize,
     /// Texels of the uploaded image (mip levels not counted).
     texels: u64,
@@ -1431,6 +1434,7 @@ impl GpuCache {
             TexEntry {
                 id,
                 alpha: img.has_alpha,
+                opaque_alpha: img.has_alpha && !img.alpha_in_use(),
                 users: 1,
                 texels: img.width as u64 * img.height as u64,
                 bytes: renderer.texture_size_bytes(scene, id),
@@ -1443,6 +1447,12 @@ impl GpuCache {
 
     fn has_alpha(&self, path: &Path) -> bool {
         self.textures.get(path).map(|e| e.alpha).unwrap_or(false)
+    }
+
+    /// Whether the texture's alpha makes anything see-through: false without an alpha
+    /// channel, and for one that is 255 throughout.
+    fn alpha_in_use(&self, path: &Path) -> bool {
+        self.textures.get(path).is_some_and(|e| e.alpha && !e.opaque_alpha)
     }
 
     /// Lazily make material overrides for one placed scenery object's active `[CTC]` and
@@ -1575,6 +1585,7 @@ impl GpuCache {
             TexEntry {
                 id,
                 alpha: true,
+                opaque_alpha: false,
                 users: 1,
                 texels: data.width as u64 * data.height as u64,
                 bytes: renderer.texture_size_bytes(scene, id),
@@ -6369,7 +6380,8 @@ impl World {
                 // it showed through - the far roads and a bridge over NCCR's apartment
                 // blocks (`[matl_alpha] 2` on a 24-bit BMP), Westcountry's road signs. In
                 // In OMSI such a blend writes depth and its alpha is 1 throughout, the same
-                // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha.)
+                // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha
+                // below 255 somewhere.)
                 let surface_phase = matches!(
                     ot.sco.render_type,
                     omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface
@@ -6377,7 +6389,7 @@ impl World {
                 let faded = slot_ov.iter().any(|o| o.alphascale.as_ref().is_some_and(|v| !v.trim().is_empty()));
                 let alpha = if alpha == AlphaMode::Blend && surface_phase && tex.is_some() && transmap.is_none() && !faded && {
                     let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                    omsi_texture::find_texture(&m.texture, &dirs_ref).is_some_and(|p| gpu.textures.get(&p).is_some_and(|e| !e.alpha))
+                    omsi_texture::find_texture(&m.texture, &dirs_ref).is_some_and(|p| gpu.textures.contains_key(&p) && !gpu.alpha_in_use(&p))
                 } {
                     AlphaMode::Opaque
                 } else {
@@ -6698,6 +6710,7 @@ impl World {
                             TexEntry {
                                 id,
                                 alpha: img.has_alpha,
+                                opaque_alpha: img.has_alpha && !img.alpha_in_use(),
                                 users: 1,
                                 texels: img.width as u64 * img.height as u64,
                                 bytes: renderer.texture_size_bytes(scene, id),
@@ -7098,7 +7111,7 @@ impl World {
                             let (tex, texture_has_alpha) =
                                 match gpu.texture(renderer, scene, &t.file, &dirs, images) {
                                     Some((id, path)) => {
-                                        let has_alpha = gpu.has_alpha(&path);
+                                        let has_alpha = gpu.alpha_in_use(&path);
                                         sg.textures.push(path);
                                         (Some(id), has_alpha)
                                     }
@@ -7106,15 +7119,14 @@ impl World {
                                 };
                             // OMSI spline [matl_alpha] uses 0 = opaque, 1 = alpha test,
                             // and 2 = blend.  Like the C++ handler, a declared blend on
-                            // a texture without alpha is opaque; otherwise the surface
+                            // a texture without alpha is opaque (as is one whose alpha is
+                            // 255 throughout: DavidM's walls and bridges, DXT5 textures
+                            // with `[matl_alpha] 2`, wrote no depth and the wall behind
+                            // showed over the one in front); otherwise the surface
                             // belongs in the blended pass, not the depth-writing cutout
                             // pass.  Blended spline overlaps also need depth writes off,
                             // matching the reference handler's far-to-near spline pass.
-                            let alpha = match (t.alpha, texture_has_alpha) {
-                                (1, _) => AlphaMode::Test,
-                                (mode, true) if mode >= 2 => AlphaMode::Blend,
-                                _ => AlphaMode::Opaque,
-                            };
+                            let alpha = spline_alpha(t.alpha, texture_has_alpha);
                             let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
                             let cfg = self.textures.cfg(&t.file, &dirs_ref);
                             let wet = cfg.moisture || cfg.puddles;
@@ -10784,6 +10796,16 @@ pub(crate) fn material_alpha(
         .unwrap_or(AlphaMode::Opaque)
 }
 
+/// A spline texture's draw mode from its `[matl_alpha]` and whether the texture's alpha
+/// makes anything see-through (see `GpuCache::alpha_in_use`).
+fn spline_alpha(declared: i32, alpha_in_use: bool) -> AlphaMode {
+    match (declared, alpha_in_use) {
+        (1, _) => AlphaMode::Test,
+        (mode, true) if mode >= 2 => AlphaMode::Blend,
+        _ => AlphaMode::Opaque,
+    }
+}
+
 fn alpha_mode(a: i32) -> AlphaMode {
     match a {
         0 => AlphaMode::Opaque,
@@ -13761,6 +13783,17 @@ mod tests {
         let missing_key = spec.with_freetex(None, 21, true, true);
         assert_eq!(missing_key.item.as_ref().unwrap().night, Some(10));
         assert_eq!(missing_key.item.as_ref().unwrap().diffuse, Some(99));
+    }
+
+    /// `[matl_alpha] 2` blends only a texture whose alpha is below 255 somewhere: a DXT5
+    /// that is opaque throughout (DavidM's walls and bridges) is drawn opaque and writes
+    /// depth, or the wall behind showed over the one in front.
+    #[test]
+    fn spline_blend_needs_alpha_in_use() {
+        assert_eq!(spline_alpha(2, false), AlphaMode::Opaque);
+        assert_eq!(spline_alpha(2, true), AlphaMode::Blend);
+        assert_eq!(spline_alpha(1, false), AlphaMode::Test);
+        assert_eq!(spline_alpha(0, true), AlphaMode::Opaque);
     }
 
     #[test]
