@@ -49,18 +49,6 @@ pub(crate) fn ground_hit(w: &crate::scene::World, o: DVec3, d: DVec3, max: f64) 
     None
 }
 
-/// Vehicle `v` put at `at` facing `heading`, standing still.
-pub(crate) fn put_vehicle(v: &mut omsi_sim::VehicleInstance, at: DVec3, heading: f64) {
-    v.position = at;
-    v.heading = heading;
-    if let Some(rb) = v.rigid_mut() {
-        rb.place(at, heading);
-    }
-    for t in v.trailers.iter_mut() {
-        t.realign();
-    }
-}
-
 impl App {
     /// The vehicle just placed (`uid`) follows the mouse until it is set down.
     pub(crate) fn begin_placing(&mut self, uid: u64, heading: f64) {
@@ -109,7 +97,7 @@ impl App {
             })
             .unwrap_or(false);
         if let Some(at) = hit {
-            put_vehicle(&mut self.placed[k].vehicle, at, heading);
+            self.placed[k].vehicle.teleport(at, heading);
         }
         if let Some(pl) = self.placing.as_mut() {
             pl.at = hit;

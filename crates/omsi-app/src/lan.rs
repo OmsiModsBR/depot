@@ -2337,14 +2337,7 @@ pub fn clear_spawn(
         return None;
     };
     let from = p.vehicle.position;
-    p.vehicle.position = origin;
-    p.vehicle.heading = heading;
-    if let Some(rb) = p.vehicle.rigid_mut() {
-        rb.place(origin, heading);
-    }
-    for t in p.vehicle.trailers.iter_mut() {
-        t.realign();
-    }
+    p.vehicle.teleport(origin, heading);
     // on the road: every rear section's turning axle on the lane behind its coupling, so
     // that it follows the bend instead of standing straight out onto the verge
     if let (Some((li, s, at)), true) = (on_lane, !p.vehicle.trailers.is_empty()) {

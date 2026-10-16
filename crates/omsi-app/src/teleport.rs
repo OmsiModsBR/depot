@@ -21,14 +21,7 @@ pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
     if let Some(p) = app.player.as_mut() {
         // (as a joining player's bus is moved off an occupied spawn: `lan::clear_spawn`)
         let origin = glam::DVec3::new(at.x, at.y, z);
-        p.vehicle.position = origin;
-        p.vehicle.heading = heading;
-        if let Some(rb) = p.vehicle.rigid_mut() {
-            rb.place(origin, heading);
-        }
-        for t in p.vehicle.trailers.iter_mut() {
-            t.realign();
-        }
+        p.vehicle.teleport(origin, heading);
         // (settled on the ground there; where its tiles are still to be read - a street far
         // off picked on the map - it waits at the street's height for them, as the frame
         // holds a bus with no ground under it, instead of dropping through first)
