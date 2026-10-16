@@ -37,18 +37,18 @@ fn main() {
         let mut rb = RigidBody::from_definition(&def, &[]);
         rb.place(DVec3::ZERO, 0.0);
         let dt = 1.0 / 60.0;
-        let brakes = vec![0.0; rb.wheels.len()];
+        let brakes = vec![0.0; rb.wheels().len()];
         let v_target = kmh / 3.6;
         // settle standing, then roll at the speed
         for _ in 0..120 {
             rb.step(dt, 0.0, &brakes, 0.0, &flat);
         }
-        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v_target;
-        for w in rb.wheels.iter_mut() {
-            w.spin = v_target / w.radius;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * v_target);
+        for w in rb.wheels_mut() {
+            w.set_spin(v_target / w.radius());
         }
-        let r_drive = rb.wheels.iter().find(|w| w.driven).map(|w| w.radius).unwrap_or(0.5);
-        let hold_speed = |rb: &RigidBody| -> f32 { ((v_target - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance + 0.36 * rb.forward_speed().powi(2) * (rb.mass / 2200.0).clamp(2.0, 8.5)) * r_drive };
+        let r_drive = rb.wheels().iter().find(|w| w.driven()).map(|w| w.radius()).unwrap_or(0.5);
+        let hold_speed = |rb: &RigidBody| -> f32 { ((v_target - rb.forward_speed()) * rb.mass() * 2.0 + rb.rolling_resistance() + 0.36 * rb.forward_speed().powi(2) * (rb.mass() / 2200.0).clamp(2.0, 8.5)) * r_drive };
         for _ in 0..180 {
             let m = hold_speed(&rb);
             rb.step(dt, m, &brakes, 0.0, &flat);
@@ -62,16 +62,16 @@ fn main() {
         for i in 0..n {
             let m = hold_speed(&rb);
             rb.step(dt, m, &brakes, steer, &flat);
-            let yaw = rb.omega.z.abs();
+            let yaw = rb.omega().z.abs();
             yaw_trace.push(yaw);
             let (_, _, bank) = rb.heading_pitch_bank();
             roll_peak = roll_peak.max(bank.abs());
             if i + 60 >= n {
-                let v_body = rb.orientation.inverse().mul_vec3(rb.velocity);
+                let v_body = rb.orientation().inverse().mul_vec3(rb.velocity());
                 yaw_ss += yaw / 60.0;
                 // side slip where the bus turns about (the rear axle line): zero when it
                 // follows its wheels, the drift angle when it does not
-                let x_at = v_body.x - rb.omega.z * (def.rot_pnt_long - rb.cog.y);
+                let x_at = v_body.x - rb.omega().z * (def.rot_pnt_long - rb.cog().y);
                 slip_ss += x_at.atan2(v_body.y).to_degrees().abs() / 60.0;
                 roll_ss += bank.abs() / 60.0;
             }
