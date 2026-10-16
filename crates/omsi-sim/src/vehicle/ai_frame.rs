@@ -2,6 +2,7 @@
 
 use super::physics_bridge::driven_rpm;
 use super::VehicleInstance;
+use crate::rigid::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
 
 /// Motion state handed to `VehicleInstance::update_ai`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -40,7 +41,7 @@ pub struct AiFrame {
 
 impl VehicleInstance {
     /// One frame of an AI-controlled vehicle: the pose is set by the traffic system
-    /// (`ai_motion::AiBody`, which also leaves the accelerations and each wheel's travel in
+    /// (`ai::AiBody`, which also leaves the accelerations and each wheel's travel in
     /// `physics`), the scripts see the motion through `Velocity` and the `AI_*` variables and
     /// run their `{frame_ai}` blocks (falling back to `{frame}` when a script has none).
     pub fn update_ai(&mut self, dt: f32, ai: &AiFrame) {
@@ -76,7 +77,7 @@ impl VehicleInstance {
         // `steer_deg` is the front wheel angle of a bicycle model turning about the
         // `[rot_pnt_long]` line: every axle ahead of that line points at the common turning
         // centre, and every wheel rolls as far as its own track through the bend is long
-        let (rot, wheelbase) = crate::ai_motion::rotation_point(&self.ty.def);
+        let (rot, wheelbase) = crate::ai::rotation_point(&self.ty.def);
         let k = ai.steer_deg.to_radians().tan() / wheelbase;
         for ai_idx in 0..self.v_wheels.len() {
             for si in 0..2 {
@@ -87,8 +88,8 @@ impl VehicleInstance {
                 let across = 1.0 - ws.lat * k;
                 // (the axle's angle, the same for both sides, as OMSI hands it to the
                 // scripts: see `RigidBody::axle_steer`)
-                let steer = if arm > 0.5 {
-                    (arm * k).atan().clamp(-1.2, 1.2)
+                let steer = if arm > AI_STEER_ARM_MIN {
+                    (arm * k).atan().clamp(-AI_AXLE_STEER_MAX, AI_AXLE_STEER_MAX)
                 } else {
                     0.0
                 };

@@ -790,7 +790,7 @@ impl ApplicationHandler for App {
                 ctl.feedback(crate::controllers::FfInput {
                     on: driving.is_some(),
                     kmh,
-                    lateral_accel: driving.and_then(|p| p.vehicle.rigid()).map(|r| r.accel_body.x).unwrap_or(0.0),
+                    lateral_accel: driving.and_then(|p| p.vehicle.rigid()).map(|r| r.accel_body().x).unwrap_or(0.0),
                     wheel_bump,
                     wheel_bump_age: 0.0,
                     vib_amp: driving.and_then(|p| p.vehicle.var("FF_Vib_Amp")).unwrap_or(0.0),

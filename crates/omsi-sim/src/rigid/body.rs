@@ -4,12 +4,8 @@
 
 use super::collide::Impact;
 use super::ground::GroundProbe;
-use super::params::{
-    BODY_DAMPING, BUMP, DEFAULT_COG_HEIGHT, DEFAULT_DAMPER, DEFAULT_INERTIA_INV, DEFAULT_MAX_FORCE,
-    DEFAULT_SPRING, DRY_GRIP, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MAX_STEER, OMSI_FRAME,
-    ROLLING_COEFFICIENT, TIP_OVER, TRACK_SHARE,
-};
-use super::suspension::wheel_rest_loads;
+use super::params::{BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, MAX_STEER, OMSI_FRAME, TIP_OVER};
+use super::spec::PhysicsSpec;
 use super::train::{step_train, BodyInputs};
 use super::tyre::Substep;
 use super::wheel::RigidWheel;
@@ -111,50 +107,22 @@ impl RigidBody {
     /// `hub_heights[a]`: unloaded hub height of axle `a` above the model origin; the tyre
     /// radius when the model does not say (see `VehicleType::wheel_geometry`).
     pub fn from_definition(def: &Vehicle, hub_heights: &[Option<f32>]) -> RigidBody {
-        let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
-        let moi = def.moment_of_inertia;
-        let scale = if moi[0] < 5000.0 { 1000.0 } else { 1.0 };
-        // `[momentofintertia]` goes to ODE as I11, I22, I33 of OMSI's y-up body frame:
-        // about the lateral axis (pitch), the vertical one (yaw) and the
-        // longitudinal one (roll) - roll takes the third value, yaw the second,
-        // whatever the SDK's comment says. Here (right, forward, up): pitch,
-        // roll, yaw. Read in the comment's order the SD202 rolled on 80 t m² instead of
-        // 300, twice as fast, and every uneven patch rocked it like a boat.
-        let inertia = Vec3::new((moi[0] * scale).max(100.0), (moi[2] * scale).max(100.0), (moi[1] * scale).max(100.0));
-        let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
-        let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(DEFAULT_COG_HEIGHT) };
-        let cog = Vec3::new(cog_xy.0, cog_xy.1, cog_z);
-        let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
+        let spec = PhysicsSpec::from(def);
+        let mass = spec.mass_kg;
         let mut wheels = Vec::new();
         let mut wheel_axle = Vec::new();
-        for (ai, a) in def.axles.iter().enumerate() {
-            let r = (a.wheel_diameter / 2.0).max(0.15);
+        for (ai, a) in spec.axles.iter().enumerate() {
+            let r = a.radius;
             let z = hub_heights.get(ai).copied().flatten().unwrap_or(r);
-            let k = if a.spring > 0.0 { a.spring * 1000.0 } else { DEFAULT_SPRING * 1000.0 };
-            let c = if a.damper > 0.0 { a.damper * 1000.0 } else { DEFAULT_DAMPER * 1000.0 };
-            let max_force = if a.max_force > 0.0 { a.max_force * 1000.0 } else { DEFAULT_MAX_FORCE * 1000.0 };
-            // where the tyres stand across (the middle of the band between the two widths)
-            // and where the strut pushes the body (the outer width)
-            let outer = (a.max_width / 2.0).max(0.3);
-            let inner = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * TRACK_SHARE };
             for side in [-1.0f32, 1.0] {
-                let inertia_inv = if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV };
-                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, spring: k, damper: c, max_force, spring_factor: 1.0, rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0 });
+                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv: a.inertia_inv, attach: Vec3::new(side * a.track, a.long, z), lever: side * (a.outer - a.track), radius: r, driven: a.driven, steered: (a.long - spec.front_long).abs() < 0.01, steer: 0.0, spring: a.spring, damper: a.damper, max_force: a.max_force, spring_factor: 1.0, rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0 });
                 wheel_axle.push(ai);
             }
         }
-        let loads = wheel_rest_loads(def);
         for (w, a) in wheels.iter_mut().zip(&wheel_axle) {
-            w.rest_load = loads.get(*a).copied().unwrap_or(0.0);
+            w.rest_load = spec.rest_loads.get(*a).copied().unwrap_or(0.0);
         }
-        let s = (front_long - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
-        // a file without a usable `[inv_min_turnradius]` still steers its front axle as far
-        // as the old default lock
-        let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 { def.inv_min_turn_radius } else { max_steer_deg.to_radians().tan() / s };
-        let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { DEFAULT_SPRING }).sum();
-        let body_freq = (springs / (mass / 1000.0)).max(0.0).sqrt();
-        RigidBody { mass, inertia, cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg, rot_pnt_long: def.rot_pnt_long, inv_min_turn_radius, body_freq, holding: true, rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { ROLLING_COEFFICIENT * mass * GRAVITY }, accel_body: Vec3::ZERO, friction: DRY_GRIP, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true }
+        RigidBody { mass, inertia: spec.inertia, cog: spec.cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg: spec.max_steer_deg, rot_pnt_long: spec.rot_pnt_long, inv_min_turn_radius: spec.inv_min_turn_radius, body_freq: spec.body_freq, holding: true, rolling_resistance: spec.rolling_resistance, accel_body: Vec3::ZERO, friction: DRY_GRIP, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true }
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading
@@ -177,6 +145,56 @@ impl RigidBody {
             w.ground_seen = false;
             w.walls.clear();
         }
+    }
+
+    /// The body's mass (kg).
+    pub fn mass(&self) -> f32 {
+        self.mass
+    }
+
+    /// The body-frame inertia (diagonal, kg m²).
+    pub fn inertia(&self) -> Vec3 {
+        self.inertia
+    }
+
+    /// The centre of gravity relative to the model origin (m).
+    pub fn cog(&self) -> Vec3 {
+        self.cog
+    }
+
+    /// The centre of gravity in the world.
+    pub fn position(&self) -> DVec3 {
+        self.position
+    }
+
+    /// The body's rotation, model frame to world.
+    pub fn orientation(&self) -> Quat {
+        self.orientation
+    }
+
+    /// The velocity of the centre of gravity (m/s, world).
+    pub fn velocity(&self) -> Vec3 {
+        self.velocity
+    }
+
+    /// The angular velocity (rad/s, body frame).
+    pub fn omega(&self) -> Vec3 {
+        self.omega
+    }
+
+    /// The body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
+    pub fn accel_body(&self) -> Vec3 {
+        self.accel_body
+    }
+
+    /// The wheels, two per axle (left then right).
+    pub fn wheels(&self) -> &[RigidWheel] {
+        &self.wheels
+    }
+
+    /// The wheels a face stopped during the last step.
+    pub fn wheel_impacts(&self) -> &[Impact] {
+        &self.wheel_impacts
     }
 
     /// Model origin (the point the renderer places) in the world.

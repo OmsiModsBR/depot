@@ -478,18 +478,15 @@ impl VehicleType {
             .zip(self.wheel_geometry(first_axle))
             .enumerate()
             .map(|(a, (axle, g))| {
-                let r = (axle.wheel_diameter / 2.0).max(0.15);
+                let axle = crate::rigid::AxleSpec::of(axle);
+                let r = axle.radius;
                 let model = g
                     .map(|(z, r_mesh)| z + (r - r_mesh))
                     .filter(|z| (z - r).abs() <= 0.08);
                 if self.suspension_axles.contains(&(first_axle + a)) {
                     return model;
                 }
-                let k = if axle.spring > 0.0 {
-                    axle.spring * 1000.0
-                } else {
-                    150_000.0
-                };
+                let k = axle.sag_spring;
                 let sag = (loads.get(a).copied().unwrap_or(0.0) / k).min(crate::rigid::BUMP);
                 Some(model.unwrap_or(r) - sag)
             })

@@ -11,22 +11,13 @@
 //! the joint's load on the axles, the lever of its pull and the inertia of the part behind.
 //! A body alone is a train of one, solved exactly as before.
 
-use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, BUMP};
+use super::spec::{split, wheel_rest_loads_supported};
+use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, Work, BUMP};
+use super::params::{BAUMGARTE, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEPS_MAX, SUBSTEPS_MIN, SUBSTEP_DT};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 use std::borrow::Cow;
 
-/// How much of a joint's error a substep takes away (Baumgarte), and the fastest it does so
-/// (m/s, rad/s): a part put down a little off its joint is drawn to it, not thrown.
-const BAUMGARTE: f32 = 0.2;
-const MAX_BIAS: f32 = 1.0;
-/// Passes over the constraints of a substep: the tyres' alone take 8 (OMSI 2's hold across
-/// converges within them); with joints the sections share their tyres through the joint, which
-/// takes a few more.
-const PASSES: usize = 8;
-const JOINT_PASSES: usize = 16;
-/// The joint's limits are looked at from this far (rad) inside them.
-const LIMIT_WINDOW: f32 = 0.3;
 
 /// What a joint lets turn besides the vertical and the transverse axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,7 +325,7 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     // a long frame (below 20 fps) is stepped in slices of at most 50 ms, so that the
     // body covers the whole frame the clock, the odometer and the scripts count (it was
     // cut to 50 ms: at 10 fps the bus went half as far as the time went on)
-    let dt = if dt.is_finite() { dt.clamp(0.0, 0.25) } else { 0.0 };
+    let dt = if dt.is_finite() { dt.clamp(0.0, FRAME_DT_MAX) } else { 0.0 };
     // A script's value that is no number - a bus's `M_Wheel` or a brake force of 0/0 or
     // 1/0 - put the whole body at NaN within a step: the bus vanished and the steering's
     // clamp stopped the game a frame later ("min > max, or either was NaN", #1045).
@@ -350,10 +341,11 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     // driven wheels of its own (a pusher's front section) was pushed by nothing: the
     // count was clamped to one and the torque went to wheels that do not drive.
     let driven = bodies.iter().map(|b| b.wheels.iter().filter(|w| w.driven).count() + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()).sum::<usize>().max(1) as f32;
-    let slices = (dt / 0.05).ceil().max(1.0) as usize;
+    let slices = (dt / SLICE_DT).ceil().max(1.0) as usize;
     let mut impacts: Vec<Vec<Impact>> = vec![Vec::new(); bodies.len()];
+    let mut scratch = SolverScratch::new(bodies.len());
     for _ in 0..slices {
-        slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe);
+        slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe, &mut scratch);
         for (b, impacts) in bodies.iter_mut().zip(impacts.iter_mut()) {
             // OMSI damps the body's pitch and roll - never its yaw - by sin(x)/x each frame,
             // x = 1.5 x sqrt(springs / mass) x frame. Its
@@ -395,8 +387,26 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     }
 }
 
+/// What the solver works in, a body each (and a joint each for `rows`): filled anew every
+/// substep, kept across the substeps and slices of a step rather than allocated for each.
+struct SolverScratch {
+    subs: Vec<Substep>,
+    lats: Vec<Lateral>,
+    works: Vec<Work>,
+    rows: Vec<JointRows>,
+}
+
+impl SolverScratch {
+    fn new(n: usize) -> SolverScratch {
+        fn each<T: Default>(n: usize) -> Vec<T> {
+            (0..n).map(|_| T::default()).collect()
+        }
+        SolverScratch { subs: each(n), lats: each(n), works: each(n), rows: Vec::new() }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, scratch: &mut SolverScratch) {
     let n = bodies.len();
     // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
     // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
@@ -412,20 +422,26 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
     // (substeps of at most ~4 ms whatever the frame: a frame held up by loading - 50 ms -
     // made 12 ms substeps, too long for the stiff tyres, and the body hopped on its
     // springs for no reason the driver could see)
-    let substeps = ((dt / 0.0042).ceil() as usize).clamp(4, 16);
+    let substeps = ((dt / SUBSTEP_DT).ceil() as usize).clamp(SUBSTEPS_MIN, SUBSTEPS_MAX);
     let h = dt / substeps as f32;
     let mut accel = vec![Vec3::ZERO; n];
     let passes = if joints.is_empty() { PASSES } else { JOINT_PASSES };
     for _ in 0..substeps {
-        let mut subs: Vec<Substep> = (0..n).map(|i| bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe)).collect();
-        let mut lats: Vec<Lateral> = (0..n).map(|i| bodies[i].lateral_start(&subs[i], h)).collect();
-        let mut rows: Vec<JointRows> = joints.iter().map(|j| JointRows::new(j, bodies, &subs, &lats, h)).collect();
+        let SolverScratch { subs, lats, works, rows } = &mut *scratch;
+        for i in 0..n {
+            bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe, &mut subs[i], &mut works[i]);
+        }
+        for i in 0..n {
+            bodies[i].lateral_start(&subs[i], h, &mut lats[i]);
+        }
+        rows.clear();
+        rows.extend(joints.iter().map(|j| JointRows::new(j, bodies, subs, lats, h)));
         for _ in 0..passes {
             for i in 0..n {
                 bodies[i].lateral_pass(&subs[i], &mut lats[i], h);
             }
             for (j, r) in joints.iter().zip(rows.iter_mut()) {
-                r.solve(j, &mut lats);
+                r.solve(j, lats);
             }
         }
         for i in 0..n {
@@ -450,37 +466,6 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
     for (b, a) in bodies.iter_mut().zip(accel) {
         b.end_slice(substeps, a);
     }
-}
-
-/// The least-squares split of a load `total` with its centre at `centre` over points at
-/// `(long, count)`: the load per point grows linearly along the vehicle, so that the shares
-/// balance the load and its moment (exactly, with two places to rest on).
-fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
-    let n: f32 = points.iter().map(|p| p.1).sum::<f32>().max(1.0);
-    let sy: f32 = points.iter().map(|p| p.1 * p.0).sum();
-    let syy: f32 = points.iter().map(|p| p.1 * p.0 * p.0).sum();
-    let det = n * syy - sy * sy;
-    if det.abs() > 1e-6 {
-        ((total * syy - sy * total * centre) / det, (n * total * centre - sy * total) / det)
-    } else {
-        (total / n, 0.0)
-    }
-}
-
-/// [`super::wheel_rest_loads`] for a part that also rests on its front joint at `support_long`
-/// (an articulated bus's rear section, a semitrailer): the static load on each wheel of each
-/// axle (N), and what the joint carries (N), which the part in front takes on its axles (see
-/// [`point_load_shares`]).
-pub fn wheel_rest_loads_supported(def: &Vehicle, support_long: f32) -> (Vec<f32>, f32) {
-    let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
-    let weight = mass * 9.81;
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    let mut points: Vec<(f32, f32)> = def.axles.iter().map(|a| (a.long, 2.0)).collect();
-    points.push((support_long, 1.0));
-    let (a, b) = split(&points, weight, cog_y);
-    let n = points.iter().map(|p| p.1).sum::<f32>();
-    let joint = (a + b * support_long).clamp(0.0, weight);
-    (def.axles.iter().map(|x| (a + b * x.long).max(weight / n * 0.2)).collect(), joint)
 }
 
 /// The share (N) of each wheel of each axle of `def` in a load `load` put on it at `long` (a

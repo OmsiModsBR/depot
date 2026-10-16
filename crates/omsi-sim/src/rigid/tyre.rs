@@ -34,6 +34,7 @@ pub(super) struct Contact {
 /// What acts on a body in one substep (see `RigidBody::prepare`): its rotation and
 /// heading at the start of it, the mass towed along it, and the forces (world) and torques
 /// (body frame) but for the tyres' hold across, which `RigidBody::lateral_start` sets up.
+#[derive(Default)]
 pub(super) struct Substep {
     pub(super) rot: Quat,
     pub(super) body_fwd: Vec3,
@@ -47,6 +48,7 @@ pub(super) struct Substep {
 /// velocities as they would be at the end of it (`w` in the body frame), the impulse of
 /// each tyre so far, and what a joint passed on to the body (`joint_p` world, `joint_l` body
 /// frame; see [`Joint`](super::Joint)).
+#[derive(Default)]
 pub(super) struct Lateral {
     pub(super) lat: Vec<usize>,
     pub(super) arms: Vec<(Vec3, f32)>,
@@ -63,6 +65,16 @@ pub(super) struct Lateral {
     pub(super) jointed: bool,
 }
 
+/// The buffers a body's substep works in besides its [`Substep`] and [`Lateral`], kept from
+/// one substep to the next (see `SolverScratch`).
+#[derive(Default)]
+pub(super) struct Work {
+    found: Vec<Option<(f32, f32)>>,
+    rolling_long: Vec<f32>,
+    standing: Vec<usize>,
+    hold_long: Vec<f32>,
+}
+
 /// The velocity an impulse `p` gives a body of mass `m` that tows `mt - m` along `fwd`.
 pub(super) fn lin(p: Vec3, fwd: Vec3, m: f32, mt: f32) -> Vec3 {
     (p - fwd * p.dot(fwd)) / m + fwd * (p.dot(fwd) / mt)
@@ -70,10 +82,11 @@ pub(super) fn lin(p: Vec3, fwd: Vec3, m: f32, mt: f32) -> Vec3 {
 
 impl RigidBody {
     /// What acts on the body in one substep of `h` seconds, but for the tyres' hold across
-    /// (see [`Self::lateral_start`]): `driven`, the driven wheels of the whole train (each
-    /// takes its share of `drive_torque`); `air`, whether the air acts on it (the leading body).
+    /// (see [`Self::lateral_start`]), into `s`: `driven`, the driven wheels of the whole train
+    /// (each takes its share of `drive_torque`); `air`, whether the air acts on it (the leading
+    /// body).
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn prepare(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], air: bool, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Substep {
+    pub(super) fn prepare(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], air: bool, probe: &dyn Fn(f64, f64, f64) -> GroundProbe, s: &mut Substep, work: &mut Work) {
         let rot = self.orientation;
         let mut force = Vec3::new(0.0, 0.0, -GRAVITY * self.mass);
         // the air: ½ ρ cw A v² (cw 0.6, the front a bus's or a car's by the mass). Without it
@@ -93,7 +106,8 @@ impl RigidBody {
         // CLIMB radii over the ground it stood on are ground; the first step after
         // `place` (which knows no ground) takes anything up to the hub, and so does a
         // tyre that finds nothing lower, to lift a body set down a little too low.
-        let mut found: Vec<Option<(f32, f32)>> = Vec::with_capacity(self.wheels.len());
+        let found = &mut work.found;
+        found.clear();
         for i in 0..self.wheels.len() {
             let w = &self.wheels[i];
             let TyreFrame { fwd_h, hub, .. } = TyreFrame::of(w, rot, position, cog);
@@ -153,7 +167,9 @@ impl RigidBody {
                 }
             }
         }
-        let mut contacts = self.wheel_contacts(h, drive_torque, driven, brake, &found, &mut force, &mut torque, probe);
+        let contacts = &mut s.contacts;
+        contacts.clear();
+        self.wheel_contacts(h, drive_torque, driven, brake, &work.found, &mut force, &mut torque, probe, contacts);
         let omega_world = rot.mul_vec3(self.omega);
         // The coupled parts, each a tyre at the joint that pushes and brakes along the
         // body's axis and takes no side force.
@@ -184,7 +200,9 @@ impl RigidBody {
         // what each brake can bear. One wheel at a time, each cancelling only its quarter
         // of the bus, a parked bus crept down an 8 % slope at 2 mm/s.
         let mut outer = force + contacts.iter().map(|c| c.base).sum::<Vec3>();
-        let mut rolling_long = vec![0.0f32; contacts.len()];
+        let rolling_long = &mut work.rolling_long;
+        rolling_long.clear();
+        rolling_long.resize(contacts.len(), 0.0);
         for (k, c) in contacts.iter().enumerate() {
             // a slipping wheel passes on the sliding friction, whichever way the tyre
             // slides over the road (the wheel's own speed against the ground's)
@@ -202,13 +220,18 @@ impl RigidBody {
                 outer += c.fwd * c.drive;
             }
         }
-        let standing: Vec<usize> = (0..contacts.len()).filter(|&k| contacts[k].v_long.abs() <= STANDING && !contacts[k].wheel.is_some_and(|i| self.wheels[i].slipping)).collect();
-        let hold = |axis: Vec3, mass: f32, cap: &dyn Fn(&Contact) -> f32| -> Vec<f32> {
+        let standing = &mut work.standing;
+        standing.clear();
+        standing.extend((0..contacts.len()).filter(|&k| contacts[k].v_long.abs() <= STANDING && !contacts[k].wheel.is_some_and(|i| self.wheels[i].slipping)));
+        // (the standing tyres hold along the body, each by what its brake bears)
+        let hold_long = &mut work.hold_long;
+        {
+            let (axis, mass, cap) = (body_fwd, self.mass + towed, |c: &Contact| c.brake);
             let need = -outer.dot(axis) - self.velocity.dot(axis) * mass / h;
             let total: f32 = standing.iter().map(|&k| cap(&contacts[k])).sum();
-            standing.iter().map(|&k| if total > 1e-3 { (need * cap(&contacts[k]) / total).clamp(-cap(&contacts[k]), cap(&contacts[k])) } else { 0.0 }).collect()
-        };
-        let hold_long = hold(body_fwd, self.mass + towed, &|c| c.brake);
+            hold_long.clear();
+            hold_long.extend(standing.iter().map(|&k| if total > 1e-3 { (need * cap(&contacts[k]) / total).clamp(-cap(&contacts[k]), cap(&contacts[k])) } else { 0.0 }));
+        }
         // (the tyres' pull along the body, for the pitch lever below)
         let mut long_sum = 0.0f32;
         for (k, c) in contacts.iter().enumerate() {
@@ -237,24 +260,27 @@ impl RigidBody {
             let r = self.wheels.first().map_or(0.0, |w| w.radius);
             torque.x += long_sum * r;
         }
-        Substep { rot, body_fwd, towed, force, torque, contacts }
+        (s.rot, s.body_fwd, s.towed, s.force, s.torque) = (rot, body_fwd, towed, force, torque);
     }
 
     /// The tyres' hold across (see [`Self::lateral_pass`]) set up over the substep: the
-    /// velocities the body would have without it, and whether the tyres hold or slide.
-    pub(super) fn lateral_start(&mut self, s: &Substep, h: f32) -> Lateral {
+    /// velocities the body would have without it, and whether the tyres hold or slide, into
+    /// `l`.
+    pub(super) fn lateral_start(&mut self, s: &Substep, h: f32, l: &mut Lateral) {
         let (rot, body_fwd, towed, force, torque, contacts) = (s.rot, s.body_fwd, s.towed, s.force, s.torque, &s.contacts);
         let (m, mt) = (self.mass, self.mass + towed);
         let lin = |p: Vec3| lin(p, body_fwd, m, mt);
         let along = force.dot(body_fwd);
         let v = self.velocity + ((force - body_fwd * along) / m + body_fwd * (along / mt)) * h;
         let w = self.omega + (torque - self.omega.cross(self.inertia * self.omega)) / self.inertia * h;
-        let lat: Vec<usize> = (0..contacts.len()).filter(|&k| contacts[k].lateral && contacts[k].grip > 0.0).collect();
+        let lat = &mut l.lat;
+        lat.clear();
+        lat.extend((0..contacts.len()).filter(|&k| contacts[k].lateral && contacts[k].grip > 0.0));
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
-        let arms: Vec<(Vec3, f32)> = lat
-            .iter()
-            .map(|&k| {
+        let arms = &mut l.arms;
+        arms.clear();
+        arms.extend(lat.iter().map(|&k| {
                 let c = &contacts[k];
                 let mut rn = rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(c.right));
                 // (holding, no roll from the tyres' hold across: OMSI 2 then sets the
@@ -266,8 +292,7 @@ impl RigidBody {
                 }
                 let inv = c.right.dot(lin(c.right)) + (rn / self.inertia).dot(rn);
                 (rn, inv.max(1e-9))
-            })
-            .collect();
+            }));
         // holding: the bend's pull against the grip of all tyres, and
         // no wheel spinning or locked (the bend the body turns on this slice: the steering's
         // for the front section, its joint's for a section behind)
@@ -283,8 +308,10 @@ impl RigidBody {
         // (holding, a tyre may pass several times its grip for the moment it takes
         // the body to follow a quick turn of the wheel: OMSI sets the yaw rate outright)
         let reach = if self.holding { HOLD_REACH } else { 1.0 };
-        let j = vec![0.0f32; lat.len()];
-        Lateral { lat, arms, j, v, w, reach, gripped, slipping, m, mt, joint_p: Vec3::ZERO, joint_l: Vec3::ZERO, jointed: false }
+        l.j.clear();
+        l.j.resize(lat.len(), 0.0);
+        (l.v, l.w, l.reach, l.gripped, l.slipping, l.m, l.mt) = (v, w, reach, gripped, slipping, m, mt);
+        (l.joint_p, l.joint_l, l.jointed) = (Vec3::ZERO, Vec3::ZERO, false);
     }
 
     /// One pass of the tyres' hold across, as OMSI 2 has it (see `lateral_start`).

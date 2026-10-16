@@ -42,6 +42,19 @@ impl VehicleInstance {
         }
     }
 
+    /// The vehicle put at `at` facing `heading` (degrees), standing still: its rigid body set
+    /// down there and every rear section lined up straight behind it.
+    pub fn teleport(&mut self, at: glam::DVec3, heading: f64) {
+        self.position = at;
+        self.heading = heading;
+        if let Some(rb) = self.rigid_mut() {
+            rb.place(at, heading);
+        }
+        for t in self.trailers.iter_mut() {
+            t.realign();
+        }
+    }
+
     /// The rigid body taken out for its step (`step_rigid` puts it back), if the vehicle has one.
     fn take_rigid(&mut self) -> Option<crate::rigid::RigidBody> {
         match std::mem::replace(&mut self.dynamics, Dynamics::Kinematic(KinematicModel::default())) {
@@ -305,19 +318,15 @@ impl VehicleInstance {
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: if def.mass < 100.0 {
-                        def.mass * 1000.0
-                    } else {
-                        def.mass
-                    }
-                    .max(0.0),
+                    mass: crate::rigid::coupled_mass_kg(def),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()
-                        .map(|&a| (def.axles[a].wheel_diameter / 2.0).max(0.15))
+                        .map(|&a| crate::rigid::AxleSpec::of(&def.axles[a]).radius)
                         .unwrap_or(0.5),
                     driven_load: driven.iter().map(|&a| wheel_load(a)).sum(),
-                    brake: self.part_brakes(t).sum::<f32>() + def.rolling_resistance.max(0.0),
+                    brake: self.part_brakes(t).sum::<f32>()
+                        + crate::rigid::coupled_rolling_resistance(def),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
                 }
             })

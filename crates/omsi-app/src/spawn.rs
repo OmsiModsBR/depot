@@ -381,26 +381,26 @@ pub(crate) fn spawn_player(
         let rb = vehicle.rigid().unwrap();
         log::info!(
             "rigid body: mass {:.0} kg, inertia {:?}, cog {:.2} m, {} wheels, loads {:?}",
-            rb.mass,
-            rb.inertia,
-            rb.cog.z,
-            rb.wheels.len(),
-            rb.wheels
+            rb.mass(),
+            rb.inertia(),
+            rb.cog().z,
+            rb.wheels().len(),
+            rb.wheels()
                 .iter()
-                .map(|w| w.rest_load.round())
+                .map(|w| w.rest_load().round())
                 .collect::<Vec<_>>()
         );
         for a in 0..vehicle.ty.def.axles.len() {
-            let w = &rb.wheels[a * 2];
+            let w = &rb.wheels()[a * 2];
             let model = vehicle.ty.wheel_geometry(0).get(a).copied().flatten();
             log::info!(
                 "axle {a}: tyre r {:.3} m, hub {:.3} m unloaded{}, spring {:.0} kN/m x {:.2}, rest load {:.1} kN, sag {:.3} m",
-                w.radius,
-                w.attach.z,
+                w.radius(),
+                w.attach().z,
                 model.map(|(z, r)| format!(" (model wheel centre {z:.3}, tyre {r:.3})")).unwrap_or_else(|| " (radius: no wheel mesh found)".into()),
-                w.spring / 1000.0,
-                w.spring_factor,
-                w.rest_load / 1000.0,
+                w.spring() / 1000.0,
+                w.spring_factor(),
+                w.rest_load() / 1000.0,
                 w.rest_compression()
             );
         }

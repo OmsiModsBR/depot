@@ -52,7 +52,7 @@ impl StateTrace {
         match player {
             Some(p) => {
                 let v = &p.vehicle;
-                let vel = v.rigid().map(|rb| rb.velocity).unwrap_or_default();
+                let vel = v.rigid().map(|rb| rb.velocity()).unwrap_or_default();
                 let _ = writeln!(
                     s,
                     "  player p {:?} {:?} {:?} heading {:?} v {:?} {:?} {:?} speed {:?}",

@@ -73,6 +73,72 @@ pub(super) fn sign(x: f32) -> f32 {
 }
 
 impl RigidWheel {
+    /// The hub in the body frame (x right, y forward, z up, relative to the model origin) with
+    /// the spring unloaded.
+    pub fn attach(&self) -> Vec3 {
+        self.attach
+    }
+
+    /// The tyre radius (m).
+    pub fn radius(&self) -> f32 {
+        self.radius
+    }
+
+    /// Whether the wheel steers.
+    pub fn steered(&self) -> bool {
+        self.steered
+    }
+
+    /// The spring rate (N/m).
+    pub fn spring(&self) -> f32 {
+        self.spring
+    }
+
+    /// `Axle_Springfactor_*`: the spring's scale by the bellows pressure.
+    pub fn spring_factor(&self) -> f32 {
+        self.spring_factor
+    }
+
+    /// The static load at rest (N).
+    pub fn rest_load(&self) -> f32 {
+        self.rest_load
+    }
+
+    /// The compression (m, positive = the wheel pushed up into the body).
+    pub fn compression(&self) -> f32 {
+        self.compression
+    }
+
+    /// The compression's rate (m/s).
+    pub fn compression_rate(&self) -> f32 {
+        self.compression_rate
+    }
+
+    /// Whether the tyre stands on the ground.
+    pub fn on_ground(&self) -> bool {
+        self.on_ground
+    }
+
+    /// The load on the tyre this step (N).
+    pub fn load(&self) -> f32 {
+        self.load
+    }
+
+    /// The world height of the ground the tyre stands on this step.
+    pub fn ground_z(&self) -> f64 {
+        self.ground_z
+    }
+
+    /// The horizontal push (N) of a step the tyre climbs or a wall it stands against.
+    pub fn step_force(&self) -> f32 {
+        self.step_force
+    }
+
+    /// The faces the tyre is up against.
+    pub fn walls(&self) -> &[WallFace] {
+        &self.walls
+    }
+
     /// One substep of the wheel's turning:
     /// a gripping wheel turns with the ground and starts to slip when what it has to pass
     /// on (`f_long`, before the friction circle cut it) is more than the road takes; a

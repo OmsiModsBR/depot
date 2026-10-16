@@ -1534,11 +1534,11 @@ impl Controllers {
             self.settled.clear();
             return 0.0;
         };
-        let travel: Vec<f32> = body.wheels.iter().map(|w| w.compression).collect();
+        let travel: Vec<f32> = body.wheels().iter().map(|w| w.compression()).collect();
         let ripples = settle(&mut self.settled, &travel, dt);
-        body.wheels.iter().zip(ripples).enumerate().map(|(i, (w, ripple))| {
-            let impact_speed = body.wheel_impacts.iter().filter(|hit| hit.obstacle == i).map(|hit| hit.speed).fold(0.0, f32::max);
-            bump_strength(ripple, impact_speed, kmh) * if w.steered { 1.0 } else { 0.55 }
+        body.wheels().iter().zip(ripples).enumerate().map(|(i, (w, ripple))| {
+            let impact_speed = body.wheel_impacts().iter().filter(|hit| hit.obstacle == i).map(|hit| hit.speed).fold(0.0, f32::max);
+            bump_strength(ripple, impact_speed, kmh) * if w.steered() { 1.0 } else { 0.55 }
         }).fold(0.0, f32::max)
     }
 }

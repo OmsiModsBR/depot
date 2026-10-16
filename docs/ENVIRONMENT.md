@@ -63,7 +63,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 
 | Variable | Value | Read by | env.txt | What it does |
 | --- | --- | --- | --- | --- |
-| `OMSI_AI_MODEL_LOCK` | switch | `omsi-sim::ai_motion` |  | AI cars steer no further than their model's lock, to compare. |
+| `OMSI_AI_MODEL_LOCK` | switch | `omsi-sim::ai` |  | AI cars steer no further than their model's lock, to compare. |
 | `OMSI_AI_WAY_ONLY` | switch | `omsi-app::traffic` |  | AI cars on their way and the plain ground sampler, as before (to compare). |
 | `OMSI_AUTOPILOT` | number | `omsi-app::offscreen` |  | Offscreen: drive the bus at this speed (km/h) along the straightest lanes. |
 | `OMSI_BATCH` | number | `omsi-app::scene` |  | Prepare the tiles of a whole-map load this many at a time, as the window's streaming does. |
@@ -92,7 +92,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_CROSSING_DEFORM` | switch | `omsi-app::scene` |  | The ground under crossings deformed to them. |
 | `OMSI_CUT_PLAIN` | switch | `omsi-app::scene` |  | The terrain cut as a plain texture, without mipmaps made on the GPU. |
 | `OMSI_DAY_AIR` | text | `omsi-render::sky::air` |  | The air fixed for comparisons (`haze,angstrom[,height,strat]`). |
-| `OMSI_DEBUG_AI_WIDE` | switch | `omsi-sim::ai_motion` |  | Log, every tenth of a second, an AI car standing over 1.5 m beside its way. |
+| `OMSI_DEBUG_AI_WIDE` | switch | `omsi-sim::ai` |  | Log, every tenth of a second, an AI car standing over 1.5 m beside its way. |
 | `OMSI_DEBUG_ANIM` | text | `omsi-sim::vehicle` |  | Log the animation of the meshes whose name contains this text. |
 | `OMSI_DEBUG_BOARDS` | switch | `omsi-app::schedule` |  | Log what the stops' departure boards show. |
 | `OMSI_DEBUG_CAMERA` | number | `omsi-app::camera_arm` |  | Log the camera's arm (1, or a higher number for more). |

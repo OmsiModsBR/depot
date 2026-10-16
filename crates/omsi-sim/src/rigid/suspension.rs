@@ -1,48 +1,26 @@
-//! What carries the body: the static load on each wheel ([`wheel_rest_loads`]) and each wheel
+//! What carries the body: each wheel
 //! on its strut - OMSI's spring on the ground under the wheel -, the tyres on the ground handed
 //! on as contacts.
 
 use super::body::RigidBody;
 use super::ground::GroundProbe;
-use super::params::{BUMP, CLIMB, DROOP, GRAVITY, MIN_LOAD_SHARE, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K};
+use super::params::{BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K};
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
 use glam::{DVec3, Vec3};
-use omsi_vehicle::Vehicle;
-
-/// The static load on each wheel of each axle (N): the weight shared so that the axle loads
-/// balance the centre of gravity (a least-squares split when there are more than two axles).
-pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    let g = GRAVITY;
-    let n = (def.axles.len() * 2).max(1) as f32;
-    let sy: f32 = def.axles.iter().map(|a| 2.0 * a.long).sum();
-    let syy: f32 = def.axles.iter().map(|a| 2.0 * a.long * a.long).sum();
-    let det = n * syy - sy * sy;
-    let (a, b) = if det.abs() > 1e-6 {
-        let rhs1 = mass * g;
-        let rhs2 = mass * g * cog_y;
-        ((rhs1 * syy - sy * rhs2) / det, (n * rhs2 - sy * rhs1) / det)
-    } else {
-        (mass * g / n, 0.0)
-    };
-    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * MIN_LOAD_SHARE)).collect()
-}
 
 impl RigidBody {
     /// Each wheel on its strut - the strut's, the step's and the walls' forces added to `force`
     /// and `torque`, a wheel off the ground turning by its drive and brake - and the tyres on
     /// the ground (`found`: the slope each stands on and where it touches) as contacts for the
-    /// tyre forces.
+    /// tyre forces, onto `contacts`.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn wheel_contacts(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], found: &[Option<(f32, f32)>], force: &mut Vec3, torque: &mut Vec3, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Vec<Contact> {
+    pub(super) fn wheel_contacts(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], found: &[Option<(f32, f32)>], force: &mut Vec3, torque: &mut Vec3, probe: &dyn Fn(f64, f64, f64) -> GroundProbe, contacts: &mut Vec<Contact>) {
         let rot = self.orientation;
         let up = rot.mul_vec3(Vec3::Z);
         let n_wheels = self.wheels.len().max(1) as f32;
         let (position, cog) = (self.position, self.cog);
         let omega_world = rot.mul_vec3(self.omega);
-        let mut contacts: Vec<Contact> = Vec::with_capacity(self.wheels.len());
         for (i, w) in self.wheels.iter_mut().enumerate() {
             let TyreFrame { fwd, right, fwd_h, hub0, hub } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
@@ -151,6 +129,5 @@ impl RigidBody {
                 wheel: Some(i),
             });
         }
-        contacts
     }
 }

@@ -1,5 +1,6 @@
 //! Artificial road and scenery fixtures.
 use super::*;
+use super::ground_query::probe_tile;
 
 struct Fixture(PathBuf);
 

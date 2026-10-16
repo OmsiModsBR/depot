@@ -279,7 +279,7 @@ pub(super) fn is_shadow_mesh(ty: &VehicleType, i: usize) -> bool {
 
 /// What one wheel of a body without a rigid body stands on at world `p` (the point on the
 /// model's z = 0 plane under it): the drawn road there, within a step of the wheel - the same
-/// level-limited probe the AI bodies ask (`ai_motion::AiBody::settle`). The plain height
+/// level-limited probe the AI bodies ask (`ai::AiBody::settle`). The plain height
 /// sampler knows only x and y and gives the *highest* face, so a vehicle under a bridge or a
 /// canopy had its `[isshadow]` blob laid onto the deck over it (the same sampler lifted the
 /// coupled parts onto the bridge, #140). The plain sampler stays the fallback where the

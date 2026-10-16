@@ -358,7 +358,7 @@ impl TrailerPart {
             .def
             .axles
             .first()
-            .map(|a| (a.wheel_diameter / 2.0).max(0.1))
+            .map(|a| crate::rigid::AxleSpec::of(a).shown_radius)
             .unwrap_or(0.5);
         let n = ty.meshes.len();
         let loads = crate::rigid::wheel_rest_loads(&ty.def);
@@ -369,13 +369,9 @@ impl TrailerPart {
             .zip(ty.hub_heights(first_axle))
             .enumerate()
             .map(|(a, (axle, z))| {
-                let r = (axle.wheel_diameter / 2.0).max(0.15);
-                let k = if axle.spring > 0.0 {
-                    axle.spring * 1000.0
-                } else {
-                    150_000.0
-                };
-                (r - z.unwrap_or(r), loads.get(a).copied().unwrap_or(0.0), k)
+                let axle = crate::rigid::AxleSpec::of(axle);
+                let r = axle.radius;
+                (r - z.unwrap_or(r), loads.get(a).copied().unwrap_or(0.0), axle.sag_spring)
             })
             .collect();
         let v_brakes = (0..ty.def.axles.len())

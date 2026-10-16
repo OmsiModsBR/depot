@@ -9,7 +9,7 @@ use hashbrown::HashMap;
 use omsi_script::{State, Vm};
 use std::sync::Arc;
 
-mod ai;
+mod ai_frame;
 mod articulation;
 mod builtins;
 mod motion;
@@ -26,7 +26,7 @@ mod weather;
 mod winding;
 
 use props::PropsPlan;
-pub use ai::AiFrame;
+pub use ai_frame::AiFrame;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
@@ -335,7 +335,7 @@ impl VehicleInstance {
                 .collect()
         };
         // An AI copy has no rigid body: it stands on the contact plane of its wheels
-        // (`ai_motion::AiBody`), and what the modelled tyre reaches below its hub less than
+        // (`ai::AiBody`), and what the modelled tyre reaches below its hub less than
         // the model thinks lifts it. An axle the model does not move with `Axle_Suspension`
         // got the spring sag taken off its hub height (`VehicleType::hub_heights`), which an
         // AI copy without springs must not stand on.
