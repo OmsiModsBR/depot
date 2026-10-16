@@ -48,10 +48,11 @@ lights, the rail signals and the player's duty (`crates/omsi-app/src/state_trace
 street twice, fails when the two runs differ and writes the trace to `<dir>/synthetic.trace`. The street has no
 timetable yet, so the duty line reads `-`.
 
-The `offscreen-traces` job (informational for now) runs `scripts/offscreen-trace-diff.sh` on pull requests, on
-lavapipe: the scenario on the pull request's base and on the change, compared bit for bit, in the same way as the
-physics traces below. A change meant to alter the behaviour carries the `offscreen-delta` label (re-run the job
-after adding it). The job becomes blocking once two parity pull requests in a row passed it without a false alarm.
+The `offscreen-traces` job (blocking) runs `scripts/offscreen-trace-diff.sh` on pull requests, on lavapipe: the
+scenario on the pull request's base and on the change, compared bit for bit, in the same way as the physics traces
+below. It is what checks the AI cars inside real traffic (the planner, the lights, the junction) while their code is
+refactored. A change meant to alter the behaviour carries the `offscreen-delta` label (re-run the job after adding
+it).
 Locally: `scripts/offscreen-trace-diff.sh [base-ref]` (default `origin/main`); the traces are kept in
 `target/offscreen-traces/`.
 
@@ -65,7 +66,14 @@ physics computes. Two jobs of the workflow guard it on pull requests:
   body, a train of articulated sections and the vehicle with its script variables (standing,
   on a grade, spinning on ice, locking the brakes, bends up to the full lock, humps, a kerb,
   a wall face, crashes, frame times from 1/144 s to 0.3 s, inputs that are no number, air
-  springs) and write the whole state of every frame. The script runs them on both commits
+  springs) and write the whole state of every frame. The scenarios in
+  `crates/omsi-sim/tests/ai_traces.rs` do the same for the AI traffic's motion: the body that
+  follows a lane (straight, a tight bend, an S-bend and a lane change, flat and up a grade,
+  with a two-axle car, a three-axle lorry and an articulated bus), what its wheels stand on,
+  the planner's pull-out and back-in curves and their clearance from standing and moving
+  obstacles, stopping and moving off, rails and the air, the rotation point, the static pose
+  of an AI copy, the kinematic model through long and empty frames, and the AI frame's
+  script variables at a stop. The script runs both files on both commits
   and compares the traces bit for bit; it also runs the change twice and fails if two runs of
   the same commit differ. Both sides are built and run on the same machine, so the
   comparison does not depend on how a platform rounds `sin` or `sqrt`. A change meant to alter the physics carries the

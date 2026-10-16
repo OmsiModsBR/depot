@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The vehicle physics of two commits, compared frame by frame.
 #
-# Runs the scenarios of crates/omsi-sim/tests/physics_traces.rs - this checkout's copy of
-# the file, on both sides - on <base> and on the working tree, and compares the traces. A
+# Runs the scenarios of crates/omsi-sim/tests/physics_traces.rs (the player's vehicle) and
+# crates/omsi-sim/tests/ai_traces.rs (the AI traffic's) - this checkout's copies of the
+# files, on both sides - on <base> and on the working tree, and compares the traces. A
 # change that only moves code (the structural phases of the physics refactor) leaves them
 # all identical, to the bit; a change that is meant to alter the physics shows where it
 # does.
@@ -19,7 +20,7 @@ set -euo pipefail
 base_ref=${1:-origin/main}
 root=$(git rev-parse --show-toplevel)
 out=${OUT:-$root/target/physics-traces}
-harness=crates/omsi-sim/tests/physics_traces.rs
+harnesses=(crates/omsi-sim/tests/physics_traces.rs crates/omsi-sim/tests/ai_traces.rs)
 
 base_sha=$(git -C "$root" rev-parse --verify "$base_ref^{commit}")
 tree=$(mktemp -d)
@@ -27,8 +28,10 @@ rm -rf "$out"
 mkdir -p "$out"
 git -C "$root" worktree add --detach --force "$tree" "$base_sha" >/dev/null
 trap 'git -C "$root" worktree remove --force "$tree" >/dev/null 2>&1 || true; rm -rf "$tree"' EXIT
-mkdir -p "$tree/$(dirname "$harness")"
-cp "$root/$harness" "$tree/$harness"
+for harness in "${harnesses[@]}"; do
+    mkdir -p "$tree/$(dirname "$harness")"
+    cp "$root/$harness" "$tree/$harness"
+done
 
 # run <checkout> <target dir> <label>: the scenarios, into $out/<label>
 # (each checkout builds in a target directory of its own: cargo names the workspace's
@@ -38,7 +41,7 @@ run() {
     local dir=$1 target=$2 label=$3
     echo "== $label"
     if ! (cd "$dir" && OMSI_PHYSICS_TRACE_DIR="$out/$label" CARGO_TARGET_DIR="$target" \
-        cargo test --locked -p omsi-sim --release ${CARGO_FLAGS:-} --test physics_traces -q); then
+        cargo test --locked -p omsi-sim --release ${CARGO_FLAGS:-} --test physics_traces --test ai_traces -q); then
         echo "physics-trace-diff: the scenarios failed on $label" >&2
         exit 2
     fi

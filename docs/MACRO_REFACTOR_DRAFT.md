@@ -526,7 +526,7 @@ Situação em 16/10/2026:
 
 | Trilha | Situação |
 | --- | --- |
-| 0, caracterização | Concluída em 12/10/2026 (PRs #62 a #64). Pendente: tornar `offscreen-golden` bloqueante depois de três execuções verdes seguidas no main e `offscreen-traces` depois de dois PRs de paridade sem falso alarme |
+| 0, caracterização | Concluída em 12/10/2026 (PRs #62 a #64). Pendente: tornar `offscreen-golden` bloqueante depois de três execuções verdes seguidas no main. O `offscreen-traces` passou a bloquear no F0 |
 | 1, crates frios | Concluída em 12/10/2026 (PRs #65 a #80), mais a divisão do `omsi-render` em domínios e camadas (T1.6, PRs #79 a #111), com a checagem de camadas bloqueante. Ficou de fora o `FrameContext`, que passa para a Frente C5 |
 | 2, grupos mornos | Concluída em 13/10/2026 (PRs #82 a #128): A1, C3, D2, imports explícitos e `vehicle.rs` em submódulos |
 | F, física de veículo, segunda rodada | Nova, a próxima. Detalhe abaixo |
