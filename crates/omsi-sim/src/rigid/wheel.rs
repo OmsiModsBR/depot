@@ -12,54 +12,54 @@ pub struct RigidWheel {
     /// gripping (turning with the ground), slipping (spinning or skidding: the tyre passes on
     /// the sliding friction and the wheel turns by its own torques), locked (a brake that
     /// stopped it). `inertia_inv`: the axle's `achse_inertia_inv` (0.002 when not given).
-    pub spin: f32,
-    pub slipping: bool,
-    pub locked: bool,
-    pub inertia_inv: f32,
+    pub(crate) spin: f32,
+    pub(crate) slipping: bool,
+    pub(crate) locked: bool,
+    pub(crate) inertia_inv: f32,
     /// Hub in the body frame (x right, y forward, z up, relative to the model origin) with
     /// the spring unloaded: the model's wheel centre when `Axle_Suspension` reads zero.
-    pub attach: Vec3,
+    pub(crate) attach: Vec3,
     /// How much farther out than the hub the strut's force acts (m, signed like `attach.x`).
     /// OMSI measures the spring's travel where the tyres stand - halfway between
     /// `achse_minwidth` and `achse_maxwidth`, (max + min) / 4 from the middle - but turns the
     /// body with the force at `achse_maxwidth` / 2.
-    pub lever: f32,
-    pub radius: f32,
-    pub driven: bool,
-    pub steered: bool,
+    pub(crate) lever: f32,
+    pub(crate) radius: f32,
+    pub(crate) driven: bool,
+    pub(crate) steered: bool,
     /// The wheel's steering angle this step (rad, positive to the right): every axle points
     /// at the turning centre on the `[rot_pnt_long]` line, atan((long - rot_pnt_long) x
     /// curvature), so an axle behind that line steers the other way.
-    pub steer: f32,
+    pub(crate) steer: f32,
     /// Spring rate (N/m), damper rate (N s/m) and the load the strut is built for (N).
-    pub spring: f32,
-    pub damper: f32,
-    pub max_force: f32,
+    pub(crate) spring: f32,
+    pub(crate) damper: f32,
+    pub(crate) max_force: f32,
     /// `Axle_Springfactor_*`: air suspensions scale the spring with the bellows pressure.
-    pub spring_factor: f32,
+    pub(crate) spring_factor: f32,
     /// Static load at rest (N), from the mass split over the axles.
-    pub rest_load: f32,
+    pub(crate) rest_load: f32,
     /// Current compression (m, positive = the wheel pushed up into the body) and its rate.
-    pub compression: f32,
-    pub compression_rate: f32,
+    pub(crate) compression: f32,
+    pub(crate) compression_rate: f32,
     /// The compression at which the tyre would just touch the ground, last substep (None
     /// in the air or right after [`RigidBody::place`](super::RigidBody::place)).
-    pub touch: Option<f32>,
-    pub on_ground: bool,
-    pub rotation_deg: f32,
-    pub rpm: f32,
+    pub(crate) touch: Option<f32>,
+    pub(crate) on_ground: bool,
+    pub(crate) rotation_deg: f32,
+    pub(crate) rpm: f32,
     /// Load on the tyre this step (N).
-    pub load: f32,
+    pub(crate) load: f32,
     /// World height of the ground the tyre stands on this step (the surface under the hub
     /// or the edge it is climbing).
-    pub ground_z: f64,
+    pub(crate) ground_z: f64,
     /// `ground_z` came from the ground (not yet after [`RigidBody::place`](super::RigidBody::place)): steps up to
     /// [`CLIMB`](super::CLIMB) radii over it are ground, higher ones walls.
-    pub ground_seen: bool,
+    pub(crate) ground_seen: bool,
     /// Faces the tyre is up against.
-    pub walls: Vec<WallFace>,
+    pub(crate) walls: Vec<WallFace>,
     /// Horizontal push (N) of a step the tyre climbs or a wall it stands against.
-    pub step_force: f32,
+    pub(crate) step_force: f32,
 }
 
 pub(super) fn sign(x: f32) -> f32 {

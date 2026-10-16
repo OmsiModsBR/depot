@@ -1,9 +1,6 @@
 //! Simulation runtime.
 
 pub mod ai;
-/// The AI body's module under its old name, for code written against it (the trace
-/// harnesses, which `scripts/physics-trace-diff.sh` also runs on older bases).
-pub use ai as ai_motion;
 pub mod anim;
 pub mod clock;
 pub mod collision;

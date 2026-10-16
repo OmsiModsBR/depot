@@ -52,55 +52,55 @@ pub struct CoupledPart {
 
 #[derive(Debug, Clone)]
 pub struct RigidBody {
-    pub mass: f32,
+    pub(crate) mass: f32,
     /// Body-frame inertia (diagonal, kg m²).
-    pub inertia: Vec3,
+    pub(crate) inertia: Vec3,
     /// Centre of gravity relative to the model origin (m).
-    pub cog: Vec3,
+    pub(crate) cog: Vec3,
     /// World position of the centre of gravity.
-    pub position: DVec3,
-    pub orientation: Quat,
-    pub velocity: Vec3,
+    pub(crate) position: DVec3,
+    pub(crate) orientation: Quat,
+    pub(crate) velocity: Vec3,
     /// Angular velocity in the body frame (rad/s).
-    pub omega: Vec3,
-    pub wheels: Vec<RigidWheel>,
+    pub(crate) omega: Vec3,
+    pub(crate) wheels: Vec<RigidWheel>,
     /// Axle index of each wheel (two per axle, left then right).
-    pub wheel_axle: Vec<usize>,
-    pub steer_deg: f32,
+    pub(crate) wheel_axle: Vec<usize>,
+    pub(crate) steer_deg: f32,
     /// The curvature the steering asks for this step (1/m, positive to the right).
-    pub kappa: f32,
-    pub max_steer_deg: f32,
+    pub(crate) kappa: f32,
+    pub(crate) max_steer_deg: f32,
     /// `[rot_pnt_long]` and `[inv_min_turnradius]`: the line the bus turns about and the
     /// curvature of the full lock.
-    pub rot_pnt_long: f32,
-    pub inv_min_turn_radius: f32,
+    pub(crate) rot_pnt_long: f32,
+    pub(crate) inv_min_turn_radius: f32,
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
     /// sin(x)/x a frame with x = 1.5 of it times the frame.
-    pub body_freq: f32,
+    pub(crate) body_freq: f32,
     /// OMSI's two states of the tyres across: holding - the bus follows
     /// its wheels however quickly they are turned, as long as the bend asks no more than
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
-    pub holding: bool,
-    pub rolling_resistance: f32,
+    pub(crate) holding: bool,
+    pub(crate) rolling_resistance: f32,
     /// Body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
-    pub accel_body: Vec3,
-    pub friction: f32,
+    pub(crate) accel_body: Vec3,
+    pub(crate) friction: f32,
     /// Wheels a face stopped during the last step, one entry per wheel.
-    pub wheel_impacts: Vec<Impact>,
+    pub(crate) wheel_impacts: Vec<Impact>,
     /// The parts coupled behind (see [`CoupledPart`]); `drive_torque` is shared by their
     /// driven wheels and the body's own.
-    pub coupled: Vec<CoupledPart>,
+    pub(crate) coupled: Vec<CoupledPart>,
     /// Obstacles (by id) the body was put down inside: left alone until it is out of them
     /// (a bus spawned in a shelter's or a depot hall's box was held there for good - every
     /// move towards the nearest side pushed it back in). `None` until the first collision
     /// check after `place`.
-    pub spawned_inside: Option<Vec<i64>>,
+    pub(crate) spawned_inside: Option<Vec<i64>>,
     /// The faces a wheel cannot climb stop it (a platform's edge, a kerb too high for it).
     /// Off with the collisions with objects: the wheels then keep to the ground under them,
     /// as OMSI's do - its wheels know no faces - and a step nobody sees (a height profile
     /// over the drawn road, a helper object's collision box) is no invisible wall.
-    pub wheel_walls: bool,
+    pub(crate) wheel_walls: bool,
 }
 
 impl RigidBody {
@@ -200,6 +200,11 @@ impl RigidBody {
     /// The steering angle (deg).
     pub fn steer_deg(&self) -> f32 {
         self.steer_deg
+    }
+
+    /// The steering lock of the front wheels (deg).
+    pub fn max_steer_deg(&self) -> f32 {
+        self.max_steer_deg
     }
 
     /// The curvature the steering asks for this step (1/m, positive to the right).

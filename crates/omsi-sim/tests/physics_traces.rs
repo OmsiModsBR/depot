@@ -15,7 +15,7 @@
 use glam::{DVec2, DVec3, Quat, Vec3};
 use omsi_model::Model;
 use omsi_script::Program;
-use omsi_sim::ai_motion::{AiBody, MotionKind};
+use omsi_sim::ai::{AiBody, MotionKind};
 use omsi_sim::collision::{CollisionWorld, Obb};
 use omsi_sim::rigid::{place_train, step_train, support_rest_loads, BodyInputs, Ground, GroundProbe, Impact, Joint, RigidBody};
 use omsi_sim::vehicle::{road_grip, AiFrame};
@@ -77,45 +77,45 @@ impl Trace {
         let _ = writeln!(
             t,
             "  body {i} p {} q {} v {} w {} holding {} kappa {} steer {} accel {} mu {} inside {:?}",
-            dv3(rb.position),
-            quat(rb.orientation),
-            v3(rb.velocity),
-            v3(rb.omega),
-            rb.holding,
-            n32(rb.kappa),
-            n32(rb.steer_deg),
-            v3(rb.accel_body),
-            n32(rb.friction),
-            rb.spawned_inside,
+            dv3(rb.position()),
+            quat(rb.orientation()),
+            v3(rb.velocity()),
+            v3(rb.omega()),
+            rb.holding(),
+            n32(rb.kappa()),
+            n32(rb.steer_deg()),
+            v3(rb.accel_body()),
+            n32(rb.friction()),
+            rb.spawned_inside(),
         );
-        for (k, w) in rb.wheels.iter().enumerate() {
-            let walls: Vec<String> = w.walls.iter().map(|f| format!("{} {} {} {}", n64(f.point.x), n64(f.point.y), n32(f.normal.x), n32(f.normal.y))).collect();
+        for (k, w) in rb.wheels().iter().enumerate() {
+            let walls: Vec<String> = w.walls().iter().map(|f| format!("{} {} {} {}", n64(f.point.x), n64(f.point.y), n32(f.normal.x), n32(f.normal.y))).collect();
             let _ = writeln!(
                 t,
                 "    wheel {k} spin {} slipping {} locked {} steer {} comp {} rate {} touch {} on_ground {} ground {} seen {} load {} rest {} sf {} rpm {} rot {} step {} walls [{}]",
-                n32(w.spin),
-                w.slipping,
-                w.locked,
-                n32(w.steer),
-                n32(w.compression),
-                n32(w.compression_rate),
-                w.touch.map(n32).unwrap_or_else(|| "-".into()),
-                w.on_ground,
-                n64(w.ground_z),
-                w.ground_seen,
-                n32(w.load),
-                n32(w.rest_load),
-                n32(w.spring_factor),
-                n32(w.rpm),
-                n32(w.rotation_deg),
-                n32(w.step_force),
+                n32(w.spin()),
+                w.slipping(),
+                w.locked(),
+                n32(w.steer()),
+                n32(w.compression()),
+                n32(w.compression_rate()),
+                w.touch().map(n32).unwrap_or_else(|| "-".into()),
+                w.on_ground(),
+                n64(w.ground_z()),
+                w.ground_seen(),
+                n32(w.load()),
+                n32(w.rest_load()),
+                n32(w.spring_factor()),
+                n32(w.rpm()),
+                n32(w.rotation_deg()),
+                n32(w.step_force()),
                 walls.join(", "),
             );
         }
-        for c in &rb.coupled {
+        for c in rb.coupled() {
             let _ = writeln!(t, "    coupled point {} dir {} mass {} brake {} load {}", v3(c.point), v3(c.dir), n32(c.mass), n32(c.brake), n32(c.load));
         }
-        for hit in &rb.wheel_impacts {
+        for hit in rb.wheel_impacts() {
             self.impact("wheel_impact", hit);
         }
     }
@@ -355,7 +355,7 @@ mod scenarios {
     fn run(t: &mut Trace, rb: &mut RigidBody, frames: usize, dt: f32, g: Probe, mut input: impl FnMut(&RigidBody) -> (f32, f32, f32)) {
         for _ in 0..frames {
             let (torque, brake, steer) = input(rb);
-            let brakes = vec![brake; rb.wheels.len()];
+            let brakes = vec![brake; rb.wheels().len()];
             t.frame(dt, &inputs(torque, &brakes, steer));
             rb.step(dt, torque, &brakes, steer, g);
             t.body(0, rb);
@@ -371,16 +371,16 @@ mod scenarios {
 
     /// Rolling at `v` m/s, the wheels turning with the road.
     fn launch(rb: &mut RigidBody, v: f32) {
-        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
-        for w in rb.wheels.iter_mut() {
-            w.spin = v / w.radius;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * v);
+        for w in rb.wheels_mut() {
+            w.set_spin(v / w.radius());
         }
     }
 
     /// The torque that holds the bus near `v` m/s (as `examples/handling.rs` drives).
     fn hold(rb: &RigidBody, v: f32) -> f32 {
-        let r = rb.wheels.iter().find(|w| w.driven).map(|w| w.radius).unwrap_or(0.5);
-        ((v - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * r
+        let r = rb.wheels().iter().find(|w| w.driven()).map(|w| w.radius()).unwrap_or(0.5);
+        ((v - rb.forward_speed()) * rb.mass() * 2.0 + rb.rolling_resistance()) * r
     }
 
     // -- T1..T16: the rigid body and the train --
@@ -413,7 +413,7 @@ mod scenarios {
     pub fn t04_spins_on_ice() -> String {
         let mut t = Trace::default();
         let mut rb = placed(&bus());
-        rb.friction = road_grip(1.0, -5.0);
+        rb.set_friction(road_grip(1.0, -5.0));
         run(&mut t, &mut rb, 30, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
         run(&mut t, &mut rb, 180, 1.0 / 60.0, &flat, |_| (20_000.0, 0.0, 0.0));
         run(&mut t, &mut rb, 180, 1.0 / 60.0, &flat, |_| (0.0, 0.0, 0.0));
@@ -486,7 +486,7 @@ mod scenarios {
         let bb = bus().bounding_box.unwrap();
         let dt = 1.0 / 30.0;
         for _ in 0..frames {
-            let brakes = vec![0.0; rb.wheels.len()];
+            let brakes = vec![0.0; rb.wheels().len()];
             t.frame(dt, &inputs(torque, &brakes, 0.0));
             rb.step(dt, torque, &brakes, 0.0, &flat);
             let gone = broken.clone();
@@ -505,7 +505,7 @@ mod scenarios {
         let mut t = Trace::default();
         let mut rb = placed(&bus());
         run(&mut t, &mut rb, 60, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
-        rb.velocity = Vec3::new(0.0, 40.0 / 3.6, 0.0);
+        rb.set_velocity(Vec3::new(0.0, 40.0 / 3.6, 0.0));
         let wall = [Obb::from_box([20.0, 1.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.0, 12.0, 0.0), 0.0)];
         crash(&mut t, &mut rb, 90, 0.0, &wall, &mut Vec::new());
         crash(&mut t, &mut rb, 60, -8000.0, &wall, &mut Vec::new());
@@ -513,7 +513,7 @@ mod scenarios {
         let mut rb = placed(&bus());
         rb.place(DVec3::ZERO, 20.0);
         run(&mut t, &mut rb, 30, 1.0 / 60.0, &flat, |_| (0.0, 0.0, 0.0));
-        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 30.0 / 3.6;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * 30.0 / 3.6);
         let side = [Obb::from_box([1.0, 60.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(4.5, 10.0, 0.0), 0.0)];
         crash(&mut t, &mut rb, 60, 0.0, &side, &mut Vec::new());
         t.text
@@ -523,7 +523,7 @@ mod scenarios {
         let mut t = Trace::default();
         let mut rb = placed(&bus());
         run(&mut t, &mut rb, 60, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
-        rb.velocity = Vec3::new(0.0, 30.0 / 3.6, 0.0);
+        rb.set_velocity(Vec3::new(0.0, 30.0 / 3.6, 0.0));
         let mut post = Obb::from_box([0.2, 0.2, 6.0, 0.0, 0.0, 3.0], DVec3::new(0.5, 10.0, 0.0), 0.0);
         post.pole = Some((0.05, 0.5));
         post.id = 11;
@@ -570,7 +570,7 @@ mod scenarios {
         let dt = 1.0 / 60.0;
         for _ in 0..frames {
             let (torque, brake, steer) = input(bodies);
-            let (b0, b1) = (vec![brake[0]; bodies[0].wheels.len()], vec![brake[1]; bodies[1].wheels.len()]);
+            let (b0, b1) = (vec![brake[0]; bodies[0].wheels().len()], vec![brake[1]; bodies[1].wheels().len()]);
             t.frame(dt, &format!("{} rear [{}]", inputs(torque, &b0, steer), n32(brake[1])));
             let inputs = [BodyInputs { brake: &b0, steer: Some(steer), air: true }, BodyInputs { brake: &b1, steer: None, air: false }];
             step_train(bodies, joints, dt, torque, &inputs, g);
@@ -673,20 +673,20 @@ mod scenarios {
         run(&mut t, &mut rb, 60, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
         for k in 0..300 {
             let sf = 1.0 - 0.7 * k as f32 / 300.0;
-            rb.wheels.iter_mut().for_each(|w| w.spring_factor = sf);
+            rb.wheels_mut().iter_mut().for_each(|w| w.set_spring_factor(sf));
             run(&mut t, &mut rb, 1, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
         }
         for k in 0..120 {
             let sf = 0.3 + 0.7 * k as f32 / 120.0;
-            rb.wheels.iter_mut().skip(1).step_by(2).for_each(|w| w.spring_factor = sf);
+            rb.wheels_mut().iter_mut().skip(1).step_by(2).for_each(|w| w.set_spring_factor(sf));
             run(&mut t, &mut rb, 1, 1.0 / 60.0, &flat, |_| (0.0, 5000.0, 0.0));
         }
-        rb.wheels.iter_mut().for_each(|w| w.spring_factor = 1.0);
+        rb.wheels_mut().iter_mut().for_each(|w| w.set_spring_factor(1.0));
         launch(&mut rb, 30.0 / 3.6);
         run(&mut t, &mut rb, 120, 1.0 / 60.0, &flat, |rb| (hold(rb, 30.0 / 3.6), 0.0, 0.0));
         for k in 0..240 {
             let sf = 1.0 - 0.5 * (k as f32 / 40.0).sin().abs();
-            rb.wheels.iter_mut().take(2).for_each(|w| w.spring_factor = sf);
+            rb.wheels_mut().iter_mut().take(2).for_each(|w| w.set_spring_factor(sf));
             run(&mut t, &mut rb, 1, 1.0 / 60.0, &flat, |rb| (hold(rb, 30.0 / 3.6), 0.0, 0.1));
         }
         t.text
