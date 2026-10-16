@@ -185,10 +185,9 @@ fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
     } else {
         &def.coupling_back
     };
-    let p = coupling
-        .as_ref()
-        .map(|c| Vec3::from(c.pos))
-        .unwrap_or(Vec3::new(0.0, if front { 4.0 } else { -4.0 }, 0.3));
+    // (none declared is the model origin, as OMSI keeps it; an AI copy's type is given the
+    // coupling it has always had - see `VehicleType::load_ai`)
+    let p = coupling.as_ref().map(|c| Vec3::from(c.pos)).unwrap_or(Vec3::ZERO);
     // Rail couplings are declared in the path frame. Express them in the model frame
     // so body_rotation can turn a negative-bogie body without moving its joints.
     if body_reversed(def, false) {

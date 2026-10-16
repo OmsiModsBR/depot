@@ -187,6 +187,13 @@ fn mesh_path(root: &Path, dir: &Path, model_dir: &Path, file: &str) -> PathBuf {
     first
 }
 
+/// The couplings an AI copy's parts join at where its file declares none: 4 m ahead of and
+/// behind its origin, 0.3 m up (see [`VehicleType::load_ai`]).
+pub(super) fn ai_couplings(def: &mut Vehicle) {
+    def.coupling_front.get_or_insert(omsi_vehicle::vehicle::Coupling { pos: [0.0, 4.0, 0.3] });
+    def.coupling_back.get_or_insert(omsi_vehicle::vehicle::Coupling { pos: [0.0, -4.0, 0.3] });
+}
+
 impl VehicleType {
     pub fn load(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, true)
@@ -215,13 +222,22 @@ impl VehicleType {
     /// A type for AI copies: its meshes are measured (the tyres) and let go - nothing but
     /// the upload to the GPU needs them, and a timetable fleet kept half a gigabyte of
     /// vertices on the CPU. [`VehicleType::mesh_data`] reads a mesh again.
+    ///
+    /// A file without `[coupling_front]` or `[coupling_back]` couples an AI copy's parts 4 m
+    /// ahead of or behind its origin, 0.3 m up, as it always has; the player's vehicle couples
+    /// it at the origin, where OMSI keeps a coupling the file does not declare.
     pub fn load_ai(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, false)
     }
 
     fn load_with(root: &Path, bus_file: &Path, keep_meshes: bool) -> Result<VehicleType> {
-        let def =
+        // (the types without their meshes are the AI's copies)
+        let ai_copy = !keep_meshes;
+        let mut def =
             Vehicle::load(bus_file).with_context(|| format!("loading {}", bus_file.display()))?;
+        if ai_copy {
+            ai_couplings(&mut def);
+        }
         let dir = def.dir().to_path_buf();
         let model_rel = def.model.clone().context("vehicle has no [model]")?;
         let model_path = omsi_cfg::resolve_path(&dir, &model_rel);
