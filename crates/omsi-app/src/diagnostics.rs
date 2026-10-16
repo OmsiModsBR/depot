@@ -117,23 +117,23 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
     let wheels = v
         .rigid()
         .map(|rb| {
-            rb.wheels
+            rb.wheels()
                 .iter()
                 .map(|w| {
                     format!(
                         "{:+.3}@{:+.3}{}{}{}",
-                        w.compression,
-                        w.ground_z - v.position.z,
-                        if w.on_ground { "" } else { "!" },
-                        if w.step_force.abs() > 500.0 {
-                            format!(" step {:+.1} kN", w.step_force / 1000.0)
+                        w.compression(),
+                        w.ground_z() - v.position.z,
+                        if w.on_ground() { "" } else { "!" },
+                        if w.step_force().abs() > 500.0 {
+                            format!(" step {:+.1} kN", w.step_force() / 1000.0)
                         } else {
                             String::new()
                         },
-                        if w.walls.is_empty() {
+                        if w.walls().is_empty() {
                             String::new()
                         } else {
-                            format!(" against {} face(s)", w.walls.len())
+                            format!(" against {} face(s)", w.walls().len())
                         }
                     )
                 })
@@ -145,9 +145,9 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
     // coupled parts' angles to it
     let slip = v
         .rigid()
-        .filter(|rb| rb.velocity.truncate().length() > 1.0)
+        .filter(|rb| rb.velocity().truncate().length() > 1.0)
         .map(|rb| {
-            let d = (rb.velocity.x as f64).atan2(rb.velocity.y as f64).to_degrees() - v.heading;
+            let d = (rb.velocity().x as f64).atan2(rb.velocity().y as f64).to_degrees() - v.heading;
             let d = (d + 540.0).rem_euclid(360.0) - 180.0;
             let d = if d.abs() > 90.0 { (d + 360.0).rem_euclid(360.0) - 180.0 } else { d };
             format!(" slip {d:+.2}")

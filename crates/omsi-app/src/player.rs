@@ -1398,7 +1398,7 @@ impl Player {
     pub(crate) fn move_head(&mut self, dt: f32, enabled: bool) {
         let dt = dt.clamp(0.0, 0.1);
         let a = self.vehicle.motion().accel;
-        let omega = self.vehicle.rigid().map(|rb| rb.omega).unwrap_or(Vec3::ZERO);
+        let omega = self.vehicle.rigid().map(|rb| rb.omega()).unwrap_or(Vec3::ZERO);
         let dw = omega - self.head_omega;
         self.head_omega = omega;
         if dt <= 0.0 {
@@ -1595,8 +1595,8 @@ impl Player {
             }
             if let (Some((f, t)), Some(rb)) = (g.as_mut(), self.vehicle.rigid()) {
                 *t += dt as f64;
-                for (k, w) in rb.wheels.iter().enumerate() {
-                    let _ = writeln!(f, "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}", t, dt, rb.position.z, self.vehicle.motion().velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z);
+                for (k, w) in rb.wheels().iter().enumerate() {
+                    let _ = writeln!(f, "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}", t, dt, rb.position().z, self.vehicle.motion().velocity_kmh(), w.compression(), w.compression_rate(), w.load(), w.ground_z());
                 }
             }
         }

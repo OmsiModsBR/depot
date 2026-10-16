@@ -926,12 +926,12 @@ pub(crate) fn run_offscreen(
                         }
                     }
                     if let (Some(f), Some(rb)) = (f.as_mut(), player.vehicle.rigid()) {
-                        for (k, w) in rb.wheels.iter().enumerate() {
+                        for (k, w) in rb.wheels().iter().enumerate() {
                             let _ = writeln!(
                                 f,
                                 "{:.4},{:.2},{:.2},{:.4},{:.3},{:.1},{k},{:.4},{:.3},{:.0},{:.4},{}",
-                                t_s, rb.position.x, rb.position.y, rb.position.z, rb.velocity.z,
-                                player.vehicle.motion().velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z, w.on_ground as u8
+                                t_s, rb.position().x, rb.position().y, rb.position().z, rb.velocity().z,
+                                player.vehicle.motion().velocity_kmh(), w.compression(), w.compression_rate(), w.load(), w.ground_z(), w.on_ground() as u8
                             );
                         }
                     }
@@ -1657,7 +1657,7 @@ pub(crate) fn run_offscreen(
                 }
             }
             if let Some(rb) = player.vehicle.rigid() {
-                log::info!("rigid: pos ({:.1}, {:.1}, {:.2}) heading {:.1} pitch {:.2} bank {:.2} v {:?} compressions {:?}", player.vehicle.position.x, player.vehicle.position.y, player.vehicle.position.z, player.vehicle.heading, player.vehicle.pitch, player.vehicle.bank, rb.velocity, rb.wheels.iter().map(|w| (w.compression * 1000.0).round() / 1000.0).collect::<Vec<_>>());
+                log::info!("rigid: pos ({:.1}, {:.1}, {:.2}) heading {:.1} pitch {:.2} bank {:.2} v {:?} compressions {:?}", player.vehicle.position.x, player.vehicle.position.y, player.vehicle.position.z, player.vehicle.heading, player.vehicle.pitch, player.vehicle.bank, rb.velocity(), rb.wheels().iter().map(|w| (w.compression() * 1000.0).round() / 1000.0).collect::<Vec<_>>());
             }
             log::info!(
                 "drove {:.1} m in {secs} s, now {:.1} km/h, engine_n={:?} M_Wheel={:?} gear={:?}",

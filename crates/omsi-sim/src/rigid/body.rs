@@ -147,6 +147,56 @@ impl RigidBody {
         }
     }
 
+    /// The body's mass (kg).
+    pub fn mass(&self) -> f32 {
+        self.mass
+    }
+
+    /// The body-frame inertia (diagonal, kg m²).
+    pub fn inertia(&self) -> Vec3 {
+        self.inertia
+    }
+
+    /// The centre of gravity relative to the model origin (m).
+    pub fn cog(&self) -> Vec3 {
+        self.cog
+    }
+
+    /// The centre of gravity in the world.
+    pub fn position(&self) -> DVec3 {
+        self.position
+    }
+
+    /// The body's rotation, model frame to world.
+    pub fn orientation(&self) -> Quat {
+        self.orientation
+    }
+
+    /// The velocity of the centre of gravity (m/s, world).
+    pub fn velocity(&self) -> Vec3 {
+        self.velocity
+    }
+
+    /// The angular velocity (rad/s, body frame).
+    pub fn omega(&self) -> Vec3 {
+        self.omega
+    }
+
+    /// The body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
+    pub fn accel_body(&self) -> Vec3 {
+        self.accel_body
+    }
+
+    /// The wheels, two per axle (left then right).
+    pub fn wheels(&self) -> &[RigidWheel] {
+        &self.wheels
+    }
+
+    /// The wheels a face stopped during the last step.
+    pub fn wheel_impacts(&self) -> &[Impact] {
+        &self.wheel_impacts
+    }
+
     /// Model origin (the point the renderer places) in the world.
     pub fn origin(&self) -> DVec3 {
         self.position - self.orientation.mul_vec3(self.cog).as_dvec3()

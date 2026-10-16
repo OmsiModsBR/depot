@@ -233,7 +233,7 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
             v.position,
             rot,
             own,
-            &mut rb.wheels.iter().map(|w| w.on_ground.then(|| w.attach + Vec3::Z * (w.compression.max(-omsi_sim::rigid::DROOP) - w.radius))),
+            &mut rb.wheels().iter().map(|w| w.on_ground().then(|| w.attach() + Vec3::Z * (w.compression().max(-omsi_sim::rigid::DROOP) - w.radius()))),
             out,
         ),
         // an AI vehicle's (a LAN player's copy too): its axles on the plane its body is
