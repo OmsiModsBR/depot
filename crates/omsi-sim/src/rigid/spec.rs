@@ -127,10 +127,13 @@ pub struct PhysicsSpec {
     pub rot_pnt_long: f32,
     /// The frontmost axle (m along the body; `f32::MIN` without axles).
     pub front_long: f32,
-    /// The full lock (deg) and the curvature (1/m) it turns on; a file without a usable
-    /// `[inv_min_turnradius]` steers as far as the old default lock.
+    /// The curvature (1/m) of the full lock, `[inv_min_turnradius]` as the file gives it (a
+    /// file without one does not steer, as in OMSI), and the front axle's angle (deg) on it.
     pub max_steer_deg: f32,
     pub inv_min_turn_radius: f32,
+    /// The kinematic model's full lock (deg): the file's held to 10..60°, and 10° for a file
+    /// without a usable `[inv_min_turnradius]`.
+    pub kinematic_max_steer_deg: f32,
     /// sqrt(springs / mass) in OMSI's units (kN/m over t), what its damping of pitch and roll
     /// scales with.
     pub body_freq: f32,
@@ -151,9 +154,10 @@ impl PhysicsSpec {
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
+        // the kinematic model's lock: the file's, held to 10..60° (with the arm from the
+        // turning line at least 1 m), and the least for a file without a usable one
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
-        let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 { def.inv_min_turn_radius } else { max_steer_deg.to_radians().tan() / s };
+        let kinematic_max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
         let springs: f32 = def.axles.iter().map(|a| 2.0 * a.spring).sum();
         PhysicsSpec {
             mass_kg: mass,
@@ -163,8 +167,9 @@ impl PhysicsSpec {
             rolling_resistance: def.rolling_resistance,
             rot_pnt_long: def.rot_pnt_long,
             front_long,
-            max_steer_deg,
-            inv_min_turn_radius,
+            max_steer_deg: (def.inv_min_turn_radius * (front_long - def.rot_pnt_long).abs()).atan().to_degrees(),
+            kinematic_max_steer_deg,
+            inv_min_turn_radius: def.inv_min_turn_radius,
             body_freq: (springs / (mass / 1000.0)).max(0.0).sqrt(),
             wheelbase: (front_long - rear_long).abs().max(1.0),
             axles: def.axles.iter().map(AxleSpec::of).collect(),

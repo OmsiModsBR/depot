@@ -619,3 +619,21 @@ fn the_wheels_stand_where_the_axle_says() {
     // the kinematic model's parts stand as they always have
     assert_eq!((spec.kinematic_radius, spec.kinematic_track), (0.15, 0.3 * 0.85));
 }
+
+#[test]
+fn the_lock_is_the_files_turning_radius() {
+    // `[inv_min_turnradius]` as it is: no range, and a file without one does not steer
+    let spec = PhysicsSpec::from(&Vehicle { inv_min_turn_radius: 0.5, ..bus() });
+    assert_eq!(spec.inv_min_turn_radius, 0.5);
+    assert!(spec.max_steer_deg > 70.0, "{}", spec.max_steer_deg);
+    let none = PhysicsSpec::from(&Vehicle { inv_min_turn_radius: 0.0, ..bus() });
+    assert_eq!((none.inv_min_turn_radius, none.max_steer_deg), (0.0, 0.0));
+    let mut rb = RigidBody::from_definition(&Vehicle { inv_min_turn_radius: 0.0, ..bus() }, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    for _ in 0..60 {
+        rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 1.0, &road(1e9, 0.0));
+    }
+    assert_eq!(rb.kappa(), 0.0);
+    // the kinematic model keeps its lock
+    assert_eq!((spec.kinematic_max_steer_deg, none.kinematic_max_steer_deg), (60.0, 10.0));
+}
