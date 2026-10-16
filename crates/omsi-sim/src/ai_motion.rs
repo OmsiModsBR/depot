@@ -10,6 +10,7 @@
 //! made-up yaw. Here the heading only ever changes by speed × tan(steering) / wheelbase,
 //! the rear axle never moves sideways, and the steering itself is rate limited.
 
+use crate::rigid::{AiSpec, AiWheelSpec};
 use crate::vehicle::VehicleInstance;
 use glam::{DVec2, DVec3, Vec3};
 use omsi_vehicle::Vehicle;
@@ -25,17 +26,8 @@ pub enum MotionKind {
 
 /// The line the vehicle turns about (`[rot_pnt_long]`, normally the rear axle) and the
 /// distance from it to the front axle: (rotation point, wheelbase), both in metres along
-/// the body.
-pub fn rotation_point(def: &Vehicle) -> (f32, f32) {
-    let front = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
-    let rear = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
-    if def.axles.is_empty() {
-        return (-1.3, 2.6);
-    }
-    // a rotation point at (or in front of) the front axle is a file without one
-    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 { def.rot_pnt_long } else { rear };
-    (rot, (front - rot).max(0.8))
-}
+/// the body (see `rigid::ai_rotation_point`).
+pub use crate::rigid::ai_rotation_point as rotation_point;
 
 /// Clearance a vehicle pulling out keeps from the corner of what it goes round (m).
 pub const PULL_OUT_CLEARANCE: f64 = 0.25;
@@ -123,19 +115,6 @@ fn wrap(d: f64) -> f64 {
     (d + 180.0).rem_euclid(360.0) - 180.0
 }
 
-/// One wheel on its spring.
-#[derive(Debug, Clone, Copy)]
-struct Wheel {
-    axle: usize,
-    side: usize,
-    /// Body frame: right and forward (m).
-    lat: f32,
-    long: f32,
-    /// Spring (N/m) and damper (Ns/m) of this wheel.
-    k: f32,
-    c: f32,
-}
-
 /// How far over an AI car's wheel its ground is looked for (m): OMSI casts the ray of its
 /// ground query from 3 m over the point and takes the highest face under that.
 pub const AI_RAY_UP: f64 = 3.0;
@@ -154,7 +133,7 @@ pub struct AiBody {
     /// Largest front wheel angle (deg) and how fast the driver turns towards it (deg/s).
     max_steer: f32,
     steer_rate: f32,
-    wheels: Vec<Wheel>,
+    wheels: Vec<AiWheelSpec>,
     axle_count: usize,
     mass: f32,
     cog: f32,
@@ -200,72 +179,7 @@ pub struct AiBody {
 
 impl AiBody {
     pub fn new(def: &Vehicle, kind: MotionKind) -> AiBody {
-        let (rot_long, wheelbase) = rotation_point(def);
-        let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
-        let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
-        let (front_long, rear_long) = if def.axles.len() >= 2 { (front_long, rear_long) } else { (rot_long + wheelbase, rot_long) };
-        // `[mass]` is in tonnes (a few files give kilograms), `[momentofintertia]` in the
-        // same unit times m²: 1 t and 1.49 for a Golf, 10.9 t and 300 for an SD200
-        let tonnes = def.mass < 100.0;
-        let mass = (if tonnes { def.mass * 1000.0 } else { def.mass }).max(300.0);
-        let unit = if tonnes { 1000.0 } else { 1.0 };
-        let heavy = mass > crate::rigid::AI_HEAVY_MASS;
-        // inv_min_turnradius = tan(max angle) / wheelbase
-        let max_steer = if def.inv_min_turn_radius > 0.0 { (def.inv_min_turn_radius * wheelbase).atan().to_degrees().clamp(15.0, 55.0) } else { 35.0 };
-        let mut wheels = Vec::new();
-        for (i, a) in def.axles.iter().enumerate() {
-            let half = (a.max_width * 0.5).max(0.4);
-            for (side, lat) in [(0, -half), (1, half)] {
-                // `achse_feder` / `achse_daempfer`: kN/m and kNs/m per side
-                wheels.push(Wheel { axle: i, side, lat, long: a.long, k: a.spring.max(0.0) * 1000.0, c: a.damper.max(0.0) * 1000.0 });
-            }
-        }
-        let n = wheels.len().max(1) as f32;
-        if wheels.iter().any(|w| w.k <= 0.0) {
-            // no springs in the file: 1.5 Hz with a third of critical damping
-            let k_total = mass * (std::f32::consts::TAU * 1.5).powi(2);
-            let c_total = 2.0 * 0.35 * (k_total * mass).sqrt();
-            for w in wheels.iter_mut() {
-                w.k = k_total / n;
-                w.c = c_total / n;
-            }
-        }
-        let mut spring = [0.0f32; 3];
-        let mut damper = [0.0f32; 3];
-        for w in &wheels {
-            spring[0] += w.k;
-            spring[1] += w.k * w.long * w.long;
-            spring[2] += w.k * w.lat * w.lat;
-            damper[0] += w.c;
-            damper[1] += w.c * w.long * w.long;
-            damper[2] += w.c * w.lat * w.lat;
-        }
-        let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
-        // (pitch and roll: the first and the third value, as OMSI reads them - see
-        // `RigidBody::from_definition`)
-        let mut inertia = [def.moment_of_inertia[0] * unit, def.moment_of_inertia[2] * unit];
-        if inertia[0] <= 0.0 {
-            inertia[0] = mass * (front_long * front_long + rear_long * rear_long) * 0.5;
-        }
-        if inertia[1] <= 0.0 {
-            inertia[1] = mass * half_track * half_track * 1.2;
-        }
-        // keep every mode below ~6 Hz: the springs are integrated at a few hundred Hz at most
-        for (i, j) in [(1usize, 0usize), (2, 1)] {
-            let max_k = inertia[j] * 38.0f32.powi(2);
-            if spring[i] > max_k {
-                inertia[j] = spring[i] / 38.0f32.powi(2);
-            }
-        }
-        // at least 0.8 of critical damping in every mode: a driven car settles after a
-        // bump or a stop instead of swinging on (the files' dampers are tuned for the
-        // player's physics, which damps through the tyres as well)
-        let heave_c = 2.0 * 0.8 * (spring[0] * mass).sqrt();
-        damper[0] = damper[0].max(heave_c);
-        for (i, j) in [(1usize, 0usize), (2, 1)] {
-            damper[i] = damper[i].max(2.0 * 0.8 * (spring[i] * inertia[j]).sqrt());
-        }
-        let axle_count = def.axles.len().max(1);
+        let AiSpec { rot_long, wheelbase, front_long, rear_long, max_steer, heavy, wheels, axle_count, mass, cog, inertia, spring, damper } = AiSpec::from(def);
         AiBody {
             kind,
             rot_long,
@@ -277,7 +191,7 @@ impl AiBody {
             wheels,
             axle_count,
             mass,
-            cog: if def.cog_height > 0.0 { def.cog_height } else { 0.6 },
+            cog,
             inertia,
             spring,
             damper,

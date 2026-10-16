@@ -11,6 +11,7 @@
 //! the joint's load on the axles, the lever of its pull and the inertia of the part behind.
 //! A body alone is a train of one, solved exactly as before.
 
+use super::spec::{split, wheel_rest_loads_supported};
 use super::{body_damping, GroundProbe, Impact, Lateral, RigidBody, Substep, BUMP};
 use super::params::{BAUMGARTE, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEPS_MAX, SUBSTEPS_MIN, SUBSTEP_DT};
 use glam::{DVec3, Mat3, Quat, Vec3};
@@ -440,37 +441,6 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
     for (b, a) in bodies.iter_mut().zip(accel) {
         b.end_slice(substeps, a);
     }
-}
-
-/// The least-squares split of a load `total` with its centre at `centre` over points at
-/// `(long, count)`: the load per point grows linearly along the vehicle, so that the shares
-/// balance the load and its moment (exactly, with two places to rest on).
-fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
-    let n: f32 = points.iter().map(|p| p.1).sum::<f32>().max(1.0);
-    let sy: f32 = points.iter().map(|p| p.1 * p.0).sum();
-    let syy: f32 = points.iter().map(|p| p.1 * p.0 * p.0).sum();
-    let det = n * syy - sy * sy;
-    if det.abs() > 1e-6 {
-        ((total * syy - sy * total * centre) / det, (n * total * centre - sy * total) / det)
-    } else {
-        (total / n, 0.0)
-    }
-}
-
-/// [`super::wheel_rest_loads`] for a part that also rests on its front joint at `support_long`
-/// (an articulated bus's rear section, a semitrailer): the static load on each wheel of each
-/// axle (N), and what the joint carries (N), which the part in front takes on its axles (see
-/// [`point_load_shares`]).
-pub fn wheel_rest_loads_supported(def: &Vehicle, support_long: f32) -> (Vec<f32>, f32) {
-    let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
-    let weight = mass * 9.81;
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    let mut points: Vec<(f32, f32)> = def.axles.iter().map(|a| (a.long, 2.0)).collect();
-    points.push((support_long, 1.0));
-    let (a, b) = split(&points, weight, cog_y);
-    let n = points.iter().map(|p| p.1).sum::<f32>();
-    let joint = (a + b * support_long).clamp(0.0, weight);
-    (def.axles.iter().map(|x| (a + b * x.long).max(weight / n * 0.2)).collect(), joint)
 }
 
 /// The share (N) of each wheel of each axle of `def` in a load `load` put on it at `long` (a

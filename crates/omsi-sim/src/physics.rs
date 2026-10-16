@@ -6,7 +6,7 @@
 //! [`VehicleMotion`], which everything else reads, and hands the scripts their variables
 //! (`vehicle/physics_bridge.rs`). The driver's [`Controls`] go in.
 
-use crate::rigid::RigidBody;
+use crate::rigid::{AxleSpec, PhysicsSpec, RigidBody};
 use glam::Vec3;
 use omsi_vehicle::Vehicle;
 
@@ -57,8 +57,9 @@ impl VehicleMotion {
             .axles
             .iter()
             .map(|a| {
-                let mk = |lat: f32| WheelState { long: a.long, lat, radius: (a.wheel_diameter / 2.0).max(0.1), driven: a.driven, rotation_deg: 0.0, rpm: 0.0, suspension: 0.0 };
-                [mk(-a.max_width / 2.0), mk(a.max_width / 2.0)]
+                let a = AxleSpec::of(a);
+                let mk = |lat: f32| WheelState { long: a.long, lat, radius: a.shown_radius, driven: a.driven, rotation_deg: 0.0, rpm: 0.0, suspension: 0.0 };
+                [mk(-a.half_width), mk(a.half_width)]
             })
             .collect();
         VehicleMotion { speed: 0.0, steer_deg: 0.0, accel: Vec3::ZERO, a_trans: Vec3::ZERO, wheels }
@@ -84,11 +85,8 @@ pub enum Dynamics {
     Kinematic(KinematicModel),
 }
 
-/// The vehicle's mass from its `[mass]` (tonnes, or kilograms in a few files), at least 500 kg.
-pub fn mass_kg(def: &Vehicle) -> f32 {
-    let mass_kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
-    mass_kg.max(500.0)
-}
+/// The vehicle's mass from its `[mass]` (see `rigid::mass_kg`).
+pub use crate::rigid::mass_kg;
 
 /// A deliberately simple model: the forces along the vehicle (drive, brakes, rolling
 /// resistance), the front wheels' angle eased towards the driver's, and the heading turned by
@@ -104,14 +102,10 @@ pub struct KinematicModel {
 
 impl KinematicModel {
     pub fn from_definition(def: &Vehicle) -> KinematicModel {
-        let wheels = VehicleMotion::at_rest(def).wheels;
-        let front = wheels.iter().map(|w| w[0].long).fold(f32::MIN, f32::max);
-        let rear = wheels.iter().map(|w| w[0].long).fold(f32::MAX, f32::min);
-        let wheelbase = (front - rear).abs().max(1.0);
-        // inv_min_turnradius = tan(alpha_max) / s  →  alpha_max
-        let s = (front - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(10.0, 60.0);
-        KinematicModel { mass_kg: mass_kg(def), rolling_resistance: def.rolling_resistance, wheelbase, max_steer_deg }
+        // (the rigid body's lock: inv_min_turnradius = tan(alpha_max) / s → alpha_max, with s
+        // from the front axle to `[rot_pnt_long]`)
+        let spec = PhysicsSpec::from(def);
+        KinematicModel { mass_kg: spec.mass_kg, rolling_resistance: spec.file_rolling_resistance, wheelbase: spec.wheelbase, max_steer_deg: spec.max_steer_deg }
     }
 
     /// Advance `m` one step, the driver steering at `steering`. `drive_torque` is `M_Wheel`,

@@ -23,13 +23,15 @@
 //! The code follows the stages of a step: `ground` (what a tyre stands on), `suspension` (the
 //! static loads and each wheel on its strut), `wheel` (each wheel's own turning), `tyre` (the
 //! tyres' forces along and across), `body` (the body and its motion) and `collide` (hits
-//! against obstacles), with the constants in `params`.
+//! against obstacles), with the constants in `params` and what a `.bus` file's values mean in
+//! `spec` (the one place a file's physics is read).
 //! `train` runs the stages in order for one body or an articulated train ([`step_train`]).
 
 mod body;
 mod collide;
 mod ground;
 mod params;
+mod spec;
 mod suspension;
 mod train;
 mod tyre;
@@ -39,9 +41,10 @@ pub use body::{CoupledPart, RigidBody};
 pub use collide::Impact;
 pub use ground::{Ground, GroundProbe, WallFace};
 pub use params::{BUMP, CLIMB, CRASH_SPEED, DEFAULT_INERTIA_INV, DROOP, HUB_REACH, WALL_HEIGHT};
-pub(crate) use params::{AI_AXLE_STEER_MAX, AI_HEAVY_MASS, AI_STEER_ARM_MIN, AI_STEER_RATE, AI_STEER_RATE_HEAVY, KINEMATIC_DT_MAX};
-pub use suspension::wheel_rest_loads;
-pub use train::{hang_followers, place_train, support_rest_loads, point_load_shares, step_train, wheel_rest_loads_supported, BodyInputs, Joint, JointKind};
+pub(crate) use params::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN, AI_STEER_RATE, AI_STEER_RATE_HEAVY, KINEMATIC_DT_MAX};
+pub use spec::{ai_rotation_point, mass_kg, wheel_rest_loads, wheel_rest_loads_supported, AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
+pub(crate) use spec::{coupled_mass_kg, coupled_rolling_resistance};
+pub use train::{hang_followers, place_train, support_rest_loads, point_load_shares, step_train, BodyInputs, Joint, JointKind};
 pub use wheel::RigidWheel;
 
 // (what `train` takes from the stages)

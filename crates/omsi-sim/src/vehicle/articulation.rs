@@ -475,10 +475,10 @@ impl TrailerPart {
                 continue;
             }
             let Some(def) = self.ty.def.axles.get(a) else { continue };
-            let r = (def.wheel_diameter / 2.0).max(0.15);
+            let def = crate::rigid::AxleSpec::of(def);
+            let r = def.radius;
             let hub = r - offset;
-            let outer = (def.max_width / 2.0).max(0.3);
-            let across = if def.min_width > 0.0 && def.min_width < def.max_width { (def.max_width + def.min_width) / 4.0 } else { outer * 0.85 };
+            let across = def.track;
             let mut sides = [None, None];
             for (si, x) in [-across, across].into_iter().enumerate() {
                 let p = self.position + rot.transform_point3(Vec3::new(x, def.long, hub)).as_dvec3();

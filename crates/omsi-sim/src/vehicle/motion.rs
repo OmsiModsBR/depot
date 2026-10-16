@@ -305,19 +305,15 @@ impl VehicleInstance {
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: if def.mass < 100.0 {
-                        def.mass * 1000.0
-                    } else {
-                        def.mass
-                    }
-                    .max(0.0),
+                    mass: crate::rigid::coupled_mass_kg(def),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()
-                        .map(|&a| (def.axles[a].wheel_diameter / 2.0).max(0.15))
+                        .map(|&a| crate::rigid::AxleSpec::of(&def.axles[a]).radius)
                         .unwrap_or(0.5),
                     driven_load: driven.iter().map(|&a| wheel_load(a)).sum(),
-                    brake: self.part_brakes(t).sum::<f32>() + def.rolling_resistance.max(0.0),
+                    brake: self.part_brakes(t).sum::<f32>()
+                        + crate::rigid::coupled_rolling_resistance(def),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
                 }
             })
