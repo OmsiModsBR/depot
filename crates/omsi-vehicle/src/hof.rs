@@ -98,18 +98,12 @@ pub struct Hof {
     pub info_trips: Vec<InfoTrip>,
     pub info_busstop_lists: Vec<Vec<String>>,
     pub info_busstops: Vec<Vec<String>>,
-    /// Whether the stop lists of the file carry the repetition of a bloated depot file.
-    pub inflation: crate::hof_check::Inflation,
 }
 
 impl Hof {
     pub fn load(path: &Path) -> Result<Hof, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let h = Self::parse(&f);
-        if h.inflation.is_problematic() {
-            warn_bloated(path, &h.inflation);
-        }
-        Ok(h)
+        Ok(Self::parse(&f))
     }
 
     /// Whether the IBIS trips carry line `line` (a map's line name, "11-11s"): a trip coded
@@ -331,31 +325,11 @@ impl Hof {
                 _ => {}
             }
         }
-        h.inflation = crate::hof_check::inspect_lines(&f.lines);
         h
     }
 
     pub fn terminus_by_code(&self, code: i32) -> Option<&Terminus> {
         self.termini.iter().find(|t| t.code == code)
-    }
-}
-
-/// Tells once per file (the file is loaded for every bus that uses it) that it is bloated.
-fn warn_bloated(path: &Path, inf: &crate::hof_check::Inflation) {
-    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
-        std::sync::OnceLock::new();
-    let first = SEEN
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(path.to_path_buf());
-    if first {
-        log::warn!(
-            "{} has repeated stop lists (largest list {} entries): it loads slowly and can be \
-             repaired without losing anything (launcher commands hof_check / hof_fix)",
-            path.display(),
-            inf.largest
-        );
     }
 }
 

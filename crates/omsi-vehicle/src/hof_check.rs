@@ -7,7 +7,8 @@
 //! its content (a few MB instead of a few KB) and loading it takes minutes, because every
 //! one of its entries is read and kept.
 //!
-//! Detection ([`inspect_lines`]) is cheap and runs on the lines `Hof::load` already has.
+//! Detection ([`inspect_lines`]) is cheap and works on already loaded lines. Nothing in the
+//! game calls it yet: when to scan users' depot files is left to the maintainer of the refactors.
 //! Repair ([`fix_bytes`]) removes the repetition inside the tables and leaves every other
 //! byte of the file as it was. Nothing here writes a file except [`fix_file`], which keeps a
 //! backup of the original next to it first; callers are expected to ask the user before
