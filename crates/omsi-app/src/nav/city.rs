@@ -309,7 +309,7 @@ impl Navigator {
         }
         if let Some(i) = focus {
             let l = &lines[i];
-            if sf.times(&self.chrono).line(&l.number).is_some() {
+            if sf.times(&self.chrono, self.date).line(&l.number).is_some() {
                 let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
                 ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
@@ -357,7 +357,7 @@ impl Navigator {
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
         ui.rounded(list_panel, 8.0 * s, ink);
-        if let Some(i) = focus.filter(|&i| self.city.lines.sheet && sf.times(&self.chrono).line(&lines[i].number).is_some()) {
+        if let Some(i) = focus.filter(|&i| self.city.lines.sheet && sf.times(&self.chrono, self.date).line(&lines[i].number).is_some()) {
             let rows = self.sheet_panel(ui, &sf, i, list_panel, s, lt, &mut hits);
             self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
             self.city.lines.list = Some(rows);
@@ -488,7 +488,8 @@ impl Navigator {
     #[allow(clippy::too_many_arguments)]
     fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
         use crate::line_times::clock;
-        let sheet = sf.times(&self.chrono).line(&sf.lines()[i].number).expect("the caller checked");
+        let timetable = sf.times(&self.chrono, self.date);
+        let sheet = timetable.line(&sf.lines()[i].number).expect("the caller checked");
         let (x0, y0, pw, pad) = (area.x, area.y, area.w, 14.0 * s);
         let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
@@ -582,7 +583,8 @@ impl Navigator {
     /// The departure picked, on the map: a dot and the time at each stop it calls at, as many as fit
     /// (the ends first); the stops are where the map's own stop objects stand.
     fn sheet_labels(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, s: f32, to_screen: &dyn Fn(DVec3) -> Vec2, view: (f32, f32)) {
-        let Some(sheet) = sf.times(&self.chrono).line(&sf.lines()[i].number) else { return };
+        let timetable = sf.times(&self.chrono, self.date);
+        let Some(sheet) = timetable.line(&sf.lines()[i].number) else { return };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
         let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();

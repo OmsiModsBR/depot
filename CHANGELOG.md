@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
+  term time or only in school holidays (`Holidays.txt`) no longer shows up together with the other, and
+  the timetable is read again when the date changes.
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
   them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
