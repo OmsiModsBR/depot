@@ -120,13 +120,14 @@ impl<'a> Cur<'a> {
     fn f32(&mut self) -> Result<f32, O3dError> {
         Ok(f32::from_bits(self.u32()?))
     }
+    /// A name: one length byte, then the bytes in the code page the exporter's Windows used
+    /// (UTF-8 from newer exporters), as `omsi_cfg::decode_text` detects it.
     fn str8(&mut self) -> Result<String, O3dError> {
         let n = self.u8()? as usize;
         self.need(n)?;
-        let (s, _) =
-            encoding_rs::WINDOWS_1252.decode_without_bom_handling(&self.b[self.p..self.p + n]);
+        let s = omsi_cfg::decode_text(&self.b[self.p..self.p + n]);
         self.p += n;
-        Ok(s.into_owned())
+        Ok(s)
     }
 }
 
