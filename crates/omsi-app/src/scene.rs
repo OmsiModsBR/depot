@@ -747,6 +747,27 @@ fn parklist_index(strings: &[String]) -> usize {
     strings.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(0)
 }
 
+/// What stands on one parking space: nothing, or a car from the list with a paint scheme.
+#[derive(Debug, PartialEq, Eq)]
+struct ParkedPick {
+    car: usize,
+    scheme: usize,
+}
+
+/// The choice for the space with this key. It is the same for a key and a seed (a tile that
+/// is unloaded and loaded again shows the same cars), and differs with the seed: a quarter of
+/// the spaces stay empty, the rest take their car and colour from the hash.
+fn parked_pick(key: i64, seed: u64, list_len: usize, scheme_count: impl Fn(usize) -> usize) -> Option<ParkedPick> {
+    let mixed = seed.wrapping_mul(0xD6E8_FEB8_6659_FD93) ^ (seed >> 29);
+    let h = ((key as u64) ^ mixed).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33;
+    if h % 4 == 0 || list_len == 0 {
+        return None;
+    }
+    let car = (h as usize / 4) % list_len;
+    let schemes = scheme_count(car);
+    Some(ParkedPick { car, scheme: if schemes > 0 { (h as usize / 64) % schemes } else { 0 } })
+}
+
 /// A tile read and tessellated, its objects typed but not yet standing on the ground. Kept
 /// (by [`World::prepare_tiles`]) while a loaded tile or one on its way depends on it.
 pub struct StagedTile {
@@ -2246,6 +2267,8 @@ pub struct World {
     /// (0 = every space the map fills, -1 = none): past it the spaces stay empty.
     pub parked_live: std::sync::atomic::AtomicUsize,
     pub parked_max: i64,
+    /// Chosen once per run: which cars stand on the parking spaces (`OMSI_SEED` repeats it).
+    parked_seed: u64,
     /// Places that echo (`[triggerbox_new]` + `[triggerbox_setreverb]`: the railway bridges'
     /// underpasses): the box, the reverberation time (s) and the distance (m) over which it
     /// fades in at the box's sides.
@@ -2737,6 +2760,9 @@ impl World {
             light_map_atlas: Mutex::new(None),
             parked_live: std::sync::atomic::AtomicUsize::new(0),
             parked_max: crate::settings::Settings::load().ai_max_parked as i64,
+            parked_seed: omsi_cfg::flags::SEED.text()
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .unwrap_or_else(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1)),
             signal_routes,
             particle_objects: Mutex::new(HashMap::new()),
             fonts: Arc::new(Mutex::new(omsi_sim::texttex::FontLibrary::new(root))),
@@ -4165,22 +4191,26 @@ impl World {
         if list.is_empty() {
             return Some((ot, false));
         }
-        let h = (key as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33;
         // leave some spaces empty like the original, and all once the options' count of
         // parked cars stands
         let full = self.parked_max < 0 || (self.parked_max > 0 && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64 >= self.parked_max);
-        if h % 4 == 0 || full {
+        let pick = if full {
+            None
+        } else {
+            parked_pick(key, self.parked_seed, list.len(), |i| self.object_type(&list[i]).map_or(0, |t| t.paint_scheme_count))
+        };
+        let Some(pick) = pick else {
             stats.lock().empty_spaces += 1;
             return None;
-        }
-        let car = &list[(h as usize / 4) % list.len()];
+        };
+        let car = &list[pick.car];
         let Some(base) = self.object_type(car) else {
             self.note_missing(car, "parked car", tx, ty, key);
             return None;
         };
         if base.paint_scheme_count > 0 {
             return self
-                .object_type_scheme(car, Some((h as usize / 64) % base.paint_scheme_count))
+                .object_type_scheme(car, Some(pick.scheme))
                 .map(|t| (t, true));
         }
         Some((base, true))
@@ -13102,6 +13132,25 @@ pub(crate) fn resolve_scenery_freetex_name<'a>(
 
 #[cfg(test)]
 mod tests {
+    /// #174: spaces are mostly filled, the same seed gives the same cars, another seed gives
+    /// other ones.
+    #[test]
+    fn parked_cars_fill_most_spaces_and_vary_with_the_seed() {
+        let picks = |seed: u64| -> Vec<Option<(usize, usize)>> {
+            (0..400i64)
+                .map(|k| parked_pick(k * 1_000_003 + 7, seed, 12, |_| 5).map(|p| (p.car, p.scheme)))
+                .collect()
+        };
+        let a = picks(1);
+        let filled = a.iter().flatten().count();
+        assert!((260..=340).contains(&filled), "{filled} of 400 spaces filled");
+        assert_eq!(a, picks(1), "same seed, same cars");
+        let b = picks(2);
+        let differing = a.iter().zip(&b).filter(|(x, y)| x != y).count();
+        assert!(differing > 200, "only {differing} of 400 spaces changed with the seed");
+        assert!((0..12).all(|c| a.iter().flatten().any(|p| p.0 == c)), "every car of the list is used");
+    }
+
     #[test]
     fn mirror_index_is_bounded() {
         assert_eq!(mirror_index("Reflexion2.bmp"), Some(2));
