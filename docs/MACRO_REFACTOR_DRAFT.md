@@ -413,6 +413,8 @@ Pequenos, em crates frios e sem mudar comportamento (fix-16). Cada um é um PR q
 - **`omsi_cfg::write_atomic(path, bytes)`**, no lugar das sete gravações tmp+rename feitas à mão, do `save_settings` do launcher (`omsi-launcher-core/src/lib.rs:2156`), do `Choice::save` e do `mirror_hud`.
 - **Texto OMSI**: um decode, com detecção de BOM e code page, e um `text::encode_utf16_bom`, no lugar das quatro cópias do escritor UTF-16 (`driver.rs:62`, `situation.rs:385`, `omsi-app/src/editor.rs:580`, `omsi-launcher-core/src/lib.rs:2574`). `codepage::decode` fica `pub(crate)` e o app passa a chamar `decode_text`.
 - **`omsi-cfg/src/lib.rs` em módulos** (`text.rs`, `paths.rs`, `install.rs`, `env.rs`), reexportados para a API pública não mudar.
+
+  Feito primeiro, por domínios e subdomínios (pedido do Zane, 17/10/2026): `text/` (`codepage`, `number`, decode e `split_lines`), `format/` (`file`, `keyword`, `keywords`, `reader`), `content/` (`listing`, `roots`, `resolve`, `packages`, `vfs`), `install/` (`original`, `layout`, `home`, `search`) e `env.rs`; `flags.rs` e `limits.rs` ficam na raiz. A raiz reexporta tudo, então a API pública não muda. `paths` entra em `install/` no PR dele.
 - **Matemática pequena** (`smoothstep`, xorshift, sRGB, normalização de ângulo, rotação de heading para direção, limites) num `omsi-geometry::util`, e a psicrometria (pressão de saturação, umidade absoluta, relativa e ponto de orvalho) e a fórmula de Magnus, hoje em quatro versões com constantes diferentes, em `omsi-content::weather`. Unificar a fórmula de Magnus muda números: as constantes escolhidas saem num PR `fix/` à parte.
 - **Um leitor little-endian** (`omsi_cfg::bytes::{le16, le32, le64}`) para `vfs.rs`, `dds.rs`, `gpu.rs`, `tga.rs` e os helpers de BMP.
 
