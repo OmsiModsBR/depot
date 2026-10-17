@@ -229,7 +229,10 @@ impl Timing {
         }
         let ms = |s: f64| s * 1000.0;
         let line = format!(
-            "audio timing over {window:.1} s: {} callbacks of {}..{} frames at {rate} Hz              (block {:.1}..{:.1} ms), longest gap {:.1} ms after a {:.1} ms block, {} late{};              mixing {:.2} ms average, {:.2} ms longest, {} blocks over their length;              longest wait for the voices {:.2} ms; up to {} voices",
+            "audio timing over {window:.1} s: {} callbacks of {}..{} frames at {rate} Hz \
+             (block {:.1}..{:.1} ms), longest gap {:.1} ms after a {:.1} ms block, {} late{}; \
+             mixing {:.2} ms average, {:.2} ms longest, {} blocks over their length; \
+             longest wait for the voices {:.2} ms; up to {} voices",
             self.calls,
             self.frames_min,
             self.frames_max,

@@ -37,10 +37,9 @@ struct RuntimeSound {
     last_gain: f32,
     /// The buffer's playback rate relative to the clip, as last taken by `SetFrequency`.
     last_pitch: f32,
-    /// The loudest the curves have made a triggered entry since its trigger fired: OMSI 2
-    /// never lets such a sound get quieter while it plays (`TSound` +0x2c, reset when the
-    /// trigger fires, peak hold @0x7507bc), so a door sound whose curve follows the door keeps
-    /// its tail when the door stops (#131).
+    /// The loudest the curves have made a triggered entry since its trigger fired: such a
+    /// sound never gets quieter while it plays (the peak is reset when the trigger fires),
+    /// so a door sound whose curve follows the door keeps its tail when the door stops (#131).
     peak: f32,
     /// When a loop of this entry was last stopped for its volume or pitch, and what the
     /// variables its curves and pitch read stood at then (`OMSI_DEBUG_AUDIO` counts the
@@ -65,7 +64,7 @@ impl RuntimeSound {
 }
 
 /// A loop started again this soon after it was stopped is counted by `OMSI_DEBUG_AUDIO`:
-/// each new start is from a random place of the clip (as OMSI 2 does), so a loop stopped
+/// each new start is from a random place of the clip, so a loop stopped
 /// and started over and over is heard as short fragments (#35).
 const QUICK_RESTART: f32 = 1.0;
 
@@ -1324,7 +1323,7 @@ mod tests {
     }
 
     /// A door sound whose curve follows the door: fired with the door at 0.7, the door closed
-    /// the next frame - OMSI 2 holds the peak (0x7507bc), so the sound keeps its tail instead
+    /// the next frame - the peak is held, so the sound keeps its tail instead
     /// of falling silent the frame after it starts (#131).
     #[test]
     fn a_triggered_sound_keeps_its_peak_while_it_plays() {
