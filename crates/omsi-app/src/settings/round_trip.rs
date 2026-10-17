@@ -194,7 +194,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("drive_keys", "launcher>game", "kept as text; the game keeps simple unless it is wasd, arrows, omsi or simple"),
     ("boarding", "launcher>game", "kept as written; the game lowercases it"),
     // `NaN` is a number to the launcher here; the game falls back to the default
-    ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
     ("pedal_throttle", "launcher>game", "NaN leaves the key empty"),
     ("pedal_brake", "launcher>game", "NaN leaves the key empty"),
