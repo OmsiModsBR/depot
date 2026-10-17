@@ -184,7 +184,6 @@ const EDGES: &[&str] = &[
 const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
-    ("msaa", "launcher>game", "a negative count is kept; the game cannot read it and draws 4x"),
     ("shadow_size", "launcher>game", "a negative size is kept; the game cannot read it and uses 2048"),
     ("ui_opacity", "launcher>game", "no 0.2-1 range, and 0 instead of 0.85 for what is no number"),
     ("min_obj_size", "launcher>game", "no 0-0.2 range"),

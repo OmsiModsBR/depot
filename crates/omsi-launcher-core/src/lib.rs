@@ -1985,7 +1985,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
-            "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
+            "msaa" | "shadow_size" if k != "msaa" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
+            // (a count the game can read, else its default 4)
+            "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
             "pax_density" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| if x > 5.0 { x / 100.0 } else { x }).unwrap_or(1.0)),
             "triple_fov_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
