@@ -1927,7 +1927,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "shadow_size" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(2048)),
             // (a count the game can read, else its default 4)
             "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
-            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" if k != "vol_ai" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
+            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" if k != "vol_scenery" && k != "vol_ai" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
+            // (0 to 1, as the game reads it)
+            "vol_scenery" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(1.0)),
             // (0 to 1, as the game reads it)
             "vol_ai" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(1.0)),
             "pax_density" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x > 5.0 { x / 100.0 } else { x }).map(|x| x.clamp(0.0, 3.0)).unwrap_or(1.0)),
