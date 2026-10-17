@@ -222,7 +222,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("vol_scenery", "game>launcher", "the game takes NaN"),
     // the launcher keeps whole numbers where the game keeps fractions
     ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
-    ("vr_mirror_rate", "game>launcher", "the launcher cuts the fraction"),
     ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
     ("ai_unsched_factor", "game>launcher", "the launcher cuts the fraction of a percent; the game takes NaN"),
     // the two sides read the same text differently
