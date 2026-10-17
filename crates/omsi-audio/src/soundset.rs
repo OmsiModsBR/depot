@@ -42,6 +42,10 @@ struct RuntimeSound {
     /// trigger fires, peak hold @0x7507bc), so a door sound whose curve follows the door keeps
     /// its tail when the door stops (#131).
     peak: f32,
+    /// When a loop of this entry was last stopped for its volume or pitch
+    /// (`OMSI_DEBUG_AUDIO` counts the loops started again soon after, see
+    /// [`note_loop_restart`]).
+    stopped_at: Option<std::time::Instant>,
 }
 
 impl RuntimeSound {
@@ -55,8 +59,48 @@ impl RuntimeSound {
             last_gain: 1.0,
             last_pitch: 1.0,
             peak: 0.0,
+            stopped_at: None,
         }
     }
+}
+
+/// A loop started again this soon after it was stopped is counted by `OMSI_DEBUG_AUDIO`:
+/// each new start is from a random place of the clip (as OMSI 2 does), so a loop stopped
+/// and started over and over is heard as short fragments (#35).
+const QUICK_RESTART: f32 = 1.0;
+
+/// The loops started again within [`QUICK_RESTART`] of being stopped since the last
+/// [`take_loop_restarts`], by file: how many times, and the shortest pause.
+static LOOP_RESTARTS: parking_lot::Mutex<Vec<(String, u32, f32)>> =
+    parking_lot::Mutex::new(Vec::new());
+
+fn note_loop_restart(s: &RuntimeSound) {
+    if !crate::mixer::debug_audio() {
+        return;
+    }
+    let Some(gap) = s.stopped_at.map(|t| t.elapsed().as_secs_f32()) else {
+        return;
+    };
+    if gap >= QUICK_RESTART {
+        return;
+    }
+    let file = s.def.file.trim();
+    let mut all = LOOP_RESTARTS.lock();
+    match all.iter_mut().find(|(f, _, _)| f == file) {
+        Some(e) => {
+            e.1 += 1;
+            e.2 = e.2.min(gap);
+        }
+        None => all.push((file.to_string(), 1, gap)),
+    }
+}
+
+/// The loops started again soon after being stopped since the last call (see
+/// [`note_loop_restart`]), most often first.
+pub fn take_loop_restarts() -> Vec<(String, u32, f32)> {
+    let mut all = std::mem::take(&mut *LOOP_RESTARTS.lock());
+    all.sort_by_key(|r| std::cmp::Reverse(r.1));
+    all
 }
 
 /// A triggered entry's volume this frame (the entry's volume times its curves): never below
@@ -536,8 +580,12 @@ impl SoundSet {
                         // "Stopped Sound ... due to volume or pitch"
                         engine.stop(id);
                         s.voice = None;
+                        s.stopped_at = Some(std::time::Instant::now());
                     }
-                    (None, true) => s.voice = Some(engine.play_from_random_place(clip, params)),
+                    (None, true) => {
+                        note_loop_restart(s);
+                        s.voice = Some(engine.play_from_random_place(clip, params));
+                    }
                     (None, false) => {}
                 }
                 continue;

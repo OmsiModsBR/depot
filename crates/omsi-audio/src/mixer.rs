@@ -125,16 +125,173 @@ struct Shared {
     /// `OMSI_MUTE`: everything is mixed as usual (voices play and end), nothing is heard -
     /// for test runs on a machine somebody is working at.
     muted: bool,
+    /// `OMSI_DEBUG_AUDIO`: how the device's callbacks come and how long a block takes.
+    timing: Option<Mutex<Timing>>,
+}
+
+/// `OMSI_DEBUG_AUDIO`: whether the mixer's timing and the loops started again are logged.
+pub fn debug_audio() -> bool {
+    omsi_cfg::flags::DEBUG_AUDIO.is_set()
+}
+
+/// How often (seconds, 10 by default) `OMSI_DEBUG_AUDIO` logs.
+fn debug_audio_every() -> f32 {
+    omsi_cfg::flags::DEBUG_AUDIO
+        .text()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|s| *s > 0.0)
+        .unwrap_or(10.0)
+}
+
+/// What the device's callbacks did since the last `OMSI_DEBUG_AUDIO` line (#35): whether the
+/// mixer keeps up with the device. A callback that comes much later than the block before
+/// it lasted, or a block that takes longer to mix than it lasts, is a block the device
+/// plays without new samples (silence or the last ones again).
+#[derive(Default)]
+struct Timing {
+    /// The start of this report's window.
+    since: Option<std::time::Instant>,
+    last_call: Option<std::time::Instant>,
+    /// How long the previous block lasted (s).
+    last_block: f64,
+    calls: u32,
+    frames_min: usize,
+    frames_max: usize,
+    /// The longest time between two callbacks against the block before (s, s).
+    gap_max: (f64, f64),
+    /// Callbacks later than twice the block before lasted, and when the first few came
+    /// (s into the window).
+    late: u32,
+    late_at: Vec<f64>,
+    render_sum: f64,
+    render_max: f64,
+    /// Blocks that took longer to mix than they last.
+    over: u32,
+    /// The longest wait for the voice list (the game holds it to start, stop or look at
+    /// voices).
+    lock_max: f64,
+    voices_max: usize,
+}
+
+impl Timing {
+    /// A callback at `at` for `frames` frames at `rate`, mixed in `render` s after waiting
+    /// `lock` s for the voices, with `voices` of them.
+    fn note(
+        &mut self,
+        at: std::time::Instant,
+        frames: usize,
+        rate: u32,
+        render: f64,
+        lock: f64,
+        voices: usize,
+    ) {
+        self.since.get_or_insert(at);
+        if let Some(last) = self.last_call {
+            let gap = at.saturating_duration_since(last).as_secs_f64();
+            if gap > self.gap_max.0 {
+                self.gap_max = (gap, self.last_block);
+            }
+            if self.last_block > 0.0 && gap > 2.0 * self.last_block {
+                self.late += 1;
+                if self.late_at.len() < 8 {
+                    let t = self
+                        .since
+                        .map_or(0.0, |s| at.saturating_duration_since(s).as_secs_f64());
+                    self.late_at.push(t);
+                }
+            }
+        }
+        let block = frames as f64 / rate.max(1) as f64;
+        self.last_call = Some(at);
+        self.last_block = block;
+        self.frames_min = if self.calls == 0 {
+            frames
+        } else {
+            self.frames_min.min(frames)
+        };
+        self.frames_max = self.frames_max.max(frames);
+        self.calls += 1;
+        self.render_sum += render;
+        self.render_max = self.render_max.max(render);
+        if render > block {
+            self.over += 1;
+        }
+        self.lock_max = self.lock_max.max(lock);
+        self.voices_max = self.voices_max.max(voices);
+    }
+
+    /// The report line once `every` s have gone by (and a fresh window), else `None`.
+    fn report(&mut self, every: f32, rate: u32) -> Option<String> {
+        let since = self.since?;
+        let window = since.elapsed().as_secs_f64();
+        if window < every as f64 || self.calls == 0 {
+            return None;
+        }
+        let ms = |s: f64| s * 1000.0;
+        let line = format!(
+            "audio timing over {window:.1} s: {} callbacks of {}..{} frames at {rate} Hz              (block {:.1}..{:.1} ms), longest gap {:.1} ms after a {:.1} ms block, {} late{};              mixing {:.2} ms average, {:.2} ms longest, {} blocks over their length;              longest wait for the voices {:.2} ms; up to {} voices",
+            self.calls,
+            self.frames_min,
+            self.frames_max,
+            ms(self.frames_min as f64 / rate.max(1) as f64),
+            ms(self.frames_max as f64 / rate.max(1) as f64),
+            ms(self.gap_max.0),
+            ms(self.gap_max.1),
+            self.late,
+            if self.late_at.is_empty() {
+                String::new()
+            } else {
+                let at: Vec<String> = self.late_at.iter().map(|t| format!("{t:.1}")).collect();
+                format!(" (at {} s)", at.join(", "))
+            },
+            ms(self.render_sum / self.calls as f64),
+            ms(self.render_max),
+            self.over,
+            ms(self.lock_max),
+            self.voices_max,
+        );
+        let last = (self.last_call, self.last_block);
+        *self = Timing {
+            last_call: last.0,
+            last_block: last.1,
+            ..Timing::default()
+        };
+        Some(line)
+    }
 }
 
 impl Shared {
     fn render(&self, out: &mut [f32]) {
+        let start = self.timing.as_ref().map(|_| std::time::Instant::now());
+        let lock_wait = self.render_mix(out, start);
+        if let (Some(t), Some(start), Some((lock, voices))) = (&self.timing, start, lock_wait) {
+            let ch = self.channels.load(Ordering::Relaxed).max(1);
+            t.lock().note(
+                start,
+                out.len() / ch,
+                self.sample_rate.load(Ordering::Relaxed),
+                start.elapsed().as_secs_f64(),
+                lock,
+                voices,
+            );
+        }
+    }
+
+    /// Mix one block into `out`. With `start` (the callback's time, `OMSI_DEBUG_AUDIO`),
+    /// returns how long it waited for the voice list and how many voices there were.
+    fn render_mix(
+        &self,
+        out: &mut [f32],
+        start: Option<std::time::Instant>,
+    ) -> Option<(f64, usize)> {
         for s in out.iter_mut() {
             *s = 0.0;
         }
         let listener = *self.listener.lock();
         let updates = std::mem::take(&mut *self.updates.lock());
+        let before_lock = start.map(|_| std::time::Instant::now());
         let mut voices = self.voices.lock();
+        let lock_wait = before_lock.map(|t| (t.elapsed().as_secs_f64(), voices.len()));
         if !updates.is_empty() {
             let index: HashMap<VoiceId, usize> =
                 voices.iter().enumerate().map(|(k, v)| (v.id, k)).collect();
@@ -335,6 +492,7 @@ impl Shared {
         for s in out.iter_mut() {
             *s = if self.muted { 0.0 } else { s.clamp(-1.0, 1.0) };
         }
+        lock_wait
     }
 }
 
@@ -472,6 +630,7 @@ impl AudioEngine {
                 sample_rate: AtomicU32::new(48_000),
                 channels: AtomicUsize::new(2),
                 muted: true,
+                timing: None,
             }),
             next_id: AtomicU64::new(1),
             clips: Default::default(),
@@ -492,6 +651,7 @@ impl AudioEngine {
             sample_rate: AtomicU32::new(48_000),
             channels: AtomicUsize::new(2),
             muted: muted(),
+            timing: debug_audio().then(|| Mutex::new(Timing::default())),
         });
         let reopen = Arc::new(AtomicBool::new(false));
         let engine = AudioEngine {
@@ -578,6 +738,7 @@ impl AudioEngine {
     /// again on the default device - the sound had stayed on the speakers, or stopped for
     /// good when the headset was disconnected. Cheap; called every frame.
     pub fn follow_device(&self) {
+        self.log_timing();
         if !self.enabled
             || self.opened.get().elapsed().as_secs_f32() < 1.0
             || !self.reopen.swap(false, Ordering::Relaxed)
@@ -594,6 +755,31 @@ impl AudioEngine {
         } else {
             // (no device right now: tried again when the watcher sees one)
             self.device.borrow_mut().clear();
+        }
+    }
+
+    /// `OMSI_DEBUG_AUDIO`: every so often, how the device's callbacks came and the loops
+    /// that were started again soon after they stopped (#35).
+    fn log_timing(&self) {
+        let Some(t) = &self.shared.timing else { return };
+        let rate = self.shared.sample_rate.load(Ordering::Relaxed);
+        let Some(line) = t.lock().report(debug_audio_every(), rate) else {
+            return;
+        };
+        log::info!("{line}");
+        let restarts = crate::soundset::take_loop_restarts();
+        if !restarts.is_empty() {
+            let total: u32 = restarts.iter().map(|r| r.1).sum();
+            let top: Vec<String> = restarts
+                .iter()
+                .take(8)
+                .map(|(f, n, gap)| format!("{f} x{n} (after {:.0} ms)", gap * 1000.0))
+                .collect();
+            log::info!(
+                "audio: {total} loops started again within a second of stopping (each from a \
+                 random place): {}",
+                top.join(", ")
+            );
         }
     }
 
@@ -832,6 +1018,7 @@ mod tests {
             sample_rate: AtomicU32::new(48_000),
             channels: AtomicUsize::new(1),
             muted: false,
+            timing: None,
         }
     }
 
@@ -1029,6 +1216,121 @@ mod tests {
         // the bus kept, then the nearest: MAX_VOICES - 1 near ones at full gain + 0.5
         let expect = ((MAX_VOICES - 1) as f32 + 0.5) * 64.0 / 32_768.0;
         assert!((out[0] - expect).abs() < 1e-3, "{} vs {expect}", out[0]);
+    }
+
+    /// `OMSI_DEBUG_AUDIO`: a callback that comes after more than twice the block before
+    /// lasted is counted as late, a block mixed slower than it lasts as over, and the line
+    /// comes once the window is over.
+    #[test]
+    fn the_timing_counts_late_callbacks_and_slow_blocks() {
+        use std::time::{Duration, Instant};
+        let mut t = Timing::default();
+        let t0 = Instant::now() - Duration::from_secs(20);
+        // 10 ms blocks every 10 ms, one 35 ms gap, one block mixed in 12 ms
+        let mut at = t0;
+        for k in 0..100 {
+            at += Duration::from_millis(if k == 50 { 35 } else { 10 });
+            let render = if k == 70 { 0.012 } else { 0.001 };
+            t.note(at, 480, 48_000, render, 0.0001, 40);
+        }
+        assert_eq!((t.late, t.over, t.calls), (1, 1, 100));
+        assert!((t.gap_max.0 - 0.035).abs() < 1e-6, "{:?}", t.gap_max);
+        let line = t.report(10.0, 48_000).expect("the window is over");
+        assert!(
+            line.contains("1 late") && line.contains("1 blocks over"),
+            "{line}"
+        );
+        assert_eq!(t.calls, 0, "a fresh window");
+        assert!(t.report(10.0, 48_000).is_none(), "nothing to say yet");
+    }
+
+    /// The synthetic load of #35: how long a block takes to mix with as many voices as a
+    /// busy street has, while another thread looks at the voice list the way the game does
+    /// every frame (`is_playing` per sound entry, `set_params` per playing voice). Prints the
+    /// numbers; a block mixed slower than it lasts is one the device plays without new
+    /// samples. `cargo test --release -p omsi-audio --lib mixer_under_load -- --ignored
+    /// --nocapture`
+    #[test]
+    #[ignore = "a benchmark: prints how the mixer keeps up"]
+    fn mixer_under_load() {
+        use std::time::Instant;
+        let clip = Arc::new(Clip {
+            sample_rate: 44_100,
+            channels: 2,
+            samples: (0..88_200)
+                .map(|i| ((i as f32 * 0.07).sin() * 8000.0) as i16)
+                .collect(),
+        });
+        for (voices, entries) in [(60usize, 2_000usize), (200, 8_000), (400, 17_000)] {
+            let s = Arc::new(Shared {
+                channels: AtomicUsize::new(2),
+                ..shared()
+            });
+            for k in 0..voices {
+                let mut v = voice(clip.clone(), 0.3);
+                v.id = k as u64 + 1;
+                v.pos = (k * 997 % 44_100) as f64;
+                v.params.pitch = 0.8 + (k % 7) as f32 * 0.05;
+                v.params.position = Some(glam::Vec3::new(k as f32, 3.0, 0.0));
+                v.params.lowpass_hz = if k % 2 == 0 { 2_500.0 } else { 0.0 };
+                s.voices.lock().push(v);
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            let game = {
+                let (s, stop) = (s.clone(), stop.clone());
+                std::thread::spawn(move || {
+                    let mut frames = 0u32;
+                    while !stop.load(Ordering::Relaxed) {
+                        let t = Instant::now();
+                        for e in 0..entries {
+                            let id = (e % (voices * 2)) as u64 + 1;
+                            let playing = s.voices.lock().iter().any(|v| v.id == id && !v.finished);
+                            if playing {
+                                let p = VoiceParams {
+                                    gain: 0.3,
+                                    ..Default::default()
+                                };
+                                s.updates.lock().push((id, p, Instant::now()));
+                            }
+                        }
+                        frames += 1;
+                        // a 60 fps frame
+                        if let Some(rest) =
+                            std::time::Duration::from_micros(16_667).checked_sub(t.elapsed())
+                        {
+                            std::thread::sleep(rest);
+                        }
+                    }
+                    frames
+                })
+            };
+            let (mut sum, mut max, mut over, mut lock_max) = (0.0f64, 0.0f64, 0, 0.0f64);
+            let block = 480;
+            let n = 500;
+            let mut out = vec![0.0f32; block * 2];
+            for _ in 0..n {
+                let start = Instant::now();
+                let (lock, _) = s.render_mix(&mut out, Some(start)).unwrap();
+                let took = start.elapsed().as_secs_f64();
+                sum += took;
+                max = max.max(took);
+                lock_max = lock_max.max(lock);
+                if took > block as f64 / 48_000.0 {
+                    over += 1;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            stop.store(true, Ordering::Relaxed);
+            let frames = game.join().unwrap();
+            println!(
+                "{voices} voices, {entries} entries looked at per frame ({frames} frames): \
+                 a 10 ms block mixes in {:.2} ms average, {:.2} ms at worst, {over} of {n} \
+                 over 10 ms; longest wait for the voices {:.2} ms",
+                sum / n as f64 * 1000.0,
+                max * 1000.0,
+                lock_max * 1000.0
+            );
+        }
     }
 }
 

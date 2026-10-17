@@ -171,6 +171,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   Code moved as is; no behaviour change.
 
 ### Added
+- `OMSI_DEBUG_AUDIO` (seconds, 10 by default) logs how the sound device's callbacks come and
+  how long a block takes to mix (late callbacks, blocks over their length, waits for the voice
+  list, voices alive), and which loops were started again within a second of being stopped,
+  each from a random place of its clip as OMSI 2 does (#35). It changes nothing it measures.
 - "Muffle outside sounds" (Options and launcher, Sound; `muffle_outside` in the settings, off
   by default): from a cab, other vehicles' sounds and the bus's own outside sounds go through a
   low-pass, 450 Hz with the bus shut up to 7.2 kHz with a door or window open.

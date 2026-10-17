@@ -94,6 +94,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_DAY_AIR` | text | `omsi-render::sky::air` |  | The air fixed for comparisons (`haze,angstrom[,height,strat]`). |
 | `OMSI_DEBUG_AI_WIDE` | switch | `omsi-sim::ai` |  | Log, every tenth of a second, an AI car standing over 1.5 m beside its way. |
 | `OMSI_DEBUG_ANIM` | text | `omsi-sim::vehicle` |  | Log the animation of the meshes whose name contains this text. |
+| `OMSI_DEBUG_AUDIO` | number | `omsi-audio::mixer` |  | Log, every this many seconds (10 by default), how the sound device's callbacks come (late ones, blocks mixed too slowly, waits for the voice list) and the loops started again soon after they stopped. |
 | `OMSI_DEBUG_BOARDS` | switch | `omsi-app::schedule` |  | Log what the stops' departure boards show. |
 | `OMSI_DEBUG_CAMERA` | number | `omsi-app::camera_arm` |  | Log the camera's arm (1, or a higher number for more). |
 | `OMSI_DEBUG_CAR` | number | `omsi-app::traffic` |  | Log the AI vehicle with this id, every frame. |
