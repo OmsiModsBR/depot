@@ -2861,7 +2861,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         let (k, val) = (setting_key(k), val.trim());
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
-            "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
+            "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(0, 16)),
             // (a size the game can read, else its default 2048)
             "shadow_size" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(2048)),
             // (a count the game can read, else its default 4)
