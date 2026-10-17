@@ -349,6 +349,7 @@ Hoje o jogo tem `ui.rs`, que rasteriza na CPU, `omsi-ui`, que desenha na GPU, e 
    O passo vai em PRs curtos: **1a** move o kit para `omsi-ui` sem mudar nada (`launcher/ui.rs` fica como reexportação, e `omsi-ui` passa a depender do `winit` pelas teclas, modificadores e cursores da entrada); **1b** em diante levam o menu, as configurações e o menu do jogo para o kit, um de cada vez, e por último a cópia da fonte sai.
 2. **Configurações do menu por tabela.** O despacho por texto de `game_lists.rs:1042-1919` e `2182-2250`, com cerca de 300 braços de `match`, dá lugar à mesma tabela `SettingSpec` da Frente D1, e a view recebe linhas tipadas em vez de texto separado por `\u{1f}`. Isso tira cerca de mil linhas.
 3. **`navigator.rs` em `nav/`** (fix-23): rota, geometria, minimapa, mapa da cidade e linhas. `way_back` e `lanes_near` vão para `omsi-sim` como `Network::shortest_path_to_any`.
+   Em dois PRs: **3a** divide o arquivo em `nav/` sem mudar nada (`mod.rs` com o `Navigator` e os tipos que os dois mapas dividem; `minimap.rs`, `city.rs`, `route.rs`, `geometry.rs`, `streets.rs`, `lines.rs`, `draw.rs` e `tests.rs`); **3b** leva a busca do caminho para `omsi-sim`.
 4. **Um só arquivo de perfil por ônibus** para `mirror_hud.cfg`, `vr-navigator.json`, `mirrors.cfg` e os assentos, gravado de forma atômica e só no fim da edição, não a cada passo do redimensionamento.
 5. **Um catálogo de conteúdo** (mapas, veículos, situações, climas) extraído de `menu.rs`, para os quatro lugares que hoje listam pastas por conta própria.
 
