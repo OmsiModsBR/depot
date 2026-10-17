@@ -6,6 +6,11 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- A panic inside a script block now logs the name of every block it passes through (the macros
+  and the trigger or frame block that called them), then goes on as before (#47). Nothing is
+  caught or hidden.
+
 ### Fixed
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought

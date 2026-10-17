@@ -277,6 +277,7 @@ impl Vm {
             return;
         }
         self.depth += 1;
+        let _trace = PanicTrace(&p.blocks[block as usize].name);
         let ops = &p.blocks[block as usize].ops;
         let mut pc = 0usize;
         while pc < ops.len() {
@@ -312,6 +313,19 @@ impl Vm {
             }
         }
         self.depth -= 1;
+    }
+}
+
+/// Names the block that was running when a panic passes through `run_block`. Nested macros
+/// each log their own line while the stack unwinds, so the log shows the chain from the
+/// innermost block out to the trigger or frame block. It never stops the panic.
+struct PanicTrace<'a>(&'a str);
+
+impl Drop for PanicTrace<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            log::error!("script: panic while running block '{}'", self.0);
+        }
     }
 }
 
