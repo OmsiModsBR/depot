@@ -23,7 +23,7 @@ use crate::scene::{self, World};
 use crate::cli::Args;
 use crate::player::Player;
 use glam::DVec3;
-use omsi_geometry::util::wrap_deg;
+use omsi_geometry::util::{wrap_deg, wrap_deg_f32};
 use omsi_net::{Footprint, LanEvent, LanSession, PartPose, Pose, Role};
 use omsi_render::{Renderer, Scene};
 use omsi_script::VarId;
@@ -2166,7 +2166,7 @@ fn along(lanes: &[Lane], prev: &[Vec<usize>], lane: usize, s: f32, d: f32) -> Op
 }
 
 fn heading_gap(a: f32, b: f32) -> f32 {
-    wrap_deg(a - b).abs()
+    wrap_deg_f32(a - b).abs()
 }
 
 /// Move our bus off anything standing where it spawned: along the road it stands on, the
