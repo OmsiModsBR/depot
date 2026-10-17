@@ -769,17 +769,20 @@ impl AudioEngine {
         log::info!("{line}");
         let restarts = crate::soundset::take_loop_restarts();
         if !restarts.is_empty() {
-            let total: u32 = restarts.iter().map(|r| r.1).sum();
-            let top: Vec<String> = restarts
-                .iter()
-                .take(8)
-                .map(|(f, n, gap)| format!("{f} x{n} (after {:.0} ms)", gap * 1000.0))
-                .collect();
+            let total: u32 = restarts.iter().map(|r| r.count).sum();
             log::info!(
                 "audio: {total} loops started again within a second of stopping (each from a \
-                 random place): {}",
-                top.join(", ")
+                 random place of its clip)"
             );
+            for r in restarts.iter().take(8) {
+                log::info!(
+                    "  {} x{} (shortest pause {:.0} ms), last stopped with {}",
+                    r.file,
+                    r.count,
+                    r.shortest * 1000.0,
+                    r.stopped_with
+                );
+            }
         }
     }
 
