@@ -286,6 +286,20 @@ pub struct MapSurface {
     times: std::sync::OnceLock<crate::line_times::LineTimes>,
 }
 
+/// A path a package file names, as a `/`-separated path under the package folder; None when it could point
+/// anywhere else: empty, absolute, with a drive or share (`:` or a leading separator), or with an empty, `.` or
+/// `..` component. (`Path::join` with an absolute path drops the package folder, so the check is on the text.)
+fn package_relative(raw: &str) -> Option<String> {
+    let p = raw.trim().replace('\\', "/");
+    if p.is_empty() || p.starts_with('/') || p.contains(':') {
+        return None;
+    }
+    if p.split('/').any(|c| c.is_empty() || c == "." || c == "..") {
+        return None;
+    }
+    Some(p)
+}
+
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
 struct Rd<'a> {
     b: &'a [u8],
@@ -749,9 +763,13 @@ impl MapSurface {
                 continue;
             }
             let f: Vec<&str> = v.split('|').map(str::trim).collect();
-            if f.len() < 4 || f[0].contains("..") {
+            if f.len() < 4 {
                 continue;
             }
+            let Some(icon_path) = package_relative(f[0]) else {
+                log::warn!("map surface: icon path \"{}\" is not inside the package: line ignored", f[0]);
+                continue;
+            };
             let (Ok(width), Ok(x), Ok(y)) = (
                 f[1].parse::<f32>(),
                 f[2].parse::<f64>(),
@@ -762,10 +780,10 @@ impl MapSurface {
             if !(width > 0.0 && width < 512.0) || !x.is_finite() || !y.is_finite() {
                 continue;
             }
-            let icon = match files.iter().position(|n| n.eq_ignore_ascii_case(f[0])) {
+            let icon = match files.iter().position(|n| n.eq_ignore_ascii_case(&icon_path)) {
                 Some(i) => i,
                 None => {
-                    let path = dir.join(f[0]);
+                    let path = dir.join(&icon_path);
                     let img = omsi_cfg::vfs::read(&path)
                         .ok()
                         .and_then(|b| omsi_texture::decode_bytes(&b, &path).ok());
@@ -776,7 +794,7 @@ impl MapSurface {
                                 && i.width <= 1024
                                 && i.height <= 1024 =>
                         {
-                            files.push(f[0].to_string());
+                            files.push(icon_path.clone());
                             images.push(i);
                             images.len() - 1
                         }
@@ -1428,6 +1446,19 @@ mod tests {
             s.player_style(Some("76")).map(|p| p.0),
             Some(Color::hex(0x5588c7))
         );
+    }
+
+    #[test]
+    fn icon_paths_stay_inside_the_package() {
+        assert_eq!(package_relative("icons/stop.png").as_deref(), Some("icons/stop.png"));
+        assert_eq!(package_relative("icons\\stop.png").as_deref(), Some("icons/stop.png"));
+        assert_eq!(package_relative("a/b/c.png").as_deref(), Some("a/b/c.png"));
+        for bad in [
+            "", "  ", "/etc/x.png", "\\x.png", "C:/a.png", "C:\\a.png", "C:a.png", "\\\\server\\share\\a.png",
+            "icons/../../x", "../x.png", "./x.png", "a//b.png", "a/./b.png", "icons/", "a/b:c.png",
+        ] {
+            assert_eq!(package_relative(bad), None, "{bad:?}");
+        }
     }
 
     #[test]
