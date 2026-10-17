@@ -188,7 +188,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("ui_opacity", "launcher>game", "no 0.2-1 range, and 0 instead of 0.85 for what is no number"),
     ("min_obj_size", "launcher>game", "no 0-0.2 range"),
     ("max_obj_dist", "launcher>game", "a negative distance is kept (the game reads it as 0, no limit)"),
-    ("vol_ai", "launcher>game", "no 0-1 range"),
     ("vol_scenery", "launcher>game", "no 0-1 range"),
     ("maintenance", "launcher>game", "no 0-4 range (the launcher writes it clamped)"),
     // the launcher keeps these texts as written; the game reads them to its own choices
