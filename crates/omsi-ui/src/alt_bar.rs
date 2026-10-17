@@ -57,6 +57,7 @@ pub fn panel_size(n: usize) -> Vec2 {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color, a: Align) {
     let px = px * TS;
     let w = ui.width(s, px, weight);

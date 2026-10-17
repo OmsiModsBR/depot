@@ -222,8 +222,8 @@ mod tests {
     fn a_click_on_a_table_row_and_a_button_is_reported() {
         let mut ui = Ui::new();
         let cols = [("Name", 16.0), ("Number", 200.0)];
-        let mut run = |ui: &mut Ui, click: Option<Vec2>| {
-            let mut frame = |ui: &mut Ui| {
+        let run = |ui: &mut Ui, click: Option<Vec2>| {
+            let frame = |ui: &mut Ui| {
                 ui.begin(Vec2::new(800.0, 600.0), 1.0, 0.016);
                 let area = window(ui, Rect::new(20.0, 20.0, 400.0, 300.0), "Test", "note");
                 let row = table(ui, "t", area, &cols, &rows(), Some(0), &|_, _| None);
