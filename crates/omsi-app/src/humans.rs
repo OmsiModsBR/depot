@@ -59,6 +59,19 @@ use std::sync::Arc;
 mod pax;
 use pax::*;
 
+/// The height of somebody on foot after a step, given the walking surface `target` under
+/// them: up a kerb quickly (1.5 m/s), down it smoothly (2 m/s), straight onto it when it is
+/// over a kerb's height above (the pavement's tile came after them) or when they stand still.
+fn follow_surface(cur: f64, target: f64, speed: f64, dt: f64) -> f64 {
+    if target - cur > 0.35 || speed < 0.05 {
+        target
+    } else if target > cur {
+        target.min(cur + 1.5 * dt)
+    } else {
+        target.max(cur - 2.0 * dt)
+    }
+}
+
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
 pub(crate) static LEFT_HAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -4689,13 +4702,7 @@ impl Humans {
                     // pavement's tile came after them): straight onto it
                     // (and whoever stands still simply stands on it: waiting people sank
                     // into a pavement that came after them and rose only when they walked)
-                    p.position.z = if z - p.position.z > 0.35 || speed < 0.05 {
-                        z
-                    } else if z > p.position.z {
-                        z.min(p.position.z + 1.5 * dt64)
-                    } else {
-                        z.max(p.position.z - 2.0 * dt64)
-                    };
+                    p.position.z = follow_surface(p.position.z, z, speed, dt64);
                 }
             }
             Place::Bus(b, l) => {
@@ -6414,6 +6421,31 @@ mod tests {
         assert_eq!(x, vec![true, true, true, true]);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #189: on a kerb or pavement that slopes, somebody waiting stands on the surface and
+    /// somebody walking along it (to the door, back to a seat) stays on it within a hair; a
+    /// step down is followed at once, a step up within a kerb's height too.
+    #[test]
+    fn people_keep_the_floor_height_on_sloped_ground() {
+        let surface = |x: f64, slope: f64| 0.15 + slope * x;
+        for slope in [-0.15, -0.05, 0.0, 0.05, 0.15] {
+            for x in [0.0, 2.5, 7.0] {
+                assert_eq!(follow_surface(surface(x, slope) + 0.2, surface(x, slope), 0.0, 1.0 / 60.0), surface(x, slope));
+                assert_eq!(follow_surface(surface(x, slope) - 0.2, surface(x, slope), 0.0, 1.0 / 60.0), surface(x, slope));
+            }
+            for dir in [1.0, -1.0] {
+                let (mut x, mut z) = (3.0, surface(3.0, slope));
+                let dt = 1.0 / 60.0;
+                for _ in 0..300 {
+                    x += dir * 1.4 * dt;
+                    z = follow_surface(z, surface(x, slope), 1.4, dt);
+                    assert!((z - surface(x, slope)).abs() < 0.03, "slope {slope}, dir {dir}: {:.3} m off", z - surface(x, slope));
+                }
+            }
+        }
+        assert_eq!(follow_surface(0.0, 2.0, 1.4, 1.0 / 60.0), 2.0);
+        assert!((follow_surface(0.0, 0.2, 1.4, 0.5) - 0.2).abs() < 1e-9);
     }
 
     /// #718: a trailer on a lorry's hitch (`[coupling_front_character]` type 0) whose cabin
