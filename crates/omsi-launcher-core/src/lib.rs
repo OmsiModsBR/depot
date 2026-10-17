@@ -2162,7 +2162,7 @@ fn physical_memory() -> Option<u64> {
 pub fn save_settings(v: &Value) -> Result<()> {
     let p = data_dir().join("settings.cfg");
     let old = std::fs::read_to_string(&p).ok();
-    std::fs::write(p, settings_to_text(v, old.as_deref()))?;
+    omsi_cfg::write_atomic(p, settings_to_text(v, old.as_deref()))?;
     Ok(())
 }
 

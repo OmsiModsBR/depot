@@ -1027,13 +1027,7 @@ pub(crate) fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), Stri
     }
     let dir = path.parent().ok_or("Controller configuration has no parent folder")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("cfg.tmp");
-    let result = (|| {
-        std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp, path).map_err(|e| e.to_string())
-    })();
-    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
-    result
+    omsi_cfg::write_atomic(path, text).map_err(|e| e.to_string())
 }
 
 /// Scale only the configured gamepad, rather than borrowing a wheel's vibration setting.
