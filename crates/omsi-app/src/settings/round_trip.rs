@@ -206,7 +206,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_engine_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
-    ("wheel_range", "launcher>game", "NaN leaves the key empty"),
     ("pedal_throttle", "launcher>game", "NaN leaves the key empty"),
     ("pedal_brake", "launcher>game", "NaN leaves the key empty"),
     ("seat_x", "launcher>game", "NaN leaves the key empty"),
