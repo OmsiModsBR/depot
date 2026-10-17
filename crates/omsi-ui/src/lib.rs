@@ -17,6 +17,7 @@ pub mod i18n;
 pub mod icons;
 pub mod loading;
 pub mod paint;
+pub mod pause_menu;
 pub mod text;
 pub mod theme;
 pub mod widgets;
