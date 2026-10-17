@@ -3385,6 +3385,7 @@ dependencies = [
  "pollster",
  "resvg",
  "wgpu",
+ "winit",
 ]
 
 [[package]]

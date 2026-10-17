@@ -114,3 +114,7 @@ winit = { workspace = true, features = ["android-native-activity"] }
 android_logger = "0.15"
 jni = "0.21"
 ndk-context = "0.1"
+
+[dev-dependencies]
+# the launcher's page tests look at where each widget was drawn (`omsi_ui::widgets::Ui::drawn`)
+omsi-ui = { path = "../omsi-ui", features = ["testing"] }
