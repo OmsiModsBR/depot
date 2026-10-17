@@ -14,6 +14,7 @@
 //!   `Sceneryobjects` …) becomes the mount's root: archives usually wrap everything in an
 //!   `OMSI 2/` folder next to documentation.
 
+use crate::bytes::{le16, le32, le64};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{self, Read};
@@ -65,27 +66,6 @@ const MAX_NAME_DEPTH: usize = 64;
 fn name_within_caps(name: &str) -> bool {
     name.len() <= MAX_NAME_LEN
         && name.split('/').filter(|c| !c.is_empty()).count() <= MAX_NAME_DEPTH
-}
-
-fn le16(b: &[u8], o: usize) -> u16 {
-    u16::from_le_bytes([b[o], b[o + 1]])
-}
-
-fn le32(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
-
-fn le64(b: &[u8], o: usize) -> u64 {
-    u64::from_le_bytes([
-        b[o],
-        b[o + 1],
-        b[o + 2],
-        b[o + 3],
-        b[o + 4],
-        b[o + 5],
-        b[o + 6],
-        b[o + 7],
-    ])
 }
 
 fn bad(msg: impl Into<String>) -> io::Error {

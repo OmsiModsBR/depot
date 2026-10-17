@@ -30,9 +30,11 @@
 //! * `install`: the original OMSI 2 installation, openOMSI's content folder and the user's
 //!   data folder ([`paths`]);
 //! * `fs`: [`write_atomic`];
+//! * [`bytes`]: little-endian numbers in binary files;
 //! * [`env`](mod@env), [`flags`] and [`limits`]: the environment, the `OMSI_*` variables and the
 //!   ceilings of the parsers.
 
+pub mod bytes;
 mod content;
 pub mod env;
 pub mod flags;
