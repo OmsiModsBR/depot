@@ -90,6 +90,7 @@ impl Cx<'_> {
         self.fonts.width(s, px * TS, w)
     }
     /// Letter-spaced text (CSS `letter-spacing`), centred vertically on `cy`.
+    #[allow(clippy::too_many_arguments)]
     fn spaced(&mut self, s: &str, px: f32, w: Weight, x: f32, cy: f32, sp: f32, c: Color) -> f32 {
         let px = px * TS;
         let base = cy + self.fonts.cap_height(px, w) * 0.5;
@@ -1173,7 +1174,7 @@ fn game_menu(cx: &mut Cx, h: f32, step: f32, head0: f32) {
         ),
     ];
     let mut head = head0;
-    for (si, (name, items)) in sections.iter().enumerate() {
+    for (name, items) in sections.iter() {
         cx.spaced(name, 11.0, Weight::Regular, 22.0, head, 2.0, MUT);
         let mut top = head + 13.0;
         for (icon, label, key) in items.iter().filter(|i| !i.1.is_empty()) {
@@ -1233,7 +1234,7 @@ fn game_menu(cx: &mut Cx, h: f32, step: f32, head0: f32) {
             );
             top += step;
         }
-        head = top + 18.0 - if si == 0 { 0.0 } else { 0.0 };
+        head = top + 18.0;
     }
 }
 
@@ -1924,7 +1925,8 @@ fn main() {
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
             .expect("device");
     let fonts = Fonts::new();
-    let screens: [(&str, fn(&mut Cx, f32, f32)); 7] = [
+    type Screen = fn(&mut Cx, f32, f32);
+    let screens: [(&str, Screen); 7] = [
         ("launcher-vehicles", vehicles),
         ("launcher-maps", maps),
         ("loading", loading),
