@@ -217,7 +217,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("volume", "game>launcher", "the game takes NaN as the volume"),
     ("volume", "launcher>game", "NaN leaves the key empty"),
     ("min_obj_size", "game>launcher", "the game takes NaN"),
-    ("pax_density", "game>launcher", "the game takes NaN"),
     ("vol_ai", "game>launcher", "the game takes NaN"),
     ("vol_scenery", "game>launcher", "the game takes NaN"),
     // the launcher keeps whole numbers where the game keeps fractions
