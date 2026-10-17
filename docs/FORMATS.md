@@ -724,7 +724,7 @@ most mods, 1 while it plays (no sound.cfg uses it); the Sound Extension plugin's
 `SndExt_Radio` - the station button pressed (1..n, 0 = off; the W906 Sprinter and the
 Procity show their own station names for it) with `SndVol_Radio` - the volume knob (0..1,
 the Sprinter's goes to 2) and `SndExt_RadioPlaylist` for its USB/CD modes. Project Depot
-plays internet stations for them (`~/.openomsi/radio.cfg`). Streams in HE-AAC with a
+plays internet stations for them (`~/.depot/radio.cfg`). Streams in HE-AAC with a
 program config element (some `.aacp` stations) are not decoded; MP3, AAC-LC and Ogg are.
 
 A radio whose display is a text of its script gets the station and the song that play,

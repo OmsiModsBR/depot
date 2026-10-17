@@ -1,15 +1,12 @@
 //! The user's data folder.
 
 /// Move the data of a version from before the rename (`~/.omsi-rewrite`,
-/// `~/.omsi-rewrite-root`) to its new place (`~/.openomsi`, `~/.openomsi-root`), once.
+/// `~/.omsi-rewrite-root`) to its new place (`~/.depot`, `~/.depot-root`), once.
 /// (First thing at the start of every program: an unusable `HOME` is dropped here, see
 /// [`drop_unusable_home`].)
 pub fn migrate_legacy_data_dir() {
     drop_unusable_home();
-    let Some(home) = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(std::path::PathBuf::from)
-    else {
+    let Some(home) = super::paths::home() else {
         return;
     };
     for (old, new) in [

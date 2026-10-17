@@ -2801,7 +2801,7 @@ static PENDING_SETTINGS: std::sync::Mutex<(Vec<(String, String)>, Option<std::ti
 const SETTINGS_FLUSH_MS: u128 = 250;
 static SETTINGS_CACHE: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
-/// Write one key of `~/.openomsi/settings.cfg` (the launcher's file; the other lines
+/// Write one key of `~/.depot/settings.cfg` (the launcher's file; the other lines
 /// stay as they are). The write is delayed a moment and joined with the ones that follow.
 /// The key the seat of the player's bus is kept under (`settings::bus_seats`): its `.bus`
 /// file, relative to the installation where it lies in it.

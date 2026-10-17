@@ -1130,7 +1130,7 @@ pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) ->
 }
 
 /// What the map needs and this installation lacks, said on the screen and written to
-/// `~/.openomsi/missing_content.txt` by add-on folder: a map short of an add-on showed
+/// `~/.depot/missing_content.txt` by add-on folder: a map short of an add-on showed
 /// holes, bare roads and white objects, and nobody could tell that from a fault of the game.
 pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>) {
     let (files, textures) = w.missing_content();

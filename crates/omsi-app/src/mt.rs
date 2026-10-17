@@ -1,7 +1,7 @@
 //! Machine translation of the interface (the `machine_translation` setting): every text the
 //! translation tables (`locales/app.yml`) and OMSI's language files do not have is
 //! translated on this machine by Meta's NLLB-200 model (600M, int8) run with CTranslate2 -
-//! what the `trad` crate does - and kept in `~/.openomsi/cache/mt-<lang>.json`, so a
+//! what the `trad` crate does - and kept in `~/.depot/cache/mt-<lang>.json`, so a
 //! text is translated once and then read from there.
 //!
 //! Nothing waits for it: `omsi_ui::tr` asks `lookup`, which answers from the cache or puts
@@ -57,8 +57,7 @@ fn set_status(s: impl Into<String>) {
 }
 
 fn data_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot"))
+    omsi_cfg::paths::data_dir()
 }
 
 fn model_dir() -> Option<PathBuf> {

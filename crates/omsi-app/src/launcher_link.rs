@@ -2,11 +2,10 @@
 //! launcher now (`launcher`), this only starts a different one when asked to.
 
 use anyhow::{anyhow, Result};
-use crate::startup::root_memo;
 use std::path::PathBuf;
 
 /// The launcher binary: next to this program, or the launcher's own build folder in the
-/// source tree, or in ~/.openomsi.
+/// source tree, or in ~/.depot.
 pub(crate) fn find_launcher() -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
     if let Some(p) = omsi_cfg::flags::LAUNCHER.os() {
@@ -19,10 +18,8 @@ pub(crate) fn find_launcher() -> Option<PathBuf> {
             cands.push(dir.join("depot.app/Contents/MacOS/depot-launcher"));
         }
     }
-    if let Some(memo) = root_memo() {
-        if let Some(home) = memo.parent() {
-            cands.push(home.join(".depot/depot-launcher"));
-        }
+    if let Some(data) = omsi_cfg::paths::data_dir() {
+        cands.push(data.join("depot-launcher"));
     }
     cands.into_iter().find(|p| p.is_file())
 }

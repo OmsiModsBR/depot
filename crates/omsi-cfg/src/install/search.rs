@@ -9,6 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
+use super::paths::home;
+
 const NAMES: &[&str] = &[
     "OMSI 2",
     "OMSI 2 Original",
@@ -18,12 +20,6 @@ const NAMES: &[&str] = &[
     "OMSI 2 Steam Edition",
     "OMSI",
 ];
-
-fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-}
 
 fn is_install(p: &Path) -> bool {
     p.is_dir() && crate::missing_original_essentials(p).is_empty()

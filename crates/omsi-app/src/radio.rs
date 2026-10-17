@@ -5,7 +5,7 @@
 //! knob). Here those variables tune in a list of internet stations, streamed while they
 //! play (see `omsi_audio::radio`); Shift+R steps through the list.
 //!
-//! The stations are kept in `~/.openomsi/radio.cfg`, one `name = address` per line
+//! The stations are kept in `~/.depot/radio.cfg`, one `name = address` per line
 //! (MP3, AAC or Ogg streams, or .m3u/.pls playlists), with `volume = 0..1`; the file is
 //! written with a default list the first time. A map can bring stations of its own: a
 //! `radio.cfg` of the same kind beside its global.cfg, whose stations come before the
@@ -108,8 +108,7 @@ pub(crate) fn save_stations(list: &[(String, String)]) -> std::io::Result<()> {
 }
 
 fn config_path() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("radio.cfg"))
+    Some(omsi_cfg::paths::data_dir()?.join("radio.cfg"))
 }
 
 /// The stream addresses an OMSI radio plugin keeps in its text files under `plugins`
