@@ -48,7 +48,6 @@ mod tests;
 
 pub(crate) use draw::stop_requested;
 pub(crate) use geometry::{city_roads, simplify, MapRoad};
-pub(crate) use route::way_back;
 use streets::Streets;
 
 // --- colours (sRGB) -------------------------------------------------------------------

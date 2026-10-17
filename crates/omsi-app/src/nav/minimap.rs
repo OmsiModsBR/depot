@@ -7,7 +7,7 @@ use omsi_ui::paint::Align;
 use super::{BAR, CityMap, DOT, FOV, LINE_TEXT, NAV_REDRAW_S, NavFrame, NavStop, Navigator, OFF_ROUTE_AFTER, PANEL, PITCH, PLAYER, REROUTE_EVERY, ROAD_RADIUS, ROUTE, Roads, Route, angle_diff, ease, map_samples, placed_at, project, words};
 use super::draw::{EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN, arrow, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon, traffic_kind, vehicle_icon};
 use super::geometry::{build_roads, confirm_road_surfaces, congestion_on};
-use super::route::{RouteStyle, build_route, lane_from_right, lanes_near, probe_lanes, way_back};
+use super::route::{RouteStyle, build_route, lane_from_right, probe_lanes};
 use super::streets::build_streets;
 
 impl Navigator {
@@ -213,11 +213,11 @@ impl Navigator {
                 return;
             }
             r.retry_in = REROUTE_EVERY * 2.0;
-            let targets: Vec<usize> = lanes_near(net, stop.position.truncate(), 40.0)
+            let targets: Vec<usize> = net.lanes_near(stop.position.truncate(), 40.0)
                 .into_iter()
                 .filter(|&i| net.lanes[i].kind == LaneKind::Street && net.lanes[i].nearest_point(stop.position).map(|p| p.1 < 20.0).unwrap_or(false))
                 .collect();
-            if let Some((mut path, k)) = way_back(net, f.bus, f.heading, &targets, 30_000.0) {
+            if let Some((mut path, k)) = net.shortest_path_to_any(f.bus, f.heading, &targets, 30_000.0) {
                 path.push(targets[k]);
                 log::info!("navigator: no route of the trip here yet; {} lanes to the next stop '{}'", path.len(), stop.name.trim());
                 r.lanes = path;
@@ -296,7 +296,7 @@ impl Navigator {
             None => (base, (base + 120).min(r.lanes.len())),
         };
         // (from the depot to the first stop may be a long way; back onto the route is not)
-        let way = way_back(net, f.bus, f.heading, &r.lanes[lo..hi], if r.joined { 6000.0 } else { 30_000.0 });
+        let way = net.shortest_path_to_any(f.bus, f.heading, &r.lanes[lo..hi], if r.joined { 6000.0 } else { 30_000.0 });
         if way.is_none() && omsi_cfg::flags::DEBUG_NAV.is_set() {
             let info: Vec<_> = r.lanes[lo..hi].iter().map(|&l| (l, net.lanes[l].kind, net.lanes[l].name.clone(), net.lanes.iter().filter(|x| x.next.contains(&l)).count(), net.lanes[l].start())).collect();
             log::info!("navigator: off the route for {:.1} s and no way back found; targets {info:?}", r.off_for);
@@ -309,7 +309,7 @@ impl Navigator {
             let k = stop_at?;
             let st = f.stops.first()?;
             let (_, h) = net.lanes[r.lanes[k]].nearest_point(st.position).map(|(s, _)| net.lanes[r.lanes[k]].at(s))?;
-            let near: Vec<usize> = lanes_near(net, st.position.truncate(), 40.0)
+            let near: Vec<usize> = net.lanes_near(st.position.truncate(), 40.0)
                 .into_iter()
                 .filter(|&i| {
                     let l = &net.lanes[i];
@@ -317,7 +317,7 @@ impl Navigator {
                         && l.nearest_point(st.position).map(|(s, d)| d < 20.0 && angle_diff(l.at(s).1 as f64, h as f64).abs() < 60.0).unwrap_or(false)
                 })
                 .collect();
-            let (mut path, j) = way_back(net, f.bus, f.heading, &near, max)?;
+            let (mut path, j) = net.shortest_path_to_any(f.bus, f.heading, &near, max)?;
             path.push(near[j]);
             log::info!("navigator: the route before stop '{}' cannot be reached; led onto the road past it", st.name.trim());
             Some((path, k + 1))
@@ -326,7 +326,7 @@ impl Navigator {
                 let k = stop_at?;
                 let hi = (k + 120).min(r.lanes.len());
                 (k + 1 < hi).then_some(())?;
-                way_back(net, f.bus, f.heading, &r.lanes[k + 1..hi], max).map(|(p, j)| (p, k + 1 + j))
+                net.shortest_path_to_any(f.bus, f.heading, &r.lanes[k + 1..hi], max).map(|(p, j)| (p, k + 1 + j))
             });
         if let Some((path, join)) = way {
             let rest = r.lanes[join.min(r.lanes.len())..].to_vec();

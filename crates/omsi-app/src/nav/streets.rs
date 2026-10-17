@@ -2,7 +2,6 @@ use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKind, Network};
 use super::angle_diff;
-use super::route::lanes_near;
 
 /// The street names of the map: per lane of its network the street it belongs to, and
 /// where to write each name on the city map. OMSI maps have no street names of their own,
@@ -47,7 +46,7 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
         });
         // the straight street lanes near the sign, and how well each runs along its plate
         let mut best: Option<(usize, f64)> = None;
-        for i in lanes_near(net, pos.truncate(), 30.0) {
+        for i in net.lanes_near(pos.truncate(), 30.0) {
             let l = &net.lanes[i];
             if !straight(l) || l.length() < 12.0 {
                 continue;
@@ -75,7 +74,7 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
     }
     if debug {
         if let Some((pos, rot, name)) = signs.first() {
-            let near = lanes_near(net, pos.truncate(), 30.0);
+            let near = net.lanes_near(pos.truncate(), 30.0);
             let best = near.iter().filter_map(|&i| net.lanes[i].nearest_point(*pos).map(|p| (i, p.1, net.lanes[i].kind, net.lanes[i].length()))).min_by(|a, b| a.1.total_cmp(&b.1));
             log::info!("navigator: first sign '{name}' at {pos:?} heading {rot}: {} lanes near, nearest {best:?}", near.len());
         }
