@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- In the lines panel's timetable, two trips leaving at the same minute are told apart: picking one
+  shows its own stops, not the other's.
 - The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
   thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.
 - The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
