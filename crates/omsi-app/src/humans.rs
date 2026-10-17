@@ -43,6 +43,7 @@ use crate::scene::World;
 use crate::traffic::Traffic;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
+use omsi_geometry::util::wrap_deg;
 use omsi_render::{AlphaMode, Camera, MaterialId, MeshId, Renderer, Scene};
 use omsi_sim::crowd::{self, Block, CrowdParams, PathGraph, Walker};
 use omsi_sim::human::{skin, Activity, HumanType};
@@ -6858,7 +6859,7 @@ fn wrap_heading(h: f64) -> f64 {
 
 /// The angle between two headings (degrees, 0..180).
 fn angle_between(a: f64, b: f64) -> f64 {
-    ((b - a + 540.0).rem_euclid(360.0) - 180.0).abs()
+    wrap_deg(b - a).abs()
 }
 
 #[cfg(test)]
