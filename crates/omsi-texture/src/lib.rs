@@ -38,6 +38,7 @@ fn load_limited(
 }
 
 pub mod pbr;
+pub mod srgb;
 pub use gpu::{gpu_options, set_gpu_options, GpuOptions, PixelFormat, TextureData};
 
 #[derive(Debug, Clone)]

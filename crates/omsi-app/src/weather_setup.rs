@@ -333,7 +333,7 @@ pub(crate) fn cloud_field(cover: Option<&omsi_texture::Image>) -> omsi_texture::
     stretch(&mut tall);
     let to_srgb = |x: f32| -> u8 {
         let x = x.clamp(0.0, 1.0);
-        let s = if x <= 0.003_130_8 { x * 12.92 } else { 1.055 * x.powf(1.0 / 2.4) - 0.055 };
+        let s = omsi_texture::srgb::from_linear(x);
         (s * 255.0 + 0.5) as u8
     };
     // the weather's picture, sampled bilinearly (it tiles as well), its brightness the cover
