@@ -42,6 +42,10 @@ struct RuntimeSound {
     /// trigger fires, peak hold @0x7507bc), so a door sound whose curve follows the door keeps
     /// its tail when the door stops (#131).
     peak: f32,
+    /// When a loop of this entry was last stopped for its volume or pitch, and what the
+    /// variables its curves and pitch read stood at then (`OMSI_DEBUG_AUDIO` counts the
+    /// loops started again soon after, see [`note_loop_restart`]).
+    stopped_at: Option<(std::time::Instant, String)>,
 }
 
 impl RuntimeSound {
@@ -55,8 +59,87 @@ impl RuntimeSound {
             last_gain: 1.0,
             last_pitch: 1.0,
             peak: 0.0,
+            stopped_at: None,
         }
     }
+}
+
+/// A loop started again this soon after it was stopped is counted by `OMSI_DEBUG_AUDIO`:
+/// each new start is from a random place of the clip (as OMSI 2 does), so a loop stopped
+/// and started over and over is heard as short fragments (#35).
+const QUICK_RESTART: f32 = 1.0;
+
+/// A loop that was started again within [`QUICK_RESTART`] of being stopped.
+#[derive(Debug, Clone)]
+pub struct LoopRestart {
+    pub file: String,
+    /// How many times since the last [`take_loop_restarts`].
+    pub count: u32,
+    /// The shortest pause between a stop and the start after it (s).
+    pub shortest: f32,
+    /// What the variables its curves and pitch read stood at when it was last stopped.
+    pub stopped_with: String,
+}
+
+static LOOP_RESTARTS: parking_lot::Mutex<Vec<LoopRestart>> = parking_lot::Mutex::new(Vec::new());
+
+/// The variables entry `def`'s curves, conditions and pitch read, as they stand now
+/// (`engine_n=1118 engine_throttle_injection=0.000`).
+fn inputs_now(def: &SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> String {
+    let mut names: Vec<&str> = def.vol_curves.iter().map(|vc| vc.variable.trim()).collect();
+    names.extend(def.conditions.iter().map(|c| c.variable.trim()));
+    if def.is_loop {
+        names.push(def.pitch_variable.trim());
+    }
+    let mut out: Vec<String> = Vec::new();
+    for n in names {
+        // (`-1`, `-2`: the entry's clock and its facing, not variables)
+        if n.is_empty() || n.starts_with('-') || out.iter().any(|o| o.starts_with(&format!("{n}=")))
+        {
+            continue;
+        }
+        match var(n) {
+            Some(x) => out.push(format!("{n}={x:.3}")),
+            None => out.push(format!("{n}=?")),
+        }
+    }
+    out.join(" ")
+}
+
+fn note_loop_restart(s: &RuntimeSound) {
+    if !crate::mixer::debug_audio() {
+        return;
+    }
+    let Some((at, with)) = &s.stopped_at else {
+        return;
+    };
+    let gap = at.elapsed().as_secs_f32();
+    if gap >= QUICK_RESTART {
+        return;
+    }
+    let file = s.def.file.trim();
+    let mut all = LOOP_RESTARTS.lock();
+    match all.iter_mut().find(|r| r.file == file) {
+        Some(r) => {
+            r.count += 1;
+            r.shortest = r.shortest.min(gap);
+            r.stopped_with.clone_from(with);
+        }
+        None => all.push(LoopRestart {
+            file: file.to_string(),
+            count: 1,
+            shortest: gap,
+            stopped_with: with.clone(),
+        }),
+    }
+}
+
+/// The loops started again soon after being stopped since the last call (see
+/// [`note_loop_restart`]), most often first.
+pub fn take_loop_restarts() -> Vec<LoopRestart> {
+    let mut all = std::mem::take(&mut *LOOP_RESTARTS.lock());
+    all.sort_by_key(|r| std::cmp::Reverse(r.count));
+    all
 }
 
 /// A triggered entry's volume this frame (the entry's volume times its curves): never below
@@ -536,8 +619,15 @@ impl SoundSet {
                         // "Stopped Sound ... due to volume or pitch"
                         engine.stop(id);
                         s.voice = None;
+                        if crate::mixer::debug_audio() {
+                            let with = inputs_now(&s.def, var);
+                            s.stopped_at = Some((std::time::Instant::now(), with));
+                        }
                     }
-                    (None, true) => s.voice = Some(engine.play_from_random_place(clip, params)),
+                    (None, true) => {
+                        note_loop_restart(s);
+                        s.voice = Some(engine.play_from_random_place(clip, params));
+                    }
                     (None, false) => {}
                 }
                 continue;
@@ -1458,6 +1548,35 @@ mod tests {
             (set.sounds[0].last_gain - 0.8).abs() < 1.0e-3,
             "{}",
             set.sounds[0].last_gain
+        );
+    }
+
+    /// `OMSI_DEBUG_AUDIO` names what stopped a loop: the variables its curves and pitch
+    /// read, each once, the entry's clock (`-1`) left out.
+    #[test]
+    fn a_stopped_loop_is_logged_with_what_its_curves_read() {
+        let curve = |v: &str| VolCurve {
+            variable: v.into(),
+            points: vec![(0.0, 0.0), (1.0, 1.0)],
+        };
+        let def = SoundEntry {
+            is_loop: true,
+            pitch_variable: "engine_n".into(),
+            vol_curves: vec![
+                curve("engine_throttle_injection"),
+                curve("engine_n"),
+                curve("-1"),
+            ],
+            ..Default::default()
+        };
+        let var = |n: &str| match n {
+            "engine_n" => Some(1118.0),
+            "engine_throttle_injection" => Some(0.0),
+            _ => None,
+        };
+        assert_eq!(
+            inputs_now(&def, &var),
+            "engine_throttle_injection=0.000 engine_n=1118.000"
         );
     }
 }
