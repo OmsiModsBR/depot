@@ -3,7 +3,7 @@ name = "omsi-ui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Interface drawing shared by the game's navigator and the launcher: Roboto text, Material Symbols icons, anti-aliased shapes and a wgpu pipeline for them"
+description = "Interface drawing shared by the game's navigator and the launcher: Roboto text, Material Symbols icons, anti-aliased shapes and a wgpu pipeline for them, and the immediate-mode widget kit"
 
 [dependencies]
 wgpu.workspace = true
@@ -14,6 +14,13 @@ ab_glyph.workspace = true
 resvg = { version = "0.45", default-features = false }
 hashbrown.workspace = true
 pollster.workspace = true
+# keys, modifiers and cursor shapes of the widgets' input
+winit.workspace = true
+
+[features]
+# `widgets::Ui::drawn`, where each clickable widget was in the frame: for the tests of the
+# pages drawn with the kit (the launcher's)
+testing = []
 
 [dev-dependencies]
 naga = { workspace = true, features = ["wgsl-in"] }
