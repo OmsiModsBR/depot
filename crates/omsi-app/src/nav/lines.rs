@@ -41,14 +41,92 @@ pub(super) struct LinesText {
     /// Monday to Friday, Saturday, Sunday.
     pub(super) days: [&'static str; 3],
     pub(super) predicted: &'static str,
-    /// Decimals with a comma.
-    pub(super) comma: bool,
 }
 
-pub(super) fn lines_text(lang: &str) -> LinesText {
-    match lang.to_ascii_uppercase().as_str() {
-"PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", loading: "Carregando horários…", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", heavy: "pesados", terrain: "Relevo", orient: ["Mapa", "Norte", "Rumo"], elev: "alt.", comma: true },
-        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", loading: "Loading timetable…", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", heavy: "heavy", terrain: "Terrain", orient: ["Map", "North", "Heading"], elev: "elev.", comma: false },
+/// The texts as English keys: the painter looks them up in the catalog when it draws or measures them. A text
+/// that is put together with others goes through `omsi_ui::tr` first (a sentence made of English pieces is not in
+/// the catalog).
+pub(super) fn lines_text() -> LinesText {
+    LinesText {
+        lines: "Lines",
+        line_data: "LINE DATA",
+        map_lines: "MAP LINES",
+        all: "All",
+        brt: "BRT",
+        express: "Express",
+        feeders: "Feeders",
+        length: "Length",
+        stops: "Stops",
+        trip: "Trip time",
+        route: "Route",
+        vehicles: "Vehicles now",
+        you_are_on: "You are on",
+        circular: "Circular",
+        out_back: "Out and back",
+        minutes: "min",
+        count: "lines",
+        timetable: "Timetable",
+        loading: "Loading timetable…",
+        hint: ["Double-click a line", "for its routes and timetable"],
+        modals: ["Bus", "Tram", "Metro", "Rail"],
+        tick_all: "Select all",
+        tick_none: "Clear",
+        towards: "Towards",
+        days: ["Mon–Fri", "Sat", "Sun"],
+        predicted: "Times predicted from the map's timetable",
+        heavy: "heavy",
+        terrain: "Terrain",
+        orient: ["Map", "North", "Heading"],
+        elev: "elev.",
+    }
+}
+
+/// Whether the interface language writes decimals with a comma.
+pub(super) fn decimal_comma() -> bool {
+    decimal_comma_in(&omsi_ui::i18n::language())
+}
+
+fn decimal_comma_in(code: &str) -> bool {
+    matches!(
+        code,
+        "be" | "ca" | "cs" | "de" | "es" | "fr" | "hu" | "id" | "it" | "kk" | "nl" | "pl" | "pt" | "pt-pt" | "ru" | "tr" | "uk" | "vi"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decimals_follow_the_language() {
+        for c in ["es", "fr", "de", "pt", "pt-pt", "ru", "pl", "it", "tr", "hu", "id", "vi"] {
+            assert!(decimal_comma_in(c), "{c}");
+        }
+        for c in ["", "en", "ja", "ko", "zh", "zh-tw", "th", "hi", "ms", "tl"] {
+            assert!(!decimal_comma_in(c), "{c}");
+        }
+    }
+
+    #[test]
+    fn every_text_of_the_panel_is_in_the_catalog_for_every_language() {
+        let t = lines_text();
+        let mut keys = vec![
+            t.lines, t.line_data, t.map_lines, t.all, t.express, t.feeders, t.length, t.stops, t.trip, t.route, t.vehicles,
+            t.you_are_on, t.circular, t.out_back, t.minutes, t.count, t.timetable, t.loading, t.tick_all, t.tick_none, t.towards,
+            t.predicted, t.heavy, t.terrain, t.elev,
+        ];
+        keys.extend(t.hint);
+        keys.extend(t.modals);
+        keys.extend(t.days);
+        keys.extend(t.orient);
+        for lang in [
+            "be", "ca", "cs", "de", "es", "fr", "hi", "hu", "id", "it", "ja", "kk", "ko", "ms", "nl", "pl", "pt", "pt-pt", "ru", "th", "tl", "tr", "uk", "vi",
+            "zh", "zh-tw",
+        ] {
+            for k in &keys {
+                assert!(crate::_rust_i18n_try_translate(lang, k).is_some(), "{lang}: {k:?}");
+            }
+        }
     }
 }
 
