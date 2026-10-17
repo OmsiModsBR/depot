@@ -482,8 +482,10 @@ impl VehicleInstance {
             self.crashes += 1;
             self.collided = true;
         }
-        self.position = rb.origin();
-        let (heading, pitch, bank) = rb.heading_pitch_bank();
+        // (shown between its last two substeps, as far as the time not yet stepped reaches:
+        // smooth at any frame rate, a substep behind the physics at most)
+        self.position = rb.shown_origin();
+        let (heading, pitch, bank) = rb.shown_heading_pitch_bank();
         self.heading = heading;
         self.pitch = pitch;
         self.bank = bank;

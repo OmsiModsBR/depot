@@ -167,8 +167,8 @@ impl VehicleInstance {
         let lead = bodies.next().unwrap();
         for (k, (rb, (placed, vars))) in bodies.zip(meta).enumerate() {
             let t = &mut self.trailers[k];
-            t.position = rb.origin();
-            let (heading, pitch, bank) = rb.heading_pitch_bank();
+            t.position = rb.shown_origin();
+            let (heading, pitch, bank) = rb.shown_heading_pitch_bank();
             (t.heading, t.pitch, t.bank) = (heading, pitch, bank);
             self.show_part_wheels(&rb, &vars);
             self.trailers[k].body = Some(PartBody { rb, placed, vars });

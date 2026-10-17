@@ -153,6 +153,28 @@ fn the_motion_does_not_depend_on_the_frame_rate() {
     }
 }
 
+/// At 144 frames a second a frame runs one substep and the next two, but the body as it is
+/// shown moves on evenly: the same distance each frame, within a few per cent.
+#[test]
+fn the_shown_body_moves_on_evenly_between_substeps() {
+    let g = road(1e9, 0.0);
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    rb.velocity = Vec3::new(0.0, 50.0 / 3.6, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &g);
+    let (mut shown, mut stepped) = (Vec::new(), Vec::new());
+    let (mut last_shown, mut last_stepped) = (rb.shown_origin().y, rb.origin().y);
+    for _ in 0..144 {
+        rb.step(1.0 / 144.0, 0.0, &[0.0; 4], 0.0, &g);
+        shown.push(rb.shown_origin().y - last_shown);
+        stepped.push(rb.origin().y - last_stepped);
+        (last_shown, last_stepped) = (rb.shown_origin().y, rb.origin().y);
+    }
+    let spread = |d: &[f64]| d.iter().cloned().fold(f64::MIN, f64::max) / d.iter().cloned().fold(f64::MAX, f64::min);
+    assert!(spread(&stepped) > 1.5, "the substeps alternate: {}", spread(&stepped));
+    assert!(spread(&shown) < 1.05, "shown: {}", spread(&shown));
+}
+
 /// A frame shorter than a substep runs none, and the time it brought counts towards the next:
 /// at 300 frames a second the bus covers the distance it covers at 60.
 #[test]
