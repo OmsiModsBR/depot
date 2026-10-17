@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- The terrain view of the city map writes the heights of the ordinary contour lines too when zoomed in
+  (the index lines' only from farther away), and the contour lines are drawn fainter as the view widens.
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
   them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
