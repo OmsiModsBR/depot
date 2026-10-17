@@ -9,6 +9,8 @@
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 
+mod route_search;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LaneKind {
     Street,

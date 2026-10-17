@@ -2,28 +2,8 @@ use glam::{DVec2, DVec3, Vec2, Vec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKind, Network};
 use omsi_ui::Painter;
-use super::angle_diff;
 use super::draw::{ARROW, LEVEL, level};
 
-/// Lanes with a point within `radius` of `c` (by the network's 50 m grid).
-pub(super) fn lanes_near(net: &Network, c: DVec2, radius: f64) -> Vec<usize> {
-    let mut seen = hashbrown::HashSet::new();
-    let (cx, cy) = Network::grid_cell(c.extend(0.0));
-    let r = (radius / 50.0).ceil() as i32;
-    if net.grid.is_empty() {
-        return (0..net.lanes.len()).filter(|&i| net.lanes[i].points.iter().any(|q| (q.truncate() - c).length() < radius)).collect();
-    }
-    for gx in cx - r..=cx + r {
-        for gy in cy - r..=cy + r {
-            if let Some(v) = net.grid.get(&(gx, gy)) {
-                seen.extend(v.iter().copied());
-            }
-        }
-    }
-    let mut v: Vec<usize> = seen.into_iter().collect();
-    v.sort_unstable();
-    v
-}
 
 /// `OMSI_NAV_PROBE=x,y[,r]`: the lanes of the map's network that start or end within r
 /// metres (25) of a point - how they link, to see why a route cannot reach a place.
@@ -221,89 +201,3 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
     }
 }
 
-/// A way from where the bus is back onto `ahead` (the route from the lane it was last
-/// on): the lanes to drive up to the route, and the index in `ahead` of the route lane it
-/// reaches (the route goes on from there). Dijkstra over
-/// the street lanes, from the lane under the bus that runs its way, to the first route
-/// lane reached (the search stops at 6 km).
-pub(crate) fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost: f32) -> Option<(Vec<usize>, usize)> {
-    use std::cmp::Ordering;
-    use std::collections::BinaryHeap;
-    // the lane under the bus going its way; else (a depot, a car park, the grass) the
-    // nearest street lane that does not point back at the bus, else any near
-    let cands: Vec<(usize, f64, f64)> = lanes_near(net, bus.truncate(), 90.0)
-        .into_iter()
-        .filter_map(|i| {
-            let l = net.lanes.get(i)?;
-            if l.kind != LaneKind::Street {
-                return None;
-            }
-            let (s, d) = l.nearest_point(bus)?;
-            let (_, h) = l.at(s);
-            Some((i, d, angle_diff(heading, h as f64).abs()))
-        })
-        .collect();
-    let pick = |max_d: f64, max_a: f64| cands.iter().filter(|c| c.1 < max_d && c.2 < max_a).min_by(|a, b| (a.1 + a.2 * 0.1).total_cmp(&(b.1 + b.2 * 0.1))).map(|c| c.0);
-    let start = pick(14.0, 70.0).or_else(|| pick(80.0, 100.0)).or_else(|| pick(80.0, 181.0));
-    if omsi_cfg::flags::DEBUG_NAV.is_set() {
-        log::info!("navigator: way search from {:?} ({} street lanes within 90 m) to {} route lanes", start, cands.len(), ahead.len());
-    }
-    let start = start?;
-    let targets: HashMap<usize, usize> = ahead.iter().take(120).enumerate().map(|(k, &l)| (l, k)).collect();
-    #[derive(PartialEq)]
-    struct Node(f32, usize);
-    impl Eq for Node {}
-    impl Ord for Node {
-        fn cmp(&self, o: &Self) -> Ordering {
-            o.0.total_cmp(&self.0)
-        }
-    }
-    impl PartialOrd for Node {
-        fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-            Some(self.cmp(o))
-        }
-    }
-    let mut dist: HashMap<usize, f32> = HashMap::new();
-    let mut parent: HashMap<usize, usize> = HashMap::new();
-    let mut heap = BinaryHeap::new();
-    dist.insert(start, 0.0);
-    heap.push(Node(0.0, start));
-    while let Some(Node(cost, lane)) = heap.pop() {
-        if cost > dist.get(&lane).copied().unwrap_or(f32::INFINITY) {
-            continue;
-        }
-        if lane != start {
-            if let Some(&k) = targets.get(&lane) {
-                let mut path = vec![lane];
-                let mut c = lane;
-                while let Some(&p) = parent.get(&c) {
-                    path.push(p);
-                    c = p;
-                }
-                path.reverse();
-                // (the route lane reached is where the route goes on)
-                path.pop();
-                return Some((path, k));
-            }
-        }
-        if cost > max_cost {
-            break;
-        }
-        let Some(l) = net.lanes.get(lane) else { continue };
-        for &n in &l.next {
-            let Some(nl) = net.lanes.get(n) else { continue };
-            if nl.kind != LaneKind::Street {
-                continue;
-            }
-            // turning back is the last resort
-            let u_turn = angle_diff(l.end_heading() as f64, nl.start_heading() as f64).abs() > 150.0;
-            let c = cost + nl.length() + if u_turn { 400.0 } else { 0.0 };
-            if c < dist.get(&n).copied().unwrap_or(f32::INFINITY) {
-                dist.insert(n, c);
-                parent.insert(n, lane);
-                heap.push(Node(c, n));
-            }
-        }
-    }
-    None
-}

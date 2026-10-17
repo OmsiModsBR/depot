@@ -7,7 +7,6 @@
 //! Zitadellenweg, at the end of the road - is left out: the duty starts at the next one.
 
 use crate::cli::{Args, parse_time};
-use crate::nav;
 use crate::scene::World;
 use crate::schedule;
 use crate::situation::start_clock;
@@ -101,7 +100,7 @@ pub(crate) fn place_on_duty(args: &mut Args) {
                 if before {
                     return Some((p - from).truncate().length());
                 }
-                let (path, _) = nav::way_back(&net, from, heading, &targets, 40_000.0)?;
+                let (path, _) = net.shortest_path_to_any(from, heading, &targets, 40_000.0)?;
                 Some(path.iter().map(|&l| net.lanes[l].length() as f64).sum())
             };
             // A trip that begins well before its first stop (a run out of the depot, whose
