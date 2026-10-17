@@ -32,6 +32,7 @@
 //!   is crystal clear with a pale sunset, and a sultry evening in a high ends in red.
 
 use omsi_content::weather::Weather;
+use omsi_geometry::util::smoothstep;
 
 /// The model's state at one moment.
 #[derive(Debug, Clone)]
@@ -152,11 +153,6 @@ fn hash(seed: u32, k: u32) -> f32 {
     x = x.wrapping_mul(0x846C_A68B);
     x ^= x >> 16;
     (x & 0xFF_FFFF) as f32 / 16_777_216.0
-}
-
-fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
-    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// Saturation specific humidity (g/kg) at a temperature (°C), at 1000 hPa (Magnus).

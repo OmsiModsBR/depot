@@ -22,6 +22,7 @@
 use anyhow::{Context, Result};
 use glam::{Affine3A, DVec2, DVec3, Mat3A, Quat, Vec2, Vec3, Vec3A};
 use omsi_content::Human;
+use omsi_geometry::util::smoothstep;
 use omsi_geometry::{mesh_from_o3d, MeshData};
 use omsi_model::Model;
 use std::f32::consts::{PI, TAU};
@@ -881,11 +882,6 @@ pub struct Posed {
     /// All transforms are finite (else `bones` is the rest pose and the caller should keep
     /// the last good mesh).
     pub ok: bool,
-}
-
-fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
-    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// Move `x` towards `to` by at most `step`.
