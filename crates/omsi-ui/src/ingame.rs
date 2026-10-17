@@ -3,7 +3,8 @@
 //! windows of the concept (vehicles in the session, choose a vehicle, end-of-trip report,
 //! menu, passengers and stop) are made of these by the game, with its own data.
 //!
-//! Whether a window pauses the simulation is not decided here (#166).
+//! Opening these windows never pauses the simulation by itself: what the caller shows in
+//! them (for example the end-of-trip report's note) is the caller's business.
 
 use crate::paint::Align;
 use crate::widgets::{id_of, Ui};
