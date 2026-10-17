@@ -183,13 +183,7 @@ pub(crate) fn encode_main_pass(
         // colour out to white instead) keeps a real gap from ever reading as a rendering
         // bug of its own.
         let sky = if lighting.classic && !enhanced {
-            lighting.sky_color.map(|v| {
-                if v <= 0.04045 {
-                    v / 12.92
-                } else {
-                    ((v + 0.055) / 1.055).powf(2.4)
-                }
-            })
+            lighting.sky_color.map(omsi_texture::srgb::to_linear)
         } else {
             lighting.sky_color
         };
