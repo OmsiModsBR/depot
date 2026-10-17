@@ -9,6 +9,7 @@ use crate::player::Player;
 use crate::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
 use crate::spawn::spawn_player;
+use omsi_geometry::util::wrap_deg;
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 
@@ -386,7 +387,7 @@ impl App {
         let found = self.placed.iter().position(|q| {
             let Some(c) = q.vehicle.ty.def.coupling_front.as_ref() else { return false };
             let front = q.vehicle.world_transform().transform_point3(glam::Vec3::from(c.pos));
-            let dh = ((q.vehicle.heading - rear_heading + 540.0).rem_euclid(360.0) - 180.0).abs();
+            let dh = wrap_deg(q.vehicle.heading - rear_heading).abs();
             (front - rear).truncate().length() < 2.5 && dh < 35.0
         });
         let Some(k) = found else {

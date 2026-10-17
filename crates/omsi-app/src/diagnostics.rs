@@ -148,7 +148,7 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
         .filter(|rb| rb.velocity().truncate().length() > 1.0)
         .map(|rb| {
             let d = (rb.velocity().x as f64).atan2(rb.velocity().y as f64).to_degrees() - v.heading;
-            let d = (d + 540.0).rem_euclid(360.0) - 180.0;
+            let d = omsi_geometry::util::wrap_deg(d);
             let d = if d.abs() > 90.0 { (d + 360.0).rem_euclid(360.0) - 180.0 } else { d };
             format!(" slip {d:+.2}")
         })
