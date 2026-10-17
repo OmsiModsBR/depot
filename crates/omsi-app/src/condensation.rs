@@ -23,7 +23,7 @@
 //! clear in a widening patch above the defroster; an empty bus on a dry winter's day stays
 //! clear, and a cold bus stood with its engine off fogs up as soon as people breathe in it.
 
-pub use omsi_content::weather::psychro::alduchov::{dew_point, saturation};
+pub use omsi_content::weather::psychro::{dew_point, saturation_density as saturation};
 
 /// The state of the cabin's air and of its glass.
 #[derive(Debug, Clone)]

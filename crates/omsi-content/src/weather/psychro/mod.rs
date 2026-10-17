@@ -1,13 +1,11 @@
 //! The humidity of the air: saturation, absolute and relative humidity, dew point.
 //!
-//! Grouped by the Magnus constants each part of the game was written with, which still
-//! differ and give slightly different numbers; choosing one set for all is a separate fix.
-//!
-//! * [`omsi`]: the original's, in base 10, over supercooled water below 0 °C (the weather
-//!   files' humidity and the cabin's `Cabinair_relHum`);
-//! * [`bolton`]: 6.112 hPa, 17.67 and 243.5 °C (the custom weather and the weather model);
-//! * [`alduchov`]: 6.1094 hPa, 17.625 and 243.04 °C (the misting of the panes).
+//! One saturation curve for the whole game, OMSI 2's own ([`magnus`]): the weather files'
+//! humidity and the scripts' `Cabinair_relHum` come out as in the original, and the weather
+//! model, the custom weather and the misting of the panes agree with them.
 
-pub mod alduchov;
-pub mod bolton;
-pub mod omsi;
+pub mod humidity;
+pub mod magnus;
+
+pub use humidity::*;
+pub use magnus::{dew_point_of_pressure, saturation_vapour_pressure};

@@ -4,7 +4,10 @@ use crate::cli::Args;
 use crate::lights;
 use crate::scene;
 use crate::startup::{CLASSIC, CLOUDS, ENHANCED};
-pub(crate) use omsi_content::weather::psychro::bolton::{absolute_humidity, dew_point as dew_point_c, relative_humidity};
+pub(crate) use omsi_content::weather::psychro::{
+    absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
+    relative_humidity_percent as relative_humidity,
+};
 use omsi_render::{Renderer, Scene};
 use std::path::Path;
 

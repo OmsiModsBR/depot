@@ -31,7 +31,7 @@
 //!   particles swell (a milky sky, softer distances) - which is why the evening after rain
 //!   is crystal clear with a pale sunset, and a sultry evening in a high ends in red.
 
-use omsi_content::weather::psychro::bolton::{dew_point_q as dew_point, q_sat};
+use omsi_content::weather::psychro::{dew_point_q as dew_point, q_sat};
 use omsi_content::weather::Weather;
 use omsi_geometry::util::smoothstep;
 
