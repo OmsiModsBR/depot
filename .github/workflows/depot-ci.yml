@@ -269,7 +269,7 @@ jobs:
           fi
           exit "$status"
 
-  # Informational: how much of the rigid body's code (rigid/, its tests aside) the physics
+  # Informational: how much of the physics package's code (physics/, its tests aside) the physics
   # scenarios and invariant tests reach - lines, regions and branches.
   physics-coverage:
     if: github.event_name == 'pull_request'
@@ -312,5 +312,5 @@ jobs:
           objects=()
           for b in "${bins[@]:1}"; do objects+=("-object=$b"); done
           "$llvm/llvm-cov" report "${bins[0]}" "${objects[@]}" -instr-profile=target/coverage/rigid.profdata -show-branch-summary \
-            $(find "$PWD/crates/omsi-sim/src/rigid" -name '*.rs' ! -name tests.rs | sort) | tee coverage.txt
+            $(find "$PWD/crates/omsi-sim/src/physics" -name '*.rs' ! -name tests.rs | sort) | tee coverage.txt
           { echo '### Coverage of the rigid body by the physics scenarios'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

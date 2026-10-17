@@ -1,31 +1,13 @@
 //! The body against the obstacles: an impulse at each point of contact (`RigidBody::collide`)
 //! and what a hit tells the scripts ([`Impact`]).
 
-use super::body::RigidBody;
-use super::params::{
+use crate::physics::domain::params::{
     BOUNCE_SPEED, CLEARANCE, CRASH_SPEED, INSIDE_DEPTH, INSIDE_FRAMES, INSIDE_REACH, RESTITUTION,
     SCRAPE_FRICTION,
 };
+use crate::physics::domain::{Impact, RigidBody};
 use crate::collision::Obb;
 use glam::{DVec3, Vec3};
-
-/// One hit of the body against an obstacle.
-#[derive(Debug, Clone, Copy)]
-pub struct Impact {
-    /// Where it hit, in the body frame relative to the model origin (x right, y forward, z up).
-    pub point: Vec3,
-    /// Closing speed along the contact normal (m/s).
-    pub speed: f32,
-    /// Kinetic energy the impact took away (J).
-    pub energy: f32,
-    /// Index into the obstacle list the body was tested against; for a wheel stopped by a
-    /// face (`RigidBody::wheel_impacts`), the wheel's.
-    pub obstacle: usize,
-    /// A `[crashmode_pole]` obstacle that broke off.
-    pub broke: bool,
-    /// Direction the obstacle was pushed (world, ground plane).
-    pub push: Vec3,
-}
 
 impl RigidBody {
     /// Keep the body's `[boundingbox]` out of the obstacles and answer each hit with an
@@ -146,7 +128,7 @@ impl RigidBody {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{bus, road, run};
+    use crate::physics::tests::{bus, road, run};
     use super::*;
 
     /// Straight into a wall at 40 km/h: the bus stops at the wall, bounces off a little, and
