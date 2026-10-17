@@ -590,7 +590,7 @@ impl Settings {
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
                 "pax_density" | "aipassfactor" => s.pax_density = v.trim_end_matches('%').parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x > 5.0 { x / 100.0 } else { x }).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.pax_density),
-                "vol_ai" => s.vol_ai = v.parse::<f32>().map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_ai),
+                "vol_ai" => s.vol_ai = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_ai),
                 "vol_scenery" => s.vol_scenery = v.parse::<f32>().map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_scenery),
                 "doppler" | "sound_doppler" => s.doppler = b(v),
                 "muffle_outside" => s.muffle_outside = b(v),
