@@ -1,7 +1,7 @@
 //! What the weather does to a vehicle: the air's humidity and the road's grip.
 
 
-pub use omsi_content::weather::psychro::omsi::relative_humidity;
+pub use omsi_content::weather::psychro::relative_humidity;
 
 /// The tyres' friction coefficient on the road under them: `street_cond` as the weather sets
 /// it (0 dry … 1 wet, 1 … 2 snow from packed to fresh) and the air temperature (°C), below

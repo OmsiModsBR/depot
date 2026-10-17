@@ -4,7 +4,7 @@ use omsi_cfg::CfgFile;
 use std::path::{Path, PathBuf};
 
 pub mod psychro;
-pub use psychro::omsi::absolute_humidity;
+pub use psychro::absolute_humidity;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Weather {
