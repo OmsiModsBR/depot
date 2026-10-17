@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- A map package's icon path can no longer point outside the package: absolute paths, drives (`C:`),
+  shares and `.`/`..`/empty parts leave the marker out (before, only `..` was refused).
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
   them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
