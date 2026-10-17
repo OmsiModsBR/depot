@@ -2,7 +2,7 @@
 //! the model's document): what the refactor must keep true whatever it moves.
 
 use glam::{DVec3, Vec3};
-use omsi_sim::rigid::{support_rest_loads, GroundProbe, Joint, RigidBody};
+use omsi_sim::physics::{support_rest_loads, GroundProbe, Joint, RigidBody};
 use omsi_vehicle::vehicle::Coupling;
 use omsi_vehicle::{Axle, Vehicle};
 

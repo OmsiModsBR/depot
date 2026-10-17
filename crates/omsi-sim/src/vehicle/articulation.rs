@@ -2,12 +2,12 @@
 //! trailers. Behind the player's vehicle (the one with a [`RigidBody`]) every road part is a
 //! body of its own on the same wheel physics, with its own `.bus` file's mass, inertia,
 //! centre of gravity, axles and springs, held to the part in front by its joint
-//! (`crate::rigid::Joint`, `[coupling_front_character]`), as OMSI 2 runs each section: what
+//! (`crate::physics::Joint`, `[coupling_front_character]`), as OMSI 2 runs each section: what
 //! the rear section weighs, brakes, drives and leans comes back to the front. The parts of the
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle.
 
-use crate::rigid::{BodyInputs, Joint, RigidBody};
+use crate::physics::{BodyInputs, Joint, RigidBody};
 use glam::{DVec3, Mat4, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
@@ -70,14 +70,14 @@ impl VehicleInstance {
 
     /// One step of the vehicle's body (`lead`, taken out of its `Dynamics`) and the bodies of the
     /// parts coupled behind it - or of the body alone, the parts handing it what they hold
-    /// along the joint (`rigid::CoupledPart`) as they follow.
-    pub(super) fn step_bodies(&mut self, mut lead: RigidBody, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> crate::rigid::GroundProbe) -> RigidBody {
+    /// along the joint (`physics::CoupledPart`) as they follow.
+    pub(super) fn step_bodies(&mut self, mut lead: RigidBody, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> crate::physics::GroundProbe) -> RigidBody {
         lead.wheel_walls = self.wheel_walls;
         if !self.part_bodies_wanted() {
             lead.coupled = self.coupled_parts();
             if self.rest_loads_for != 0 {
                 // the parts that were carried by the bodies are gone: the wheels carry their own again
-                let loads = crate::rigid::wheel_rest_loads(&self.ty.def);
+                let loads = crate::physics::wheel_rest_loads(&self.ty.def);
                 for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                     w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
                 }
@@ -104,13 +104,13 @@ impl VehicleInstance {
             self.rest_loads_for = self.trailers.len();
             // the joints carry part of each part behind (from the front: each load the part in
             // front of it takes on its axles)
-            let loads = crate::rigid::wheel_rest_loads(&self.ty.def);
+            let loads = crate::physics::wheel_rest_loads(&self.ty.def);
             let lead = &mut bodies[0];
             for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                 w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
             }
             let defs: Vec<&Vehicle> = std::iter::once(&self.ty.def).chain(self.trailers.iter().map(|t| &t.ty.def)).collect();
-            crate::rigid::support_rest_loads(&mut bodies, &joints, &defs);
+            crate::physics::support_rest_loads(&mut bodies, &joints, &defs);
         }
         // put down where the part was put (a bus placed on a bend has its rear section follow
         // the bend: `TrailerPart::place_pivot`) or straight behind - and so is one the vehicle
@@ -130,7 +130,7 @@ impl VehicleInstance {
             }
             let mut headings = vec![0.0; bodies.len()];
             headings[j.follow] = heading;
-            crate::rigid::hang_followers(&mut bodies, std::slice::from_ref(j), &headings);
+            crate::physics::hang_followers(&mut bodies, std::slice::from_ref(j), &headings);
             meta[k].0 = true;
         }
         // each part: its own brakes and air springs, the road's grip
@@ -145,7 +145,7 @@ impl VehicleInstance {
         }
         let mut inputs = vec![BodyInputs { brake: brakes, steer: Some(steer), air: true }];
         inputs.extend(part_brakes.iter().map(|b| BodyInputs { brake: b, steer: None, air: false }));
-        crate::rigid::step_train(&mut bodies, &joints, dt, m_wheel, &inputs, probe);
+        crate::physics::step_train(&mut bodies, &joints, dt, m_wheel, &inputs, probe);
         // a part's wheel stopped by a face is a crash of the vehicle (in its frame)
         let (front, parts) = bodies.split_at_mut(1);
         let front = &mut front[0];
@@ -153,7 +153,7 @@ impl VehicleInstance {
             for hit in &b.wheel_impacts {
                 let world = b.position + b.orientation.mul_vec3(hit.point - b.cog).as_dvec3();
                 let point = front.orientation.inverse().mul_vec3((world - front.position).as_vec3()) + front.cog;
-                front.wheel_impacts.push(crate::rigid::Impact { point, obstacle: usize::MAX, ..*hit });
+                front.wheel_impacts.push(crate::physics::Impact { point, obstacle: usize::MAX, ..*hit });
             }
         }
         if omsi_cfg::flags::DEBUG_TRAILER.is_set() {
@@ -310,7 +310,7 @@ impl TrailerPart {
                     .filter(|_| !main.springs_full)
                     .unwrap_or(1.0)
                     .max(0.05);
-                (load / (k * factor)).min(crate::rigid::BUMP)
+                (load / (k * factor)).min(crate::physics::BUMP)
             } else {
                 0.0
             };
@@ -454,7 +454,7 @@ impl TrailerPart {
         let Some(b) = &self.body else { return };
         let rb = &b.rb;
         let standing = rb.wheels.iter().any(|w| w.on_ground);
-        let touching: Vec<f32> = rb.wheels.iter().filter(|w| w.on_ground || !standing).map(|w| w.radius - w.attach.z - w.compression.max(-crate::rigid::DROOP)).collect();
+        let touching: Vec<f32> = rb.wheels.iter().filter(|w| w.on_ground || !standing).map(|w| w.radius - w.attach.z - w.compression.max(-crate::physics::DROOP)).collect();
         self.ground_lift = touching.iter().sum::<f32>() / touching.len().max(1) as f32;
         self.pivot = Some(self.position + self.body_rotation().transform_point3(Vec3::new(0.0, self.axle_long, 0.0)).as_dvec3());
         self.axle_z = None;
@@ -477,7 +477,7 @@ impl TrailerPart {
                 continue;
             }
             let Some(def) = self.ty.def.axles.get(a) else { continue };
-            let def = crate::rigid::AxleSpec::of(def);
+            let def = crate::physics::AxleSpec::of(def);
             let r = def.kinematic_radius;
             let hub = r - offset;
             let across = def.kinematic_track;
@@ -487,7 +487,7 @@ impl TrailerPart {
                 let Some(g) = probe(p.x, p.y, p.z + 1.0) else { continue };
                 // how far the wheel is pushed up into its arch (never below where it hangs
                 // unloaded, never past the bump stop)
-                sides[si] = Some(((g + r as f64 - p.z) as f32).clamp(0.0, crate::rigid::BUMP));
+                sides[si] = Some(((g + r as f64 - p.z) as f32).clamp(0.0, crate::physics::BUMP));
             }
             travel.push((axle, sides));
         }
@@ -508,7 +508,7 @@ mod tests {
     use super::*;
     use crate::host::VehicleHost;
     use crate::physics::Controls;
-    use crate::rigid::GroundProbe;
+    use crate::physics::GroundProbe;
     use std::sync::Arc;
 
     /// The two sections of an articulated bus: a front section on two free-rolling axles and a
@@ -529,7 +529,7 @@ mod tests {
         (section(&[(3.2, false), (-2.6, false)], 8.0), section(&[(-0.4, true)], 7.2))
     }
 
-    fn flat() -> Arc<dyn crate::rigid::Ground> {
+    fn flat() -> Arc<dyn crate::physics::Ground> {
         Arc::new(|_x: f64, _y: f64, _top: f64| GroundProbe { below: Some(0.0), above: None })
     }
 

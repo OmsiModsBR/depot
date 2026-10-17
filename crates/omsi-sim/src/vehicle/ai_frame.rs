@@ -2,7 +2,7 @@
 
 use super::physics_bridge::driven_rpm;
 use super::VehicleInstance;
-use crate::rigid::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
+use crate::physics::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
 
 /// Motion state handed to `VehicleInstance::update_ai`.
 #[derive(Debug, Clone, Copy, Default)]

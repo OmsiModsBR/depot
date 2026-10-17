@@ -22,7 +22,7 @@ mod road;
 pub use planner::{back_in_ramp, pull_out_ramps, pull_out_room, straight_pull_out, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT};
 pub use road::AI_RAY_UP;
 
-use crate::rigid::{AiSpec, AiWheelSpec};
+use crate::physics::{AiSpec, AiWheelSpec};
 use crate::vehicle::VehicleInstance;
 use glam::{DVec2, DVec3, Vec3};
 use omsi_vehicle::Vehicle;
@@ -37,8 +37,8 @@ pub enum MotionKind {
 
 /// The line the vehicle turns about (`[rot_pnt_long]`, normally the rear axle) and the
 /// distance from it to the front axle: (rotation point, wheelbase), both in metres along
-/// the body (see `rigid::ai_rotation_point`).
-pub use crate::rigid::ai_rotation_point as rotation_point;
+/// the body (see `physics::ai_rotation_point`).
+pub use crate::physics::ai_rotation_point as rotation_point;
 
 /// Unit vector (east, north) of a heading in degrees.
 fn dir(h: f64) -> DVec2 {
@@ -114,7 +114,7 @@ impl AiBody {
             front_long,
             rear_long,
             max_steer,
-            steer_rate: if heavy { crate::rigid::AI_STEER_RATE_HEAVY } else { crate::rigid::AI_STEER_RATE },
+            steer_rate: if heavy { crate::physics::AI_STEER_RATE_HEAVY } else { crate::physics::AI_STEER_RATE },
             wheels,
             axle_count,
             mass,
@@ -149,7 +149,7 @@ impl AiBody {
 
     /// Put the body onto its way, standing still and straight. `way(d)` is the point `d`
     /// metres along the way from the vehicle's origin.
-    pub fn place(&mut self, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>, speed: f32) {
+    pub fn place(&mut self, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::physics::Ground>, speed: f32) {
         self.started = false;
         self.ground = None;
         self.contact_z.clear();
@@ -160,7 +160,7 @@ impl AiBody {
     /// Follow the way for `dt` seconds at `speed` (m/s, the planner's speed).
     /// `contact`: what the wheels stand on (the faces under a height, as the player's wheels
     /// ask it); without it the plain height sampler `ground`.
-    pub fn step(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) {
+    pub fn step(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::physics::Ground>) {
         if dt > 0.0 {
             let a = (speed - self.last_speed) / dt;
             self.a_long += (a - self.a_long) * (dt / 0.15).min(1.0);

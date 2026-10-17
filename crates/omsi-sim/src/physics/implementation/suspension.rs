@@ -2,11 +2,10 @@
 //! on its strut - OMSI's spring on the ground under the wheel -, the tyres on the ground handed
 //! on as contacts.
 
-use super::body::RigidBody;
-use super::ground::GroundProbe;
-use super::params::{BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K};
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
+use crate::physics::domain::params::{BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K};
+use crate::physics::domain::{GroundProbe, RigidBody};
 use glam::{DVec3, Vec3};
 
 impl RigidBody {

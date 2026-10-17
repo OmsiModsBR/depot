@@ -492,14 +492,14 @@ impl VehicleType {
     /// plane) cannot show them sitting up in their arches: that axle hangs its wheels as much
     /// lower as the load compresses the spring, and the body keeps its unloaded height.
     pub fn hub_heights(&self, first_axle: usize) -> Vec<Option<f32>> {
-        let loads = crate::rigid::kinematic_wheel_rest_loads(&self.def);
+        let loads = crate::physics::kinematic_wheel_rest_loads(&self.def);
         self.def
             .axles
             .iter()
             .zip(self.wheel_geometry(first_axle))
             .enumerate()
             .map(|(a, (axle, g))| {
-                let axle = crate::rigid::AxleSpec::of(axle);
+                let axle = crate::physics::AxleSpec::of(axle);
                 let r = axle.kinematic_radius;
                 let model = g
                     .map(|(z, r_mesh)| z + (r - r_mesh))
@@ -508,7 +508,7 @@ impl VehicleType {
                     return model;
                 }
                 let k = axle.sag_spring;
-                let sag = (loads.get(a).copied().unwrap_or(0.0) / k).min(crate::rigid::BUMP);
+                let sag = (loads.get(a).copied().unwrap_or(0.0) / k).min(crate::physics::BUMP);
                 Some(model.unwrap_or(r) - sag)
             })
             .collect()

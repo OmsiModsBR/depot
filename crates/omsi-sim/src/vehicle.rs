@@ -72,7 +72,7 @@ pub struct VehicleInstance {
     pub ground: Option<std::sync::Arc<dyn Fn(f64, f64) -> Option<f64> + Send + Sync>>,
     /// What the wheels stand on: the highest face at or below a height and the lowest one
     /// above it. Without it the wheels stand on `ground`.
-    pub contact: Option<std::sync::Arc<dyn crate::rigid::Ground>>,
+    pub contact: Option<std::sync::Arc<dyn crate::physics::Ground>>,
     /// Vehicles coupled behind this one.
     pub trailers: Vec<TrailerPart>,
     /// How many coupled parts the lead body's rest loads were worked out for (`step_bodies`).
@@ -322,7 +322,7 @@ impl VehicleInstance {
                 ]
             })
             .collect();
-        let rest_sag = crate::rigid::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
+        let rest_sag = crate::physics::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
         // An AI copy has no rigid body: it stands on the contact plane of its wheels
         // (`ai::AiBody`), and what the modelled tyre reaches below its hub less than
         // the model thinks lifts it. An axle the model does not move with `Axle_Suspension`
@@ -559,7 +559,7 @@ impl VehicleInstance {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
             let under = contact
                 .as_ref()
-                .and_then(|c| crate::rigid::Ground::probe(&**c, w.x, w.y, w.z).below)
+                .and_then(|c| crate::physics::Ground::probe(&**c, w.x, w.y, w.z).below)
                 .or_else(|| g(w.x, w.y));
             match under {
                 Some(h) => (w.z - h) as f32,

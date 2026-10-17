@@ -1,4 +1,4 @@
-use super::super::tests::{bus, road};
+use crate::physics::tests::{bus, road};
 use super::*;
 use omsi_vehicle::vehicle::{Axle, Coupling};
 
@@ -155,7 +155,7 @@ fn the_joint_weighs_on_the_front_sections_rear_axle() {
     t.run(4.0, &none, [5000.0; 2], &none, &flat);
     let mut lone = RigidBody::from_definition(&front, &[]);
     lone.place(DVec3::ZERO, 0.0);
-    super::super::tests::run(&mut lone, 4.0, 0.0, 5000.0, &flat);
+    crate::physics::tests::run(&mut lone, 4.0, 0.0, 5000.0, &flat);
     let axle = |b: &RigidBody, a: usize| b.wheels.iter().zip(&b.wheel_axle).filter(|(_, x)| **x == a).map(|(w, _)| w.load).sum::<f32>();
     let (gain_rear, gain_front) = (axle(t.front(), 1) - axle(&lone, 1), axle(t.front(), 0) - axle(&lone, 0));
     eprintln!("the joint on the front section: rear axle {gain_rear:+.0} N, front axle {gain_front:+.0} N");
@@ -196,7 +196,7 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
     let train_decel = (v0 - t.front().forward_speed()) * 2.0;
     let mut lone = RigidBody::from_definition(&front, &[]);
     lone.place(DVec3::ZERO, 0.0);
-    super::super::tests::run(&mut lone, 1.0, 0.0, 5000.0, &flat);
+    crate::physics::tests::run(&mut lone, 1.0, 0.0, 5000.0, &flat);
     lone.velocity = Vec3::Y * v0;
     lone.wheels.iter_mut().for_each(|w| w.spin = v0 / w.radius);
     let mut lone_dip = 0.0f32;

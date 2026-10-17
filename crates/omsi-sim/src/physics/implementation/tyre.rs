@@ -2,14 +2,13 @@
 //! standing tyres (`RigidBody::prepare`); across it OMSI's holding or sliding, solved as an
 //! impulse on each tyre (`RigidBody::lateral_start`, `lateral_pass`, `lateral_end`).
 
-use super::body::RigidBody;
-use super::collide::Impact;
-use super::ground::{track_walls, tyre_line, GroundProbe};
-use super::params::{
+use super::ground::{track_walls, tyre_line};
+use super::wheel::{sign, TyreFrame};
+use crate::physics::domain::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
     GRIPPED_ALONG, HOLD_REACH, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
-use super::wheel::{sign, TyreFrame};
+use crate::physics::domain::{GroundProbe, Impact, RigidBody};
 use glam::{Quat, Vec2, Vec3};
 
 /// A wheel on the ground in one substep, before its tyre forces are settled.
@@ -47,7 +46,7 @@ pub(super) struct Substep {
 /// The tyres' hold across over a substep, solved as a constraint on each tyre: the body's
 /// velocities as they would be at the end of it (`w` in the body frame), the impulse of
 /// each tyre so far, and what a joint passed on to the body (`joint_p` world, `joint_l` body
-/// frame; see [`Joint`](super::Joint)).
+/// frame; see [`Joint`](crate::physics::Joint)).
 #[derive(Default)]
 pub(super) struct Lateral {
     pub(super) lat: Vec<usize>,
@@ -332,7 +331,7 @@ impl RigidBody {
         }
     }
 
-    /// The hold across (and a joint's pull, see [`Joint`](super::Joint)) as forces over the substep.
+    /// The hold across (and a joint's pull, see [`Joint`](crate::physics::Joint)) as forces over the substep.
     pub(super) fn lateral_end(&mut self, s: &mut Substep, l: &Lateral, h: f32) {
         let (rot, contacts, v_fwd) = (s.rot, &s.contacts, self.velocity.dot(s.body_fwd));
         let Lateral { lat, arms, j, v, w, gripped, slipping, m, .. } = l;

@@ -1,4 +1,4 @@
-use super::params::{HALF_WIDTH, LATTICE};
+use super::domain::params::{HALF_WIDTH, LATTICE};
 use super::*;
 use glam::{DVec3, Vec3};
 use omsi_vehicle::Vehicle;
