@@ -11,10 +11,9 @@
 //! the joint's load on the axles, the lever of its pull and the inertia of the part behind.
 //! A body alone is a train of one, solved exactly as before.
 
-use super::body::body_damping;
 use super::spec::{split, wheel_rest_loads_supported};
 use super::tyre::{lin, Lateral, Substep, Work};
-use crate::physics::domain::params::{BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEPS_MAX, SUBSTEPS_MIN, SUBSTEP_DT};
+use crate::physics::domain::params::{BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEP_DT};
 use crate::physics::domain::{BodyInputs, GroundProbe, Impact, Joint, JointKind, RigidBody};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -278,13 +277,28 @@ impl JointRows {
 /// One step of a train (see the module's notes): `drive_torque` (N m, from `M_Wheel`) shared
 /// by every driven wheel of every body - a pusher's front section drives none and is pushed -,
 /// one [`BodyInputs`] per body. Each body is stepped as [`RigidBody::step`] steps one alone:
-/// the same slices and substeps, its own pitch and roll damping, and should any body come out
-/// of the step at no number, the whole train stays where it stood, at rest.
+/// the same substeps, its own pitch and roll damping, and should any body come out of the
+/// step at no number, the whole train stays where it stood, at rest.
 pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, inputs: &[BodyInputs], probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+    step_train_with(bodies, joints, dt, drive_torque, inputs, probe, &mut |_, _| {});
+}
+
+/// [`step_train`], with `after_slice(bodies, slice)` called after each slice of the step
+/// (`slice` its length, s): where the bodies answer the obstacles around them
+/// ([`RigidBody::collide`]), with the time that slice covered.
+///
+/// The frame runs as many substeps of [`SUBSTEP_DT`] as fit in its `dt` and in what the frames
+/// before it left over (the first body keeps that, `RigidBody::unstepped`), in slices of at
+/// most [`SLICE_DT`]; whatever the frame rate, the same drive makes the same motion.
+#[allow(clippy::too_many_arguments)]
+pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, inputs: &[BodyInputs], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, after_slice: &mut dyn FnMut(&mut [RigidBody], f32)) {
     assert_eq!(bodies.len(), inputs.len());
-    // a long frame (below 20 fps) is stepped in slices of at most 50 ms, so that the
-    // body covers the whole frame the clock, the odometer and the scripts count (it was
-    // cut to 50 ms: at 10 fps the bus went half as far as the time went on)
+    if bodies.is_empty() {
+        return;
+    }
+    // a long frame (below 20 fps) is stepped in slices, so that the body covers the whole
+    // frame the clock, the odometer and the scripts count (it was cut to 50 ms: at 10 fps the
+    // bus went half as far as the time went on)
     let dt = if dt.is_finite() { dt.clamp(0.0, FRAME_DT_MAX) } else { 0.0 };
     // A script's value that is no number - a bus's `M_Wheel` or a brake force of 0/0 or
     // 1/0 - put the whole body at NaN within a step: the bus vanished and the steering's
@@ -301,21 +315,27 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
     // driven wheels of its own (a pusher's front section) was pushed by nothing: the
     // count was clamped to one and the torque went to wheels that do not drive.
     let driven = bodies.iter().map(|b| b.wheels.iter().filter(|w| w.driven).count() + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()).sum::<usize>().max(1) as f32;
-    let slices = (dt / SLICE_DT).ceil().max(1.0) as usize;
+    // the substeps this frame: what fits in the time it brings and what was left over (a
+    // hair's breadth short of a whole one counts as one: 1/60 s is four 1/240 s substeps,
+    // not three and a remainder)
+    let time = (bodies[0].unstepped + dt).max(0.0);
+    let substeps = (time / SUBSTEP_DT + 1e-3).floor() as usize;
+    let unstepped = (time - substeps as f32 * SUBSTEP_DT).max(0.0);
+    for b in bodies.iter_mut() {
+        b.unstepped = unstepped;
+        b.wheel_impacts.clear();
+    }
+    let per_slice = ((SLICE_DT / SUBSTEP_DT).round() as usize).max(1);
     let mut impacts: Vec<Vec<Impact>> = vec![Vec::new(); bodies.len()];
+    let mut accel = vec![Vec3::ZERO; bodies.len()];
     let mut scratch = SolverScratch::new(bodies.len());
-    for _ in 0..slices {
-        slice(bodies, joints, dt / slices as f32, drive_torque, driven, &brakes, &steers, &air, probe, &mut scratch);
+    let mut left = substeps;
+    while left > 0 {
+        let n = left.min(per_slice);
+        left -= n;
+        slice(bodies, joints, n, drive_torque, driven, &brakes, &steers, &air, probe, &mut scratch, &mut accel);
+        after_slice(bodies, n as f32 * SUBSTEP_DT);
         for (b, impacts) in bodies.iter_mut().zip(impacts.iter_mut()) {
-            // OMSI damps the body's pitch and roll - never its yaw - by sin(x)/x each frame,
-            // x = 1.5 x sqrt(springs / mass) x frame. Its
-            // frames are OMSI's (its options.cfg caps them at 30 a second): taken per frame
-            // of this game, a machine drawing 150 frames a second damped the body a fifth as
-            // much, and the bus rocked on its springs like a boat. The same damping a second
-            // as OMSI's at 30 frames, however many are drawn:
-            let k = body_damping(b.body_freq, dt / slices as f32);
-            b.omega.x *= k;
-            b.omega.y *= k;
             // (one impact per obstacle a frame, as a single slice gives)
             for m in b.wheel_impacts.drain(..) {
                 match impacts.iter_mut().find(|x: &&mut Impact| x.obstacle == m.obstacle) {
@@ -326,14 +346,20 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
             }
         }
     }
-    for (b, impacts) in bodies.iter_mut().zip(impacts) {
+    for ((b, impacts), a) in bodies.iter_mut().zip(impacts).zip(accel) {
         b.wheel_impacts = impacts;
+        // the acceleration the body felt over the frame (a frame that ran no substep keeps
+        // the last one's)
+        if substeps > 0 {
+            b.accel_body = a / substeps as f32;
+        }
     }
     if !bodies.iter().all(|b| b.position.is_finite() && b.orientation.is_finite() && b.velocity.is_finite() && b.omega.is_finite()) {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| log::warn!("vehicle physics: the body's state became no number; it stays where it was, at rest"));
         for (b, (position, orientation, steer_deg, wheels)) in bodies.iter_mut().zip(before) {
             (b.position, b.orientation, b.steer_deg) = (position, orientation, steer_deg);
+            (b.last_position, b.last_orientation) = (position, orientation);
             b.velocity = Vec3::ZERO;
             b.omega = Vec3::ZERO;
             b.accel_body = Vec3::ZERO;
@@ -365,28 +391,27 @@ impl SolverScratch {
     }
 }
 
+/// `substeps` substeps of [`SUBSTEP_DT`] of the whole train, the bodies' accelerations added
+/// to `accel`.
 #[allow(clippy::too_many_arguments)]
-fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, scratch: &mut SolverScratch) {
+fn slice(bodies: &mut [RigidBody], joints: &[Joint], substeps: usize, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, scratch: &mut SolverScratch, accel: &mut [Vec3]) {
     let n = bodies.len();
-    // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
-    // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
-    let kappas: Vec<f32> = (0..n)
-        .map(|i| match steers[i] {
-            Some(s) => s.clamp(-1.0, 1.0) * bodies[i].inv_min_turn_radius,
-            None => joints.iter().find(|j| j.follow == i).map_or(0.0, |j| j.kappa(bodies)),
-        })
-        .collect();
-    for (b, k) in bodies.iter_mut().zip(kappas) {
-        b.steer_slice(k);
-    }
-    // (substeps of at most ~4 ms whatever the frame: a frame held up by loading - 50 ms -
-    // made 12 ms substeps, too long for the stiff tyres, and the body hopped on its
-    // springs for no reason the driver could see)
-    let substeps = ((dt / SUBSTEP_DT).ceil() as usize).clamp(SUBSTEPS_MIN, SUBSTEPS_MAX);
-    let h = dt / substeps as f32;
-    let mut accel = vec![Vec3::ZERO; n];
+    let h = SUBSTEP_DT;
     let passes = if joints.is_empty() { PASSES } else { JOINT_PASSES };
+    let braked: f32 = brakes.iter().map(|b| b.iter().sum::<f32>()).sum();
+    let mass: f32 = bodies.iter().map(|b| b.mass).sum();
     for _ in 0..substeps {
+        // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
+        // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
+        let kappas: Vec<f32> = (0..n)
+            .map(|i| match steers[i] {
+                Some(s) => s.clamp(-1.0, 1.0) * bodies[i].inv_min_turn_radius,
+                None => joints.iter().find(|j| j.follow == i).map_or(0.0, |j| j.kappa(bodies)),
+            })
+            .collect();
+        for (b, k) in bodies.iter_mut().zip(kappas) {
+            b.steer_to(k);
+        }
         let SolverScratch { subs, lats, works, rows } = &mut *scratch;
         for i in 0..n {
             bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe, &mut subs[i], &mut works[i]);
@@ -407,24 +432,20 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32,
         for i in 0..n {
             bodies[i].lateral_end(&mut subs[i], &lats[i], h);
             bodies[i].integrate(&subs[i], h, &mut accel[i]);
+            bodies[i].end_substep(h);
         }
-    }
-    // Asleep: with the brakes holding and no drive, the last few millimetres per
-    // second of horizontal drift are noise from the tyre model, not motion. Take them
-    // away so the bus stands truly still (the vertical velocity stays: the suspension
-    // may still be settling). (The whole train or none of it: a section stopped on its
-    // own was pulled along by the other through the joint.)
-    let braked: f32 = brakes.iter().map(|b| b.iter().sum::<f32>()).sum();
-    let mass: f32 = bodies.iter().map(|b| b.mass).sum();
-    if bodies.iter().all(|b| Vec3::new(b.velocity.x, b.velocity.y, 0.0).length() < 0.03) && drive_torque.abs() < 1.0 && braked > 0.02 * mass * 9.81 {
-        for b in bodies.iter_mut() {
-            b.velocity.x = 0.0;
-            b.velocity.y = 0.0;
-            b.omega.z = 0.0;
+        // Asleep: with the brakes holding and no drive, the last few millimetres per
+        // second of horizontal drift are noise from the tyre model, not motion. Take them
+        // away so the bus stands truly still (the vertical velocity stays: the suspension
+        // may still be settling). (The whole train or none of it: a section stopped on its
+        // own was pulled along by the other through the joint.)
+        if bodies.iter().all(|b| Vec3::new(b.velocity.x, b.velocity.y, 0.0).length() < 0.03) && drive_torque.abs() < 1.0 && braked > 0.02 * mass * 9.81 {
+            for b in bodies.iter_mut() {
+                b.velocity.x = 0.0;
+                b.velocity.y = 0.0;
+                b.omega.z = 0.0;
+            }
         }
-    }
-    for (b, a) in bodies.iter_mut().zip(accel) {
-        b.end_slice(substeps, a);
     }
 }
 

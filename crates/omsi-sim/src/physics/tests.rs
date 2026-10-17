@@ -132,6 +132,44 @@ fn sags_by_its_own_springs() {
     assert!(soft.origin().z < origin.z - 0.08, "{:?}", soft.origin());
 }
 
+/// The same drive makes the same motion at any frame rate: the bus starts off, steers into a
+/// bend and over a ramp, and stands at the same place, to the bit, whether it was stepped at
+/// 30, 60, 120 or 240 frames a second (its substeps are the same length at all of them).
+#[test]
+fn the_motion_does_not_depend_on_the_frame_rate() {
+    let g = ramp(0.05);
+    let drive = |fps: u32| {
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        for f in 0..4 * fps {
+            // (the steering turns at the first second, the start of a frame at every rate)
+            rb.step(1.0 / fps as f32, 6000.0, &[0.0; 4], if f >= fps { 0.4 } else { 0.0 }, &g);
+        }
+        (rb.position, rb.orientation, rb.velocity, rb.omega)
+    };
+    let at_60 = drive(60);
+    for fps in [30, 120, 240] {
+        assert_eq!(drive(fps), at_60, "at {fps} fps");
+    }
+}
+
+/// A frame shorter than a substep runs none, and the time it brought counts towards the next:
+/// at 300 frames a second the bus covers the distance it covers at 60.
+#[test]
+fn short_frames_add_up_to_substeps() {
+    let g = road(1e9, 0.0);
+    let go = |fps: u32| {
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        for _ in 0..3 * fps {
+            rb.step(1.0 / fps as f32, 6000.0, &[0.0; 4], 0.0, &g);
+        }
+        rb.position.y
+    };
+    let (a, b) = (go(60), go(300));
+    assert!((a - b).abs() < 0.05, "{a} m at 60 fps, {b} m at 300");
+}
+
 /// A 6 cm hump 0.6 m long (a manhole cover's rim, a speed cushion's edge) crossed at
 /// 40 km/h: the wheels ride over it without leaving the road for long, the body
 /// hardly lifts, and a wheel's travel changes smoothly from frame to frame instead of

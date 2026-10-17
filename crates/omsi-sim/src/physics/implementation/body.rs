@@ -4,7 +4,7 @@
 
 use super::train::step_train;
 use super::tyre::Substep;
-use crate::physics::domain::params::{BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, MAX_STEER, OMSI_FRAME, TIP_OVER};
+use crate::physics::domain::params::{BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, MAX_STEER, OMSI_FRAME, SUBSTEP_DT, TIP_OVER};
 use crate::physics::domain::{BodyInputs, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
 use crate::collision::Obb;
 use glam::{DVec3, Quat, Vec3};
@@ -39,7 +39,7 @@ impl RigidBody {
         for (w, a) in wheels.iter_mut().zip(&wheel_axle) {
             w.rest_load = spec.rest_loads.get(*a).copied().unwrap_or(0.0);
         }
-        RigidBody { mass, inertia: spec.inertia, cog: spec.cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg: spec.max_steer_deg, rot_pnt_long: spec.rot_pnt_long, inv_min_turn_radius: spec.inv_min_turn_radius, body_freq: spec.body_freq, holding: true, rolling_resistance: spec.rolling_resistance, accel_body: Vec3::ZERO, friction: DRY_GRIP, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true }
+        RigidBody { mass, inertia: spec.inertia, cog: spec.cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg: spec.max_steer_deg, rot_pnt_long: spec.rot_pnt_long, inv_min_turn_radius: spec.inv_min_turn_radius, body_freq: spec.body_freq, holding: true, rolling_resistance: spec.rolling_resistance, accel_body: Vec3::ZERO, friction: DRY_GRIP, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true, unstepped: 0.0, last_position: DVec3::ZERO, last_orientation: Quat::IDENTITY }
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading
@@ -51,6 +51,8 @@ impl RigidBody {
         self.velocity = Vec3::ZERO;
         self.omega = Vec3::ZERO;
         self.spawned_inside = None;
+        self.unstepped = 0.0;
+        (self.last_position, self.last_orientation) = (self.position, self.orientation);
         for w in self.wheels.iter_mut() {
             w.compression = w.rest_compression().min(BUMP);
             w.compression_rate = 0.0;
@@ -158,8 +160,8 @@ impl RigidBody {
         step_train(std::slice::from_mut(self), &[], dt, drive_torque, &[BodyInputs { brake, steer: Some(steer), air: true }], probe);
     }
 
-    /// The start of a slice: the body turns on curvature `kappa` (1/m, positive to the right).
-    pub(super) fn steer_slice(&mut self, kappa: f32) {
+    /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right).
+    pub(super) fn steer_to(&mut self, kappa: f32) {
         // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
         // `[inv_min_turnradius]`) and every axle points at the centre of that turn on the
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
@@ -178,11 +180,11 @@ impl RigidBody {
             w.steered = w.steer != 0.0;
         }
         self.steer_deg = ((front - self.rot_pnt_long) * kappa).atan().clamp(-MAX_STEER, MAX_STEER).to_degrees();
-        self.wheel_impacts.clear();
     }
 
     /// The body moved on by the substep under what acts on it.
     pub(super) fn integrate(&mut self, s: &Substep, h: f32, accel_sum: &mut Vec3) {
+        (self.last_position, self.last_orientation) = (self.position, self.orientation);
         let (rot, body_fwd, towed, force, torque) = (s.rot, s.body_fwd, s.towed, s.force, s.torque);
         let along = force.dot(body_fwd);
         let acc = (force - body_fwd * along) / self.mass + body_fwd * (along / (self.mass + towed));
@@ -196,10 +198,17 @@ impl RigidBody {
         self.orientation = (dq * rot).normalize();
     }
 
-    /// The end of a slice of `substeps`: the acceleration the body felt, and the safety net
+    /// The end of a substep: OMSI's damping of pitch and roll over it, and the safety net
     /// against tipping over.
-    pub(super) fn end_slice(&mut self, substeps: usize, accel_sum: Vec3) {
-        self.accel_body = accel_sum / substeps as f32;
+    pub(super) fn end_substep(&mut self, h: f32) {
+        // OMSI damps the body's pitch and roll - never its yaw - by sin(x)/x each frame,
+        // x = 1.5 x sqrt(springs / mass) x frame. Its frames are OMSI's (its options.cfg caps
+        // them at 30 a second): taken per frame of this game, a machine drawing 150 frames a
+        // second damped the body a fifth as much, and the bus rocked on its springs like a
+        // boat. The same damping a second as OMSI's at 30 frames, however many are drawn:
+        let k = body_damping(self.body_freq, h);
+        self.omega.x *= k;
+        self.omega.y *= k;
         // rotation keeps the body from tipping over completely (safety net for bad ground)
         let up = self.orientation.mul_vec3(Vec3::Z);
         if up.z < TIP_OVER {
@@ -207,6 +216,31 @@ impl RigidBody {
             self.orientation = Quat::from_rotation_z((-heading).to_radians() as f32);
             self.omega = Vec3::ZERO;
         }
+    }
+
+    /// The model origin as the body is shown: between where it stood a substep before the
+    /// last and where it stands, as far as the time not yet stepped reaches into the next
+    /// substep (a substep behind the physics at most).
+    pub fn shown_origin(&self) -> DVec3 {
+        let (position, orientation) = self.shown_pose();
+        position - orientation.mul_vec3(self.cog).as_dvec3()
+    }
+
+    /// Heading (deg, clockwise from north), pitch and bank (deg) of the body as it is shown
+    /// (see [`Self::shown_origin`]).
+    pub fn shown_heading_pitch_bank(&self) -> (f64, f32, f32) {
+        let (_, orientation) = self.shown_pose();
+        let f = orientation.mul_vec3(Vec3::Y);
+        let r = orientation.mul_vec3(Vec3::X);
+        let heading = (f.x.atan2(f.y) as f64).to_degrees().rem_euclid(360.0);
+        let pitch = f.z.clamp(-1.0, 1.0).asin().to_degrees();
+        let bank = (-r.z).clamp(-1.0, 1.0).asin().to_degrees();
+        (heading, pitch, bank)
+    }
+
+    fn shown_pose(&self) -> (DVec3, Quat) {
+        let t = (self.unstepped / SUBSTEP_DT).clamp(0.0, 1.0);
+        (self.last_position.lerp(self.position, t as f64), self.last_orientation.slerp(self.orientation, t))
     }
 }
 
