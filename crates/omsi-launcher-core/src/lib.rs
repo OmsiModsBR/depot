@@ -765,7 +765,7 @@ pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
 /// The vehicle packs whose parts a model file names and that are installed nowhere.
 fn missing_packs_of(model: &Path) -> Vec<String> {
     let Ok(text) = omsi_cfg::vfs::read(model) else { return Vec::new() };
-    let text = omsi_cfg::codepage::decode(&text);
+    let text = omsi_cfg::decode_text(&text);
     let dir = model.parent().unwrap_or(Path::new("."));
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -2090,7 +2090,7 @@ pub fn tutorials() -> Vec<(usize, String, String)> {
         let p = [lang, "ENG", "DEU"].iter().map(|l| r.join("Tutorials").join(format!("menu_{n}_{l}.html"))).find(|p| p.is_file());
         let Some(p) = p else { continue };
         let Ok(bytes) = std::fs::read(&p) else { continue };
-        let html = omsi_cfg::codepage::decode(&bytes);
+        let html = omsi_cfg::decode_text(&bytes);
         let body = html.split_once("</style>").map(|x| x.1).unwrap_or(&html);
         let mut text = String::new();
         let mut tag = false;
@@ -2578,7 +2578,7 @@ mod save_slot_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // as the game writes them: UTF-16 with its mark
-        let utf16 = |t: &str| [0xFFu8, 0xFE].into_iter().chain(t.encode_utf16().flat_map(|u| u.to_le_bytes())).collect::<Vec<u8>>();
+        let utf16 = omsi_cfg::encode_utf16_bom;
         std::fs::write(dir.join("Slot 1.osn"), utf16("\r\n[name]\r\nSlot 1: SD202, 09:00\r\n[description]\r\nx\r\n")).unwrap();
         std::fs::write(dir.join("Slot 2.osn"), utf16("[name]\r\nSlot 2: NG272, 10:30\r\n")).unwrap();
         std::fs::write(dir.join("notes.txt"), "not a situation").unwrap();

@@ -98,7 +98,7 @@ pub(crate) fn read_cfg(root: &Path) -> Vec<DeviceCfg> {
 pub(crate) fn read_cfg_checked(root: &Path) -> Result<Vec<DeviceCfg>, String> {
     let path = cfg_path(root);
     let text = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut devices = parse_cfg(&omsi_cfg::codepage::decode(&text));
+    let mut devices = parse_cfg(&omsi_cfg::decode_text(&text));
     // An inherited OMSI file can contain 0/0 FFScale on a wheel. Keep its axis and
     // button bindings, but use openOMSI's 100/100 default until our own file is saved.
     let original = root.join("Inputs").join("gamectrler.cfg");
@@ -2158,7 +2158,7 @@ mod cfg_tests {
     #[test]
     fn the_stock_file_round_trips() {
         let Ok(bytes) = std::fs::read("../../../OMSI 2 Original/Inputs/gamectrler.cfg") else { return };
-        let text = omsi_cfg::codepage::decode(&bytes);
+        let text = omsi_cfg::decode_text(&bytes);
         let devs = super::parse_cfg(&text);
         assert!(devs.iter().any(|d| d.name.contains("G25")), "{:?}", devs.iter().map(|d| &d.name).collect::<Vec<_>>());
         let again = super::parse_cfg(&super::cfg_text(&devs));

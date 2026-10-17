@@ -59,4 +59,4 @@ pub use install::{
     CONTENT_MARKER, LEGACY_CONTENT_MARKER, ORIGINAL_ESSENTIALS,
 };
 pub use text::number::{parse_f32, parse_f64, parse_i32, parse_i64};
-pub use text::{codepage, decode_text, encode_text, number, split_lines};
+pub use text::{codepage, decode_text, encode_text, encode_utf16_bom, number, split_lines};
