@@ -154,7 +154,7 @@ fn boarding_time(id: u64) -> f32 {
 /// bus at a stop (s). Somebody who cannot get on or off - an exit that never opens, a door that
 /// stays shut - asks for the doors every frame, and the bus stood at its stop for good (#172).
 /// The people of a crowd getting on one after the other finish well within this.
-const MAX_HELD: f64 = 120.0;
+const MAX_HELD: f64 = 180.0;
 
 /// An early bus waits at its stop until this long before its departure, a train at its
 /// station until `EARLY_LEAVE_RAIL` before (as in OMSI: it stands while it is more
@@ -882,13 +882,36 @@ mod tests {
     }
 
     /// The limit does not cut short a crowd: people getting on one after another keep the
-    /// doors open for as long as it takes them within reason.
+    /// doors open until just before `MAX_HELD` past the time the bus would have left, and
+    /// not much longer.
     #[test]
     fn a_queue_of_people_still_holds_the_doors() {
         let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
-        let left = rig.seconds_to_leave(30.0, true);
+        let base = boarding_time(3);
+        let left = rig.seconds_to_leave(base + MAX_HELD as f32 - 5.0, true);
         assert!(left.is_none(), "left after {left:?} with people at the doors");
         assert_eq!(rig.svc.phase, Phase::Boarding);
+        let left = rig.seconds_to_leave(20.0 + CLOSE_MAX, true).expect("never left");
+        assert!(left < 20.0 + CLOSE_MAX);
+    }
+
+    /// The limit is per stop: after being held out at one stop the bus serves the next
+    /// one normally.
+    #[test]
+    fn a_bus_held_out_of_one_stop_boards_normally_at_the_next() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        rig.seconds_to_leave(600.0, true).expect("never left");
+        assert!(rig.svc.held_out);
+        rig.svc.restart(vec![Stop { ri: 0, s: 100.0, bay: 0.0, depart: rig.now, id: 5, side: 0.0 }, Stop { ri: 0, s: 250.0, bay: 0.0, depart: rig.now + 300.0, id: 6, side: 0.0 }], false);
+        rig.st.s = 100.0;
+        rig.st.speed = 0.0;
+        for _ in 0..50 {
+            rig.frame(0.1, false);
+        }
+        assert_eq!(rig.svc.phase, Phase::Boarding);
+        assert!(!rig.svc.held_out);
+        rig.svc.hold(None, 2.5);
+        assert!(rig.svc.boarding >= 2.4, "a hold at the new stop is ignored");
     }
 
     #[test]
