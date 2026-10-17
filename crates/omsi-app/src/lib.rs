@@ -55,7 +55,7 @@ mod launcher;
 mod menu;
 mod mirror_hud;
 mod map_surface;
-mod navigator;
+mod nav;
 mod vr_navigator;
 mod money;
 mod radio;

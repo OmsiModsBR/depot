@@ -70,7 +70,7 @@ use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::humans;
 use crate::lights;
-use crate::navigator;
+use crate::nav;
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
@@ -2389,7 +2389,7 @@ impl ApplicationHandler for App {
                                 d.learn_places(places);
                             }
                         }
-                        let (line, terminus, stops, trip) = navigator::duty_parts(self.duty.as_ref());
+                        let (line, terminus, stops, trip) = nav::duty_parts(self.duty.as_ref());
                         match (trip, self.schedule.as_ref(), self.traffic.as_ref(), self.world.as_ref()) {
                             (Some((key, name)), Some(sch), _, _) if nav.map_net().is_some() => {
                                 if nav.wants_route(&key, 0) {
@@ -2413,7 +2413,7 @@ impl ApplicationHandler for App {
                             None => (p.vehicle.position, p.vehicle.heading),
                         };
                         let car_line = |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
-                        let frame = navigator::NavFrame {
+                        let frame = nav::NavFrame {
                             traffic: self.traffic.as_ref(),
                             #[cfg(feature = "lan")]
                             players: self.online.lan.as_ref().map(|l| crate::lan::nav_players(&self.online.remotes, l.my_id)).unwrap_or_default(),
@@ -2429,7 +2429,7 @@ impl ApplicationHandler for App {
                             stops,
                             delay: self.duty.as_ref().map(|_| p.vehicle.host.tt_delay as f64),
                             passengers: self.humans.as_ref().map(|h| h.riding()),
-                            stop_requested: navigator::stop_requested(&p.vehicle),
+                            stop_requested: nav::stop_requested(&p.vehicle),
                             time: self.clock.time,
                             weekday: self.clock.weekday(),
                             date: self.clock.date_code(),
