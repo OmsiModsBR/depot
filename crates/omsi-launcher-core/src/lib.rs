@@ -2046,7 +2046,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "autosave_minutes" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5)),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
-            "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
+            // (what is no finite number is the default, as the game reads it)
+            "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|| "1".into())),
             "language" => v[&k] = json!(language_code(val)),
             "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
