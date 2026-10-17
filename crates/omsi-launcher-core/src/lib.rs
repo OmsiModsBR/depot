@@ -1955,7 +1955,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
-            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" if k != "navigator_corner" => v[&k] = json!(val),
+            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" if k != "navigator_corner" && k != "render_scale" => v[&k] = json!(val),
+            // (auto, or 0.5 to 1 (a value above 1.5 is a percentage), else auto, as the game reads it)
+            "render_scale" => v[&k] = json!(if val.eq_ignore_ascii_case("auto") { "auto".to_string() } else { match val.trim_end_matches('%').parse::<f32>() { Ok(x) if x > 1.5 => (x / 100.0).clamp(0.5, 1.0).to_string(), Ok(x) if x > 0.0 => x.clamp(0.5, 1.0).to_string(), _ => "auto".to_string() } }),
             // (the game lowercases it)
             "navigator_corner" => v[&k] = json!(val.to_ascii_lowercase()),
             "ctrl_off" => v[&k] = json!(val),
