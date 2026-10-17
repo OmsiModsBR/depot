@@ -78,3 +78,28 @@ fn a_click_on_a_vehicle_row_and_a_paint_chooses_them() {
     );
     assert_eq!(shell.vehicles.chosen(), (1, 1));
 }
+
+#[test]
+fn a_click_on_a_map_row_and_a_start_point_chooses_them() {
+    use omsi_launcher_ui::maps::MapsView;
+    let mut shell = Shell::new(Page::Maps);
+    shell.maps = MapsView::with_catalog(omsi_launcher_ui::sample::maps());
+    let mut ui = Ui::new();
+    frame(&mut shell, &mut ui, None);
+    assert_eq!(shell.maps.chosen(), (0, 0));
+    let start = ui.drawn[&omsi_ui::widgets::id_of("maps:start:2")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(start.x + 30.0, start.y + 10.0)),
+    );
+    assert_eq!(shell.maps.chosen(), (0, 2));
+    let row = ui.drawn[&omsi_ui::widgets::id_of("maps:row:1")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
+    );
+    // a new map starts on its first start point
+    assert_eq!(shell.maps.chosen(), (1, 0));
+}

@@ -49,3 +49,44 @@ pub fn vehicles() -> Vec<VehicleInfo> {
         last,
     ]
 }
+
+/// A few maps; the last has no start point and no depot file.
+pub fn maps() -> Vec<omsi_launcher_lib::MapInfo> {
+    use omsi_launcher_lib::{EntryInfo, MapInfo};
+    let entry = |i: i32, n: &str| EntryInfo {
+        index: i,
+        name: n.into(),
+    };
+    let map = |name: &str, friendly: &str, installed: bool, entries: Vec<EntryInfo>, hof: &str| {
+        MapInfo {
+        name: name.into(),
+        friendly: friendly.into(),
+        file: format!("maps/{name}/global.cfg"),
+        description: "Example map. The author describes the area, the lines and the period here (example text).".into(),
+        entry_points: entries,
+        hof: hof.into(),
+        installed,
+    }
+    };
+    vec![
+        map(
+            "Example map",
+            "Example map",
+            false,
+            vec![
+                entry(0, "Central depot"),
+                entry(1, "North terminus"),
+                entry(2, "Harbour"),
+            ],
+            "Depot A",
+        ),
+        map(
+            "Example city 2",
+            "Example city 2",
+            true,
+            vec![entry(0, "Main station")],
+            "Depot B",
+        ),
+        map("Example town", "Example town", true, Vec::new(), ""),
+    ]
+}

@@ -6,6 +6,7 @@
 
 pub mod kit;
 pub mod look;
+pub mod maps;
 pub mod offscreen;
 pub mod pages;
 pub mod sample;
