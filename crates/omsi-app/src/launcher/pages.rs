@@ -1064,6 +1064,7 @@ fn gameplay_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     sel_setting(ui, s, dirty, "s-unsched", c.row(), "Random traffic", "ai_unsched_factor", &[("25", "25%"), ("50", "50%"), ("75", "75%"), ("100", "100%"), ("150", "150%"), ("200", "200%")]);
     sel_setting(ui, s, dirty, "s-maxsched", c.row(), "Timetable vehicles", "ai_max_scheduled", &[("0", "All"), ("10", "At most 10"), ("25", "At most 25"), ("50", "At most 50")]);
     sel_setting(ui, s, dirty, "s-maxpark", c.row(), "Parked cars", "ai_max_parked", &[("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")]);
+    sel_setting(ui, s, dirty, "s-autosave", c.row(), "Autosave", "autosave_minutes", &[("0", "Off"), ("2", "Every 2 minutes"), ("5", "Every 5 minutes"), ("10", "Every 10 minutes"), ("15", "Every 15 minutes")]);
     sel_setting(ui, s, dirty, "s-maxhumans", c.row(), "People", "ai_max_humans", &[("50", "At most 50"), ("100", "At most 100"), ("200", "At most 200"), ("400", "At most 400"), ("800", "At most 800")]);
     let left = c.used();
     // OMSI's own options (options.cfg)
@@ -2758,7 +2759,7 @@ mod settings_tests {
         // (the radio stations: one, see `frame`)
         let sound = vec!["s-vol", "s-volai", "s-volsc", "set-doppler", "set-muffle_outside", "s-voices", "radio-name-0", "radio-url-0", "radio-del-0", "radio-add"];
         let gameplay = vec![
-            "s-board", "set-exact_fare", "s-pax", "set-get_up", "s-unsched", "s-maxsched", "s-maxpark", "s-maxhumans",
+            "s-board", "set-exact_fare", "s-pax", "set-get_up", "s-unsched", "s-maxsched", "s-maxpark", "s-autosave", "s-maxhumans",
             "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
         ];
         let general = vec![
