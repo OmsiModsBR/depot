@@ -80,7 +80,7 @@ impl AiBody {
     /// The body on its springs over the ground under its wheels: the plane through the
     /// contact points is where the body wants to be, braking and cornering lean it off
     /// that plane, and the difference is how far each wheel moves in its arch.
-    pub(super) fn settle(&mut self, dt: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) {
+    pub(super) fn settle(&mut self, dt: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::physics::Ground>) {
         let fwd = dir(self.heading);
         let right = DVec2::new(fwd.y, -fwd.x);
         let origin = self.position.truncate();

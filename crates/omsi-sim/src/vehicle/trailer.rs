@@ -357,10 +357,10 @@ impl TrailerPart {
             .def
             .axles
             .first()
-            .map(|a| crate::rigid::AxleSpec::of(a).shown_radius)
+            .map(|a| crate::physics::AxleSpec::of(a).shown_radius)
             .unwrap_or(0.5);
         let n = ty.meshes.len();
-        let loads = crate::rigid::kinematic_wheel_rest_loads(&ty.def);
+        let loads = crate::physics::kinematic_wheel_rest_loads(&ty.def);
         let rest = ty
             .def
             .axles
@@ -368,7 +368,7 @@ impl TrailerPart {
             .zip(ty.hub_heights(first_axle))
             .enumerate()
             .map(|(a, (axle, z))| {
-                let axle = crate::rigid::AxleSpec::of(axle);
+                let axle = crate::physics::AxleSpec::of(axle);
                 let r = axle.kinematic_radius;
                 (r - z.unwrap_or(r), loads.get(a).copied().unwrap_or(0.0), axle.sag_spring)
             })

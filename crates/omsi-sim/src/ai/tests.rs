@@ -177,7 +177,7 @@ fn each_wheel_stands_on_the_face_under_it() {
         let road = move |x: f64, _y: f64| 10.0 + lift + camber * x;
         let ground = move |x: f64, y: f64, top: f64| {
             let z = road(x, y);
-            if z <= top { crate::rigid::GroundProbe { below: Some(z), above: None } } else { crate::rigid::GroundProbe { below: Some(9.0), above: Some(z) } }
+            if z <= top { crate::physics::GroundProbe { below: Some(z), above: None } } else { crate::physics::GroundProbe { below: Some(9.0), above: Some(z) } }
         };
         let way = |d: f32| DVec3::new(0.0, d as f64, 10.0);
         let mut body = AiBody::new(&def, MotionKind::Road);
@@ -207,7 +207,7 @@ fn a_car_over_a_lower_road_comes_down_onto_it() {
     for (drop, expect) in [(0.5f64, 9.5f64), (6.0, 10.0)] {
         let ground = move |_x: f64, _y: f64, top: f64| {
             let z = 10.0 - drop;
-            crate::rigid::GroundProbe { below: (z <= top).then_some(z), above: None }
+            crate::physics::GroundProbe { below: (z <= top).then_some(z), above: None }
         };
         let way = |d: f32| DVec3::new(0.0, d as f64, 10.0);
         let mut body = AiBody::new(&def, MotionKind::Road);

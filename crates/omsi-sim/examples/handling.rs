@@ -9,7 +9,7 @@
 //! the roll frequency and how many swings the body makes before it is still again.
 
 use glam::{DVec3, Vec3};
-use omsi_sim::rigid::{GroundProbe, RigidBody};
+use omsi_sim::physics::{GroundProbe, RigidBody};
 use omsi_vehicle::Vehicle;
 use std::path::PathBuf;
 

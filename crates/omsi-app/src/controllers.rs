@@ -1529,7 +1529,7 @@ impl Controllers {
 /// reaches it through the bus body at a lower strength.
 impl Controllers {
     /// The wheels' jolt this frame (None: not driving, the travel is settled anew on return).
-    pub(crate) fn wheel_bump(&mut self, body: Option<&omsi_sim::rigid::RigidBody>, kmh: f32, dt: f32) -> f32 {
+    pub(crate) fn wheel_bump(&mut self, body: Option<&omsi_sim::physics::RigidBody>, kmh: f32, dt: f32) -> f32 {
         let Some(body) = body else {
             self.settled.clear();
             return 0.0;

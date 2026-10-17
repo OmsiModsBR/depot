@@ -23,7 +23,7 @@ impl VehicleInstance {
     }
 
     /// The vehicle's mass (kg) as the model that moves it has it: the rigid body's
-    /// (`rigid::mass_kg`), the kinematic model's (`rigid::kinematic_mass_kg`).
+    /// (`physics::mass_kg`), the kinematic model's (`physics::kinematic_mass_kg`).
     pub fn mass_kg(&self) -> f32 {
         match &self.dynamics {
             Dynamics::Rigid(rb) => rb.mass(),
@@ -32,14 +32,14 @@ impl VehicleInstance {
     }
 
     /// The vehicle's rigid body, when it runs on one (the player's vehicle).
-    pub fn rigid(&self) -> Option<&crate::rigid::RigidBody> {
+    pub fn rigid(&self) -> Option<&crate::physics::RigidBody> {
         match &self.dynamics {
             Dynamics::Rigid(rb) => Some(rb),
             Dynamics::Kinematic(_) => None,
         }
     }
 
-    pub fn rigid_mut(&mut self) -> Option<&mut crate::rigid::RigidBody> {
+    pub fn rigid_mut(&mut self) -> Option<&mut crate::physics::RigidBody> {
         match &mut self.dynamics {
             Dynamics::Rigid(rb) => Some(rb),
             Dynamics::Kinematic(_) => None,
@@ -60,7 +60,7 @@ impl VehicleInstance {
     }
 
     /// The rigid body taken out for its step (`step_rigid` puts it back), if the vehicle has one.
-    fn take_rigid(&mut self) -> Option<crate::rigid::RigidBody> {
+    fn take_rigid(&mut self) -> Option<crate::physics::RigidBody> {
         match std::mem::replace(&mut self.dynamics, Dynamics::Kinematic(KinematicModel::default())) {
             Dynamics::Rigid(rb) => Some(rb),
             other => {
@@ -108,7 +108,7 @@ impl VehicleInstance {
     pub fn enable_rigid_body(&mut self) {
         // (its hubs from the `.bus` alone, a tyre radius over the model origin's plane where
         // OMSI's springs stand: neither the model's wheels nor their animation move them)
-        let mut rb = crate::rigid::RigidBody::from_definition(&self.ty.def, &[]);
+        let mut rb = crate::physics::RigidBody::from_definition(&self.ty.def, &[]);
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -173,7 +173,7 @@ impl VehicleInstance {
                 });
             if let Some(hit) = hit {
                 let v = self.motion.speed;
-                if v.abs() > crate::rigid::CRASH_SPEED {
+                if v.abs() > crate::physics::CRASH_SPEED {
                     let e = 0.5 * k.mass_kg * v * v;
                     let rel = hit.center - self.position.truncate();
                     let body_h = body_heading(&self.ty.def, prev.1, false).to_radians();
@@ -296,7 +296,7 @@ impl VehicleInstance {
     /// The coupled parts as the leading body feels them at its rear coupling (each along
     /// the direction of the part hung on that coupling; the parts follow kinematically and
     /// pass on what acts on them): drive, brakes, rolling resistance and mass.
-    pub(super) fn coupled_parts(&self) -> Vec<crate::rigid::CoupledPart> {
+    pub(super) fn coupled_parts(&self) -> Vec<crate::physics::CoupledPart> {
         let Some(first) = self.trailers.first() else {
             return Vec::new();
         };
@@ -319,20 +319,20 @@ impl VehicleInstance {
                     .filter(|(_, a)| a.driven)
                     .map(|(i, _)| i)
                     .collect();
-                let loads = crate::rigid::wheel_rest_loads(def);
+                let loads = crate::physics::wheel_rest_loads(def);
                 let wheel_load = |a: usize| loads.get(a).copied().unwrap_or(0.0) * 2.0;
-                crate::rigid::CoupledPart {
+                crate::physics::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: crate::rigid::mass_kg(def),
+                    mass: crate::physics::mass_kg(def),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()
-                        .map(|&a| crate::rigid::AxleSpec::of(&def.axles[a]).radius)
+                        .map(|&a| crate::physics::AxleSpec::of(&def.axles[a]).radius)
                         .unwrap_or(0.5),
                     driven_load: driven.iter().map(|&a| wheel_load(a)).sum(),
                     brake: self.part_brakes(t).sum::<f32>()
-                        + crate::rigid::coupled_rolling_resistance(def),
+                        + crate::physics::coupled_rolling_resistance(def),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
                 }
             })
@@ -349,18 +349,18 @@ impl VehicleInstance {
         }
         {
             let ground = self.ground.clone();
-            let flat = |_: f64, _: f64, _: f64| crate::rigid::GroundProbe {
+            let flat = |_: f64, _: f64, _: f64| crate::physics::GroundProbe {
                 below: Some(0.0),
                 above: None,
             };
             let from_ground = |x: f64, y: f64, top: f64| {
                 let z = ground.as_ref().and_then(|g| g(x, y));
                 match z {
-                    Some(z) if z > top => crate::rigid::GroundProbe {
+                    Some(z) if z > top => crate::physics::GroundProbe {
                         below: None,
                         above: Some(z),
                     },
-                    z => crate::rigid::GroundProbe {
+                    z => crate::physics::GroundProbe {
                         below: z,
                         above: None,
                     },
@@ -370,7 +370,7 @@ impl VehicleInstance {
             // together, and it looks the tiles under them up once
             let contact = self.contact.clone();
             let session = contact.as_ref().map(|c| c.session());
-            let probe: &dyn Fn(f64, f64, f64) -> crate::rigid::GroundProbe =
+            let probe: &dyn Fn(f64, f64, f64) -> crate::physics::GroundProbe =
                 match (&session, &ground) {
                     (Some(s), _) => s.as_ref(),
                     (None, Some(_)) => &from_ground,
@@ -381,10 +381,10 @@ impl VehicleInstance {
         }
         // what the crashes of this step destroyed, and the worst of them
         let mut energy = 0.0f32;
-        let mut worst: Option<crate::rigid::Impact> = None;
+        let mut worst: Option<crate::physics::Impact> = None;
         // a wheel stopped by a face it cannot climb (a platform, a step in the road)
         for hit in &rb.wheel_impacts {
-            if hit.speed < crate::rigid::CRASH_SPEED || hit.energy < 1000.0 {
+            if hit.speed < crate::physics::CRASH_SPEED || hit.energy < 1000.0 {
                 continue;
             }
             energy += hit.energy;
@@ -433,10 +433,10 @@ impl VehicleInstance {
                 // a brush that takes less than a kilojoule is no accident (a broken post is), and
                 // a car still inside the bus from the frame before is the same accident
                 let o = &obstacles[hit.obstacle];
-                if hit.speed >= crate::rigid::CRASH_SPEED && omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
+                if hit.speed >= crate::physics::CRASH_SPEED && omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
                     log::info!("  hit obstacle {} at ({:.1}, {:.1}) z {:.2}..{:.2} half {:.2}x{:.2} heading {:.0}, {:.1} km/h", o.id, o.center.x, o.center.y, o.z0, o.z1, o.half.x, o.half.y, o.heading.to_degrees(), hit.speed * 3.6);
                 }
-                if hit.speed < crate::rigid::CRASH_SPEED
+                if hit.speed < crate::physics::CRASH_SPEED
                     || (hit.energy < 1000.0 && !hit.broke)
                     || (o.mass > 0.0 && self.touching.contains(&o.id))
                 {

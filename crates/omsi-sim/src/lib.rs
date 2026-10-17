@@ -15,8 +15,8 @@ pub mod human_omsi;
 pub mod input;
 pub mod particles;
 pub mod physics;
-/// The physics' old path, kept for the trace harnesses (`tests/physics_traces.rs`,
-/// `tests/ai_traces.rs`, `tests/physics_invariants.rs`): `scripts/physics-trace-diff.sh` builds
+/// The physics' old path, kept for the trace harnesses (`tests/physics_traces.rs` and
+/// `tests/ai_traces.rs`): `scripts/physics-trace-diff.sh` builds
 /// them on the base commit as well, so they move to `physics` once that path is on the base.
 pub use physics as rigid;
 pub mod scenery;

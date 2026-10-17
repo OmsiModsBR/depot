@@ -1009,11 +1009,11 @@ fn volvo_wright_family_rear_toggle_closes_every_bus_variant() {
 fn a_wheels_ground_is_the_road_under_it_not_the_highest_face() {
     let (road, deck) = (12.0f64, 17.0f64);
     // the faces: the deck above the wheel, the road under it
-    let faces = |_x: f64, _y: f64, top: f64| crate::rigid::GroundProbe {
+    let faces = |_x: f64, _y: f64, top: f64| crate::physics::GroundProbe {
         below: [road, deck].into_iter().filter(|h| *h <= top).fold(None, |a: Option<f64>, b| Some(a.map_or(b, |a| a.max(b)))),
         above: None,
     };
-    let faces: &dyn crate::rigid::Ground = &faces;
+    let faces: &dyn crate::physics::Ground = &faces;
     // the plain sampler: the highest face at (x, y), which is the deck
     let plain = |_x: f64, _y: f64| Some(deck);
     let plain: &(dyn Fn(f64, f64) -> Option<f64> + Send + Sync) = &plain;
@@ -1022,8 +1022,8 @@ fn a_wheels_ground_is_the_road_under_it_not_the_highest_face() {
     // a wheel standing on the deck itself gets the deck
     assert_eq!(wheel_ground(Some(faces), Some(plain), DVec3::new(100.0, 200.0, deck)), Some(deck));
     // nothing drawn within a step of the wheel: the plain sampler, as before
-    let empty = |_x: f64, _y: f64, _top: f64| crate::rigid::GroundProbe { below: None, above: Some(deck) };
-    let empty: &dyn crate::rigid::Ground = &empty;
+    let empty = |_x: f64, _y: f64, _top: f64| crate::physics::GroundProbe { below: None, above: Some(deck) };
+    let empty: &dyn crate::physics::Ground = &empty;
     assert_eq!(wheel_ground(Some(empty), Some(plain), wheel), Some(deck));
     // no face probe at all (a rail or air lane): the plain sampler
     assert_eq!(wheel_ground(None, Some(plain), wheel), Some(deck));
@@ -1042,7 +1042,7 @@ fn the_ground_probe_reads_the_ground_under_a_roof() {
     // a kerb right of x = 1 m (world), a canopy over everything
     let faces = move |x: f64, _y: f64, top: f64| {
         let kerb = if x > 101.0 { kerb } else { road };
-        crate::rigid::GroundProbe {
+        crate::physics::GroundProbe {
             below: [road, kerb, roof].into_iter().filter(|h| *h <= top).reduce(f64::max),
             above: (roof > top).then_some(roof),
         }
@@ -1435,11 +1435,11 @@ fn rear_section_stays_on_a_viaduct_deck() {
     let ground = move |_x: f64, _y: f64, top: f64| {
         let deck = m.load(Ordering::Relaxed) == 0;
         if deck && top >= 10.0 {
-            crate::rigid::GroundProbe { below: Some(10.0), above: None }
+            crate::physics::GroundProbe { below: Some(10.0), above: None }
         } else if deck {
-            crate::rigid::GroundProbe { below: Some(0.0), above: Some(10.0) }
+            crate::physics::GroundProbe { below: Some(0.0), above: Some(10.0) }
         } else {
-            crate::rigid::GroundProbe { below: Some(0.0), above: None }
+            crate::physics::GroundProbe { below: Some(0.0), above: None }
         }
     };
     v.contact = Some(Arc::new(ground));
@@ -1482,7 +1482,7 @@ fn rear_section_wheels_spring_on_their_own() {
     let axle = t.first_axle;
     assert!(t.ty.suspension_axles.contains(&axle), "the GN92's rear axle is drawn sprung");
     // a step 6 cm high under the left wheels behind the joint
-    let ground = move |x: f64, y: f64, _top: f64| crate::rigid::GroundProbe { below: Some(if x < 0.0 && y < -4.0 { 0.06 } else { 0.0 }), above: None };
+    let ground = move |x: f64, y: f64, _top: f64| crate::physics::GroundProbe { below: Some(if x < 0.0 && y < -4.0 { 0.06 } else { 0.0 }), above: None };
     v.contact = Some(Arc::new(ground));
     v.position = DVec3::new(0.0, 0.0, 0.0);
     for _ in 0..50 {

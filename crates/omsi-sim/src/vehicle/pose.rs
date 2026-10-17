@@ -45,7 +45,7 @@ impl VehicleInstance {
             let standing = rb.wheels.iter().any(|w| w.on_ground);
             for w in rb.wheels.iter().filter(|w| w.on_ground || !standing) {
                 points.push(
-                    w.attach + Vec3::Z * (w.compression.max(-crate::rigid::DROOP) - w.radius),
+                    w.attach + Vec3::Z * (w.compression.max(-crate::physics::DROOP) - w.radius),
                 );
             }
         } else {

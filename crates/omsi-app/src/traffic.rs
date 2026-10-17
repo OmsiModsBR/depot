@@ -2783,7 +2783,7 @@ impl Traffic {
             std::sync::Arc::new(crate::scene::DriveGround {
                 terrains: world.terrains.clone(),
                 surfaces: world.surfaces.clone(),
-            }) as std::sync::Arc<dyn omsi_sim::rigid::Ground>
+            }) as std::sync::Arc<dyn omsi_sim::physics::Ground>
         });
         vehicle.apply_paint_vars(scheme);
         let render = world.add_vehicle_shared(renderer, scene, &ty, scheme, None);

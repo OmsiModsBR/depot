@@ -285,7 +285,7 @@ pub(super) fn is_shadow_mesh(ty: &VehicleType, i: usize) -> bool {
 /// coupled parts onto the bridge, #140). The plain sampler stays the fallback where the
 /// tiles put no road face near the wheel.
 pub(super) fn wheel_ground(
-    contact: Option<&dyn crate::rigid::Ground>,
+    contact: Option<&dyn crate::physics::Ground>,
     ground: Option<&(dyn Fn(f64, f64) -> Option<f64> + Send + Sync)>,
     p: DVec3,
 ) -> Option<f64> {

@@ -2339,14 +2339,14 @@ pub(crate) fn run_offscreen(
                 }
             }
             // And where a bus wheel (0.47 m) rolling along the lane meets a face it cannot
-            // climb: a step over omsi_sim::rigid::CLIMB radii, lower than the hub and a metre
+            // climb: a step over omsi_sim::physics::CLIMB radii, lower than the hub and a metre
             // and a half more (up to the hub and 5 cm the wheels used to climb anyway).
             {
                 let r = 0.47f64;
                 let (climb, hub, overhead) = (
-                    omsi_sim::rigid::CLIMB as f64 * r,
-                    r + omsi_sim::rigid::HUB_REACH,
-                    r + omsi_sim::rigid::WALL_HEIGHT,
+                    omsi_sim::physics::CLIMB as f64 * r,
+                    r + omsi_sim::physics::HUB_REACH,
+                    r + omsi_sim::physics::WALL_HEIGHT,
                 );
                 let (mut rolled, mut steep, mut high) = (0usize, 0usize, 0usize);
                 let mut faces: Vec<(DVec3, f64, f32)> = Vec::new();

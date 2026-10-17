@@ -106,7 +106,7 @@ impl VehicleInstance {
     /// need it), which as `A_Trans_Z` kept checks such as the NEOMAN ECAS's "|A_Trans_Z| < 3
     /// while driving" from ever passing. (Over OMSI's frames: the rattle scripts take its
     /// change from one frame to the next.)
-    pub(super) fn body_a_trans(&mut self, rb: &crate::rigid::RigidBody, dt: f32) -> Vec3 {
+    pub(super) fn body_a_trans(&mut self, rb: &crate::physics::RigidBody, dt: f32) -> Vec3 {
         self.a_trans.push(scripts_acceleration(rb.accel_body, rb.orientation), dt)
     }
 
@@ -119,7 +119,7 @@ impl VehicleInstance {
     }
 
     /// The wheels' variables of a coupled part's own body (`vars`: each wheel's).
-    pub(super) fn show_part_wheels(&mut self, rb: &crate::rigid::RigidBody, vars: &[PartWheelVars]) {
+    pub(super) fn show_part_wheels(&mut self, rb: &crate::physics::RigidBody, vars: &[PartWheelVars]) {
         for (i, (w, v)) in rb.wheels.iter().zip(vars).enumerate() {
             let shown = body_wheel_shown(rb, i, w);
             for (id, x) in v.iter().zip(shown) {
@@ -148,7 +148,7 @@ impl VehicleInstance {
 }
 
 /// Wheel `i` (`w`) of a body as its variables show it.
-pub(super) fn body_wheel_shown(rb: &crate::rigid::RigidBody, i: usize, w: &crate::rigid::RigidWheel) -> WheelShown {
+pub(super) fn body_wheel_shown(rb: &crate::physics::RigidBody, i: usize, w: &crate::physics::RigidWheel) -> WheelShown {
     // `Axle_Suspension_*` is the wheel's travel *relative to the body*, and the stock
     // model.cfg moves the wheel down for a positive value (`origin_rot_y -90` +
     // `anim_trans`, checked with OMSI_DEBUG_ANIM on the SD200's front wheel). A compressed
