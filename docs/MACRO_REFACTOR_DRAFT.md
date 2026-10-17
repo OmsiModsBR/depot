@@ -431,6 +431,8 @@ O guia de estilo do projeto diz que formatos OMSI são lidos só em `omsi-cfg`, 
 5. **Um `DdsHeader::parse`** usado por `dds::decode` e `gpu::dds_blocks`, um `IMAGE_EXTENSIONS` só e o `CP437_HIGH` duplicado de `vfs.rs:97` trocado pelo de `codepage`.
 6. **Testes de `.o3d`** (cabeçalhos v1, v3 e v4, índices longos, vértices embaralhados, tag desconhecida, arquivo truncado), que hoje não existem, e os nomes de textura `str8` decodificados por `codepage` em vez de 1252 fixo. Os testes entram antes de qualquer mudança no leitor.
 
+   No passo 1, `crates/omsi-o3d/tests/o3d.rs` passou a cobrir o leitor como ele é hoje, com arquivos montados no teste: cabeçalhos v1, v3 e v4+, índices de 16 e 32 bits, ossos, a matriz, triângulos com vértice inexistente, as chaves de embaralhamento (um caso calculado à mão e a volta completa para várias chaves e flags), bytes desconhecidos entre seções, magic errado e arquivos truncados. O leitor não mudou; os nomes `str8` por `codepage` ficam para um PR `fix/`.
+
 ## Frente E: simulação separada da apresentação e divisão de crates
 
 O código já tem metade da separação: `Traffic` e `Humans` têm um `tick` que avança o estado e um `sync` que copia o estado para a cena (`traffic.rs:7046`, `humans.rs:4880`). O que falta é tirar o renderer de dentro do `tick`.
