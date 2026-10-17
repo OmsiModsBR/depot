@@ -190,7 +190,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("max_obj_dist", "launcher>game", "a negative distance is kept (the game reads it as 0, no limit)"),
     ("vol_ai", "launcher>game", "no 0-1 range"),
     ("vol_scenery", "launcher>game", "no 0-1 range"),
-    ("maintenance", "launcher>game", "no 0-4 range (the launcher writes it clamped)"),
     // the launcher keeps these texts as written; the game reads them to its own choices
     ("render_scale", "launcher>game", "kept as text; the game makes 0 or less auto, takes more than 1.5 as a percentage and clamps to 0.5-1"),
     ("pax_voices", "launcher>game", "kept as text; the game reads anything but tickets and off as all"),
