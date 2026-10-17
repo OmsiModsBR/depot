@@ -21,7 +21,7 @@ use omsi_script::Program;
 use omsi_sim::ai::{back_in_ramp, pull_out_ramps, pull_out_room, rotation_point, straight_pull_out, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT};
 use omsi_sim::collision::Obb;
 use omsi_sim::physics::VehicleMotion;
-use omsi_sim::rigid::{Ground, GroundProbe};
+use omsi_sim::physics::{Ground, GroundProbe};
 use omsi_sim::vehicle::AiFrame;
 use omsi_sim::{Controls, KinematicModel, SimClock, VehicleHost, VehicleInstance, VehicleType};
 use omsi_vehicle::vehicle::Coupling;
