@@ -106,6 +106,8 @@ pub struct BusService {
     /// The doors have been open at this stop already (a layover bus opens them only for
     /// the last minute before its departure).
     pub boarded: bool,
+    /// The people at the doors have kept it past `MAX_HELD`: they hold it no longer.
+    held_out: bool,
     /// Seconds behind (positive) or ahead of the timetable, as of the last stop.
     pub delay: f64,
     /// Put out before its departure: it waits for it at its first stop.
@@ -147,6 +149,12 @@ const ENGINE_ON_BEFORE: f64 = 20.0;
 fn boarding_time(id: u64) -> f32 {
     7.0 + (id % 5) as f32
 }
+
+/// How long, past the time it would have left, the people at its doors may keep a timetable
+/// bus at a stop (s). Somebody who cannot get on or off - an exit that never opens, a door that
+/// stays shut - asks for the doors every frame, and the bus stood at its stop for good (#172).
+/// The people of a crowd getting on one after the other finish well within this.
+const MAX_HELD: f64 = 120.0;
 
 /// An early bus waits at its stop until this long before its departure, a train at its
 /// station until `EARLY_LEAVE_RAIL` before (as in OMSI: it stands while it is more
@@ -244,6 +252,7 @@ impl BusService {
             leave_at: 0.0,
             arrived_at: 0.0,
             boarded: false,
+            held_out: false,
             delay: 0.0,
             layover: false,
             route_open: false,
@@ -310,7 +319,7 @@ impl BusService {
     /// person's stop is the bus's), not a stop it stands next to.
     pub fn hold(&mut self, stop: Option<i64>, secs: f32) {
         let here = stop.is_none_or(|s| self.stops.front().is_some_and(|f| f.id == s));
-        if self.phase == Phase::Boarding && here {
+        if self.phase == Phase::Boarding && here && !self.held_out {
             self.boarding = self.boarding.max(secs);
         }
     }
@@ -324,6 +333,7 @@ impl BusService {
         self.phase_t = 0.0;
         self.boarding = 0.0;
         self.boarded = false;
+        self.held_out = false;
         self.layover = layover;
     }
 
@@ -356,6 +366,7 @@ impl BusService {
         self.arrived_at = ctx.day_time;
         self.boarding = boarding_time(ctx.id);
         self.boarded = false;
+        self.held_out = false;
         // a layover opens the doors for the last minute only; anywhere else people get off
         // straight away
         if layover && wait > LAYOVER_BOARDING + 10.0 {
@@ -440,6 +451,16 @@ impl BusService {
             }
             Phase::Boarding => {
                 self.boarding -= ctx.dt;
+                // kept past the time it would have left by people who cannot get in or out:
+                // the doors close (the people stay aboard or on the kerb for the next bus)
+                let due = self.leave_at.max(self.arrived_at + boarding_time(ctx.id) as f64);
+                if ctx.day_time > due + MAX_HELD && !self.held_out {
+                    self.held_out = true;
+                    self.boarding = 0.0;
+                    if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
+                        log::info!("t={:.1}: timetable bus {} leaves its stop {:?}: held at the doors for over {MAX_HELD:.0} s", ctx.day_time, ctx.id, self.stops.front().map(|s| s.id));
+                    }
+                }
                 // an early bus waits for its departure with the doors open, as drivers do
                 // (shut, it stood at the stop for half a minute for no reason anyone could
                 // see); the doors close when it is time to go
