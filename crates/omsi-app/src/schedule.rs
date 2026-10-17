@@ -6268,6 +6268,24 @@ pub(crate) mod tests {
         assert!(!duty.done);
     }
 
+    /// A stop driven past is still caught up when it lies away from the stop just left.
+    #[test]
+    fn a_skipped_stop_far_from_the_one_just_left_is_still_caught_up() {
+        let mut duty = circular_duty(&[(0.0, 0.0), (400.0, 300.0), (800.0, 0.0), (1200.0, 0.0)]);
+        let mut bus = timetable_test_vehicle();
+        bus.position.x = 0.0;
+        bus.heading = 90.0;
+        bus.set_speed(0.0);
+        bus.set_var("door_0", 1.0);
+        duty.update(&mut bus, 100.0);
+        bus.set_var("door_0", 0.0);
+        for (t, x) in [(110.0, 50.0), (200.0, 390.0), (210.0, 450.0), (300.0, 790.0)] {
+            drive(&mut duty, &mut bus, (x, 0.0), 90.0, t);
+        }
+        assert_eq!(duty.take_skipped(), Some((1, 2, 3)));
+        assert_eq!(duty.next_stop, 2);
+    }
+
     #[test]
     fn waiting_at_the_terminus_still_uses_the_scheduled_changeover() {
         let mut duty = early_departure_duty();
