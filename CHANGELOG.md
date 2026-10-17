@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
+  thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.
 - The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
   term time or only in school holidays (`Holidays.txt`) no longer shows up together with the other, and
   the timetable is read again when the date changes.
