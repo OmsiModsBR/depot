@@ -3526,11 +3526,25 @@ fn routes_to(hof: &omsi_vehicle::Hof, line: &str, codes: &[i32]) -> Vec<usize> {
         .take_while(|c| c.is_ascii_digit())
         .collect();
     let line_number = line_digits.parse::<u32>().ok();
+    let to_terminus = |t: &&omsi_vehicle::hof::InfoTrip| codes.contains(&omsi_cfg::parse_i32(&t.route));
+    let exact: Vec<usize> = hof
+        .info_trips
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| to_terminus(t) && t.line.trim().eq_ignore_ascii_case(line.trim()))
+        .map(|(i, _)| i)
+        .collect();
+    // lines 12 and 12A have routes of their own: neither takes the other's (the number
+    // alone matches every route code of the line), the number's routes are only the
+    // fallback when the depot file lists none under the exact name
+    if !exact.is_empty() {
+        return exact;
+    }
     hof.info_trips
         .iter()
         .enumerate()
         .filter(|(_, t)| {
-            codes.contains(&omsi_cfg::parse_i32(&t.route))
+            to_terminus(t)
                 && (t.line.trim().eq_ignore_ascii_case(line.trim())
                 || (!line_digits.is_empty() && t.line.trim() == line_digits)
                 || (line_number.is_some()
@@ -5911,6 +5925,26 @@ pub(crate) mod tests {
         ibis.set_var("IBIS_TerminusIndex", 1.0);
         ibis.set_var("IBIS_TerminusCode", 205.0);
         assert_eq!(shown_destination(&ibis, &hof, None), Some(1));
+    }
+
+    /// #170: lines 12 and 12A share their stops and terminus; setting the destination for
+    /// 12A must keep 12A's route, not fall back to the plain 12 route listed before it.
+    #[test]
+    fn a_lettered_line_keeps_its_own_route_next_to_the_plain_number() {
+        // (the target's route is the route code's last two digits)
+        let mut hof = omsi_vehicle::Hof {
+            termini: vec![omsi_vehicle::hof::Terminus { code: 100, strings: vec!["Hafen".into()], ..Default::default() }],
+            ..Default::default()
+        };
+        for (code, line) in [("1201", "12"), ("1202", "12A"), ("1203", "12B")] {
+            hof.info_trips.push(omsi_vehicle::hof::InfoTrip { code: code.into(), route: "100".into(), line: line.into(), ..Default::default() });
+            hof.info_busstop_lists.push(["Markt", "Schule", "Hafen"].iter().map(|s| s.to_string()).collect());
+        }
+        let stops = ["Markt", "Schule", "Hafen"];
+        let route = |line: &str| ibis_target(&hof, line, "Hafen", &stops, None).expect("a target").route;
+        assert_eq!(route("12"), Some(1));
+        assert_eq!(route("12A"), Some(2));
+        assert_eq!(route("12B"), Some(3));
     }
 
     /// A depot file with a row of one destination per route, each of its own code (#738's
