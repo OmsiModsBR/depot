@@ -6,6 +6,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- Draw-order characterization tests for blended slots (#41): a window and an opaque panel behind it, drawn with and without model order, recorded as they stand. Test-only, run with `--ignored` on a graphics adapter.
+
 ### Fixed
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
