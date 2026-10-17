@@ -158,7 +158,7 @@ fn main() {
                 s(&["Central Station", "08:42", "08:41", "-0:40", "3", "18"]),
             ],
             None,
-            &|row, col| (col == 3).then(|| if row == 1 { red } else { green }),
+            &|row, col| (col == 3).then_some(if row == 1 { red } else { green }),
         );
         let rows = [
             ("Total passengers", "26".to_string(), None),
