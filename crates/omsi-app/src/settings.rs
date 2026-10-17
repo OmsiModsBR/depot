@@ -1,5 +1,5 @@
 //! The user's settings: graphics and gameplay switches, kept as `key=value` lines in
-//! `~/.openomsi/settings.cfg` (the launcher writes the same file). Anything missing
+//! `~/.depot/settings.cfg` (the launcher writes the same file). Anything missing
 //! keeps its default, so an old file never breaks a new build.
 
 use std::path::PathBuf;
@@ -7,8 +7,7 @@ use std::path::PathBuf;
 /// Where the game keeps its own files (`~/.depot`): settings beside the content, the
 /// seats, the missing content list, the LAN status files.
 pub(crate) fn data_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot"))
+    omsi_cfg::paths::data_dir()
 }
 
 /// Version of the settings file (`version=`); files without it are version 1.
@@ -421,10 +420,9 @@ impl Settings {
         cfg!(windows) && (self.vr || omsi_cfg::flags::OPENXR.is_set())
     }
 
-    /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
+    /// `~/.depot/settings.cfg` (or `%USERPROFILE%` on Windows).
     pub fn path() -> Option<PathBuf> {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        Some(PathBuf::from(home).join(".depot").join("settings.cfg"))
+        omsi_cfg::paths::settings()
     }
 
     /// The window's size in pixels the settings ask for (`resolution=WxH`, #904); None:
@@ -1049,10 +1047,10 @@ impl Settings {
 }
 
 /// The player's own turn of a bus's mirrors (degrees yaw, pitch per `[add_camera_reflexion]`),
-/// kept per `.bus` file in `~/.openomsi/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
+/// kept per `.bus` file in `~/.depot/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
 pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
+    let Some(p) = omsi_cfg::paths::mirrors() else { return Vec::new() };
     let text = std::fs::read_to_string(p).unwrap_or_default();
     let mut out: Vec<[f32; 2]> = Vec::new();
     for line in text.lines() {
@@ -1074,7 +1072,7 @@ pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
 /// turns on lines `<bus>|s<n>=x,y,z` (a build that knows only turns skips them).
 pub fn mirror_shifts(bus: &std::path::Path) -> Vec<[f32; 3]> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
+    let Some(p) = omsi_cfg::paths::mirrors() else { return Vec::new() };
     let text = std::fs::read_to_string(p).unwrap_or_default();
     let mut out: Vec<[f32; 3]> = Vec::new();
     for line in text.lines() {
@@ -1097,7 +1095,7 @@ pub fn mirror_shifts(bus: &std::path::Path) -> Vec<[f32; 3]> {
 /// `<bus>|f<n>=degrees` of the same file.
 pub fn mirror_fovs(bus: &std::path::Path) -> Vec<f32> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
+    let Some(p) = omsi_cfg::paths::mirrors() else { return Vec::new() };
     let text = std::fs::read_to_string(p).unwrap_or_default();
     let mut out: Vec<f32> = Vec::new();
     for line in text.lines() {
@@ -1120,7 +1118,7 @@ pub fn mirror_fovs(bus: &std::path::Path) -> Vec<f32> {
 /// [`mirror_shifts`], [`mirror_fovs`]).
 pub fn save_mirror_state(bus: &std::path::Path, offsets: &[[f32; 2]], shifts: &[[f32; 3]], fovs: &[f32]) {
     let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return };
+    let Some(p) = omsi_cfg::paths::mirrors() else { return };
     let text = std::fs::read_to_string(&p).unwrap_or_default();
     let mut lines: Vec<String> = text
         .lines()
@@ -1178,7 +1176,7 @@ mod right_stick_look_tests {
     }
 }
 
-/// The driver's seat per bus (`~/.openomsi/seats.cfg`, a line `bus|x|y|z|pitch` each, the
+/// The driver's seat per bus (`~/.depot/seats.cfg`, a line `bus|x|y|z|pitch` each, the
 /// bus by its `.bus` file relative to the installation, lower case). The seat set in the
 /// menu was one for every bus: fitted to a Solaris, every other bus put the driver
 /// somewhere else than its `.bus` file does (#1355). A bus that has none takes the
@@ -1187,7 +1185,7 @@ pub mod bus_seats {
     use std::path::PathBuf;
 
     fn path() -> Option<PathBuf> {
-        crate::settings::data_dir().map(|d| d.join("seats.cfg"))
+        omsi_cfg::paths::seats()
     }
 
     fn key(bus: &str) -> String {

@@ -118,26 +118,23 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
     if !omsi_cfg::is_programs_folder(&cand) && (cand.exists() || std::fs::create_dir_all(&cand).is_ok()) && omsi_cfg::is_writable(&cand) {
         Some(cand)
     } else {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        let fallback = PathBuf::from(home).join(".depot").join("content");
+        let fallback = omsi_cfg::paths::data_dir()?.join("content");
         let _ = omsi_cfg::ensure_content_layout(&fallback);
         Some(fallback)
     }
 }
 
-/// Where a save goes when the content folder takes none (`~/.openomsi/content`): a game
+/// Where a save goes when the content folder takes none (`~/.depot/content`): a game
 /// unpacked into Program Files, or a folder Windows' controlled folder access guards, said
 /// "Could not save: access is denied (os error 5)" (#1673). The launcher lists the saves
 /// there as well.
 pub(crate) fn save_fallback_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("content"))
+    Some(omsi_cfg::paths::data_dir()?.join("content"))
 }
 
 /// Where the last working installation was remembered.
 pub(crate) fn root_memo() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot-root"))
+    omsi_cfg::paths::root_memo()
 }
 
 /// Find the OMSI 2 installation without being told where it is.
@@ -152,8 +149,8 @@ pub(crate) fn find_root() -> Option<PathBuf> {
         }
     }
     // the folder the launcher was told about (Setup)
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".depot/launcher.json")) {
+    if let Some(data) = omsi_cfg::paths::data_dir() {
+        if let Ok(t) = std::fs::read_to_string(data.join("launcher.json")) {
             if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
                 first.push(r);
             }

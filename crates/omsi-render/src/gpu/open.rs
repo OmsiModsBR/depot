@@ -20,14 +20,9 @@ pub(crate) fn basic_pipelines() -> bool {
 }
 
 /// The file that remembers, per graphics adapter, the reduced renderer that worked there
-/// (`~/.openomsi/gpu-fallback.cfg`, lines `adapter|msaa|basic`).
+/// (`~/.depot/gpu-fallback.cfg`, lines `adapter|msaa|basic`).
 pub(crate) fn fallback_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(
-        std::path::PathBuf::from(home)
-            .join(".depot")
-            .join("gpu-fallback.cfg"),
-    )
+    Some(omsi_cfg::paths::data_dir()?.join("gpu-fallback.cfg"))
 }
 
 pub(crate) fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool)> {

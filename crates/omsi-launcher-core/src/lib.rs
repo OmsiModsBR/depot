@@ -29,12 +29,8 @@ pub struct Config {
     pub profile: String,
 }
 
-fn home() -> PathBuf {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default()
-}
-
 pub fn data_dir() -> PathBuf {
-    let d = home().join(".depot");
+    let d = omsi_cfg::paths::data_dir().unwrap_or_else(|| PathBuf::from(".depot"));
     let _ = std::fs::create_dir_all(&d);
     d
 }
@@ -103,7 +99,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if let Some(p) = omsi_cfg::flags::ROOT.path() {
         first.push(p);
     }
-    if let Ok(t) = std::fs::read_to_string(home().join(".depot-root")) {
+    if let Some(Ok(t)) = omsi_cfg::paths::root_memo().map(std::fs::read_to_string) {
         first.push(PathBuf::from(t.trim()));
     }
     // searching the disk costs a moment: once per process is enough (until the settings
@@ -117,7 +113,9 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     let r = omsi_cfg::find_original_install(&first);
     if let Some(p) = &r {
         // the game finds it the same way next time
-        let _ = std::fs::write(home().join(".depot-root"), p.to_string_lossy().as_bytes());
+        if let Some(memo) = omsi_cfg::paths::root_memo() {
+            let _ = std::fs::write(memo, p.to_string_lossy().as_bytes());
+        }
     }
     *g = Some((first, r.clone()));
     r
@@ -858,7 +856,7 @@ fn shared_depot_names() -> Vec<String> {
     names
 }
 
-/// One line into ~/.openomsi/launcher.log.
+/// One line into ~/.depot/launcher.log.
 fn log_line(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -1744,6 +1742,11 @@ mod profile_cleanup_tests {
 // key bindings: the content folder's Inputs/keyboard.cfg once the page has saved one (the
 // game reads that first), else the original installation's, which is never written
 
+/// The key assignment kept beside the settings when no content folder takes it.
+fn own_inputs() -> PathBuf {
+    omsi_cfg::paths::inputs().unwrap_or_else(|| data_dir().join("Inputs"))
+}
+
 fn keyboard_cfg_write_path() -> Result<PathBuf> {
     let cand = content_dir().unwrap_or(root()?).join("Inputs").join("keyboard.cfg");
     if let Some(p) = cand.parent() {
@@ -1751,7 +1754,7 @@ fn keyboard_cfg_write_path() -> Result<PathBuf> {
             return Ok(cand);
         }
     }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
+    let fallback = own_inputs().join("keyboard.cfg");
     if let Some(p) = fallback.parent() {
         let _ = std::fs::create_dir_all(p);
     }
@@ -1763,7 +1766,7 @@ fn keyboard_cfg_read_path() -> Result<PathBuf> {
     if own.exists() {
         return Ok(own);
     }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
+    let fallback = own_inputs().join("keyboard.cfg");
     if fallback.exists() {
         return Ok(fallback);
     }
@@ -1806,7 +1809,7 @@ pub fn save_keybindings(v: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------------------
-// settings (the game's ~/.openomsi/settings.cfg)
+// settings (the game's ~/.depot/settings.cfg)
 
 pub fn get_settings() -> Result<Value> {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
@@ -2171,7 +2174,7 @@ fn graphics_profiles_path() -> PathBuf {
     data_dir().join("graphics_profiles.json")
 }
 
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles.json`).
+/// The saved graphics profiles by name (`~/.depot/graphics_profiles.json`).
 pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
     std::fs::read_to_string(graphics_profiles_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
@@ -2769,7 +2772,7 @@ pub fn check_join(text: &str) -> Value {
 // ---------------------------------------------------------------------------------------
 // small services for the window
 
-/// A line into ~/.openomsi/launcher.log.
+/// A line into ~/.depot/launcher.log.
 pub fn log_to_file(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");

@@ -38,10 +38,9 @@ pub fn find_cloudflared() -> Option<PathBuf> {
     dirs.into_iter().map(|d| d.join(exe)).find(|p| p.is_file()).or(own)
 }
 
-/// The game's own folder for the tools it fetches (`~/.openomsi/bin`).
+/// The game's own folder for the tools it fetches (`~/.depot/bin`).
 fn own_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("bin"))
+    Some(omsi_cfg::paths::data_dir()?.join("bin"))
 }
 
 /// The cloudflared release the game fetches: a fixed version whose files' SHA-256 (as
@@ -160,9 +159,9 @@ impl Drop for Tunnel {
     }
 }
 
-/// Where the running tunnel's process id is kept (`~/.openomsi/cloudflared.pid`).
+/// Where the running tunnel's process id is kept (`~/.depot/cloudflared.pid`).
 fn pid_file() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| std::path::PathBuf::from(h).join(".depot").join("cloudflared.pid"))
+    Some(omsi_cfg::paths::data_dir()?.join("cloudflared.pid"))
 }
 
 /// A cloudflared an earlier game left running (it was killed, or crashed before it could

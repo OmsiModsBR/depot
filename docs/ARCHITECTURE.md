@@ -239,13 +239,13 @@ budget.
    physics step (they trembled a seat-width behind the bus); SSAO with an ordered 4x4
    pattern and a 6x6 depth-aware blur, 5x5 PCF shadows; weather changes the light
    (overcast, rain, fog over the whole sky, snow textures and cover on any map);
-   `~/.openomsi/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
+   `~/.depot/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
    fullscreen); the ETS2-style navigator (`omsi-app::navigator`, N); AI cars spawn out of
    sight; pedestrians walk both ways along the pavements (`Network::prev`); a procedural
    gait/stance/sitting pose; Shift+U also sets the IBIS to the duty (without the AI
    trigger, which switched the NL202's electrics off); stop announcements verified through
    the IBIS-2 'next stop' key; `--export-glb` writes the bus as glTF; session summaries in
-   `~/.openomsi/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
+   `~/.depot/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
    ACES, grading and vignette; since f9770c1 its own physically based renderer without them);
    and the Tauri launcher in `launcher/` (profile with hours/XP/level, bus with 3D
    preview and liveries, depot, line, tour, roadbook with the IBIS codes, time, date,

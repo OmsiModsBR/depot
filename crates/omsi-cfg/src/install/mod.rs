@@ -4,6 +4,7 @@
 mod home;
 mod layout;
 mod original;
+pub mod paths;
 pub mod search;
 
 pub use home::{drop_unusable_home, migrate_legacy_data_dir};
