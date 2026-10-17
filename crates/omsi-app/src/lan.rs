@@ -1633,10 +1633,7 @@ fn write_status(lan: &LanSession, game: &LanGame, player: Option<&Player>) {
                     if let Some(dir) = p.parent() {
                         let _ = std::fs::create_dir_all(dir);
                     }
-                    let tmp = p.with_extension("json.tmp");
-                    if std::fs::write(&tmp, bytes).is_ok() {
-                        let _ = std::fs::rename(&tmp, &p);
-                    }
+                    let _ = omsi_cfg::write_atomic(&p, bytes);
                 }
             })
             .ok()

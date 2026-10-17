@@ -552,7 +552,7 @@ fn save(key: &str, enabled: bool, panels: &[Panel]) {
     if let Some(d) = p.parent() {
         let _ = std::fs::create_dir_all(d);
     }
-    let _ = std::fs::write(&p, lines.join("\n") + "\n");
+    let _ = omsi_cfg::write_atomic(&p, lines.join("\n") + "\n");
 }
 
 #[cfg(test)]

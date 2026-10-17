@@ -29,6 +29,7 @@
 //!   lookup of a content file's path ([`resolve_path`]);
 //! * `install`: the original OMSI 2 installation, openOMSI's content folder and the user's
 //!   data folder ([`paths`]);
+//! * `fs`: [`write_atomic`];
 //! * [`env`](mod@env), [`flags`] and [`limits`]: the environment, the `OMSI_*` variables and the
 //!   ceilings of the parsers.
 
@@ -36,6 +37,7 @@ mod content;
 pub mod env;
 pub mod flags;
 mod format;
+mod fs;
 mod install;
 pub mod limits;
 pub mod text;
@@ -48,6 +50,7 @@ pub use content::{
     remove_content_root, resolve_path, windows_components,
 };
 pub use format::{keyword_of, keyword_with, CfgError, CfgFile, CfgReader, Entry, KeywordRule};
+pub use fs::write_atomic;
 pub use install::paths;
 pub use install::search::{self as install_search, find_original_install};
 pub use install::{
