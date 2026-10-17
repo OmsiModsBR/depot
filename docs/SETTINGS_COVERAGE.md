@@ -185,6 +185,11 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 
 Whether `post_aa` and the head-tracking port and bind should get a screen is a product decision for #151 (OPT-04 and OPT-08); they are not missing by accident.
 
+## Items reported by players (comment on #151), checked against the code
+
+- *Languages that exist but do not appear in the language list:* every language that has texts in `crates/omsi-app/locales/app.yml` is in the launcher's list (27 entries). Not checked: content languages of an OMSI 2 installation that have no interface texts.
+- The other items in that comment (remembered livery and fleet number, triple screen, live weather, head tracking, key hints by layout, assignable vehicle buttons, time display opacity, pre-world traffic screen, editable date) are not checked yet.
+
 ## Regenerating
 
 The inventory is derived from `VARIED` and `KNOWN` in `round_trip.rs` and string matches in the launcher, `game_*.rs`, `menu.rs` and `omsi-launcher-core`. When an option is added or a known difference is fixed, update this file in the same change.
