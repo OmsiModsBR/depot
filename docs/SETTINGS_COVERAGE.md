@@ -172,9 +172,18 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `wheel_range` | yes | yes | yes | yes, known difference (launcher>game) |
 | `windy_trees` | yes | yes | yes | yes |
 
-## Keys with no UI string match (6)
+## Keys with no UI string match (6), checked by hand
 
-These keys are read by the game but their name appears in neither the launcher nor the in-game option sources: `head_tracking_bind`, `head_tracking_invert`, `head_tracking_port`, `mirror_hud`, `mouse_steering`, `post_aa`. Each needs a manual check: it may be reached under another name, or it may be file-only on purpose.
+| Key | What it is | Where it is reached |
+|---|---|---|
+| `head_tracking_port` | UDP port of the head-tracking listener | File only; documented in the user guide (opentrack, port 4242) |
+| `head_tracking_bind` | Address the listener binds to (empty means this computer only) | File only on purpose; written by hand, documented in the user guide, with a log warning when it opens the port to the network |
+| `head_tracking_invert` | Older combined invert text | Superseded by the six `head_tracking_invert_*` switches, which the launcher shows; kept for old files |
+| `mirror_hud` | Mirror panels over the picture: 0 off, 1 right, 2 left | In game by Ctrl+M and the panel editing keys, not by a settings screen; documented in the user guide |
+| `mouse_steering` | Steering with the mouse | Toggled in game with its key and remembered; the launcher reads and writes it through `omsi-launcher-core` |
+| `post_aa` | Post-process anti-aliasing: `fxaa`, the enhanced renderer's, or `off` | File only; documented in the user guide. No screen offers it |
+
+Whether `post_aa` and the head-tracking port and bind should get a screen is a product decision for #151 (OPT-04 and OPT-08); they are not missing by accident.
 
 ## Regenerating
 
