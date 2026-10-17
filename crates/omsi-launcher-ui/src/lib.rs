@@ -4,10 +4,13 @@
 //! body. The window (`window`) and the picture written to a file (`offscreen`) both draw it,
 //! so what a test or a screenshot sees is what the window shows.
 
+pub mod kit;
 pub mod look;
 pub mod offscreen;
 pub mod pages;
+pub mod sample;
 pub mod shell;
+pub mod vehicles;
 pub mod window;
 
 pub use pages::Page;
