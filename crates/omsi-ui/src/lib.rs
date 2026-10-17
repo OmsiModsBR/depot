@@ -7,7 +7,9 @@
 //!   circles, rings, lines, text and icons in pixels, and ribbons and markers in a 3D
 //!   world whose width can be given in metres, in pixels, or the larger of the two;
 //! * [`gpu`]: the wgpu pipeline that draws such lists (MSAA, premultiplied alpha,
-//!   rounded clipping), into a window or a texture.
+//!   rounded clipping), into a window or a texture;
+//! * [`widgets`]: the immediate-mode widget kit (buttons, toggles, sliders, dropdowns, text
+//!   fields, scrolling lists) the launcher draws its pages with.
 
 pub mod atlas;
 pub mod gpu;
@@ -16,6 +18,7 @@ pub mod icons;
 pub mod paint;
 pub mod text;
 pub mod theme;
+pub mod widgets;
 
 pub use atlas::{Atlas, Sprite};
 pub use gpu::{Draw, Gpu, Layer};

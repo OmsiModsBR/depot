@@ -29,12 +29,8 @@ pub struct Config {
     pub profile: String,
 }
 
-fn home() -> PathBuf {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default()
-}
-
 pub fn data_dir() -> PathBuf {
-    let d = home().join(".depot");
+    let d = omsi_cfg::paths::data_dir().unwrap_or_else(|| PathBuf::from(".depot"));
     let _ = std::fs::create_dir_all(&d);
     d
 }
@@ -103,7 +99,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if let Some(p) = omsi_cfg::flags::ROOT.path() {
         first.push(p);
     }
-    if let Ok(t) = std::fs::read_to_string(home().join(".depot-root")) {
+    if let Some(Ok(t)) = omsi_cfg::paths::root_memo().map(std::fs::read_to_string) {
         first.push(PathBuf::from(t.trim()));
     }
     // searching the disk costs a moment: once per process is enough (until the settings
@@ -117,7 +113,9 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     let r = omsi_cfg::find_original_install(&first);
     if let Some(p) = &r {
         // the game finds it the same way next time
-        let _ = std::fs::write(home().join(".depot-root"), p.to_string_lossy().as_bytes());
+        if let Some(memo) = omsi_cfg::paths::root_memo() {
+            let _ = std::fs::write(memo, p.to_string_lossy().as_bytes());
+        }
     }
     *g = Some((first, r.clone()));
     r
@@ -767,7 +765,7 @@ pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
 /// The vehicle packs whose parts a model file names and that are installed nowhere.
 fn missing_packs_of(model: &Path) -> Vec<String> {
     let Ok(text) = omsi_cfg::vfs::read(model) else { return Vec::new() };
-    let text = omsi_cfg::codepage::decode(&text);
+    let text = omsi_cfg::decode_text(&text);
     let dir = model.parent().unwrap_or(Path::new("."));
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -858,7 +856,7 @@ fn shared_depot_names() -> Vec<String> {
     names
 }
 
-/// One line into ~/.openomsi/launcher.log.
+/// One line into ~/.depot/launcher.log.
 fn log_line(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -1744,6 +1742,11 @@ mod profile_cleanup_tests {
 // key bindings: the content folder's Inputs/keyboard.cfg once the page has saved one (the
 // game reads that first), else the original installation's, which is never written
 
+/// The key assignment kept beside the settings when no content folder takes it.
+fn own_inputs() -> PathBuf {
+    omsi_cfg::paths::inputs().unwrap_or_else(|| data_dir().join("Inputs"))
+}
+
 fn keyboard_cfg_write_path() -> Result<PathBuf> {
     let cand = content_dir().unwrap_or(root()?).join("Inputs").join("keyboard.cfg");
     if let Some(p) = cand.parent() {
@@ -1751,7 +1754,7 @@ fn keyboard_cfg_write_path() -> Result<PathBuf> {
             return Ok(cand);
         }
     }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
+    let fallback = own_inputs().join("keyboard.cfg");
     if let Some(p) = fallback.parent() {
         let _ = std::fs::create_dir_all(p);
     }
@@ -1763,7 +1766,7 @@ fn keyboard_cfg_read_path() -> Result<PathBuf> {
     if own.exists() {
         return Ok(own);
     }
-    let fallback = data_dir().join("Inputs").join("keyboard.cfg");
+    let fallback = own_inputs().join("keyboard.cfg");
     if fallback.exists() {
         return Ok(fallback);
     }
@@ -1806,7 +1809,7 @@ pub fn save_keybindings(v: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------------------
-// settings (the game's ~/.openomsi/settings.cfg)
+// settings (the game's ~/.depot/settings.cfg)
 
 pub fn get_settings() -> Result<Value> {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
@@ -1945,6 +1948,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
     v["info_bar"] = json!(false);
+    // minutes between the automatic saves of the last situation (0: off)
+    v["autosave_minutes"] = json!(5);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
     // outside sounds heard from a cab go through a low-pass
@@ -2038,6 +2043,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_orientation" => v[&k] = json!(if matches!(val, "north" | "heading") { val } else { "map" }),
             "info_bar" => v[&k] = json!(b(val)),
+            "autosave_minutes" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5)),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
@@ -2084,7 +2090,7 @@ pub fn tutorials() -> Vec<(usize, String, String)> {
         let p = [lang, "ENG", "DEU"].iter().map(|l| r.join("Tutorials").join(format!("menu_{n}_{l}.html"))).find(|p| p.is_file());
         let Some(p) = p else { continue };
         let Ok(bytes) = std::fs::read(&p) else { continue };
-        let html = omsi_cfg::codepage::decode(&bytes);
+        let html = omsi_cfg::decode_text(&bytes);
         let body = html.split_once("</style>").map(|x| x.1).unwrap_or(&html);
         let mut text = String::new();
         let mut tag = false;
@@ -2156,7 +2162,7 @@ fn physical_memory() -> Option<u64> {
 pub fn save_settings(v: &Value) -> Result<()> {
     let p = data_dir().join("settings.cfg");
     let old = std::fs::read_to_string(&p).ok();
-    std::fs::write(p, settings_to_text(v, old.as_deref()))?;
+    omsi_cfg::write_atomic(p, settings_to_text(v, old.as_deref()))?;
     Ok(())
 }
 
@@ -2171,7 +2177,7 @@ fn graphics_profiles_path() -> PathBuf {
     data_dir().join("graphics_profiles.json")
 }
 
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles.json`).
+/// The saved graphics profiles by name (`~/.depot/graphics_profiles.json`).
 pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
     std::fs::read_to_string(graphics_profiles_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
@@ -2393,6 +2399,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let orientation = v.get("nav_orientation").and_then(|x| x.as_str()).unwrap_or("map");
     text.push_str(&format!("nav_orientation={}\n", if matches!(orientation, "north" | "heading") { orientation } else { "map" }));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
+    text.push_str(&format!("autosave_minutes={}\n", n("autosave_minutes", 5).clamp(0, 60)));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
     text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
@@ -2571,7 +2578,7 @@ mod save_slot_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // as the game writes them: UTF-16 with its mark
-        let utf16 = |t: &str| [0xFFu8, 0xFE].into_iter().chain(t.encode_utf16().flat_map(|u| u.to_le_bytes())).collect::<Vec<u8>>();
+        let utf16 = omsi_cfg::encode_utf16_bom;
         std::fs::write(dir.join("Slot 1.osn"), utf16("\r\n[name]\r\nSlot 1: SD202, 09:00\r\n[description]\r\nx\r\n")).unwrap();
         std::fs::write(dir.join("Slot 2.osn"), utf16("[name]\r\nSlot 2: NG272, 10:30\r\n")).unwrap();
         std::fs::write(dir.join("notes.txt"), "not a situation").unwrap();
@@ -2769,7 +2776,7 @@ pub fn check_join(text: &str) -> Value {
 // ---------------------------------------------------------------------------------------
 // small services for the window
 
-/// A line into ~/.openomsi/launcher.log.
+/// A line into ~/.depot/launcher.log.
 pub fn log_to_file(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -3221,6 +3228,11 @@ mod tests {
         let on = settings_from_text(Some("info_bar=1\n"));
         assert_eq!(on["info_bar"], json!(true));
         assert!(settings_to_text(&on, None).lines().any(|l| l == "info_bar=1"));
+        // (the minutes between automatic saves: five unless set, 0 for off, and kept)
+        assert_eq!(settings_from_text(None)["autosave_minutes"], json!(5));
+        let off = settings_from_text(Some("autosave_minutes=0\n"));
+        assert_eq!(off["autosave_minutes"], json!(0));
+        assert!(settings_to_text(&off, None).lines().any(|l| l == "autosave_minutes=0"));
     }
 
     /// The opacity is the whole interface's now: a file of an older build, where it was the

@@ -11,6 +11,7 @@ use crate::scene::{VehicleRender, World};
 use anyhow::Result;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
+use omsi_geometry::util::wrap_deg;
 use omsi_render::{Renderer, Scene};
 use omsi_sim::ai::{
     back_in_ramp, pull_out_ramps, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
@@ -3825,7 +3826,7 @@ impl Traffic {
                 let rel = obstacles.first().map(|o| {
                     let h = car.vehicle.heading.to_radians();
                     let d = o.center - car.vehicle.position.truncate();
-                    let turned = (o.heading.to_degrees() - car.vehicle.heading + 540.0).rem_euclid(360.0) - 180.0;
+                    let turned = wrap_deg(o.heading.to_degrees() - car.vehicle.heading);
                     format!("box {:+.2} m right, {:.2} m ahead, turned {turned:+.1}°, half {:.2} x {:.2}", d.x * h.cos() - d.y * h.sin(), d.x * h.sin() + d.y * h.cos(), o.half.x, o.half.y)
                 });
                 log::info!("t={:.1}: car {} cannot steer out round the obstacle {real:.2} m ahead (best clearance {best_seen:.2} m, room {:.2} m, oncoming lane {side:.2} m over, lateral {:.2}): {}; S-curves {}", self.time, car.id, car.pass_room, st.lateral, rel.unwrap_or_default(), tried.join(", "));
@@ -5373,7 +5374,7 @@ impl Traffic {
                 let (p0, h0) = lane.at(0.0);
                 let d = (p0 - pos).truncate();
                 let (along, across) = (d.dot(fwd), d.perp_dot(fwd).abs());
-                let turn = ((h0 as f64 - heading + 540.0).rem_euclid(360.0) - 180.0).abs();
+                let turn = wrap_deg(h0 as f64 - heading).abs();
                 if (-2.0..25.0).contains(&along) && across < 6.0 && turn < 60.0 && (p0.z - pos.z).abs() < 4.0 {
                     if let Some(r) = self.lights.get_mut(ci).and_then(|c| c.request.get_mut(li)) {
                         *r = true;
@@ -6974,7 +6975,7 @@ impl Traffic {
                     continue;
                 }
                 let start = nl.headings.first().copied().unwrap_or(end_heading);
-                let turn = ((start - end_heading) as f64 + 540.0).rem_euclid(360.0) - 180.0;
+                let turn = wrap_deg((start - end_heading) as f64);
                 if turn.abs() > 60.0 {
                     continue;
                 }

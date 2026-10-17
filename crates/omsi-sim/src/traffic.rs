@@ -9,6 +9,8 @@
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 
+mod route_search;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LaneKind {
     Street,
@@ -1359,7 +1361,7 @@ impl Network {
                     if d > max_dist || best.map(|b| d >= b.2).unwrap_or(false) {
                         continue;
                     }
-                    let turn = (l.at(s).1 as f64 - heading + 540.0).rem_euclid(360.0) - 180.0;
+                    let turn = omsi_geometry::util::wrap_deg(l.at(s).1 as f64 - heading);
                     if turn.abs() <= max_turn {
                         best = Some((i, s, d));
                     }

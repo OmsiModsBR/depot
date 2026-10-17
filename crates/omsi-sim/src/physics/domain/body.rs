@@ -82,6 +82,13 @@ pub struct RigidBody {
     /// as OMSI's do - its wheels know no faces - and a step nobody sees (a height profile
     /// over the drawn road, a helper object's collision box) is no invisible wall.
     pub(crate) wheel_walls: bool,
+    /// The time the frames brought that no substep has run yet (s, less than a substep), and
+    /// where the body stood a substep before the last: the body is shown that far between the
+    /// two (see `RigidBody::shown_origin`), so that its motion on screen stays smooth while a
+    /// frame runs one substep and the next two.
+    pub(crate) unstepped: f32,
+    pub(crate) last_position: DVec3,
+    pub(crate) last_orientation: Quat,
 }
 
 impl RigidBody {

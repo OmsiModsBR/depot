@@ -3,26 +3,23 @@
 //! A8L8) and the BC1/BC2/BC3 (DXT1/3/5) block formats. Only the top mip level is used.
 
 use crate::Image;
-
-fn u32_at(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
+use omsi_cfg::bytes::le32;
 
 /// Decode a DDS file. Returns None when the header is not a DDS one.
 pub fn decode(bytes: &[u8]) -> Result<Image, String> {
     if bytes.len() < 128 || &bytes[..4] != b"DDS " {
         return Err("not a DDS file".into());
     }
-    let height = u32_at(bytes, 12) as usize;
-    let width = u32_at(bytes, 16) as usize;
-    let pf_flags = u32_at(bytes, 80);
+    let height = le32(bytes, 12) as usize;
+    let width = le32(bytes, 16) as usize;
+    let pf_flags = le32(bytes, 80);
     let fourcc = &bytes[84..88];
-    let bpp = u32_at(bytes, 88) as usize;
+    let bpp = le32(bytes, 88) as usize;
     let masks = [
-        u32_at(bytes, 92),
-        u32_at(bytes, 96),
-        u32_at(bytes, 100),
-        u32_at(bytes, 104),
+        le32(bytes, 92),
+        le32(bytes, 96),
+        le32(bytes, 100),
+        le32(bytes, 104),
     ];
     let mut data_start = 128;
     if fourcc == b"DX10" {
@@ -34,7 +31,7 @@ pub fn decode(bytes: &[u8]) -> Result<Image, String> {
     }
     // a cube map (six faces of the same size, one after the other): OMSI's reflections are
     // sphere maps, so the faces are turned into one (the first face alone had been taken)
-    let caps2 = u32_at(bytes, 112);
+    let caps2 = le32(bytes, 112);
     if caps2 & 0x200 != 0 && caps2 & 0xFC00 == 0xFC00 && data.len() >= 6 {
         let face_len = data.len() / 6;
         let mut faces = Vec::with_capacity(6);
@@ -54,13 +51,13 @@ pub fn decode(bytes: &[u8]) -> Result<Image, String> {
     if pf_flags & 0x4 != 0 {
         // D3DFORMAT numbers in the fourcc: the wide RGBA formats D3DX writes for float or
         // 16-bit pictures (a Citaro repaint's `lublins.dds` is A32B32G32R32F)
-        if let Some(img) = wide_rgba(u32_at(bytes, 84), data, width, height) {
+        if let Some(img) = wide_rgba(le32(bytes, 84), data, width, height) {
             return img;
         }
         // the DX10 header names a DXGI format: the block formats as their DXT names, the
         // plain ones read as they lie (D3DX 9 itself knows none of them; newer tools write
         // them for mods)
-        let dxgi = (fourcc == b"DX10" && bytes.len() >= 148).then(|| u32_at(bytes, 128));
+        let dxgi = (fourcc == b"DX10" && bytes.len() >= 148).then(|| le32(bytes, 128));
         if let Some(img) = dxgi.and_then(|f| dxgi_plain(f, data, width, height)) {
             return img;
         }

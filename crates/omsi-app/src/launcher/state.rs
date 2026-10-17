@@ -39,7 +39,7 @@ pub enum Msg {
     Crashed(String),
 }
 
-/// A server in the Multiplayer page's list (`~/.openomsi/servers.json`), as the player
+/// A server in the Multiplayer page's list (`~/.depot/servers.json`), as the player
 /// added it: its address (`https://….trycloudflare.com`, `http://host:port`) and a name of
 /// their own (empty: the server's).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -91,7 +91,7 @@ fn servers_path() -> std::path::PathBuf {
     core::data_dir().join("servers.json")
 }
 
-/// The duty as it is remembered between launches (`~/.openomsi/launcher-duty.json`).
+/// The duty as it is remembered between launches (`~/.depot/launcher-duty.json`).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Choice {
@@ -193,7 +193,7 @@ impl Choice {
     }
     pub fn save(&self) {
         if let Ok(t) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(choice_path(), t);
+            let _ = omsi_cfg::write_atomic(choice_path(), t);
         }
     }
 }

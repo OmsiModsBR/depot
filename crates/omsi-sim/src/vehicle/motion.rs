@@ -341,6 +341,8 @@ impl VehicleInstance {
 
     fn step_rigid(&mut self, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32) {
         let mut rb = self.take_rigid().unwrap();
+        // what the body ran into this frame, and what it was
+        let mut hits: Vec<(crate::physics::Impact, crate::collision::Obb)> = Vec::new();
         // the tyres' grip on the road as it is this frame (set after the step, it took hold a
         // frame late: the first frame on a frozen road still had the dry road's grip)
         rb.friction = road_grip(self.host.street_cond, self.host.temperature);
@@ -376,8 +378,49 @@ impl VehicleInstance {
                     (None, Some(_)) => &from_ground,
                     (None, None) => &flat,
                 };
+            // Obstacles: the static boxes around the vehicle and the moving ones, answered
+            // with impulses after each slice of the step, with the time it covered (once a
+            // frame, with the frame's time however long, a long frame took a box the bus had
+            // only just reached for one it had stood in all along). The old answer - put the
+            // bus back where it was and take its speed - held it against whatever it touched:
+            // it could not slide along a wall or turn away, and every frame of pushing counted
+            // as another crash.
+            let bb = self.ty.def.bounding_box;
+            let collision = self.collision.clone();
+            let dynamic = std::mem::take(&mut self.dynamic_boxes);
+            let mut knocked = self.knocked.clone();
+            let mut collide = |bodies: &mut [crate::physics::RigidBody], slice: f32| {
+                let Some(bb) = bb else { return };
+                let rb = &mut bodies[0];
+                let me = rb.body_box(bb);
+                let mut obstacles: Vec<crate::collision::Obb> = Vec::new();
+                if let Some(cw) = &collision {
+                    let mut probe_box = me;
+                    probe_box.half += glam::DVec2::splat(1.0);
+                    // the faces of collision meshes only where they are in the body as it
+                    // stands: pitched on a ramp, the plan-view box reaches down to its lowest
+                    // corner all along its length and ran into the ramp it drove on
+                    let solid = rb.body_solid(bb, 0.05);
+                    obstacles.extend(cw.obstacles_near_solid(&probe_box, Some(&solid)));
+                }
+                obstacles.extend(dynamic.iter().copied());
+                let impacts = rb.collide(bb, &obstacles, &|i| obstacles[i].id >= 0 && knocked.contains(&obstacles[i].id), slice);
+                for hit in impacts {
+                    let o = obstacles[hit.obstacle];
+                    if hit.broke && o.id >= 0 && !knocked.contains(&o.id) {
+                        knocked.push(o.id);
+                    }
+                    // (one hit per obstacle a frame, the hardest, as a single slice gives)
+                    match hits.iter_mut().find(|(_, p): &&mut (crate::physics::Impact, crate::collision::Obb)| o.id != -1 && p.id == o.id) {
+                        Some((h, _)) if h.energy >= hit.energy => {}
+                        Some(x) => *x = (hit, o),
+                        None => hits.push((hit, o)),
+                    }
+                }
+            };
             // (with the parts coupled behind it: see `articulation`)
-            rb = self.step_bodies(rb, dt, m_wheel, brakes, steer, probe);
+            rb = self.step_bodies(rb, dt, m_wheel, brakes, steer, probe, &mut collide);
+            self.dynamic_boxes = dynamic;
         }
         // what the crashes of this step destroyed, and the worst of them
         let mut energy = 0.0f32;
@@ -392,61 +435,29 @@ impl VehicleInstance {
                 worst = Some(*hit);
             }
         }
-        // Obstacles: the static boxes around the vehicle and the moving ones, answered with
-        // impulses. The old answer - put the bus back where it was and take its speed - held
-        // it against whatever it touched: it could not slide along a wall or turn away, and
-        // every frame of pushing counted as another crash.
-        if let Some(bb) = self.ty.def.bounding_box {
-            let me = rb.body_box(bb);
-            let mut obstacles: Vec<crate::collision::Obb> = Vec::new();
-            if let Some(cw) = &self.collision {
-                let mut probe_box = me;
-                probe_box.half += glam::DVec2::splat(1.0);
-                // the faces of collision meshes only where they are in the body as it
-                // stands: pitched on a ramp, the plan-view box reaches down to its lowest
-                // corner all along its length and ran into the ramp it drove on
-                let solid = rb.body_solid(bb, 0.05);
-                obstacles.extend(cw.obstacles_near_solid(&probe_box, Some(&solid)));
+        let touching: Vec<i64> = hits.iter().map(|(_, o)| o).filter(|o| o.mass > 0.0).map(|o| o.id).collect();
+        for (hit, o) in &hits {
+            if hit.broke && o.id >= 0 && !self.knocked.contains(&o.id) {
+                self.knocked.push(o.id);
+                self.knocked_now.push((o.id, hit.push.as_dvec3()));
             }
-            obstacles.extend(self.dynamic_boxes.iter().copied());
-            let knocked = self.knocked.clone();
-            let impacts = rb.collide(
-                bb,
-                &obstacles,
-                &|i| obstacles[i].id >= 0 && knocked.contains(&obstacles[i].id),
-                dt,
-            );
-            let touching: Vec<i64> = impacts
-                .iter()
-                .map(|h| &obstacles[h.obstacle])
-                .filter(|o| o.mass > 0.0)
-                .map(|o| o.id)
-                .collect();
-            for hit in &impacts {
-                if hit.broke {
-                    let o = &obstacles[hit.obstacle];
-                    if o.id >= 0 && !self.knocked.contains(&o.id) {
-                        self.knocked.push(o.id);
-                        self.knocked_now.push((o.id, hit.push.as_dvec3()));
-                    }
-                }
-                // a brush that takes less than a kilojoule is no accident (a broken post is), and
-                // a car still inside the bus from the frame before is the same accident
-                let o = &obstacles[hit.obstacle];
-                if hit.speed >= crate::physics::CRASH_SPEED && omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
-                    log::info!("  hit obstacle {} at ({:.1}, {:.1}) z {:.2}..{:.2} half {:.2}x{:.2} heading {:.0}, {:.1} km/h", o.id, o.center.x, o.center.y, o.z0, o.z1, o.half.x, o.half.y, o.heading.to_degrees(), hit.speed * 3.6);
-                }
-                if hit.speed < crate::physics::CRASH_SPEED
-                    || (hit.energy < 1000.0 && !hit.broke)
-                    || (o.mass > 0.0 && self.touching.contains(&o.id))
-                {
-                    continue;
-                }
-                energy += hit.energy;
-                if worst.map(|w| hit.energy > w.energy).unwrap_or(true) {
-                    worst = Some(*hit);
-                }
+            // a brush that takes less than a kilojoule is no accident (a broken post is), and
+            // a car still inside the bus from the frame before is the same accident
+            if hit.speed >= crate::physics::CRASH_SPEED && omsi_cfg::flags::DEBUG_PHYSICS.is_set() {
+                log::info!("  hit obstacle {} at ({:.1}, {:.1}) z {:.2}..{:.2} half {:.2}x{:.2} heading {:.0}, {:.1} km/h", o.id, o.center.x, o.center.y, o.z0, o.z1, o.half.x, o.half.y, o.heading.to_degrees(), hit.speed * 3.6);
             }
+            if hit.speed < crate::physics::CRASH_SPEED
+                || (hit.energy < 1000.0 && !hit.broke)
+                || (o.mass > 0.0 && self.touching.contains(&o.id))
+            {
+                continue;
+            }
+            energy += hit.energy;
+            if worst.map(|w| hit.energy > w.energy).unwrap_or(true) {
+                worst = Some(*hit);
+            }
+        }
+        if self.ty.def.bounding_box.is_some() {
             self.touching = touching;
         }
         if let Some(hit) = worst {
@@ -471,8 +482,10 @@ impl VehicleInstance {
             self.crashes += 1;
             self.collided = true;
         }
-        self.position = rb.origin();
-        let (heading, pitch, bank) = rb.heading_pitch_bank();
+        // (shown between its last two substeps, as far as the time not yet stepped reaches:
+        // smooth at any frame rate, a substep behind the physics at most)
+        self.position = rb.shown_origin();
+        let (heading, pitch, bank) = rb.shown_heading_pitch_bank();
         self.heading = heading;
         self.pitch = pitch;
         self.bank = bank;

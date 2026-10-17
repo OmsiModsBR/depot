@@ -164,6 +164,33 @@ mod tests {
         assert!(rb.origin().y < y0 - 1.0, "{} -> {}", y0, rb.origin().y);
     }
 
+    /// At 4 frames a second the bus answers the wall after each slice of the frame, with the
+    /// time the slice covered: it stops at the wall, as it does at 30, and the crash counts
+    /// once. (Answered once a frame, it ran 2.6 m into the wall before the wall pushed it out.)
+    #[test]
+    fn a_long_frame_meets_the_wall_slice_by_slice() {
+        let def = bus();
+        let bb = def.bounding_box.unwrap();
+        let mut rb = RigidBody::from_definition(&def, &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        let g = road(1e9, 0.0);
+        run(&mut rb, 1.0, 0.0, 5000.0, &g);
+        rb.velocity = Vec3::new(0.0, 40.0 / 3.6, 0.0);
+        let wall = [Obb::from_box([20.0, 1.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.0, 12.0, 0.0), 0.0)];
+        let mut impacts = Vec::new();
+        let mut deepest = f64::MIN;
+        for _ in 0..12 {
+            let inputs = [crate::physics::BodyInputs { brake: &[0.0; 4], steer: Some(0.0), air: true }];
+            crate::physics::step_train_with(std::slice::from_mut(&mut rb), &[], 0.25, 0.0, &inputs, &g, &mut |bodies, slice| {
+                deepest = deepest.max(bodies[0].origin().y + 5.83 - 11.5);
+                impacts.extend(bodies[0].collide(bb, &wall, &|_| false, slice));
+            });
+        }
+        assert_eq!(impacts.iter().filter(|i| i.speed > CRASH_SPEED).count(), 1, "{impacts:?}");
+        assert!(deepest < 0.6, "the front went {deepest} m into the wall");
+        assert!(rb.origin().y + 5.83 < 11.5 + 0.01);
+    }
+
     /// A glancing blow on the front corner turns the bus away from the wall and lets it slide.
     #[test]
     fn glancing_blow_turns_the_bus() {

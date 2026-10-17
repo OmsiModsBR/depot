@@ -36,10 +36,7 @@ impl Rain {
     }
 
     fn rand(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        (self.rng >> 40) as f32 / (1u64 << 24) as f32
+        omsi_geometry::util::unit_f32(&mut self.rng)
     }
 
     /// `kind`: 0 none, 1 rain, 2 snow; `rate` 0..1.
@@ -169,12 +166,7 @@ pub fn snow_on_glass(root: &std::path::Path) -> omsi_texture::Image {
     let flake =
         omsi_texture::decode_file(&omsi_cfg::resolve_path(root, "Texture\\snowflake.tga")).ok();
     let mut rng = 0x9E37_79B9_7F4A_7C15u64;
-    let mut rand = move || {
-        rng ^= rng << 13;
-        rng ^= rng >> 7;
-        rng ^= rng << 17;
-        (rng >> 40) as f32 / (1u64 << 24) as f32
-    };
+    let mut rand = move || omsi_geometry::util::unit_f32(&mut rng);
     // a pane holds more snow at its rim than in the middle, where the airstream and the
     // wipers take it away
     let edge = |x: f32, y: f32| {

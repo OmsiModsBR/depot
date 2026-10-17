@@ -59,7 +59,7 @@ pub struct DriveView {
     /// player's first trip, not on the morning's trips before it.
     book_scrolled: Option<(String, String, usize)>,
     /// The buses marked with a star (#524), by file (lower case, '/'), read once from
-    /// `~/.openomsi/favourite-buses.txt`; and whether the list shows only them.
+    /// `~/.depot/favourite-buses.txt`; and whether the list shows only them.
     favourites: Option<std::collections::BTreeSet<String>>,
     only_favourites: bool,
 }

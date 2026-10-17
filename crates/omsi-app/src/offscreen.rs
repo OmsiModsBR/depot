@@ -14,7 +14,7 @@ use crate::humans;
 use crate::lights;
 use crate::memory::texture_budget;
 use crate::money;
-use crate::navigator;
+use crate::nav;
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
@@ -34,6 +34,7 @@ use crate::weather_setup::{
 };
 use crate::world_load::load_world;
 use glam::{DVec3, Vec3};
+use omsi_geometry::util::{wrap_deg, wrap_deg_f32};
 use omsi_render::{Camera, Renderer};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -836,9 +837,9 @@ pub(crate) fn run_offscreen(
                     if let Some((mut lane, mut s, _)) = net.nearest_lane(probe, omsi_sim::traffic::LaneKind::Street) {
                         // (the lane that runs our way)
                         let lh = net.lanes[lane].at(s).1 as f64;
-                        let dh = (lh - v.heading + 540.0).rem_euclid(360.0) - 180.0;
+                        let dh = wrap_deg(lh - v.heading);
                         if dh.abs() > 100.0 {
-                            if let Some((l2, s2, _)) = (0..net.lanes.len()).filter(|&k| net.lanes[k].kind == omsi_sim::traffic::LaneKind::Street).filter_map(|k| net.lanes[k].nearest_point(probe).map(|(s, d)| (k, s, d))).filter(|(k, s, d)| *d < 6.0 && ((net.lanes[*k].at(*s).1 as f64 - v.heading + 540.0).rem_euclid(360.0) - 180.0).abs() < 80.0).min_by(|a, b| a.2.total_cmp(&b.2)) {
+                            if let Some((l2, s2, _)) = (0..net.lanes.len()).filter(|&k| net.lanes[k].kind == omsi_sim::traffic::LaneKind::Street).filter_map(|k| net.lanes[k].nearest_point(probe).map(|(s, d)| (k, s, d))).filter(|(k, s, d)| *d < 6.0 && wrap_deg(net.lanes[*k].at(*s).1 as f64 - v.heading).abs() < 80.0).min_by(|a, b| a.2.total_cmp(&b.2)) {
                                 lane = l2;
                                 s = s2;
                             }
@@ -853,8 +854,8 @@ pub(crate) fn run_offscreen(
                             ahead -= len - s;
                             let here = net.lanes[lane].at(len).1;
                             lane = *net.lanes[lane].next.iter().min_by(|a, b| {
-                                let da = (net.lanes[**a].at(0.0).1 - here + 540.0).rem_euclid(360.0) - 180.0;
-                                let db = (net.lanes[**b].at(0.0).1 - here + 540.0).rem_euclid(360.0) - 180.0;
+                                let da = wrap_deg_f32(net.lanes[**a].at(0.0).1 - here);
+                                let db = wrap_deg_f32(net.lanes[**b].at(0.0).1 - here);
                                 da.abs().total_cmp(&db.abs())
                             }).unwrap();
                             s = 0.0;
@@ -862,7 +863,7 @@ pub(crate) fn run_offscreen(
                         let target = net.lanes[lane].at(s).0;
                         let d = (target - v.position).truncate();
                         let want = d.x.atan2(d.y).to_degrees();
-                        let alpha = ((want - v.heading + 540.0).rem_euclid(360.0) - 180.0) as f32;
+                        let alpha = wrap_deg(want - v.heading) as f32;
                         let speed = v.motion().velocity_kmh();
                         controls.steering = (alpha / 30.0).clamp(-1.0, 1.0);
                         controls.throttle = ((kmh - speed) / 10.0).clamp(0.0, 1.0);
@@ -2759,7 +2760,7 @@ pub(crate) fn run_offscreen(
         crate::ui::shift_overlays(&mut scene, overlay_start, viewport[0]);
         // the navigator, as the window shows it (its camera settled first)
         if settings.navigator {
-            let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
+            let mut nav = nav::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
             nav.schedule = omsi_cfg::flags::NAV_SCHEDULE.is_set();
             nav.show_ai = settings.nav_ai;
             nav.show_surface = settings.nav_surface;
@@ -2778,7 +2779,7 @@ pub(crate) fn run_offscreen(
             if let Ok(v) = omsi_cfg::env::var("OMSI_NAV_LINES") {
                 nav.debug_lines(&v);
             }
-            let (line, terminus, stops, trip) = navigator::duty_parts(duty.as_ref());
+            let (line, terminus, stops, trip) = nav::duty_parts(duty.as_ref());
             if let (Some((key, name)), Some(sch)) = (trip, schedule.as_ref()) {
                 let lanes = sch.trip_route_in(nav.map_net().unwrap(), &name);
                 let g = nav.global_version + (1 << 40);
@@ -2786,7 +2787,7 @@ pub(crate) fn run_offscreen(
             }
             let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
             let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
-            let frame = navigator::NavFrame {
+            let frame = nav::NavFrame {
                 traffic: traffic.as_ref(),
                 #[cfg(feature = "lan")]
                 players: lan_off.as_ref().map(|l| lan::nav_players(&remotes_off, l.my_id)).unwrap_or_default(),
@@ -2802,7 +2803,7 @@ pub(crate) fn run_offscreen(
                 stops,
                 delay: duty.as_ref().map(|_| p.vehicle.host.tt_delay as f64),
                 passengers: humans_off.as_ref().map(|h| h.riding()),
-                stop_requested: navigator::stop_requested(&p.vehicle),
+                stop_requested: nav::stop_requested(&p.vehicle),
                 time: clock.time,
                 weekday: clock.weekday(),
                 date: clock.date_code(),

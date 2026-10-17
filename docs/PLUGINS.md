@@ -330,7 +330,7 @@ only to programs on this computer, and only to ports from 1024 up.
 
 ### Tips
 
-* Watch `game.log` (in `~/.openomsi/`) while you write a plugin: every `omsi.log` line and
+* Watch `game.log` (in `~/.depot/`) while you write a plugin: every `omsi.log` line and
   every error is there.
 * `OMSI_WATCH_VARS=Velocity,throttle` logs changes of bus variables - useful to find the
   names a bus uses; the bus's `.osc` scripts list them all.

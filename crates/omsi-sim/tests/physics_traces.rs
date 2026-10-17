@@ -17,7 +17,7 @@ use omsi_model::Model;
 use omsi_script::Program;
 use omsi_sim::ai::{AiBody, MotionKind};
 use omsi_sim::collision::{CollisionWorld, Obb};
-use omsi_sim::rigid::{place_train, step_train, support_rest_loads, BodyInputs, Ground, GroundProbe, Impact, Joint, RigidBody};
+use omsi_sim::physics::{place_train, step_train, support_rest_loads, BodyInputs, Ground, GroundProbe, Impact, Joint, RigidBody};
 use omsi_sim::vehicle::{road_grip, AiFrame};
 use omsi_sim::{Controls, SimClock, VehicleHost, VehicleInstance, VehicleType};
 use omsi_vehicle::vehicle::Coupling;
@@ -250,7 +250,7 @@ mod scenarios {
 
     // -- the vehicles (the synthetic ones of the crate's own tests) --
 
-    /// A 12 m solo bus on two axles (`rigid`'s tests' `bus()`).
+    /// A 12 m solo bus on two axles (`physics`' tests' `bus()`).
     pub fn bus() -> Vehicle {
         let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle { long, max_width: 2.4, min_width: 1.76, wheel_diameter: 0.94, spring, max_force, damper: 20.0, driven, inertia_inv: 0.0 };
         Vehicle {

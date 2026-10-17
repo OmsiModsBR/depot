@@ -5,7 +5,7 @@
 //! (`tools/greenteaspeak-plugin`) listens on `127.0.0.1:38088`; the game connects to it and
 //! sends one JSON object a line:
 //!
-//! - `hello`: first, the key of `~/.openomsi/voice-plugin.key` (made by the game, read by the
+//! - `hello`: first, the key of `~/.depot/voice-plugin.key` (made by the game, read by the
 //!   plugin): anything else on that port - a web page posting to it, another program - is
 //!   not the game and is hung up on. The plugin answers `welcome`, or `refused` and hangs up
 //!   (another game is already linked to it).
@@ -25,7 +25,7 @@
 //! (who speaks now: drawn by their name tags) and `mute`.
 //!
 //! The voice server is the host's to name: `voice_server_uid`, `voice_channel` and the rest in
-//! a dedicated server's `server.cfg`, or `~/.openomsi/voice.cfg` for a game that hosts. A
+//! a dedicated server's `server.cfg`, or `~/.depot/voice.cfg` for a game that hosts. A
 //! joining game asks for it with the command `voice?` and the host answers `voice …`.
 //!
 //! Players are told apart in the voice channel by their nicknames: `<name> #<id>` with the
@@ -112,7 +112,7 @@ impl VoiceServer {
         Some(s)
     }
 
-    /// `~/.openomsi/voice.cfg` of a game that hosts (the same keys as `server.cfg`).
+    /// `~/.depot/voice.cfg` of a game that hosts (the same keys as `server.cfg`).
     pub(crate) fn host_file() -> Option<VoiceServer> {
         let text = std::fs::read_to_string(crate::lan::data_dir()?.join("voice.cfg")).ok()?;
         let kv = parse_kv(&text);
@@ -157,7 +157,7 @@ impl VoiceServer {
 }
 
 /// The voice server this game names when it hosts: a dedicated server's `server.cfg`, else
-/// `~/.openomsi/voice.cfg`.
+/// `~/.depot/voice.cfg`.
 pub(crate) fn hosted() -> Option<VoiceServer> {
     #[cfg(feature = "server")]
     if let Some(v) = crate::server::SERVER_VOICE.get() {
@@ -227,7 +227,7 @@ pub(crate) fn nickname(name: &str, id: u32) -> String {
     format!("{}{tail}", short.trim_end())
 }
 
-/// `~/.openomsi/voice-plugin.key`: the key the game says `hello` with and the plugin
+/// `~/.depot/voice-plugin.key`: the key the game says `hello` with and the plugin
 /// checks it against (no web page or other program on this machine can read it).
 pub(crate) fn key_path() -> Option<PathBuf> {
     Some(crate::lan::data_dir()?.join("voice-plugin.key"))

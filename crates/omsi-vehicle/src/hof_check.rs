@@ -464,10 +464,8 @@ pub fn fix_file(path: &Path, expected_key: Option<u64>) -> FileResult {
             backup.display()
         ));
     }
-    let tmp = path.with_extension("hof.depot-tmp");
-    let written = std::fs::write(&tmp, &fixed.bytes).and_then(|_| std::fs::rename(&tmp, path));
+    let written = omsi_cfg::write_atomic(path, &fixed.bytes);
     if let Err(e) = written {
-        let _ = std::fs::remove_file(&tmp);
         return FileResult::Failed(format!(
             "writing failed, the original is untouched (is the game closed?): {e}"
         ));
