@@ -10,6 +10,7 @@
 pub mod index;
 pub mod install;
 pub mod instances;
+pub mod screenshots;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
