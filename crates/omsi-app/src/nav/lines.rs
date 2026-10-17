@@ -28,6 +28,8 @@ pub(super) struct LinesText {
     pub(super) terrain: &'static str,
     pub(super) elev: &'static str,
     pub(super) timetable: &'static str,
+    /// Said while the timetable is being read.
+    pub(super) loading: &'static str,
     /// Tick every line of the tab on show, and clear them.
     /// Said in the card while no line is open: how to open one.
     pub(super) hint: [&'static str; 2],
@@ -45,8 +47,8 @@ pub(super) struct LinesText {
 
 pub(super) fn lines_text(lang: &str) -> LinesText {
     match lang.to_ascii_uppercase().as_str() {
-"PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", heavy: "pesados", terrain: "Relevo", orient: ["Mapa", "Norte", "Rumo"], elev: "alt.", comma: true },
-        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", heavy: "heavy", terrain: "Terrain", orient: ["Map", "North", "Heading"], elev: "elev.", comma: false },
+"PTB" | "PT" | "POR" | "BRA" => LinesText { lines: "Linhas", line_data: "DADOS DA LINHA", map_lines: "LINHAS DO MAPA", all: "Todas", brt: "BRT", express: "Expressas", feeders: "Alimentadoras", length: "Extensão", stops: "Paradas", trip: "Tempo de percurso", route: "Rota", vehicles: "Veículos agora", you_are_on: "Você está em", circular: "Circular", out_back: "Ida e volta", minutes: "min", count: "linhas", timetable: "Horários", loading: "Carregando horários…", hint: ["Duplo clique numa linha", "para ver rotas, sentidos e horários"], modals: ["Ônibus", "VLT", "Metrô", "Trens"], tick_all: "Marcar todas", tick_none: "Limpar", towards: "Sentido", days: ["Seg–Sex", "Sáb", "Dom"], predicted: "Horários previstos pela tabela do mapa", heavy: "pesados", terrain: "Relevo", orient: ["Mapa", "Norte", "Rumo"], elev: "alt.", comma: true },
+        _ => LinesText { lines: "Lines", line_data: "LINE DATA", map_lines: "MAP LINES", all: "All", brt: "BRT", express: "Express", feeders: "Feeders", length: "Length", stops: "Stops", trip: "Trip time", route: "Route", vehicles: "Vehicles now", you_are_on: "You are on", circular: "Circular", out_back: "Out and back", minutes: "min", count: "lines", timetable: "Timetable", loading: "Loading timetable…", hint: ["Double-click a line", "for its routes and timetable"], modals: ["Bus", "Tram", "Metro", "Rail"], tick_all: "Select all", tick_none: "Clear", towards: "Towards", days: ["Mon–Fri", "Sat", "Sun"], predicted: "Times predicted from the map's timetable", heavy: "heavy", terrain: "Terrain", orient: ["Map", "North", "Heading"], elev: "elev.", comma: false },
     }
 }
 
