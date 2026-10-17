@@ -31,6 +31,7 @@
 //!   particles swell (a milky sky, softer distances) - which is why the evening after rain
 //!   is crystal clear with a pale sunset, and a sultry evening in a high ends in red.
 
+use omsi_content::weather::psychro::bolton::{dew_point_q as dew_point, q_sat};
 use omsi_content::weather::Weather;
 use omsi_geometry::util::smoothstep;
 
@@ -153,19 +154,6 @@ fn hash(seed: u32, k: u32) -> f32 {
     x = x.wrapping_mul(0x846C_A68B);
     x ^= x >> 16;
     (x & 0xFF_FFFF) as f32 / 16_777_216.0
-}
-
-/// Saturation specific humidity (g/kg) at a temperature (°C), at 1000 hPa (Magnus).
-fn q_sat(t: f32) -> f32 {
-    let e = 6.112 * (17.67 * t / (t + 243.5)).exp();
-    622.0 * e / (1000.0 - 0.378 * e)
-}
-
-/// Dew point (°C) of air with specific humidity q (g/kg), at 1000 hPa.
-fn dew_point(q: f32) -> f32 {
-    let e = (q.max(0.01) * 1000.0 / (622.0 + 0.378 * q.max(0.01))).max(1e-3);
-    let g = (e / 6.112).ln();
-    243.5 * g / (17.67 - g)
 }
 
 /// The season: 0 in midwinter, 1 in high summer (half a year later south of the equator).

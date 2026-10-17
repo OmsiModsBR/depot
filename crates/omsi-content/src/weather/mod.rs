@@ -3,6 +3,9 @@
 use omsi_cfg::CfgFile;
 use std::path::{Path, PathBuf};
 
+pub mod psychro;
+pub use psychro::omsi::absolute_humidity;
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Weather {
     pub path: PathBuf,
@@ -55,22 +58,6 @@ impl Weather {
         }
         w
     }
-}
-
-/// The absolute humidity (g/m³) of air at `temp` °C with the dew point `dew` °C, as OMSI 2
-/// makes `Weather_AbsHum` of a weather's `[temp]`: the second value there is the dew point
-/// (Bodennebel 9/9 and Überfrierende Nässe -6/-6 are saturated, Starker Schneefall -6/-7.96),
-/// not the humidity itself. Taken as it stood, a winter weather gave the scripts a negative
-/// humidity - no breath of exhaust steam in the frost - and every weather a wrong one for the
-/// heating's misting of the panes. The saturation pressure is Magnus's in base 10, over ice
-/// below 0 °C (chosen by the temperature, not the dew point, as in the original).
-pub fn absolute_humidity(temp: f32, dew: f32) -> f32 {
-    let (a, b) = if temp < 0.0 {
-        (7.6, 240.7)
-    } else {
-        (7.5, 237.3)
-    };
-    6.1078 * 216.69 * 10f32.powf(a * dew / (b + dew)) / (273.15 + temp)
 }
 
 /// OMSI 2's current weather (`[currWeather_ICAO]`): a weather made from an airport's METAR

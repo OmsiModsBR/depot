@@ -4,6 +4,7 @@ use crate::cli::Args;
 use crate::lights;
 use crate::scene;
 use crate::startup::{CLASSIC, CLOUDS, ENHANCED};
+pub(crate) use omsi_content::weather::psychro::bolton::{absolute_humidity, dew_point as dew_point_c, relative_humidity};
 use omsi_render::{Renderer, Scene};
 use std::path::Path;
 
@@ -100,19 +101,6 @@ impl CustomWeather {
             pressure:c.pressure,clouds:(cloud.into(),c.cloud_base_m),precip:vec![c.precip as f32,c.precip_intensity,0.0,0.0,0.0],
             ground_wet:[c.road_wetness*255.0,0.0,0.0],snow:c.snow_cover,snow_on_road:c.snow_on_road}
     }
-}
-fn saturation_vapour_pressure(temp_c:f32)->f32{6.112*((17.67*temp_c)/(temp_c+243.5)).exp()}
-pub(crate) fn absolute_humidity(temp_c:f32,relative:f32)->f32{
-    let vapour=saturation_vapour_pressure(temp_c)*relative.clamp(0.0,100.0)/100.0;
-    (216.7*vapour/(temp_c+273.15).max(1.0)).max(0.0)
-}
-pub(crate) fn relative_humidity(temp_c:f32,absolute:f32)->f32{
-    let vapour=absolute.max(0.0)*(temp_c+273.15).max(1.0)/216.7;
-    (vapour/saturation_vapour_pressure(temp_c).max(0.001)*100.0).clamp(0.0,100.0)
-}
-pub(crate) fn dew_point_c(temp_c:f32,relative:f32)->f32{
-    let rh=(relative.clamp(0.1,100.0)/100.0).ln();
-    let g=rh+17.67*temp_c/(243.5+temp_c); 243.5*g/(17.67-g)
 }
 pub(crate) fn custom_weather(text:Option<&str>)->Option<CustomWeather>{text.and_then(CustomWeather::parse)}
 
