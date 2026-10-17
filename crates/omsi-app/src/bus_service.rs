@@ -763,6 +763,113 @@ mod tests {
         assert!(s.must_serve(&stop(2, 200.0), 170.0));
     }
 
+    /// One timetable bus on a straight street, standing at its first stop (the stop point is
+    /// where the bus rests), with a second stop ahead so that the service does not end the
+    /// trip when it pulls out. Nothing is simulated but the service itself: no physics, no
+    /// passengers, a script that answers nothing (so the doors count as shut at once).
+    struct Rig {
+        net: Network,
+        st: AiState,
+        vehicle: VehicleInstance,
+        svc: BusService,
+        now: f64,
+        id: u64,
+    }
+
+    impl Rig {
+        fn at_first_stop(depart: f64, now: f64, id: u64) -> Rig {
+            let lane = omsi_sim::traffic::LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 300.0, 0.0, 0.0, LaneKind::Street, 2.5);
+            let net = Network { lanes: vec![lane], crossings: vec![Vec::new()], ..Default::default() };
+            let mut st = AiState::new(0, 100.0, id);
+            st.route = vec![0];
+            let stop = |id, s, depart| Stop { ri: 0, s, bay: 0.0, depart, id, side: 0.0 };
+            let svc = BusService::new(vec![stop(1, 100.0, depart), stop(2, 250.0, depart + 300.0)]);
+            let vehicle = crate::schedule::tests::script_test_vehicle("{frame_ai}\n{end}\n", "", "");
+            Rig { net, st, vehicle, svc, now, id }
+        }
+
+        /// One frame of `dt` seconds; whether `holds` keeps the doors open (somebody at them).
+        fn frame(&mut self, dt: f32, hold: bool) {
+            self.now += dt as f64;
+            if hold {
+                self.svc.hold(None, 2.5);
+            }
+            let way = [(0usize, 0.0f32)];
+            let ctx = Ctx {
+                net: &self.net,
+                way: &way,
+                day_time: self.now,
+                dt,
+                id: self.id,
+                stopped: 0.0,
+                passing: false,
+                kerb_swerve: None,
+                wanted: Some(true),
+                debug: false,
+            };
+            self.svc.step(&mut self.st, &mut self.vehicle, &ctx);
+        }
+
+        /// Frames of 0.1 s until the bus has left its first stop; the seconds that took, or
+        /// None when it was still there after `limit` seconds.
+        fn seconds_to_leave(&mut self, limit: f32, hold: bool) -> Option<f32> {
+            let mut t = 0.0;
+            while t < limit {
+                self.frame(0.1, hold);
+                t += 0.1;
+                if self.svc.phase == Phase::Running && self.svc.stops.len() == 1 {
+                    return Some(t);
+                }
+            }
+            None
+        }
+    }
+
+    /// #172: one stop, one bus, boarding finished, nobody at the doors and nothing ahead: the
+    /// bus pulls out. A late bus stands no longer than the doors' time and the closing.
+    #[test]
+    fn a_bus_leaves_its_stop_when_boarding_is_over() {
+        for id in 1..=10u64 {
+            // due at 08:00:00, there at 08:00:30 (late): off as soon as the doors are shut
+            let mut rig = Rig::at_first_stop(28_800.0, 28_830.0, id);
+            let left = rig.seconds_to_leave(120.0, false).unwrap_or_else(|| panic!("bus {id} never left ({:?})", rig.svc.phase));
+            assert!(left <= boarding_time(id) + CLOSE_MAX + 1.0, "bus {id} stood {left:.1} s");
+            assert!(left >= boarding_time(id), "bus {id} left with its doors open {left:.1} s");
+        }
+    }
+
+    /// #172: an early bus waits for its time and not a second longer: it leaves when its
+    /// departure is reached (a bus that is more than `EARLY_LEAVE` early stands until then).
+    #[test]
+    fn an_early_bus_leaves_when_its_time_comes_and_not_later() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_700.0, 3);
+        let left = rig.seconds_to_leave(300.0, false).expect("never left");
+        let wait = early_wait(28_800.0, 28_700.0, false, false) as f32;
+        assert!(left >= wait && left <= wait + 2.0 + CLOSE_MAX, "left after {left:.1} s, expected about {wait:.0} s");
+    }
+
+    /// #172: somebody at the doors who cannot get on or off (an exit that never opens, a
+    /// door that stays shut) must not keep a timetable bus at its stop for good: the people
+    /// hold the doors every frame (`hold`), so without a limit the bus never leaves.
+    /// Until the cause of the reports is seen on a real map, this limit is the safety net;
+    /// what the original does with such a case is not known (#49).
+    #[test]
+    fn nobody_keeps_a_bus_at_its_stop_for_good() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        let left = rig.seconds_to_leave(600.0, true);
+        assert!(left.is_some(), "still {:?} after ten minutes of somebody at the doors", rig.svc.phase);
+    }
+
+    /// The limit does not cut short a crowd: people getting on one after another keep the
+    /// doors open for as long as it takes them within reason.
+    #[test]
+    fn a_queue_of_people_still_holds_the_doors() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        let left = rig.seconds_to_leave(30.0, true);
+        assert!(left.is_none(), "left after {left:?} with people at the doors");
+        assert_eq!(rig.svc.phase, Phase::Boarding);
+    }
+
     #[test]
     fn station_side_comes_from_the_stop_it_boards_at() {
         let stop = |side: f32| Stop::from_tuple((0, 0.0, 0.0, 0.0, 1, side));
