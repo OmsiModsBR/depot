@@ -98,7 +98,7 @@ impl Navigator {
             (st.sheet, st.jump) = (true, true);
             st.route.insert(i, d.parse().unwrap_or(0));
             if let Some((h, m)) = it.next().and_then(|t| t.split_once(':')) {
-                st.dep = Some(h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60);
+                st.dep = Some(crate::line_times::DepKey { t: h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60, trip: None });
             }
         }
     }
@@ -205,7 +205,7 @@ impl Navigator {
         match h {
             LinesHit::Sheet => (st.sheet, st.dep, st.jump, st.scroll) = (!st.sheet, None, true, 0.0),
             LinesHit::Day(d) => (st.day, st.dep, st.jump, st.scroll) = (Some(d), None, true, 0.0),
-            LinesHit::Dep(t) => (st.dep, st.scroll) = (Some(t), 0.0),
+            LinesHit::Dep(k) => (st.dep, st.scroll) = (Some(k), 0.0),
             LinesHit::Back => (st.dep, st.jump, st.scroll) = (None, true, 0.0),
             LinesHit::All => {
                 if shown.iter().all(|i| st.selected.contains(i)) {
@@ -508,7 +508,7 @@ impl Navigator {
         let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let deps = sheet.departures(dir, day);
-        let pick = self.city.lines.dep.and_then(|t| deps.iter().copied().find(|d| d.t as u32 == t));
+        let pick = self.city.lines.dep.and_then(|k| deps.iter().copied().find(|d| d.is(&k)));
         ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", lt.timetable, lt.towards).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
         if pick.is_some() {
             let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
@@ -586,7 +586,7 @@ impl Navigator {
                     let rr = Rect::new(x0 + pad + 42.0 * s + k as f32 * 43.0 * s, ry + 3.0 * s, 39.0 * s, row_h - 6.0 * s);
                     ui.rounded(rr, 4.0 * s, tab(Some(d.t as u32) == next));
                     ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", (d.t / 60.0).round() as i64 % 60), 14.5 * s, Weight::Bold, rr, Align::Center, TEXT);
-                    hits.push((rr, LinesHit::Dep(d.t as u32)));
+                    hits.push((rr, LinesHit::Dep(d.key())));
                 }
             }
             scroll_bar(ui, self.city.lines.scroll, max, vis, lines.len(), row_h);
@@ -600,7 +600,7 @@ impl Navigator {
         let Some(timetable) = sf.times(&self.chrono, self.date) else { return };
         let Some(sheet) = timetable.line(&sf.lines()[i].number) else { return };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
-        let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
+        let Some(d) = self.city.lines.dep.and_then(|k| sheet.departures(dir, day).into_iter().find(|d| d.is(&k))) else { return };
         let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();
         let n = stops.len();
         let mut placed: Vec<Rect> = Vec::new();
