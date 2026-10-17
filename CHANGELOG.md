@@ -6,6 +6,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
+
 ### Fixed
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
