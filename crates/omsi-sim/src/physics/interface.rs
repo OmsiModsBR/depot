@@ -27,7 +27,7 @@ pub use super::implementation::{
 pub(crate) use super::implementation::coupled_rolling_resistance;
 
 // A train of bodies.
-pub use super::implementation::{hang_followers, place_train, point_load_shares, step_train, support_rest_loads};
+pub use super::implementation::{hang_followers, place_train, point_load_shares, step_train, step_train_with, support_rest_loads};
 
 // The constants the rest of the game measures against.
 pub use super::domain::params::{BUMP, CLIMB, CRASH_SPEED, DEFAULT_INERTIA_INV, DROOP, HUB_REACH, WALL_HEIGHT};

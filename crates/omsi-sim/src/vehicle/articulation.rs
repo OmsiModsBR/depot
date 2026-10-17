@@ -71,7 +71,8 @@ impl VehicleInstance {
     /// One step of the vehicle's body (`lead`, taken out of its `Dynamics`) and the bodies of the
     /// parts coupled behind it - or of the body alone, the parts handing it what they hold
     /// along the joint (`physics::CoupledPart`) as they follow.
-    pub(super) fn step_bodies(&mut self, mut lead: RigidBody, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> crate::physics::GroundProbe) -> RigidBody {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn step_bodies(&mut self, mut lead: RigidBody, dt: f32, m_wheel: f32, brakes: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> crate::physics::GroundProbe, after_slice: &mut dyn FnMut(&mut [RigidBody], f32)) -> RigidBody {
         lead.wheel_walls = self.wheel_walls;
         if !self.part_bodies_wanted() {
             lead.coupled = self.coupled_parts();
@@ -83,7 +84,7 @@ impl VehicleInstance {
                 }
                 self.rest_loads_for = 0;
             }
-            lead.step(dt, m_wheel, brakes, steer, probe);
+            crate::physics::step_train_with(std::slice::from_mut(&mut lead), &[], dt, m_wheel, &[BodyInputs { brake: brakes, steer: Some(steer), air: true }], probe, after_slice);
             return lead;
         }
         lead.coupled.clear();
@@ -145,7 +146,7 @@ impl VehicleInstance {
         }
         let mut inputs = vec![BodyInputs { brake: brakes, steer: Some(steer), air: true }];
         inputs.extend(part_brakes.iter().map(|b| BodyInputs { brake: b, steer: None, air: false }));
-        crate::physics::step_train(&mut bodies, &joints, dt, m_wheel, &inputs, probe);
+        crate::physics::step_train_with(&mut bodies, &joints, dt, m_wheel, &inputs, probe, after_slice);
         // a part's wheel stopped by a face is a crash of the vehicle (in its frame)
         let (front, parts) = bodies.split_at_mut(1);
         let front = &mut front[0];
@@ -166,8 +167,8 @@ impl VehicleInstance {
         let lead = bodies.next().unwrap();
         for (k, (rb, (placed, vars))) in bodies.zip(meta).enumerate() {
             let t = &mut self.trailers[k];
-            t.position = rb.origin();
-            let (heading, pitch, bank) = rb.heading_pitch_bank();
+            t.position = rb.shown_origin();
+            let (heading, pitch, bank) = rb.shown_heading_pitch_bank();
             (t.heading, t.pitch, t.bank) = (heading, pitch, bank);
             self.show_part_wheels(&rb, &vars);
             self.trailers[k].body = Some(PartBody { rb, placed, vars });

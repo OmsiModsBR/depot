@@ -14,14 +14,16 @@
 /// The longest frame stepped (s): a longer one (a hitch, a frame after loading) is cut to it.
 /// *tuned*
 pub(in crate::physics) const FRAME_DT_MAX: f32 = 0.25;
-/// A frame is stepped in slices of at most this (s), each with its own steering and pitch and
-/// roll damping: a long frame (below 20 fps) covers the whole time the clock counts. *tuned*
+/// The frame's substeps are run in slices of at most this (s), each answering the obstacles
+/// once (`collide`): a long frame (below 20 fps) covers the whole time the clock counts.
+/// *tuned*
 pub(in crate::physics) const SLICE_DT: f32 = 0.05;
-/// A slice is cut into substeps of about this (s), at least `SUBSTEPS_MIN` and at most
-/// `SUBSTEPS_MAX` of them: 12 ms substeps were too long for the stiff tyres. *tuned*
-pub(in crate::physics) const SUBSTEP_DT: f32 = 0.0042;
-pub(in crate::physics) const SUBSTEPS_MIN: usize = 4;
-pub(in crate::physics) const SUBSTEPS_MAX: usize = 16;
+/// Every substep is this long (s), at any frame rate: a frame runs as many as fit in the time
+/// it brings and what the frames before it left over, and keeps the rest for the next one, so
+/// that the motion does not depend on the frame rate. (Substeps cut from each frame were
+/// 1.7 ms at 144 fps and 4.2 ms at 60, and the same drive came out differently; 12 ms ones
+/// were too long for the stiff tyres.) *tuned*
+pub(in crate::physics) const SUBSTEP_DT: f32 = 1.0 / 240.0;
 /// Passes over the constraints of a substep: the tyres' alone take 8 (OMSI 2's hold across
 /// converges within them); with joints the sections share their tyres through the joint, which
 /// takes a few more. *tuned*
