@@ -7,6 +7,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Fixed
+- The city map's view turns smoothly (the short way round) when the compass changes how it is turned, or
+  the vehicle's heading changes, instead of jumping.
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
   them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
