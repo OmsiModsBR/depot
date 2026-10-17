@@ -204,7 +204,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     // `NaN` is a number to the launcher here; the game falls back to the default
     ("time_speed", "launcher>game", "NaN is kept"),
     ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
-    ("ff_engine_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
     ("wheel_range", "launcher>game", "NaN leaves the key empty"),
     ("pedal_throttle", "launcher>game", "NaN leaves the key empty"),
