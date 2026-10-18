@@ -1,39 +1,85 @@
-//! The shortest way over the street lanes from a vehicle back onto a list of lanes (the
-//! navigator's way back to the route, a duty's way to its first stop), and the lanes near
-//! a point it starts from.
+//! Shortest ways over the lanes: from one lane to another, and from a vehicle back onto a
+//! list of lanes (the navigator's way back to the route, a duty's way to its first stop).
 
-use glam::{DVec2, DVec3};
+use glam::DVec3;
 use hashbrown::HashMap;
 
-use super::{LaneKind, Network};
+use super::Network;
+use crate::traffic::lane::LaneKind;
 use omsi_geometry::util::angle_diff;
 
 impl Network {
-    /// Lanes with a point within `radius` of `c` (by the network's 50 m grid).
-    pub fn lanes_near(&self, c: DVec2, radius: f64) -> Vec<usize> {
-        let mut seen = hashbrown::HashSet::new();
-        let (cx, cy) = Network::grid_cell(c.extend(0.0));
-        let r = (radius / 50.0).ceil() as i32;
-        if self.grid.is_empty() {
-            return (0..self.lanes.len())
-                .filter(|&i| {
-                    self.lanes[i]
-                        .points
-                        .iter()
-                        .any(|q| (q.truncate() - c).length() < radius)
-                })
-                .collect();
+    /// Find shortest lane path from `start` to `target` using Dijkstra's algorithm.
+    pub fn shortest_path(&self, start: usize, target: usize) -> Option<Vec<usize>> {
+        if start >= self.lanes.len() || target >= self.lanes.len() {
+            return None;
         }
-        for gx in cx - r..=cx + r {
-            for gy in cy - r..=cy + r {
-                if let Some(v) = self.grid.get(&(gx, gy)) {
-                    seen.extend(v.iter().copied());
+        if start == target {
+            return Some(vec![start]);
+        }
+        use std::cmp::Ordering;
+        use std::collections::BinaryHeap;
+
+        #[derive(Copy, Clone, PartialEq)]
+        struct State {
+            cost: f32,
+            position: usize,
+        }
+        impl Eq for State {}
+        impl Ord for State {
+            fn cmp(&self, other: &Self) -> Ordering {
+                other.cost.total_cmp(&self.cost)
+            }
+        }
+        impl PartialOrd for State {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        let mut dist = vec![f32::INFINITY; self.lanes.len()];
+        let mut parent = vec![None; self.lanes.len()];
+        let mut heap = BinaryHeap::new();
+
+        dist[start] = 0.0;
+        heap.push(State {
+            cost: 0.0,
+            position: start,
+        });
+
+        while let Some(State { cost, position }) = heap.pop() {
+            if position == target {
+                let mut path = Vec::new();
+                let mut curr = Some(target);
+                while let Some(node) = curr {
+                    path.push(node);
+                    curr = parent[node];
+                }
+                path.reverse();
+                return Some(path);
+            }
+
+            if cost > dist[position] {
+                continue;
+            }
+
+            for &next_idx in &self.lanes[position].next {
+                if next_idx >= self.lanes.len() {
+                    continue;
+                }
+                let next_len = self.lanes[next_idx].length();
+                let next_cost = cost + next_len;
+                if next_cost < dist[next_idx] {
+                    dist[next_idx] = next_cost;
+                    parent[next_idx] = Some(position);
+                    heap.push(State {
+                        cost: next_cost,
+                        position: next_idx,
+                    });
                 }
             }
         }
-        let mut v: Vec<usize> = seen.into_iter().collect();
-        v.sort_unstable();
-        v
+        None
     }
 
     /// A way from where the bus is back onto `ahead` (the route from the lane it was last
