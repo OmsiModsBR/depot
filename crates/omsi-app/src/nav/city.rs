@@ -880,12 +880,14 @@ impl Navigator {
         let (hw, hh) = (w as f64 * 0.5 * self.city.mpp, h as f64 * 0.5 * self.city.mpp);
         // the turn: as the map is drawn, real north up (where the package says which way it lies) or the heading up
         let north = self.surface.as_ref().map_or(0.0, |sf| sf.north() as f64);
-        let phi = match self.orient {
+        let target = match self.orient {
             1 => north,
             2 => f.heading,
             _ => 0.0,
         }
         .to_radians();
+        // (the view turns to it the short way round instead of jumping)
+        let phi = super::geometry::turn_towards(self.city.phi, target, f.dt as f64);
         self.city.phi = phi;
         let proj = Mat4::orthographic_rh(-hw as f32, hw as f32, -hh as f32, hh as f32, -1000.0, 1000.0) * Mat4::from_rotation_z(phi as f32) * Mat4::from_translation(Vec3::new(-c.x as f32, -c.y as f32, 0.0));
         let vp = [0.0, 0.0, w, h];

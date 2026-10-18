@@ -10,6 +10,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
 
 ### Fixed
+- The city map's view turns smoothly (the short way round) when the compass changes how it is turned, or
+  the vehicle's heading changes, instead of jumping.
 - The city map's lines panel (and the "you are on" chip) is translated into every interface language through the
   catalog, not only Portuguese and English, and decimals take the comma in every language that writes them so
   (before, only Portuguese did). A test checks every text of the panel exists in all languages.
