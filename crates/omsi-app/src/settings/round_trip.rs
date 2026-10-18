@@ -227,7 +227,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("ai_unsched_factor", "game>launcher", "the launcher cuts the fraction of a percent; the game takes NaN"),
     // the two sides read the same text differently
     ("anisotropy", "game>launcher", "the game takes 0, the launcher saves it as 1"),
-    ("graphics_api", "game>launcher", "the game keeps any text, the launcher saves anything but vulkan, dx12 and gl as auto"),
     ("head_tracking_yaw_sens", "game>launcher", "the game reads 2 or less as a fraction (x100) and does not clamp it; the launcher reads a percentage, 0-100"),
     ("head_tracking_yaw_sens", "launcher>game", "the same, the other way"),
     ("head_tracking_pitch_sens", "game>launcher", "as head_tracking_yaw_sens"),
