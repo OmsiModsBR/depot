@@ -1,19 +1,7 @@
 //! What the weather does to a vehicle: the air's humidity and the road's grip.
 
 
-/// The relative humidity (a fraction, 1 = saturated) of air at `t` °C holding `abs_hum` g/m³,
-/// as OMSI computes `Cabinair_relHum` (the original, Magnus over water with 7.5/237.3,
-/// over ice with 7.6/240.7 below 0 °C). It was written as a percentage: 100 times what the
-/// scripts and the passengers (a humid saloon at over 0.9) expect.
-pub fn relative_humidity(t: f32, abs_hum: f32) -> f32 {
-    let (a, b) = if t >= 0.0 { (7.5, 237.3) } else { (7.6, 240.7) };
-    let sat = 1323.480_3 * 10f32.powf(a * t / (b + t)) / (273.15 + t);
-    if sat > 0.0 && sat.is_finite() {
-        (abs_hum / sat).max(0.0)
-    } else {
-        0.0
-    }
-}
+pub use omsi_content::weather::psychro::relative_humidity;
 
 /// The tyres' friction coefficient on the road under them: `street_cond` as the weather sets
 /// it (0 dry … 1 wet, 1 … 2 snow from packed to fresh) and the air temperature (°C), below

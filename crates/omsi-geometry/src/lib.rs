@@ -8,6 +8,7 @@ use omsi_scenery::Spline;
 
 mod hole_rims;
 mod terrain_walls;
+pub mod util;
 pub use terrain_walls::terrain_hole_walls;
 
 /// A renderable triangle mesh with one texture per material slot.

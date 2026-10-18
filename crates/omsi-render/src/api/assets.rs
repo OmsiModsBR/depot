@@ -165,11 +165,7 @@ impl Renderer {
         let lut: Vec<u8> = (0..256)
             .map(|v| {
                 let l = v as f32 / 255.0;
-                let s = if l <= 0.003_130_8 {
-                    l * 12.92
-                } else {
-                    1.055 * l.powf(1.0 / 2.4) - 0.055
-                };
+                let s = omsi_texture::srgb::from_linear(l);
                 (s * 255.0 + 0.5).clamp(0.0, 255.0) as u8
             })
             .collect();

@@ -844,8 +844,7 @@ pub fn fetch(args: &mut Args, host: SocketAddr, session: u64, progress: &mut dyn
                 continue;
             }
             let stored = store.join(&e.sha256);
-            let tmp = store.join(format!("{}.part", e.sha256));
-            std::fs::write(&tmp, &data).and_then(|_| std::fs::rename(&tmp, &stored)).map_err(|x| format!("{}: {x}", e.path))?;
+            omsi_cfg::write_atomic(&stored, &data).map_err(|x| format!("{}: {x}", e.path))?;
             place(&stored, &target).map_err(|x| format!("{}: {x}", e.path))?;
             done += len;
             report.fetched += 1;

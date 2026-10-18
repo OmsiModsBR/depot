@@ -577,7 +577,7 @@ fn encode(text: &str, enc: Encoding) -> Vec<u8> {
     match enc {
         Encoding::Utf8 => text.as_bytes().to_vec(),
         Encoding::Latin1 => text.chars().map(|c| c as u32 as u8).collect(),
-        Encoding::Utf16Le => [0xFF, 0xFE].into_iter().chain(text.encode_utf16().flat_map(|u| u.to_le_bytes())).collect(),
+        Encoding::Utf16Le => omsi_cfg::encode_utf16_bom(text),
     }
 }
 
