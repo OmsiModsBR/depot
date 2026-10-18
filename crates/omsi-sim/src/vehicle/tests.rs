@@ -579,6 +579,26 @@ fn rail_joints_stay_closed_on_curved_graded_track() {
     }
 }
 
+/// #94: a rail vehicle with nothing coupled behind it, run on a track for a few seconds
+/// (the player's train and an AI one both go through these per-frame paths).
+#[test]
+fn a_rail_vehicle_with_nothing_coupled_runs_on_a_track() {
+    let ty = coupling_test_type(Some(-5.0));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
+    assert!(v.trailers.is_empty());
+    let track = |d: f64| Some(DVec3::new(0.0, -d, 0.0));
+    for _ in 0..300 {
+        v.retrail(1.0 / 30.0, &track);
+        v.update_trailers(1.0 / 30.0);
+        v.position.y += 0.2;
+    }
+    assert!(v.position.is_finite() && v.body_rotation().is_finite());
+    assert!(v.detach_last_trailer().is_none());
+    // a track that knows no point behind it, as at the start of a line
+    v.retrail(1.0 / 30.0, &|_| None);
+    assert!(v.trailers.is_empty());
+}
+
 #[test]
 fn a_borrowed_part_is_judged_with_its_own_pack() {
     // the same machine from its own pack, whichever bus borrows it (#977)

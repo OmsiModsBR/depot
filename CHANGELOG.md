@@ -6,6 +6,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
+
 ### Fixed
 - The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
   thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.

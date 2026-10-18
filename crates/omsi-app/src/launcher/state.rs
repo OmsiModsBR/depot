@@ -193,7 +193,7 @@ impl Choice {
     }
     pub fn save(&self) {
         if let Ok(t) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(choice_path(), t);
+            let _ = omsi_cfg::write_atomic(choice_path(), t);
         }
     }
 }

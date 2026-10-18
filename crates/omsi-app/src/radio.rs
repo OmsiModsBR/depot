@@ -234,7 +234,7 @@ fn parse_stations(text: &str) -> (Vec<(String, String)>, Option<f32>, Frequencie
 fn map_stations(map_cfg: &std::path::Path) -> (Vec<(String, String)>, Frequencies) {
     let Some(dir) = map_cfg.parent() else { return Default::default() };
     let Ok(bytes) = omsi_cfg::vfs::read(&dir.join("radio.cfg")) else { return Default::default() };
-    let (stations, _, frequencies) = parse_stations(&omsi_cfg::codepage::decode(&bytes));
+    let (stations, _, frequencies) = parse_stations(&omsi_cfg::decode_text(&bytes));
     (stations, frequencies)
 }
 
