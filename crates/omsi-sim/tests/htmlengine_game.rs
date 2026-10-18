@@ -11,7 +11,9 @@ fn px(frame: &[u8], w: u32, x: u32, y: u32) -> [u8; 4] {
 }
 
 fn has_colour(frame: &[u8], rgb: [u8; 3]) -> bool {
-    frame.chunks(4).any(|p| p[0] == rgb[0] && p[1] == rgb[1] && p[2] == rgb[2])
+    frame
+        .chunks(4)
+        .any(|p| p[0] == rgb[0] && p[1] == rgb[1] && p[2] == rgb[2])
 }
 
 /// `.warn` (open door, brake held) and `.on` (engine lamp, open boarding door).
@@ -123,10 +125,19 @@ fn a_scenery_page_has_only_the_basic_api() {
         "<div id='a'></div><div id='b'></div>         <script>          document.getElementById('a').textContent = [typeof omsi.vehicle, typeof omsi.depot, typeof omsi.setRoute, typeof omsi.setNextStop].join(',');          omsi.update = function (d) {            document.getElementById('b').textContent = [typeof d.vehicle, typeof omsi.setVar, typeof omsi.trigger, typeof omsi.time, omsi.locale].join(',');          };         </script>",
         omsi_sim::htmltex::PageApi::Scenery,
     );
-    r.set_env(&omsi_sim::vehicle_api::environment(&omsi_sim::SimClock::default(), "de"));
+    r.set_env(&omsi_sim::vehicle_api::environment(
+        &omsi_sim::SimClock::default(),
+        "de",
+    ));
     r.set_vars(&[], &[]);
-    assert_eq!(r.text_of("a").as_deref(), Some("undefined,undefined,undefined,undefined"));
-    assert_eq!(r.text_of("b").as_deref(), Some("undefined,function,function,object,de"));
+    assert_eq!(
+        r.text_of("a").as_deref(),
+        Some("undefined,undefined,undefined,undefined")
+    );
+    assert_eq!(
+        r.text_of("b").as_deref(),
+        Some("undefined,function,function,object,de")
+    );
 }
 
 #[test]
@@ -134,9 +145,16 @@ fn the_english_date_is_month_first() {
     use omsi_sim::vehicle_api::{environment, ApiValue};
     let mut c = omsi_sim::SimClock::default();
     c.set_date(2026, 9, 30);
-    let ApiValue::Map(m) = environment(&c, "en") else { panic!() };
-    let ApiValue::Map(d) = &m.iter().find(|(k, _)| k == "date").unwrap().1 else { panic!() };
-    assert_eq!(d.iter().find(|(k, _)| k == "asString").unwrap().1, ApiValue::Str("09/30/2026".into()));
+    let ApiValue::Map(m) = environment(&c, "en") else {
+        panic!()
+    };
+    let ApiValue::Map(d) = &m.iter().find(|(k, _)| k == "date").unwrap().1 else {
+        panic!()
+    };
+    assert_eq!(
+        d.iter().find(|(k, _)| k == "asString").unwrap().1,
+        ApiValue::Str("09/30/2026".into())
+    );
 }
 
 #[test]
@@ -145,8 +163,16 @@ fn linked_style_sheet_and_script_are_inlined_with_their_pictures() {
     std::fs::create_dir_all(dir.join("css")).unwrap();
     std::fs::create_dir_all(dir.join("img")).unwrap();
     std::fs::write(dir.join("img").join("red.bmp"), bmp(4, 4, [255, 0, 0])).unwrap();
-    std::fs::write(dir.join("css").join("s.css"), "#a{width:6px;height:6px;background:url(../img/red.bmp)}").unwrap();
-    std::fs::write(dir.join("index.html"), "<link rel='stylesheet' href='css/s.css'><body style='margin:0'><div id=a></div></body>").unwrap();
+    std::fs::write(
+        dir.join("css").join("s.css"),
+        "#a{width:6px;height:6px;background:url(../img/red.bmp)}",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<link rel='stylesheet' href='css/s.css'><body style='margin:0'><div id=a></div></body>",
+    )
+    .unwrap();
     let dirs = [dir.as_path()];
     let html = omsi_sim::htmltex::load_page(&dirs, "index.html");
     assert!(html.contains("url(css/../img/red.bmp)"));

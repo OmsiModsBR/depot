@@ -46,7 +46,12 @@ impl WindingVotes {
     }
 
     pub(super) fn keep_authored(&self) -> bool {
-        keep_authored_winding(self.forward, self.backward, self.forward_weight, self.backward_weight)
+        keep_authored_winding(
+            self.forward,
+            self.backward,
+            self.forward_weight,
+            self.backward_weight,
+        )
     }
 }
 
@@ -78,15 +83,24 @@ mod winding_exporter_tests {
     #[test]
     fn borrowed_pack_evidence_stays_separate_and_capped() {
         let body = winding_pack(Path::new("/omsi/Vehicles/Bus/model/body.o3d"));
-        let borrowed = winding_pack(Path::new("/omsi/Vehicles/Bus/model/../../Display/model/display.o3d"));
-        let mut votes: std::collections::HashMap<String, WindingVotes> = std::collections::HashMap::new();
+        let borrowed = winding_pack(Path::new(
+            "/omsi/Vehicles/Bus/model/../../Display/model/display.o3d",
+        ));
+        let mut votes: std::collections::HashMap<String, WindingVotes> =
+            std::collections::HashMap::new();
         for _ in 0..4 {
-            votes.entry(body.clone()).or_default().record(true, usize::MAX);
+            votes
+                .entry(body.clone())
+                .or_default()
+                .record(true, usize::MAX);
         }
         for _ in 0..5 {
             votes.entry(body.clone()).or_default().record(false, 2);
         }
-        votes.entry(borrowed.clone()).or_default().record(false, 100);
+        votes
+            .entry(borrowed.clone())
+            .or_default()
+            .record(false, 100);
         assert!(votes[&body].keep_authored());
         assert_eq!(votes[&body].forward_weight, 4 * WINDING_EVIDENCE_CAP);
         assert!(!votes[&borrowed].keep_authored());

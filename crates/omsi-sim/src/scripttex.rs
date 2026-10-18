@@ -117,7 +117,12 @@ impl ScriptTexture {
             return [0; 4];
         }
         let i = (y as usize * self.width as usize + x as usize) * 4;
-        [self.rgba[i], self.rgba[i + 1], self.rgba[i + 2], self.rgba[i + 3]]
+        [
+            self.rgba[i],
+            self.rgba[i + 1],
+            self.rgba[i + 2],
+            self.rgba[i + 3],
+        ]
     }
 
     pub fn rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
@@ -141,7 +146,15 @@ impl ScriptTexture {
     /// from the font's colour bitmap (else the `STSetColor` colour), the alpha is the font's
     /// mask; `mode & 3 == 2` writes only the glyphs' covered pixels (a transparent
     /// background), any other mode the whole glyph cell.
-    pub fn text_out(&mut self, atlas: &FontAtlas, x: i32, y: i32, spacing: i32, mode: u8, text: &str) {
+    pub fn text_out(
+        &mut self,
+        atlas: &FontAtlas,
+        x: i32,
+        y: i32,
+        spacing: i32,
+        mode: u8,
+        text: &str,
+    ) {
         let glyph_h = atlas.font.height.max(1) as i32;
         let mut cx = x;
         let c = self.color;
@@ -149,11 +162,19 @@ impl ScriptTexture {
         let transparent = mode & 3 == 2;
         for ch in text.chars() {
             if ch.is_whitespace() {
-                cx = cx.saturating_add(atlas.font.space_width().saturating_add(atlas.font.gap).saturating_add(spacing));
+                cx = cx.saturating_add(
+                    atlas
+                        .font
+                        .space_width()
+                        .saturating_add(atlas.font.gap)
+                        .saturating_add(spacing),
+                );
                 continue;
             }
             let Some(g) = atlas.font.glyph(ch) else {
-                cx = cx.saturating_add(atlas.font.gap.max(1)).saturating_add(spacing);
+                cx = cx
+                    .saturating_add(atlas.font.gap.max(1))
+                    .saturating_add(spacing);
                 continue;
             };
             let gw = (g.x1 - g.x0).max(0);
@@ -172,12 +193,21 @@ impl ScriptTexture {
                     if cov == 0 && transparent {
                         continue;
                     }
-                    let rgb = if from_font && si + 2 < atlas.color.len() { [atlas.color[si], atlas.color[si + 1], atlas.color[si + 2]] } else { [c[0], c[1], c[2]] };
-                    let (Some(px), Some(py)) = (cx.checked_add(gx), y.checked_add(gy)) else { continue };
+                    let rgb = if from_font && si + 2 < atlas.color.len() {
+                        [atlas.color[si], atlas.color[si + 1], atlas.color[si + 2]]
+                    } else {
+                        [c[0], c[1], c[2]]
+                    };
+                    let (Some(px), Some(py)) = (cx.checked_add(gx), y.checked_add(gy)) else {
+                        continue;
+                    };
                     self.put(px, py, [rgb[0], rgb[1], rgb[2], cov]);
                 }
             }
-            cx = cx.saturating_add(gw).saturating_add(atlas.font.gap).saturating_add(spacing);
+            cx = cx
+                .saturating_add(gw)
+                .saturating_add(atlas.font.gap)
+                .saturating_add(spacing);
         }
     }
 
@@ -198,7 +228,11 @@ impl ScriptTexture {
         let (tw, th) = (w.next_power_of_two(), h.next_power_of_two());
         self.width = tw;
         self.height = th;
-        self.rgba = if (tw, th) == (w, h) { rgba[..w as usize * h as usize * 4].to_vec() } else { resample(w, h, rgba, tw, th) };
+        self.rgba = if (tw, th) == (w, h) {
+            rgba[..w as usize * h as usize * 4].to_vec()
+        } else {
+            resample(w, h, rgba, tw, th)
+        };
         self.mipmaps = true;
         // the file replaces whatever was released at the old size
         self.pending = None;
@@ -222,7 +256,8 @@ fn resample(w: u32, h: u32, src: &[u8], tw: u32, th: u32) -> Vec<u8> {
             for c in 0..4 {
                 let top = px(x0, y0, c) * (1.0 - fx) + px(x1, y0, c) * fx;
                 let bot = px(x0, y1, c) * (1.0 - fx) + px(x1, y1, c) * fx;
-                out[(y as usize * tw as usize + x as usize) * 4 + c] = (top * (1.0 - fy) + bot * fy).round() as u8;
+                out[(y as usize * tw as usize + x as usize) * 4 + c] =
+                    (top * (1.0 - fy) + bot * fy).round() as u8;
             }
         }
     }
@@ -260,9 +295,20 @@ mod tests {
     #[test]
     fn hostile_texture_sizes_are_clamped_not_overflowed() {
         // 65536 * 65536 * 4 wraps to 0 in u32; 30000 * 30000 * 4 is 3.6 GB
-        for (w, h) in [(65536, 65536), (30000, 30000), (i32::MAX, i32::MAX), (i32::MIN, 5), (0, 0)] {
+        for (w, h) in [
+            (65536, 65536),
+            (30000, 30000),
+            (i32::MAX, i32::MAX),
+            (i32::MIN, 5),
+            (0, 0),
+        ] {
             let mut t = ScriptTexture::new(w, h);
-            assert!(t.width >= 1 && t.width <= MAX_SCRIPT_TEXTURE_SIDE && t.height >= 1 && t.height <= MAX_SCRIPT_TEXTURE_SIDE);
+            assert!(
+                t.width >= 1
+                    && t.width <= MAX_SCRIPT_TEXTURE_SIDE
+                    && t.height >= 1
+                    && t.height <= MAX_SCRIPT_TEXTURE_SIDE
+            );
             assert_eq!(t.rgba.len(), t.width as usize * t.height as usize * 4);
             t.put(0, 0, [1, 2, 3, 4]);
             assert_eq!(t.get(0, 0), [1, 2, 3, 4]);
@@ -290,7 +336,10 @@ mod tests {
         // a power-of-two bitmap is taken as it is
         let px: Vec<u8> = (0..8 * 2 * 4).map(|i| i as u8).collect();
         t.load(8, 2, &px);
-        assert_eq!((t.width, t.height, t.rgba.as_slice()), (8, 2, px.as_slice()));
+        assert_eq!(
+            (t.width, t.height, t.rgba.as_slice()),
+            (8, 2, px.as_slice())
+        );
         // STNewTex: back to the declared size, empty
         t.color = [255; 4];
         t.renew();

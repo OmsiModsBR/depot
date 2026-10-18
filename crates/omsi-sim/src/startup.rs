@@ -108,8 +108,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("model.cfg"), "").unwrap();
-        std::fs::write(dir.join("vars.txt"), "battery_on\nmotor_anlasser\nmotor_on\n")
-            .unwrap();
+        std::fs::write(
+            dir.join("vars.txt"),
+            "battery_on\nmotor_anlasser\nmotor_on\n",
+        )
+        .unwrap();
         std::fs::write(
             dir.join("main.osc"),
             "{init}\n0 (S.L.battery_on) 0 (S.L.motor_anlasser) 0 (S.L.motor_on)\n{end}\n\
@@ -137,16 +140,18 @@ mod tests {
         }
         assert!(power_on(&v), "{:?}", start.report);
         assert!(engine_running(&v), "{:?}", start.report);
-        assert!(start.report.iter().any(|s| s.contains("engine started")), "{:?}", start.report);
+        assert!(
+            start.report.iter().any(|s| s.contains("engine started")),
+            "{:?}",
+            start.report
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn logs_in_and_selects_neutral_before_starting() {
-        let dir = std::env::temp_dir().join(format!(
-            "omsi-startup-login-neutral-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("omsi-startup-login-neutral-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("login.bus"),
@@ -181,18 +186,35 @@ mod tests {
             }
         }
         assert!(engine_running(&v), "{:?}", start.report);
-        assert!(start.report.iter().any(|s| s.contains("DDU login")), "{:?}", start.report);
-        assert!(start.report.iter().any(|s| s.contains("neutral")), "{:?}", start.report);
+        assert!(
+            start.report.iter().any(|s| s.contains("DDU login")),
+            "{:?}",
+            start.report
+        );
+        assert!(
+            start.report.iter().any(|s| s.contains("neutral")),
+            "{:?}",
+            start.report
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn treats_real_main_as_power_before_two_stage_starter() {
-        let dir = std::env::temp_dir().join(format!("omsi-startup-real-main-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("omsi-startup-real-main-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("real.bus"), "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n").unwrap();
+        std::fs::write(
+            dir.join("real.bus"),
+            "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("model.cfg"), "").unwrap();
-        std::fs::write(dir.join("vars.txt"), "elec_real_main\nelec_busbar_main\nengine_on\n").unwrap();
+        std::fs::write(
+            dir.join("vars.txt"),
+            "elec_real_main\nelec_busbar_main\nengine_on\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("main.osc"), "{init}\n0 (S.L.elec_real_main) 0 (S.L.elec_busbar_main) 0 (S.L.engine_on)\n{end}\n\\
              {trigger:master_battery}\n1 (S.L.elec_real_main)\n{end}\n\\
              {trigger:kw_m_enginestart}\n(L.L.elec_busbar_main) 0 = {if} 1 (S.L.elec_busbar_main) {else} 1 (S.L.engine_on) {endif}\n{end}\n\\
@@ -201,7 +223,9 @@ mod tests {
         let mut v = VehicleInstance::new(ty, VehicleHost::new(SimClock::default()));
         let mut start = StartUp::new(&v, &[]);
         for _ in 0..300 {
-            if !start.tick(&mut v, &[], 1.0 / 30.0) { break; }
+            if !start.tick(&mut v, &[], 1.0 / 30.0) {
+                break;
+            }
             v.update(1.0 / 30.0);
         }
         assert!(engine_running(&v), "{:?}", start.report);
@@ -235,11 +259,7 @@ pub struct StartUp {
 /// fallback after the exact variables and stock trigger names; it lets Shift+U find controls
 /// such as `master_battery`, `key_ignition` and `motor_anlasser` in otherwise conventional
 /// bus scripts without accidentally operating lamp or door controls.
-fn semantic_triggers(
-    p: &omsi_script::Program,
-    bound: &[String],
-    words: &[&str],
-) -> Vec<String> {
+fn semantic_triggers(p: &omsi_script::Program, bound: &[String], words: &[&str]) -> Vec<String> {
     let matches = |n: &str| {
         let n = n.to_ascii_lowercase();
         !n.ends_with("_off")
@@ -269,15 +289,15 @@ fn candidates(
     semantic_words: &[&str],
 ) -> Vec<String> {
     let p = &v.ty.program;
-    let storing: Vec<String> = vars
-        .iter()
-        .flat_map(|var| p.triggers_setting(var))
-        .fold(Vec::new(), |mut all, n| {
-            if !all.iter().any(|x| x.eq_ignore_ascii_case(&n)) {
-                all.push(n);
-            }
-            all
-        });
+    let storing: Vec<String> =
+        vars.iter()
+            .flat_map(|var| p.triggers_setting(var))
+            .fold(Vec::new(), |mut all, n| {
+                if !all.iter().any(|x| x.eq_ignore_ascii_case(&n)) {
+                    all.push(n);
+                }
+                all
+            });
     let has_state = vars.iter().any(|var| p.var(var).is_some());
     let usable = |n: &str| !n.ends_with("_off") && !n.ends_with("_drag") && p.trigger(n).is_some();
     let mut out: Vec<String> = Vec::new();
@@ -330,25 +350,30 @@ fn any_flag(v: &VehicleInstance, names: impl IntoIterator<Item = impl AsRef<str>
 }
 
 fn custom_state_names<'a>(v: &'a VehicleInstance, kind: &str) -> Vec<&'a str> {
-    v.ty.program.var_names.iter().map(String::as_str).filter(|name| {
-        let n = name.to_ascii_lowercase();
-        if n.starts_with("cp_") {
-            return false;
-        }
-        match kind {
-            "power" => {
-                (n.contains("busbar") && n.contains("main"))
-                    || ((n.contains("batter") || n.contains("battery"))
-                        && (n.contains("_on") || n.contains("main") || n.contains("trenner")))
+    v.ty.program
+        .var_names
+        .iter()
+        .map(String::as_str)
+        .filter(|name| {
+            let n = name.to_ascii_lowercase();
+            if n.starts_with("cp_") {
+                return false;
             }
-            "starter" => n.contains("starter") || n.contains("anlasser"),
-            "engine" => {
-                (n.contains("engine") || n.contains("motor"))
-                    && (n.ends_with("_on") || n.contains("running"))
+            match kind {
+                "power" => {
+                    (n.contains("busbar") && n.contains("main"))
+                        || ((n.contains("batter") || n.contains("battery"))
+                            && (n.contains("_on") || n.contains("main") || n.contains("trenner")))
+                }
+                "starter" => n.contains("starter") || n.contains("anlasser"),
+                "engine" => {
+                    (n.contains("engine") || n.contains("motor"))
+                        && (n.ends_with("_on") || n.contains("running"))
+                }
+                _ => false,
             }
-            _ => false,
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 fn power_state(v: &VehicleInstance) -> Option<bool> {
@@ -372,7 +397,9 @@ pub fn power_on(v: &VehicleInstance) -> bool {
 
 /// The engine speed the scripts keep, when they keep one.
 pub fn engine_rpm(v: &VehicleInstance) -> Option<f32> {
-    ["engine_n", "engine_rpm", "motor_n", "motor_rpm"].into_iter().find_map(|n| v.var(n))
+    ["engine_n", "engine_rpm", "motor_n", "motor_rpm"]
+        .into_iter()
+        .find_map(|n| v.var(n))
 }
 
 /// The engine has caught: it runs and turns faster than a starter turns it. The PAZ's
@@ -432,7 +459,10 @@ pub fn engine_running(v: &VehicleInstance) -> bool {
 /// D86's stop button was let go then and the engine ran on; let go at 150 rpm, its script
 /// fired it up again: it is 0 only under 100 with the fuel still cut), else by the flags.
 fn engine_dead(v: &VehicleInstance) -> bool {
-    let rpm: Vec<f32> = ["engine_n", "engine_rpm", "motor_n", "motor_rpm"].into_iter().filter_map(|n| v.var(n)).collect();
+    let rpm: Vec<f32> = ["engine_n", "engine_rpm", "motor_n", "motor_rpm"]
+        .into_iter()
+        .filter_map(|n| v.var(n))
+        .collect();
     if rpm.is_empty() {
         !engine_running(v)
     } else {
@@ -448,13 +478,16 @@ fn engine_dead(v: &VehicleInstance) -> bool {
 /// on/off toggle of that one variable are left alone.
 fn display_switches(v: &VehicleInstance) -> Vec<(String, String, f32)> {
     let p = &v.ty.program;
-    let clickable: Vec<String> = v
-        .ty
-        .model
-        .meshes
-        .iter()
-        .filter_map(|m| m.mouse_event.as_ref().map(|e| e.trim().to_ascii_lowercase()))
-        .collect();
+    let clickable: Vec<String> =
+        v.ty.model
+            .meshes
+            .iter()
+            .filter_map(|m| {
+                m.mouse_event
+                    .as_ref()
+                    .map(|e| e.trim().to_ascii_lowercase())
+            })
+            .collect();
     let mut out: Vec<(String, String, f32)> = Vec::new();
     // `(L.L.x) ! (S.L.x)`: a plain toggle of `x`
     let toggles_var = |t: &str, id: omsi_script::VarId| {
@@ -468,14 +501,13 @@ fn display_switches(v: &VehicleInstance) -> Vec<(String, String, f32)> {
     // wants `matrix_power` (its "Matrix" switch) and the 12 V circuit (`elec_12v`). The
     // switches are the clickable plain toggles among the variables read by the blocks that
     // write a display's string (a `[texttexture]`) or draw on a script texture.
-    let display_strings: Vec<u32> = v
-        .ty
-        .model
-        .text_textures
-        .iter()
-        .filter_map(|t| p.text_texture_var(&t.variable))
-        .map(|id| id as u32)
-        .collect();
+    let display_strings: Vec<u32> =
+        v.ty.model
+            .text_textures
+            .iter()
+            .filter_map(|t| p.text_texture_var(&t.variable))
+            .map(|id| id as u32)
+            .collect();
     let mut read_by_displays: Vec<omsi_script::VarId> = Vec::new();
     for b in &p.blocks {
         let writes_display = b.ops.iter().any(|op| match op {
@@ -499,24 +531,33 @@ fn display_switches(v: &VehicleInstance) -> Vec<(String, String, f32)> {
     for id in read_by_displays {
         let var = p.var_names[id as usize].clone();
         let lower = var.to_ascii_lowercase();
-        if !display_power.iter().any(|w| lower.contains(w)) || v.var(&var).map(|x| x.abs() > 1e-3).unwrap_or(true) {
+        if !display_power.iter().any(|w| lower.contains(w))
+            || v.var(&var).map(|x| x.abs() > 1e-3).unwrap_or(true)
+        {
             continue;
         }
         for t in p.triggers_setting(&var) {
-            if clickable.contains(&t) && toggles_var(&t, id) && !out.iter().any(|(n, _, _)| *n == t) {
+            if clickable.contains(&t) && toggles_var(&t, id) && !out.iter().any(|(n, _, _)| *n == t)
+            {
                 out.push((t, var.clone(), 1.0));
             }
         }
     }
     for m in &v.ty.model.meshes {
-        let Some((var, want)) = m.visible.as_ref() else { continue };
+        let Some((var, want)) = m.visible.as_ref() else {
+            continue;
+        };
         if (*want - 1.0).abs() > 1e-3 || m.mouse_event.is_some() {
             continue;
         }
         let shows = m.materials.iter().any(|mat| {
             mat.use_script_texture.is_some()
                 || mat.use_text_texture.is_some()
-                || mat.transmap.as_deref().map(|t| t.trim().starts_with("\\S:")).unwrap_or(false)
+                || mat
+                    .transmap
+                    .as_deref()
+                    .map(|t| t.trim().starts_with("\\S:"))
+                    .unwrap_or(false)
                 || mat.texture.trim().starts_with("\\S:")
         });
         if !shows || v.var(var).map(|x| (x - want).abs() < 1e-3).unwrap_or(true) {
@@ -525,7 +566,10 @@ fn display_switches(v: &VehicleInstance) -> Vec<(String, String, f32)> {
         // a variable that also shows something else at another value chooses between
         // alternatives (the C2's small or big ATRON, an odometer's modes): not a power switch
         let selects = v.ty.model.meshes.iter().any(|o| {
-            o.visible.as_ref().map(|(n, x)| n.eq_ignore_ascii_case(var) && (*x - want).abs() > 1e-3).unwrap_or(false)
+            o.visible
+                .as_ref()
+                .map(|(n, x)| n.eq_ignore_ascii_case(var) && (*x - want).abs() > 1e-3)
+                .unwrap_or(false)
         });
         if selects {
             continue;
@@ -555,8 +599,12 @@ fn blank_displays(v: &VehicleInstance) -> Vec<String> {
     for t in &v.ty.model.text_textures {
         // the field may be a built-in string's number (see `Program::text_texture_var`); the
         // variable it names is what a caller has to look at, not the number in the file
-        let Some(id) = v.ty.program.text_texture_var(&t.variable) else { continue };
-        let Some(name) = v.ty.program.str_var_names.get(id as usize).cloned() else { continue };
+        let Some(id) = v.ty.program.text_texture_var(&t.variable) else {
+            continue;
+        };
+        let Some(name) = v.ty.program.str_var_names.get(id as usize).cloned() else {
+            continue;
+        };
         if v.str_var(&name).trim().is_empty() && !out.contains(&name) {
             out.push(name);
         }
@@ -567,11 +615,26 @@ fn blank_displays(v: &VehicleInstance) -> Vec<String> {
 /// Clickable buttons named as a display's power: `IBIS_POWER`, `matrix_on`, `anzeige_ein` ...
 fn display_power_buttons(v: &VehicleInstance) -> Vec<String> {
     let p = &v.ty.program;
-    let displays = ["ibis", "matrix", "anzeige", "display", "afisaj", "tablo", "informator", "annax", "zza", "lcd"];
-    let power = ["power", "pwr", "strom", "_on", "_ein", "onoff", "on_off", "an_aus", "toggle", "_sw"];
+    let displays = [
+        "ibis",
+        "matrix",
+        "anzeige",
+        "display",
+        "afisaj",
+        "tablo",
+        "informator",
+        "annax",
+        "zza",
+        "lcd",
+    ];
+    let power = [
+        "power", "pwr", "strom", "_on", "_ein", "onoff", "on_off", "an_aus", "toggle", "_sw",
+    ];
     let mut out: Vec<String> = Vec::new();
     for m in &v.ty.model.meshes {
-        let Some(e) = m.mouse_event.as_ref().map(|e| e.trim().to_string()) else { continue };
+        let Some(e) = m.mouse_event.as_ref().map(|e| e.trim().to_string()) else {
+            continue;
+        };
         let lower = e.to_ascii_lowercase();
         if lower.ends_with("_off")
             || !displays.iter().any(|w| lower.contains(w))
@@ -631,19 +694,45 @@ impl StartUp {
                 POWER_VARIABLES,
                 POWER_NAMES,
                 bound,
-                &["batter", "battery", "hauptschalter", "main_switch", "mainswitch", "mainpower", "master_switch", "masterpower"],
+                &[
+                    "batter",
+                    "battery",
+                    "hauptschalter",
+                    "main_switch",
+                    "mainswitch",
+                    "mainpower",
+                    "master_switch",
+                    "masterpower",
+                ],
             ),
             Step::Ignition => semantic_triggers(
                 &v.ty.program,
                 bound,
-                &["zuendung", "zündung", "zundung", "ignition", "schluessel", "schlüssel"],
+                &[
+                    "zuendung",
+                    "zündung",
+                    "zundung",
+                    "ignition",
+                    "schluessel",
+                    "schlüssel",
+                ],
             ),
             Step::Crank if !engine_running(v) => candidates(
                 v,
                 STARTER_VARIABLES,
                 STARTER_NAMES,
                 bound,
-                &["engine_start", "enginestart", "engine_starter", "starter", "anlass", "anlasser", "motor_start", "motorstart", "start_stop"],
+                &[
+                    "engine_start",
+                    "enginestart",
+                    "engine_starter",
+                    "starter",
+                    "anlass",
+                    "anlasser",
+                    "motor_start",
+                    "motorstart",
+                    "start_stop",
+                ],
             ),
             // Shutting down: what stops the engine (a stop button, where a bus has one),
             // then what switches the electrics off - the very toggles that switched them on
@@ -656,13 +745,52 @@ impl StartUp {
                     &v.ty.program,
                     bound,
                     // (the stock `kw_m_engineshutdown`, "Motorabstellung", held down)
-                    &["enginestop", "engine_stop", "motorstop", "motor_stop", "stop_engine", "motor_aus", "motoraus", "engine_kill", "engineshutdown", "engine_shutdown", "motorabstell", "engine_off", "motor_off"],
+                    &[
+                        "enginestop",
+                        "engine_stop",
+                        "motorstop",
+                        "motor_stop",
+                        "stop_engine",
+                        "motor_aus",
+                        "motoraus",
+                        "engine_kill",
+                        "engineshutdown",
+                        "engine_shutdown",
+                        "motorabstell",
+                        "engine_off",
+                        "motor_off",
+                    ],
                 );
                 self.stop_n = list.len();
-                for n in candidates(v, POWER_VARIABLES, POWER_NAMES, bound, &["batter", "battery", "hauptschalter", "main_switch", "mainswitch", "mainpower", "master_switch", "masterpower"])
-                    .into_iter()
-                    .chain(semantic_triggers(&v.ty.program, bound, &["zuendung", "zündung", "zundung", "ignition", "schluessel", "schlüssel"]))
-                {
+                for n in candidates(
+                    v,
+                    POWER_VARIABLES,
+                    POWER_NAMES,
+                    bound,
+                    &[
+                        "batter",
+                        "battery",
+                        "hauptschalter",
+                        "main_switch",
+                        "mainswitch",
+                        "mainpower",
+                        "master_switch",
+                        "masterpower",
+                    ],
+                )
+                .into_iter()
+                .chain(semantic_triggers(
+                    &v.ty.program,
+                    bound,
+                    &[
+                        "zuendung",
+                        "zündung",
+                        "zundung",
+                        "ignition",
+                        "schluessel",
+                        "schlüssel",
+                    ],
+                )) {
                     if !list.contains(&n) {
                         list.push(n);
                     }
@@ -774,9 +902,7 @@ impl StartUp {
                     // whose only electrical state was `battery_on` produced one starter
                     // sound and then nothing.  Stop early only when a known power state
                     // explicitly dropped out.
-                    if engine_caught(v)
-                        || held > MAX_CRANK
-                        || matches!(power_state(v), Some(false))
+                    if engine_caught(v) || held > MAX_CRANK || matches!(power_state(v), Some(false))
                     {
                         self.release(v);
                         self.cranking = None;
@@ -818,10 +944,12 @@ impl StartUp {
             Step::Verify => {
                 if !engine_running(v) {
                     if self.cranks >= 3 {
-                        self.report.push("the engine died again after starting".to_string());
+                        self.report
+                            .push("the engine died again after starting".to_string());
                         self.step = Step::Done;
                     } else {
-                        self.report.push("the engine died again: cranking once more".to_string());
+                        self.report
+                            .push("the engine died again: cranking once more".to_string());
                         self.step = Step::Crank;
                         self.t = -1.0;
                         self.pressed = None;
@@ -835,7 +963,9 @@ impl StartUp {
             Step::Displays => {
                 // an automatic gearbox into D, the foot on the brake as the ZF scripts want it
                 // (`(L.L.Brake) 0 >` for D: the GX7767 E500 MMC stayed in N)
-                if v.ty.program.trigger("automatic_D").is_some() && v.var("antrieb_getr_gangvorwahl").is_none_or(|g| g < 3.5) {
+                if v.ty.program.trigger("automatic_D").is_some()
+                    && v.var("antrieb_getr_gangvorwahl").is_none_or(|g| g < 3.5)
+                {
                     let brake = v.var("Brake");
                     v.set_var("Brake", 1.0);
                     v.trigger("automatic_D");
@@ -856,7 +986,11 @@ impl StartUp {
                     }
                 }
                 self.blank = blank_displays(v);
-                self.candidates = if self.blank.is_empty() { Vec::new() } else { display_power_buttons(v) };
+                self.candidates = if self.blank.is_empty() {
+                    Vec::new()
+                } else {
+                    display_power_buttons(v)
+                };
                 self.candidate = 0;
                 self.t = 0.0;
                 // (the starter's press is over: a stale one was taken for this step's own)
@@ -900,7 +1034,9 @@ impl StartUp {
                         self.step = Step::Done;
                     }
                     // an engine stop button is held until the engine has died (a few seconds)
-                    Some((_, false)) if stopping && (self.t >= 8.0 || engine_dead(v)) => self.release(v),
+                    Some((_, false)) if stopping && (self.t >= 8.0 || engine_dead(v)) => {
+                        self.release(v)
+                    }
                     Some((_, false)) if !stopping && self.t >= PRESS => self.release(v),
                     // (the engine stopped already: no stop button pressed for nothing)
                     None if stopping && engine_dead(v) => self.candidate += 1,
@@ -913,7 +1049,10 @@ impl StartUp {
                         // (the list twice over: the key of some mods turns one notch a press)
                         let n = self.candidates.len();
                         if n == 0 || self.candidate >= n * 2 {
-                            self.report.push(format!("could not switch off ({} tried)", self.candidates.join(", ")));
+                            self.report.push(format!(
+                                "could not switch off ({} tried)",
+                                self.candidates.join(", ")
+                            ));
                             self.step = Step::Done;
                         } else {
                             let name = self.candidates[self.candidate % n].clone();
@@ -947,7 +1086,11 @@ impl StartUp {
                 // (the starter longer: a bus's self-test after the key may hold it back for a
                 // few seconds - the GX7767 E500 MMC's lamp test takes four - and a driver
                 // presses it again once the lamps are out)
-                let per_trigger = if what == "starter" { PRESSES_PER_TRIGGER * 4 } else { PRESSES_PER_TRIGGER };
+                let per_trigger = if what == "starter" {
+                    PRESSES_PER_TRIGGER * 4
+                } else {
+                    PRESSES_PER_TRIGGER
+                };
                 if self.presses >= per_trigger {
                     self.candidate += 1;
                     self.presses = 0;

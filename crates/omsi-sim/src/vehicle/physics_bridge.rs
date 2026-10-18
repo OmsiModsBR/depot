@@ -9,9 +9,9 @@
 //! per wheel, `Wheel_Rotation` (rad), `Wheel_RotationSpeed` (rpm), `Axle_Steering` (rad) and
 //! `Axle_Suspension` (m). The driver's controls go to `Throttle`, `Brake` and `Clutch`.
 
-use glam::{Quat, Vec3};
 use super::trailer::TrailerPart;
 use super::VehicleInstance;
+use glam::{Quat, Vec3};
 
 /// What the scripts left for the physics this frame.
 pub(super) struct DriveInputs {
@@ -78,7 +78,10 @@ impl VehicleInstance {
 
     /// The spring factor of a coupled part's wheel (`vars`: its variables).
     pub(super) fn part_spring_factor(&self, vars: &PartWheelVars) -> f32 {
-        vars[4].filter(|_| !self.springs_full).map(|i| self.state.vars[i as usize]).unwrap_or(1.0)
+        vars[4]
+            .filter(|_| !self.springs_full)
+            .map(|i| self.state.vars[i as usize])
+            .unwrap_or(1.0)
     }
 
     /// `Velocity` and `Velocity_Ground` (km/h).
@@ -107,19 +110,26 @@ impl VehicleInstance {
     /// while driving" from ever passing. (Over OMSI's frames: the rattle scripts take its
     /// change from one frame to the next.)
     pub(super) fn body_a_trans(&mut self, rb: &crate::physics::RigidBody, dt: f32) -> Vec3 {
-        self.a_trans.push(scripts_acceleration(rb.accel_body, rb.orientation), dt)
+        self.a_trans
+            .push(scripts_acceleration(rb.accel_body, rb.orientation), dt)
     }
 
     /// The variables of wheel `side` (0 left, 1 right) of the vehicle's axle `axle`.
     pub(super) fn show_wheel(&mut self, axle: usize, side: usize, shown: WheelShown) {
-        let Some(ids) = self.v_wheels.get(axle).map(|a| a[side]) else { return };
+        let Some(ids) = self.v_wheels.get(axle).map(|a| a[side]) else {
+            return;
+        };
         for (id, x) in ids.into_iter().zip(shown) {
             self.put(id, x);
         }
     }
 
     /// The wheels' variables of a coupled part's own body (`vars`: each wheel's).
-    pub(super) fn show_part_wheels(&mut self, rb: &crate::physics::RigidBody, vars: &[PartWheelVars]) {
+    pub(super) fn show_part_wheels(
+        &mut self,
+        rb: &crate::physics::RigidBody,
+        vars: &[PartWheelVars],
+    ) {
         for (i, (w, v)) in rb.wheels.iter().zip(vars).enumerate() {
             let shown = body_wheel_shown(rb, i, w);
             for (id, x) in v.iter().zip(shown) {
@@ -132,14 +142,24 @@ impl VehicleInstance {
 
     /// `Wheel_Rotation` and `Wheel_RotationSpeed` of the `count` axles from `first` on, for a
     /// coupled part that follows without a body of its own.
-    pub(super) fn show_rolling_wheels(&mut self, first: usize, count: usize, rotation: f32, rpm: f32) {
+    pub(super) fn show_rolling_wheels(
+        &mut self,
+        first: usize,
+        count: usize,
+        rotation: f32,
+        rpm: f32,
+    ) {
         for a in 0..count {
             for side in ["L", "R"] {
                 let k = first + a;
                 if let Some(id) = self.ty.program.var(&format!("Wheel_Rotation_{k}_{side}")) {
                     self.state.vars[id as usize] = rotation;
                 }
-                if let Some(id) = self.ty.program.var(&format!("Wheel_RotationSpeed_{k}_{side}")) {
+                if let Some(id) = self
+                    .ty
+                    .program
+                    .var(&format!("Wheel_RotationSpeed_{k}_{side}"))
+                {
                     self.state.vars[id as usize] = rpm;
                 }
             }
@@ -148,7 +168,11 @@ impl VehicleInstance {
 }
 
 /// Wheel `i` (`w`) of a body as its variables show it.
-pub(super) fn body_wheel_shown(rb: &crate::physics::RigidBody, i: usize, w: &crate::physics::RigidWheel) -> WheelShown {
+pub(super) fn body_wheel_shown(
+    rb: &crate::physics::RigidBody,
+    i: usize,
+    w: &crate::physics::RigidWheel,
+) -> WheelShown {
     // `Axle_Suspension_*` is the wheel's travel *relative to the body*, and the stock
     // model.cfg moves the wheel down for a positive value (`origin_rot_y -90` +
     // `anim_trans`, checked with OMSI_DEBUG_ANIM on the SD200's front wheel). A compressed
@@ -159,17 +183,35 @@ pub(super) fn body_wheel_shown(rb: &crate::physics::RigidBody, i: usize, w: &cra
     // hands over -clamp(travel, 0, maxforce / k) - a wheel in the air stays where it hangs
     // at rest.) The steering is each axle's own angle: OMSI turns every axle towards the
     // centre of the bend on the `[rot_pnt_long]` line - one angle for both sides.
-    [w.rotation_deg.to_radians(), w.rpm, rb.axle_steer(i), -w.compression.max(0.0)]
+    [
+        w.rotation_deg.to_radians(),
+        w.rpm,
+        rb.axle_steer(i),
+        -w.compression.max(0.0),
+    ]
 }
 
 /// `n_Wheel`: the rpm of the first driven wheel, or of the first wheel when none drives.
-pub(super) fn driven_rpm<W>(wheels: &[W], driven: impl Fn(&W) -> bool, rpm: impl Fn(&W) -> f32) -> f32 {
-    wheels.iter().find(|w| driven(w)).or(wheels.first()).map(rpm).unwrap_or(0.0)
+pub(super) fn driven_rpm<W>(
+    wheels: &[W],
+    driven: impl Fn(&W) -> bool,
+    rpm: impl Fn(&W) -> f32,
+) -> f32 {
+    wheels
+        .iter()
+        .find(|w| driven(w))
+        .or(wheels.first())
+        .map(rpm)
+        .unwrap_or(0.0)
 }
 
 /// Scripts often test a stopped bus with `!Velocity_Ground`, so do not expose tiny solver drift.
 pub(super) fn script_speed(speed_kmh: f32) -> f32 {
-    if speed_kmh.abs() < 0.01 { 0.0 } else { speed_kmh }
+    if speed_kmh.abs() < 0.01 {
+        0.0
+    } else {
+        speed_kmh
+    }
 }
 
 /// OMSI's frames, a thirtieth of a second (`[maxFPS]` 30 in its options.cfg and every option
@@ -195,7 +237,10 @@ impl OmsiFrames {
         }
         // (a frame as long as OMSI's or longer is one of OMSI's)
         if dt >= Self::FRAME * 0.99 {
-            *self = OmsiFrames { out: a, ..Default::default() };
+            *self = OmsiFrames {
+                out: a,
+                ..Default::default()
+            };
             return a;
         }
         self.sum += a * dt;

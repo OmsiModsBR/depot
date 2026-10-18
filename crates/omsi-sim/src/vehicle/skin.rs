@@ -1,9 +1,9 @@
 //! Skinned meshes: the bones the animations move and the vertices they carry.
 
-use crate::anim::MeshAnimator;
-use glam::{Mat4, Vec3};
 use super::vehicle_type::VehicleType;
 use super::VehicleInstance;
+use crate::anim::MeshAnimator;
+use glam::{Mat4, Vec3};
 
 impl VehicleInstance {
     /// The `[smoothskin]` meshes (the bellows of an articulated bus).
@@ -34,7 +34,11 @@ pub(super) fn skin_key(ty: &VehicleType, i: usize, transforms: &[Mat4]) -> Vec<M
     };
     let mut key = vec![transforms.get(i).copied().unwrap_or(Mat4::IDENTITY)];
     for b in &vm.skin {
-        if let Some(k) = ty.meshes.iter().position(|m| Some(m.def_index) == b.def_index) {
+        if let Some(k) = ty
+            .meshes
+            .iter()
+            .position(|m| Some(m.def_index) == b.def_index)
+        {
             key.push(transforms.get(k).copied().unwrap_or(Mat4::IDENTITY));
         }
     }

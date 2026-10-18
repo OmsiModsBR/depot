@@ -1,8 +1,8 @@
 //! The scripts' side of a vehicle: variables, triggers, text textures, paint and service.
 
-use std::path::Path;
 use super::weather::relative_humidity;
 use super::VehicleInstance;
+use std::path::Path;
 
 impl VehicleInstance {
     /// Prepare the text textures with fonts from `lib`.
@@ -120,7 +120,8 @@ impl VehicleInstance {
     pub fn trigger(&mut self, name: &str) -> bool {
         let p = self.ty.program.clone();
         let rear_target_was_open = self.var("doorTarget_23").is_some_and(|target| target > 0.0);
-        let rear_force_close_was_active = self.var("bdoor_embtn_cls").is_some_and(|close| close > 0.5);
+        let rear_force_close_was_active =
+            self.var("bdoor_embtn_cls").is_some_and(|close| close > 0.5);
         let rear_was_open = self.var("doorTarget_23").is_some_and(|target| target > 0.0)
             || self.var("door_2").is_some_and(|door| door > 0.05)
             || self.var("door_3").is_some_and(|door| door > 0.05);
@@ -137,7 +138,8 @@ impl VehicleInstance {
         // physically open for a few frames.
         let toggle_is_reopen_request = name.eq_ignore_ascii_case("bus_dooraft")
             && !rear_target_was_open
-            && (rear_force_close_was_active || self.var("doorTarget_23").is_some_and(|target| target > 0.0));
+            && (rear_force_close_was_active
+                || self.var("doorTarget_23").is_some_and(|target| target > 0.0));
         if (name.eq_ignore_ascii_case("bus_dooraftclose")
             || (name.eq_ignore_ascii_case("bus_dooraft") && !toggle_is_reopen_request))
             && rear_was_open
@@ -161,7 +163,12 @@ impl VehicleInstance {
     /// sounds and messages the triggers asked for.
     pub fn trial_triggers(&mut self, names: &[&str]) -> Vec<f32> {
         let (state, vm) = (self.state.clone(), self.vm.clone());
-        let (fired, fired_files, messages, time_written) = (self.host.fired_triggers.len(), self.host.fired_file_triggers.len(), self.host.messages.clone(), self.host.time_written);
+        let (fired, fired_files, messages, time_written) = (
+            self.host.fired_triggers.len(),
+            self.host.fired_file_triggers.len(),
+            self.host.messages.clone(),
+            self.host.time_written,
+        );
         let fired_vars = self.host.fired_trigger_vars.len();
         for n in names {
             self.trigger(n);
@@ -205,7 +212,10 @@ impl VehicleInstance {
         // what is coupled to this vehicle (the train scripts light their ends by it: a head
         // lamp only where nothing is coupled, the tail lamps at the last car)
         self.set_engine_var("train_frontcoupling", 0.0);
-        self.set_engine_var("train_backcoupling", if self.trailers.is_empty() { 0.0 } else { 1.0 });
+        self.set_engine_var(
+            "train_backcoupling",
+            if self.trailers.is_empty() { 0.0 } else { 1.0 },
+        );
         self.set_engine_var("train_me_reverse", 0.0);
     }
 
@@ -228,10 +238,15 @@ impl VehicleInstance {
             self.km_started = true;
             if self.host.km_base == 0.0 {
                 let (year, per_year) = self.ty.def.km_counter_init.unwrap_or((1980, 60000.0));
-                let years = ((self.host.clock.year - year) as f64 + self.host.clock.day_of_year as f64 / 365.0).max(0.0);
-                let seed = (std::ptr::addr_of!(self.host) as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40;
+                let years = ((self.host.clock.year - year) as f64
+                    + self.host.clock.day_of_year as f64 / 365.0)
+                    .max(0.0);
+                let seed = (std::ptr::addr_of!(self.host) as u64)
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                    >> 40;
                 let (r1, r2) = ((seed % 100) as f64, ((seed / 100) % 100) as f64);
-                self.host.km_base = r1 / 10.0 + 8.0 + years * per_year as f64 * (1.0 + 0.2 * (r2 - 50.0) / 50.0);
+                self.host.km_base =
+                    r1 / 10.0 + 8.0 + years * per_year as f64 * (1.0 + 0.2 * (r2 - 50.0) / 50.0);
             }
         }
         // (the sum is split, not the parts: 0.7 km + 0.5 km is 1 km 200 m, not 0 km 1200 m)
@@ -246,7 +261,12 @@ impl VehicleInstance {
         // them; only the relative humidity comes from their temperature and humidity. An
         // engine model on top of theirs broke that balance - the Sprinter 312D's cabin
         // went to infinity within a second, and its engine with it.
-        let owns = |name: &str| self.ty.program.var(name).is_some_and(|v| self.ty.program.stores(v));
+        let owns = |name: &str| {
+            self.ty
+                .program
+                .var(name)
+                .is_some_and(|v| self.ty.program.stores(v))
+        };
         if owns("Cabinair_Temp") {
             if let (Some(t), Some(hum)) = (self.var("Cabinair_Temp"), self.var("Cabinair_absHum")) {
                 if !owns("Cabinair_relHum") && t.is_finite() && t > -237.0 {
@@ -256,7 +276,9 @@ impl VehicleInstance {
             return;
         }
         let out = self.host.temperature;
-        let (mut t, mut hum, last) = self.cabin_air.unwrap_or((out.clamp(18.0, 25.0), 9.0, f32::NAN));
+        let (mut t, mut hum, last) =
+            self.cabin_air
+                .unwrap_or((out.clamp(18.0, 25.0), 9.0, f32::NAN));
         // a script of the bus's own wrote the cabin temperature: that is what it is now
         if let Some(cur) = self.var("Cabinair_Temp") {
             if !last.is_nan() && (cur - last).abs() > 1e-4 {
@@ -267,7 +289,11 @@ impl VehicleInstance {
         let upper = (out + 20.0).min(out.max(25.0)).max(lower);
         let target = t.clamp(lower, upper);
         t += (target - t) * (dt / 120.0).min(1.0);
-        let out_hum = if self.host.abs_humidity > 0.0 { self.host.abs_humidity } else { 9.0 };
+        let out_hum = if self.host.abs_humidity > 0.0 {
+            self.host.abs_humidity
+        } else {
+            9.0
+        };
         hum += (out_hum - hum) * (dt / 300.0).min(1.0);
         // relative humidity: against the saturation (Magnus) at the cabin temperature
 

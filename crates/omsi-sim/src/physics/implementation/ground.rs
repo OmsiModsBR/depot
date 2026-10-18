@@ -56,7 +56,15 @@ pub(super) struct TyreLine {
 /// A sample whose ground is higher than `z_top` (the most the tyre climbs) is no ground,
 /// and within a radius, a sample and `look` metres of the hub it is a face the tyre runs
 /// against if that face is lower than `wall_top`.
-pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3, fwd_h: Vec3, r: f32, z_top: f64, wall_top: f64, look: f32) -> TyreLine {
+pub(super) fn tyre_line(
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    hub: DVec3,
+    fwd_h: Vec3,
+    r: f32,
+    z_top: f64,
+    wall_top: f64,
+    look: f32,
+) -> TyreLine {
     const N: usize = LATTICE;
     let a = r * ENVELOPE;
     let lift = |x: f32| r * (1.0 - (x / a).powi(2)).max(0.0).sqrt();
@@ -78,9 +86,13 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
     for k in 0..N {
         let g = at(x_of(k));
         below[k] = g.below;
-        wall[k] = xs[k].abs() <= r + spacing + look && g.above.map(|z| z < wall_top).unwrap_or(false);
+        wall[k] =
+            xs[k].abs() <= r + spacing + look && g.above.map(|z| z < wall_top).unwrap_or(false);
     }
-    let rise = |k: usize| match (below.get(k).copied().flatten(), below.get(k + 1).copied().flatten()) {
+    let rise = |k: usize| match (
+        below.get(k).copied().flatten(),
+        below.get(k + 1).copied().flatten(),
+    ) {
         (Some(g0), Some(g1)) => Some(g1 - g0),
         _ => None,
     };
@@ -91,10 +103,13 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
     // one neighbour, the level ground after a step at the end of the samples was an edge
     // too, the step no longer a lone one, and the hub jumped a centimetre as the lattice
     // moved on.
-    let edge: [bool; N] = std::array::from_fn(|k| match (rise(k), k.checked_sub(1).and_then(rise), rise(k + 1)) {
-        (Some(d), Some(l), Some(h)) => (d - l).abs() > EDGE && (d - h).abs() > EDGE,
-        _ => false,
-    });
+    let edge: [bool; N] =
+        std::array::from_fn(
+            |k| match (rise(k), k.checked_sub(1).and_then(rise), rise(k + 1)) {
+                (Some(d), Some(l), Some(h)) => (d - l).abs() > EDGE && (d - h).abs() > EDGE,
+                _ => false,
+            },
+        );
 
     let mut best: Option<(f64, f32, f32)> = None;
     let mut offer = |need: f64, slope: f32, x: f32| {
@@ -120,7 +135,11 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
         let need = z0 + (m * (x - x0)) as f64 + lift(x) as f64;
         // resting on the face, or at the end of the tyre (which rolls on with the hub), the
         // need rises with the ground; at a corner of the ground the envelope slides over it
-        let slope = if x == free || x <= -a || x >= a { m } else { corner_slope(x) };
+        let slope = if x == free || x <= -a || x >= a {
+            m
+        } else {
+            corner_slope(x)
+        };
         offer(need, slope, x);
     };
     for k in 0..N {
@@ -132,7 +151,8 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
             }
             continue;
         };
-        let lone_edge = edge[k] && !(k > 0 && edge[k - 1]) && !edge.get(k + 1).copied().unwrap_or(false);
+        let lone_edge =
+            edge[k] && !(k > 0 && edge[k - 1]) && !edge.get(k + 1).copied().unwrap_or(false);
         if !lone_edge || xs[k + 1] < -a || xs[k] > a {
             // no step, one beyond the envelope, or a run of them: a steep face the samples
             // outline well enough
@@ -162,18 +182,46 @@ pub(super) fn tyre_line(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, hub: DVec3
     }
 
     // the faces nearest the hub ahead and behind, bracketed by the clear sample before them
-    let ahead = (0..N).find(|&k| xs[k] > 0.0 && wall[k]).filter(|&k| k > 0 && !wall[k - 1]).map(|k| (xs[k - 1], xs[k]));
-    let behind = (0..N).rev().find(|&k| xs[k] <= 0.0 && wall[k]).filter(|&k| k + 1 < N && !wall[k + 1]).map(|k| (xs[k + 1], xs[k]));
-    let clear = (0..N - 1).find(|&k| xs[k] <= 0.0 && xs[k + 1] > 0.0).map_or(true, |k| !wall[k] && !wall[k + 1]);
-    TyreLine { ground: best, faces: [ahead, behind], clear }
+    let ahead = (0..N)
+        .find(|&k| xs[k] > 0.0 && wall[k])
+        .filter(|&k| k > 0 && !wall[k - 1])
+        .map(|k| (xs[k - 1], xs[k]));
+    let behind = (0..N)
+        .rev()
+        .find(|&k| xs[k] <= 0.0 && wall[k])
+        .filter(|&k| k + 1 < N && !wall[k + 1])
+        .map(|k| (xs[k + 1], xs[k]));
+    let clear = (0..N - 1)
+        .find(|&k| xs[k] <= 0.0 && xs[k + 1] > 0.0)
+        .map_or(true, |k| !wall[k] && !wall[k + 1]);
+    TyreLine {
+        ground: best,
+        faces: [ahead, behind],
+        clear,
+    }
 }
 
 /// The faces a tyre is up against after this step: those it was against that are still
 /// there and near, and new ones its samples (and a look to either side, `look` metres
 /// further than the tyre reaches) found.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn track_walls(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, old: &[WallFace], line: &TyreLine, hub: DVec3, fwd_h: Vec3, r: f32, z_top: f64, wall_top: f64, look: f32) -> Vec<WallFace> {
-    let is_wall = |p: DVec2| probe(p.x, p.y, z_top).above.map(|z| z < wall_top).unwrap_or(false);
+pub(super) fn track_walls(
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    old: &[WallFace],
+    line: &TyreLine,
+    hub: DVec3,
+    fwd_h: Vec3,
+    r: f32,
+    z_top: f64,
+    wall_top: f64,
+    look: f32,
+) -> Vec<WallFace> {
+    let is_wall = |p: DVec2| {
+        probe(p.x, p.y, z_top)
+            .above
+            .map(|z| z < wall_top)
+            .unwrap_or(false)
+    };
     let hub2 = hub.truncate();
     // A face stays while the hub is near it (as near as the samples find one) and has not
     // gone through by a whole radius, and while the ground just behind the line is still
@@ -186,7 +234,10 @@ pub(super) fn track_walls(probe: &dyn Fn(f64, f64, f64) -> GroundProbe, old: &[W
             let d = f.distance(hub);
             let n = f.normal.as_dvec2();
             let foot = hub2 - n * d as f64;
-            d > -r && d < WALL_KEEP * r && is_wall(foot - n * WALL_BEHIND) && !is_wall(foot + n * WALL_BEFORE)
+            d > -r
+                && d < WALL_KEEP * r
+                && is_wall(foot - n * WALL_BEHIND)
+                && !is_wall(foot + n * WALL_BEFORE)
         })
         .collect();
     let facing = |out: &[WallFace], dir: Vec2| out.iter().any(|f| f.normal.dot(-dir) > WALL_FACING);
@@ -255,9 +306,9 @@ fn find_face(is_wall: &dyn Fn(DVec2) -> bool, hub2: DVec2, dir: Vec2, d: f32) ->
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::physics::domain::params::{CLIMB, WALL_HEIGHT};
     use crate::physics::tests::ramp;
-    use super::*;
 
     /// On a uniform grade of any steepness the tyre reports the grade itself and stands where
     /// the envelope touches the ramp, with no more probes than on the flat. The old comb read
@@ -267,7 +318,9 @@ mod tests {
     fn tyre_reads_any_grade_as_a_grade() {
         let r = 0.47f32;
         let a = (r * ENVELOPE) as f64;
-        for pct in [0.0, 2.0, 5.0, 6.3, 6.5, 8.0, 9.0, 10.0, 12.0, 15.0, 20.0, 25.0] {
+        for pct in [
+            0.0, 2.0, 5.0, 6.3, 6.5, 8.0, 9.0, 10.0, 12.0, 15.0, 20.0, 25.0,
+        ] {
             let s = pct / 100.0;
             let count = std::cell::Cell::new(0);
             let g = ramp(s);
@@ -286,9 +339,18 @@ mod tests {
                 let t = s * a / r as f64;
                 let xs = a * t / (1.0 + t * t).sqrt();
                 let want = s * (y + xs) + r as f64 * (1.0 - (xs / a).powi(2)).sqrt();
-                assert!((slope as f64 - s).abs() < 1e-4, "{pct} %: slope {slope} at {y}");
-                assert!((need - want).abs() < 1e-5, "{pct} %: need {need}, want {want}");
-                assert!((x as f64 - xs).abs() < 1e-3, "{pct} %: contact at {x}, want {xs}");
+                assert!(
+                    (slope as f64 - s).abs() < 1e-4,
+                    "{pct} %: slope {slope} at {y}"
+                );
+                assert!(
+                    (need - want).abs() < 1e-5,
+                    "{pct} %: need {need}, want {want}"
+                );
+                assert!(
+                    (x as f64 - xs).abs() < 1e-3,
+                    "{pct} %: contact at {x}, want {xs}"
+                );
                 assert!(line.faces == [None, None] && line.clear);
                 assert!(count.get() <= LATTICE, "{pct} %: {} probes", count.get());
             }
@@ -302,16 +364,47 @@ mod tests {
     #[test]
     fn climbing_a_face_costs_what_it_lifts() {
         let r = 0.47f32;
-        for (grade, height, angle) in [(0.0, 0.15, 90.0f64), (0.0, 0.2, 72.0), (0.0, 0.2, 60.0), (0.0, 0.1, 45.0), (0.0, 0.3, 80.0), (0.0, 0.05, 20.0), (0.0, 0.37, 90.0), (0.0, 0.37, 70.0), (0.1, 0.15, 90.0), (-0.08, 0.2, 75.0)] {
+        for (grade, height, angle) in [
+            (0.0, 0.15, 90.0f64),
+            (0.0, 0.2, 72.0),
+            (0.0, 0.2, 60.0),
+            (0.0, 0.1, 45.0),
+            (0.0, 0.3, 80.0),
+            (0.0, 0.05, 20.0),
+            (0.0, 0.37, 90.0),
+            (0.0, 0.37, 70.0),
+            (0.1, 0.15, 90.0),
+            (-0.08, 0.2, 75.0),
+        ] {
             let run = height / angle.to_radians().tan();
             let face = move |_x: f64, y: f64, top: f64| {
                 let z = grade * y + ((y - 5.0) / run.max(1e-9)).clamp(0.0, 1.0) * height;
-                if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(0.0), above: Some(z) } }
+                if z <= top {
+                    GroundProbe {
+                        below: Some(z),
+                        above: None,
+                    }
+                } else {
+                    GroundProbe {
+                        below: Some(0.0),
+                        above: Some(z),
+                    }
+                }
             };
             let need_at = |y: f64| {
                 let hub = DVec3::new(0.3, y, r as f64 + grade * y);
                 let top = hub.z - r as f64 + (CLIMB * r) as f64;
-                tyre_line(&face, hub, Vec3::Y, r, top.max(grade * 5.0 + height), hub.z + WALL_HEIGHT, 0.0).ground.expect("ground")
+                tyre_line(
+                    &face,
+                    hub,
+                    Vec3::Y,
+                    r,
+                    top.max(grade * 5.0 + height),
+                    hub.z + WALL_HEIGHT,
+                    0.0,
+                )
+                .ground
+                .expect("ground")
             };
             let (y0, y1, dy) = (2.5, 7.0, 0.0005);
             let (mut work, mut y, mut need) = (0.0, y0, need_at(y0).0);
@@ -320,13 +413,23 @@ mod tests {
                 work += slope * dy;
                 y += dy;
                 let next = need_at(y).0;
-                assert!((next - need - slope * dy).abs() < 1e-3, "{height} m at {angle}° on {grade}: the hub jumped by {} at {y}", next - need - slope * dy);
+                assert!(
+                    (next - need - slope * dy).abs() < 1e-3,
+                    "{height} m at {angle}° on {grade}: the hub jumped by {} at {y}",
+                    next - need - slope * dy
+                );
                 need = next;
             }
             let lift = need_at(y).0 - need_at(y0).0;
             let want = height + grade * (y - y0);
-            assert!((lift - want).abs() < 1e-3, "{height} m at {angle}° on {grade}: lifted {lift}, want {want}");
-            assert!((work - lift).abs() < 0.003 * height.max(0.1), "{height} m at {angle}° on {grade}: pushed back {work} for {lift}");
+            assert!(
+                (lift - want).abs() < 1e-3,
+                "{height} m at {angle}° on {grade}: lifted {lift}, want {want}"
+            );
+            assert!(
+                (work - lift).abs() < 0.003 * height.max(0.1),
+                "{height} m at {angle}° on {grade}: pushed back {work} for {lift}"
+            );
         }
     }
 }

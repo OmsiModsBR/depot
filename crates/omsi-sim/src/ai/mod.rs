@@ -19,7 +19,10 @@ mod planner;
 mod rail;
 mod road;
 
-pub use planner::{back_in_ramp, pull_out_ramps, pull_out_room, straight_pull_out, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT};
+pub use planner::{
+    back_in_ramp, pull_out_ramps, pull_out_room, straight_pull_out, BACK_IN_LAT_ACCEL,
+    PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT,
+};
 pub use road::AI_RAY_UP;
 
 use crate::physics::{AiSpec, AiWheelSpec};
@@ -106,7 +109,21 @@ pub struct AiBody {
 
 impl AiBody {
     pub fn new(def: &Vehicle, kind: MotionKind) -> AiBody {
-        let AiSpec { rot_long, wheelbase, front_long, rear_long, max_steer, heavy, wheels, axle_count, mass, cog, inertia, spring, damper } = AiSpec::from(def);
+        let AiSpec {
+            rot_long,
+            wheelbase,
+            front_long,
+            rear_long,
+            max_steer,
+            heavy,
+            wheels,
+            axle_count,
+            mass,
+            cog,
+            inertia,
+            spring,
+            damper,
+        } = AiSpec::from(def);
         AiBody {
             kind,
             rot_long,
@@ -114,7 +131,11 @@ impl AiBody {
             front_long,
             rear_long,
             max_steer,
-            steer_rate: if heavy { crate::physics::AI_STEER_RATE_HEAVY } else { crate::physics::AI_STEER_RATE },
+            steer_rate: if heavy {
+                crate::physics::AI_STEER_RATE_HEAVY
+            } else {
+                crate::physics::AI_STEER_RATE
+            },
             wheels,
             axle_count,
             mass,
@@ -149,7 +170,13 @@ impl AiBody {
 
     /// Put the body onto its way, standing still and straight. `way(d)` is the point `d`
     /// metres along the way from the vehicle's origin.
-    pub fn place(&mut self, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::physics::Ground>, speed: f32) {
+    pub fn place(
+        &mut self,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::physics::Ground>,
+        speed: f32,
+    ) {
         self.started = false;
         self.ground = None;
         self.contact_z.clear();
@@ -160,7 +187,14 @@ impl AiBody {
     /// Follow the way for `dt` seconds at `speed` (m/s, the planner's speed).
     /// `contact`: what the wheels stand on (the faces under a height, as the player's wheels
     /// ask it); without it the plain height sampler `ground`.
-    pub fn step(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::physics::Ground>) {
+    pub fn step(
+        &mut self,
+        dt: f32,
+        speed: f32,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::physics::Ground>,
+    ) {
         if dt > 0.0 {
             let a = (speed - self.last_speed) / dt;
             self.a_long += (a - self.a_long) * (dt / 0.15).min(1.0);
@@ -183,7 +217,11 @@ impl AiBody {
         // over that plane (`[ai_deltaheight]` and the model's wheel geometry) comes on top,
         // once: the springs here only add their travel about it. Rail and air vehicles
         // follow their path's own height.
-        let (lift, delta) = if self.kind == MotionKind::Road { v.ai_rest_offset() } else { (0.0, 0.0) };
+        let (lift, delta) = if self.kind == MotionKind::Road {
+            v.ai_rest_offset()
+        } else {
+            (0.0, 0.0)
+        };
         v.position = self.position + DVec3::new(0.0, 0.0, lift as f64);
         v.heading = self.heading;
         v.pitch = self.pitch_deg;

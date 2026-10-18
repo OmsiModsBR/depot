@@ -1,11 +1,21 @@
-use crate::physics::tests::{bus, road};
 use super::*;
+use crate::physics::tests::{bus, road};
 use omsi_vehicle::vehicle::{Axle, Coupling};
 
 /// The stock GN92's two sections (`MAN_GN92_main.bus`, `MAN_GN92_trail.bus`): a pusher,
 /// whose front section drives no wheel and whose rear one stands on one axle and the joint.
 fn gn92() -> (Vehicle, Vehicle) {
-    let axle = |long: f32, max_width: f32, min_width: f32, driven: bool| Axle { long, max_width, min_width, wheel_diameter: 0.94, spring: 280.0, max_force: 116.0, damper: 20.0, driven, inertia_inv: 0.0 };
+    let axle = |long: f32, max_width: f32, min_width: f32, driven: bool| Axle {
+        long,
+        max_width,
+        min_width,
+        wheel_diameter: 0.94,
+        spring: 280.0,
+        max_force: 116.0,
+        damper: 20.0,
+        driven,
+        inertia_inv: 0.0,
+    };
     let front = Vehicle {
         mass: 8.0,
         moment_of_inertia: [300.0, 80.0, 300.0],
@@ -13,8 +23,17 @@ fn gn92() -> (Vehicle, Vehicle) {
         rolling_resistance: 900.0,
         rot_pnt_long: -2.7,
         inv_min_turn_radius: 0.13,
-        axles: vec![Axle { spring: 240.0, max_force: 90.0, ..axle(3.238, 2.25, 1.76, false) }, axle(-2.637, 2.4, 1.2, false)],
-        coupling_back: Some(Coupling { pos: [0.0, -4.331, 0.315] }),
+        axles: vec![
+            Axle {
+                spring: 240.0,
+                max_force: 90.0,
+                ..axle(3.238, 2.25, 1.76, false)
+            },
+            axle(-2.637, 2.4, 1.2, false),
+        ],
+        coupling_back: Some(Coupling {
+            pos: [0.0, -4.331, 0.315],
+        }),
         ..Default::default()
     };
     let rear = Vehicle {
@@ -24,7 +43,9 @@ fn gn92() -> (Vehicle, Vehicle) {
         rolling_resistance: 500.0,
         rot_pnt_long: -0.387,
         axles: vec![axle(-0.387, 2.4, 1.2, true)],
-        coupling_front: Some(Coupling { pos: [0.0, 4.169, 0.315] }),
+        coupling_front: Some(Coupling {
+            pos: [0.0, 4.169, 0.315],
+        }),
         coupling_front_character: Some([52.5, -20.0, 20.0, 1.0]),
         ..Default::default()
     };
@@ -42,25 +63,58 @@ struct Train {
 
 impl Train {
     fn new(front: &Vehicle, rear: &Vehicle) -> Train {
-        let mut bodies = vec![RigidBody::from_definition(front, &[]), RigidBody::from_definition(rear, &[])];
+        let mut bodies = vec![
+            RigidBody::from_definition(front, &[]),
+            RigidBody::from_definition(rear, &[]),
+        ];
         let back = Vec3::from(front.coupling_back.as_ref().unwrap().pos);
         let at = Vec3::from(rear.coupling_front.as_ref().unwrap().pos);
         let joints = vec![Joint::new(0, 1, rear, back, at)];
         support_rest_loads(&mut bodies, &joints, &[front, rear]);
         place_train(&mut bodies, &joints, DVec3::ZERO, &[0.0, 0.0]);
-        Train { bodies, joints, gap: 0.0, alpha: 0.0, beta: 0.0 }
+        Train {
+            bodies,
+            joints,
+            gap: 0.0,
+            alpha: 0.0,
+            beta: 0.0,
+        }
     }
 
     /// `secs` at 60 frames a second: `torque` from the speed it is at, brakes per wheel of
     /// the front and the rear section, steering from the time.
-    fn run(&mut self, secs: f32, torque: &dyn Fn(f32) -> f32, brake: [f32; 2], steer: &dyn Fn(f32) -> f32, g: &dyn Fn(f64, f64, f64) -> GroundProbe) {
-        let (b0, b1) = (vec![brake[0]; self.bodies[0].wheels.len()], vec![brake[1]; self.bodies[1].wheels.len()]);
+    fn run(
+        &mut self,
+        secs: f32,
+        torque: &dyn Fn(f32) -> f32,
+        brake: [f32; 2],
+        steer: &dyn Fn(f32) -> f32,
+        g: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    ) {
+        let (b0, b1) = (
+            vec![brake[0]; self.bodies[0].wheels.len()],
+            vec![brake[1]; self.bodies[1].wheels.len()],
+        );
         for k in 0..(secs * 60.0).round() as usize {
             let t = k as f32 / 60.0;
             let m = torque(self.bodies[0].forward_speed());
-            let inputs = [BodyInputs { brake: &b0, steer: Some(steer(t)), air: true }, BodyInputs { brake: &b1, steer: None, air: false }];
+            let inputs = [
+                BodyInputs {
+                    brake: &b0,
+                    steer: Some(steer(t)),
+                    air: true,
+                },
+                BodyInputs {
+                    brake: &b1,
+                    steer: None,
+                    air: false,
+                },
+            ];
             step_train(&mut self.bodies, &self.joints, 1.0 / 60.0, m, &inputs, g);
-            assert!(self.bodies.iter().all(|b| b.position.is_finite() && b.velocity.is_finite()));
+            assert!(self
+                .bodies
+                .iter()
+                .all(|b| b.position.is_finite() && b.velocity.is_finite()));
             self.gap = self.gap.max(self.joints[0].gap(&self.bodies));
             (self.alpha, self.beta) = self.joints[0].angles(&self.bodies);
         }
@@ -82,15 +136,39 @@ fn none(_: f32) -> f32 {
 
 /// Humps 6 cm high and 0.6 m long every 7 m.
 fn humps(_x: f64, y: f64, top: f64) -> GroundProbe {
-    let z = if y > 10.0 && (y % 7.0) < 0.6 { 0.06 } else { 0.0 };
-    if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(0.0), above: Some(z) } }
+    let z = if y > 10.0 && (y % 7.0) < 0.6 {
+        0.06
+    } else {
+        0.0
+    };
+    if z <= top {
+        GroundProbe {
+            below: Some(z),
+            above: None,
+        }
+    } else {
+        GroundProbe {
+            below: Some(0.0),
+            above: Some(z),
+        }
+    }
 }
 
 /// A grade of `s` from y = 20 on.
 fn ramp(s: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
     move |_x, y, top| {
         let z = (y - 20.0).max(0.0) * s;
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
+        if z <= top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: None,
+                above: Some(z),
+            }
+        }
     }
 }
 
@@ -109,11 +187,23 @@ fn a_follower_without_a_joint_is_the_leader_again() {
         let brake = [if t > 10.0 { 15_000.0 } else { 0.0 }; 4];
         let steer = (t * 0.8).sin() * 0.7;
         lone.step(1.0 / 60.0, torque, &brake, steer, &g);
-        let inputs = [BodyInputs { brake: &brake, steer: Some(steer), air: true }; 2];
+        let inputs = [BodyInputs {
+            brake: &brake,
+            steer: Some(steer),
+            air: true,
+        }; 2];
         step_train(&mut pair, &[], 1.0 / 60.0, 2.0 * torque, &inputs, &g);
         for b in &pair {
-            assert_eq!((b.position, b.orientation, b.velocity, b.omega), (lone.position, lone.orientation, lone.velocity, lone.omega), "at {t} s");
-            assert!(b.wheels.iter().zip(&lone.wheels).all(|(a, b)| a.compression == b.compression && a.spin == b.spin));
+            assert_eq!(
+                (b.position, b.orientation, b.velocity, b.omega),
+                (lone.position, lone.orientation, lone.velocity, lone.omega),
+                "at {t} s"
+            );
+            assert!(b
+                .wheels
+                .iter()
+                .zip(&lone.wheels)
+                .all(|(a, b)| a.compression == b.compression && a.spin == b.spin));
         }
     }
     assert!(lone.origin().y > 30.0, "{:?}", lone.origin());
@@ -130,11 +220,25 @@ fn the_joint_stays_closed() {
     t.run(1.0, &none, [5000.0; 2], &none, &flat);
     t.gap = 0.0;
     t.run(12.0, &cruise(40.0 / 3.6, mass), [0.0; 2], &none, &flat);
-    t.run(20.0, &cruise(40.0 / 3.6, mass), [0.0; 2], &|s| (s * 0.7).sin() * 0.5, &flat);
-    assert!(t.front().forward_speed() > 9.0, "{}", t.front().forward_speed());
+    t.run(
+        20.0,
+        &cruise(40.0 / 3.6, mass),
+        [0.0; 2],
+        &|s| (s * 0.7).sin() * 0.5,
+        &flat,
+    );
+    assert!(
+        t.front().forward_speed() > 9.0,
+        "{}",
+        t.front().forward_speed()
+    );
     assert!(t.gap < 0.02, "weaving: the joint opened {} m", t.gap);
     t.run(5.0, &none, [20_000.0; 2], &none, &flat);
-    assert!(t.front().forward_speed().abs() < 0.1, "{}", t.front().forward_speed());
+    assert!(
+        t.front().forward_speed().abs() < 0.1,
+        "{}",
+        t.front().forward_speed()
+    );
     assert!(t.gap < 0.02, "braking: the joint opened {} m", t.gap);
     let mut t = Train::new(&front, &rear);
     t.run(1.0, &none, [5000.0; 2], &none, &humps);
@@ -156,17 +260,37 @@ fn the_joint_weighs_on_the_front_sections_rear_axle() {
     let mut lone = RigidBody::from_definition(&front, &[]);
     lone.place(DVec3::ZERO, 0.0);
     crate::physics::tests::run(&mut lone, 4.0, 0.0, 5000.0, &flat);
-    let axle = |b: &RigidBody, a: usize| b.wheels.iter().zip(&b.wheel_axle).filter(|(_, x)| **x == a).map(|(w, _)| w.load).sum::<f32>();
-    let (gain_rear, gain_front) = (axle(t.front(), 1) - axle(&lone, 1), axle(t.front(), 0) - axle(&lone, 0));
+    let axle = |b: &RigidBody, a: usize| {
+        b.wheels
+            .iter()
+            .zip(&b.wheel_axle)
+            .filter(|(_, x)| **x == a)
+            .map(|(w, _)| w.load)
+            .sum::<f32>()
+    };
+    let (gain_rear, gain_front) = (
+        axle(t.front(), 1) - axle(&lone, 1),
+        axle(t.front(), 0) - axle(&lone, 0),
+    );
     eprintln!("the joint on the front section: rear axle {gain_rear:+.0} N, front axle {gain_front:+.0} N");
-    assert!(gain_rear > 5000.0 && gain_rear < 11_000.0, "rear axle took {gain_rear} N more");
+    assert!(
+        gain_rear > 5000.0 && gain_rear < 11_000.0,
+        "rear axle took {gain_rear} N more"
+    );
     assert!(gain_front < 0.0, "front axle took {gain_front} N more");
     let carried = axle(&t.bodies[1], 0);
     let weight = 7200.0 * 9.81;
-    assert!((weight - carried - (gain_rear + gain_front)).abs() < 1000.0, "rear axle {carried} N, front section {} N", gain_rear + gain_front);
+    assert!(
+        (weight - carried - (gain_rear + gain_front)).abs() < 1000.0,
+        "rear axle {carried} N, front section {} N",
+        gain_rear + gain_front
+    );
     let (_, pitch, _) = t.front().heading_pitch_bank();
     let (_, lone_pitch, _) = lone.heading_pitch_bank();
-    assert!(pitch > lone_pitch + 0.03, "pitch {pitch} alone {lone_pitch}");
+    assert!(
+        pitch > lone_pitch + 0.03,
+        "pitch {pitch} alone {lone_pitch}"
+    );
     assert!(t.gap < 0.02, "{}", t.gap);
 }
 
@@ -206,7 +330,10 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
     }
     let lone_decel = (v0 - lone.forward_speed()) * 2.0;
     eprintln!("braking on the front: train {train_decel:.2} m/s², front alone {lone_decel:.2}; dip {dip:.2}° / {lone_dip:.2}°");
-    assert!(train_decel < 0.7 * lone_decel, "train {train_decel}, alone {lone_decel}");
+    assert!(
+        train_decel < 0.7 * lone_decel,
+        "train {train_decel}, alone {lone_decel}"
+    );
     assert!((dip - lone_dip).abs() > 0.05, "dip {dip} alone {lone_dip}");
     assert!(t.gap < 0.02, "{}", t.gap);
     // a step of the steering at 40 km/h, rear sections of different mass and inertia
@@ -216,16 +343,33 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
         let (mut yaw, mut roll) = (0.0f32, 0.0f32);
         let m = t.bodies.iter().map(|b| b.mass).sum::<f32>();
         for _ in 0..90 {
-            t.run(1.0 / 60.0, &cruise(40.0 / 3.6, m), [0.0; 2], &|_| 0.4, &flat);
+            t.run(
+                1.0 / 60.0,
+                &cruise(40.0 / 3.6, m),
+                [0.0; 2],
+                &|_| 0.4,
+                &flat,
+            );
             yaw = yaw.max(t.front().omega.z.abs());
             roll = roll.max(t.front().heading_pitch_bank().2.abs());
         }
         assert!(t.gap < 0.02, "{}", t.gap);
         (yaw, roll)
     };
-    let light = Vehicle { mass: 3.0, moment_of_inertia: [60.0, 15.0, 60.0], ..rear.clone() };
-    let heavy = Vehicle { mass: 12.0, moment_of_inertia: [250.0, 80.0, 250.0], ..rear.clone() };
-    let ball = Vehicle { coupling_front_character: Some([52.5, -20.0, 20.0, 0.0]), ..rear.clone() };
+    let light = Vehicle {
+        mass: 3.0,
+        moment_of_inertia: [60.0, 15.0, 60.0],
+        ..rear.clone()
+    };
+    let heavy = Vehicle {
+        mass: 12.0,
+        moment_of_inertia: [250.0, 80.0, 250.0],
+        ..rear.clone()
+    };
+    let ball = Vehicle {
+        coupling_front_character: Some([52.5, -20.0, 20.0, 0.0]),
+        ..rear.clone()
+    };
     // (on a dry road the front follows its wheels, as OMSI 2's holds it: the yaw is the
     // steering's; on a wet one its tyres slide and the rear section's inertia shows)
     let ((_, rl), (_, rh)) = (bend(&light, 0.85), bend(&heavy, 0.85));
@@ -234,7 +378,10 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
     eprintln!("step steer: roll {rl:.2}° / {rh:.2}°, sliding yaw rate {yl:.3} / {yh:.3} rad/s (light / heavy rear); roll with the turntable {ra:.2}°, with a ball {rb:.2}°");
     assert!(rh > 1.2 * rl, "roll {rl} {rh}");
     assert!((yl - yh).abs() > 0.05 * yl.max(yh), "yaw rate {yl} {yh}");
-    assert!(ra > rb + 0.2, "roll with the turntable {ra}, with a ball {rb}");
+    assert!(
+        ra > rb + 0.2,
+        "roll with the turntable {ra}, with a ball {rb}"
+    );
 }
 
 /// A pusher: the front section has no driven wheel and is pushed through the joint, the
@@ -249,9 +396,17 @@ fn a_pusher_pushes_its_front_section() {
     let v = t.front().forward_speed();
     let (heading, _, _) = t.front().heading_pitch_bank();
     assert!(v > 3.0, "pushed to {v} m/s");
-    assert!(heading.min(360.0 - heading) < 0.5 && t.alpha.abs() < 0.01, "heading {heading}, alpha {}", t.alpha);
+    assert!(
+        heading.min(360.0 - heading) < 0.5 && t.alpha.abs() < 0.01,
+        "heading {heading}, alpha {}",
+        t.alpha
+    );
     t.run(4.0, &none, [0.0, 30_000.0], &none, &flat);
-    assert!(t.front().forward_speed().abs() < 0.1, "{}", t.front().forward_speed());
+    assert!(
+        t.front().forward_speed().abs() < 0.1,
+        "{}",
+        t.front().forward_speed()
+    );
     assert!(t.gap < 0.02, "{}", t.gap);
 }
 
@@ -268,9 +423,16 @@ fn the_joint_stops_at_its_max_alpha() {
         t.run(0.25, &cruise(-1.5, 15_200.0), [0.0; 2], &|_| 1.0, &flat);
         most = most.max(t.alpha.abs());
     }
-    eprintln!("reversing on full lock: alpha up to {:.1}°", most.to_degrees());
+    eprintln!(
+        "reversing on full lock: alpha up to {:.1}°",
+        most.to_degrees()
+    );
     assert!(most.to_degrees() > 45.0, "alpha only {}", most.to_degrees());
-    assert!(most.to_degrees() < 52.5 + 1.5, "alpha {}", most.to_degrees());
+    assert!(
+        most.to_degrees() < 52.5 + 1.5,
+        "alpha {}",
+        most.to_degrees()
+    );
     assert!(t.gap < 0.03, "{}", t.gap);
 }
 
@@ -280,7 +442,10 @@ fn the_joint_stops_at_its_max_alpha() {
 #[test]
 fn beta_stays_within_its_range() {
     let (front, rear) = gn92();
-    let stiff = Vehicle { coupling_front_character: Some([52.5, -2.0, 2.0, 1.0]), ..rear.clone() };
+    let stiff = Vehicle {
+        coupling_front_character: Some([52.5, -2.0, 2.0, 1.0]),
+        ..rear.clone()
+    };
     for (rear, limit) in [(&rear, 20.0f32), (&stiff, 2.0)] {
         let g = ramp(0.10);
         let mut t = Train::new(&front, rear);
@@ -290,9 +455,16 @@ fn beta_stays_within_its_range() {
             t.run(0.25, &cruise(3.0, 15_200.0), [0.0; 2], &none, &g);
             most = most.max(t.beta.abs());
         }
-        eprintln!("onto a 10 % grade with ±{limit}°: beta up to {:.2}°", most.to_degrees());
+        eprintln!(
+            "onto a 10 % grade with ±{limit}°: beta up to {:.2}°",
+            most.to_degrees()
+        );
         assert!(t.front().origin().y > 35.0, "{:?}", t.front().origin());
-        assert!(most.to_degrees() < limit + 0.5, "beta {}", most.to_degrees());
+        assert!(
+            most.to_degrees() < limit + 0.5,
+            "beta {}",
+            most.to_degrees()
+        );
         assert!(t.gap < 0.02, "{}", t.gap);
     }
 }
@@ -301,11 +473,20 @@ fn beta_stays_within_its_range() {
 #[test]
 fn a_hinge_ahead_of_the_ball_holds() {
     let (front, rear) = gn92();
-    let rear = Vehicle { coupling_pitch_offset: Some(0.8), ..rear };
+    let rear = Vehicle {
+        coupling_pitch_offset: Some(0.8),
+        ..rear
+    };
     let mut t = Train::new(&front, &rear);
     t.run(1.0, &none, [5000.0; 2], &none, &humps);
     t.gap = 0.0;
-    t.run(15.0, &cruise(30.0 / 3.6, 15_200.0), [0.0; 2], &|s| (s * 0.5).sin() * 0.3, &humps);
+    t.run(
+        15.0,
+        &cruise(30.0 / 3.6, 15_200.0),
+        [0.0; 2],
+        &|s| (s * 0.5).sin() * 0.3,
+        &humps,
+    );
     assert!(t.front().origin().y > 50.0, "{:?}", t.front().origin());
     assert!(t.gap < 0.02, "{}", t.gap);
 }
