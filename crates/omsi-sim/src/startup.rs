@@ -677,11 +677,6 @@ impl StartUp {
         s
     }
 
-    /// Everything was already done when the start-up began.
-    pub fn nothing_to_do(v: &VehicleInstance) -> bool {
-        power_on(v) && engine_running(v)
-    }
-
     fn enter(&mut self, v: &VehicleInstance, bound: &[String], step: Step) {
         self.step = step;
         self.t = 0.0;

@@ -499,37 +499,6 @@ impl PathGraph {
         Some(out)
     }
 
-    /// Walking distance from path point `a` to every path point (infinite when unreachable).
-    pub fn distances_from(&self, a: usize) -> Vec<f32> {
-        let n = self.points.len();
-        let mut dist = vec![f32::INFINITY; n];
-        if a >= n {
-            return dist;
-        }
-        let mut done = vec![false; n];
-        dist[a] = 0.0;
-        loop {
-            let mut u = usize::MAX;
-            let mut best = f32::INFINITY;
-            for i in 0..n {
-                if !done[i] && dist[i] < best {
-                    best = dist[i];
-                    u = i;
-                }
-            }
-            if u == usize::MAX {
-                break;
-            }
-            done[u] = true;
-            for &(v, w) in &self.adj[u] {
-                if dist[u] + w < dist[v] {
-                    dist[v] = dist[u] + w;
-                }
-            }
-        }
-        dist
-    }
-
     /// Path points linked to `i` (either way).
     pub fn neighbours(&self, i: usize) -> Vec<usize> {
         let mut out: Vec<usize> = self

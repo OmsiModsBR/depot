@@ -1,7 +1,6 @@
 use crate::vehicle::VehicleInstance;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 pub(crate) use crate::htmlengine::rebase_css_urls;
 pub use crate::htmlengine::{HtmlRenderer, HtmlRequest, PageApi, PointerKind};
@@ -9,22 +8,10 @@ pub use crate::htmlengine::{HtmlRenderer, HtmlRequest, PageApi, PointerKind};
 /// Most requests kept for the game between two of its frames (a page that asks in a loop).
 const MAX_REQUESTS: usize = 32;
 
-pub type BackendFactory =
-    fn(width: u32, height: u32, html: &str, api: PageApi) -> Box<dyn HtmlRenderer>;
-
-static BACKEND: OnceLock<BackendFactory> = OnceLock::new();
-
-pub fn set_backend(factory: BackendFactory) -> bool {
-    BACKEND.set(factory).is_ok()
-}
-
 fn make_renderer(width: u32, height: u32, html: &str, api: PageApi) -> Box<dyn HtmlRenderer> {
-    match BACKEND.get() {
-        Some(f) => f(width, height, html, api),
-        None => Box::new(crate::htmlengine::EngineRenderer::with_api(
-            width, height, html, api,
-        )),
-    }
+    Box::new(crate::htmlengine::EngineRenderer::with_api(
+        width, height, html, api,
+    ))
 }
 
 /// Find `rel` (a `model.cfg` path, backslashes, any letter case) under the first of `dirs`

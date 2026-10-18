@@ -2080,22 +2080,6 @@ impl TrafficLightController {
         None
     }
 
-    /// Index of the phase light `i` is in (debugging).
-    pub fn phase_index(&self, i: usize) -> i32 {
-        let phases = match self.lights.get(i) {
-            Some(p) if !p.is_empty() => p,
-            _ => return -1,
-        };
-        let mut x = self.time.rem_euclid(self.cycle_len()) as f32;
-        for (k, (_, dur)) in phases.iter().enumerate() {
-            if x < *dur {
-                return k as i32;
-            }
-            x -= dur;
-        }
-        phases.len() as i32 - 1
-    }
-
     /// Seconds until light `i` leaves the state it shows now while the clock runs on
     /// (phases in a row with the same state count as one; a stop point may hold it
     /// longer). A pedestrian starts across only when the green lasts.
