@@ -525,6 +525,11 @@ pub struct Schedule {
     /// 24:00): a departure leaves at `day_base + time` (`dep_time`), and the date moves on
     /// when the clock passes the next midnight.
     day_base: f64,
+    /// Departures put out as the previous service day's (a night tour's trips at 24:00 or
+    /// later, once the clock has passed midnight): where that day's midnight lay on the
+    /// traffic's clock. `dep_time` uses it instead of `day_base` while the departure stays
+    /// spawned.
+    carried_base: HashMap<usize, f64>,
     /// The current date (its time of day is not used).
     date_clock: omsi_sim::SimClock,
     /// The map's `car_use/*.ocu`: which vehicles serve which line's tours.
@@ -821,6 +826,7 @@ impl Schedule {
             day_bits: (day_bit, school_bit),
             next_day_bit: 1 << ((clock.weekday() + 1) % 7),
             day_base: 0.0,
+            carried_base: HashMap::new(),
             date_clock: clock.clone(),
             car_use,
             tour_vehicle: HashMap::new(),
@@ -904,7 +910,44 @@ impl Schedule {
 
     /// When departure `i` leaves on the traffic's clock.
     fn dep_time(&self, i: usize) -> f64 {
-        self.day_base + self.departures[i].time
+        self.carried_base.get(&i).copied().unwrap_or(self.day_base) + self.departures[i].time
+    }
+
+    /// Whether the not yet spawned departure `i` is, at `day_time`, a trip of yesterday's
+    /// timetable that leaves within [`TOUR_LAYOVER_MAX`] (and not one of today's, which
+    /// `dep_time` has leave sooner): a bus that finishes its trip after midnight takes it on.
+    fn carries_over(&self, i: usize, day_time: f64) -> bool {
+        let today = self.day_base + self.departures[i].time - day_time;
+        if (0.0..TOUR_LAYOVER_MAX).contains(&today) {
+            return false;
+        }
+        let lead = self.day_base - DAY + self.departures[i].time - day_time;
+        (0.0..TOUR_LAYOVER_MAX).contains(&lead) && self.ran_yesterday(i, self.yesterday_bits())
+    }
+
+    /// Whether departure `i`'s tour ran yesterday: the day mask of a tour is the one of the
+    /// day its timetable starts, so the trips written 24:00 or later keep the mask of that
+    /// day after the clock has passed midnight (as the existing night-tour handling in
+    /// `tour_available` has it).
+    fn ran_yesterday(&self, i: usize, yesterday: (i32, i32)) -> bool {
+        mask_matches(self.departures[i].mask, yesterday)
+    }
+
+    /// The departures of yesterday's timetable that are due now, on the clock of yesterday's
+    /// midnight (see [`due_previous_day`]), and not yet put out.
+    fn due_from_yesterday(&self, tod: f64, window: f64) -> Vec<usize> {
+        let mut out = Vec::new();
+        let mut yesterday = None;
+        for (i, d) in self.departures.iter().enumerate() {
+            if d.spawned || !due_previous_day(d.time, tod, window) {
+                continue;
+            }
+            let bits = *yesterday.get_or_insert_with(|| self.yesterday_bits());
+            if self.ran_yesterday(i, bits) {
+                out.push(i);
+            }
+        }
+        out
     }
 
     /// Past midnight on the traffic's clock: the next day's timetable.
@@ -953,8 +996,7 @@ impl Schedule {
 
     /// Whether departure `i`'s tour runs on the current day.
     fn runs(&self, i: usize) -> bool {
-        let m = self.departures[i].mask;
-        m & self.day_bits.0 != 0 && m & self.day_bits.1 != 0
+        mask_matches(self.departures[i].mask, self.day_bits)
     }
 
     /// Move the timetable on to the clock's date when it has changed (midnight): the day's
@@ -988,6 +1030,7 @@ impl Schedule {
             let d = &mut self.departures[i];
             if d.spawned && !mine {
                 d.spawned = false;
+                self.carried_base.remove(&i);
                 n += 1;
             }
         }
@@ -1041,6 +1084,7 @@ impl Schedule {
                 self.departures[i].spawned = false;
             }
         }
+        self.carried_base.clear();
         self.last_tod = day_time - self.day_base;
         self.restarted = true;
         log::info!("timetable: the clock was set to {}: {n} timetable buses taken off, the trips under way put out again", hhmm(day_time - self.day_base));
@@ -1072,7 +1116,13 @@ impl Schedule {
             if let Some(j) = next {
                 let d = &self.departures[j];
                 let open = self.awaiting.contains(&j) || (!d.spawned && self.runs(j));
-                if open && !self.is_player_tour(j) && self.day_base + d.time - day_time < TOUR_LAYOVER_MAX {
+                let carried = !d.spawned && !self.awaiting.contains(&j) && self.carries_over(j, day_time);
+                if carried && !self.is_player_tour(j) {
+                    // the next trip is a night trip past midnight: yesterday's timetable
+                    self.carried_base.insert(j, self.day_base - DAY);
+                }
+                let open = open || carried;
+                if open && !self.is_player_tour(j) && self.dep_time(j) - day_time < TOUR_LAYOVER_MAX {
                     if let Placed::Spawned =
                         self.spawn_departure(j, world, traffic, renderer, scene, day_time, Some(ci))
                     {
@@ -1084,6 +1134,10 @@ impl Schedule {
                         self.retry_at.remove(&j);
                         self.later_layover.remove(&j);
                     }
+                }
+                if !taken && carried && !self.awaiting.contains(&j) {
+                    // (the base was only tried for the hand-over)
+                    self.carried_base.remove(&j);
                 }
                 // its bus is not coming: the trip gets a bus of its own
                 if !taken && self.awaiting.remove(&j) {
@@ -1905,32 +1959,40 @@ impl Schedule {
         let name_of = |id: i64| names.get(&id).cloned().unwrap_or_else(|| id.to_string());
         let tod = day_time - self.day_base;
         let longest = self.times.iter().flatten().map(|t| t.duration).fold(0.0, f64::max);
-        let from = self.departures.partition_point(|d| d.time < tod - longest - 60.0);
+        let yesterday = self.yesterday_bits();
         let mut out: HashMap<i64, HashSet<String>> = HashMap::new();
-        for i in from..self.departures.len() {
-            let d = &self.departures[i];
-            if d.time > tod + PAX_SPAWN_AHEAD {
-                break;
-            }
-            if !self.runs(i) {
-                continue;
-            }
-            let tt = self.times_of(i);
-            let stations = trip_stations(&self.data.trips[d.trip]);
-            for (k, sid) in stations.iter().enumerate() {
-                let due = d.time + tt.stations.get(k).map(|s| s.0).unwrap_or(0.0);
-                if !(tod - 60.0..=tod + PAX_SPAWN_AHEAD).contains(&due) || !tt.stops.get(k).copied().unwrap_or(true) {
+        // today's departures on today's clock, then the previous day's (the night trips past
+        // 24:00, #40) on the clock of its midnight
+        for (tod, today) in [(tod, true), (tod + DAY, false)] {
+            let from = self.departures.partition_point(|d| d.time < tod - longest - 60.0);
+            for i in from..self.departures.len() {
+                let d = &self.departures[i];
+                if d.time > tod + PAX_SPAWN_AHEAD {
+                    break;
+                }
+                if !today && d.time < DAY {
                     continue;
                 }
-                let here = name_of(*sid);
-                let set = out.entry(*sid).or_default();
-                for (j, to) in stations.iter().enumerate().skip(k + 1) {
-                    if !tt.stops.get(j).copied().unwrap_or(true) {
+                if !(if today { self.runs(i) } else { self.ran_yesterday(i, yesterday) }) {
+                    continue;
+                }
+                let tt = self.times_of(i);
+                let stations = trip_stations(&self.data.trips[d.trip]);
+                for (k, sid) in stations.iter().enumerate() {
+                    let due = d.time + tt.stations.get(k).map(|s| s.0).unwrap_or(0.0);
+                    if !(tod - 60.0..=tod + PAX_SPAWN_AHEAD).contains(&due) || !tt.stops.get(k).copied().unwrap_or(true) {
                         continue;
                     }
-                    let to = name_of(*to);
-                    if to != here {
-                        set.insert(to);
+                    let here = name_of(*sid);
+                    let set = out.entry(*sid).or_default();
+                    for (j, to) in stations.iter().enumerate().skip(k + 1) {
+                        if !tt.stops.get(j).copied().unwrap_or(true) {
+                            continue;
+                        }
+                        let to = name_of(*to);
+                        if to != here {
+                            set.insert(to);
+                        }
                     }
                 }
             }
@@ -2009,6 +2071,14 @@ impl Schedule {
             .filter(|(i, d)| !d.spawned && due_in_window(d.time, tod, window) && self.runs(*i))
             .map(|(i, _)| i)
             .collect();
+        // past midnight the day's timetable has moved on: the trips of the night before that
+        // are due now are yesterday's timetable, on the clock of yesterday's midnight and with
+        // the day mask of the day the tour started (#40)
+        let mut due = due;
+        for i in self.due_from_yesterday(tod, window) {
+            self.carried_base.insert(i, self.day_base - DAY);
+            due.push(i);
+        }
         for i in due {
             self.departures[i].spawned = true;
             // the tour's bus is still on its way here: it takes the trip on when it arrives
@@ -4088,6 +4158,7 @@ impl Schedule {
                 .collect();
             for &i in &later {
                 self.departures[i].spawned = false;
+                self.carried_base.remove(&i);
             }
             log::info!("timetable: line {} tour {} is no LAN player's any more: its {} later departures run again", t.0, t.1, later.len());
         }
@@ -4622,6 +4693,21 @@ const DAY: f64 = 86_400.0;
 /// and not longer ago than `window`.
 fn due_in_window(time: f64, tod: f64, window: f64) -> bool {
     time <= tod && time > tod - window
+}
+
+/// Whether a tour's validity mask has a day's bits (weekday or holiday, and school day or
+/// holiday): see [`day_bits`].
+fn mask_matches(mask: i32, bits: (i32, i32)) -> bool {
+    mask & bits.0 != 0 && mask & bits.1 != 0
+}
+
+/// Whether a departure at `time` of the day before is due at `tod` of the day that has just
+/// begun: the same check on the clock of the previous midnight (`tod + 24 h`). Only the trips
+/// of a night tour past 24:00 are yesterday's alone; an evening trip of yesterday is the same
+/// departure as today's (one `spawned` flag), and times a day or more past 24:00 are no trips
+/// of yesterday.
+fn due_previous_day(time: f64, tod: f64, window: f64) -> bool {
+    (DAY..2.0 * DAY).contains(&time) && due_in_window(time, tod + DAY, window)
 }
 
 /// A 64-bit hash of a tour: its depot group (lower case), line and tour number.
@@ -6297,24 +6383,82 @@ pub(crate) mod tests {
         assert_eq!(duty.next_stop, 2);
     }
 
-    /// What the AI's departure check does with a tour that crosses midnight (23:40, then
-    /// 24:10 and 24:40): `Schedule::roll_day` moves the day's midnight on as soon as the
-    /// clock reaches it, so `tod` never reaches a time past 24:00 and the later trips are
-    /// never due (#40). Characterization of how it behaves now, not of what it should do:
-    /// the fix is for the maintainers to decide.
+    const H: f64 = 3600.0;
+
+    /// A tour that crosses midnight (23:40, then 24:10 and 24:40): `Schedule::roll_day` moves
+    /// the day's midnight on as soon as the clock reaches it, so `tod` never reaches a time
+    /// past 24:00 and `due_in_window` alone never finds the later trips due (#40, which this
+    /// test used to characterize). `due_previous_day` is the same check on the clock of the
+    /// previous midnight, and every trip is due exactly once along the night.
     #[test]
-    fn departures_past_midnight_are_never_due_in_the_day_they_belong_to() {
+    fn every_trip_of_a_tour_across_midnight_is_due_once() {
         let window = 60.0;
-        let trips = [23.0 * 3600.0 + 40.0 * 60.0, 24.0 * 3600.0 + 10.0 * 60.0, 24.0 * 3600.0 + 40.0 * 60.0];
-        // the evening trip is due at its time, and not once the window is over
-        assert!(due_in_window(trips[0], trips[0], window));
-        assert!(!due_in_window(trips[0], trips[0] + window, window));
-        // every second of the day the timetable is rolled on at midnight: `tod` stays below 24:00
-        let due_after_midnight = (0..DAY as i64).any(|tod| trips[1..].iter().any(|&t| due_in_window(t, tod as f64, window)));
-        assert!(!due_after_midnight, "when this changes, #40 is being fixed: update the test");
-        // (on the next day the same times run as 00:10 and 00:40 of the day after, `tod` small:
-        // a trip written as 00:10, not 24:10, is due then, but as the morning trip of the day)
-        assert!(due_in_window(10.0 * 60.0, 10.0 * 60.0, window));
+        let trips = [23.0 * H + 40.0 * 60.0, 24.0 * H + 10.0 * 60.0, 24.0 * H + 40.0 * 60.0];
+        // the clock of the traffic, from 23:00 to 02:00 the next day, a second at a time; the
+        // timetable's day rolls at 24:00 as in `Schedule::tick`
+        let mut seen = [0u32; 3];
+        for clock in (23 * 3600)..(26 * 3600) {
+            let clock = clock as f64;
+            let (day_base, tod) = if clock >= DAY { (DAY, clock - DAY) } else { (0.0, clock) };
+            for (k, &t) in trips.iter().enumerate() {
+                // (the first day's mask is the one that runs the whole tour)
+                let today = day_base == 0.0 && due_in_window(t, tod, window);
+                let yesterday = day_base == DAY && due_previous_day(t, tod, window);
+                if today || yesterday {
+                    seen[k] += 1;
+                    // the departure is `window` seconds wide: it is due that long
+                }
+            }
+        }
+        assert_eq!(seen, [60, 60, 60], "each trip is due during its `window` seconds, once");
+    }
+
+    /// The day mask of a tour is the one of the day its timetable starts; departures written
+    /// 24:00 or later keep it (maintainer's observation, #40). A Monday-only night tour runs
+    /// its 00:10 trip in the early hours of Tuesday (it is checked against Monday's bits); a
+    /// Tuesday-only tour does not run that trip, which belongs to the Monday timetable.
+    /// Synthetic masks; a single-day tour whose first departure is already past 24:00 does not
+    /// occur in real maps, and is assumed to follow the same rule (not validated).
+    #[test]
+    fn a_trip_past_midnight_keeps_the_mask_of_the_day_the_tour_started() {
+        let school = 1 << 9;
+        let monday = (1 << 0, school);
+        let mondays_only = (1 << 0) | school;
+        let tuesdays_only = (1 << 1) | school;
+        // at 00:10 on Tuesday the previous day's bits are Monday's
+        let yesterday = monday;
+        assert!(mask_matches(mondays_only, yesterday), "Monday's night tour runs its 00:10 trip");
+        assert!(!mask_matches(tuesdays_only, yesterday), "a Tuesday-only tour does not run Monday's 00:10 trip");
+        // a Saturday-only tour of 4:47 to 28:25 is still a Saturday tour at 03:00 on Sunday
+        let (saturday, sunday) = ((1 << 5, school), (1 << 6, school));
+        assert!(mask_matches((1 << 5) | school, saturday));
+        assert!(!mask_matches((1 << 5) | school, sunday), "the mask is not Sunday's");
+    }
+
+    #[test]
+    fn departures_of_the_previous_day_table() {
+        let w = 60.0;
+        // (time of the departure, tod of the new day, window, due)
+        let cases = [
+            (24.0 * H, 0.0, w, true),                      // exactly 00:00
+            (24.0 * H, 59.0, w, true),                     // still inside the window
+            (24.0 * H, 60.0, w, false),                    // window over
+            (24.0 * H + 10.0 * 60.0, 10.0 * 60.0, w, true),
+            (24.0 * H + 10.0 * 60.0, 9.0 * 60.0 + 59.0, w, false), // not yet
+            (23.0 * H + 59.0 * 60.0 + 59.0, 0.0, w, false), // 23:59:59 is an evening trip: today's departure, not yesterday's
+            (23.0 * H + 50.0 * 60.0, 5.0 * 60.0, 20.0 * 60.0, false), // clock set to 00:05: the evening trip is not caught up (its flag is today's)
+            (24.0 * H + 3.0 * 60.0, 5.0 * 60.0, 20.0 * 60.0, true), // clock set to 00:05: the trip of 00:03 of the night tour is under way
+            (36.0 * H, 12.0 * H, w, true),                 // a very long tour: 36:00 is noon of the day after
+            (48.0 * H + 60.0, 60.0, w, false),             // a day or more past 24:00 belongs to no previous day
+            (10.0 * 60.0, 10.0 * 60.0, w, false),          // a morning trip of today is not yesterday's
+        ];
+        for (time, tod, window, due) in cases {
+            assert_eq!(due_previous_day(time, tod, window), due, "time {time} tod {tod} window {window}");
+        }
+        // today's check is untouched: a trip at 00:10 is due at 00:10 of its own day
+        assert!(due_in_window(10.0 * 60.0, 10.0 * 60.0, w));
+        // and a trip past 24:00 is never due in the day's own view
+        assert!(!(0..DAY as i64).any(|tod| due_in_window(24.0 * H + 600.0, tod as f64, w)));
     }
 
     #[test]
