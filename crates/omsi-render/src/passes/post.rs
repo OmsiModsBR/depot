@@ -2,7 +2,7 @@
 
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
-use crate::gpu::{float_tex, pass_timer, target_2d};
+use crate::gpu::{float_tex, fullscreen_pipeline, pass_timer, target_2d};
 use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
 use crate::sky::{atmosphere, SkyResources};
@@ -94,35 +94,19 @@ pub(crate) fn post_pipelines(
         immediate_size: 0,
     });
     let post_pipeline = |entry: &str, target: wgpu::TextureFormat| {
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(entry),
-            layout: Some(&post_pl),
-            vertex: wgpu::VertexState {
-                module: &post_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
+        fullscreen_pipeline(
+            device,
+            entry,
+            &post_pl,
+            &post_shader,
+            "vs_main",
+            entry,
+            wgpu::ColorTargetState {
+                format: target,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &post_shader,
-                entry_point: Some(entry),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        })
+        )
     };
     PostPipelines {
         down_first: post_pipeline("fs_down_first", hdr_format),

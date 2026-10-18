@@ -1,7 +1,7 @@
 //! The depth prepass and the ambient occlusion (SSAO), with their pipelines and uniform.
 
 use super::draw::{encode_batches, one_sided_primitive, Batch};
-use crate::gpu::{pass_timer, DEPTH_FORMAT};
+use crate::gpu::{fullscreen_pipeline, pass_timer, DEPTH_FORMAT};
 use crate::scene::{Camera, Scene};
 use crate::targets::TargetCache;
 use glam::Mat4;
@@ -163,35 +163,19 @@ pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
         immediate_size: 0,
     });
     let make_ao = |entry: &str| {
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(entry),
-            layout: Some(&ao_pl),
-            vertex: wgpu::VertexState {
-                module: &ssao_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
+        fullscreen_pipeline(
+            device,
+            entry,
+            &ao_pl,
+            &ssao_shader,
+            "vs_main",
+            entry,
+            wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rg16Float,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &ssao_shader,
-                entry_point: Some(entry),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rg16Float,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        })
+        )
     };
     let ssao_pipeline = (!gl).then(|| make_ao("fs_ssao"));
     let blur_pipeline = (!gl).then(|| make_ao("fs_blur"));

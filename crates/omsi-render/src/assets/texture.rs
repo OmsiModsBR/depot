@@ -1,7 +1,7 @@
 //! Textures: the GPU texture slot, preparing and fitting images, uploads with their mip
 //! chains, and replacing or shrinking textures already in the scene.
 
-use crate::gpu::{gl_worker_turn, mip_levels, target_2d};
+use crate::gpu::{fullscreen_pipeline, gl_worker_turn, mip_levels, target_2d};
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
@@ -549,35 +549,19 @@ pub(crate) fn mip_pipeline(
         bind_group_layouts: &[Some(&mip_layout)],
         immediate_size: 0,
     });
-    let mip_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("mip"),
-        layout: Some(&mip_pl),
-        vertex: wgpu::VertexState {
-            module: &mip_shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
+    let mip_pipeline = fullscreen_pipeline(
+        device,
+        "mip",
+        &mip_pl,
+        &mip_shader,
+        "vs_main",
+        "fs_main",
+        wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
         },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &mip_shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
+    );
     let mip_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
