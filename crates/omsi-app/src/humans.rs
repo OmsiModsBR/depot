@@ -6416,6 +6416,35 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// #171: a bus whose exit door opens only on a request. The passenger's request leaves
+    /// the passengers' side as `PAX_Exit<i>_Req` (`DoorWants`), reaches the AI bus's script
+    /// through `write_door_requests`, the script opens the door at the stop, and the open state
+    /// it reports (`PAX_Exit<i>_Open`) is what the passengers read back as the exit being open.
+    /// The door script here is a stand-in written for the test (open = asked for and at a
+    /// stop; the host reports "at a stop" as -1, as the AI scripts read it), not any bus's own.
+    #[test]
+    fn a_request_opens_the_manual_exit_door_of_an_ai_bus_and_the_passenger_sees_it() {
+        let script = "{frame_ai}\n(L.L.PAX_Exit0_Req) (L.L.AI_Scheduled_AtStation) * -1 * (S.L.PAX_Exit0_Open)\n{end}\n";
+        let vars = "PAX_Exit0_Req\nPAX_Exit0_Open\nPAX_Entry0_Open\nAI_Scheduled_AtStation\n";
+        let mut bus = crate::schedule::tests::script_test_vehicle(script, vars, "");
+        let doors = |exit_req: bool| DoorWants { entry_req: vec![false], exit_req: vec![exit_req], entry_busy: vec![false], exit_busy: vec![false], places: Vec::new() };
+        let frame = |bus: &mut VehicleInstance, at_stop: bool, exit_req: bool| {
+            // (the order of the app: the traffic sets the stop state, the passengers' requests go in,
+            // the AI script runs, the passengers read the doors)
+            bus.set_var("AI_Scheduled_AtStation", if at_stop { -1.0 } else { 0.0 });
+            Humans::write_door_requests(bus, &doors(exit_req));
+            bus.update_ai(0.05, &Default::default());
+            Humans::doors_open(bus, 1, 1).1[0]
+        };
+        // driving, with a request: shut; at the stop without a request: shut (manual door)
+        assert!(!frame(&mut bus, false, true), "open while driving");
+        assert!(!frame(&mut bus, true, false), "opened without a request");
+        // at the stop, with the request: open, and the passengers see it open
+        assert!(frame(&mut bus, true, true), "a request at the stop did not open the exit door");
+        // the request is dropped when nobody asks any more
+        assert!(!frame(&mut bus, true, false));
+    }
+
     /// #718: a trailer on a lorry's hitch (`[coupling_front_character]` type 0) whose cabin
     /// gives no `[linkToNextVeh]` is not walked into from the bus: it is a section of its
     /// own, boarded, ridden in and left by its own doors. A bus joint (type 1) without the

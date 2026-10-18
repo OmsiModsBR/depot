@@ -39,6 +39,65 @@ const LINE_STREET: u8 = 3;
 /// A named street that also says its limits: `width` is the limit (km/h, 0 = none), `flags` the limit of heavy
 /// vehicles (km/h, 0 = the same, or none).
 const LINE_STREET_LIMITS: u8 = 4;
+/// Where the height of a contour line is written: a point on it, the height (m) and whether it is an index line.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContourMark {
+    pub at: DVec2,
+    pub height: i32,
+    pub index: bool,
+}
+
+/// How strongly the contour lines are drawn at `mpp` metres a pixel: full close up, fainter as the view widens.
+pub fn contour_strength(mpp: f64) -> f32 {
+    if mpp < 4.0 {
+        1.0
+    } else if mpp < 12.0 {
+        0.5
+    } else {
+        0.2
+    }
+}
+
+/// The marks for the heights along one contour line: the first after 150 m (index lines) or 100 m, then every
+/// 700 m or 450 m of the line; a mark sits at the middle of the segment that reaches the distance.
+fn height_marks(pts: &[DVec2], height: i32, index: bool) -> Vec<ContourMark> {
+    let (first, every) = if index { (150.0, 700.0) } else { (100.0, 450.0) };
+    let (mut out, mut run, mut next) = (Vec::new(), 0.0, first);
+    for s in pts.windows(2) {
+        run += (s[1] - s[0]).length();
+        if run >= next {
+            out.push(ContourMark { at: (s[0] + s[1]) * 0.5, height, index });
+            next = run + every;
+        }
+    }
+    out
+}
+
+/// The marks to write at `mpp` metres a pixel: all of them close up (under 6), only the index lines' up to 40, and
+/// none over another (at least 64 px apart close up, 120 px otherwise, times the interface scale `ui`); only those
+/// `inside` the window. Returns each with its place on the screen.
+pub fn marks_to_write<'a>(
+    marks: &'a [ContourMark],
+    mpp: f64,
+    ui: f32,
+    to_screen: impl Fn(DVec2) -> Vec2,
+    inside: impl Fn(Vec2) -> bool,
+) -> Vec<(Vec2, &'a ContourMark)> {
+    let near = mpp < 6.0;
+    if mpp >= 40.0 {
+        return Vec::new();
+    }
+    let apart = if near { 64.0 } else { 120.0 } * ui;
+    let mut shown: Vec<(Vec2, &ContourMark)> = Vec::new();
+    for m in marks.iter().filter(|m| near || m.index) {
+        let p = to_screen(m.at);
+        if inside(p) && !shown.iter().any(|(q, _)| (*q - p).length() < apart) {
+            shown.push((p, m));
+        }
+    }
+    shown
+}
+
 /// A contour line of the terrain (`width` is its height in metres) and an index contour (every fifth: drawn heavier).
 const LINE_CONTOUR: u8 = 5;
 const LINE_CONTOUR_INDEX: u8 = 6;
@@ -277,13 +336,29 @@ pub struct MapSurface {
     /// Added to the heights of the contour lines when the manifest says so (some maps' heights are relative).
     terrain_offset: f32,
     /// Where the index contours are written (a point and a height about every 700 m of them), made on first use.
-    contour_marks: std::sync::OnceLock<Vec<(DVec2, i32)>>,
+    contour_marks: std::sync::OnceLock<Vec<ContourMark>>,
     /// What the map says its rail vehicles are: (a part of the vehicle file's path, MODAL_*), from the manifest's
     /// `tram_vehicles`, `metro_vehicles` and `rail_vehicles`. A rail vehicle named by none is drawn as a tram.
     rail_kinds: Vec<(String, u8)>,
     /// The map, for its timetable (read when the lines panel first asks).
     map_dir: std::path::PathBuf,
-    times: std::sync::OnceLock<crate::line_times::LineTimes>,
+    times: std::sync::OnceLock<crate::line_times::TimesCache>,
+}
+
+/// A path a package file names, as a `/`-separated path under the package folder; None when it could point
+/// anywhere else: empty, absolute, with a drive or share (`:` or a leading separator), or with an empty
+/// component or one of only dots (`.`, `..`, `...`). (`Path::join` with an absolute path drops the package folder, so the check is on the text.)
+fn package_relative(raw: &str) -> Option<String> {
+    let p = raw.trim().replace('\\', "/");
+    if p.is_empty() || p.starts_with('/') || p.contains(':') {
+        return None;
+    }
+    // a component of only dots (or spaces) is refused too: Windows-style names, which the package readers apply,
+    // drop trailing dots and spaces, so `...` would end up as `..`
+    if p.split('/').any(|c| c.trim_end_matches(['.', ' ']).is_empty()) {
+        return None;
+    }
+    Some(p)
 }
 
 /// Bounds-checked reading: any short or odd file ends in `None`, never a panic.
@@ -621,9 +696,8 @@ impl MapSurface {
         Some(h + self.terrain_offset)
     }
 
-    /// Where the heights of the index contours are written on the city map: a point and the height, about every
-    /// 700 m along each index line.
-    pub fn contour_marks(&self) -> &[(DVec2, i32)] {
+    /// Where the heights of the contour lines are written on the city map (made on first use).
+    pub fn contour_marks(&self) -> &[ContourMark] {
         self.contour_marks.get_or_init(|| {
             let mut out = Vec::new();
             for e in &self.index {
@@ -632,16 +706,8 @@ impl MapSurface {
                     body,
                     |_, _| {},
                     |(class, w), pts| {
-                        if class != LINE_CONTOUR_INDEX {
-                            return;
-                        }
-                        let (mut run, mut next) = (0.0, 150.0);
-                        for s in pts.windows(2) {
-                            run += (s[1] - s[0]).length();
-                            if run >= next {
-                                out.push(((s[0] + s[1]) * 0.5, (w + self.terrain_offset).round() as i32));
-                                next = run + 700.0;
-                            }
+                        if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
+                            out.extend(height_marks(&pts, (w + self.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
                         }
                     },
                     |_| {},
@@ -665,8 +731,20 @@ impl MapSurface {
     }
 
     /// The map's timetable (`TTData`, with the eras in force): departures and the time at each stop, per line.
-    pub fn times(&self, chrono: &[std::path::PathBuf]) -> &crate::line_times::LineTimes {
-        self.times.get_or_init(|| crate::line_times::LineTimes::load(&self.map_dir, chrono))
+    /// Never waits: None while it is read (away from the frame), and read again when the date (yyyymmdd; the eras
+    /// and the school period follow it) changes.
+    pub fn times(&self, chrono: &[std::path::PathBuf], date: i32) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
+        self.times
+            .get_or_init(|| {
+                let (dir, chrono) = (self.map_dir.clone(), chrono.to_vec());
+                crate::line_times::TimesCache::new(move |date| crate::line_times::LineTimes::load(&dir, &chrono, date))
+            })
+            .get(date)
+    }
+
+    /// The timetable if it has been read already; asking never starts a read.
+    pub fn times_read(&self, date: i32) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
+        self.times.get().and_then(|c| c.peek(date))
     }
 
     /// The package can say where the player is (municipality outlines or named streets).
@@ -749,9 +827,13 @@ impl MapSurface {
                 continue;
             }
             let f: Vec<&str> = v.split('|').map(str::trim).collect();
-            if f.len() < 4 || f[0].contains("..") {
+            if f.len() < 4 {
                 continue;
             }
+            let Some(icon_path) = package_relative(f[0]) else {
+                log::warn!("map surface: icon path \"{}\" is not inside the package: line ignored", f[0]);
+                continue;
+            };
             let (Ok(width), Ok(x), Ok(y)) = (
                 f[1].parse::<f32>(),
                 f[2].parse::<f64>(),
@@ -762,10 +844,10 @@ impl MapSurface {
             if !(width > 0.0 && width < 512.0) || !x.is_finite() || !y.is_finite() {
                 continue;
             }
-            let icon = match files.iter().position(|n| n.eq_ignore_ascii_case(f[0])) {
+            let icon = match files.iter().position(|n| n.eq_ignore_ascii_case(&icon_path)) {
                 Some(i) => i,
                 None => {
-                    let path = dir.join(f[0]);
+                    let path = dir.join(&icon_path);
                     let img = omsi_cfg::vfs::read(&path)
                         .ok()
                         .and_then(|b| omsi_texture::decode_bytes(&b, &path).ok());
@@ -776,7 +858,7 @@ impl MapSurface {
                                 && i.width <= 1024
                                 && i.height <= 1024 =>
                         {
-                            files.push(f[0].to_string());
+                            files.push(icon_path.clone());
                             images.push(i);
                             images.len() - 1
                         }
@@ -970,7 +1052,9 @@ impl MapSurface {
     /// The surface as vertices (relative to `anchor`, drawn under the roads): built-up
     /// land, green, water, then rivers, rail and borders. `near` limits it to the chunks
     /// within a radius of a point (the tilted navigator); None builds the whole map.
-    pub fn build(&self, p: &mut Painter, anchor: DVec2, near: Option<(DVec2, f64)>, light: bool, contours: bool) {
+    pub fn build(&self, p: &mut Painter, anchor: DVec2, near: Option<(DVec2, f64)>, light: bool, contours: f32) {
+        let strength = contours;
+        let contours = contours > 0.0;
         let rel = |q: DVec2| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
         let mut tris: [Vec<[DVec2; 3]>; FILL_CLASSES] = Default::default();
         let mut lines: Vec<(u8, f32, Vec<DVec2>)> = Vec::new();
@@ -1037,9 +1121,9 @@ impl MapSurface {
             for (class, _, pts) in lines.iter().filter(|l| l.0 == LINE_CONTOUR || l.0 == LINE_CONTOUR_INDEX) {
                 let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
                 if *class == LINE_CONTOUR_INDEX {
-                    p.ribbon(&v, 1.9, 1.5, pal.contour, false);
+                    p.ribbon(&v, 1.9, 1.5, pal.contour.alpha(strength), false);
                 } else {
-                    p.ribbon(&v, 1.0, 1.0, pal.contour.alpha(0.5), false);
+                    p.ribbon(&v, 1.0, 1.0, pal.contour.alpha(0.5 * strength), false);
                 }
             }
         }
@@ -1373,7 +1457,7 @@ mod tests {
     fn a_valid_file_builds_and_names_its_places() {
         let s = open(sample()).expect("valid");
         let mut p = Painter::new();
-        s.build(&mut p, DVec2::new(1000.0, 2000.0), None, false, false);
+        s.build(&mut p, DVec2::new(1000.0, 2000.0), None, false, 0.0);
         // one triangle (3 vertices) and a river ribbon
         assert!(p.verts.len() >= 3 + 6);
         let l = s.labels();
@@ -1390,7 +1474,7 @@ mod tests {
             DVec2::ZERO,
             Some((DVec2::new(1.0e7, 1.0e7), 500.0)),
             true,
-            false,
+            0.0,
         );
         assert!(p.verts.is_empty());
     }
@@ -1428,6 +1512,20 @@ mod tests {
             s.player_style(Some("76")).map(|p| p.0),
             Some(Color::hex(0x5588c7))
         );
+    }
+
+    #[test]
+    fn icon_paths_stay_inside_the_package() {
+        assert_eq!(package_relative("icons/stop.png").as_deref(), Some("icons/stop.png"));
+        assert_eq!(package_relative("icons\\stop.png").as_deref(), Some("icons/stop.png"));
+        assert_eq!(package_relative("a/b/c.png").as_deref(), Some("a/b/c.png"));
+        for bad in [
+            "", "  ", "/etc/x.png", "\\x.png", "C:/a.png", "C:\\a.png", "C:a.png", "\\\\server\\share\\a.png",
+            "icons/../../x", "../x.png", "./x.png", "a//b.png", "a/./b.png", "icons/", "a/b:c.png",
+            "a/.../x.png", ".../x.png", "a/.. /x.png", "a/ /x.png",
+        ] {
+            assert_eq!(package_relative(bad), None, "{bad:?}");
+        }
     }
 
     #[test]
@@ -1596,6 +1694,35 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
         let (d2, h2) = found[1];
         let h = h1 + (h2 - h1) * (d1 / (d1 + d2)) as f32;
         assert!((h - 105.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn heights_are_marked_along_a_line_and_not_too_close() {
+        // a straight line of 100 m segments, 2 km long
+        let pts: Vec<DVec2> = (0..=20).map(|i| DVec2::new(i as f64 * 100.0, 0.0)).collect();
+        let idx = height_marks(&pts, 120, true);
+        // first once 150 m are run (the segment 100-200 m), then 700 m of line further on (counted from where it was reached)
+        assert_eq!(idx.iter().map(|m| m.at.x).collect::<Vec<_>>(), vec![150.0, 850.0, 1550.0]);
+        assert!(idx.iter().all(|m| m.index && m.height == 120));
+        let plain = height_marks(&pts, 100, false);
+        assert_eq!(plain.iter().map(|m| m.at.x).collect::<Vec<_>>(), vec![50.0, 550.0, 1050.0, 1550.0]);
+        // close up all of them, far away only the index ones, none nearer than the minimum
+        let all: Vec<ContourMark> = plain.iter().chain(&idx).copied().collect();
+        let scale = |p: DVec2| Vec2::new(p.x as f32 / 4.0, 0.0); // 4 m a pixel
+        let close = marks_to_write(&all, 4.0, 1.0, scale, |_| true);
+        assert!(close.iter().any(|(_, m)| !m.index), "close up the plain lines are marked too");
+        for (i, (a, _)) in close.iter().enumerate() {
+            assert!(close.iter().skip(i + 1).all(|(b, _)| (*a - *b).length() >= 64.0));
+        }
+        let far = marks_to_write(&all, 20.0, 1.0, |p| Vec2::new(p.x as f32 / 20.0, 0.0), |_| true);
+        assert!(!far.is_empty() && far.iter().all(|(_, m)| m.index));
+        assert!(marks_to_write(&all, 40.0, 1.0, scale, |_| true).is_empty());
+        assert!(marks_to_write(&all, 4.0, 1.0, scale, |_| false).is_empty(), "outside the window");
+    }
+
+    #[test]
+    fn contour_lines_get_fainter_as_the_view_widens() {
+        assert_eq!((contour_strength(1.0), contour_strength(8.0), contour_strength(30.0)), (1.0, 0.5, 0.2));
     }
 
     #[test]

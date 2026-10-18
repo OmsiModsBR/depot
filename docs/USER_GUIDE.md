@@ -146,11 +146,11 @@ picture **drawn by the game's renderer** - its model, paint, materials, reflecti
 shadows exactly as in the game, under the light of the chosen time and weather - drawn
 again only when something changes; drag on it to turn the bus, scroll to zoom. Its pages:
 
-* **Drive** - four steps: the bus (search, liveries, depot file, number plate), the route (map, start
-  point, line and tour - the lines that run on the chosen date), time and weather (time,
-  date, season, traffic, passengers, timetable buses, autostart, *LAN play: host / join*,
-  the weather presets that suit the season), and the roadbook with the IBIS codes; the
-  summary and **Start the duty** bottom right.
+* **Drive** - three steps: *Bus* (search, liveries, depot file, number plate), *Day & weather*
+  (time, date, season, traffic, passengers, timetable buses, autostart, *LAN play: host / join*,
+  the weather presets that suit the season) and *Map & duty* (the map, start point, line and
+  tour - the lines that run on the chosen date - with the roadbook and the IBIS codes, or
+  free driving); the summary and **Start the duty** bottom right.
 * **Profile** - hours, experience and level, from OMSI's own `.odr` personnel files plus
   the session summaries the game writes to `~/.depot/sessions`.
 * **Settings** - everything in `settings.cfg` below, saved as it changes; keys the page
