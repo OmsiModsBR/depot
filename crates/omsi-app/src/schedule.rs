@@ -3850,6 +3850,9 @@ const AT_STOP: f64 = 25.0;
 /// terminus it has served (s).
 const EARLY_START: f64 = 300.0;
 const LEFT_STOP: f64 = 35.0;
+/// A stop this near the one the bus has just left cannot have been reached by driving past
+/// the stops between (m, see `catch_up`).
+const LEFT_ZONE: f64 = 100.0;
 
 /// How far ahead (s) the departure displays look.
 const BOARD_AHEAD: f64 = 2.0 * 3600.0;
@@ -5213,9 +5216,19 @@ impl PlayerDuty {
             }
         }
         let here = of(self.next_stop);
+        // Where it has just left: a stop standing near that place is not one the bus has
+        // reached by driving past the stops between. A circular line's last stop is the
+        // terminal again, or a platform a few metres from where the buses leave it, and a bus
+        // pulling out passes it at once.
+        let left_from = self.next_stop.checked_sub(1).and_then(|k| trip.stops.get(k)).and_then(|s| s.position);
         let mut best: Option<(usize, f64)> = None;
         for k in self.next_stop + 1..upto {
             let Some(d) = of(k) else { continue };
+            if let (Some(from), Some(p)) = (left_from, trip.stops[k].position) {
+                if (p - from).length() < LEFT_ZONE {
+                    continue;
+                }
+            }
             if d >= AT_STOP || here.is_some_and(|h| d >= h) || !trip.stops[k].dir.takes(fwd) {
                 continue;
             }
@@ -6208,6 +6221,80 @@ pub(crate) mod tests {
             duty.update(&mut bus, 160.0);
             assert_eq!(duty.trip_index, 0);
         }
+    }
+
+    /// A circular trip: a terminal, three stops round a block and the terminal again (its
+    /// two ends are the same place). `(x, y)` of each stop, one every 100 s.
+    fn circular_duty(places: &[(f64, f64)]) -> PlayerDuty {
+        let mut trip = planned(100.0, &[(0.0, 100.0, 100.0), (0.0, 200.0, 200.0)]);
+        trip.stops = places
+            .iter()
+            .enumerate()
+            .map(|(i, &(x, y))| PlannedStop {
+                object_id: i as i64,
+                name: format!("s{i}"),
+                arr: 100.0 * (i + 1) as f64,
+                dep: 100.0 * (i + 1) as f64,
+                position: Some(glam::DVec3::new(x, y, 0.0)),
+                dir: StopDir::default(),
+                stops: true,
+            })
+            .collect();
+        trip.end = trip.stops.last().unwrap().arr;
+        trip.set_dirs();
+        let mut duty = early_departure_duty();
+        duty.trips = vec![trip];
+        duty.next_stop = 0;
+        duty.left_late = None;
+        duty
+    }
+
+    fn drive(duty: &mut PlayerDuty, bus: &mut omsi_sim::VehicleInstance, to: (f64, f64), heading: f64, t: f64) -> Option<(f64, f64)> {
+        bus.position.x = to.0;
+        bus.position.y = to.1;
+        bus.heading = heading;
+        bus.set_speed(5.0);
+        duty.update(bus, t)
+    }
+
+    /// Leaving the terminal of a circular line whose arrival platform lies a few metres ahead
+    /// of the departure platform: the stops of the trip are not passed by it at once.
+    #[test]
+    fn leaving_the_terminal_of_a_circular_line_skips_no_stop() {
+        // arrive at (30, 0) from the west, leave from (0, 0) the same way: the loop is
+        // round a block, back in from the west
+        let mut duty = circular_duty(&[(0.0, 0.0), (400.0, 0.0), (400.0, 400.0), (-300.0, 400.0), (-300.0, 0.0), (30.0, 0.0)]);
+        let mut bus = timetable_test_vehicle();
+        bus.position.x = 0.0;
+        bus.heading = 90.0;
+        bus.set_speed(0.0);
+        bus.set_var("door_0", 1.0);
+        duty.update(&mut bus, 100.0);
+        bus.set_var("door_0", 0.0);
+        for (t, x) in [(104.0, 10.0), (108.0, 20.0), (112.0, 30.0), (116.0, 40.0), (120.0, 50.0)] {
+            drive(&mut duty, &mut bus, (x, 0.0), 90.0, t);
+        }
+        assert_eq!(duty.take_skipped(), None);
+        assert_eq!(duty.next_stop, 1);
+        assert!(!duty.done);
+    }
+
+    /// A stop driven past is still caught up when it lies away from the stop just left.
+    #[test]
+    fn a_skipped_stop_far_from_the_one_just_left_is_still_caught_up() {
+        let mut duty = circular_duty(&[(0.0, 0.0), (400.0, 300.0), (800.0, 0.0), (1200.0, 0.0)]);
+        let mut bus = timetable_test_vehicle();
+        bus.position.x = 0.0;
+        bus.heading = 90.0;
+        bus.set_speed(0.0);
+        bus.set_var("door_0", 1.0);
+        duty.update(&mut bus, 100.0);
+        bus.set_var("door_0", 0.0);
+        for (t, x) in [(110.0, 50.0), (200.0, 390.0), (210.0, 450.0), (300.0, 790.0)] {
+            drive(&mut duty, &mut bus, (x, 0.0), 90.0, t);
+        }
+        assert_eq!(duty.take_skipped(), Some((1, 2, 3)));
+        assert_eq!(duty.next_stop, 2);
     }
 
     /// What the AI's departure check does with a tour that crosses midnight (23:40, then
