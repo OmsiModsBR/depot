@@ -205,8 +205,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("seat_z", "launcher>game", "NaN leaves the key empty"),
     // and the other way: the game takes NaN, the launcher saves the default over it
     ("volume", "launcher>game", "NaN leaves the key empty"),
-    ("min_obj_size", "game>launcher", "the game takes NaN"),
-    ("vol_ai", "game>launcher", "the game takes NaN"),
     ("vol_scenery", "game>launcher", "the game takes NaN"),
     // the launcher keeps whole numbers where the game keeps fractions
     ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
