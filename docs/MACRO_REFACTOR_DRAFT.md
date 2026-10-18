@@ -425,6 +425,8 @@ Pequenos, em crates frios e sem mudar comportamento (fix-16). Cada um é um PR q
 O guia de estilo do projeto diz que formatos OMSI são lidos só em `omsi-cfg`, `omsi-content`, `omsi-model`, `omsi-o3d` e `omsi-texture`. Hoje não é assim:
 
 1. **`gamectrler.cfg`** (fix-17): `parse_cfg`, `cfg_text`, `DeviceCfg`, `Func` e `axis_shape` de `controllers.rs`, e `stock_keys.rs`, vão para `omsi_content::input`, que passa a ser o único leitor e escritor, com os blocos de extensão do Depot. O `omsi-app` fica só com o mapeamento de dispositivos. B4 já faz o launcher usar o escritor do jogo; este item move os dois.
+
+   Feito no passo 3: `omsi_content::input` virou pasta, com `gamectrler` (`Func`, `DeviceCfg`, `read`, `parse`, `to_text`, `write` com a conferência de ida e volta, `axis_shape` e `AXIS_SHAPES`) e `stock_keys`. O antigo `load_game_controllers`, que só o `omsi-check` usava, deu lugar a `gamectrler::read`. O `omsi-app` reexporta o que usa e ficou com o caminho do arquivo, a regra do `[FFScale]` 0/0 herdado do OMSI e o mapeamento dos dispositivos.
 2. **`[cloudtype]`** (`weather_setup.rs:346-351`) passa por `omsi_content::Envir::load`, com um `CloudKind` lido uma vez (Frente E3).
 3. **Fontes `.oft`** (`lan_mods.rs:336`) usam `Font::load_all`; o `[name]` do launcher e os textos de tile do editor (`editor.rs`) passam por `omsi-map` com `omsi_cfg::decode_text`.
 4. **`handle_keyword` de `omsi-model`** (cerca de 620 linhas, `lib.rs:623`) se divide por família (malha e animação, `matl_*`, luzes, texturas dinâmicas, partículas), sem mudar a delegação do `.sco`.

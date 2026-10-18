@@ -309,7 +309,9 @@ impl Navigator {
         }
         if let Some(i) = focus {
             let l = &lines[i];
-            if sf.times(&self.chrono, self.date).line(&l.number).is_some() {
+            // (the button shows until the timetable has been read and the line is found not to have one; opening
+            // a line reads nothing)
+            if sf.times_read(self.date).is_none_or(|t| t.line(&l.number).is_some()) {
                 let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
                 ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
@@ -357,12 +359,25 @@ impl Navigator {
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
         ui.rounded(list_panel, 8.0 * s, ink);
-        if let Some(i) = focus.filter(|&i| self.city.lines.sheet && sf.times(&self.chrono, self.date).line(&lines[i].number).is_some()) {
-            let rows = self.sheet_panel(ui, &sf, i, list_panel, s, lt, &mut hits);
+        if let Some(i) = focus.filter(|_| self.city.lines.sheet) {
+            // the timetable is read only now that it is asked for
+            let Some(timetable) = sf.times(&self.chrono, self.date) else {
+                ui.text(&mut self.atlas, &self.fonts, lt.loading, 13.0 * s, Weight::Medium, Vec2::new(x0 + pad, ly + 24.0 * s), Align::Left, TEXT_DIM);
+                self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
+                self.city.lines.list = None;
+                self.city.lines.hits = hits;
+                return;
+            };
+            if timetable.line(&lines[i].number).is_none() {
+                // read, and this line has none: back to the list
+                self.city.lines.sheet = false;
+            } else {
+            let rows = self.sheet_panel(ui, &sf, &timetable, i, list_panel, s, lt, &mut hits);
             self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
             self.city.lines.list = Some(rows);
             self.city.lines.hits = hits;
             return;
+            }
         }
         ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
         let dated: Vec<usize> = (0..lines.len()).filter(|&i| sf.line_on(i, self.date)).collect();
@@ -486,9 +501,8 @@ impl Navigator {
     /// departures by the hour and - once one is picked - when its bus is at each stop (the same times are
     /// written on the map). Returns the scrolling area.
     #[allow(clippy::too_many_arguments)]
-    fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
+    fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, timetable: &crate::line_times::LineTimes, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
         use crate::line_times::clock;
-        let timetable = sf.times(&self.chrono, self.date);
         let sheet = timetable.line(&sf.lines()[i].number).expect("the caller checked");
         let (x0, y0, pw, pad) = (area.x, area.y, area.w, 14.0 * s);
         let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
@@ -583,7 +597,7 @@ impl Navigator {
     /// The departure picked, on the map: a dot and the time at each stop it calls at, as many as fit
     /// (the ends first); the stops are where the map's own stop objects stand.
     fn sheet_labels(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, s: f32, to_screen: &dyn Fn(DVec3) -> Vec2, view: (f32, f32)) {
-        let timetable = sf.times(&self.chrono, self.date);
+        let Some(timetable) = sf.times(&self.chrono, self.date) else { return };
         let Some(sheet) = timetable.line(&sf.lines()[i].number) else { return };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
@@ -781,10 +795,13 @@ impl Navigator {
         // the map's surface (buffer 7), once per surface and anchor
         let mut surface_verts = None;
         if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
-            let key = self.surface_version * 4 + self.light as u64 + 2 * self.show_contours as u64;
+            // (the contour lines are fainter the wider the view: the strength is part of the key)
+            let strength = if self.show_contours { crate::map_surface::contour_strength(self.city.mpp) } else { 0.0 };
+            let band = if strength >= 1.0 { 0 } else if strength >= 0.5 { 1 } else { 2 };
+            let key = (self.surface_version * 4 + self.light as u64 + 2 * self.show_contours as u64) * 3 + band;
             if self.city.surface.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, None, self.light, self.show_contours);
+                sf.build(&mut p, anchor, None, self.light, strength);
                 self.city.surface = Some((key, p.len(), anchor));
                 surface_verts = Some(p.verts);
             }
@@ -1011,19 +1028,15 @@ impl Navigator {
                 }
                 ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at, Align::Center, if l.kind == 0 { ink_dim } else { ink });
             }
-            // the terrain view: the height written on the index contours, semi-transparent
-            if self.show_contours && self.city.mpp < 40.0 {
+            // the terrain view: the heights written on the contour lines, semi-transparent
+            if self.show_contours {
                 if let Some(sf) = self.surface.clone() {
                     let px = 11.5 * s;
                     let col = if self.light { Color::rgba(110, 72, 34, 0.62) } else { Color::rgba(236, 206, 156, 0.55) };
-                    let mut shown: Vec<Vec2> = Vec::new();
-                    for (at, height) in sf.contour_marks() {
-                        let p = to_screen(at.extend(0.0));
-                        if !win.pad(30.0 * s, 30.0 * s).contains(p) || shown.iter().any(|q| (*q - p).length() < 120.0 * s) {
-                            continue;
-                        }
-                        shown.push(p);
-                        ui.text(&mut self.atlas, &self.fonts, &format!("{height} m"), px, Weight::Medium, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
+                    let inside = win.pad(30.0 * s, 30.0 * s);
+                    let marks = crate::map_surface::marks_to_write(sf.contour_marks(), self.city.mpp, s, |at| to_screen(at.extend(0.0)), |p| inside.contains(p));
+                    for (p, m) in marks {
+                        ui.text(&mut self.atlas, &self.fonts, &format!("{} m", m.height), px, if m.index { Weight::Medium } else { Weight::Regular }, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
                     }
                 }
             }
