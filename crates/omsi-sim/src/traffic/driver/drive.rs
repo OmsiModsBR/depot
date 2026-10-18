@@ -108,11 +108,7 @@ impl AiState {
     /// Advance along the network with the car ahead (`lead`) and a stop point (`stop`,
     /// distance from the car's origin). False at a dead end.
     pub fn drive(&mut self, net: &Network, dt: f32, lead: Option<Lead>, stop: Option<f32>) -> bool {
-        self.change_cooldown = (self.change_cooldown - dt).max(0.0);
-        self.signal_time = (self.signal_time - dt).max(0.0);
-        if self.signal_time <= 0.0 {
-            self.signal = 0;
-        }
+        self.count_down(dt);
         if net.lanes.get(self.lane).is_none() {
             return false;
         }
@@ -120,8 +116,34 @@ impl AiState {
         if let Some(cap) = self.accel_cap {
             acc = acc.min(cap);
         }
-        // standing: a driver who is held there moves off only after a moment when the way
-        // clears (the wave that runs down a queue at a green light)
+        let acc = self.hold_or_move_off(acc, dt);
+        let ds = self.move_on(acc, dt);
+        self.step_lane_change(net, ds, dt);
+        self.follow_bay_offset(ds);
+        if !self.enter_next_lanes(net) {
+            return false; // dead end: despawn
+        }
+        // keep the plan PLAN_AHEAD metres long as the car eats into it (a route's plan
+        // only moves when the car enters its next lane)
+        if self.route.is_empty() {
+            self.plan_next(net);
+        }
+        true
+    }
+
+    /// The lane change cooldown and the signal run down.
+    fn count_down(&mut self, dt: f32) {
+        self.change_cooldown = (self.change_cooldown - dt).max(0.0);
+        self.signal_time = (self.signal_time - dt).max(0.0);
+        if self.signal_time <= 0.0 {
+            self.signal = 0;
+        }
+    }
+
+    /// The acceleration taken once the driver's reaction is counted: standing, a driver who
+    /// is held there moves off only after a moment when the way clears (the wave that runs
+    /// down a queue at a green light).
+    fn hold_or_move_off(&mut self, mut acc: f32, dt: f32) -> f32 {
         if self.speed < 0.05 {
             if acc <= 0.05 {
                 // (a hold of a frame or two - a junction that is free and not free by turns
@@ -146,6 +168,11 @@ impl AiState {
         } else if self.speed > 0.5 {
             self.held = false;
         }
+        acc
+    }
+
+    /// Speed, brake lights and distance after `dt` at `acc`; the distance covered.
+    fn move_on(&mut self, acc: f32, dt: f32) -> f32 {
         let v0 = self.speed;
         let v1 = (v0 + acc * dt).max(0.0);
         self.speed = v1;
@@ -155,56 +182,69 @@ impl AiState {
         let ds = (v0 + v1) * 0.5 * dt;
         self.s += ds;
         self.odometer += ds;
-        // lane change: signal, glide over to the neighbour, then continue there
-        if let Some(mut c) = self.change {
-            c.s_to += ds;
-            if c.wait > 0.0 {
-                c.wait = (c.wait - dt).max(0.0);
-            } else {
-                c.t += ds / c.length;
-            }
-            let from_len = net.lanes[self.lane].length();
-            let mut to_len = net.lanes.get(c.to).map(|l| l.length()).unwrap_or(0.0);
-            // A move that is not over where a lane ends carries on across the joint: the
-            // lane beside goes on into the way chosen on it, and this lane into its plan
-            // (below). Finished at the joint instead, the car jumped sideways by what was
-            // left of the move - so a lane change was only started 20 m and more before a
-            // lane's end, and on a road of short spline pieces a car stopped behind a parked
-            // car just past a joint never got round it. (A timetable vehicle's route moves
-            // over well before the end, as before.)
-            let carry_on = self.route.is_empty();
-            while carry_on && c.t < 1.0 && c.s_to >= to_len && !self.change_plan.is_empty() {
-                c.s_to -= to_len;
-                c.to = self.change_plan.remove(0);
-                to_len = net.lanes.get(c.to).map(|l| l.length()).unwrap_or(0.0);
-            }
-            let from_ends = self.s >= from_len && (self.planned_next.is_none() || !carry_on);
-            if c.t >= 1.0 || from_ends || c.s_to >= to_len {
-                // arrived on the new lane: it has no joint behind the car, and the way on
-                // is planned afresh from there
-                if self.route.get(self.route_index + 1) == Some(&c.to) {
-                    self.route_index += 1;
-                }
-                self.lane = c.to;
-                self.s = c.s_to.min(to_len);
-                self.change = None;
-                self.change_cooldown = 6.0;
-                self.prev_lane = None;
-                let plan = std::mem::take(&mut self.change_plan);
-                self.planned_next = plan.first().copied();
-                self.ahead = plan.into_iter().skip(1).collect();
-            } else {
-                self.change = Some(c);
-            }
+        ds
+    }
+
+    /// A lane change under way: signal, glide over to the neighbour, then continue there.
+    fn step_lane_change(&mut self, net: &Network, ds: f32, dt: f32) {
+        let Some(mut c) = self.change else {
+            return;
+        };
+        c.s_to += ds;
+        if c.wait > 0.0 {
+            c.wait = (c.wait - dt).max(0.0);
+        } else {
+            c.t += ds / c.length;
         }
-        // bay offset: a new target starts an S-curve from where the car is now, eight metres
-        // long for every metre sideways (at least 8, at most 30)
+        let from_len = net.lanes[self.lane].length();
+        let mut to_len = net.lanes.get(c.to).map(|l| l.length()).unwrap_or(0.0);
+        // A move that is not over where a lane ends carries on across the joint: the
+        // lane beside goes on into the way chosen on it, and this lane into its plan
+        // (below). Finished at the joint instead, the car jumped sideways by what was
+        // left of the move - so a lane change was only started 20 m and more before a
+        // lane's end, and on a road of short spline pieces a car stopped behind a parked
+        // car just past a joint never got round it. (A timetable vehicle's route moves
+        // over well before the end, as before.)
+        let carry_on = self.route.is_empty();
+        while carry_on && c.t < 1.0 && c.s_to >= to_len && !self.change_plan.is_empty() {
+            c.s_to -= to_len;
+            c.to = self.change_plan.remove(0);
+            to_len = net.lanes.get(c.to).map(|l| l.length()).unwrap_or(0.0);
+        }
+        let from_ends = self.s >= from_len && (self.planned_next.is_none() || !carry_on);
+        if c.t >= 1.0 || from_ends || c.s_to >= to_len {
+            // arrived on the new lane: it has no joint behind the car, and the way on
+            // is planned afresh from there
+            if self.route.get(self.route_index + 1) == Some(&c.to) {
+                self.route_index += 1;
+            }
+            self.lane = c.to;
+            self.s = c.s_to.min(to_len);
+            self.change = None;
+            self.change_cooldown = 6.0;
+            self.prev_lane = None;
+            let plan = std::mem::take(&mut self.change_plan);
+            self.planned_next = plan.first().copied();
+            self.ahead = plan.into_iter().skip(1).collect();
+        } else {
+            self.change = Some(c);
+        }
+    }
+
+    /// The bay offset after `ds` metres: a new target starts an S-curve from where the car
+    /// is now, eight metres long for every metre sideways (at least 8, at most 30).
+    fn follow_bay_offset(&mut self, ds: f32) {
         if (self.lateral_target - self.lateral_ramp.1).abs() > 1e-3 {
             let from = self.lateral_at(self.odometer - ds);
             let len = ((self.lateral_target - from).abs() * 8.0).clamp(8.0, 30.0);
             self.lateral_ramp = (from, self.lateral_target, self.odometer - ds, len);
         }
         self.lateral = self.lateral_at(self.odometer);
+    }
+
+    /// Over the end of the lane into the planned ones, as many as the car has passed. False
+    /// at a dead end.
+    fn enter_next_lanes(&mut self, net: &Network) -> bool {
         if self.planned_next.is_none() {
             self.plan_next(net);
         }
@@ -218,7 +258,7 @@ impl AiState {
                 if l.kind == LaneKind::Air {
                     break;
                 }
-                return false; // dead end: despawn
+                return false;
             };
             self.s -= l.length();
             self.prev_lane = Some(self.lane);
@@ -236,11 +276,6 @@ impl AiState {
                     .find(|&k| self.route[k] == next)
                     .unwrap_or(from);
             }
-            self.plan_next(net);
-        }
-        // keep the plan PLAN_AHEAD metres long as the car eats into it (a route's plan
-        // only moves when the car enters its next lane)
-        if self.route.is_empty() {
             self.plan_next(net);
         }
         true
