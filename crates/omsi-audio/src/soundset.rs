@@ -105,11 +105,12 @@ fn inputs_now(def: &SoundEntry, var: &dyn Fn(&str) -> Option<f32>) -> String {
     out.join(" ")
 }
 
-fn note_loop_restart(s: &RuntimeSound) {
+fn note_loop_restart(s: &mut RuntimeSound) {
     if !crate::mixer::debug_audio() {
         return;
     }
-    let Some((at, with)) = &s.stopped_at else {
+    // taken, so a later start after a stop for another reason is not counted against it
+    let Some((at, with)) = s.stopped_at.take() else {
         return;
     };
     let gap = at.elapsed().as_secs_f32();
@@ -122,13 +123,13 @@ fn note_loop_restart(s: &RuntimeSound) {
         Some(r) => {
             r.count += 1;
             r.shortest = r.shortest.min(gap);
-            r.stopped_with.clone_from(with);
+            r.stopped_with = with;
         }
         None => all.push(LoopRestart {
             file: file.to_string(),
             count: 1,
             shortest: gap,
-            stopped_with: with.clone(),
+            stopped_with: with,
         }),
     }
 }

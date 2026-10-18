@@ -220,19 +220,48 @@ impl Timing {
         self.voices_max = self.voices_max.max(voices);
     }
 
-    /// The report line once `every` s have gone by (and a fresh window), else `None`.
-    fn report(&mut self, every: f32, rate: u32) -> Option<String> {
+    /// The report line at `now` once `every` s have gone by (and a fresh window), else
+    /// `None`. A device that stopped calling is reported too: the time since its last
+    /// callback counts as a gap, and a window without callbacks says so.
+    fn report(&mut self, every: f32, rate: u32, now: std::time::Instant) -> Option<String> {
         let since = self.since?;
-        let window = since.elapsed().as_secs_f64();
-        if window < every as f64 || self.calls == 0 {
+        let window = now.saturating_duration_since(since).as_secs_f64();
+        if window < every as f64 {
             return None;
         }
+        let waiting = self
+            .last_call
+            .map_or(0.0, |l| now.saturating_duration_since(l).as_secs_f64());
+        let line = if self.calls == 0 {
+            format!(
+                "audio timing over {window:.1} s: no callbacks, the last one {waiting:.1} s ago"
+            )
+        } else {
+            let stalled = self.last_block > 0.0 && waiting > 2.0 * self.last_block;
+            if waiting > self.gap_max.0 {
+                self.gap_max = (waiting, self.last_block);
+            }
+            self.line(window, rate, stalled.then_some(waiting))
+        };
+        let last = (self.last_call, self.last_block);
+        *self = Timing {
+            since: Some(now),
+            last_call: last.0,
+            last_block: last.1,
+            ..Timing::default()
+        };
+        Some(line)
+    }
+
+    /// The report of a window with callbacks, `waiting` s since the last one when that is
+    /// late.
+    fn line(&self, window: f64, rate: u32, waiting: Option<f64>) -> String {
         let ms = |s: f64| s * 1000.0;
-        let line = format!(
+        format!(
             "audio timing over {window:.1} s: {} callbacks of {}..{} frames at {rate} Hz \
              (block {:.1}..{:.1} ms), longest gap {:.1} ms after a {:.1} ms block, {} late{}; \
              mixing {:.2} ms average, {:.2} ms longest, {} blocks over their length; \
-             longest wait for the voices {:.2} ms; up to {} voices",
+             longest wait for the voices {:.2} ms; up to {} voices{}",
             self.calls,
             self.frames_min,
             self.frames_max,
@@ -252,14 +281,11 @@ impl Timing {
             self.over,
             ms(self.lock_max),
             self.voices_max,
-        );
-        let last = (self.last_call, self.last_block);
-        *self = Timing {
-            last_call: last.0,
-            last_block: last.1,
-            ..Timing::default()
-        };
-        Some(line)
+            waiting.map_or(String::new(), |w| format!(
+                "; none for the last {:.0} ms",
+                ms(w)
+            )),
+        )
     }
 }
 
@@ -766,7 +792,10 @@ impl AudioEngine {
     fn log_timing(&self) {
         let Some(t) = &self.shared.timing else { return };
         let rate = self.shared.sample_rate.load(Ordering::Relaxed);
-        let Some(line) = t.lock().report(debug_audio_every(), rate) else {
+        let Some(line) = t
+            .lock()
+            .report(debug_audio_every(), rate, std::time::Instant::now())
+        else {
             return;
         };
         log::info!("{line}");
@@ -1241,13 +1270,39 @@ mod tests {
         }
         assert_eq!((t.late, t.over, t.calls), (1, 1, 100));
         assert!((t.gap_max.0 - 0.035).abs() < 1e-6, "{:?}", t.gap_max);
-        let line = t.report(10.0, 48_000).expect("the window is over");
+        let now = at + Duration::from_millis(10);
+        let line = t.report(0.5, 48_000, now).expect("the window is over");
         assert!(
-            line.contains("1 late") && line.contains("1 blocks over"),
+            line.contains("1 late") && line.contains("1 blocks over") && !line.contains("none for"),
             "{line}"
         );
         assert_eq!(t.calls, 0, "a fresh window");
-        assert!(t.report(10.0, 48_000).is_none(), "nothing to say yet");
+        assert!(t.report(0.5, 48_000, now).is_none(), "nothing to say yet");
+    }
+
+    /// A device that stops calling mid-window: the report counts the wait since its last
+    /// callback, and the windows after it say there were none.
+    #[test]
+    fn the_timing_reports_a_device_that_stopped_calling() {
+        use std::time::{Duration, Instant};
+        let mut t = Timing::default();
+        let mut at = Instant::now();
+        for _ in 0..100 {
+            at += Duration::from_millis(10);
+            t.note(at, 480, 48_000, 0.001, 0.0, 10);
+        }
+        let line = t
+            .report(10.0, 48_000, at + Duration::from_secs(10))
+            .expect("over");
+        assert!(line.contains("longest gap 10000.0 ms"), "{line}");
+        assert!(line.contains("none for the last 10000 ms"), "{line}");
+        let line = t
+            .report(10.0, 48_000, at + Duration::from_secs(21))
+            .expect("over");
+        assert!(
+            line.contains("no callbacks, the last one 21.0 s ago"),
+            "{line}"
+        );
     }
 
     /// The synthetic load of #35: how long a block takes to mix with as many voices as a
