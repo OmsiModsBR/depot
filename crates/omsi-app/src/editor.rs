@@ -373,7 +373,9 @@ impl Editor {
                 }
             }
             let bytes = omsi_cfg::vfs::read(&src).map_err(|e| format!("{}: {e}", src.display()))?;
-            let (text, enc) = decode(&bytes);
+            // (as it was written: OMSI's editor saves UTF-16, hand-made tiles are in their
+            // author's code page)
+            let (text, enc) = omsi_cfg::decode_with_encoding(&bytes);
             let (new_text, n) = rewrite_tile(&text, &edits);
             let (new_text, c) = add_copies(&new_text, copies_by_tile.get(&(tx, ty)).map(|v| v.as_slice()).unwrap_or(&[]));
             let n = n + c;
@@ -381,7 +383,7 @@ impl Editor {
                 return Err(format!("the objects edited were not found in {}", src.display()));
             }
             std::fs::create_dir_all(out.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-            let data = encode(&new_text, enc);
+            let data = omsi_cfg::encode_like(&new_text, enc);
             write_with_backup(&out, &data).map_err(|e| format!("{}: {e}", out.display()))?;
             log::info!("object editor: {} objects of tile ({tx}, {ty}) changed, written to {}", n, out.display());
             written.push(out);
@@ -553,34 +555,6 @@ pub fn add_copies(text: &str, copies: &[NewRecord]) -> (String, usize) {
     (out, added)
 }
 
-/// How a tile file is written: OMSI's editor saves UTF-16 (little endian, with its byte
-/// order mark); hand-made ones are ASCII or Latin-1.
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum Encoding {
-    Utf8,
-    Latin1,
-    Utf16Le,
-}
-
-fn decode(bytes: &[u8]) -> (String, Encoding) {
-    if bytes.starts_with(&[0xFF, 0xFE]) {
-        let units: Vec<u16> = bytes[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        return (String::from_utf16_lossy(&units), Encoding::Utf16Le);
-    }
-    match String::from_utf8(bytes.to_vec()) {
-        Ok(t) => (t, Encoding::Utf8),
-        Err(_) => (bytes.iter().map(|&b| b as char).collect(), Encoding::Latin1),
-    }
-}
-
-fn encode(text: &str, enc: Encoding) -> Vec<u8> {
-    match enc {
-        Encoding::Utf8 => text.as_bytes().to_vec(),
-        Encoding::Latin1 => text.chars().map(|c| c as u32 as u8).collect(),
-        Encoding::Utf16Le => omsi_cfg::encode_utf16_bom(text),
-    }
-}
-
 /// A number as a tile file writes it.
 fn num(v: f64) -> String {
     let s = format!("{v:.4}");
@@ -734,10 +708,11 @@ mod tests {
 
     #[test]
     fn a_utf16_tile_is_written_back_as_utf16() {
-        let bytes = encode(TILE, Encoding::Utf16Le);
+        let enc = omsi_cfg::TextEncoding::Utf16Le;
+        let bytes = omsi_cfg::encode_like(TILE, enc);
         assert_eq!(&bytes[..4], &[0xFF, 0xFE, b'[', 0]);
-        let (text, enc) = decode(&bytes);
-        assert_eq!((text.as_str(), enc), (TILE, Encoding::Utf16Le));
+        let (text, read) = omsi_cfg::decode_with_encoding(&bytes);
+        assert_eq!((text.as_str(), read), (TILE, enc));
     }
 }
 
