@@ -287,14 +287,16 @@ pub struct MapSurface {
 }
 
 /// A path a package file names, as a `/`-separated path under the package folder; None when it could point
-/// anywhere else: empty, absolute, with a drive or share (`:` or a leading separator), or with an empty, `.` or
-/// `..` component. (`Path::join` with an absolute path drops the package folder, so the check is on the text.)
+/// anywhere else: empty, absolute, with a drive or share (`:` or a leading separator), or with an empty
+/// component or one of only dots (`.`, `..`, `...`). (`Path::join` with an absolute path drops the package folder, so the check is on the text.)
 fn package_relative(raw: &str) -> Option<String> {
     let p = raw.trim().replace('\\', "/");
     if p.is_empty() || p.starts_with('/') || p.contains(':') {
         return None;
     }
-    if p.split('/').any(|c| c.is_empty() || c == "." || c == "..") {
+    // a component of only dots (or spaces) is refused too: Windows-style names, which the package readers apply,
+    // drop trailing dots and spaces, so `...` would end up as `..`
+    if p.split('/').any(|c| c.trim_end_matches(['.', ' ']).is_empty()) {
         return None;
     }
     Some(p)
@@ -1465,6 +1467,7 @@ mod tests {
         for bad in [
             "", "  ", "/etc/x.png", "\\x.png", "C:/a.png", "C:\\a.png", "C:a.png", "\\\\server\\share\\a.png",
             "icons/../../x", "../x.png", "./x.png", "a//b.png", "a/./b.png", "icons/", "a/b:c.png",
+            "a/.../x.png", ".../x.png", "a/.. /x.png", "a/ /x.png",
         ] {
             assert_eq!(package_relative(bad), None, "{bad:?}");
         }
