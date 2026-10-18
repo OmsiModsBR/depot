@@ -204,7 +204,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("seat_y", "launcher>game", "NaN leaves the key empty"),
     ("seat_z", "launcher>game", "NaN leaves the key empty"),
     // and the other way: the game takes NaN, the launcher saves the default over it
-    ("volume", "game>launcher", "the game takes NaN as the volume"),
     ("volume", "launcher>game", "NaN leaves the key empty"),
     ("min_obj_size", "game>launcher", "the game takes NaN"),
     ("pax_density", "game>launcher", "the game takes NaN"),

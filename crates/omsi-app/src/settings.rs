@@ -546,7 +546,7 @@ impl Settings {
                 }
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
-                "volume" => s.volume = v.parse().unwrap_or(s.volume),
+                "volume" => s.volume = v.parse::<f32>().ok().filter(|x| x.is_finite()).unwrap_or(s.volume),
                 // "auto", a fraction (0.75) or a percentage (75)
                 "render_scale" => {
                     s.render_scale = if v.eq_ignore_ascii_case("auto") {
