@@ -5,11 +5,20 @@ use omsi_vehicle::hof::{depot_anywhere, depot_files, depot_in};
 use omsi_vehicle::Hof;
 use std::path::{Path, PathBuf};
 
+/// The content roots are one list for the whole process and `depot_anywhere` searches all of
+/// them, so a test that has a root registered must not overlap another: each `Root` holds this
+/// lock from creation to drop.
+static ROOTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// A temporary content root that is registered on creation and removed on drop.
-struct Root(PathBuf);
+struct Root(
+    PathBuf,
+    #[allow(dead_code)] std::sync::MutexGuard<'static, ()>,
+);
 
 impl Root {
     fn new(tag: &str) -> Root {
+        let guard = ROOTS.lock().unwrap_or_else(|e| e.into_inner());
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -18,7 +27,7 @@ impl Root {
             std::env::temp_dir().join(format!("depot-t46-{tag}-{}-{stamp}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
         omsi_cfg::add_content_root(p.clone());
-        Root(p)
+        Root(p, guard)
     }
 
     fn dir(&self, rel: &str) -> PathBuf {
