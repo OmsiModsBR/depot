@@ -8324,3 +8324,9 @@ mod lane_permission_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod junction_scenarios;
+
+#[cfg(test)]
+mod junction_tests;
