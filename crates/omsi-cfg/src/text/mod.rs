@@ -8,6 +8,9 @@ pub fn decode_text(bytes: &[u8]) -> String {
     if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
         let (s, _) = encoding_rs::UTF_16LE.decode_without_bom_handling(&bytes[2..]);
         s.into_owned()
+    } else if bytes.len() >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF {
+        let (s, _) = encoding_rs::UTF_16BE.decode_without_bom_handling(&bytes[2..]);
+        s.into_owned()
     } else if bytes.len() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
         String::from_utf8_lossy(&bytes[3..]).into_owned()
     } else {
@@ -63,5 +66,10 @@ mod tests {
         let bytes = encode_utf16_bom("[name]\r\nGrünau");
         assert_eq!(&bytes[..4], &[0xFF, 0xFE, b'[', 0]);
         assert_eq!(decode_text(&bytes), "[name]\r\nGrünau");
+        let big_endian: Vec<u8> = [0xFE, 0xFF]
+            .into_iter()
+            .chain("Grünau".encode_utf16().flat_map(u16::to_be_bytes))
+            .collect();
+        assert_eq!(decode_text(&big_endian), "Grünau");
     }
 }
