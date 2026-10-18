@@ -2760,9 +2760,8 @@ impl World {
             light_map_atlas: Mutex::new(None),
             parked_live: std::sync::atomic::AtomicUsize::new(0),
             parked_max: crate::settings::Settings::load().ai_max_parked as i64,
-            parked_seed: omsi_cfg::flags::SEED.text()
-                .and_then(|s| s.trim().parse::<u64>().ok())
-                .unwrap_or_else(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1)),
+            // the session's seed that `OMSI_SEED` repeats (logged at start); 0 when no session set one
+            parked_seed: omsi_script::session_seed(),
             signal_routes,
             particle_objects: Mutex::new(HashMap::new()),
             fonts: Arc::new(Mutex::new(omsi_sim::texttex::FontLibrary::new(root))),

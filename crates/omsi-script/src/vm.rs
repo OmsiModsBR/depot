@@ -156,6 +156,11 @@ pub fn set_session_seed(seed: u64) {
     SESSION_SEED.store(seed.max(1), std::sync::atomic::Ordering::Relaxed);
 }
 
+/// The seed given to [`set_session_seed`] (0 when none was set).
+pub fn session_seed() -> u64 {
+    SESSION_SEED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn splitmix64(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
