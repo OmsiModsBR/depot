@@ -208,7 +208,7 @@ struct MeshPlan {
 /// name and allocated four vectors per mesh - for every mesh of every AI car, which made
 /// the mesh properties the costliest part of the traffic's frame.
 #[derive(Debug, Clone, Default)]
-pub(super) struct PropsPlan {
+pub struct PropsPlan {
     meshes: Vec<MeshPlan>,
     /// Size of the variable table the plan was resolved against (engine variables such
     /// as `Dirt_Norm` join it later, and an `[alphascale]` on one must then find it).
@@ -217,11 +217,7 @@ pub(super) struct PropsPlan {
 }
 
 impl PropsPlan {
-    pub(super) fn refresh(
-        &mut self,
-        ty: &VehicleType,
-        var_index: &HashMap<String, omsi_script::VarId>,
-    ) {
+    pub fn refresh(&mut self, ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>) {
         if self.built && self.vars_seen == var_index.len() {
             return;
         }
@@ -288,7 +284,7 @@ impl PropsPlan {
     }
 
     /// The mesh properties for the current variables, written into `out` in place.
-    pub(super) fn apply(&self, vars: &[f32], out: &mut Vec<MeshProps>) {
+    pub fn apply(&self, vars: &[f32], out: &mut Vec<MeshProps>) {
         out.resize_with(self.meshes.len(), MeshProps::default);
         for (plan, props) in self.meshes.iter().zip(out.iter_mut()) {
             let n = plan.slots;

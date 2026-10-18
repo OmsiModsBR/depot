@@ -5,8 +5,11 @@
 //! hand-written script of a few lines, not a real bus. It runs scripts only: no physics step, so
 //! it neither depends on nor changes the physics model.
 
+mod support;
+
 use omsi_sim::{VehicleHost, VehicleInstance, VehicleType};
 use std::sync::Arc;
+use support::scratch::ScratchPack;
 
 /// A shift-by-speed gearbox in four gears with a throttle condition and hysteresis.
 const AMT: &str = "\
@@ -30,13 +33,8 @@ const AMT: &str = "\
 ";
 
 fn amt_vehicle(script: &str) -> VehicleInstance {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "depot-t38-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("gearbox");
+    let dir = pack.path();
     std::fs::write(dir.join("gearbox.osc"), script).unwrap();
     std::fs::write(dir.join("vars.txt"), "gear\n").unwrap();
     let program = omsi_script::compile(&omsi_script::CompileInput {
@@ -51,7 +49,7 @@ fn amt_vehicle(script: &str) -> VehicleInstance {
     let ty = Arc::new(VehicleType {
         def: Default::default(),
         model: Default::default(),
-        model_dir: dir.clone(),
+        model_dir: dir.to_path_buf(),
         program: Arc::new(program),
         meshes: Vec::new(),
         paint_schemes: Vec::new(),
@@ -62,7 +60,6 @@ fn amt_vehicle(script: &str) -> VehicleInstance {
         mesh_bounds: Vec::new(),
         mesh_boxes: Vec::new(),
     });
-    let _ = std::fs::remove_dir_all(dir);
     VehicleInstance::new(ty, VehicleHost::new(Default::default()))
 }
 

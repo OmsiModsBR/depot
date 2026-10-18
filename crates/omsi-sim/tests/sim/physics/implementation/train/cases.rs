@@ -1,56 +1,11 @@
-use super::*;
-use crate::physics::tests::{bus, road};
-use omsi_vehicle::vehicle::{Axle, Coupling};
-
-/// The stock GN92's two sections (`MAN_GN92_main.bus`, `MAN_GN92_trail.bus`): a pusher,
-/// whose front section drives no wheel and whose rear one stands on one axle and the joint.
-fn gn92() -> (Vehicle, Vehicle) {
-    let axle = |long: f32, max_width: f32, min_width: f32, driven: bool| Axle {
-        long,
-        max_width,
-        min_width,
-        wheel_diameter: 0.94,
-        spring: 280.0,
-        max_force: 116.0,
-        damper: 20.0,
-        driven,
-        inertia_inv: 0.0,
-    };
-    let front = Vehicle {
-        mass: 8.0,
-        moment_of_inertia: [300.0, 80.0, 300.0],
-        cog_height: 1.2,
-        rolling_resistance: 900.0,
-        rot_pnt_long: -2.7,
-        inv_min_turn_radius: 0.13,
-        axles: vec![
-            Axle {
-                spring: 240.0,
-                max_force: 90.0,
-                ..axle(3.238, 2.25, 1.76, false)
-            },
-            axle(-2.637, 2.4, 1.2, false),
-        ],
-        coupling_back: Some(Coupling {
-            pos: [0.0, -4.331, 0.315],
-        }),
-        ..Default::default()
-    };
-    let rear = Vehicle {
-        mass: 7.2,
-        moment_of_inertia: [150.0, 40.0, 150.0],
-        cog_height: 1.2,
-        rolling_resistance: 500.0,
-        rot_pnt_long: -0.387,
-        axles: vec![axle(-0.387, 2.4, 1.2, true)],
-        coupling_front: Some(Coupling {
-            pos: [0.0, 4.169, 0.315],
-        }),
-        coupling_front_character: Some([52.5, -20.0, 20.0, 1.0]),
-        ..Default::default()
-    };
-    (front, rear)
-}
+use crate::physics::cases::run;
+use crate::support::ground::road;
+use crate::support::vehicles::{bus, gn92};
+use glam::{DVec3, Vec3};
+use omsi_sim::testing::physics::domain::{BodyInputs, GroundProbe, Joint, RigidBody};
+use omsi_sim::testing::physics::implementation::train::*;
+use omsi_sim::testing::physics::RigidBodyInternals;
+use omsi_vehicle::Vehicle;
 
 struct Train {
     bodies: Vec<RigidBody>,
@@ -92,8 +47,8 @@ impl Train {
         g: &dyn Fn(f64, f64, f64) -> GroundProbe,
     ) {
         let (b0, b1) = (
-            vec![brake[0]; self.bodies[0].wheels.len()],
-            vec![brake[1]; self.bodies[1].wheels.len()],
+            vec![brake[0]; self.bodies[0].wheels().len()],
+            vec![brake[1]; self.bodies[1].wheels().len()],
         );
         for k in 0..(secs * 60.0).round() as usize {
             let t = k as f32 / 60.0;
@@ -114,7 +69,7 @@ impl Train {
             assert!(self
                 .bodies
                 .iter()
-                .all(|b| b.position.is_finite() && b.velocity.is_finite()));
+                .all(|b| b.position().is_finite() && b.velocity().is_finite()));
             self.gap = self.gap.max(self.joints[0].gap(&self.bodies));
             (self.alpha, self.beta) = self.joints[0].angles(&self.bodies);
         }
@@ -195,15 +150,20 @@ fn a_follower_without_a_joint_is_the_leader_again() {
         step_train(&mut pair, &[], 1.0 / 60.0, 2.0 * torque, &inputs, &g);
         for b in &pair {
             assert_eq!(
-                (b.position, b.orientation, b.velocity, b.omega),
-                (lone.position, lone.orientation, lone.velocity, lone.omega),
+                (b.position(), b.orientation(), b.velocity(), b.omega()),
+                (
+                    lone.position(),
+                    lone.orientation(),
+                    lone.velocity(),
+                    lone.omega()
+                ),
                 "at {t} s"
             );
             assert!(b
-                .wheels
+                .wheels()
                 .iter()
-                .zip(&lone.wheels)
-                .all(|(a, b)| a.compression == b.compression && a.spin == b.spin));
+                .zip(lone.wheels())
+                .all(|(a, b)| a.compression() == b.compression() && a.spin() == b.spin()));
         }
     }
     assert!(lone.origin().y > 30.0, "{:?}", lone.origin());
@@ -213,7 +173,7 @@ fn a_follower_without_a_joint_is_the_leader_again() {
 /// at 30 km/h, the two balls stay within 2 cm of each other.
 #[test]
 fn the_joint_stays_closed() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let mass = 15_200.0;
     let flat = road(1e9, 0.0);
     let mut t = Train::new(&front, &rear);
@@ -253,19 +213,19 @@ fn the_joint_stays_closed() {
 /// front axle a little and pitches the front section nose up.
 #[test]
 fn the_joint_weighs_on_the_front_sections_rear_axle() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let flat = road(1e9, 0.0);
     let mut t = Train::new(&front, &rear);
     t.run(4.0, &none, [5000.0; 2], &none, &flat);
     let mut lone = RigidBody::from_definition(&front, &[]);
     lone.place(DVec3::ZERO, 0.0);
-    crate::physics::tests::run(&mut lone, 4.0, 0.0, 5000.0, &flat);
+    run(&mut lone, 4.0, 0.0, 5000.0, &flat);
     let axle = |b: &RigidBody, a: usize| {
-        b.wheels
+        b.wheels()
             .iter()
-            .zip(&b.wheel_axle)
+            .zip(b.wheel_axle())
             .filter(|(_, x)| **x == a)
-            .map(|(w, _)| w.load)
+            .map(|(w, _)| w.load())
             .sum::<f32>()
     };
     let (gain_rear, gain_front) = (
@@ -300,12 +260,12 @@ fn the_joint_weighs_on_the_front_sections_rear_axle() {
 /// front differently in the same bend, and so does a joint that lets it roll on its own.
 #[test]
 fn the_rear_sections_mass_and_inertia_reach_the_front() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let flat = road(1e9, 0.0);
     let start = |rear: &Vehicle| {
         let mut t = Train::new(&front, rear);
         t.run(1.0, &none, [5000.0; 2], &none, &flat);
-        let m = t.bodies.iter().map(|b| b.mass).sum::<f32>();
+        let m = t.bodies.iter().map(|b| b.mass()).sum::<f32>();
         t.run(10.0, &cruise(40.0 / 3.6, m), [0.0; 2], &none, &flat);
         t
     };
@@ -320,9 +280,11 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
     let train_decel = (v0 - t.front().forward_speed()) * 2.0;
     let mut lone = RigidBody::from_definition(&front, &[]);
     lone.place(DVec3::ZERO, 0.0);
-    crate::physics::tests::run(&mut lone, 1.0, 0.0, 5000.0, &flat);
-    lone.velocity = Vec3::Y * v0;
-    lone.wheels.iter_mut().for_each(|w| w.spin = v0 / w.radius);
+    run(&mut lone, 1.0, 0.0, 5000.0, &flat);
+    lone.set_velocity(Vec3::Y * v0);
+    lone.wheels_mut()
+        .iter_mut()
+        .for_each(|w| w.set_spin(v0 / w.radius()));
     let mut lone_dip = 0.0f32;
     for _ in 0..30 {
         lone.step(1.0 / 60.0, 0.0, &[12_000.0; 4], 0.0, &flat);
@@ -339,9 +301,9 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
     // a step of the steering at 40 km/h, rear sections of different mass and inertia
     let bend = |rear: &Vehicle, friction: f32| {
         let mut t = start(rear);
-        t.bodies.iter_mut().for_each(|b| b.friction = friction);
+        t.bodies.iter_mut().for_each(|b| b.set_friction(friction));
         let (mut yaw, mut roll) = (0.0f32, 0.0f32);
-        let m = t.bodies.iter().map(|b| b.mass).sum::<f32>();
+        let m = t.bodies.iter().map(|b| b.mass()).sum::<f32>();
         for _ in 0..90 {
             t.run(
                 1.0 / 60.0,
@@ -350,7 +312,7 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
                 &|_| 0.4,
                 &flat,
             );
-            yaw = yaw.max(t.front().omega.z.abs());
+            yaw = yaw.max(t.front().omega().z.abs());
             roll = roll.max(t.front().heading_pitch_bank().2.abs());
         }
         assert!(t.gap < 0.02, "{}", t.gap);
@@ -388,7 +350,7 @@ fn the_rear_sections_mass_and_inertia_reach_the_front() {
 /// train running straight; the brakes of the rear section alone stop it.
 #[test]
 fn a_pusher_pushes_its_front_section() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let flat = road(1e9, 0.0);
     let mut t = Train::new(&front, &rear);
     t.run(1.0, &none, [5000.0; 2], &none, &flat);
@@ -414,7 +376,7 @@ fn a_pusher_pushes_its_front_section() {
 /// `[coupling_front_character]`'s 52.5 degrees; it goes no further, and the joint holds.
 #[test]
 fn the_joint_stops_at_its_max_alpha() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let flat = road(1e9, 0.0);
     let mut t = Train::new(&front, &rear);
     t.run(1.0, &none, [5000.0; 2], &none, &flat);
@@ -441,7 +403,7 @@ fn the_joint_stops_at_its_max_alpha() {
 /// lifted rather than bending the joint.
 #[test]
 fn beta_stays_within_its_range() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let stiff = Vehicle {
         coupling_front_character: Some([52.5, -2.0, 2.0, 1.0]),
         ..rear.clone()
@@ -472,7 +434,7 @@ fn beta_stays_within_its_range() {
 /// A pusher's joint that pitches about a hinge 0.8 m ahead of the ball holds over humps.
 #[test]
 fn a_hinge_ahead_of_the_ball_holds() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let rear = Vehicle {
         coupling_pitch_offset: Some(0.8),
         ..rear

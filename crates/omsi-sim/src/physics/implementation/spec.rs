@@ -185,7 +185,7 @@ fn rest_loads(def: &Vehicle, mass: f32, least_share: f32) -> Vec<f32> {
 /// The least-squares split of a load `total` with its centre at `centre` over points at
 /// `(long, count)`: the load per point grows linearly along the vehicle, so that the shares
 /// balance the load and its moment (exactly, with two places to rest on).
-pub(super) fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
+pub fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
     let n: f32 = points.iter().map(|p| p.1).sum::<f32>().max(1.0);
     let sy: f32 = points.iter().map(|p| p.1 * p.0).sum();
     let syy: f32 = points.iter().map(|p| p.1 * p.0 * p.0).sum();

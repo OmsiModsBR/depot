@@ -9,10 +9,13 @@
 //! bit. Without it, each scenario runs twice and both runs must write the same trace.
 //!
 //! Numbers are written as `{:?}` writes them - the shortest decimal that reads back to
-//! the same bits, NaN with its bits -, so equal text is equal bits. The file uses only the
-//! crate's public API: the script copies it as it is into the commit it compares with.
+//! the same bits, NaN with its bits -, so equal text is equal bits (`support::trace`). The
+//! file uses only the crate's public API: the script copies it as it is, with `support/`,
+//! into the commit it compares with.
 
-use glam::{DVec2, DVec3, Quat, Vec3};
+mod support;
+
+use glam::{DVec2, DVec3, Vec3};
 use omsi_model::Model;
 use omsi_script::Program;
 use omsi_sim::ai::{AiBody, MotionKind};
@@ -28,53 +31,16 @@ use omsi_vehicle::{Axle, Vehicle};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+use support::ground::{flat, road, step_at};
+use support::trace::{check, dv3, n32, n64, quat, v3, Trace};
+use support::vehicles::{bus, gn92};
 
 type Probe<'a> = &'a dyn Fn(f64, f64, f64) -> GroundProbe;
 
 // ---------------------------------------------------------------------------------------
 // Writing the state
 
-fn n32(x: f32) -> String {
-    if x.is_nan() {
-        format!("NaN:{:08x}", x.to_bits())
-    } else {
-        format!("{x:?}")
-    }
-}
-
-fn n64(x: f64) -> String {
-    if x.is_nan() {
-        format!("NaN:{:016x}", x.to_bits())
-    } else {
-        format!("{x:?}")
-    }
-}
-
-fn v3(v: Vec3) -> String {
-    format!("{} {} {}", n32(v.x), n32(v.y), n32(v.z))
-}
-
-fn dv3(v: DVec3) -> String {
-    format!("{} {} {}", n64(v.x), n64(v.y), n64(v.z))
-}
-
-fn quat(q: Quat) -> String {
-    format!("{} {} {} {}", n32(q.x), n32(q.y), n32(q.z), n32(q.w))
-}
-
-/// One scenario's trace: a line for each frame with what went in, then the state.
-#[derive(Default)]
-struct Trace {
-    text: String,
-    frame: usize,
-}
-
 impl Trace {
-    fn frame(&mut self, dt: f32, inputs: &str) {
-        let _ = writeln!(self.text, "frame {} dt {} {inputs}", self.frame, n32(dt));
-        self.frame += 1;
-    }
-
     fn body(&mut self, i: usize, rb: &RigidBody) {
         let t = &mut self.text;
         let _ = writeln!(
@@ -220,41 +186,6 @@ impl Trace {
 // ---------------------------------------------------------------------------------------
 // Running the scenarios
 
-/// Write the scenario's trace where `OMSI_PHYSICS_TRACE_DIR` says; without it, run it
-/// twice and compare (and look for a body that left the numbers).
-fn check(name: &str, scenario: fn() -> String) {
-    let first = scenario();
-    assert!(first.lines().count() > 10, "{name}: no trace");
-    // (the inputs may be no number - T14 -, the state never)
-    let lost = |l: &&str| {
-        !l.starts_with("frame")
-            && l.split_whitespace()
-                .any(|w| w == "inf" || w == "-inf" || w.starts_with("NaN"))
-    };
-    if let Some(l) = first.lines().find(lost) {
-        panic!("{name}: the state left the numbers:\n{l}");
-    }
-    match std::env::var_os("OMSI_PHYSICS_TRACE_DIR") {
-        Some(dir) => {
-            let dir = PathBuf::from(dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(format!("{name}.trace")), first).unwrap();
-        }
-        None => {
-            let second = scenario();
-            if first != second {
-                let (k, (a, b)) = first
-                    .lines()
-                    .zip(second.lines())
-                    .enumerate()
-                    .find(|(_, (a, b))| a != b)
-                    .unwrap_or((0, ("", "")));
-                panic!("{name}: two runs differ at line {}:\n{a}\n{b}", k + 1);
-            }
-        }
-    }
-}
-
 macro_rules! scenarios {
     ($($name:ident),* $(,)?) => {
         $(
@@ -300,109 +231,7 @@ mod scenarios {
 
     // -- the vehicles (the synthetic ones of the crate's own tests) --
 
-    /// A 12 m solo bus on two axles (`physics`' tests' `bus()`).
-    pub fn bus() -> Vehicle {
-        let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle {
-            long,
-            max_width: 2.4,
-            min_width: 1.76,
-            wheel_diameter: 0.94,
-            spring,
-            max_force,
-            damper: 20.0,
-            driven,
-            inertia_inv: 0.0,
-        };
-        Vehicle {
-            mass: 10.2,
-            moment_of_inertia: [600.0, 90.0, 400.0],
-            cog_height: 1.2,
-            rolling_resistance: 1000.0,
-            rot_pnt_long: -2.7,
-            inv_min_turn_radius: 0.13,
-            axles: vec![
-                axle(3.238, 240.0, 90.0, false),
-                axle(-2.637, 280.0, 116.0, true),
-            ],
-            bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]),
-            ..Default::default()
-        }
-    }
-
-    /// The stock GN92's two sections (`train`'s tests' `gn92()`): a pusher, whose front
-    /// section drives no wheel; `puller` drives the front section's rear axle instead.
-    pub fn gn92(puller: bool) -> (Vehicle, Vehicle) {
-        let axle = |long: f32, max_width: f32, min_width: f32, driven: bool| Axle {
-            long,
-            max_width,
-            min_width,
-            wheel_diameter: 0.94,
-            spring: 280.0,
-            max_force: 116.0,
-            damper: 20.0,
-            driven,
-            inertia_inv: 0.0,
-        };
-        let front = Vehicle {
-            mass: 8.0,
-            moment_of_inertia: [300.0, 80.0, 300.0],
-            cog_height: 1.2,
-            rolling_resistance: 900.0,
-            rot_pnt_long: -2.7,
-            inv_min_turn_radius: 0.13,
-            axles: vec![
-                Axle {
-                    spring: 240.0,
-                    max_force: 90.0,
-                    ..axle(3.238, 2.25, 1.76, false)
-                },
-                axle(-2.637, 2.4, 1.2, puller),
-            ],
-            coupling_back: Some(Coupling {
-                pos: [0.0, -4.331, 0.315],
-            }),
-            ..Default::default()
-        };
-        let rear = Vehicle {
-            mass: 7.2,
-            moment_of_inertia: [150.0, 40.0, 150.0],
-            cog_height: 1.2,
-            rolling_resistance: 500.0,
-            rot_pnt_long: -0.387,
-            axles: vec![axle(-0.387, 2.4, 1.2, !puller)],
-            coupling_front: Some(Coupling {
-                pos: [0.0, 4.169, 0.315],
-            }),
-            coupling_front_character: Some([52.5, -20.0, 20.0, 1.0]),
-            ..Default::default()
-        };
-        (front, rear)
-    }
-
     // -- the grounds --
-
-    /// The ground at height `z` for a probe reaching up to `top`: a face too high is above,
-    /// with the road at 0 still below it (a kerb, a platform).
-    fn step_at(z: f64, top: f64) -> GroundProbe {
-        if z <= top {
-            GroundProbe {
-                below: Some(z),
-                above: None,
-            }
-        } else {
-            GroundProbe {
-                below: Some(0.0),
-                above: Some(z),
-            }
-        }
-    }
-
-    pub fn flat(_x: f64, _y: f64, _top: f64) -> GroundProbe {
-        GroundProbe {
-            below: Some(0.0),
-            above: None,
-        }
-    }
 
     /// A grade of `s` all along y (z = s y).
     fn grade(s: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
@@ -420,11 +249,6 @@ mod scenarios {
                 }
             }
         }
-    }
-
-    /// The road at 0 with a step of `step` metres from y = `at` on.
-    fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
-        move |_x, y, top| step_at(if y >= at { step } else { 0.0 }, top)
     }
 
     /// A 6 cm hump under the right-hand wheels, an 8 cm one under the left-hand ones, then

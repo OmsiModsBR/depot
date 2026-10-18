@@ -724,7 +724,7 @@ fn differs(a: &Sim, b: &Sim, vars: &[VarId], strs: &[u32]) -> bool {
 }
 
 /// Digit layouts to try for an entry that takes up to `room` digits.
-fn layouts(t: &Target, room: usize) -> Vec<String> {
+pub(crate) fn layouts(t: &Target, room: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let ls = t.line * 100 + t.suffix;
     let mut add = |s: String| {
@@ -1421,50 +1421,5 @@ fn confirm(u: &Unit, t: &Target, s: &mut Sim, enter: &str) {
             return;
         }
         *s = pressed;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn layouts_fit_the_room() {
-        let t = Target {
-            line: 5,
-            suffix: 0,
-            route: Some(1),
-            terminus_code: Some(34),
-            route_index: Some(3),
-            terminus_index: 7,
-            stop: 0,
-        };
-        assert_eq!(
-            layouts(&t, 10),
-            vec![
-                "005000001",
-                "0050000001",
-                "500",
-                "01",
-                "034",
-                "00500",
-                "5",
-                "1",
-                "34"
-            ]
-        );
-        assert_eq!(
-            layouts(&t, 5),
-            vec!["500", "01", "034", "00500", "5", "1", "34"]
-        );
-        assert_eq!(layouts(&t, 2), vec!["01", "5", "1", "34"]);
-        let t = Target {
-            line: 137,
-            suffix: 0,
-            route: None,
-            terminus_code: Some(5),
-            ..Default::default()
-        };
-        assert_eq!(layouts(&t, 5), vec!["13700", "005", "137", "5"]);
     }
 }

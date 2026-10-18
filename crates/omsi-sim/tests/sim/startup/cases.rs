@@ -1,27 +1,20 @@
-use super::*;
-use crate::{SimClock, VehicleHost, VehicleType};
+use crate::support::scratch::ScratchPack;
+use omsi_sim::testing::startup::*;
+use omsi_sim::VehicleInstance;
+use omsi_sim::{SimClock, VehicleHost, VehicleType};
 use std::collections::BTreeSet;
-use std::path::PathBuf;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 /// Original, minimal scripts: no installed game content is needed by these tests.
 struct Fixture {
-    dir: PathBuf,
+    _pack: ScratchPack,
     ty: Arc<VehicleType>,
 }
 
 impl Fixture {
     fn new(script: &str) -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "omsi-startup-regression-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed),
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        let pack = ScratchPack::new("startup-regression");
+        let dir = pack.path();
         std::fs::write(
             dir.join("test.bus"),
             "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
@@ -40,19 +33,13 @@ impl Fixture {
         )
         .unwrap();
         std::fs::write(dir.join("main.osc"), script).unwrap();
-        let ty = Arc::new(VehicleType::load(&dir, &dir.join("test.bus")).unwrap());
+        let ty = Arc::new(VehicleType::load(dir, &dir.join("test.bus")).unwrap());
         assert!(ty.program.errors.is_empty(), "{:?}", ty.program.errors);
-        Self { dir, ty }
+        Self { _pack: pack, ty }
     }
 
     fn vehicle(&self) -> VehicleInstance {
         VehicleInstance::new(self.ty.clone(), VehicleHost::new(SimClock::default()))
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.dir).unwrap();
     }
 }
 
@@ -367,11 +354,11 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     for _ in 0..300 {
         start.tick(&mut v, &[], dt);
         v.update(dt);
-        if start.step == Step::Verify {
+        if start.verifying() {
             break;
         }
     }
-    assert_eq!(start.step, Step::Verify);
+    assert!(start.verifying());
     assert_eq!(v.var("releases"), Some(1.0));
     v.trigger("stall");
     advance(&mut v, &mut start, dt, 6.0);
@@ -390,7 +377,7 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     for _ in 0..1200 {
         let running = start.tick(&mut v, &[], dt);
         v.update(dt);
-        if start.step == Step::Verify {
+        if start.verifying() {
             v.trigger("stall");
         }
         if !running {

@@ -1,7 +1,10 @@
 //! The HTML engine with the rest of the game: the vehicle snapshot, the clock's date and time,
 //! and pages loaded from disk with their style sheets and pictures.
 
+mod support;
+
 use omsi_sim::htmlengine::{EngineRenderer, HtmlRenderer};
+use support::scratch::ScratchPack;
 
 const DEMO: &str = include_str!("../../../docs/examples/htmltexture/demo.html");
 
@@ -159,7 +162,8 @@ fn the_english_date_is_month_first() {
 
 #[test]
 fn linked_style_sheet_and_script_are_inlined_with_their_pictures() {
-    let dir = std::env::temp_dir().join(format!("omsi_htmlimg_page_{}", std::process::id()));
+    let pack = ScratchPack::new("htmlimg-page");
+    let dir = pack.path();
     std::fs::create_dir_all(dir.join("css")).unwrap();
     std::fs::create_dir_all(dir.join("img")).unwrap();
     std::fs::write(dir.join("img").join("red.bmp"), bmp(4, 4, [255, 0, 0])).unwrap();
@@ -173,7 +177,7 @@ fn linked_style_sheet_and_script_are_inlined_with_their_pictures() {
         "<link rel='stylesheet' href='css/s.css'><body style='margin:0'><div id=a></div></body>",
     )
     .unwrap();
-    let dirs = [dir.as_path()];
+    let dirs = [dir];
     let html = omsi_sim::htmltex::load_page(&dirs, "index.html");
     assert!(html.contains("url(css/../img/red.bmp)"));
     let mut r = EngineRenderer::new(8, 8, &html);

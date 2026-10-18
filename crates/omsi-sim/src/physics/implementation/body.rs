@@ -13,7 +13,7 @@ use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 
 /// What is left of the body's pitch and roll rate after `dt` seconds of OMSI's damping.
-pub(super) fn body_damping(body_freq: f32, dt: f32) -> f32 {
+pub fn body_damping(body_freq: f32, dt: f32) -> f32 {
     let x0 = BODY_DAMPING * body_freq * OMSI_FRAME;
     if x0 <= 1e-6 || dt <= 0.0 {
         return 1.0;
@@ -165,7 +165,7 @@ impl RigidBody {
 
     /// Inverse of the effective mass the body shows along world direction `n` at world
     /// offset `r` from its centre of gravity.
-    pub(super) fn inv_mass_at(&self, r: Vec3, n: Vec3) -> f32 {
+    pub(crate) fn inv_mass_at(&self, r: Vec3, n: Vec3) -> f32 {
         let inv = self.orientation.inverse();
         let (rb, nb) = (inv.mul_vec3(r), inv.mul_vec3(n));
         let w = rb.cross(nb) / self.inertia;
@@ -343,20 +343,5 @@ impl RigidBody {
             self.last_position.lerp(self.position, t as f64),
             self.last_orientation.slerp(self.orientation, t),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    /// The body's pitch and roll are damped as much a second at any frame rate: as OMSI
-    /// damps them at 30 frames a second (a 12 t bus on 240-280 kN/m springs).
-    #[test]
-    fn body_damping_does_not_depend_on_the_frame_rate() {
-        let f = ((2.0 * 240.0 + 2.0 * 280.0) / 12.0f32).sqrt();
-        let second =
-            |fps: f32| (0..fps as usize).fold(1.0f32, |k, _| k * super::body_damping(f, 1.0 / fps));
-        let (a, b, c) = (second(30.0), second(60.0), second(144.0));
-        assert!((a - b).abs() < 1e-3 && (a - c).abs() < 1e-3, "{a} {b} {c}");
-        assert!(a > 0.2 && a < 0.5, "{a}");
     }
 }

@@ -10,20 +10,20 @@ use omsi_script::{State, Vm};
 use std::sync::Arc;
 
 mod ai_frame;
-mod articulation;
+pub(crate) mod articulation;
 mod builtins;
-mod motion;
-mod physics_bridge;
+pub(crate) mod motion;
+pub(crate) mod physics_bridge;
 mod pose;
-mod props;
-mod radio;
-mod scripts;
+pub(crate) mod props;
+pub(crate) mod radio;
+pub(crate) mod scripts;
 mod skin;
-mod trailer;
-mod vehicle_type;
-mod visuals;
-mod weather;
-mod winding;
+pub(crate) mod trailer;
+pub(crate) mod vehicle_type;
+pub(crate) mod visuals;
+pub(crate) mod weather;
+pub(crate) mod winding;
 
 pub use ai_frame::AiFrame;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
@@ -37,8 +37,6 @@ pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, V
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
 pub use weather::{relative_humidity, road_grip};
 
-#[cfg(test)]
-use physics_bridge::scripts_acceleration;
 use physics_bridge::OmsiFrames;
 
 pub struct VehicleInstance {
@@ -127,7 +125,7 @@ pub struct VehicleInstance {
     /// The AI odometer at the last `update_ai` (the wheels roll the difference).
     ai_odometer: f32,
     /// Kilometres driven this session (the odometer's `kmcounter_*`).
-    driven_km: f64,
+    pub(crate) driven_km: f64,
     /// The odometer's start was set from `[kmcounter_init]` (see `update_engine_vars`).
     km_started: bool,
     /// The cabin air as the engine keeps it (°C, g/m³), and the value last written, so that
@@ -139,7 +137,7 @@ pub struct VehicleInstance {
     /// the coupled parts and the scripts still run every frame.
     pub ai_visuals: bool,
     ai_visuals_missed: f32,
-    var_index: HashMap<String, omsi_script::VarId>,
+    pub(crate) var_index: HashMap<String, omsi_script::VarId>,
     /// Where each mesh's material properties come from, resolved against `var_index`
     /// (rebuilt when the vehicle gains engine variables).
     props_plan: PropsPlan,
@@ -596,6 +594,3 @@ impl VehicleInstance {
             .unwrap_or(true)
     }
 }
-
-#[cfg(test)]
-mod tests;

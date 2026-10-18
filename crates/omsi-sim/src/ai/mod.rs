@@ -63,7 +63,7 @@ pub struct AiBody {
     /// Largest front wheel angle (deg) and how fast the driver turns towards it (deg/s).
     max_steer: f32,
     steer_rate: f32,
-    wheels: Vec<AiWheelSpec>,
+    pub(crate) wheels: Vec<AiWheelSpec>,
     axle_count: usize,
     mass: f32,
     cog: f32,
@@ -74,7 +74,7 @@ pub struct AiBody {
     damper: [f32; 3],
     started: bool,
     /// World position of the rotation point (x east, y north).
-    rear: DVec2,
+    pub(crate) rear: DVec2,
     /// Heading (deg, clockwise from north).
     pub heading: f64,
     /// Front wheel angle of the bicycle model (deg, + = right), rate limited and smoothed.
@@ -84,7 +84,7 @@ pub struct AiBody {
     /// Longitudinal and lateral acceleration (m/s², forward / right positive).
     pub a_long: f32,
     pub a_lat: f32,
-    yaw_rate: f32,
+    pub(crate) yaw_rate: f32,
     /// The body on its springs: height of the origin, pitch and roll (rad), their rates.
     z: f64,
     vz: f32,
@@ -104,7 +104,7 @@ pub struct AiBody {
     pub suspension: Vec<[f32; 2]>,
     /// Each wheel's contact height last frame (NaN until the first frame): where its next
     /// ground query starts from.
-    contact_z: Vec<f64>,
+    pub(crate) contact_z: Vec<f64>,
 }
 
 impl AiBody {
@@ -233,6 +233,3 @@ impl AiBody {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

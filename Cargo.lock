@@ -3345,6 +3345,7 @@ dependencies = [
  "omsi-o3d",
  "omsi-scenery",
  "omsi-script",
+ "omsi-sim",
  "omsi-texture",
  "omsi-vehicle",
  "parking_lot",

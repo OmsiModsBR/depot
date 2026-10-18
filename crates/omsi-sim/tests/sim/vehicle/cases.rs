@@ -1,17 +1,21 @@
-use super::physics_bridge::script_speed;
-use super::props::PropsPlan;
-use super::trailer::body_rotation;
-use super::visuals::wheel_ground;
-use super::winding::winding_pack;
-use super::*;
+use crate::support::scratch::ScratchPack;
+use glam::{DVec3, Vec3};
+use omsi_sim::testing::host::VehicleHost;
+use std::sync::Arc;
+
 use glam::Quat;
 use omsi_model::Model;
 use omsi_script::Program;
+use omsi_sim::testing::vehicle::physics_bridge::script_speed;
+use omsi_sim::testing::vehicle::props::PropsPlan;
+use omsi_sim::testing::vehicle::trailer::body_rotation;
+use omsi_sim::testing::vehicle::visuals::wheel_ground;
+use omsi_sim::testing::vehicle::winding::winding_pack;
+use omsi_sim::testing::vehicle::*;
 use omsi_vehicle::Vehicle;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-pub(super) fn coupling_test_type(boogies: Option<f32>) -> Arc<VehicleType> {
+pub(crate) fn coupling_test_type(boogies: Option<f32>) -> Arc<VehicleType> {
     Arc::new(VehicleType {
         def: Vehicle {
             boogies,
@@ -64,8 +68,8 @@ fn bogie_orientation_is_independent_of_consist_flags() {
         for reversed in [false, true] {
             let mut t = TrailerPart::new_ex(ty.clone(), &ty, false, reversed, &ty.program, 2, 0);
             t.heading = v.heading;
-            t.pitch = v.pitch;
-            t.bank = v.bank;
+            t.set_pitch(v.pitch);
+            t.set_bank(v.bank);
             let sign = if intrinsic ^ reversed { -1.0 } else { 1.0 };
             assert!(
                 (t.body_rotation().transform_vector3(Vec3::Y).dot(forward) - sign).abs() < 1e-5
@@ -92,11 +96,13 @@ fn simple_collision_uses_the_body_frame_for_current_and_previous_pose() {
             def.bounding_box = Some([2.0, 2.0, 2.0, 0.0, 3.0, 1.0]);
             def.rolling_resistance = 0.0;
             let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
-            v.collision = Some(Arc::new(crate::collision::CollisionWorld::default()));
+            v.collision = Some(Arc::new(omsi_sim::collision::CollisionWorld::default()));
             let center = if bogies == Some(-5.0) { -3.0 } else { 3.0 };
             let y = center + if already_inside { 0.0 } else { 1.15 };
-            v.dynamic_boxes
-                .push(crate::collision::Obb::point(DVec3::new(0.0, y, 1.0), 0.025));
+            v.dynamic_boxes.push(omsi_sim::collision::Obb::point(
+                DVec3::new(0.0, y, 1.0),
+                0.025,
+            ));
             v.set_speed(2.0);
             v.step_physics(0.1);
             if already_inside {
@@ -237,7 +243,7 @@ fn coupling_defaults_and_non_bogie_rail_bounds_are_preserved() {
         let def = &mut Arc::get_mut(&mut ty).unwrap().def;
         def.coupling_front = None;
         def.coupling_back = None;
-        super::vehicle_type::ai_couplings(def);
+        omsi_sim::testing::vehicle::vehicle_type::ai_couplings(def);
         let (back, front) = coupling_points(&ty, false, &ty, false);
         let sign = if bogies == Some(-5.0) { -1.0 } else { 1.0 };
         let z = if bogies.is_some() { 0.0 } else { 0.3 };
@@ -432,7 +438,7 @@ fn a_pushers_joint_pitches_ahead_of_the_ball() {
                 .as_dvec3();
         let hinge = t.pitch_hinge(v.position, v.body_rotation());
         let alpha = ((v.heading - t.heading + 540.0) % 360.0) - 180.0;
-        (c, ball, hinge, t.pitch as f64, alpha)
+        (c, ball, hinge, t.pitch() as f64, alpha)
     };
     // a puller's: hinge and ball are the coupling point, the rear section stays level
     let (c, ball, hinge, pitch, _) = joint(None, 0.0);
@@ -554,9 +560,9 @@ fn rail_joints_stay_closed_on_curved_graded_track() {
                 let own_joint = t.position + t.body_rotation().transform_point3(front).as_dvec3();
                 assert!((lead_joint - own_joint).length() < 1e-4);
                 assert!(t.position.is_finite() && t.body_rotation().is_finite());
-                let rail = t.track.expect("rail contact");
+                let rail = t.track().expect("rail contact");
                 assert!(rail.z < 0.0, "contact left the descending track");
-                assert!((t.axle_z.unwrap() - rail.z).abs() < 1e-4);
+                assert!((t.axle_z().unwrap() - rail.z).abs() < 1e-4);
                 origin = t.position;
                 rotation = t.body_rotation();
             }
@@ -611,13 +617,8 @@ fn a_borrowed_part_is_judged_with_its_own_pack() {
 }
 
 fn restored_display_vehicle() -> VehicleInstance {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "omsi_restore_{}_{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("restore");
+    let dir = pack.path();
     let script = dir.join("display.osc");
     std::fs::write(
         &script,
@@ -675,7 +676,7 @@ fn restored_display_vehicle() -> VehicleInstance {
     let ty = Arc::new(VehicleType {
         def: Default::default(),
         model,
-        model_dir: dir.clone(),
+        model_dir: dir.to_path_buf(),
         program: Arc::new(program),
         meshes: Vec::new(),
         paint_schemes: Vec::new(),
@@ -686,7 +687,6 @@ fn restored_display_vehicle() -> VehicleInstance {
         mesh_bounds: Vec::new(),
         mesh_boxes: Vec::new(),
     });
-    std::fs::remove_dir_all(dir).unwrap();
     VehicleInstance::new(ty, VehicleHost::new(Default::default()))
 }
 
@@ -737,10 +737,10 @@ fn string_only_restore_preserves_and_reuploads_main_and_articulated_displays() {
         v.attach_trailer(v.ty.clone());
         for def in &v.ty.model.text_textures {
             v.text_textures
-                .push(crate::texttex::TextTextureState::new(def.clone(), None));
+                .push(omsi_sim::texttex::TextTextureState::new(def.clone(), None));
             v.trailers[0]
                 .text_textures
-                .push(crate::texttex::TextTextureState::new(def.clone(), None));
+                .push(omsi_sim::texttex::TextTextureState::new(def.clone(), None));
         }
         let strings = [
             (
@@ -831,7 +831,7 @@ fn volvo_wright_rear_close_fallback_moves_a_partly_open_door() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     for (name, value) in [
         ("elec_real_main", 1.0),
         ("elec_busbar_main", 1.0),
@@ -860,7 +860,7 @@ fn volvo_wright_rear_toggle_falls_back_to_external_close() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     for (name, value) in [
         ("elec_real_main", 1.0),
         ("elec_busbar_main", 1.0),
@@ -890,7 +890,7 @@ fn volvo_wright_rear_toggle_closes_open_leaves_even_with_zero_target() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     for (name, value) in [
         ("elec_real_main", 1.0),
         ("elec_busbar_main", 1.0),
@@ -919,7 +919,7 @@ fn volvo_wright_rear_toggle_reopens_during_forced_close() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     for (name, value) in [
         ("elec_real_main", 1.0),
         ("elec_busbar_main", 1.0),
@@ -950,7 +950,7 @@ fn volvo_wright_rear_toggle_keeps_close_target_through_frames() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     for (name, value) in [
         ("elec_real_main", 1.0),
         ("elec_busbar_main", 1.0),
@@ -1010,7 +1010,7 @@ fn volvo_wright_family_rear_toggle_closes_every_bus_variant() {
     for bus in buses {
         let name = bus.file_name().unwrap().to_string_lossy().into_owned();
         let ty = Arc::new(VehicleType::load(&root, &bus).unwrap_or_else(|e| panic!("{name}: {e}")));
-        let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+        let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
         for (var, value) in [
             ("elec_real_main", 1.0),
             ("elec_busbar_main", 1.0),
@@ -1045,14 +1045,14 @@ fn volvo_wright_family_rear_toggle_closes_every_bus_variant() {
 fn a_wheels_ground_is_the_road_under_it_not_the_highest_face() {
     let (road, deck) = (12.0f64, 17.0f64);
     // the faces: the deck above the wheel, the road under it
-    let faces = |_x: f64, _y: f64, top: f64| crate::physics::GroundProbe {
+    let faces = |_x: f64, _y: f64, top: f64| omsi_sim::physics::GroundProbe {
         below: [road, deck]
             .into_iter()
             .filter(|h| *h <= top)
             .fold(None, |a: Option<f64>, b| Some(a.map_or(b, |a| a.max(b)))),
         above: None,
     };
-    let faces: &dyn crate::physics::Ground = &faces;
+    let faces: &dyn omsi_sim::physics::Ground = &faces;
     // the plain sampler: the highest face at (x, y), which is the deck
     let plain = |_x: f64, _y: f64| Some(deck);
     let plain: &(dyn Fn(f64, f64) -> Option<f64> + Send + Sync) = &plain;
@@ -1064,11 +1064,11 @@ fn a_wheels_ground_is_the_road_under_it_not_the_highest_face() {
         Some(deck)
     );
     // nothing drawn within a step of the wheel: the plain sampler, as before
-    let empty = |_x: f64, _y: f64, _top: f64| crate::physics::GroundProbe {
+    let empty = |_x: f64, _y: f64, _top: f64| omsi_sim::physics::GroundProbe {
         below: None,
         above: Some(deck),
     };
-    let empty: &dyn crate::physics::Ground = &empty;
+    let empty: &dyn omsi_sim::physics::Ground = &empty;
     assert_eq!(wheel_ground(Some(empty), Some(plain), wheel), Some(deck));
     // no face probe at all (a rail or air lane): the plain sampler
     assert_eq!(wheel_ground(None, Some(plain), wheel), Some(deck));
@@ -1084,13 +1084,13 @@ fn the_ground_probe_reads_the_ground_under_a_roof() {
     let (road, kerb, roof) = (0.0f64, 0.15f64, 4.5f64);
     let mut v = VehicleInstance::new(
         coupling_test_type(None),
-        VehicleHost::new(crate::SimClock::default()),
+        VehicleHost::new(omsi_sim::SimClock::default()),
     );
     v.position = DVec3::new(100.0, 200.0, road);
     // a kerb right of x = 1 m (world), a canopy over everything
     let faces = move |x: f64, _y: f64, top: f64| {
         let kerb = if x > 101.0 { kerb } else { road };
-        crate::physics::GroundProbe {
+        omsi_sim::physics::GroundProbe {
             below: [road, kerb, roof]
                 .into_iter()
                 .filter(|h| *h <= top)
@@ -1142,10 +1142,10 @@ fn props_plan_matches_compute_mesh_props() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("EN92"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     let compare = |v: &VehicleInstance| {
         let mut plan = PropsPlan::default();
-        plan.refresh(&v.ty, &v.var_index);
+        plan.refresh(&v.ty, &v.var_index());
         let mut got = vec![MeshProps::default(); 3];
         plan.apply(&v.state.vars, &mut got);
         let want = compute_mesh_props(&v.ty, &|n| v.var(n));
@@ -1219,13 +1219,15 @@ fn a_lightmap_on_an_unknown_variable_is_on() {
                 m.lightmaps.truncate(1);
             }
         }
-        let mut v =
-            VehicleInstance::new(Arc::new(ty), VehicleHost::new(crate::SimClock::default()));
+        let mut v = VehicleInstance::new(
+            Arc::new(ty),
+            VehicleHost::new(omsi_sim::SimClock::default()),
+        );
         for x in v.state.vars.iter_mut() {
             *x = value;
         }
         let mut plan = PropsPlan::default();
-        plan.refresh(&v.ty, &v.var_index);
+        plan.refresh(&v.ty, &v.var_index());
         let mut got = vec![MeshProps::default(); 3];
         plan.apply(&v.state.vars, &mut got);
         let want = compute_mesh_props(&v.ty, &|n| v.var(n));
@@ -1251,7 +1253,7 @@ fn articulation_alpha_turns_the_joint_onto_the_rear_section() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("GN92"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load(&root, &trail).expect("GN92 trail")),
         false,
@@ -1322,7 +1324,10 @@ fn articulation_alpha_turns_the_joint_onto_the_rear_section() {
         );
     }
     // straight: the modelled shape
-    let mut s = VehicleInstance::new(v.ty.clone(), VehicleHost::new(crate::SimClock::default()));
+    let mut s = VehicleInstance::new(
+        v.ty.clone(),
+        VehicleHost::new(omsi_sim::SimClock::default()),
+    );
     s.attach_trailer_ex(v.trailers[0].ty.clone(), false);
     s.update_visuals(0.02);
     let i = s.skinned_meshes()[0];
@@ -1343,14 +1348,14 @@ fn restored_odometer_survives_engine_updates_and_continues_driving() {
             coupling_test_type(None),
             VehicleHost::new(Default::default()),
         );
-        v.driven_km = driven;
+        v.set_driven_km(driven);
         v.set_odometer_km(75556.639);
         assert_eq!(v.odometer_km(), 75556.639);
         v.update_engine_vars(0.02);
         assert_eq!(v.odometer_km(), 75556.639);
         assert_eq!(v.var("kmcounter_km"), Some(75556.0));
         assert!((v.var("kmcounter_m").unwrap() - 639.0).abs() < 0.001);
-        v.driven_km += 0.5;
+        v.set_driven_km(v.driven_km() + 0.5);
         v.update_engine_vars(0.02);
         assert!((v.odometer_km() - 75557.139).abs() < 1e-8);
         assert_eq!(v.var("kmcounter_km"), Some(75557.0));
@@ -1380,7 +1385,10 @@ fn odometer_starts_at_the_default_service_life() {
     }
     let mut ty = VehicleType::load(&root, &bus).expect("SD77");
     ty.def.km_counter_init = None;
-    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(
+        Arc::new(ty),
+        VehicleHost::new(omsi_sim::SimClock::default()),
+    );
     v.host.clock.year = 2011;
     v.host.clock.day_of_year = 0;
     v.update_engine_vars(0.02);
@@ -1389,7 +1397,7 @@ fn odometer_starts_at_the_default_service_life() {
         (31.0 * 60000.0 * 0.8 + 8.0..=31.0 * 60000.0 * 1.2 + 18.0).contains(&base),
         "{base}"
     );
-    v.driven_km = -0.5;
+    v.set_driven_km(-0.5);
     v.update_engine_vars(0.02);
     let km = v.var("kmcounter_km").unwrap() as f64 + v.var("kmcounter_m").unwrap() as f64 / 1000.0;
     assert!((km - (base - 0.5)).abs() < 1.0, "{km} for {base}");
@@ -1409,7 +1417,7 @@ fn articulation_stops_at_the_coupling_max_alpha() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("GN92"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load(&root, &trail).expect("GN92 trail")),
         false,
@@ -1432,8 +1440,12 @@ fn articulation_stops_at_the_coupling_max_alpha() {
 fn a_jolt_rattles_alike_at_any_frame_rate() {
     fn rattle(fps: f32) -> f32 {
         let dt = 1.0 / fps;
-        let (mut frames, mut last, mut vol, mut peak) =
-            (super::OmsiFrames::default(), 0.0f32, 0.0f32, 0.0f32);
+        let (mut frames, mut last, mut vol, mut peak) = (
+            omsi_sim::testing::vehicle::physics_bridge::OmsiFrames::default(),
+            0.0f32,
+            0.0f32,
+            0.0f32,
+        );
         for i in 0..(fps as usize) {
             let t = i as f32 * dt;
             // a 6 Hz pitching after a bump, 0.5 m/s² along the bus
@@ -1463,15 +1475,21 @@ fn a_jolt_rattles_alike_at_any_frame_rate() {
 /// standing still, on the level or on a grade, and the braking's deceleration alone.
 #[test]
 fn scripts_acceleration_leaves_gravity_out() {
-    let level = super::scripts_acceleration(Vec3::new(0.0, 0.0, 9.81), Quat::IDENTITY);
+    let level = omsi_sim::testing::vehicle::physics_bridge::scripts_acceleration(
+        Vec3::new(0.0, 0.0, 9.81),
+        Quat::IDENTITY,
+    );
     assert!(level.length() < 1e-4, "{level}");
     // standing nose up on a 10 % grade: the accelerometer reads gravity's share along it
     let rot = Quat::from_rotation_x(0.1f32.atan());
     let reading = rot.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81));
-    let grade = super::scripts_acceleration(reading, rot);
+    let grade = omsi_sim::testing::vehicle::physics_bridge::scripts_acceleration(reading, rot);
     assert!(grade.length() < 1e-4, "{grade}");
     // braking at 3 m/s² on the level
-    let braking = super::scripts_acceleration(Vec3::new(0.0, -3.0, 9.81), Quat::IDENTITY);
+    let braking = omsi_sim::testing::vehicle::physics_bridge::scripts_acceleration(
+        Vec3::new(0.0, -3.0, 9.81),
+        Quat::IDENTITY,
+    );
     assert!(
         (braking - Vec3::new(0.0, -3.0, 0.0)).length() < 1e-4,
         "{braking}"
@@ -1529,7 +1547,7 @@ fn rear_section_stays_on_a_viaduct_deck() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("GN92"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load(&root, &trail).expect("GN92 trail")),
         false,
@@ -1540,17 +1558,17 @@ fn rear_section_stays_on_a_viaduct_deck() {
     let ground = move |_x: f64, _y: f64, top: f64| {
         let deck = m.load(Ordering::Relaxed) == 0;
         if deck && top >= 10.0 {
-            crate::physics::GroundProbe {
+            omsi_sim::physics::GroundProbe {
                 below: Some(10.0),
                 above: None,
             }
         } else if deck {
-            crate::physics::GroundProbe {
+            omsi_sim::physics::GroundProbe {
                 below: Some(0.0),
                 above: Some(10.0),
             }
         } else {
-            crate::physics::GroundProbe {
+            omsi_sim::physics::GroundProbe {
                 below: Some(0.0),
                 above: None,
             }
@@ -1573,7 +1591,7 @@ fn rear_section_stays_on_a_viaduct_deck() {
     // sunk under the deck: it comes back up
     mode.store(0, Ordering::Relaxed);
     v.trailers[0].position.z = 0.2;
-    v.trailers[0].axle_z = Some(0.0);
+    v.trailers[0].set_axle_z(Some(0.0));
     for _ in 0..5 {
         v.update_visuals(0.02);
     }
@@ -1598,19 +1616,19 @@ fn rear_section_wheels_spring_on_their_own() {
         return;
     }
     let ty = Arc::new(VehicleType::load(&root, &bus).expect("GN92"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load(&root, &trail).expect("GN92 trail")),
         false,
     );
     let t = &v.trailers[0];
-    let axle = t.first_axle;
+    let axle = t.first_axle();
     assert!(
         t.ty.suspension_axles.contains(&axle),
         "the GN92's rear axle is drawn sprung"
     );
     // a step 6 cm high under the left wheels behind the joint
-    let ground = move |x: f64, y: f64, _top: f64| crate::physics::GroundProbe {
+    let ground = move |x: f64, y: f64, _top: f64| omsi_sim::physics::GroundProbe {
         below: Some(if x < 0.0 && y < -4.0 { 0.06 } else { 0.0 }),
         above: None,
     };
@@ -1667,7 +1685,7 @@ fn ai_loaded_bellows_keep_their_skin_and_still_bend() {
     );
 
     let ty = Arc::new(ai);
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load_ai(&root, &trail).expect("GN92 trail (AI)")),
         false,
@@ -1722,7 +1740,7 @@ fn o530g_mod_bellows_bend_and_survive_an_ai_load() {
         !skinned.is_empty(),
         "the O530G has no [smoothskin] mesh to check (bellows_out/bellows_in)"
     );
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(omsi_sim::SimClock::default()));
     v.attach_trailer_ex(
         Arc::new(VehicleType::load(&content, &trail).expect("O530G trail")),
         false,
@@ -1769,8 +1787,11 @@ fn wheel_pivot_report_reads_dropped_meshes() {
         return;
     }
     let report = |ty: VehicleType| {
-        VehicleInstance::new(Arc::new(ty), VehicleHost::new(crate::SimClock::default()))
-            .wheel_pivot_report()
+        VehicleInstance::new(
+            Arc::new(ty),
+            VehicleHost::new(omsi_sim::SimClock::default()),
+        )
+        .wheel_pivot_report()
     };
     let ai = VehicleType::load_ai(&root, &bus).expect("F90");
     assert!(

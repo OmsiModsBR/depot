@@ -197,7 +197,7 @@ fn mesh_path(root: &Path, dir: &Path, model_dir: &Path, file: &str) -> PathBuf {
 
 /// The couplings an AI copy's parts join at where its file declares none: 4 m ahead of and
 /// behind its origin, 0.3 m up (see [`VehicleType::load_ai`]).
-pub(super) fn ai_couplings(def: &mut Vehicle) {
+pub fn ai_couplings(def: &mut Vehicle) {
     def.coupling_front
         .get_or_insert(omsi_vehicle::vehicle::Coupling {
             pos: [0.0, 4.0, 0.3],

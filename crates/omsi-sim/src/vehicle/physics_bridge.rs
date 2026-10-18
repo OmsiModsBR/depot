@@ -14,7 +14,7 @@ use super::VehicleInstance;
 use glam::{Quat, Vec3};
 
 /// What the scripts left for the physics this frame.
-pub(super) struct DriveInputs {
+pub struct DriveInputs {
     /// `M_Wheel`, N m.
     pub(super) m_wheel: f32,
     /// Each wheel's brake force (N), in the order of the wheels (axle by axle, left first).
@@ -23,11 +23,11 @@ pub(super) struct DriveInputs {
 
 /// One wheel as its variables show it: `Wheel_Rotation` (rad), `Wheel_RotationSpeed` (rpm),
 /// `Axle_Steering` (rad) and `Axle_Suspension` (m).
-pub(super) type WheelShown = [f32; 4];
+pub type WheelShown = [f32; 4];
 
 /// `Wheel_Rotation`, `Wheel_RotationSpeed`, `Axle_Steering`, `Axle_Suspension` and
 /// `Axle_Springfactor` of one wheel of a coupled part (`<axle>_L`, `<axle>_R`).
-pub(super) type PartWheelVars = [Option<omsi_script::VarId>; 5];
+pub type PartWheelVars = [Option<omsi_script::VarId>; 5];
 
 impl VehicleInstance {
     /// The driver's controls into `Throttle`, `Brake` and `Clutch`, then `M_Wheel` and each
@@ -168,7 +168,7 @@ impl VehicleInstance {
 }
 
 /// Wheel `i` (`w`) of a body as its variables show it.
-pub(super) fn body_wheel_shown(
+pub fn body_wheel_shown(
     rb: &crate::physics::RigidBody,
     i: usize,
     w: &crate::physics::RigidWheel,
@@ -192,11 +192,7 @@ pub(super) fn body_wheel_shown(
 }
 
 /// `n_Wheel`: the rpm of the first driven wheel, or of the first wheel when none drives.
-pub(super) fn driven_rpm<W>(
-    wheels: &[W],
-    driven: impl Fn(&W) -> bool,
-    rpm: impl Fn(&W) -> f32,
-) -> f32 {
+pub fn driven_rpm<W>(wheels: &[W], driven: impl Fn(&W) -> bool, rpm: impl Fn(&W) -> f32) -> f32 {
     wheels
         .iter()
         .find(|w| driven(w))
@@ -206,7 +202,7 @@ pub(super) fn driven_rpm<W>(
 }
 
 /// Scripts often test a stopped bus with `!Velocity_Ground`, so do not expose tiny solver drift.
-pub(super) fn script_speed(speed_kmh: f32) -> f32 {
+pub fn script_speed(speed_kmh: f32) -> f32 {
     if speed_kmh.abs() < 0.01 {
         0.0
     } else {
@@ -222,7 +218,7 @@ pub(super) fn script_speed(speed_kmh: f32) -> f32 {
 /// the same jolt, and the buses kept quiet on rough roads (#772, #886). The value is the
 /// mean over each thirtieth, held until the next one is complete.
 #[derive(Debug, Clone, Copy, Default)]
-pub(super) struct OmsiFrames {
+pub struct OmsiFrames {
     sum: Vec3,
     t: f32,
     out: Vec3,
@@ -231,7 +227,7 @@ pub(super) struct OmsiFrames {
 impl OmsiFrames {
     const FRAME: f32 = 1.0 / 30.0;
 
-    pub(super) fn push(&mut self, a: Vec3, dt: f32) -> Vec3 {
+    pub fn push(&mut self, a: Vec3, dt: f32) -> Vec3 {
         if !(dt > 0.0) || !a.is_finite() {
             return self.out;
         }
@@ -257,6 +253,6 @@ impl OmsiFrames {
 /// The body-frame acceleration the scripts see as `A_Trans_*` (as OMSI computes it: the
 /// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
 /// an accelerometer would read, less gravity's share in the body frame.
-pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
+pub fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }
