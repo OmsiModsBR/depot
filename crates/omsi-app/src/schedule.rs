@@ -1965,6 +1965,9 @@ impl Schedule {
                 if d.time > tod + PAX_SPAWN_AHEAD {
                     break;
                 }
+                if !today && d.time < DAY {
+                    continue;
+                }
                 if !(if today { self.runs(i) } else { self.ran_yesterday(i, yesterday) }) {
                     continue;
                 }
@@ -4684,11 +4687,12 @@ fn due_in_window(time: f64, tod: f64, window: f64) -> bool {
 }
 
 /// Whether a departure at `time` of the day before is due at `tod` of the day that has just
-/// begun: the same check on the clock of the previous midnight (`tod + 24 h`). The trips of a
-/// night tour past 24:00 are due here, and with a long `window` (the clock was set) so are
-/// the last trips of the evening. Times a day or more past 24:00 are no trips of yesterday.
+/// begun: the same check on the clock of the previous midnight (`tod + 24 h`). Only the trips
+/// of a night tour past 24:00 are yesterday's alone; an evening trip of yesterday is the same
+/// departure as today's (one `spawned` flag), and times a day or more past 24:00 are no trips
+/// of yesterday.
 fn due_previous_day(time: f64, tod: f64, window: f64) -> bool {
-    time < 2.0 * DAY && due_in_window(time, tod + DAY, window)
+    (DAY..2.0 * DAY).contains(&time) && due_in_window(time, tod + DAY, window)
 }
 
 /// A 64-bit hash of a tour: its depot group (lower case), line and tour number.
@@ -6316,10 +6320,9 @@ pub(crate) mod tests {
             (24.0 * H, 60.0, w, false),                    // window over
             (24.0 * H + 10.0 * 60.0, 10.0 * 60.0, w, true),
             (24.0 * H + 10.0 * 60.0, 9.0 * 60.0 + 59.0, w, false), // not yet
-            (23.0 * H + 59.0 * 60.0 + 59.0, 0.0, w, true), // 23:59:59, a second ago at 00:00: a tick that missed midnight
-            (23.0 * H + 58.0 * 60.0, 0.0, w, false),       // two minutes ago: over
-            (23.0 * H + 50.0 * 60.0, 5.0 * 60.0, 20.0 * 60.0, true), // clock set to 00:05: the trip of 23:50 is under way
-            (23.0 * H + 50.0 * 60.0, 5.0 * 60.0, w, false),
+            (23.0 * H + 59.0 * 60.0 + 59.0, 0.0, w, false), // 23:59:59 is an evening trip: today's departure, not yesterday's
+            (23.0 * H + 50.0 * 60.0, 5.0 * 60.0, 20.0 * 60.0, false), // clock set to 00:05: the evening trip is not caught up (its flag is today's)
+            (24.0 * H + 3.0 * 60.0, 5.0 * 60.0, 20.0 * 60.0, true), // clock set to 00:05: the trip of 00:03 of the night tour is under way
             (36.0 * H, 12.0 * H, w, true),                 // a very long tour: 36:00 is noon of the day after
             (48.0 * H + 60.0, 60.0, w, false),             // a day or more past 24:00 belongs to no previous day
             (10.0 * 60.0, 10.0 * 60.0, w, false),          // a morning trip of today is not yesterday's
