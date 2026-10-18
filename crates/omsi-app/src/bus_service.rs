@@ -150,11 +150,11 @@ fn boarding_time(id: u64) -> f32 {
     7.0 + (id % 5) as f32
 }
 
-/// How long, past the time it would have left, the people at its doors may keep a timetable
+/// How long (s of the frames' time) past its normal dwell the people at its doors may keep a timetable
 /// bus at a stop (s). Somebody who cannot get on or off - an exit that never opens, a door that
 /// stays shut - asks for the doors every frame, and the bus stood at its stop for good (#172).
 /// The people of a crowd getting on one after the other finish well within this.
-const MAX_HELD: f64 = 180.0;
+const MAX_HELD: f32 = 180.0;
 
 /// An early bus waits at its stop until this long before its departure, a train at its
 /// station until `EARLY_LEAVE_RAIL` before (as in OMSI: it stands while it is more
@@ -451,14 +451,20 @@ impl BusService {
             }
             Phase::Boarding => {
                 self.boarding -= ctx.dt;
-                // kept past the time it would have left by people who cannot get in or out:
-                // the doors close (the people stay aboard or on the kerb for the next bus)
-                let due = self.leave_at.max(self.arrived_at + boarding_time(ctx.id) as f64);
-                if ctx.day_time > due + MAX_HELD && !self.held_out {
+                // kept past the normal dwell by people who cannot get in or out: the doors
+                // close (the people stay aboard or on the kerb for the next bus). Counted in
+                // the frames' own seconds (`phase_t`), not the day clock, which runs faster
+                // at a higher time speed; an early bus still waits for its departure time
+                if !self.held_out && self.phase_t > boarding_time(ctx.id) + MAX_HELD {
                     self.held_out = true;
                     self.boarding = 0.0;
                     if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
-                        log::info!("t={:.1}: timetable bus {} leaves its stop {:?}: held at the doors for over {MAX_HELD:.0} s", ctx.day_time, ctx.id, self.stops.front().map(|s| s.id));
+                        log::info!(
+                            "t={:.1}: timetable bus {} leaves its stop {:?}: held at the doors for over {MAX_HELD:.0} s",
+                            ctx.day_time,
+                            ctx.id,
+                            self.stops.front().map(|s| s.id)
+                        );
                     }
                 }
                 // an early bus waits for its departure with the doors open, as drivers do
@@ -882,17 +888,31 @@ mod tests {
     }
 
     /// The limit does not cut short a crowd: people getting on one after another keep the
-    /// doors open until just before `MAX_HELD` past the time the bus would have left, and
+    /// doors open until just before `MAX_HELD` past the normal dwell, and
     /// not much longer.
     #[test]
     fn a_queue_of_people_still_holds_the_doors() {
         let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
         let base = boarding_time(3);
-        let left = rig.seconds_to_leave(base + MAX_HELD as f32 - 5.0, true);
+        let left = rig.seconds_to_leave(base + MAX_HELD - 5.0, true);
         assert!(left.is_none(), "left after {left:?} with people at the doors");
         assert_eq!(rig.svc.phase, Phase::Boarding);
         let left = rig.seconds_to_leave(20.0 + CLOSE_MAX, true).expect("never left");
         assert!(left < 20.0 + CLOSE_MAX);
+    }
+
+    /// At a higher time speed the day clock runs faster than the frames: the limit is in the
+    /// frames' seconds, so a normal dwell is never cut short by it.
+    #[test]
+    fn the_hold_limit_does_not_follow_the_day_clock() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        for _ in 0..(boarding_time(3) * 10.0) as usize - 5 {
+            // (x30: a frame of 0.1 s is 3 s of the day)
+            rig.now += 2.9;
+            rig.frame(0.1, true);
+        }
+        assert!(!rig.svc.held_out);
+        assert_eq!(rig.svc.phase, Phase::Boarding);
     }
 
     /// The limit is per stop: after being held out at one stop the bus serves the next
