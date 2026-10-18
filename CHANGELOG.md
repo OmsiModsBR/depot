@@ -10,6 +10,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
 
 ### Fixed
+- The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
+  thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.
 - The terrain view of the city map writes the heights of the ordinary contour lines too when zoomed in
   (the index lines' only from farther away), and the contour lines are drawn fainter as the view widens.
 - The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
