@@ -70,11 +70,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layouts.camera_layout), Some(&layouts.material_layout)],
             immediate_size: 0,
         });
-        let vertex_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-        };
+        let vertex_layout = Vertex::LAYOUT;
         let shadows = ShadowResources::new(
             &device,
             shadow_size,
