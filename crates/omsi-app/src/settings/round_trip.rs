@@ -210,8 +210,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
     // the two sides read the same text differently
     ("anisotropy", "game>launcher", "the game takes 0, the launcher saves it as 1"),
-    ("head_tracking_roll_sens", "game>launcher", "as head_tracking_yaw_sens"),
-    ("head_tracking_roll_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_y_sens", "game>launcher", "as head_tracking_yaw_sens"),
     ("head_tracking_y_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_z_sens", "game>launcher", "as head_tracking_yaw_sens"),
