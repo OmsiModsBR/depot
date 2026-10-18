@@ -1,7 +1,9 @@
 //! The depth prepass and the ambient occlusion (SSAO), with their pipelines and uniform.
 
 use super::draw::{encode_batches, one_sided_primitive, Batch};
-use crate::gpu::{fullscreen_pipeline, pass_timer, DEPTH_FORMAT};
+use crate::gpu::{
+    depth_texture_entry, fullscreen_pipeline, pass_timer, uniform_entry, DEPTH_FORMAT,
+};
 use crate::scene::{Camera, Scene};
 use crate::targets::TargetCache;
 use glam::Mat4;
@@ -112,26 +114,8 @@ pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
     let ao_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("ssao"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
+            depth_texture_entry(1),
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,

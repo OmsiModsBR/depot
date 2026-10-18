@@ -2,7 +2,9 @@
 
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
-use crate::gpu::{float_tex, fullscreen_pipeline, pass_timer, target_2d};
+use crate::gpu::{
+    float_tex, fullscreen_pipeline, pass_timer, sampler_entry, target_2d, uniform_entry,
+};
 use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
 use crate::sky::{atmosphere, SkyResources};
@@ -51,23 +53,9 @@ pub(crate) fn post_pipelines(
     let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("post"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
             float_tex(1),
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            sampler_entry(2),
             float_tex(3),
             float_tex(4),
             // (the screen mask for the tone mapping: the condensation on the bus's

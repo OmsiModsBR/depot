@@ -5,7 +5,9 @@ use crate::assets::AssetStore;
 use crate::assets::MaterialUniform;
 #[cfg(test)]
 use crate::assets::{AlphaMode, MaterialExtra};
-use crate::gpu::{fullscreen_pipeline, pass_timer, target_2d, DEPTH_FORMAT, HDR_FORMAT};
+use crate::gpu::{
+    fullscreen_pipeline, pass_timer, sampler_entry, target_2d, DEPTH_FORMAT, HDR_FORMAT,
+};
 #[cfg(test)]
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
@@ -132,12 +134,7 @@ impl Pipelines {
                     wgpu::TextureViewDimension::D2,
                 ),
                 texture(4, float, wgpu::TextureViewDimension::D2),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
+                sampler_entry(5),
                 texture(6, float, wgpu::TextureViewDimension::Cube),
                 texture(
                     7,

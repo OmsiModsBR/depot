@@ -1,7 +1,10 @@
 //! The window: its surface, and presenting a frame to it with upscale, FXAA, the overlays
 //! and the HUD.
 
-use crate::gpu::{buffer_init, fullscreen_pipeline, pass_timer, DEPTH_FORMAT};
+use crate::gpu::{
+    buffer_init, fullscreen_pipeline, pass_timer, sampler_entry, texture_entry, uniform_entry,
+    DEPTH_FORMAT,
+};
 use crate::scene::{Scene, TextureId};
 use std::sync::Arc;
 
@@ -57,32 +60,9 @@ pub(crate) fn overlay_pipeline(
     let overlay_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("overlay"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
+            texture_entry(1),
+            sampler_entry(2),
         ],
     });
     log::info!("renderer: compiling the overlays shaders");
@@ -216,32 +196,9 @@ pub(crate) fn upscale_pipelines(
     let upscale_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("upscale"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
+            texture_entry(1),
+            sampler_entry(2),
         ],
     });
     let upscale_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
