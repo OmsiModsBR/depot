@@ -365,17 +365,8 @@ fn cloud_texture(root: &Path, kind: &str) -> Option<omsi_texture::Image> {
     if kind.is_empty() || kind.starts_with("-1") {
         return None;
     }
-    let cfg = omsi_cfg::vfs::read(&root.join("Weather").join("clouds.cfg")).ok()?;
-    let text = omsi_cfg::decode_text(&cfg);
-    let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
-    let mut file = None;
-    for i in 0..lines.len() {
-        if lines[i].eq_ignore_ascii_case("[cloudtype]") && lines.get(i + 1).map(|n| n.eq_ignore_ascii_case(kind)).unwrap_or(false) {
-            file = lines.get(i + 2).map(|s| s.to_string());
-            break;
-        }
-    }
-    let file = file?;
+    let clouds = omsi_content::Envir::load(&root.join("Weather").join("clouds.cfg")).ok()?;
+    let file = clouds.cloud_type(kind)?.texture.trim().to_string();
     let mut img = omsi_texture::decode_file(&omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&root, "Texture"), &file)).ok()?;
     if img.has_alpha {
         for px in img.rgba.chunks_mut(4) {
