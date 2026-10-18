@@ -5,7 +5,7 @@
 pub(crate) fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -> Option<String> {
     use omsi_content::input::KEY_HOLD;
     let b = bindings.iter().find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
-    let stock = crate::stock_keys::STOCK_KEYS
+    let stock = omsi_content::input::stock_keys::STOCK_KEYS
         .iter()
         .any(|(a, s, m)| a.eq_ignore_ascii_case(action) && *s == b.scan_code && (m & !KEY_HOLD) == (b.modifier & !KEY_HOLD));
     (!stock).then(|| crate::keys::key_name(b.scan_code as i64, b.modifier as i64))

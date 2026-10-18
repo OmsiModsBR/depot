@@ -17,7 +17,7 @@ pub use driver::Driver;
 pub use envir::Envir;
 pub use font::{Font, FontChar};
 pub use human::Human;
-pub use input::{GameController, KeyBinding, KeyboardCfg};
+pub use input::{KeyBinding, KeyboardCfg};
 pub use language::Language;
 pub use money::Currency;
 pub use options::Options;

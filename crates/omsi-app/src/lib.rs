@@ -129,7 +129,6 @@ pub(crate) enum ServerCfg {}
 mod services;
 mod situation;
 mod spawn;
-mod stock_keys;
 mod startup;
 mod state_trace;
 mod teleport;
