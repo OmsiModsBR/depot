@@ -165,8 +165,9 @@ jobs:
           exit "$status"
 
   # Blocking on pull requests: the vehicle physics of the change against its base, frame by
-  # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md): the player's vehicle and the AI
-  # traffic's motion (physics_traces.rs, ai_traces.rs). A change that only moves code
+  # frame (scripts/physics-trace-diff.sh, docs/QUALITY.md): the player's vehicle, the AI
+  # traffic's motion, the AI drivers on a lane network and the people's bones
+  # (physics_traces.rs, ai_traces.rs, traffic_traces.rs, people_traces.rs). A change that only moves code
   # leaves every trace identical. One meant to alter the physics carries the `physics-delta`
   # label: the job then lists where the traces differ without failing, for the review to
   # check against the change the pull request predicts.
@@ -312,5 +313,5 @@ jobs:
           objects=()
           for b in "${bins[@]:1}"; do objects+=("-object=$b"); done
           "$llvm/llvm-cov" report "${bins[0]}" "${objects[@]}" -instr-profile=target/coverage/rigid.profdata -show-branch-summary \
-            $(find "$PWD/crates/omsi-sim/src/physics" -name '*.rs' ! -name tests.rs | sort) | tee coverage.txt
+            $(find "$PWD/crates/omsi-sim/src/physics" -name '*.rs' | sort) | tee coverage.txt
           { echo '### Coverage of the rigid body by the physics scenarios'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

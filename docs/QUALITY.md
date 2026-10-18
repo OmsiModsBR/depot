@@ -73,20 +73,39 @@ physics computes. Two jobs of the workflow guard it on pull requests:
   the planner's pull-out and back-in curves and their clearance from standing and moving
   obstacles, stopping and moving off, rails and the air, the rotation point, the static pose
   of an AI copy, the kinematic model through long and empty frames, and the AI frame's
-  script variables at a stop. The script runs both files on both commits
-  and compares the traces bit for bit; it also runs the change twice and fails if two runs of
+  script variables at a stop. `crates/omsi-sim/tests/traffic_traces.rs` puts the AI drivers
+  on a synthetic town (a main road of two lanes, a side road crossing it, the junction's
+  paths with their priorities and lights, a dead end) and writes what the network says of
+  itself and what the drivers make of it: giving way, waiting at a red light, following a
+  car that brakes, changing lanes, pulling out round a standing car, choosing the way on and
+  running out of road. `crates/omsi-sim/tests/people_traces.rs` writes the bones of a
+  person standing, walking, running, turning, stopping, sitting down and getting up, paying
+  and climbing a kerb, and of OMSI's own animation of the passengers. The four files share
+  the trace writer and the synthetic vehicles of `crates/omsi-sim/tests/support/`. The
+  script runs them on both commits, with this checkout's copies of the files and of
+  `support/` on both sides, and compares the traces bit for bit; it also runs the change twice and fails if two runs of
   the same commit differ. Both sides are built and run on the same machine, so the
   comparison does not depend on how a platform rounds `sin` or `sqrt`. A change meant to alter the physics carries the
   `physics-delta` label (re-run the job after adding it): the job then lists the first
   difference of each trace without failing, for the review to check against the predicted
   change.
 - `physics-coverage` (informational) reports the lines, regions and branches of
-  the physics package (`crates/omsi-sim/src/physics/`, its tests aside) that those scenarios and
+  the physics package (`crates/omsi-sim/src/physics/`) that those scenarios and
   `physics_invariants.rs` reach.
 
 Locally: `scripts/physics-trace-diff.sh [base-ref]` (default `origin/main`); the traces are
 kept in `target/physics-traces/`. Without `OMSI_PHYSICS_TRACE_DIR`, `cargo test` runs each
 scenario twice and checks that both runs agree.
+
+## Tests of `omsi-sim`
+
+`crates/omsi-sim/src/` holds no test: the unit tests are one test binary,
+`crates/omsi-sim/tests/sim/`, with a module per module of the crate, and the integration tests
+and trace harnesses sit beside it. What the tests reach of the crate's insides comes through
+`omsi_sim::testing`, which exists only with the `test-support` feature: the crate's own
+dev-dependency turns it on for the tests and examples, and the game builds without it. What
+the test binaries share (`ScratchPack`, a package written for one test into a folder of its
+own, the trace writer, the synthetic vehicles and grounds) is in `crates/omsi-sim/tests/support/`.
 
 ## settings.cfg between the game and the launcher
 
