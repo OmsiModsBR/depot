@@ -168,8 +168,8 @@ fn check_scripts(root: &Path, verbose: bool) {
     let program_root = if root.join("program").is_dir() {
         root.to_path_buf()
     } else {
-        std::env::var_os("HOME")
-            .and_then(|h| std::fs::read_to_string(Path::new(&h).join(".openomsi-root")).ok())
+        omsi_cfg::paths::root_memo()
+            .and_then(|memo| std::fs::read_to_string(memo).ok())
             .map(|s| PathBuf::from(s.trim()))
             .filter(|p| p.join("program").is_dir())
             .unwrap_or_else(|| root.to_path_buf())

@@ -9,6 +9,7 @@ use crate::player::Player;
 use crate::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
 use crate::spawn::spawn_player;
+use omsi_geometry::util::wrap_deg;
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 
@@ -386,7 +387,7 @@ impl App {
         let found = self.placed.iter().position(|q| {
             let Some(c) = q.vehicle.ty.def.coupling_front.as_ref() else { return false };
             let front = q.vehicle.world_transform().transform_point3(glam::Vec3::from(c.pos));
-            let dh = ((q.vehicle.heading - rear_heading + 540.0).rem_euclid(360.0) - 180.0).abs();
+            let dh = wrap_deg(q.vehicle.heading - rear_heading).abs();
             (front - rear).truncate().length() < 2.5 && dh < 35.0
         });
         let Some(k) = found else {
@@ -1292,12 +1293,16 @@ impl App {
     }
 
     /// OMSI's `screenshot`: the picture into the content folder's `Screenshots`, named by the
-    /// date and time.
+    /// time, the map and the vehicle the player is in (see `screenshot_name`).
     pub(crate) fn take_screenshot(&mut self) {
         let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Screenshots");
         let _ = std::fs::create_dir_all(&dir);
         let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        let path = dir.join(format!("omsi_{secs}.png"));
+        let map = crate::screenshot_name::folder_of(&self.args.map).unwrap_or_default();
+        // in a vehicle: at the wheel, or aboard the own bus on foot; not on foot outside it
+        let aboard = self.player.is_some() && (self.on_foot.is_none() || self.foot_bus() == Some(crate::humans::BusId::Player));
+        let vehicle = if aboard { self.args.bus.as_deref().and_then(crate::screenshot_name::folder_of) } else { None };
+        let path = dir.join(crate::screenshot_name::build(secs, &map, vehicle.as_deref()));
         self.service_msg = Some((format!("Screenshot: {}", path.display()), 4.0));
         self.shot = Some((path, false));
     }

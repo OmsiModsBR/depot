@@ -283,7 +283,7 @@ pub struct MapSurface {
     rail_kinds: Vec<(String, u8)>,
     /// The map, for its timetable (read when the lines panel first asks).
     map_dir: std::path::PathBuf,
-    times: std::sync::OnceLock<crate::line_times::LineTimes>,
+    times: std::sync::Mutex<Option<(i32, std::sync::Arc<crate::line_times::LineTimes>)>>,
 }
 
 /// A path a package file names, as a `/`-separated path under the package folder; None when it could point
@@ -543,7 +543,7 @@ impl MapSurface {
             contour_marks: std::sync::OnceLock::new(),
             map_dir: Default::default(),
             rail_kinds: Vec::new(),
-            times: std::sync::OnceLock::new(),
+            times: std::sync::Mutex::new(None),
         })
     }
 
@@ -679,8 +679,17 @@ impl MapSurface {
     }
 
     /// The map's timetable (`TTData`, with the eras in force): departures and the time at each stop, per line.
-    pub fn times(&self, chrono: &[std::path::PathBuf]) -> &crate::line_times::LineTimes {
-        self.times.get_or_init(|| crate::line_times::LineTimes::load(&self.map_dir, chrono))
+    /// Read again when the date (yyyymmdd; the eras and the school period follow it) changes.
+    pub fn times(&self, chrono: &[std::path::PathBuf], date: i32) -> std::sync::Arc<crate::line_times::LineTimes> {
+        let mut slot = self.times.lock().unwrap_or_else(|e| e.into_inner());
+        match slot.as_ref() {
+            Some((d, t)) if *d == date => t.clone(),
+            _ => {
+                let t = std::sync::Arc::new(crate::line_times::LineTimes::load(&self.map_dir, chrono, date));
+                *slot = Some((date, t.clone()));
+                t
+            }
+        }
     }
 
     /// The package can say where the player is (municipality outlines or named streets).

@@ -21,6 +21,16 @@ pub fn encode_text(s: &str) -> Vec<u8> {
     b.into_owned()
 }
 
+/// Encode a string as OMSI's editor saves it: UTF-16 little endian, with its byte order mark.
+pub fn encode_utf16_bom(s: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(2 + 2 * s.len());
+    bytes.extend_from_slice(&[0xFF, 0xFE]);
+    for u in s.encode_utf16() {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    bytes
+}
+
 /// Split into lines. Handles CR LF, LF and bare CR.
 pub fn split_lines(text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -42,4 +52,16 @@ pub fn split_lines(text: &str) -> Vec<String> {
         out.push(cur);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utf16_with_its_mark_reads_back() {
+        let bytes = encode_utf16_bom("[name]\r\nGrünau");
+        assert_eq!(&bytes[..4], &[0xFF, 0xFE, b'[', 0]);
+        assert_eq!(decode_text(&bytes), "[name]\r\nGrünau");
+    }
 }
