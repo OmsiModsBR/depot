@@ -1,3 +1,4 @@
+use crate::support::scratch::ScratchPack;
 use omsi_script::{compile, CompileInput, Vm};
 use omsi_script::{Host, NameId, Stacks, State};
 use omsi_sim::testing::host::*;
@@ -113,8 +114,8 @@ fn script_texture_colour_is_kept_per_texture() {
 
 #[test]
 fn stfilter_marks_a_script_texture_for_mipmaps() {
-    let dir = std::env::temp_dir().join(format!("omsi_host_stfilter_test_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("host-stfilter-test");
+    let dir = pack.path();
     let script = dir.join("matrix.osc");
     std::fs::write(
         &script,
@@ -140,8 +141,8 @@ fn stfilter_marks_a_script_texture_for_mipmaps() {
 
 #[test]
 fn atron_unlock_filter_relock_publishes_the_released_image() {
-    let dir = std::env::temp_dir().join(format!("omsi_host_atron_test_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("host-atron-test");
+    let dir = pack.path();
     let script = dir.join("atron.osc");
     std::fs::write(
         &script,
@@ -182,11 +183,8 @@ fn atron_unlock_filter_relock_publishes_the_released_image() {
 
 #[test]
 fn atron_arrival_check_does_not_clear_sales_text_without_a_timetable() {
-    let dir = std::env::temp_dir().join(format!(
-        "omsi_host_atron_arrival_test_{}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("host-atron-arrival-test");
+    let dir = pack.path();
     let script = dir.join("arrival.osc");
     std::fs::write(&script, "{trigger:check}\n(M.V.GetTTBusstopIndex) 1 - -1 >=\n{if}\n0 (M.V.STNewTex)\n{endif}\n{end}\n").unwrap();
     let p = compile(&CompileInput {
@@ -215,8 +213,8 @@ fn atron_arrival_check_does_not_clear_sales_text_without_a_timetable() {
 /// damages the engine, one at the front only the general account.
 #[test]
 fn a_collision_block_reads_the_energy_twice() {
-    let dir = std::env::temp_dir().join(format!("omsi_host_test_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("host-test");
+    let dir = pack.path();
     let script = dir.join("collision.osc");
     std::fs::write(
         &script,

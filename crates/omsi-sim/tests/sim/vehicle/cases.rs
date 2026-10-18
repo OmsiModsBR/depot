@@ -1,3 +1,4 @@
+use crate::support::scratch::ScratchPack;
 use glam::{DVec3, Vec3};
 use omsi_sim::testing::host::VehicleHost;
 use std::sync::Arc;
@@ -616,13 +617,8 @@ fn a_borrowed_part_is_judged_with_its_own_pack() {
 }
 
 fn restored_display_vehicle() -> VehicleInstance {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "omsi_restore_{}_{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("restore");
+    let dir = pack.path();
     let script = dir.join("display.osc");
     std::fs::write(
         &script,
@@ -680,7 +676,7 @@ fn restored_display_vehicle() -> VehicleInstance {
     let ty = Arc::new(VehicleType {
         def: Default::default(),
         model,
-        model_dir: dir.clone(),
+        model_dir: dir.to_path_buf(),
         program: Arc::new(program),
         meshes: Vec::new(),
         paint_schemes: Vec::new(),
@@ -691,7 +687,6 @@ fn restored_display_vehicle() -> VehicleInstance {
         mesh_bounds: Vec::new(),
         mesh_boxes: Vec::new(),
     });
-    std::fs::remove_dir_all(dir).unwrap();
     VehicleInstance::new(ty, VehicleHost::new(Default::default()))
 }
 

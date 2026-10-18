@@ -1,10 +1,13 @@
 //! Invariants of the vehicle physics model that had no test of their own (I1 and I4 of
 //! the model's document): what the refactor must keep true whatever it moves.
 
+mod support;
+
 use glam::{DVec3, Vec3};
-use omsi_sim::physics::{support_rest_loads, GroundProbe, Joint, RigidBody};
-use omsi_vehicle::vehicle::Coupling;
+use omsi_sim::physics::{support_rest_loads, Joint, RigidBody};
 use omsi_vehicle::{Axle, Vehicle};
+use support::ground::flat;
+use support::vehicles::{bus, gn92};
 
 const G: f32 = 9.81;
 
@@ -19,32 +22,6 @@ fn axle(long: f32, driven: bool) -> Axle {
         damper: 20.0,
         driven,
         inertia_inv: 0.0,
-    }
-}
-
-/// A 12 m solo bus on two axles (`rigid`'s tests' `bus()`).
-fn bus() -> Vehicle {
-    Vehicle {
-        mass: 10.2,
-        moment_of_inertia: [600.0, 90.0, 400.0],
-        cog_height: 1.2,
-        rolling_resistance: 1000.0,
-        rot_pnt_long: -2.7,
-        inv_min_turn_radius: 0.13,
-        axles: vec![
-            Axle {
-                spring: 240.0,
-                max_force: 90.0,
-                ..axle(3.238, false)
-            },
-            Axle {
-                spring: 280.0,
-                max_force: 116.0,
-                ..axle(-2.637, true)
-            },
-        ],
-        bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]),
-        ..Default::default()
     }
 }
 
@@ -107,61 +84,12 @@ fn i1_the_static_loads_carry_and_balance_the_weight() {
     }
 }
 
-/// The stock GN92's two sections (`train`'s tests' `gn92()`).
-fn gn92() -> (Vehicle, Vehicle) {
-    let axle = |long: f32, max_width: f32, min_width: f32, driven: bool| Axle {
-        long,
-        max_width,
-        min_width,
-        wheel_diameter: 0.94,
-        spring: 280.0,
-        max_force: 116.0,
-        damper: 20.0,
-        driven,
-        inertia_inv: 0.0,
-    };
-    let front = Vehicle {
-        mass: 8.0,
-        moment_of_inertia: [300.0, 80.0, 300.0],
-        cog_height: 1.2,
-        rolling_resistance: 900.0,
-        rot_pnt_long: -2.7,
-        inv_min_turn_radius: 0.13,
-        axles: vec![
-            Axle {
-                spring: 240.0,
-                max_force: 90.0,
-                ..axle(3.238, 2.25, 1.76, false)
-            },
-            axle(-2.637, 2.4, 1.2, false),
-        ],
-        coupling_back: Some(Coupling {
-            pos: [0.0, -4.331, 0.315],
-        }),
-        ..Default::default()
-    };
-    let rear = Vehicle {
-        mass: 7.2,
-        moment_of_inertia: [150.0, 40.0, 150.0],
-        cog_height: 1.2,
-        rolling_resistance: 500.0,
-        rot_pnt_long: -0.387,
-        axles: vec![axle(-0.387, 2.4, 1.2, true)],
-        coupling_front: Some(Coupling {
-            pos: [0.0, 4.169, 0.315],
-        }),
-        coupling_front_character: Some([52.5, -20.0, 20.0, 1.0]),
-        ..Default::default()
-    };
-    (front, rear)
-}
-
 /// I1 across a joint: the rear section rests on its axle and the joint, the front section
 /// takes what the joint carries on its own axles; together the wheels carry both weights,
 /// and each section is balanced with the joint's load where the joint is.
 #[test]
 fn i1_with_a_joint_the_wheels_carry_both_sections() {
-    let (front, rear) = gn92();
+    let (front, rear) = gn92(false);
     let mut bodies = vec![
         RigidBody::from_definition(&front, &[]),
         RigidBody::from_definition(&rear, &[]),
@@ -196,13 +124,6 @@ fn i1_with_a_joint_the_wheels_carry_both_sections() {
         (front_moment - want).abs() <= tol,
         "front section: moment {front_moment}, want {want}"
     );
-}
-
-fn flat(_x: f64, _y: f64, _top: f64) -> GroundProbe {
-    GroundProbe {
-        below: Some(0.0),
-        above: None,
-    }
 }
 
 /// I4: while the tyres hold, the bus follows its wheels - in a steady bend its yaw rate is

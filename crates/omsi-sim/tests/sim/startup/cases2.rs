@@ -1,3 +1,4 @@
+use crate::support::scratch::ScratchPack;
 use omsi_sim::testing::startup::*;
 use omsi_sim::VehicleInstance;
 use omsi_sim::{SimClock, VehicleHost, VehicleType};
@@ -9,11 +10,8 @@ use std::sync::Arc;
 /// `elec_busbar_main_sw` variable.
 #[test]
 fn starts_a_bus_with_custom_battery_and_starter_names() {
-    let dir = std::env::temp_dir().join(format!(
-        "omsi-startup-custom-controls-{}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("startup-custom-controls");
+    let dir = pack.path();
     std::fs::write(
         dir.join("custom.bus"),
         "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
@@ -57,14 +55,12 @@ fn starts_a_bus_with_custom_battery_and_starter_names() {
         "{:?}",
         start.report
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn logs_in_and_selects_neutral_before_starting() {
-    let dir =
-        std::env::temp_dir().join(format!("omsi-startup-login-neutral-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("startup-login-neutral");
+    let dir = pack.path();
     std::fs::write(
         dir.join("login.bus"),
         "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
@@ -108,13 +104,12 @@ fn logs_in_and_selects_neutral_before_starting() {
         "{:?}",
         start.report
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
 fn treats_real_main_as_power_before_two_stage_starter() {
-    let dir = std::env::temp_dir().join(format!("omsi-startup-real-main-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("startup-real-main");
+    let dir = pack.path();
     std::fs::write(
         dir.join("real.bus"),
         "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
@@ -140,5 +135,4 @@ fn treats_real_main_as_power_before_two_stage_starter() {
         v.update(1.0 / 30.0);
     }
     assert!(engine_running(&v), "{:?}", start.report);
-    std::fs::remove_dir_all(&dir).ok();
 }

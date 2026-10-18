@@ -1,11 +1,12 @@
+use crate::support::scratch::ScratchPack;
 use omsi_script::{compile, CompileInput};
 use omsi_sim::testing::scenery::*;
 use std::sync::Arc;
 
 #[test]
 fn busstop_frame_resolves_each_placements_texture() {
-    let dir = std::env::temp_dir().join(format!("omsi_busstop_freetex_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let pack = ScratchPack::new("busstop-freetex");
+    let dir = pack.path();
     let vars = dir.join("strings.txt");
     let script = dir.join("BusStop.osc");
     std::fs::write(&vars, "BusStop\nTexture\n").unwrap();
@@ -40,5 +41,4 @@ fn busstop_frame_resolves_each_placements_texture() {
         };
         assert_eq!(inst.str_var("Texture"), expected);
     }
-    std::fs::remove_dir_all(dir).unwrap();
 }

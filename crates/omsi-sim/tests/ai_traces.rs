@@ -9,13 +9,15 @@
 //! and on the change and compares the two. A change that only moves code leaves every trace
 //! as it was, to the bit. Without it, each scenario runs twice and both runs must write the
 //! same trace. Numbers are written as `{:?}` writes them (NaN with its bits), so equal text is
-//! equal bits. The file uses only the crate's public API: the script copies it as it is into
-//! the commit it compares with.
+//! equal bits (`support::trace`). The file uses only the crate's public API: the script copies
+//! it as it is, with `support/`, into the commit it compares with.
 //!
 //! The vehicles are synthetic, built here as in `physics_traces.rs`, so that the scenarios run
 //! without the game's content.
 
-use glam::{DVec2, DVec3, Vec3};
+mod support;
+
+use glam::{DVec2, DVec3};
 use omsi_model::Model;
 use omsi_script::Program;
 use omsi_sim::ai::{
@@ -32,55 +34,12 @@ use omsi_vehicle::{Axle, Vehicle};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+use support::trace::{check, dv3, list32, n32, n64, v3, Trace};
 
 // ---------------------------------------------------------------------------------------
 // Writing the state
 
-fn n32(x: f32) -> String {
-    if x.is_nan() {
-        format!("NaN:{:08x}", x.to_bits())
-    } else {
-        format!("{x:?}")
-    }
-}
-
-fn n64(x: f64) -> String {
-    if x.is_nan() {
-        format!("NaN:{:016x}", x.to_bits())
-    } else {
-        format!("{x:?}")
-    }
-}
-
-fn v3(v: Vec3) -> String {
-    format!("{} {} {}", n32(v.x), n32(v.y), n32(v.z))
-}
-
-fn dv3(v: DVec3) -> String {
-    format!("{} {} {}", n64(v.x), n64(v.y), n64(v.z))
-}
-
-fn list32(xs: &[f32]) -> String {
-    xs.iter().map(|x| n32(*x)).collect::<Vec<_>>().join(" ")
-}
-
-/// One scenario's trace: a line for each frame with what went in, then the state.
-#[derive(Default)]
-struct Trace {
-    text: String,
-    frame: usize,
-}
-
 impl Trace {
-    fn frame(&mut self, dt: f32, inputs: &str) {
-        let _ = writeln!(self.text, "frame {} dt {} {inputs}", self.frame, n32(dt));
-        self.frame += 1;
-    }
-
-    fn line(&mut self, s: &str) {
-        let _ = writeln!(self.text, "{s}");
-    }
-
     /// The AI body as the traffic reads it.
     fn body(&mut self, b: &AiBody) {
         let susp: Vec<String> = b
@@ -146,43 +105,6 @@ impl Trace {
 
 // ---------------------------------------------------------------------------------------
 // Running the scenarios
-
-/// Write the scenario's trace where `OMSI_PHYSICS_TRACE_DIR` says; without it, run it
-/// twice and compare (and look for a state that left the numbers).
-fn check(name: &str, scenario: fn() -> String) {
-    let first = scenario();
-    assert!(first.lines().count() > 10, "{name}: no trace");
-    // (the inputs may be no number, the state never; a `known` line writes down a value that
-    // is no number today, as it is)
-    let lost = |l: &&str| {
-        !l.starts_with("frame")
-            && !l.starts_with("known")
-            && l.split_whitespace()
-                .any(|w| w == "inf" || w == "-inf" || w.starts_with("NaN"))
-    };
-    if let Some(l) = first.lines().find(lost) {
-        panic!("{name}: the state left the numbers:\n{l}");
-    }
-    match std::env::var_os("OMSI_PHYSICS_TRACE_DIR") {
-        Some(dir) => {
-            let dir = PathBuf::from(dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(format!("{name}.trace")), first).unwrap();
-        }
-        None => {
-            let second = scenario();
-            if first != second {
-                let (k, (a, b)) = first
-                    .lines()
-                    .zip(second.lines())
-                    .enumerate()
-                    .find(|(_, (a, b))| a != b)
-                    .unwrap_or((0, ("", "")));
-                panic!("{name}: two runs differ at line {}:\n{a}\n{b}", k + 1);
-            }
-        }
-    }
-}
 
 macro_rules! scenarios {
     ($($name:ident),* $(,)?) => {
@@ -354,33 +276,11 @@ mod scenarios {
         }
     }
 
-    /// A 12 m solo bus (`physics_traces.rs`' `bus()`).
+    /// A 12 m solo bus (`support::vehicles::bus`), lowered as its AI copy.
     pub fn bus() -> Vehicle {
-        let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle {
-            long,
-            max_width: 2.4,
-            min_width: 1.76,
-            wheel_diameter: 0.94,
-            spring,
-            max_force,
-            damper: 20.0,
-            driven,
-            inertia_inv: 0.0,
-        };
         Vehicle {
-            mass: 10.2,
-            moment_of_inertia: [600.0, 90.0, 400.0],
-            cog_height: 1.2,
-            rolling_resistance: 1000.0,
-            rot_pnt_long: -2.7,
-            inv_min_turn_radius: 0.13,
             ai_delta_height: 0.12,
-            axles: vec![
-                axle(3.238, 240.0, 90.0, false),
-                axle(-2.637, 280.0, 116.0, true),
-            ],
-            bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]),
-            ..Default::default()
+            ..support::vehicles::bus()
         }
     }
 

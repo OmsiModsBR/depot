@@ -1,4 +1,6 @@
-use crate::physics::cases::{bus, road, run};
+use crate::physics::cases::run;
+use crate::support::ground::road;
+use crate::support::vehicles::bus;
 use glam::{DVec3, Vec3};
 use omsi_sim::testing::collision::Obb;
 use omsi_sim::testing::physics::domain::params::{CRASH_SPEED, RESTITUTION};

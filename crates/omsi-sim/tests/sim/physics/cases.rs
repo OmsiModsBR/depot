@@ -1,55 +1,11 @@
+use crate::support::ground::road;
+use crate::support::vehicles::bus;
 use glam::{DVec3, Vec3};
 use omsi_sim::testing::physics::domain::params::{HALF_WIDTH, LATTICE};
 use omsi_sim::testing::physics::*;
 use omsi_vehicle::Vehicle;
 
 use omsi_vehicle::vehicle::Axle;
-
-pub(crate) fn bus() -> Vehicle {
-    let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle {
-        long,
-        max_width: 2.4,
-        min_width: 1.76,
-        wheel_diameter: 0.94,
-        spring,
-        max_force,
-        damper: 20.0,
-        driven,
-        inertia_inv: 0.0,
-    };
-    Vehicle {
-        mass: 10.2,
-        moment_of_inertia: [600.0, 90.0, 400.0],
-        cog_height: 1.2,
-        rolling_resistance: 1000.0,
-        rot_pnt_long: -2.7,
-        inv_min_turn_radius: 0.13,
-        axles: vec![
-            axle(3.238, 240.0, 90.0, false),
-            axle(-2.637, 280.0, 116.0, true),
-        ],
-        bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]),
-        ..Default::default()
-    }
-}
-
-/// Flat road at height 0 with an optional step of `step` metres from y = `at` on.
-pub(crate) fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
-    move |_x, y, z_top| {
-        let z = if y >= at { step } else { 0.0 };
-        if z <= z_top {
-            GroundProbe {
-                below: Some(z),
-                above: None,
-            }
-        } else {
-            GroundProbe {
-                below: Some(0.0),
-                above: Some(z),
-            }
-        }
-    }
-}
 
 pub(crate) fn run(
     rb: &mut RigidBody,
