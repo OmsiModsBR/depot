@@ -12,6 +12,7 @@
 
 use glam::{DVec2, Vec3};
 use hashbrown::HashMap;
+use omsi_geometry::util::angle_diff;
 
 /// One person on foot in a plane (the ground, or the floor of one bus).
 #[derive(Debug, Clone, Copy)]
@@ -372,17 +373,6 @@ pub fn turn_towards(from: f64, to: f64, rate: f64, dt: f64) -> f64 {
     let step = (diff * (dt / 0.25).min(1.0)).clamp(-rate * dt, rate * dt);
     let out = from + step;
     out.rem_euclid(360.0)
-}
-
-/// Signed difference `to - from` in degrees, the short way round (-180..180).
-pub fn angle_diff(from: f64, to: f64) -> f64 {
-    let mut diff = (to - from) % 360.0;
-    if diff > 180.0 {
-        diff -= 360.0;
-    } else if diff < -180.0 {
-        diff += 360.0;
-    }
-    diff
 }
 
 /// Heading (degrees clockwise from north) of a ground direction.

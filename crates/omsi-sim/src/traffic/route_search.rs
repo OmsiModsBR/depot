@@ -6,7 +6,7 @@ use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 
 use super::{LaneKind, Network};
-use crate::crowd::angle_diff;
+use omsi_geometry::util::angle_diff;
 
 impl Network {
     /// Lanes with a point within `radius` of `c` (by the network's 50 m grid).

@@ -16,6 +16,7 @@
 //! being cut off by it in a straight line (see `omsi_render::SmokeParticle::ground`).
 
 use glam::{DVec3, Mat4, Vec3};
+use omsi_geometry::util::unit_f32;
 use omsi_model::{ParticleSystemDef, PsRange, PsValue};
 use std::sync::RwLock;
 
@@ -138,10 +139,7 @@ impl ParticleSet {
 
     /// -1..1
     fn rand(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        ((self.rng >> 40) as f32 / (1u64 << 24) as f32) * 2.0 - 1.0
+        unit_f32(&mut self.rng) * 2.0 - 1.0
     }
 
     fn draw(&mut self, r: &PsRange, value: &dyn Fn(&str) -> f32) -> f32 {

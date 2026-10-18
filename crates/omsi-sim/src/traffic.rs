@@ -8,6 +8,7 @@
 
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
+use omsi_geometry::util::smoothstep;
 
 mod route_search;
 
@@ -2310,7 +2311,7 @@ pub fn ramp_progress_for(side: f32, clear: f32) -> f32 {
     let (mut lo, mut hi) = (0.0f32, 1.0f32);
     for _ in 0..20 {
         let mid = 0.5 * (lo + hi);
-        if smooth01(mid) < want {
+        if smoothstep(0.0, 1.0, mid) < want {
             lo = mid;
         } else {
             hi = mid;
@@ -2344,12 +2345,6 @@ pub struct LaneChange {
     pub bypass: bool,
 }
 
-/// Smoothstep 0..1.
-fn smooth01(t: f32) -> f32 {
-    let t = t.clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
 /// A short sequence of lanes the way runs along, with the lane the car is on at `cur`.
 struct LaneSeq {
     lanes: [usize; PLAN_LANES + 2],
@@ -2371,7 +2366,7 @@ impl LaneSeq {
     fn at(&self, net: &Network, i: usize, u: f32) -> (DVec3, f32) {
         let l = &net.lanes[self.lanes[i]];
         let (mut p, h) = l.at_ext(u);
-        let w = |x: f32| 1.0 - smooth01(x / JOINT_BLEND);
+        let w = |x: f32| 1.0 - smoothstep(0.0, 1.0, x / JOINT_BLEND);
         if i > 0 {
             if let Some(g) = self.gap(net, i - 1) {
                 p -= g * (0.5 * w(u.max(0.0))) as f64;
@@ -2778,7 +2773,7 @@ impl AiState {
                 let (pt, ht) = self.change_seq(c.to).point(net, c.s_to, d);
                 // how far the change will have got by the time the car is `d` metres on
                 let tau = (d - c.wait * self.speed.max(2.0)) / c.length;
-                let k = smooth01(c.t + tau);
+                let k = smoothstep(0.0, 1.0, c.t + tau);
                 p = p.lerp(pt, k as f64);
                 h += wrap_deg(ht - h) * k;
             }
@@ -2844,7 +2839,7 @@ impl AiState {
     /// The sideways offset of the way when the odometer reads `x`.
     fn lateral_at(&self, x: f32) -> f32 {
         let (from, to, x0, len) = self.lateral_ramp;
-        from + (to - from) * smooth01((x - x0) / len.max(0.1))
+        from + (to - from) * smoothstep(0.0, 1.0, (x - x0) / len.max(0.1))
     }
 
     /// The first turn (1 left, 2 right) on the way within `within` metres, with the
@@ -4157,7 +4152,7 @@ mod tests {
     fn moving_back_in_clears_the_oncoming_lane_part_way() {
         // 3.3 m over, 2.05 m needed to the oncoming lane's middle: 62 % of the offset
         let t = ramp_progress_for(3.3, 2.05);
-        assert!((smooth01(t) - 2.05 / 3.3).abs() < 1e-4, "{t}");
+        assert!((smoothstep(0.0, 1.0, t) - 2.05 / 3.3).abs() < 1e-4, "{t}");
         assert!(t > 0.5 && t < 0.7, "{t}");
         assert_eq!(ramp_progress_for(3.3, 0.0), 0.0);
         assert_eq!(ramp_progress_for(2.0, 2.5), 1.0);

@@ -22,7 +22,7 @@
 use anyhow::{Context, Result};
 use glam::{Affine3A, DVec2, DVec3, Mat3A, Quat, Vec2, Vec3, Vec3A};
 use omsi_content::Human;
-use omsi_geometry::util::smoothstep;
+use omsi_geometry::util::{angle_diff, smoothstep};
 use omsi_geometry::{mesh_from_o3d, MeshData};
 use omsi_model::Model;
 use std::f32::consts::{PI, TAU};
@@ -931,16 +931,6 @@ fn approach(x: f32, to: f32, step: f32) -> f32 {
 /// Exponential smoothing factor for time constant `tau`.
 fn ease_k(dt: f32, tau: f32) -> f32 {
     1.0 - (-dt / tau.max(1e-3)).exp()
-}
-
-fn angle_diff(a: f64, b: f64) -> f64 {
-    let mut d = (b - a) % 360.0;
-    if d > 180.0 {
-        d -= 360.0;
-    } else if d < -180.0 {
-        d += 360.0;
-    }
-    d
 }
 
 /// Rotation about z turning +y towards +x by `deg` (OMSI's heading sense).
