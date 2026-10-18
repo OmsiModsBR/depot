@@ -892,10 +892,11 @@ fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
     }
 }
 
-/// Whether a `[mass]` (t) is a stock bicycle's. They weigh exactly 0.3 t; anything lighter
-/// (a motorcycle at 0.125 t) is no bicycle and keeps to the road's limit like a car.
-fn is_bicycle_mass(mass: f32) -> bool {
-    (mass - 0.3).abs() < 1e-3
+/// Whether a vehicle is a bicycle rather than a motorcycle or another light vehicle: its own
+/// script has the `vmax` the bicycles' scripts cut the drive at, or it weighs the stock
+/// bicycles' 0.3 t. The mass alone took every vehicle up to 0.3 t, motorcycles included.
+fn is_bicycle(mass: f32, script_has_vmax: bool) -> bool {
+    script_has_vmax || (mass - 0.3).abs() < 1e-3
 }
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
@@ -2834,7 +2835,7 @@ impl Traffic {
             // (a truck keeps to the limit like the cars, up to a truck's own 80-90 km/h: it
             // took 38-47 on every road, crawling along 80 km/h roads, #327)
             80.0 + (seed % 10) as f32
-        } else if kind == LaneKind::Street && is_bicycle_mass(ty.def.mass) {
+        } else if kind == LaneKind::Street && is_bicycle(ty.def.mass, ty.program.constant("vmax").is_some() || ty.program.var("vmax").is_some()) {
             // a bicycle: 15-21 km/h, the `vmax` range their script cuts the drive at (#327)
             15.0 + (seed % 7) as f32
         } else {
@@ -8338,15 +8339,17 @@ mod junction_tests;
 
 #[cfg(test)]
 mod bicycle_cap_tests {
-    use super::is_bicycle_mass;
+    use super::is_bicycle;
 
     #[test]
-    fn only_the_stock_bicycle_mass_is_capped() {
-        assert!(is_bicycle_mass(0.3));
-        // a motorcycle (0.125 t) and other light vehicles are not bicycles
-        assert!(!is_bicycle_mass(0.125));
-        assert!(!is_bicycle_mass(0.2));
-        assert!(!is_bicycle_mass(0.0));
-        assert!(!is_bicycle_mass(0.95));
+    fn a_light_vehicle_is_no_bicycle_without_the_bicycle_script() {
+        // a motorcycle (0.125 t) and other light vehicles follow the road's limit
+        assert!(!is_bicycle(0.125, false));
+        assert!(!is_bicycle(0.2, false));
+        assert!(!is_bicycle(0.0, false));
+        assert!(!is_bicycle(0.95, false));
+        // the stock bicycles' weight, and any vehicle whose script cuts the drive at `vmax`
+        assert!(is_bicycle(0.3, false));
+        assert!(is_bicycle(0.125, true));
     }
 }
