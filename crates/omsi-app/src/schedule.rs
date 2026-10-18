@@ -4641,8 +4641,12 @@ fn norm_vehicle_path(p: &str) -> String {
 fn day_bits(calendar: &omsi_map::Calendar, clock: &omsi_sim::SimClock) -> (i32, i32) {
     let date = clock.date_code();
     let day_bit = if calendar.is_holiday(date) { 1 << 7 } else { 1 << clock.weekday() };
-    let school_bit = if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 };
-    (day_bit, school_bit)
+    (day_bit, school_period_bit(calendar, date))
+}
+
+/// The tour mask bit of the school period of `date` (yyyymmdd): 8 inside a holiday range, else 9.
+pub(crate) fn school_period_bit(calendar: &omsi_map::Calendar, date: i32) -> i32 {
+    if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 }
 }
 
 /// What a bus's displays call its terminus: the depot file's first string for it (what the
