@@ -2,7 +2,7 @@
 
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
-use crate::gpu::{float_tex, pass_timer};
+use crate::gpu::{float_tex, pass_timer, target_2d};
 use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
 use crate::sky::{atmosphere, SkyResources};
@@ -400,20 +400,17 @@ impl Exposure {
             depth_or_array_layers: 1,
         };
         let tiny = |label: &str| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: one,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: hdr_format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                device,
+                label,
+                one,
+                1,
+                hdr_format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+            )
+            .create_view(&Default::default())
         };
         let meter_view = tiny("exposure meter");
         let adapt_views = [tiny("exposure a"), tiny("exposure b")];

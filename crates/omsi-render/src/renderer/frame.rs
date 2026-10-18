@@ -3,7 +3,7 @@
 //! (`lists.rs`) and the passes (`encode.rs`) follow, and the commands are submitted at the end.
 
 use super::state::Renderer;
-use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, HDR_FORMAT};
+use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, target_2d, HDR_FORMAT};
 use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
 use crate::passes::{Batch, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
@@ -205,20 +205,18 @@ impl Renderer {
             && self.started.elapsed().as_secs_f32() > 3.0
         {
             // test hook for the fallback below
-            let _ = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("invalid"),
-                size: wgpu::Extent3d {
+            let _ = target_2d(
+                &self.device,
+                "invalid",
+                wgpu::Extent3d {
                     width: 4,
                     height: 4,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
-                sample_count: 3,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.gpu.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+                3,
+                self.gpu.format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            );
         }
         if self.gpu.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
             self.fall_back_without_ray_tracing(scene);

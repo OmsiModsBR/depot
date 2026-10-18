@@ -2,7 +2,7 @@
 //! targets and the composite of the panels and the HUD into the window.
 
 use super::window::Presenter;
-use crate::gpu::buffer_init;
+use crate::gpu::{buffer_init, target_2d};
 use crate::scene::{CullHistory, ScreenView, TextureId};
 
 /// Swap in a panel's own culling history (and the last one's back out).
@@ -35,21 +35,19 @@ impl Presenter {
                 .iter()
                 .map(|v| {
                     let w = pw;
-                    let texture = device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("triple screen panel"),
-                        size: wgpu::Extent3d {
+                    let texture = target_2d(
+                        device,
+                        "triple screen panel",
+                        wgpu::Extent3d {
                             width: w,
                             height,
                             depth_or_array_layers: 1,
                         },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: format,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        1,
+                        format,
+                        wgpu::TextureUsages::RENDER_ATTACHMENT
                             | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    });
+                    );
                     let view = texture.create_view(&Default::default());
                     // (z: where the panel starts in the window, for `fs_panel`)
                     let params = [w as f32, height as f32, v.viewport[0] as f32, 0.0];

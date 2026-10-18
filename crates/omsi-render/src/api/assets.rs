@@ -6,7 +6,7 @@ use crate::assets::{
     MaterialExtra, MaterialMaps, MaterialUniform, MeshPage, PbrMaps, PreparedMesh, PreparedTexture,
     TexAddressing, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
 };
-use crate::gpu::buffer_init;
+use crate::gpu::{buffer_init, mip_levels};
 use crate::renderer::Renderer;
 use crate::scene::{
     mesh_bounds_changed, mesh_slot_replaced, MaterialId, MeshId, Scene, TextureId, Vertex,
@@ -278,7 +278,7 @@ impl Renderer {
         };
         let fitted = fit_image(img, self.device.limits().max_texture_dimension_2d);
         let img = fitted.as_ref().unwrap_or(img);
-        let levels = (32 - img.width.max(img.height).leading_zeros()).max(1);
+        let levels = mip_levels(img.width, img.height);
         if old.size != (img.width, img.height) || old.texture.mip_level_count() != levels {
             scene.textures[id] = self.upload_texture_gpu_mips(img);
             return true;

@@ -1,6 +1,7 @@
 //! The frame's destinations on the renderer: an image rendered off screen and read back,
 //! the triple screen's panels, the HUD overlays and the GPU timers.
 
+use crate::gpu::target_2d;
 use crate::lighting::Lighting;
 use crate::output::{read_texture, swap_triple_culling, Output};
 use crate::renderer::Renderer;
@@ -17,20 +18,18 @@ impl Renderer {
         lighting: &Lighting,
         rig: Option<&TripleScreen>,
     ) -> Result<Vec<u8>> {
-        let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("offscreen"),
-            size: wgpu::Extent3d {
+        let tex = target_2d(
+            &self.device,
+            "offscreen",
+            wgpu::Extent3d {
                 width,
                 height,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.gpu.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+            1,
+            self.gpu.format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
         let view = tex.create_view(&Default::default());
         // a picture on its own: the enhanced exposure is where the light puts it at once
         self.instant_exposure = true;

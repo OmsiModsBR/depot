@@ -3,7 +3,7 @@
 
 use super::probe::{Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE};
 use super::{atmosphere, clouds};
-use crate::gpu::{buffer_init, float_tex};
+use crate::gpu::{buffer_init, float_tex, target_2d};
 
 /// The sky's GPU resources and the sky last computed.
 pub(crate) struct SkyResources {
@@ -87,20 +87,18 @@ impl SkyResources {
             wgpu::BufferUsages::INDEX,
         );
         let sky_mesh = (sky_vb, sky_ib, si.len() as u32);
-        let sky_lut = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("sky table"),
-            size: wgpu::Extent3d {
+        let sky_lut = target_2d(
+            device,
+            "sky table",
+            wgpu::Extent3d {
                 width: atmosphere::SKY_LUT_W,
                 height: atmosphere::SKY_LUT_H,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: hdr_format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+            1,
+            hdr_format,
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
         let sky_lut_view = sky_lut.create_view(&Default::default());
         let uniform_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
             binding,
@@ -183,39 +181,34 @@ impl SkyResources {
                 })
                 .collect();
             // level 0 is drawn from the sky and reads nothing: a black cube stands in
-            let dummy = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("probe placeholder"),
-                size: wgpu::Extent3d {
+            let dummy = target_2d(
+                device,
+                "probe placeholder",
+                wgpu::Extent3d {
                     width: 1,
                     height: 1,
                     depth_or_array_layers: 6,
                 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: hdr_format,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
+                1,
+                hdr_format,
+                wgpu::TextureUsages::TEXTURE_BINDING,
+            );
             let dummy_view = dummy.create_view(&wgpu::TextureViewDescriptor {
                 dimension: Some(wgpu::TextureViewDimension::Cube),
                 ..Default::default()
             });
-            let cube_tex = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("sky cube"),
-                size: wgpu::Extent3d {
+            let cube_tex = target_2d(
+                device,
+                "sky cube",
+                wgpu::Extent3d {
                     width: SKY_CUBE_SIZE,
                     height: SKY_CUBE_SIZE,
                     depth_or_array_layers: 6,
                 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: hdr_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
+                1,
+                hdr_format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            );
             let cube_view = cube_tex.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("sky cube"),
                 dimension: Some(wgpu::TextureViewDimension::Cube),

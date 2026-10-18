@@ -5,7 +5,7 @@ use crate::assets::AssetStore;
 use crate::assets::MaterialUniform;
 #[cfg(test)]
 use crate::assets::{AlphaMode, MaterialExtra};
-use crate::gpu::{pass_timer, DEPTH_FORMAT, HDR_FORMAT};
+use crate::gpu::{pass_timer, target_2d, DEPTH_FORMAT, HDR_FORMAT};
 #[cfg(test)]
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
@@ -387,63 +387,54 @@ impl PuddleTargets {
     ) -> Self {
         let size = trace_size(w, h);
         let source_depth = ao_depth.texture().clone();
-        let hit_depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("puddle hit depth including glass"),
-            size: wgpu::Extent3d {
+        let hit_depth = target_2d(
+            &ctx.device,
+            "puddle hit depth including glass",
+            wgpu::Extent3d {
                 width: w,
                 height: h,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::COPY_DST
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        );
         let hit_depth_view = hit_depth.create_view(&Default::default());
         let target = |label, (width, height)| {
-            ctx.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: HDR_FORMAT,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                &ctx.device,
+                label,
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                1,
+                HDR_FORMAT,
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+            )
+            .create_view(&Default::default())
         };
         let trace = target("puddle reflection rays", size);
         let vehicle_view = target("puddle player vehicle", size);
-        let vehicle_depth = ctx
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("puddle player vehicle depth"),
-                size: wgpu::Extent3d {
-                    width: size.0,
-                    height: size.1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
-            .create_view(&Default::default());
+        let vehicle_depth = target_2d(
+            &ctx.device,
+            "puddle player vehicle depth",
+            wgpu::Extent3d {
+                width: size.0,
+                height: size.1,
+                depth_or_array_layers: 1,
+            },
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        )
+        .create_view(&Default::default());
         let blur = target("puddle reflection horizontal filter", size);
         let filtered = target("puddle reflection filtered", size);
         let view = target("scene with puddle reflections", (w, h));
