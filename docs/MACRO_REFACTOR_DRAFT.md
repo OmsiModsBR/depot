@@ -556,6 +556,7 @@ Situação em 16/10/2026:
 | F, física de veículo, segunda rodada | Nova, a próxima. Detalhe abaixo |
 | 3, frios e mornos da auditoria | Nova, depois da F |
 | 4, áreas quentes | A antiga trilha 3, ampliada com os itens da auditoria, depois da F |
+| S, `omsi-sim` por domínio | Nova (18/10/2026), em paralelo à 3. Detalhe em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md) |
 
 Os bugs B1 a B7 não esperam nenhuma trilha.
 
@@ -636,6 +637,14 @@ A antiga trilha 3, com o mesmo método de janelas curtas e anunciadas, agora com
 As alocações por frame (fix-24) entram item a item na fase de performance do mapa, medidas com o perfil por escopo, e não nesta trilha.
 
 Portão: o da antiga trilha 3 (traço B0 idêntico em cada PR, `run_offscreen` abaixo de 400 linhas, `omsi-gameplay` compilando e testando sem `wgpu`, `omsi-app` abaixo de 50 mil linhas na configuração padrão), mais `scene.rs` sem arquivo acima de 3.000 linhas e nenhuma divergência conhecida no teste de ida e volta do `settings.cfg`.
+
+### Trilha S: `omsi-sim` por domínio
+
+Pedida pelo mantenedor em 18/10/2026, com três objetivos: testes e auxílios de teste fora do código funcional, o crate dividido por domínio e subdomínio, e sem código duplicado. O plano completo, com o diagnóstico, a árvore alvo e a sequência de PRs (S1 a S5), está em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md).
+
+Em resumo, cinco PRs: rustfmt do crate, as quatro funções sem uso removidas e as cópias de `angle_diff`, do xorshift e do smoothstep trocadas (S1); todos os testes de `src/` para `tests/`, um apoio de testes só (`tests/support/`), o que é interno alcançado pela feature `test-support` e traços novos do motorista da IA e da pose das pessoas (S2); `traffic/` (S3); `people/` (S4); e `host/`, `automation/`, `collision/`, `textures/` e `vehicle/coupled/` (S5), cada um já com os imports do app nos caminhos novos. Ela não tem arquivo em comum com a Trilha 3 e prepara o `omsi-gameplay` da Trilha 4.
+
+Portão: nenhum teste em `src/`, nenhum auxílio de teste copiado, nenhuma API só de teste no jogo, nenhum arquivo funcional do `omsi-sim` acima de 800 linhas, e os traços da física, da IA, do tráfego e das pessoas idênticos em todos os PRs.
 
 ## Preparação para implementação: trilhas 0 e 1
 
