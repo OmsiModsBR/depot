@@ -129,6 +129,10 @@ fn cars_wait_at_red_and_go_on_green() {
         // per car: seconds it has stood at the line with green showing, first in its queue
         let mut waited = std::collections::HashMap::<u64, f32>::new();
         let mut worst = (0.0f32, String::new());
+        // the lane each car was on a frame ago, and the cars that went into the junction while
+        // their light had been red for two seconds
+        let mut was_on = std::collections::HashMap::<u64, usize>::new();
+        let mut ran_red = Vec::<String>::new();
         for k in 0..12 {
             // a car on each street every 10 s, 70 m before its line
             for d in [NORTH, EAST] {
@@ -139,6 +143,22 @@ fn cars_wait_at_red_and_go_on_green() {
                     let Some(c) = w.t.cars.iter().find(|c| c.id == id) else {
                         continue;
                     };
+                    let before = was_on.insert(id, c.state.lane);
+                    if let Some(d) = [NORTH, EAST]
+                        .into_iter()
+                        .find(|&d| w.x.junction[d] == c.state.lane)
+                    {
+                        let red = |at: f64| {
+                            matches!(
+                                TrafficLightController::aspect(w.t.lights[0].state_at(d, at)),
+                                Aspect::Red | Aspect::RedYellow
+                            )
+                        };
+                        let now = w.t.lights[0].time;
+                        if before == Some(w.x.approach[d]) && red(now) && red(now - 2.0) {
+                            ran_red.push(describe(w, id));
+                        }
+                    }
                     let Some(d) = [NORTH, EAST]
                         .into_iter()
                         .find(|&d| w.x.approach[d] == c.state.lane)
@@ -168,6 +188,10 @@ fn cars_wait_at_red_and_go_on_green() {
             worst.0,
             worst.1
         );
+        assert!(
+            ran_red.is_empty(),
+            "start {start}: went in on red: {ran_red:#?}"
+        );
         w.run(60.0, |_| {});
         let stuck: Vec<String> = ids
             .iter()
@@ -183,7 +207,7 @@ fn cars_wait_at_red_and_go_on_green() {
 
 /// #192: two emergency vehicles come to the crossroads from different streets, each one going
 /// straight on or turning, at several distances and speeds (standing too), with or without a
-/// car behind. One of them must go in soon, and all must be through within a minute.
+/// car behind. One of them must go in within 25 s, and all must be through within a minute.
 #[test]
 fn two_emergency_vehicles_do_not_wait_for_each_other() {
     let mut n = 0;
@@ -219,13 +243,28 @@ fn two_emergency_vehicles_do_not_wait_for_each_other() {
                             all.push(id);
                         }
                     }
-                    w.run(60.0, |_| {});
+                    let mut first = None;
+                    w.run(60.0, |w| {
+                        if first.is_none() && (w.in_junction(a) || w.in_junction(b)) {
+                            first = Some(w.t.time);
+                        }
+                    });
+                    let case = format!(
+                        "{da} {ka} at {sa} m {va} m/s against {db} {kb} at {sb} m {vb} m/s"
+                    );
+                    assert!(
+                        first.is_some_and(|t| t < 25.0),
+                        "{case}: neither went in within 25 s ({first:?})"
+                    );
                     let stuck: Vec<String> = all
                         .iter()
                         .filter(|&&id| !w.through(id))
                         .map(|&id| describe(&w, id))
                         .collect();
-                    assert!(stuck.is_empty(), "{da} {ka} at {sa} m {va} m/s against {db} {kb} at {sb} m {vb} m/s: still before the junction after a minute: {stuck:#?}");
+                    assert!(
+                        stuck.is_empty(),
+                        "{case}: still before the junction after a minute: {stuck:#?}"
+                    );
                 }
             }
         }
