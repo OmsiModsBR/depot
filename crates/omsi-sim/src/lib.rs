@@ -30,3 +30,6 @@ pub use host::VehicleHost;
 pub use input::{engine_action, EngineAction, KeyboardAxes};
 pub use physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 pub use vehicle::{VehicleInstance, VehicleType};
+
+#[cfg(feature = "test-support")]
+pub mod testing;

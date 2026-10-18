@@ -725,6 +725,3 @@ impl RigidBody {
             / n
     }
 }
-
-#[cfg(test)]
-mod tests;

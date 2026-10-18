@@ -1,5 +1,7 @@
-use super::*;
+use glam::{DVec2, DVec3};
+use omsi_sim::testing::ai::*;
 use omsi_vehicle::vehicle::Axle;
+use omsi_vehicle::Vehicle;
 
 #[test]
 fn back_in_ramp_keeps_the_sideways_acceleration() {
@@ -78,11 +80,11 @@ fn follows_a_bend_smoothly() {
         let at = s;
         body.step(dt, speed, &|d| bend(12.0, at + d as f64), None, None);
         if let Some(y) = last_yaw {
-            worst_jump = worst_jump.max((body.yaw_rate - y).abs().to_degrees());
+            worst_jump = worst_jump.max((body.yaw_rate() - y).abs().to_degrees());
         }
-        last_yaw = Some(body.yaw_rate);
+        last_yaw = Some(body.yaw_rate());
         // the rear axle stays on the way (a circle has no steady error; entering it costs a little)
-        let rear = body.rear;
+        let rear = body.rear();
         let q = bend(12.0, at + def.rot_pnt_long as f64).truncate();
         worst_off = worst_off.max((rear - q).length());
     }
@@ -171,8 +173,8 @@ fn lorry() -> Vehicle {
 
 /// A standing bus `half_width` × 2 wide, `gap` metres ahead of a vehicle whose front is `front`
 /// metres ahead of its origin at (0, 0) facing north.
-fn bus_ahead(front: f32, gap: f32, half_width: f64) -> crate::collision::Obb {
-    crate::collision::Obb::vehicle(
+fn bus_ahead(front: f32, gap: f32, half_width: f64) -> omsi_sim::collision::Obb {
+    omsi_sim::collision::Obb::vehicle(
         DVec2::new(0.0, (front + gap) as f64 + 6.0),
         0.0,
         6.0,
@@ -289,12 +291,12 @@ fn each_wheel_stands_on_the_face_under_it() {
         let ground = move |x: f64, y: f64, top: f64| {
             let z = road(x, y);
             if z <= top {
-                crate::physics::GroundProbe {
+                omsi_sim::physics::GroundProbe {
                     below: Some(z),
                     above: None,
                 }
             } else {
-                crate::physics::GroundProbe {
+                omsi_sim::physics::GroundProbe {
                     below: Some(9.0),
                     above: Some(z),
                 }
@@ -309,7 +311,7 @@ fn each_wheel_stands_on_the_face_under_it() {
             let at = x;
             body.step(1.0 / 30.0, 6.0, &|d| way(at + d), None, Some(&ground));
         }
-        for (w, z) in body.wheels.iter().zip(&body.contact_z) {
+        for (w, z) in body.wheels().iter().zip(body.contact_z()) {
             let p = body.position.truncate() + DVec2::new(w.lat as f64, w.long as f64);
             assert!(
                 (z - road(p.x, p.y)).abs() < 0.01,
@@ -340,7 +342,7 @@ fn a_car_over_a_lower_road_comes_down_onto_it() {
     for (drop, expect) in [(0.5f64, 9.5f64), (6.0, 10.0)] {
         let ground = move |_x: f64, _y: f64, top: f64| {
             let z = 10.0 - drop;
-            crate::physics::GroundProbe {
+            omsi_sim::physics::GroundProbe {
                 below: (z <= top).then_some(z),
                 above: None,
             }

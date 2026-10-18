@@ -1,11 +1,11 @@
-use super::domain::params::{HALF_WIDTH, LATTICE};
-use super::*;
 use glam::{DVec3, Vec3};
+use omsi_sim::testing::physics::domain::params::{HALF_WIDTH, LATTICE};
+use omsi_sim::testing::physics::*;
 use omsi_vehicle::Vehicle;
 
 use omsi_vehicle::vehicle::Axle;
 
-pub(super) fn bus() -> Vehicle {
+pub(crate) fn bus() -> Vehicle {
     let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle {
         long,
         max_width: 2.4,
@@ -34,7 +34,7 @@ pub(super) fn bus() -> Vehicle {
 }
 
 /// Flat road at height 0 with an optional step of `step` metres from y = `at` on.
-pub(super) fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
+pub(crate) fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
     move |_x, y, z_top| {
         let z = if y >= at { step } else { 0.0 };
         if z <= z_top {
@@ -51,14 +51,14 @@ pub(super) fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe 
     }
 }
 
-pub(super) fn run(
+pub(crate) fn run(
     rb: &mut RigidBody,
     secs: f32,
     torque: f32,
     brake: f32,
     g: &dyn Fn(f64, f64, f64) -> GroundProbe,
 ) {
-    let brakes = vec![brake; rb.wheels.len()];
+    let brakes = vec![brake; rb.wheels().len()];
     for _ in 0..(secs * 60.0) as usize {
         rb.step(1.0 / 60.0, torque, &brakes, 0.0, g);
     }
@@ -98,31 +98,32 @@ fn driving_past_a_thin_roadside_triangle_has_no_false_wall() {
             rb.place(DVec3::new(14.0, 4.0, 0.0), 0.0);
             run(&mut rb, 2.0, 0.0, 0.0, &ground);
             let speed = kmh / 3.6;
-            rb.velocity = Vec3::Y * speed;
-            for w in &mut rb.wheels {
-                w.spin = speed / w.radius;
+            rb.set_velocity(Vec3::Y * speed);
+            for w in rb.wheels_mut() {
+                w.set_spin(speed / w.radius());
             }
-            let radius = rb.wheels.iter().find(|w| w.driven).unwrap().radius;
+            let radius = rb.wheels().iter().find(|w| w.driven()).unwrap().radius();
             let dt = 1.0 / fps as f32;
             // Hold speed with drive torque so the slow case crosses too.
             for _ in 0..(18.0 / speed / dt).ceil() as usize {
-                let torque =
-                    ((speed - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
+                let torque = ((speed - rb.forward_speed()) * rb.mass() * 2.0
+                    + rb.rolling_resistance())
+                    * radius;
                 rb.step(dt, torque, &[0.0; 4], 0.0, &ground);
                 assert!(
-                    rb.wheel_impacts.is_empty(),
+                    rb.wheel_impacts().is_empty(),
                     "{kmh} km/h at {fps} fps: {:?}",
-                    rb.wheel_impacts
+                    rb.wheel_impacts()
                 );
                 assert!(
-                    rb.wheels.iter().all(|w| w.walls.is_empty()),
+                    rb.wheels().iter().all(|w| w.walls().is_empty()),
                     "{kmh} km/h at {fps} fps: false wheel wall"
                 );
             }
             assert!(
-                rb.position.y > 20.0,
+                rb.position().y > 20.0,
                 "{kmh} km/h at {fps} fps: stopped at {:?}",
-                rb.position
+                rb.position()
             );
             assert!(
                 rb.forward_speed() > speed * 0.9,
@@ -146,8 +147,8 @@ fn the_axle_steers_as_far_left_as_right() {
         (
             rb.axle_steer(0),
             rb.axle_steer(1),
-            rb.wheels[0].steer,
-            rb.wheels[1].steer,
+            rb.wheels()[0].steer(),
+            rb.wheels()[1].steer(),
         )
     };
     let (l0, r0, tl0, tr0) = at(-1.0);
@@ -173,19 +174,22 @@ fn a_brake_beyond_the_grip_locks_the_wheels() {
         rb.place(DVec3::ZERO, 0.0);
         let g = road(1e9, 0.0);
         run(&mut rb, 2.0, 0.0, 0.0, &g);
-        rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 12.0;
-        for w in rb.wheels.iter_mut() {
-            w.spin = 12.0 / w.radius;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * 12.0);
+        for w in rb.wheels_mut().iter_mut() {
+            w.set_spin(12.0 / w.radius());
         }
         run(&mut rb, 0.6, 0.0, brake, &g);
-        let v = rb.velocity.length();
-        let locked = rb.wheels.iter().all(|w| w.spin.abs() * w.radius < 0.5);
+        let v = rb.velocity().length();
+        let locked = rb
+            .wheels()
+            .iter()
+            .all(|w| w.spin().abs() * w.radius() < 0.5);
         assert!(v > 5.0, "still moving: {v}");
         assert_eq!(
             locked,
             locks,
             "brake {brake}: spins {:?} at {v} m/s",
-            rb.wheels.iter().map(|w| w.spin).collect::<Vec<_>>()
+            rb.wheels().iter().map(|w| w.spin()).collect::<Vec<_>>()
         );
     }
 }
@@ -200,17 +204,19 @@ fn sags_by_its_own_springs() {
     run(&mut rb, 3.0, 0.0, 5000.0, &g);
     let origin = rb.origin();
     assert!((origin.z + 0.097).abs() < 0.01, "origin {origin:?}");
-    for w in &rb.wheels {
+    for w in rb.wheels() {
         assert!(
-            (w.compression - 0.097).abs() < 0.015,
+            (w.compression() - 0.097).abs() < 0.015,
             "compression {}",
-            w.compression
+            w.compression()
         );
-        assert!(w.ground_z.abs() < 1e-6);
+        assert!(w.ground_z().abs() < 1e-6);
     }
     // a softer air spring lowers it further
     let mut soft = RigidBody::from_definition(&bus(), &[]);
-    soft.wheels.iter_mut().for_each(|w| w.spring_factor = 0.5);
+    soft.wheels_mut()
+        .iter_mut()
+        .for_each(|w| w.set_spring_factor(0.5));
     soft.place(DVec3::ZERO, 0.0);
     run(&mut soft, 3.0, 0.0, 5000.0, &g);
     assert!(soft.origin().z < origin.z - 0.08, "{:?}", soft.origin());
@@ -235,7 +241,7 @@ fn the_motion_does_not_depend_on_the_frame_rate() {
                 &g,
             );
         }
-        (rb.position, rb.orientation, rb.velocity, rb.omega)
+        (rb.position(), rb.orientation(), rb.velocity(), rb.omega())
     };
     let at_60 = drive(60);
     for fps in [30, 120, 240] {
@@ -250,7 +256,7 @@ fn the_shown_body_moves_on_evenly_between_substeps() {
     let g = road(1e9, 0.0);
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
-    rb.velocity = Vec3::new(0.0, 50.0 / 3.6, 0.0);
+    rb.set_velocity(Vec3::new(0.0, 50.0 / 3.6, 0.0));
     run(&mut rb, 1.0, 0.0, 0.0, &g);
     let (mut shown, mut stepped) = (Vec::new(), Vec::new());
     let (mut last_shown, mut last_stepped) = (rb.shown_origin().y, rb.origin().y);
@@ -282,7 +288,7 @@ fn short_frames_add_up_to_substeps() {
         for _ in 0..3 * fps {
             rb.step(1.0 / fps as f32, 6000.0, &[0.0; 4], 0.0, &g);
         }
-        rb.position.y
+        rb.position().y
     };
     let (a, b) = (go(60), go(300));
     assert!((a - b).abs() < 0.05, "{a} m at 60 fps, {b} m at 300");
@@ -299,13 +305,13 @@ fn a_long_frame_does_not_bounce_the_body() {
     rb.place(DVec3::ZERO, 0.0);
     let g = road(1e9, 0.0);
     run(&mut rb, 3.0, 3000.0, 5000.0, &g);
-    let before: Vec<f32> = rb.wheels.iter().map(|w| w.compression).collect();
+    let before: Vec<f32> = rb.wheels().iter().map(|w| w.compression()).collect();
     rb.step(0.1, 3000.0, &[0.0; 4], 0.0, &g);
     let mut worst = 0.0f32;
     for _ in 0..30 {
         rb.step(1.0 / 60.0, 3000.0, &[0.0; 4], 0.0, &g);
-        for (w, b) in rb.wheels.iter().zip(&before) {
-            worst = worst.max((w.compression - b).abs());
+        for (w, b) in rb.wheels().iter().zip(&before) {
+            worst = worst.max((w.compression() - b).abs());
         }
     }
     assert!(
@@ -333,17 +339,17 @@ fn rides_over_a_hump() {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 2.0, 0.0, 5000.0, &hump);
-    rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * (40.0 / 3.6);
-    let z0 = rb.position.z;
+    rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * (40.0 / 3.6));
+    let z0 = rb.position().z;
     let (mut lift, mut jump, mut air) = (0.0f64, 0.0f32, 0usize);
-    let mut last: Vec<f32> = rb.wheels.iter().map(|w| w.compression).collect();
+    let mut last: Vec<f32> = rb.wheels().iter().map(|w| w.compression()).collect();
     for _ in 0..(3.0 * 60.0) as usize {
         rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 0.0, &hump);
-        lift = lift.max(rb.position.z - z0);
-        for (k, w) in rb.wheels.iter().enumerate() {
-            jump = jump.max((w.compression - last[k]).abs());
-            last[k] = w.compression;
-            if !w.on_ground {
+        lift = lift.max(rb.position().z - z0);
+        for (k, w) in rb.wheels().iter().enumerate() {
+            jump = jump.max((w.compression() - last[k]).abs());
+            last[k] = w.compression();
+            if !w.on_ground() {
                 air += 1;
             }
         }
@@ -379,9 +385,9 @@ fn climbs_a_kerb_but_not_a_wall() {
     let (rb, front) = climb(&kerb, 9500.0, 10.0);
     assert!(front > 9.0, "front axle at {front}");
     assert!(
-        (rb.wheels[0].ground_z - 0.15).abs() < 0.01,
+        (rb.wheels()[0].ground_z() - 0.15).abs() < 0.01,
         "front wheel on the kerb: {}",
-        rb.wheels[0].ground_z
+        rb.wheels()[0].ground_z()
     );
     let (_, front) = climb(&kerb, 1400.0, 10.0);
     assert!(
@@ -428,7 +434,7 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     let g = road(1e9, 0.0);
     let start = |def: &Vehicle, parts: Vec<CoupledPart>| {
         let mut rb = RigidBody::from_definition(def, &[]);
-        rb.coupled = parts;
+        *rb.coupled_mut() = parts;
         rb.place(DVec3::ZERO, 0.0);
         run(&mut rb, 1.0, 0.0, 5000.0, &g);
         rb
@@ -437,10 +443,10 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     let mut rb = start(&def, vec![rear]);
     run(&mut rb, 2.0, 9000.0, 20_000.0, &g);
     assert!(rb.origin().y.abs() < 0.05, "crept to {:?}", rb.origin());
-    rb.coupled[0].brake = 80_000.0;
+    rb.coupled_mut()[0].brake = 80_000.0;
     run(&mut rb, 2.0, 9000.0, 0.0, &g);
     assert!(rb.origin().y.abs() < 0.05, "crept to {:?}", rb.origin());
-    rb.coupled[0].brake = 0.0;
+    rb.coupled_mut()[0].brake = 0.0;
     run(&mut rb, 5.0, 9000.0, 0.0, &g);
     let pushed = rb.origin().y;
     // the same torque on its own rear axle
@@ -459,7 +465,7 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     );
     // the rear section's brakes stop the train
     let v = rb.forward_speed();
-    rb.coupled[0].brake = 30_000.0;
+    rb.coupled_mut()[0].brake = 30_000.0;
     run(&mut rb, 1.0, 0.0, 0.0, &g);
     assert!(
         rb.forward_speed() < v - 2.0,
@@ -467,7 +473,7 @@ fn pusher_front_section_is_pushed_through_the_joint() {
         rb.forward_speed()
     );
     // and backwards
-    rb.coupled[0].brake = 0.0;
+    rb.coupled_mut()[0].brake = 0.0;
     run(&mut rb, 1.0, 0.0, 20_000.0, &g);
     let y0 = rb.origin().y;
     run(&mut rb, 6.0, -9000.0, 0.0, &g);
@@ -476,7 +482,7 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     let mut heavy = start(
         &def,
         vec![CoupledPart {
-            mass: rb.mass,
+            mass: rb.mass(),
             ..rear
         }],
     );
@@ -505,7 +511,7 @@ fn pusher_front_section_is_pushed_through_the_joint() {
         "{:?} {heading}",
         bent.origin()
     );
-    bent.coupled[0].brake = 0.0;
+    bent.coupled_mut()[0].brake = 0.0;
     run(&mut bent, 5.0, 9000.0, 0.0, &g);
     let (heading, _, _) = bent.heading_pitch_bank();
     let ratio = bent.origin().y / pushed;
@@ -533,7 +539,7 @@ fn towed_weight_on_a_grade() {
         load: 70_000.0,
     };
     let mut rb = RigidBody::from_definition(&def, &[]);
-    rb.coupled = vec![CoupledPart {
+    *rb.coupled_mut() = vec![CoupledPart {
         brake: 40_000.0,
         ..part
     }];
@@ -546,13 +552,13 @@ fn towed_weight_on_a_grade() {
         "rolled from {y0} to {}",
         rb.origin().y
     );
-    rb.coupled[0].brake = 0.0;
+    rb.coupled_mut()[0].brake = 0.0;
     run(&mut rb, 3.0, 0.0, 0.0, &g);
     assert!(rb.origin().y < y0 - 1.0, "stayed at {}", rb.origin().y);
 }
 
 /// A ramp of grade `s` along y (from y = 0), steps over `CLIMB` radii read as faces.
-pub(super) fn ramp(s: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
+pub(crate) fn ramp(s: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
     move |_x, y, top| {
         let z = y * s;
         if z <= top {
@@ -588,7 +594,7 @@ fn a_step_asks_for_few_points() {
         rb.step(1.0 / 60.0, 0.0, &[30_000.0; 4], 0.0, &probe);
         // (and the point under the wheel OMSI's suspension stands on)
         assert!(
-            count.get() <= 4 * rb.wheels.len() * (LATTICE + 6),
+            count.get() <= 4 * rb.wheels().len() * (LATTICE + 6),
             "{s}: {} probes",
             count.get()
         );
@@ -609,7 +615,7 @@ fn rolls_down_a_grade_at_its_own_pace() {
         let v0 = rb.forward_speed();
         run(&mut rb, 2.0, 0.0, 0.0, &g);
         let accel = (rb.forward_speed() - v0) / 2.0;
-        let want = -(9.81 * s / (1.0 + s * s).sqrt()) as f32 + 1000.0 / rb.mass;
+        let want = -(9.81 * s / (1.0 + s * s).sqrt()) as f32 + 1000.0 / rb.mass();
         assert!(
             (accel - want).abs() < 0.04 * want.abs(),
             "{pct} %: {accel} m/s², want {want}"
@@ -626,14 +632,14 @@ fn a_step_near_the_radius_is_a_wall() {
     let (rb, front) = climb(&step, 9500.0, 10.0);
     assert!(front < 6.0 - 0.4, "front axle at {front}");
     assert!(
-        rb.wheels[0].ground_z.abs() < 0.01,
+        rb.wheels()[0].ground_z().abs() < 0.01,
         "on the step: {}",
-        rb.wheels[0].ground_z
+        rb.wheels()[0].ground_z()
     );
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &step);
-    rb.velocity = Vec3::new(0.0, 15.0 / 3.6, 0.0);
+    rb.set_velocity(Vec3::new(0.0, 15.0 / 3.6, 0.0));
     run(&mut rb, 5.0, 9500.0, 0.0, &step);
     let front = rb.origin().y + 3.238;
     assert!(front < 6.0 - 0.4, "front axle at {front} after a run-up");
@@ -641,7 +647,7 @@ fn a_step_near_the_radius_is_a_wall() {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &low);
-    rb.velocity = Vec3::new(0.0, 15.0 / 3.6, 0.0);
+    rb.set_velocity(Vec3::new(0.0, 15.0 / 3.6, 0.0));
     run(&mut rb, 5.0, 9500.0, 0.0, &low);
     assert!(
         rb.origin().y > 6.0,
@@ -649,9 +655,11 @@ fn a_step_near_the_radius_is_a_wall() {
         rb.origin().y
     );
     assert!(
-        rb.wheels.iter().all(|w| (w.ground_z - 0.3).abs() < 0.01),
+        rb.wheels()
+            .iter()
+            .all(|w| (w.ground_z() - 0.3).abs() < 0.01),
         "{:?}",
-        rb.wheels.iter().map(|w| w.ground_z).collect::<Vec<_>>()
+        rb.wheels().iter().map(|w| w.ground_z()).collect::<Vec<_>>()
     );
 }
 
@@ -666,7 +674,7 @@ fn a_face_stops_the_wheels_at_any_speed() {
             let mut rb = RigidBody::from_definition(&bus(), &[]);
             rb.place(DVec3::new(0.0, -10.0, 0.0), 0.0);
             run(&mut rb, 1.0, 0.0, 5000.0, &wall);
-            rb.velocity = Vec3::new(0.0, kmh / 3.6, 0.0);
+            rb.set_velocity(Vec3::new(0.0, kmh / 3.6, 0.0));
             let kinetic = rb.kinetic_energy();
             let (mut front, mut top, mut crash) = (f64::MIN, f64::MIN, 0.0);
             for _ in 0..(fps * 6.0) as usize {
@@ -674,7 +682,7 @@ fn a_face_stops_the_wheels_at_any_speed() {
                 front = front.max(rb.origin().y + 3.238);
                 top = top.max(rb.origin().z);
                 for hit in rb
-                    .wheel_impacts
+                    .wheel_impacts()
                     .iter()
                     .filter(|h| h.speed > CRASH_SPEED && h.energy > 1000.0)
                 {
@@ -728,12 +736,12 @@ fn a_face_beside_the_tyres_stops_a_slide() {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 1.0, 0.0, 0.0, &platform);
-    rb.velocity = Vec3::new(8.0, 0.0, 0.0);
+    rb.set_velocity(Vec3::new(8.0, 0.0, 0.0));
     let mut right = f64::MIN;
     for _ in 0..120 {
         rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &platform);
-        for w in rb.wheels.iter().filter(|w| w.attach.x > 0.0) {
-            let hub = rb.position + rb.orientation.mul_vec3(w.attach - rb.cog).as_dvec3();
+        for w in rb.wheels().iter().filter(|w| w.attach().x > 0.0) {
+            let hub = rb.position() + rb.orientation().mul_vec3(w.attach() - rb.cog()).as_dvec3();
             right = right.max(hub.x);
         }
     }
@@ -743,12 +751,12 @@ fn a_face_beside_the_tyres_stops_a_slide() {
         "a right hub reached {right} (face at 1.5)"
     );
     assert!(
-        rb.wheels
+        rb.wheels()
             .iter()
-            .filter(|w| w.attach.x > 0.0)
-            .all(|w| !w.walls.is_empty()),
+            .filter(|w| w.attach().x > 0.0)
+            .all(|w| !w.walls().is_empty()),
         "{:?}",
-        rb.wheels.iter().map(|w| &w.walls).collect::<Vec<_>>()
+        rb.wheels().iter().map(|w| w.walls()).collect::<Vec<_>>()
     );
     let (_, _, bank) = rb.heading_pitch_bank();
     assert!(bank.abs() < 5.0, "banked {bank}");
@@ -810,7 +818,7 @@ fn holds_on_a_slope_and_brakes_to_a_stand() {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 0.5, 0.0, 0.0, &flat);
-    rb.velocity = Vec3::new(0.0, 50.0 / 3.6, 0.0);
+    rb.set_velocity(Vec3::new(0.0, 50.0 / 3.6, 0.0));
     let mut t = 0.0;
     while rb.forward_speed() > 0.01 && t < 10.0 {
         rb.step(1.0 / 60.0, 0.0, &[15_000.0; 4], 0.0, &flat);
@@ -836,8 +844,8 @@ fn brakes_slide_on_ice() {
         let mut rb = RigidBody::from_definition(&bus(), &[]);
         rb.place(DVec3::ZERO, 0.0);
         run(&mut rb, 0.5, 0.0, 0.0, &flat);
-        rb.friction = mu;
-        rb.velocity = Vec3::new(0.0, 50.0 / 3.6, 0.0);
+        rb.set_friction(mu);
+        rb.set_velocity(Vec3::new(0.0, 50.0 / 3.6, 0.0));
         let y0 = rb.origin().y;
         let mut t = 0.0;
         while rb.forward_speed() > 0.01 && t < 30.0 {
@@ -847,8 +855,8 @@ fn brakes_slide_on_ice() {
         rb.origin().y - y0
     };
     let (dry, ice) = (
-        stop(crate::vehicle::road_grip(0.0, 15.0)),
-        stop(crate::vehicle::road_grip(0.4, -6.0)),
+        stop(omsi_sim::vehicle::road_grip(0.0, 15.0)),
+        stop(omsi_sim::vehicle::road_grip(0.4, -6.0)),
     );
     eprintln!("50 km/h to a stand: {dry:.1} m dry, {ice:.1} m on ice");
     assert!(dry > 12.0 && dry < 20.0, "dry {dry}");
@@ -874,10 +882,10 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
             rb.step(1.0 / 60.0, torque, &[brake; 4], steer, &g);
         }
         assert!(
-            rb.position.is_finite() && rb.velocity.is_finite(),
+            rb.position().is_finite() && rb.velocity().is_finite(),
             "{torque} {brake} {steer}: {:?} {:?}",
-            rb.position,
-            rb.velocity
+            rb.position(),
+            rb.velocity()
         );
         assert!(
             rb.forward_speed() > 0.1,
@@ -885,24 +893,24 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
             rb.forward_speed()
         );
         assert!(rb
-            .wheels
+            .wheels()
             .iter()
-            .all(|w| w.compression.is_finite() && w.spin.is_finite()));
+            .all(|w| w.compression().is_finite() && w.spin().is_finite()));
     }
     // a body whose own values are no number stays put
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     let g = road(1e9, 0.0);
     run(&mut rb, 0.5, 0.0, 0.0, &g);
-    let at = rb.position;
-    rb.mass = f32::NAN;
+    let at = rb.position();
+    rb.set_mass(f32::NAN);
     rb.step(1.0 / 60.0, 3000.0, &[0.0; 4], 0.0, &g);
     assert!(
-        rb.position.is_finite() && (rb.position - at).length() < 1e-9,
+        rb.position().is_finite() && (rb.position() - at).length() < 1e-9,
         "{:?}",
-        rb.position
+        rb.position()
     );
-    assert_eq!(rb.velocity, Vec3::ZERO);
+    assert_eq!(rb.velocity(), Vec3::ZERO);
 }
 
 #[test]
@@ -965,9 +973,9 @@ fn an_axle_without_springs_carries_nothing() {
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 1.0, 0.0, 0.0, &road(1e9, 0.0));
     assert!(
-        rb.wheels.iter().all(|w| w.load() == 0.0),
+        rb.wheels().iter().all(|w| w.load() == 0.0),
         "{:?}",
-        rb.wheels.iter().map(|w| w.load()).collect::<Vec<_>>()
+        rb.wheels().iter().map(|w| w.load()).collect::<Vec<_>>()
     );
     assert!(rb.position().z.is_finite());
 }

@@ -153,7 +153,7 @@ impl VehicleInstance {
         }
     }
 
-    pub(super) fn step_physics(&mut self, dt: f32) {
+    pub(crate) fn step_physics(&mut self, dt: f32) {
         let c = self.controls;
         let DriveInputs { m_wheel, brakes } = self.take_drive_inputs();
         let k = match self.dynamics {

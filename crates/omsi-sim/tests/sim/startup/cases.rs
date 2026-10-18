@@ -1,5 +1,6 @@
-use super::*;
-use crate::{SimClock, VehicleHost, VehicleType};
+use omsi_sim::testing::startup::*;
+use omsi_sim::VehicleInstance;
+use omsi_sim::{SimClock, VehicleHost, VehicleType};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{
@@ -367,11 +368,11 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     for _ in 0..300 {
         start.tick(&mut v, &[], dt);
         v.update(dt);
-        if start.step == Step::Verify {
+        if start.verifying() {
             break;
         }
     }
-    assert_eq!(start.step, Step::Verify);
+    assert!(start.verifying());
     assert_eq!(v.var("releases"), Some(1.0));
     v.trigger("stall");
     advance(&mut v, &mut start, dt, 6.0);
@@ -390,7 +391,7 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     for _ in 0..1200 {
         let running = start.tick(&mut v, &[], dt);
         v.update(dt);
-        if start.step == Step::Verify {
+        if start.verifying() {
             v.trigger("stall");
         }
         if !running {

@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 impl VehicleInstance {
     /// Coupled vehicles follow and animate from this vehicle's variables.
-    pub(super) fn update_trailers(&mut self, dt: f32) {
+    pub(crate) fn update_trailers(&mut self, dt: f32) {
         let mut trailers = std::mem::take(&mut self.trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         for t in &mut trailers {
@@ -88,7 +88,7 @@ impl VehicleInstance {
 /// variables, and it is towed at the coupling point with trailer kinematics.
 /// Sign of `articulation_<n>_alpha` relative to (heading in front − own heading), clockwise
 /// degrees: settled with the GN92's joint dummies (see the vehicle tests).
-pub(super) const ARTICULATION_SIGN: f64 = 1.0;
+pub const ARTICULATION_SIGN: f64 = 1.0;
 
 pub struct TrailerPart {
     pub ty: Arc<VehicleType>,
@@ -110,10 +110,10 @@ pub struct TrailerPart {
     pub(super) pitch_offset: f32,
     pub(super) coupling_front: Vec3,
     pub(super) coupling_back: Vec3,
-    pub(super) axle_long: f32,
+    pub(crate) axle_long: f32,
     pub(super) axle_count: usize,
     /// First axle index of this part in the train's `Wheel_*` variables.
-    pub(super) first_axle: usize,
+    pub(crate) first_axle: usize,
     pub(super) wheel_radius: f32,
     /// `articulation_<n>_alpha` (the angle about the vertical axis, which the jackknife
     /// protection watches and the joint's plates and bellows turn with) and
@@ -131,14 +131,14 @@ pub struct TrailerPart {
     pub(super) ground_lift: f32,
     /// The part's pitch (degrees, nose up) and lean (degrees, as the vehicle's `bank`) as
     /// it travels (not turned round for a reversed part), and the eased height of its axle.
-    pub(super) pitch: f32,
-    pub(super) bank: f32,
-    pub(super) axle_z: Option<f64>,
+    pub(crate) pitch: f32,
+    pub(crate) bank: f32,
+    pub(crate) axle_z: Option<f64>,
     /// How fast the axle's height moves (m/s), for the road part's springs (see `follow`).
     pub(super) axle_vz: f64,
     /// The track under its turning axle, when it runs on rails (`VehicleInstance::retrail`):
     /// it stands at the track's height, not on whatever the ground probe finds there.
-    pub(super) track: Option<DVec3>,
+    pub(crate) track: Option<DVec3>,
     /// Mesh property sources, resolved against the leading vehicle's variables.
     pub(super) props_plan: PropsPlan,
     /// The part's own body behind the player's vehicle (see `articulation`).
@@ -168,7 +168,7 @@ pub fn body_heading(def: &Vehicle, heading: f64, reversed: bool) -> f64 {
     }
 }
 
-pub(super) fn body_rotation(heading: f64, pitch: f32, bank: f32, reversed: bool) -> Mat4 {
+pub fn body_rotation(heading: f64, pitch: f32, bank: f32, reversed: bool) -> Mat4 {
     let (h, p, b) = if reversed {
         (heading + 180.0, -pitch, -bank)
     } else {

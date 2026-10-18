@@ -34,7 +34,7 @@ pub(super) struct Contact {
 /// heading at the start of it, the mass towed along it, and the forces (world) and torques
 /// (body frame) but for the tyres' hold across, which `RigidBody::lateral_start` sets up.
 #[derive(Default)]
-pub(super) struct Substep {
+pub struct Substep {
     pub(super) rot: Quat,
     pub(super) body_fwd: Vec3,
     pub(super) towed: f32,
@@ -48,7 +48,7 @@ pub(super) struct Substep {
 /// each tyre so far, and what a joint passed on to the body (`joint_p` world, `joint_l` body
 /// frame; see [`Joint`](crate::physics::Joint)).
 #[derive(Default)]
-pub(super) struct Lateral {
+pub struct Lateral {
     pub(super) lat: Vec<usize>,
     pub(super) arms: Vec<(Vec3, f32)>,
     pub(super) j: Vec<f32>,
@@ -67,7 +67,7 @@ pub(super) struct Lateral {
 /// The buffers a body's substep works in besides its [`Substep`] and [`Lateral`], kept from
 /// one substep to the next (see `SolverScratch`).
 #[derive(Default)]
-pub(super) struct Work {
+pub struct Work {
     found: Vec<Option<(f32, f32)>>,
     rolling_long: Vec<f32>,
     standing: Vec<usize>,
@@ -75,7 +75,7 @@ pub(super) struct Work {
 }
 
 /// The velocity an impulse `p` gives a body of mass `m` that tows `mt - m` along `fwd`.
-pub(super) fn lin(p: Vec3, fwd: Vec3, m: f32, mt: f32) -> Vec3 {
+pub fn lin(p: Vec3, fwd: Vec3, m: f32, mt: f32) -> Vec3 {
     (p - fwd * p.dot(fwd)) / m + fwd * (p.dot(fwd) / mt)
 }
 

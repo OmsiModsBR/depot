@@ -226,7 +226,7 @@ impl VehicleInstance {
     /// timetable is driven, the precipitation type, and the cabin air - kept within reach of
     /// the weather (never more than 10 °C from the air outside and pulled towards 18..25 °C
     /// as a heated/ventilated bus is; the absolute humidity follows the outside air).
-    pub(super) fn update_engine_vars(&mut self, dt: f32) {
+    pub(crate) fn update_engine_vars(&mut self, dt: f32) {
         self.update_driver_seat(dt);
         // `[kmcounter_init] year km`: in service since that year, so many kilometres a year -
         // the odometer starts at what that comes to on the day driven (it stood at 0 on
