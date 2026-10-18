@@ -335,7 +335,9 @@ impl Navigator {
                 ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(label, 10.0 * s, Weight::Medium, colw - 6.0 * s), 10.0 * s, Weight::Medium, Vec2::new(sx, top + 92.0 * s), Align::Left, TEXT_DIM);
                 ui.text(&mut self.atlas, &self.fonts, value, 17.0 * s, Weight::Bold, Vec2::new(sx, top + 114.0 * s), Align::Left, TEXT);
             }
-            let meta = [r.days.as_str(), r.model.as_str(), if r.circular { lt.circular } else { lt.out_back }].into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
+            // the route shape is translated before the pieces are joined: the painter looks up whole strings only
+            let shape = tr(if r.circular { lt.circular } else { lt.out_back });
+            let meta = [r.days.as_str(), r.model.as_str(), shape.as_ref()].into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
             let meta = self.fonts.fit(&meta, 11.0 * s, Weight::Medium, pw - 2.0 * pad - 4.0 * s);
             ui.text(&mut self.atlas, &self.fonts, &meta, 11.0 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 138.0 * s), Align::Left, TEXT_DIM);
             let n = on_line.get(&i).copied().unwrap_or(0);
