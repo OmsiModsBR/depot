@@ -3293,25 +3293,13 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .unwrap_or(0.0)
                     .clamp(-45.0, 45.0))
             }
-            "head_tracking_yaw_sens"
-            | "head_tracking_pitch_sens"
-            | "head_tracking_roll_sens"
-            | "head_tracking_x_sens"
-            | "head_tracking_y_sens"
-            | "head_tracking_z_sens"
-                if !matches!(
-                    k.as_str(),
-                    "head_tracking_x_sens"
-                        | "head_tracking_yaw_sens"
-                        | "head_tracking_pitch_sens"
-                        | "head_tracking_roll_sens"
-                        | "head_tracking_y_sens"
-                ) =>
-            {
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_z_sens" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .ok()
                     .filter(|x| x.is_finite())
+                    .map(|x| if x <= 2.0 { x * 100.0 } else { x })
                     .map(|x| x.clamp(0.0, 100.0))
                     .unwrap_or(100.0))
             }
@@ -3813,7 +3801,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         { let p = f("head_tracking_roll_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
         { let p = f("head_tracking_x_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
         { let p = f("head_tracking_y_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
-        f("head_tracking_z_sens", 100.0).clamp(0.0, 100.0),
+        { let p = f("head_tracking_z_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
         b("head_tracking_invert_yaw", false),
         b("head_tracking_invert_pitch", false),
         b("head_tracking_invert_roll", false),
