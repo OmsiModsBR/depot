@@ -11,6 +11,7 @@ mod formats;
 mod lost;
 mod open;
 mod timers;
+mod util;
 
 pub use caps::{gl_backend, poll_gpu, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
 pub use errors::{catch, catching};
@@ -40,3 +41,4 @@ pub(crate) use lost::{
 };
 pub(crate) use open::{basic_pipelines, fallback_load, fallback_store, BASIC_PIPELINES};
 pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};
+pub(crate) use util::{mip_levels, target_2d};

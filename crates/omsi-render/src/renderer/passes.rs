@@ -2,6 +2,7 @@
 //! glass and post passes given the parts they draw with.
 
 use crate::assets::GpuTexture;
+use crate::gpu::target_2d;
 use crate::lighting::Lighting;
 use crate::passes::{
     encode_enhanced_post, encode_glass, encode_main_pass, Batch, MainParts, PassPipelines,
@@ -217,22 +218,20 @@ impl Renderer {
                 || v.texture().height() != height
                 || v.texture().format() != format
         }) {
-            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("picture behind glass"),
-                size: wgpu::Extent3d {
+            let tex = target_2d(
+                &self.device,
+                "picture behind glass",
+                wgpu::Extent3d {
                     width,
                     height,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
+                1,
                 format,
-                usage: wgpu::TextureUsages::COPY_DST
+                wgpu::TextureUsages::COPY_DST
                     | wgpu::TextureUsages::COPY_SRC
                     | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
+            );
             self.targets.glass_picture = Some(tex.create_view(&Default::default()));
         }
         let view = self.targets.glass_picture.as_ref().unwrap();

@@ -1,7 +1,7 @@
 //! Textures: the GPU texture slot, preparing and fitting images, uploads with their mip
 //! chains, and replacing or shrinking textures already in the scene.
 
-use crate::gpu::gl_worker_turn;
+use crate::gpu::{gl_worker_turn, mip_levels, target_2d};
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
@@ -118,7 +118,7 @@ pub(crate) fn upload_texture(
     mipmaps: bool,
 ) -> GpuTexture {
     let mip_count = if mipmaps {
-        (32 - img.width.max(img.height).leading_zeros()).max(1)
+        mip_levels(img.width, img.height)
     } else {
         1
     };
@@ -479,16 +479,14 @@ pub(crate) fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f
         height: n,
         depth_or_array_layers: 1,
     };
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("upload check"),
+    let texture = target_2d(
+        device,
+        "upload check",
         size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
+        1,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureUsages::COPY_DST,
+    );
     let data = vec![0u8; (n * n * 4) as usize];
     let rounds = 4;
     let t = std::time::Instant::now();

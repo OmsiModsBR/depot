@@ -1,7 +1,7 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
 
 use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
-use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer, DEPTH_FORMAT};
+use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer, target_2d, DEPTH_FORMAT};
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::scene::Scene;
 use glam::{DVec3, Mat4, Vec3};
@@ -40,37 +40,33 @@ pub(crate) fn shadow_pipelines(
     Vec<wgpu::RenderPipeline>,
 ) {
     // sun shadow map: depth only, from the light's orthographic camera
-    let shadow_tex = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map"),
-        size: wgpu::Extent3d {
+    let shadow_tex = target_2d(
+        device,
+        "shadow map",
+        wgpu::Extent3d {
             // near cascade on the left, close cascade on the right
             width: shadow_size * 2,
             height: shadow_size,
             depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
+        1,
+        DEPTH_FORMAT,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+    );
     let shadow_view = shadow_tex.create_view(&Default::default());
-    let shadow_tex_far = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("shadow map far"),
+    let shadow_tex_far = target_2d(
+        device,
+        "shadow map far",
         // (and the street lamps' tiles under it, see `LAMP_SHADOWS`)
-        size: wgpu::Extent3d {
+        wgpu::Extent3d {
             width: shadow_size,
             height: (shadow_size as f32 * FAR_MAP_ASPECT) as u32,
             depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
+        1,
+        DEPTH_FORMAT,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+    );
     let shadow_view_far = shadow_tex_far.create_view(&Default::default());
     let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,

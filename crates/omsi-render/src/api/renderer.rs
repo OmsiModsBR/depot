@@ -2,8 +2,8 @@
 //! frame's entry points (the window, a triple screen, a headset's eyes, an image or a texture).
 use crate::assets::{fit_size, next_gen, texture_bytes, GpuTexture};
 use crate::gpu::{
-    fake_poll_loss, gl_backend, guarded_poll, let_go, lost_why, read_buffer_with, wait_poll,
-    wait_with, GpuWaitError,
+    fake_poll_loss, gl_backend, guarded_poll, let_go, lost_why, read_buffer_with, target_2d,
+    wait_poll, wait_with, GpuWaitError,
 };
 use crate::lighting::Lighting;
 use crate::output::Output;
@@ -326,16 +326,14 @@ impl Renderer {
             height,
             depth_or_array_layers: 1,
         };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("render target"),
+        let texture = target_2d(
+            &self.device,
+            "render target",
             size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.gpu.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+            1,
+            self.gpu.format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
         let view = texture.create_view(&Default::default());
         // (its depth buffer is the pass's own, see `msaa_targets`)
         let bytes = texture_bytes(self.gpu.format, width, height, 1);
