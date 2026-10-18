@@ -2835,7 +2835,12 @@ impl Traffic {
             // (a truck keeps to the limit like the cars, up to a truck's own 80-90 km/h: it
             // took 38-47 on every road, crawling along 80 km/h roads, #327)
             80.0 + (seed % 10) as f32
-        } else if kind == LaneKind::Street && is_bicycle(ty.def.mass, ty.program.constant("vmax").is_some() || ty.program.var("vmax").is_some()) {
+        } else if kind == LaneKind::Street
+            && is_bicycle(
+                ty.def.mass,
+                ty.program.constant("vmax").is_some() || ty.program.var("vmax").is_some(),
+            )
+        {
             // a bicycle: 15-21 km/h, the `vmax` range their script cuts the drive at (#327)
             15.0 + (seed % 7) as f32
         } else {
