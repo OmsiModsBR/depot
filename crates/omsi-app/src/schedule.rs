@@ -525,9 +525,10 @@ pub struct Schedule {
     /// 24:00): a departure leaves at `day_base + time` (`dep_time`), and the date moves on
     /// when the clock passes the next midnight.
     day_base: f64,
-    /// Departures put out as the previous service day's (a night tour's trips past 24:00,
-    /// or trips of the evening before): where that day's midnight lay on the traffic's
-    /// clock. `dep_time` uses it instead of `day_base` while the departure stays spawned.
+    /// Departures put out as the previous service day's (a night tour's trips at 24:00 or
+    /// later, once the clock has passed midnight): where that day's midnight lay on the
+    /// traffic's clock. `dep_time` uses it instead of `day_base` while the departure stays
+    /// spawned.
     carried_base: HashMap<usize, f64>,
     /// The current date (its time of day is not used).
     date_clock: omsi_sim::SimClock,
@@ -925,7 +926,7 @@ impl Schedule {
     }
 
     /// Whether departure `i`'s tour ran yesterday: the trips of the night before that run
-    /// on past midnight belong to yesterday's tours (#1576, as in `tour_available`).
+    /// on past midnight belong to yesterday's tours (as the existing night-tour handling in `tour_available` has it).
     fn ran_yesterday(&self, i: usize, yesterday: (i32, i32)) -> bool {
         let m = self.departures[i].mask;
         m & yesterday.0 != 0 && m & yesterday.1 != 0
@@ -1133,6 +1134,10 @@ impl Schedule {
                         self.retry_at.remove(&j);
                         self.later_layover.remove(&j);
                     }
+                }
+                if !taken && carried && !self.awaiting.contains(&j) {
+                    // (the base was only tried for the hand-over)
+                    self.carried_base.remove(&j);
                 }
                 // its bus is not coming: the trip gets a bus of its own
                 if !taken && self.awaiting.remove(&j) {
@@ -4722,8 +4727,12 @@ fn norm_vehicle_path(p: &str) -> String {
 fn day_bits(calendar: &omsi_map::Calendar, clock: &omsi_sim::SimClock) -> (i32, i32) {
     let date = clock.date_code();
     let day_bit = if calendar.is_holiday(date) { 1 << 7 } else { 1 << clock.weekday() };
-    let school_bit = if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 };
-    (day_bit, school_bit)
+    (day_bit, school_period_bit(calendar, date))
+}
+
+/// The tour mask bit of the school period of `date` (yyyymmdd): 8 inside a holiday range, else 9.
+pub(crate) fn school_period_bit(calendar: &omsi_map::Calendar, date: i32) -> i32 {
+    if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 }
 }
 
 /// What a bus's displays call its terminus: the depot file's first string for it (what the

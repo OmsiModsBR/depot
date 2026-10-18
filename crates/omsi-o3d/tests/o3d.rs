@@ -72,8 +72,12 @@ impl File {
         }
     }
     fn str8(&mut self, s: &str) -> &mut Self {
-        self.u8(s.len() as u8);
-        self.b.extend(s.as_bytes());
+        self.name(s.as_bytes())
+    }
+    /// A name as raw bytes, in whatever code page the exporter wrote.
+    fn name(&mut self, bytes: &[u8]) -> &mut Self {
+        self.u8(bytes.len() as u8);
+        self.b.extend(bytes);
         self
     }
     /// Vertices exactly as given (no scrambling).
@@ -97,6 +101,9 @@ impl File {
         self
     }
     fn material(&mut self, diffuse: [f32; 4], texture: &str) -> &mut Self {
+        self.material_named(diffuse, texture.as_bytes())
+    }
+    fn material_named(&mut self, diffuse: [f32; 4], texture: &[u8]) -> &mut Self {
         self.u8(0x26).u16(1);
         for f in diffuse {
             self.f32(f);
@@ -104,7 +111,7 @@ impl File {
         for f in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 8.0] {
             self.f32(f);
         }
-        self.str8(texture)
+        self.name(texture)
     }
     fn matrix(&mut self, m: [f32; 16]) -> &mut Self {
         self.u8(0x79);
@@ -375,6 +382,34 @@ fn unknown_bytes_between_sections_are_passed_over() {
     assert_vertices(&mesh.vertices, &QUAD);
     assert_eq!(mesh.triangles.len(), 1);
     assert_eq!(mesh.materials[0].texture, "a.tga");
+}
+
+/// The texture name of a one-material file whose name is written as `bytes`.
+fn texture_name(bytes: &[u8]) -> String {
+    let mut f = File::new(1, 0, 0);
+    f.vertices(&QUAD).material_named([1.0; 4], bytes);
+    parse_o3d(&f.b).unwrap().materials[0].texture.clone()
+}
+
+#[test]
+fn names_are_read_in_the_code_page_they_were_written_in() {
+    // Windows-1252, the stock content's: "Türe.bmp".
+    assert_eq!(texture_name(b"T\xFCre.bmp"), "Türe.bmp");
+    // UTF-8 from a newer exporter.
+    assert_eq!(texture_name("Türe.bmp".as_bytes()), "Türe.bmp");
+    // Windows-1251 from a Russian Windows: "Автобус.bmp".
+    assert_eq!(
+        texture_name(b"\xC0\xE2\xF2\xEE\xE1\xF3\xF1.bmp"),
+        "Автобус.bmp"
+    );
+    // Bone names the same way.
+    let mut f = File::new(1, 0, 0);
+    f.vertices(&QUAD)
+        .u8(0x54)
+        .u16(1)
+        .name("Kn\u{f6}chel".as_bytes())
+        .u16(0);
+    assert_eq!(parse_o3d(&f.b).unwrap().bones[0].name, "Knöchel");
 }
 
 #[test]

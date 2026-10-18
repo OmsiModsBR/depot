@@ -431,7 +431,7 @@ O guia de estilo do projeto diz que formatos OMSI são lidos só em `omsi-cfg`, 
 5. **Um `DdsHeader::parse`** usado por `dds::decode` e `gpu::dds_blocks`, um `IMAGE_EXTENSIONS` só e o `CP437_HIGH` duplicado de `vfs.rs:97` trocado pelo de `codepage`.
 6. **Testes de `.o3d`** (cabeçalhos v1, v3 e v4, índices longos, vértices embaralhados, tag desconhecida, arquivo truncado), que hoje não existem, e os nomes de textura `str8` decodificados por `codepage` em vez de 1252 fixo. Os testes entram antes de qualquer mudança no leitor.
 
-   No passo 1, `crates/omsi-o3d/tests/o3d.rs` passou a cobrir o leitor como ele é hoje, com arquivos montados no teste: cabeçalhos v1, v3 e v4+, índices de 16 e 32 bits, ossos, a matriz, triângulos com vértice inexistente, as chaves de embaralhamento (um caso calculado à mão e a volta completa para várias chaves e flags), bytes desconhecidos entre seções, magic errado e arquivos truncados. O leitor não mudou; os nomes `str8` por `codepage` ficam para um PR `fix/`.
+   No passo 1, `crates/omsi-o3d/tests/o3d.rs` passou a cobrir o leitor como ele é hoje, com arquivos montados no teste: cabeçalhos v1, v3 e v4+, índices de 16 e 32 bits, ossos, a matriz, triângulos com vértice inexistente, as chaves de embaralhamento (um caso calculado à mão e a volta completa para várias chaves e flags), bytes desconhecidos entre seções, magic errado e arquivos truncados. O leitor não mudou. No passo 2, um PR `fix/`, os nomes `str8` (texturas e ossos) passaram a ser lidos por `omsi_cfg::decode_text`, que detecta a code page (1252, 1250, 1251 ou UTF-8) em vez de supor 1252; o leitor de `.x` continua em 1252.
 
 ## Frente E: simulação separada da apresentação e divisão de crates
 

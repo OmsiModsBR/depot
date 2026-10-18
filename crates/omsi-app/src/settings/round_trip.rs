@@ -184,17 +184,13 @@ const EDGES: &[&str] = &[
 const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
-    ("msaa", "launcher>game", "a negative count is kept; the game cannot read it and draws 4x"),
     ("shadow_size", "launcher>game", "a negative size is kept; the game cannot read it and uses 2048"),
     ("ui_opacity", "launcher>game", "no 0.2-1 range, and 0 instead of 0.85 for what is no number"),
     ("min_obj_size", "launcher>game", "no 0-0.2 range"),
-    ("max_fps", "launcher>game", "a negative limit is kept (the launcher writes 0)"),
     ("max_obj_dist", "launcher>game", "a negative distance is kept (the game reads it as 0, no limit)"),
-    ("pax_density", "launcher>game", "no 0-3 range"),
     ("vol_ai", "launcher>game", "no 0-1 range"),
     ("vol_scenery", "launcher>game", "no 0-1 range"),
     ("maintenance", "launcher>game", "no 0-4 range (the launcher writes it clamped)"),
-    ("ai_unsched_factor", "launcher>game", "no 0-300 % range (the launcher writes it clamped)"),
     // the launcher keeps these texts as written; the game reads them to its own choices
     ("render_scale", "launcher>game", "kept as text; the game makes 0 or less auto, takes more than 1.5 as a percentage and clamps to 0.5-1"),
     ("pax_voices", "launcher>game", "kept as text; the game reads anything but tickets and off as all"),
@@ -202,14 +198,11 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("navigator_corner", "launcher>game", "kept as written; the game lowercases it"),
     ("boarding", "launcher>game", "kept as written; the game lowercases it"),
     // `NaN` is a number to the launcher here; the game falls back to the default
-    ("time_speed", "launcher>game", "NaN is kept"),
     ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
-    ("ff_engine_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
     ("wheel_range", "launcher>game", "NaN leaves the key empty"),
     ("pedal_throttle", "launcher>game", "NaN leaves the key empty"),
     ("pedal_brake", "launcher>game", "NaN leaves the key empty"),
-    ("seat_x", "launcher>game", "NaN leaves the key empty"),
     ("seat_y", "launcher>game", "NaN leaves the key empty"),
     ("seat_z", "launcher>game", "NaN leaves the key empty"),
     ("mouse_sens", "launcher>game", "NaN leaves the key empty"),

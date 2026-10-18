@@ -30,6 +30,7 @@ mod touch;
 mod placing;
 mod mt;
 mod about;
+mod screenshot_name;
 mod actions;
 mod env_file;
 mod ambience;
