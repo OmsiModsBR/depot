@@ -12,6 +12,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Fixed
 - A map package's icon path can no longer point outside the package: absolute paths, drives (`C:`),
   shares and `.`/`..`/empty parts leave the marker out (before, only `..` was refused).
+- The terrain view of the city map writes the heights of the ordinary contour lines too when zoomed in
+  (the index lines' only from farther away), and the contour lines are drawn fainter as the view widens.
 - The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
   term time or only in school holidays (`Holidays.txt`) no longer shows up together with the other, and
   the timetable is read again when the date changes.

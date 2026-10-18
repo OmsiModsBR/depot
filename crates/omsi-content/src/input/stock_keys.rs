@@ -5,7 +5,7 @@
 //! untouched copy to tell the changes by.
 
 /// (action, DirectInput scan code, the entry's third value: 1 held, 2 Shift, 4 Ctrl)
-pub(crate) const STOCK_KEYS: &[(&str, i32, i32)] = &[
+pub const STOCK_KEYS: &[(&str, i32, i32)] = &[
     ("debug_start_bench2", 48, 6),
     ("sim_pause", 25, 0),
     ("debug_window", 1, 2),
