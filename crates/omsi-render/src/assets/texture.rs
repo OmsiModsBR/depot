@@ -400,6 +400,121 @@ pub(crate) fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels:
         .sum()
 }
 
+/// Texture `t` without its `n` finest mip levels: the coarser levels copied into a smaller
+/// texture on the GPU. None when it cannot shrink so far (a block format needs sides that
+/// are multiples of four).
+pub(crate) fn drop_top_levels(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    t: &GpuTexture,
+    n: u32,
+) -> Option<GpuTexture> {
+    let (w, h) = t.size;
+    let levels = t.texture.mip_level_count();
+    let format = t.texture.format();
+    if n == 0 || n >= levels || !t.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+        return None;
+    }
+    let (nw, nh) = ((w >> n).max(1), (h >> n).max(1));
+    let (bw, bh) = format.block_dimensions();
+    if nw % bw != 0 || nh % bh != 0 {
+        return None;
+    }
+    let new_levels = levels - n;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: nw,
+            height: nh,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: new_levels,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("drop levels"),
+    });
+    for l in 0..new_levels {
+        let (lw, lh) = ((nw >> l).max(1), (nh >> l).max(1));
+        let size = wgpu::Extent3d {
+            width: lw.div_ceil(bw) * bw,
+            height: lh.div_ceil(bh) * bh,
+            depth_or_array_layers: 1,
+        };
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &t.texture,
+                mip_level: l + n,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: l,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            size,
+        );
+    }
+    queue.submit([encoder.finish()]);
+    Some(GpuTexture::new(
+        texture,
+        (nw, nh),
+        texture_bytes(format, nw, nh, new_levels),
+    ))
+}
+
+/// How fast textures go up to the GPU, in MB/s: four 1024x1024 RGBA uploads timed.
+pub(crate) fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f64 {
+    let n = 1024u32;
+    let size = wgpu::Extent3d {
+        width: n,
+        height: n,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("upload check"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let data = vec![0u8; (n * n * 4) as usize];
+    let rounds = 4;
+    let t = std::time::Instant::now();
+    for _ in 0..rounds {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(n * 4),
+                rows_per_image: Some(n),
+            },
+            size,
+        );
+    }
+    let secs = t.elapsed().as_secs_f64().max(1e-6);
+    queue.submit([]);
+    texture.destroy();
+    (data.len() * rounds) as f64 / 1e6 / secs
+}
+
 /// The mip map generator (mip.wgsl): its bind group layout, pipeline and sampler.
 pub(crate) fn mip_pipeline(
     device: &wgpu::Device,

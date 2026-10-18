@@ -25,4 +25,7 @@ pub(crate) use mesh::{
 pub(crate) use mesh::{page_give, page_take};
 pub(crate) use store::AssetStore;
 pub(crate) use texture::RgbaRef;
-pub(crate) use texture::{fit_image, fit_size, next_gen, texture_bytes, upload_texture};
+pub(crate) use texture::{
+    drop_top_levels, fit_image, fit_size, next_gen, texture_bytes, upload_speed_mb_s,
+    upload_texture,
+};
