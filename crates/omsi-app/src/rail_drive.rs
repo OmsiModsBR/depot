@@ -11,6 +11,7 @@
 use crate::player::Player;
 use crate::scene::World;
 use glam::DVec3;
+use omsi_geometry::util::wrap_deg;
 use omsi_sim::traffic::{LaneKind, Network};
 
 /// Where on the track the vehicle is.
@@ -95,7 +96,7 @@ pub(crate) fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, u: f64)
 }
 
 fn angle_diff(a: f64, b: f64) -> f64 {
-    (a - b + 540.0).rem_euclid(360.0) - 180.0
+    wrap_deg(a - b)
 }
 
 impl RailDrive {

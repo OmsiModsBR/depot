@@ -2,6 +2,7 @@
 //! lights, coronas and smoke particles, and their records on the GPU.
 
 use glam::{DVec3, Vec3};
+pub(crate) use omsi_geometry::util::smoothstep;
 
 /// The illuminance a light's core gives (maplight colour 1, in the sky model's units:
 /// 55 lux, so the street under a lamp gets its 15-25 lux).
@@ -430,10 +431,4 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
 pub(crate) fn debug_view() -> f32 {
     static VIEW: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *VIEW.get_or_init(|| omsi_cfg::flags::DEBUG_ENHANCED.number().unwrap_or(0.0))
-}
-
-/// Hermite step from 0 at `e0` to 1 at `e1` (as WGSL's `smoothstep`).
-pub(crate) fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
-    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }

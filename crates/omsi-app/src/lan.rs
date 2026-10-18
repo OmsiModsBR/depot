@@ -23,6 +23,7 @@ use crate::scene::{self, World};
 use crate::cli::Args;
 use crate::player::Player;
 use glam::DVec3;
+use omsi_geometry::util::{wrap_deg, wrap_deg_f32};
 use omsi_net::{Footprint, LanEvent, LanSession, PartPose, Pose, Role};
 use omsi_render::{Renderer, Scene};
 use omsi_script::VarId;
@@ -1633,10 +1634,7 @@ fn write_status(lan: &LanSession, game: &LanGame, player: Option<&Player>) {
                     if let Some(dir) = p.parent() {
                         let _ = std::fs::create_dir_all(dir);
                     }
-                    let tmp = p.with_extension("json.tmp");
-                    if std::fs::write(&tmp, bytes).is_ok() {
-                        let _ = std::fs::rename(&tmp, &p);
-                    }
+                    let _ = omsi_cfg::write_atomic(&p, bytes);
                 }
             })
             .ok()
@@ -2168,7 +2166,7 @@ fn along(lanes: &[Lane], prev: &[Vec<usize>], lane: usize, s: f32, d: f32) -> Op
 }
 
 fn heading_gap(a: f32, b: f32) -> f32 {
-    ((a - b + 540.0).rem_euclid(360.0) - 180.0).abs()
+    wrap_deg_f32(a - b).abs()
 }
 
 /// Move our bus off anything standing where it spawned: along the road it stands on, the
@@ -2771,7 +2769,7 @@ impl RemoteVehicle {
 }
 
 fn lerp_angle(a: f64, b: f64, t: f64) -> f64 {
-    let d = (b - a + 540.0).rem_euclid(360.0) - 180.0;
+    let d = wrap_deg(b - a);
     (a + d * t).rem_euclid(360.0)
 }
 
@@ -2811,7 +2809,7 @@ fn place_remote_rear(v: &mut omsi_sim::VehicleInstance, rear: &[(DVec3, f64)]) {
 }
 
 fn ease_heading(from: f64, to: f64, k: f64) -> f64 {
-    let dh = (to - from + 540.0).rem_euclid(360.0) - 180.0;
+    let dh = wrap_deg(to - from);
     if dh.abs() > 90.0 {
         to
     } else {

@@ -23,6 +23,7 @@ use crate::traffic::Traffic;
 use crate::cli::Args;
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::{HashMap, HashSet};
+use omsi_geometry::util::wrap_deg;
 use omsi_net::world::{
     self as nw, Activity as NetActivity, CarState, Desc, EntityRef, LightState, PersonPlace,
     PersonState, WorldFrame,
@@ -151,7 +152,7 @@ impl PlayClock {
 }
 
 fn lerp_angle(a: f64, b: f64, t: f64) -> f64 {
-    let d = (b - a + 540.0).rem_euclid(360.0) - 180.0;
+    let d = wrap_deg(b - a);
     (a + d * t).rem_euclid(360.0)
 }
 

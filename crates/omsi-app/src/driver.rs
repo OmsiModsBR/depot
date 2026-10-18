@@ -39,6 +39,7 @@
 //! further back (palming it), rather than letting the rim slide through it.
 
 use glam::{Mat4, Vec3};
+use omsi_geometry::util::wrap_deg_f32;
 use omsi_render::{AlphaMode, MeshId, Renderer, Scene};
 use omsi_sim::human::{curl_hands, grip_centres, hand_slot, skin_from, Activity, HumanType, Pose, PoseInput};
 use omsi_sim::VehicleInstance;
@@ -1407,7 +1408,7 @@ impl DriverFigure {
 }
 
 fn wrap(a: f32) -> f32 {
-    (a + 540.0).rem_euclid(360.0) - 180.0
+    wrap_deg_f32(a)
 }
 
 /// The foot of the lever and where a hand holds its knob: the knob is the far end of the mesh

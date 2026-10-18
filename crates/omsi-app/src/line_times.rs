@@ -8,6 +8,19 @@ use omsi_timetable::TimetableData;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// A tour's mask when the file says nothing: every weekday, holidays and both school periods.
+const ALL_DAYS: i32 = 1023;
+
+/// The mask bit a tour needs to run on `date` (yyyymmdd), the one the AI buses use; both bits while the date is
+/// not known (nothing is left out).
+fn period_bit(calendar: &omsi_map::Calendar, date: i32) -> i32 {
+    if date <= 0 {
+        (1 << 8) | (1 << 9)
+    } else {
+        crate::schedule::school_period_bit(calendar, date)
+    }
+}
+
 /// A departure: seconds after midnight, the weekdays it runs on (bits 0-6, Monday first), the
 /// trip it runs and the trip's profile.
 pub struct Dep {
@@ -53,13 +66,15 @@ pub struct StopTime<'a> {
 pub struct LineTimes(HashMap<String, Sheet>);
 
 impl LineTimes {
-    pub fn load(map_dir: &Path, chrono: &[std::path::PathBuf]) -> LineTimes {
+    pub fn load(map_dir: &Path, chrono: &[std::path::PathBuf], date: i32) -> LineTimes {
         let began = std::time::Instant::now();
         let data = TimetableData::load_with_chrono(
             map_dir,
             chrono,
             &omsi_map::chrono_deactivated_lines(chrono),
         );
+        let calendar = omsi_map::Calendar::load(&map_dir.join("Holidays.txt")).unwrap_or_default();
+        let period = period_bit(&calendar, date);
         let mut links: HashMap<(i64, i64), f64> = HashMap::new();
         for l in &data.stn_links {
             links.entry((l.from_id, l.to_id)).or_insert(l.length);
@@ -72,7 +87,11 @@ impl LineTimes {
         let mut ends: HashMap<(String, String), String> = HashMap::new();
         for line in &data.lines {
             for tour in &line.tours {
-                let mask = tour.extra.trim().parse::<i32>().unwrap_or(1023);
+                let mask = tour.extra.trim().parse::<i32>().unwrap_or(ALL_DAYS);
+                // (as the AI buses do: a tour of the other school period does not run on this date)
+                if mask & period == 0 {
+                    continue;
+                }
                 for tt in &tour.trips {
                     let Some(ti) = data
                         .trips
@@ -292,4 +311,24 @@ pub fn clock(secs: f64) -> String {
         m.div_euclid(60).rem_euclid(24),
         m.rem_euclid(60)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_school_period_bit_follows_the_holiday_ranges() {
+        let cal = omsi_map::Calendar {
+            ranges: vec![omsi_map::HolidayRange { start: 20260701, end: 20260731, name: "summer".into() }],
+            holidays: vec![],
+        };
+        assert_eq!(period_bit(&cal, 20260715), 1 << 8, "inside a range: school holidays");
+        assert_eq!(period_bit(&cal, 20260901), 1 << 9, "outside: term time");
+        assert_eq!(period_bit(&cal, 0), (1 << 8) | (1 << 9), "no date: nothing is left out");
+        // a tour of the other period is left out, one for both (the default mask) is kept
+        assert_eq!(0b11_0000_0000 & period_bit(&cal, 20260715), 1 << 8);
+        assert_eq!((1 << 9 | 0b1111111) & period_bit(&cal, 20260715), 0);
+        assert_ne!(ALL_DAYS & period_bit(&cal, 20260715), 0);
+    }
 }

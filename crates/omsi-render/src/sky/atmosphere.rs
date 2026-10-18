@@ -1261,14 +1261,7 @@ mod tests {
     #[test]
     #[ignore]
     fn sky_report() {
-        let srgb = |c: f32| {
-            let c = c.clamp(0.0, 1.0);
-            (if c <= 0.003_130_8 {
-                c * 12.92
-            } else {
-                1.055 * c.powf(1.0 / 2.4) - 0.055
-            }) * 255.0
-        };
+        let srgb = |c: f32| omsi_texture::srgb::from_linear(c.clamp(0.0, 1.0)) * 255.0;
         for (sun_el, oc) in [
             (60.0f32, 0.0f32),
             (22.0, 0.0),

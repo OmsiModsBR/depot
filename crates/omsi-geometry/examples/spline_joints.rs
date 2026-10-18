@@ -5,6 +5,7 @@
 //!
 //! usage: spline_joints <map folder> [--list]
 use glam::DVec2;
+use omsi_geometry::util::wrap_deg;
 use omsi_geometry::SplineCurve;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -83,7 +84,7 @@ fn main() {
         }
         n += 1;
         let dz = (a.3.z - q.z).abs();
-        let dh = ((a.4 - hb + 540.0).rem_euclid(360.0) - 180.0).abs();
+        let dh = wrap_deg(a.4 - hb).abs();
         if d > 0.05 {
             gap5 += 1;
         }
