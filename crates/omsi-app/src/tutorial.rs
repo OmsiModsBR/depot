@@ -69,7 +69,7 @@ impl Tutorial {
             .into_iter()
             .filter_map(|(n, p)| {
                 let bytes = std::fs::read(&p).ok()?;
-                let (title, text) = page_text(&omsi_cfg::codepage::decode(&bytes));
+                let (title, text) = page_text(&omsi_cfg::decode_text(&bytes));
                 let img = dir.join(format!("{n}.jpg"));
                 Some(Page { title, text, image: img.is_file().then_some(img) })
             })

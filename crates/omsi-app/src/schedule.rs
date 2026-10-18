@@ -2006,7 +2006,7 @@ impl Schedule {
             .departures
             .iter()
             .enumerate()
-            .filter(|(i, d)| !d.spawned && d.time <= tod && d.time > tod - window && self.runs(*i))
+            .filter(|(i, d)| !d.spawned && due_in_window(d.time, tod, window) && self.runs(*i))
             .map(|(i, _)| i)
             .collect();
         for i in due {
@@ -4614,6 +4614,13 @@ fn starting_trip(trips: &[PlannedTrip], now: f64) -> usize {
 
 const DAY: f64 = 86_400.0;
 
+/// Whether a departure at `time` (seconds from the midnight of the timetable's day, past
+/// 24:00 for a night tour's later trips) is due at `tod` (seconds from the same midnight)
+/// and not longer ago than `window`.
+fn due_in_window(time: f64, tod: f64, window: f64) -> bool {
+    time <= tod && time > tod - window
+}
+
 /// A 64-bit hash of a tour: its depot group (lower case), line and tour number.
 fn tour_key_of(group: &str, line: &str, tour: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
@@ -4641,8 +4648,12 @@ fn norm_vehicle_path(p: &str) -> String {
 fn day_bits(calendar: &omsi_map::Calendar, clock: &omsi_sim::SimClock) -> (i32, i32) {
     let date = clock.date_code();
     let day_bit = if calendar.is_holiday(date) { 1 << 7 } else { 1 << clock.weekday() };
-    let school_bit = if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 };
-    (day_bit, school_bit)
+    (day_bit, school_period_bit(calendar, date))
+}
+
+/// The tour mask bit of the school period of `date` (yyyymmdd): 8 inside a holiday range, else 9.
+pub(crate) fn school_period_bit(calendar: &omsi_map::Calendar, date: i32) -> i32 {
+    if calendar.in_holiday_range(date) { 1 << 8 } else { 1 << 9 }
 }
 
 /// What a bus's displays call its terminus: the depot file's first string for it (what the
@@ -6197,6 +6208,26 @@ pub(crate) mod tests {
             duty.update(&mut bus, 160.0);
             assert_eq!(duty.trip_index, 0);
         }
+    }
+
+    /// What the AI's departure check does with a tour that crosses midnight (23:40, then
+    /// 24:10 and 24:40): `Schedule::roll_day` moves the day's midnight on as soon as the
+    /// clock reaches it, so `tod` never reaches a time past 24:00 and the later trips are
+    /// never due (#40). Characterization of how it behaves now, not of what it should do:
+    /// the fix is for the maintainers to decide.
+    #[test]
+    fn departures_past_midnight_are_never_due_in_the_day_they_belong_to() {
+        let window = 60.0;
+        let trips = [23.0 * 3600.0 + 40.0 * 60.0, 24.0 * 3600.0 + 10.0 * 60.0, 24.0 * 3600.0 + 40.0 * 60.0];
+        // the evening trip is due at its time, and not once the window is over
+        assert!(due_in_window(trips[0], trips[0], window));
+        assert!(!due_in_window(trips[0], trips[0] + window, window));
+        // every second of the day the timetable is rolled on at midnight: `tod` stays below 24:00
+        let due_after_midnight = (0..DAY as i64).any(|tod| trips[1..].iter().any(|&t| due_in_window(t, tod as f64, window)));
+        assert!(!due_after_midnight, "when this changes, #40 is being fixed: update the test");
+        // (on the next day the same times run as 00:10 and 00:40 of the day after, `tod` small:
+        // a trip written as 00:10, not 24:10, is due then, but as the morning trip of the day)
+        assert!(due_in_window(10.0 * 60.0, 10.0 * 60.0, window));
     }
 
     #[test]
