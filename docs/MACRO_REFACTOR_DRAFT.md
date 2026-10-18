@@ -638,11 +638,11 @@ Portão: o da antiga trilha 3 (traço B0 idêntico em cada PR, `run_offscreen` a
 
 ### Trilha S: `omsi-sim` por domínio
 
-Pedida pelo mantenedor em 18/10/2026, com três objetivos: testes e auxílios de teste fora do código funcional, o crate dividido por domínio e subdomínio, e sem código duplicado. O plano completo, com o diagnóstico, a árvore alvo e a sequência de PRs (S0 a S13), está em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md).
+Pedida pelo mantenedor em 18/10/2026, com três objetivos: testes e auxílios de teste fora do código funcional, o crate dividido por domínio e subdomínio, e sem código duplicado. O plano completo, com o diagnóstico, a árvore alvo e a sequência de PRs (S1 a S5), está em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md).
 
-Em resumo: o `rustfmt` do crate primeiro (S0); os testes inline para arquivos `tests.rs` irmãos, um apoio de testes por lado (`src/testing/` e `tests/support/`) e a API só de teste atrás de uma feature `test-support` (S1 a S3); traços novos do motorista da IA e da pose das pessoas antes de mexer nesses domínios (S4); as cópias de `angle_diff`, do xorshift e do smoothstep trocadas (S5); `traffic/`, `people/`, `host/`, `automation/`, `collision/`, `textures/` e `vehicle/coupled/` (S6 a S12); e os imports do app nos caminhos novos (S13). Ela não tem arquivo em comum com a Trilha 3 e prepara o `omsi-gameplay` da Trilha 4.
+Em resumo, cinco PRs: rustfmt do crate, as quatro funções sem uso removidas e as cópias de `angle_diff`, do xorshift e do smoothstep trocadas (S1); todos os testes de `src/` para `tests/`, um apoio de testes só (`tests/support/`), o que é interno alcançado pela feature `test-support` e traços novos do motorista da IA e da pose das pessoas (S2); `traffic/` (S3); `people/` (S4); e `host/`, `automation/`, `collision/`, `textures/` e `vehicle/coupled/` (S5), cada um já com os imports do app nos caminhos novos. Ela não tem arquivo em comum com a Trilha 3 e prepara o `omsi-gameplay` da Trilha 4.
 
-Portão: nenhum teste dentro de arquivo funcional, nenhum auxílio de teste copiado, nenhuma API só de teste no jogo, nenhum arquivo funcional do `omsi-sim` acima de 800 linhas, e os traços da física, da IA, do tráfego e das pessoas idênticos em todos os PRs.
+Portão: nenhum teste em `src/`, nenhum auxílio de teste copiado, nenhuma API só de teste no jogo, nenhum arquivo funcional do `omsi-sim` acima de 800 linhas, e os traços da física, da IA, do tráfego e das pessoas idênticos em todos os PRs.
 
 ## Preparação para implementação: trilhas 0 e 1
 

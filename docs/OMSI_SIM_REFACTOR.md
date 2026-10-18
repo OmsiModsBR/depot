@@ -1,6 +1,6 @@
 # Refatoração do `omsi-sim` por domínio (plano)
 
-Plano de 18/10/2026 para o crate `omsi-sim`, medido no `main` em `7cc8474` (PR #303). Só leitura de código; contagens de linha e de função são aproximadas (casamento de chaves). É a **Trilha S** do [plano macro](MACRO_REFACTOR_DRAFT.md#trilha-s-omsi-sim-por-domínio) e segue as regras de lá: PRs curtos, um por vez, reservados na issue #61, branches `feat/` para estrutura e `fix/` para qualquer mudança de comportamento.
+Plano de 18/10/2026 para o crate `omsi-sim`, medido no `main` em `7cc8474` (PR #303). Só leitura de código; contagens de linha e de função são aproximadas (casamento de chaves). É a **Trilha S** do [plano macro](MACRO_REFACTOR_DRAFT.md#trilha-s-omsi-sim-por-domínio) e segue as regras de lá: um PR por vez, reservado na issue #61, branches `feat/` para estrutura e `fix/` para qualquer mudança de comportamento.
 
 Três objetivos, pedidos pelo mantenedor:
 
@@ -13,7 +13,7 @@ Três objetivos, pedidos pelo mantenedor:
 - **Refatoração não muda comportamento.** Todo PR deste plano prova isso: traços da física e da IA idênticos bit a bit (`scripts/physics-trace-diff.sh`), `offscreen-traces` e golden iguais, e a mesma lista de testes (`cargo test -p omsi-sim -- --list`, comparando os nomes sem o caminho do módulo). Qualquer diferença achada no caminho vira um PR `fix/` separado.
 - **A física do tráfego IA só muda de lugar**, com testes que provam que ela se comporta igual no jogo. As compensações que só existem na IA (`ai_lift`, `ai_rest_offset`, `rotation_point`, o limite de ±1,2 rad) ficam como estão.
 - **O jogo não compensa modelos mal configurados.** Nenhuma etapa deste plano acrescenta compensação; as que existem só na IA não são tocadas.
-- **Nada se apaga.** Código sem uso fica no repositório; no máximo sai da compilação do jogo atrás de uma feature. A exceção já decidida é a feature `model-fallbacks`, que sai depois da validação da física no jogo, fora deste plano.
+- **Nada se apaga**, com duas exceções decididas pelo mantenedor: as quatro funções sem uso listadas abaixo, que saem neste plano, e a feature `model-fallbacks`, que sai depois da validação da física no jogo, fora deste plano. O resto do código sem uso fica no repositório; no máximo sai da compilação do jogo atrás de uma feature.
 - **Os caminhos que os harnesses de traços usam não mudam.** O script de comparação compila `tests/physics_traces.rs` e `tests/ai_traces.rs` do PR também no commit base. Eles usam `omsi_sim::{ai, collision, physics, vehicle}` e as reexportações da raiz (`Controls`, `KinematicModel`, `SimClock`, `VehicleHost`, `VehicleInstance`, `VehicleType`); esses caminhos continuam valendo do começo ao fim.
 
 ## Diagnóstico
@@ -26,7 +26,6 @@ O crate tem 82 arquivos `.rs` e 28.439 linhas em `src/`, além de 2.610 em `test
 - Os maiores: `traffic.rs` (791 linhas de teste em quatro módulos: `extend_tests`, `tests`, `light_tests`, `aurora_pool_tests`), `human.rs` (522), `input.rs` (377, 60% do arquivo), `collision.rs` (233 em quatro módulos), `physics/implementation/collide.rs` (219, 63%), `host.rs` (218), `vehicle/articulation.rs` (154).
 - Em `human.rs` o módulo de testes fica no meio do arquivo (linhas 2222 a 2749) e o código funcional continua depois dele (`curl_hands`, `grip_centres`, `hand_slot`, `skin_from`).
 - `startup.rs` tem dois módulos de teste: um dentro do arquivo (linhas 88 a 213) e `regressions`, que aponta para `startup/tests.rs` com `#[path]`.
-- O job `physics-coverage` já ignora arquivos chamados `tests.rs`; com os testes dentro de `collide.rs`, `ground.rs` e `body.rs`, as linhas de teste entram na conta da cobertura da física.
 
 ### Auxílios de teste no código funcional
 
@@ -74,7 +73,7 @@ Seis variáveis estáticas que o app escreve e a simulação lê, escondidas das
 
 ### Sem uso (busca de texto no workspace)
 
-`TrafficLightController::phase_index`, `PathGraph::distances_from`, `StartUp::nothing_to_do` e `htmltex::set_backend` não têm chamador. Pela regra do projeto, ficam.
+`TrafficLightController::phase_index`, `PathGraph::distances_from`, `StartUp::nothing_to_do` e `htmltex::set_backend` não têm chamador. O mantenedor decidiu (18/10/2026) que estas quatro saem do código, como exceção à regra de não apagar.
 
 ### Formatação
 
@@ -84,27 +83,25 @@ O `omsi-sim` é um dos três crates ainda fora do `fmt --check` bloqueante: `car
 
 - **Uma responsabilidade por arquivo (SRP).** Um arquivo fala de um assunto e tem o nome dele. Função longa vira etapas com nome, na mesma ordem, sem mudar a lógica.
 - **Aberto para extensão (OCP).** Callbacks do host e famílias de dados entram por módulo de família, como o `handle_keyword` do `omsi-model` (D6, passo 8): cada família devolve "não é meu" e o despachante tenta a próxima. Um callback novo mexe num arquivo só.
-- **Interfaces pequenas (ISP).** Cada domínio grande ganha um `mod.rs` que reexporta só o que o resto do jogo usa, como o `physics/interface.rs`. O que é interno fica `pub(crate)` ou `pub(super)`.
+- **Interfaces pequenas (ISP).** Cada domínio grande tem um `mod.rs` que reexporta só o que o resto do jogo usa, como o `physics/interface.rs`. Os submódulos são privados.
 - **Dependências explícitas (DIP).** O estado global vira parâmetro, mas só junto da Frente B (ver [Decisões pendentes](#decisões-pendentes)).
 - **Sem abstração especulativa.** Trait só onde houver duas implementações de verdade. Hoje nenhum domínio deste plano tem; a divisão é por módulos e funções.
 - **Clean Code:** nomes que dizem o domínio, sem comentário que conta a história de uma mudança, testes descritos pelo comportamento (o padrão que o crate já segue).
 
 ## Convenções novas
 
-1. **Testes unitários num arquivo irmão.** Todo módulo com testes declara `#[cfg(test)] mod tests;` e os testes ficam em `<módulo>/tests.rs` (ou `<módulo>/tests/` com um arquivo por assunto, quando passam de uns 400 linhas). Nenhum `mod … { #[test] … }` dentro de arquivo funcional, nenhum `#[path]`.
-2. **Auxílios de teste num lugar só, por lado:**
-   - `src/testing/` (`#[cfg(test)] pub(crate) mod testing`): `ScratchPack`, que monta um pacote de veículo ou objeto numa pasta temporária com nome único e a apaga no `Drop`, e os veículos e pisos sintéticos que os testes unitários usam.
-   - `tests/support/` (incluído por `mod support;` em cada teste de integração): o gravador de traço e os veículos sintéticos dos harnesses. Ele usa só API pública que já existe no `main`, porque o script de comparação também o copia para o commit base.
-3. **API só de teste atrás da feature `test-support`.** Os setters e acessores que só testes e exemplos usam ficam num `impl` próprio com `#[cfg(any(test, feature = "test-support"))]`. O `Cargo.toml` liga a feature para os testes de integração e os exemplos com uma dev-dependency do próprio crate (`omsi-sim = { path = ".", features = ["test-support"] }`). O jogo compila sem ela. No commit base os harnesses continuam compilando, porque lá esses métodos ainda não têm a condição.
-4. **Caminhos antigos como reexportação.** Cada movimento deixa `pub use` no lugar antigo (`pub use people::human;` no `lib.rs`), para o `omsi-app` não mudar no mesmo PR. Um PR no fim troca os imports do app e tira as reexportações, menos as que os harnesses usam.
+1. **Todo teste em `tests/`, nenhum em `src/`** (decisão do mantenedor, 18/10/2026). `src/` fica sem `#[cfg(test)]`, sem `#[test]` e sem `tests.rs`. Os testes que hoje são unitários vão para um binário de teste só, `tests/sim/main.rs`, com um módulo por domínio (`tests/sim/traffic/…`, `tests/sim/people/…`), para não compilar e linkar um binário por arquivo. Os harnesses de traços e os outros testes de integração continuam binários próprios, porque o CI e o script de comparação os chamam pelo nome (`--test physics_traces --test ai_traces`).
+2. **Auxílios de teste num lugar só:** `tests/support/` (incluído por `mod support;` em cada binário de teste), com `ScratchPack`, que monta um pacote de veículo ou objeto numa pasta temporária com nome único e a apaga no `Drop`, o gravador de traço e os veículos e pisos sintéticos. O GN92, o gravador e os pacotes temporários passam a existir uma vez.
+3. **O que é interno chega aos testes pela feature `test-support`.** Um teste em `tests/` só enxerga a API pública, e cerca de 30 funções e métodos privados (e alguns campos) que os testes de hoje usam não são (`smooth01`, `choose_after`, `bone_id_by_name`, `measure`, `arg_idx`, `starter_engaged`, `winding_pack`, `step_physics` e `update_visuals` do veículo, `inv_mass_at`, entre outros; contagem por busca de texto, a ser conferida no PR). Esses itens passam a `pub` dentro de submódulos privados, o que não os põe na API, e um módulo `omsi_sim::testing`, compilado só com `#[cfg(feature = "test-support")]`, os reexporta. Campos privados ganham acessores no mesmo módulo. O `Cargo.toml` liga a feature para os testes e os exemplos por uma dev-dependency do próprio crate (`omsi-sim = { path = ".", features = ["test-support"] }`); o jogo compila sem ela. Os setters que só os harnesses usam (`RigidBody::set_velocity` e os outros) também passam para trás da feature; no commit base eles continuam sem condição, então os harnesses compilam dos dois lados.
+4. **O script de comparação copia `tests/support/` junto com os harnesses**, e `tests/support/` usa só API que já existe no `main` do momento, para compilar também no commit base.
+5. **Sem reexportação de caminho antigo.** Cada PR de domínio já troca os imports do `omsi-app` e das ferramentas para os caminhos novos. Só ficam os caminhos que os harnesses usam (ver as regras herdadas).
 
 ## Arquitetura alvo
 
 ```
 src/
-  lib.rs              reexportações da raiz (as de hoje)
-  testing/            só em teste: ScratchPack, veículos e pisos sintéticos
-  physics/            como está (domain/, interface.rs, implementation/)
+  lib.rs              reexportações da raiz (as de hoje) e `testing` atrás da feature
+  physics/            como está (domain/, interface.rs, implementation/), sem tests.rs
   ai/                 corpo do veículo da IA, como está (rodovia, trilho, ar, planner)
   vehicle/            como está, mais:
     coupled/          mod.rs (TrailerPart), coupling.rs (engates e posição),
@@ -128,7 +125,7 @@ src/
       speed.rs        arrival_time, curve_speed, desired_accel, rampa de saída
       drive.rs        advance, drive, way_point, pisca
   people/
-    mod.rs            reexporta human, human_omsi e crowd nos caminhos de hoje
+    mod.rs            o que o app usa
     rig/              ossos e slots, Joints, Rig, HumanType (carga do .hum)
     pose/             PoseInput, Foot, Pose e as etapas de advance e bones; gait.rs; math.rs
     skin.rs           skin, skin_from, mãos (curl_hands, grip_centres)
@@ -144,62 +141,55 @@ src/
   collision/          obb.rs, box3.rs, polygon.rs, mesh.rs, world.rs
   textures/           script.rs (scripttex), text.rs (texttex), html.rs (htmltex),
                       page_api.rs (vehicle_api)
+  testing.rs          só com `test-support`: reexporta o que é interno para os testes
   anim.rs, particles.rs, scenery.rs, input.rs, clock.rs, daylight.rs
-                      ficam como estão, só com os testes fora
+                      ficam como estão, sem os testes
+
+tests/
+  support/            ScratchPack, gravador de traço, veículos e pisos sintéticos
+  sim/                um binário: main.rs e um módulo por domínio, espelhando src/
+  physics_traces.rs, ai_traces.rs, traffic_traces.rs, people_traces.rs
+  physics_invariants.rs, automated_gearbox_script.rs, htmlengine_game.rs
 ```
 
-Alvo de tamanho: nenhum arquivo funcional acima de 800 linhas (o padrão que a física já cumpre) e nenhuma função acima de 150, a não ser tabelas de despacho.
+Alvo de tamanho: nenhum arquivo de `src/` acima de 800 linhas (o padrão que a física já cumpre) e nenhuma função acima de 150, a não ser tabelas de despacho.
 
 ## Sequência de PRs
 
-Cada PR é só estrutura, a não ser onde a tabela diz "testes". Antes de cada um, o PR reserva a unidade na issue #61 e confere se há PR `fix/` aberto nos arquivos; se houver, espera ou deixa o arquivo de fora.
+Cinco PRs, só de estrutura. Cada um tem um commit por assunto, para a revisão ler por partes, e por isso passa do limite de um dia útil das regras de trabalho em paralelo, como o F1 passou. Antes de cada um, o PR reserva a unidade na issue #61 e confere se há PR `fix/` aberto nos arquivos; se houver, espera ou deixa o arquivo de fora.
 
-| Item | Branch | O que entra | Pronto quando |
+| Item | Branch | O que entra, em commits | Pronto quando |
 | --- | --- | --- | --- |
-| S0 | `feat/sim-fmt` | `cargo fmt -p omsi-sim`, sem outra mudança, e o crate na lista bloqueante do `fmt --check` no CI | Traços idênticos; `fmt --check -p omsi-sim` verde |
-| S1a | `feat/sim-testes-fisica-veiculo` | Testes inline de `physics/`, `vehicle/`, `ai/`, `anim`, `clock`, `daylight`, `particles`, `scenery`, `scripttex`, `texttex`, `input` e `vehicle_api` para arquivos `tests.rs` irmãos | Mesma lista de testes; traços idênticos; a cobertura da física passa a contar só código |
-| S1b | `feat/sim-testes-dominios` | O mesmo em `traffic` (os quatro módulos viram `traffic/tests/{extend,network,lights,pools}.rs`), `human`, `human_omsi`, `crowd`, `collision`, `host`, `ibis` e `startup` (os dois módulos num só, sem `#[path]`) | Mesma lista de testes; nenhum `#[cfg(test)] mod … {` em arquivo funcional |
-| S2 | `feat/sim-apoio-testes` | `src/testing/` com `ScratchPack` no lugar dos 12 pacotes temporários; `tests/support/` com o gravador de traço e os veículos sintéticos (GN92 de três cópias para uma por lado); `scripts/physics-trace-diff.sh` copia `tests/support/` junto com os harnesses | Traços idênticos byte a byte; nenhuma pasta temporária sobra depois de `cargo test` |
-| S3 | `feat/sim-api-de-teste` | Feature `test-support` com os setters e acessores só de teste; `sit_amount`, `mesh_dropped` e o import de `scripts_acceleration` para dentro dos testes | `cargo build -p omsi-sim` sem a feature não tem esses métodos; app compila com `--all-features`; traços idênticos |
-| S4 | `feat/sim-tracos-trafego-pessoas` | Testes: `tests/traffic_traces.rs` (o `AiState` numa rede sintética: cruzamento com preferência, semáforo, troca de faixa, seguidor que freia, beco sem saída) e `tests/people_traces.rs` (matrizes dos ossos de `Pose` e de `OmsiAnim` em andar, correr, parar, sentar e levantar), os dois no script de comparação | Os traços novos rodam no job `physics-traces` |
-| S5 | `feat/sim-duplicados` | Um `angle_diff` (em `omsi_geometry::util::angle`, junto do `wrap_deg`); `ParticleSet::rand` sobre `unit_f32`; `smooth01` vira `smoothstep(0.0, 1.0, t)`. Só trocas com a mesma aritmética | Traços, inclusive os de S4, idênticos |
-| S6a | `feat/sim-trafego-faixas` | `traffic/` como pasta: `lane.rs`, `geometry.rs`, `lights.rs` | Traços e `offscreen-traces` idênticos |
-| S6b | `feat/sim-trafego-rede` | `traffic/network/` | Idem |
-| S6c | `feat/sim-trafego-motorista` | `traffic/driver/`, e `AiState::drive` (126 linhas) em etapas | Idem; `traffic_traces` idêntico |
-| S7a | `feat/sim-pessoas` | `people/` só movendo: `rig/`, `pose/`, `skin.rs`, `omsi_anim.rs`, `crowd/` | `people_traces` idêntico |
-| S7b | `feat/sim-pessoas-pose` | `Pose::advance` e `Pose::bones` em etapas com nome (pés, quadril, tronco, braços, mãos, olhar) | `people_traces` idêntico |
-| S8 | `feat/sim-host-callbacks` | `host/` com os callbacks por família, como o D6 passo 8 | Traços idênticos; os testes do host verdes |
-| S9 | `feat/sim-automacao` | `automation/startup` e `automation/ibis`, com `StartUp::tick` e `Unit::learn` em etapas | Testes de regressão de partida e do IBIS iguais |
-| S10 | `feat/sim-colisao` | `collision/` em submódulos | Traços idênticos (os cenários de batida usam `CollisionWorld`) |
-| S11 | `feat/sim-texturas` | `textures/` (script, texto, HTML e a API da página) | `tests/htmlengine_game.rs` e golden iguais |
-| S12 | `feat/sim-veiculo-acoplados` | `vehicle/coupled/` no lugar de `trailer.rs` e `articulation.rs`; `VehicleInstance::new`, `VehicleType::load_with`, `TrailerPart::follow`, `step_rigid` e `step_physics` em etapas | Traços da física e da IA idênticos |
-| S13 | `feat/sim-imports-app` | Imports do `omsi-app` e das ferramentas nos caminhos novos; saem as reexportações, menos as que os harnesses usam; `crates/omsi-sim/ARCHITECTURE.md` com a árvore final | App compila com `--all-features`; traços idênticos |
+| S1 | `feat/sim-limpeza` | (1) `cargo fmt -p omsi-sim` sozinho, e o crate na lista bloqueante do `fmt --check`; (2) as quatro funções sem uso removidas; (3) as cópias trocadas: um `angle_diff` em `omsi_geometry::util::angle`, `ParticleSet::rand` sobre `unit_f32`, `smooth01` como `smoothstep(0.0, 1.0, t)`, só onde a aritmética é a mesma | Traços idênticos; `fmt --check -p omsi-sim` verde |
+| S2 | `feat/sim-testes` | (1) feature `test-support`, `omsi_sim::testing` e os setters só de teste atrás dela; (2) `tests/support/` com `ScratchPack`, gravador e veículos, e o script copiando a pasta; (3) por domínio, os testes de `src/` para `tests/sim/`, inclusive os cinco `tests.rs` de hoje; (4) `tests/traffic_traces.rs` (o `AiState` numa rede sintética: cruzamento com preferência, semáforo, troca de faixa, seguidor que freia, beco sem saída) e `tests/people_traces.rs` (os ossos de `Pose` e de `OmsiAnim` em andar, correr, parar, sentar e levantar), os dois no job `physics-traces` | Nenhum teste em `src/`; a mesma lista de testes, pelos nomes; traços idênticos; `cargo build -p omsi-sim` sem a feature não tem `testing` |
+| S3 | `feat/sim-trafego` | `traffic/` (faixa, geometria, semáforos, `network/` e `driver/`), `AiState::drive` em etapas, imports do app | Traços da IA, `traffic_traces` e `offscreen-traces` idênticos |
+| S4 | `feat/sim-pessoas` | `people/` (rig, pose, pele, animação do OMSI, multidão), `Pose::advance` e `Pose::bones` em etapas com nome, imports do app | `people_traces` idêntico; golden igual |
+| S5 | `feat/sim-dominios` | `host/` com os callbacks por família; `automation/` com `StartUp::tick` e `Unit::learn` em etapas; `collision/`; `textures/`; `vehicle/coupled/`, com `VehicleInstance::new`, `VehicleType::load_with`, `TrailerPart::follow`, `step_rigid` e `step_physics` em etapas; imports do app; `crates/omsi-sim/ARCHITECTURE.md` com a árvore final | Traços da física e da IA idênticos; app compila com `--all-features` |
 
-S0 vem antes de tudo porque deixa os PRs de movimento legíveis e não conflita com nada aberto hoje. S1 a S3 cumprem o primeiro objetivo; S4 é a rede de segurança dos domínios que ainda não têm traço; S5 cumpre o terceiro; S6 a S13 cumprem o segundo. Os itens S6 a S12 não dependem entre si e podem trocar de ordem conforme o que estiver aberto no repositório; S6 primeiro porque `traffic.rs` é o maior arquivo do crate.
+S1 vem primeiro porque o rustfmt deixa os PRs de movimento legíveis. S2 vem antes da divisão por domínio porque, com os testes fora de `src/`, mover um arquivo deixa de levar os testes junto, e porque os traços novos do tráfego e das pessoas, que hoje não têm nenhum, são a prova de S3 e S4. S3 a S5 não dependem entre si e podem trocar de ordem conforme o que estiver aberto no repositório. Se a revisão pedir, qualquer um deles se divide nos próprios commits.
 
-Depois de S13, o crate entra na limpeza do clippy (A3), que não faz parte deste plano.
+Depois de S5, o crate entra na limpeza do clippy (A3), que não faz parte deste plano.
 
 ## Onde esta trilha encosta nas outras
 
 - **Trilha 3.** C5 é só do renderer e dos shaders, e o fix-25 não tem o que fazer aqui (o `omsi-sim` não tem `unsafe`). Não há arquivo em comum; as duas podem correr juntas.
-- **Trilha 4.** A Frente E move o tráfego e os humanos do **app** (`omsi-app/src/traffic.rs`, `humans.rs`) para um `omsi-gameplay`. Com esta trilha feita antes, o `omsi-gameplay` passa a depender de `omsi_sim::traffic` e `omsi_sim::people` já divididos. Os trechos da cena que a auditoria sugere levar para cá (faixas de `scene.rs` e a criação dos semáforos) entram na C4, não aqui.
-- **Física.** A trilha F terminou; S12 só move código da física do veículo e prova com os mesmos traços. A retirada de `model-fallbacks` continua esperando a validação no jogo.
+- **Trilha 4.** A Frente E move o tráfego e os humanos do **app** (`omsi-app/src/traffic.rs`, `humans.rs`) para um `omsi-gameplay`. Com esta trilha feita antes, o `omsi-gameplay` passa a depender de `omsi_sim::traffic` e `omsi_sim::people` já divididos. Os trechos da cena que a auditoria sugere levar para cá (faixas de `scene.rs` e a criação dos semáforos) entram na C4, não aqui. Os imports que S3 a S5 trocam no app são linhas de `use`; se houver PR aberto nesses arquivos, quem move porta a branch, como as regras pedem.
+- **Física.** A trilha F terminou; S5 só move código da física do veículo e prova com os mesmos traços. A retirada de `model-fallbacks` continua esperando a validação no jogo.
 
 ## Decisões pendentes
 
 | Pergunta | Recomendação | Alternativa |
 | --- | --- | --- |
 | Quando começa | Em paralelo à Trilha 3, já que não há arquivo em comum | Depois da Trilha 3 |
-| API só de teste | Feature `test-support` ligada pelas dev-dependencies | Deixar pública, num `impl` separado com documentação |
-| Estado global (`EYE`, `WIND`, `AMBIENT`, `PLACE`, `LOCALE`, `BACKEND`) | Trocar por parâmetros junto da Frente B, quando o `Session::step` passar a ser dono desse contexto | Um PR próprio nesta trilha, depois de S13 |
+| Como os testes em `tests/` alcançam o que é interno | `omsi_sim::testing` atrás da feature `test-support` | Reescrever esses testes só pela API pública, o que muda o que eles verificam |
+| Estado global (`EYE`, `WIND`, `AMBIENT`, `PLACE`, `LOCALE`, `BACKEND`) | Trocar por parâmetros junto da Frente B, quando o `Session::step` passar a ser dono desse contexto | Um PR próprio nesta trilha, depois de S5 |
 | Nome do `VehicleHost` | Manter o nome e documentar que serve também ao cenário; renomear exigiria um apelido para os harnesses | `ScriptHost` com `pub use ScriptHost as VehicleHost` |
-| As quatro funções sem uso | Ficam como estão | Atrás de uma feature desligada |
 
 ## Critério de sucesso
 
-- Nenhum módulo de teste dentro de arquivo funcional, nenhum `#[path]` de teste.
+- Nenhum teste em `src/`: nenhum `#[cfg(test)]`, `#[test]` ou `tests.rs`.
 - Nenhum pacote temporário, veículo sintético ou gravador de traço copiado.
 - Nenhuma API só de teste compilada no jogo.
-- Nenhum arquivo funcional acima de 800 linhas; nenhuma função acima de 150, a não ser tabelas de despacho.
-- Traços da física, da IA, do tráfego e das pessoas idênticos desde S4; `offscreen-traces` e golden iguais em todos os PRs.
+- Nenhum arquivo de `src/` acima de 800 linhas; nenhuma função acima de 150, a não ser tabelas de despacho.
+- Traços da física, da IA, do tráfego e das pessoas idênticos desde S2; `offscreen-traces` e golden iguais em todos os PRs.
 - `fmt --check` bloqueante no `omsi-sim`.
