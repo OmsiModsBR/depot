@@ -1999,7 +1999,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "triple_eye_height_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-500.0, 500.0)).unwrap_or(0.0)),
             "vr_scale" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 1.0)).unwrap_or(0.65)),
             "vr_head_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 30.0) as i64).unwrap_or(0)),
-            "vr_mirror_rate" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.0, 360.0) as i64).unwrap_or(16)),
+            "vr_mirror_rate" => v[&k] = val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.0, 360.0)).map(|x| if x.fract() == 0.0 { json!(x as i64) } else { json!(x) }).unwrap_or(json!(16)),
             "mirror_size" => v[&k] = json!(val.parse::<i64>().map(|x| if x == 0 { 0 } else { x.clamp(64, 2048) }).unwrap_or(256)),
             "mirror_refresh" => v[&k] = json!(mirror_refresh(val)),
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
