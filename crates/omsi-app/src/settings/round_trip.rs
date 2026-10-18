@@ -234,8 +234,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("head_tracking_pitch_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_roll_sens", "game>launcher", "as head_tracking_yaw_sens"),
     ("head_tracking_roll_sens", "launcher>game", "as head_tracking_yaw_sens"),
-    ("head_tracking_x_sens", "game>launcher", "as head_tracking_yaw_sens"),
-    ("head_tracking_x_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_y_sens", "game>launcher", "as head_tracking_yaw_sens"),
     ("head_tracking_y_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_z_sens", "game>launcher", "as head_tracking_yaw_sens"),
