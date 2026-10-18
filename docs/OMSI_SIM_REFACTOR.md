@@ -84,7 +84,7 @@ O `omsi-sim` é um dos três crates ainda fora do `fmt --check` bloqueante: `car
 - **Uma responsabilidade por arquivo (SRP).** Um arquivo fala de um assunto e tem o nome dele. Função longa vira etapas com nome, na mesma ordem, sem mudar a lógica.
 - **Aberto para extensão (OCP).** Callbacks do host e famílias de dados entram por módulo de família, como o `handle_keyword` do `omsi-model` (D6, passo 8): cada família devolve "não é meu" e o despachante tenta a próxima. Um callback novo mexe num arquivo só.
 - **Interfaces pequenas (ISP).** Cada domínio grande tem um `mod.rs` que reexporta só o que o resto do jogo usa, como o `physics/interface.rs`. Os submódulos são privados.
-- **Dependências explícitas (DIP).** O estado global vira parâmetro, mas só junto da Frente B (ver [Decisões pendentes](#decisões-pendentes)).
+- **Dependências explícitas (DIP).** O estado global vira parâmetro, mas só junto da Frente B (ver [Decisões](#decisões)).
 - **Sem abstração especulativa.** Trait só onde houver duas implementações de verdade. Hoje nenhum domínio deste plano tem; a divisão é por módulos e funções.
 - **Clean Code:** nomes que dizem o domínio, sem comentário que conta a história de uma mudança, testes descritos pelo comportamento (o padrão que o crate já segue).
 
@@ -176,13 +176,15 @@ Depois de S5, o crate entra na limpeza do clippy (A3), que não faz parte deste 
 - **Trilha 4.** A Frente E move o tráfego e os humanos do **app** (`omsi-app/src/traffic.rs`, `humans.rs`) para um `omsi-gameplay`. Com esta trilha feita antes, o `omsi-gameplay` passa a depender de `omsi_sim::traffic` e `omsi_sim::people` já divididos. Os trechos da cena que a auditoria sugere levar para cá (faixas de `scene.rs` e a criação dos semáforos) entram na C4, não aqui. Os imports que S3 a S5 trocam no app são linhas de `use`; se houver PR aberto nesses arquivos, quem move porta a branch, como as regras pedem.
 - **Física.** A trilha F terminou; S5 só move código da física do veículo e prova com os mesmos traços. A retirada de `model-fallbacks` continua esperando a validação no jogo.
 
-## Decisões pendentes
+## Decisões
 
-| Pergunta | Recomendação | Alternativa |
-| --- | --- | --- |
-| Quando começa | Em paralelo à Trilha 3, já que não há arquivo em comum | Depois da Trilha 3 |
-| Estado global (`EYE`, `WIND`, `AMBIENT`, `PLACE`, `LOCALE`, `BACKEND`) | Trocar por parâmetros junto da Frente B, quando o `Session::step` passar a ser dono desse contexto | Um PR próprio nesta trilha, depois de S5 |
-| Nome do `VehicleHost` | Manter o nome e documentar que serve também ao cenário; renomear exigiria um apelido para os harnesses | `ScriptHost` com `pub use ScriptHost as VehicleHost` |
+Tomadas pelo mantenedor em 18/10/2026:
+
+- **Quando começa:** em paralelo à Trilha 3, já que não há arquivo em comum.
+- **Testes:** todos em `tests/`; o que é interno chega a eles por `omsi_sim::testing`, atrás da feature `test-support`.
+- **Funções sem uso:** as quatro saem no S1.
+- **Estado global** (`EYE`, `WIND`, `AMBIENT`, `PLACE`, `LOCALE`, `BACKEND`): fica como está nesta trilha e vira parâmetro junto da Frente B, quando o `Session::step` passar a ser dono desse contexto.
+- **Nome do `VehicleHost`:** fica, com a documentação dizendo que ele também serve aos scripts dos objetos de cenário.
 
 ## Critério de sucesso
 
