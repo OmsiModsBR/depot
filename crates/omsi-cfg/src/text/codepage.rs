@@ -209,8 +209,9 @@ fn detect_on(bytes: &[u8], system: Option<CodePage>) -> CodePage {
     CodePage::Windows1252
 }
 
-/// `bytes` decoded in the code page [`detect`] finds.
-pub fn decode(bytes: &[u8]) -> String {
+/// `bytes` decoded in the code page [`detect`] finds, with no byte order mark; outside the
+/// crate, [`decode_text`](crate::decode_text) reads the marks too.
+pub(crate) fn decode(bytes: &[u8]) -> String {
     if bytes.is_ascii() {
         // ASCII is ASCII in every code page (and the common case by far)
         return String::from_utf8_lossy(bytes).into_owned();

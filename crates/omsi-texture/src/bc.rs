@@ -744,11 +744,7 @@ fn srgb_to_linear_table() -> &'static [f32; 256] {
         let mut t = [0.0f32; 256];
         for (i, v) in t.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *v = if c <= 0.04045 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            };
+            *v = crate::srgb::to_linear(c);
         }
         t
     })
@@ -760,11 +756,7 @@ fn linear_to_srgb_table() -> &'static [u8; 4097] {
         let mut t = [0u8; 4097];
         for (i, v) in t.iter_mut().enumerate() {
             let l = i as f32 / 4096.0;
-            let s = if l <= 0.003_130_8 {
-                l * 12.92
-            } else {
-                1.055 * l.powf(1.0 / 2.4) - 0.055
-            };
+            let s = crate::srgb::from_linear(l);
             *v = (s * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
         }
         t
