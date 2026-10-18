@@ -98,7 +98,7 @@ impl Navigator {
             (st.sheet, st.jump) = (true, true);
             st.route.insert(i, d.parse().unwrap_or(0));
             if let Some((h, m)) = it.next().and_then(|t| t.split_once(':')) {
-                st.dep = Some(crate::line_times::DepKey { t: h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60, trip: None });
+                st.dep = Some(crate::line_times::DepKey { t: h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60, trip: None, profile: None });
             }
         }
     }
