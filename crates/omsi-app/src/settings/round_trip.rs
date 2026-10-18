@@ -208,11 +208,8 @@ const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher keeps whole numbers where the game keeps fractions
     ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
     ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
-    ("ai_unsched_factor", "game>launcher", "the launcher cuts the fraction of a percent; the game takes NaN"),
     // the two sides read the same text differently
     ("anisotropy", "game>launcher", "the game takes 0, the launcher saves it as 1"),
-    ("head_tracking_pitch_sens", "game>launcher", "as head_tracking_yaw_sens"),
-    ("head_tracking_pitch_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_roll_sens", "game>launcher", "as head_tracking_yaw_sens"),
     ("head_tracking_roll_sens", "launcher>game", "as head_tracking_yaw_sens"),
     ("head_tracking_y_sens", "game>launcher", "as head_tracking_yaw_sens"),
