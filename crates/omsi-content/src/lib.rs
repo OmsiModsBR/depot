@@ -1,6 +1,7 @@
 //! The smaller content formats.
 
 pub mod driver;
+pub mod dsc;
 pub mod envir;
 pub mod font;
 pub mod human;
@@ -14,6 +15,7 @@ pub mod tickets;
 pub mod weather;
 
 pub use driver::Driver;
+pub use dsc::Dsc;
 pub use envir::Envir;
 pub use font::{Font, FontChar};
 pub use human::Human;

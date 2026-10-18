@@ -659,7 +659,7 @@ pub fn list_maps() -> Result<Vec<MapInfo>> {
         let Some(d) = dirs.into_iter().find(|d| omsi_cfg::vfs::is_file(&d.join("global.cfg"))) else { continue };
         let key = format!("map|{lang}|{}", d.display());
         let mut stamped = vec![d.clone(), d.join("global.cfg"), d.join("ailists.cfg")];
-        stamped.extend(dsc_candidates(&d.join("global.cfg"), lang));
+        stamped.extend(omsi_content::Dsc::candidates(&d.join("global.cfg"), lang));
         let stamp = index::files_stamp(&stamped);
         keys.push(key.clone());
         let info: Option<MapInfo> = index::cached(&key, stamp, || (read_map(&d, &folder, lang), Vec::new()));
@@ -697,7 +697,7 @@ fn read_map(d: &Path, folder: &str, lang: &str) -> Option<MapInfo> {
         }
     };
     // `global_ENG.dsc` (the language of the settings) names and describes the map
-    let dsc = find_dsc(&d.join("global.cfg"), lang);
+    let dsc = omsi_content::Dsc::find(&d.join("global.cfg"), lang);
     let friendly = dsc.as_ref().and_then(|x| x.name.first().cloned()).unwrap_or_else(|| g.friendly_name.trim().to_string());
     let description = dsc.map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| g.description.trim().to_string());
     let mut entries: Vec<EntryInfo> = g.entry_points.iter().map(|e| EntryInfo { index: e.index, name: e.name.trim().to_string() }).collect();
@@ -1029,7 +1029,7 @@ fn read_vehicle_folder(folder: &str, dirs: &[PathBuf], lang: &str) -> (Vec<Vehic
         let (paints, paint_dirs) = paint_schemes(&v);
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
-        let description = find_dsc(f, lang).map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| v.description.trim().to_string());
+        let description = omsi_content::Dsc::find(f, lang).map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| v.description.trim().to_string());
         let missing_packs = model.as_deref().map(missing_packs_of).unwrap_or_default();
         if !missing_packs.is_empty() {
             log_line(&format!("vehicles: {} borrows parts from packs that are not installed: {}", f.display(), missing_packs.join(", ")));
@@ -1067,7 +1067,7 @@ pub fn list_weather() -> Result<Vec<WeatherInfo>> {
     for f in files {
         // the description in the settings' language lives in `<name>_ENG.dsc`
         let mut stamped = vec![f.clone()];
-        stamped.extend(dsc_candidates(&f, lang));
+        stamped.extend(omsi_content::Dsc::candidates(&f, lang));
         let key = format!("wx|{lang}|{}", f.display());
         keys.push(key.clone());
         let info: Option<WeatherInfo> = index::cached(&key, index::files_stamp(&stamped), || (read_weather(&f, lang), Vec::new()));
@@ -1081,7 +1081,7 @@ fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
     let w = omsi_content::weather::Weather::load(f).ok()?;
     let stem = f.file_stem().unwrap().to_string_lossy().to_string();
     // (the `[name]` of the file is not part of the description: "Ground Fog Heavy ground fog ...")
-    let description = find_dsc(f, lang).map(|x| x.description.replace('\n', " ")).filter(|t| !t.is_empty()).unwrap_or_else(|| w.description.replace('\n', " "));
+    let description = omsi_content::Dsc::find(f, lang).map(|x| x.description.replace('\n', " ")).filter(|t| !t.is_empty()).unwrap_or_else(|| w.description.replace('\n', " "));
     let precip = match w.precip.first().copied().unwrap_or(0.0) as i32 {
         1 => format!("rain {:.0}%", w.precip.get(1).copied().unwrap_or(0.0) / 255.0 * 100.0),
         2 => format!("snow {:.0}%", w.precip.get(1).copied().unwrap_or(0.0) / 255.0 * 100.0),
@@ -1095,68 +1095,6 @@ fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
 fn content_language() -> &'static str {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
     language_code(settings_from_text(text.as_deref())["language"].as_str().unwrap_or("ENG"))
-}
-
-/// The description files OMSI reads for `file` (`global.cfg` -> `global_ENG.dsc`), in the
-/// order they are tried: the language itself, then English for a language that has none
-/// (German is the files' own language, so German falls back to the file itself).
-fn dsc_candidates(file: &Path, lang: &str) -> Vec<PathBuf> {
-    let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let mut langs = vec![lang];
-    if lang != "DEU" && lang != "ENG" {
-        langs.push("ENG");
-    }
-    langs.into_iter().map(|l| file.with_file_name(format!("{stem}_{l}.dsc"))).collect()
-}
-
-/// A `.dsc` file: the `[name]` / `[friendlyname]` lines and the `[description]` text.
-struct Dsc {
-    name: Vec<String>,
-    description: String,
-}
-
-fn parse_dsc(text: &str) -> Dsc {
-    let mut name = Vec::new();
-    let mut desc: Vec<&str> = Vec::new();
-    let mut section = "";
-    for line in text.lines() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            section = if t.eq_ignore_ascii_case("[name]") || t.eq_ignore_ascii_case("[friendlyname]") {
-                "name"
-            } else if t.eq_ignore_ascii_case("[description]") {
-                "description"
-            } else {
-                ""
-            };
-            continue;
-        }
-        match section {
-            "name" if !t.is_empty() => name.push(t.to_string()),
-            "name" => section = "",
-            "description" => desc.push(line.trim_end()),
-            _ => {}
-        }
-    }
-    Dsc { name, description: desc.join("\n").trim().to_string() }
-}
-
-fn find_dsc(file: &Path, lang: &str) -> Option<Dsc> {
-    dsc_candidates(file, lang).iter().find_map(|p| omsi_cfg::vfs::read(p).ok()).map(|b| parse_dsc(&encoding_latin1(&b)))
-}
-
-/// OMSI's text files are Latin-1, except that some description files were saved as
-/// UTF-16 with a byte-order mark.
-fn encoding_latin1(b: &[u8]) -> String {
-    if b.len() >= 2 && b[0] == 0xFF && b[1] == 0xFE {
-        let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        return String::from_utf16_lossy(&u);
-    }
-    if b.len() >= 2 && b[0] == 0xFE && b[1] == 0xFF {
-        let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
-        return String::from_utf16_lossy(&u);
-    }
-    b.iter().map(|&c| c as char).collect()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2584,9 +2522,7 @@ fn save_slots(dir: &Path) -> Vec<SavedSituation> {
             // (the `[name]` line alone: the lists ask again every few seconds, and a whole
             // situation holds every variable of every vehicle; the game writes them in
             // UTF-16, as OMSI does)
-            let text = std::fs::read(&f).map(|b| omsi_cfg::decode_text(&b[..b.len().min(8192) & !1])).unwrap_or_default();
-            let mut lines = text.lines().map(str::trim);
-            let name = lines.by_ref().find(|l| l.eq_ignore_ascii_case("[name]")).and_then(|_| lines.next()).map(str::to_string).filter(|n| !n.is_empty()).unwrap_or_else(|| f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+            let name = std::fs::read(&f).ok().and_then(|b| omsi_content::Situation::read_name(&b[..b.len().min(8192) & !1])).unwrap_or_else(|| f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
             SavedSituation { saved: modified_secs(&f), file: f, name }
         })
         .collect();
@@ -3032,19 +2968,6 @@ mod tests {
         assert!(!text.contains("discord_status") && !text.contains("discord_app_id"), "{text}");
     }
 
-    #[test]
-    fn dsc_files_give_name_and_description() {
-        let d = super::parse_dsc("\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n");
-        assert_eq!(d.name, vec!["MAN", "NL202 - EN92", "Beige"]);
-        assert_eq!(d.description, "Although the BVG did not purchase\n\n-Technical specifications-");
-        let w = super::parse_dsc("[name]\r\nGround Fog\r\n\r\n[description]\r\nHeavy ground fog limits the maximum visibility dangerously!\r\n[end]\r\n");
-        assert_eq!(w.name, vec!["Ground Fog"]);
-        assert_eq!(w.description, "Heavy ground fog limits the maximum visibility dangerously!");
-        let p = std::path::Path::new("/x/maps/Spandau/global.cfg");
-        assert_eq!(super::dsc_candidates(p, "ENG"), vec![std::path::PathBuf::from("/x/maps/Spandau/global_ENG.dsc")]);
-        assert_eq!(super::dsc_candidates(p, "FRA").len(), 2);
-        assert_eq!(super::dsc_candidates(std::path::Path::new("/v/MAN_EN92_main.bus"), "DEU"), vec![std::path::PathBuf::from("/v/MAN_EN92_main_DEU.dsc")]);
-    }
 
     use super::*;
 
