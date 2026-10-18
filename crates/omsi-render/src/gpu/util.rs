@@ -26,3 +26,41 @@ pub(crate) fn target_2d(
 pub(crate) fn mip_levels(width: u32, height: u32) -> u32 {
     (32 - width.max(height).leading_zeros()).max(1)
 }
+
+/// A pipeline that draws one triangle over the whole target, made by the vertex shader from
+/// the vertex index: no vertex buffers, no depth, one colour target.
+pub(crate) fn fullscreen_pipeline(
+    device: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::PipelineLayout,
+    module: &wgpu::ShaderModule,
+    vs: &str,
+    fs: &str,
+    target: wgpu::ColorTargetState,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some(vs),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some(fs),
+            targets: &[Some(target)],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}

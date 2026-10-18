@@ -3,7 +3,7 @@
 
 use super::probe::{Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE};
 use super::{atmosphere, clouds};
-use crate::gpu::{buffer_init, float_tex, target_2d};
+use crate::gpu::{buffer_init, float_tex, fullscreen_pipeline, target_2d};
 
 /// The sky's GPU resources and the sky last computed.
 pub(crate) struct SkyResources {
@@ -363,48 +363,32 @@ impl SkyResources {
                     })
                 })
                 .collect();
-            let cube_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("sky cube"),
-                layout: Some(&probe_pl),
-                vertex: wgpu::VertexState {
-                    module: sky_shader,
-                    entry_point: Some("vs_probe"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
+            let cube_pipeline = fullscreen_pipeline(
+                device,
+                "sky cube",
+                &probe_pl,
+                sky_shader,
+                "vs_probe",
+                "fs_sky_cube",
+                // a redraw is blended into what the face holds (the blend constant is
+                // the old picture's share): the clouds' grain averages out
+                wgpu::ColorTargetState {
+                    format: hdr_format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::OneMinusConstant,
+                            dst_factor: wgpu::BlendFactor::Constant,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::OneMinusConstant,
+                            dst_factor: wgpu::BlendFactor::Constant,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
                 },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    cull_mode: None,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: sky_shader,
-                    entry_point: Some("fs_sky_cube"),
-                    // a redraw is blended into what the face holds (the blend constant is
-                    // the old picture's share): the clouds' grain averages out
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: hdr_format,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::OneMinusConstant,
-                                dst_factor: wgpu::BlendFactor::Constant,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::OneMinusConstant,
-                                dst_factor: wgpu::BlendFactor::Constant,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                multiview_mask: None,
-                cache: None,
-            });
+            );
             Probe {
                 view,
                 faces,
