@@ -8,6 +8,7 @@ mod encode;
 mod frame;
 mod lights;
 mod lists;
+mod open;
 mod options;
 mod output;
 mod passes;
