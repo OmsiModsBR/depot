@@ -50,7 +50,7 @@ foreach ($level in $Msaa) {
         Set-Content -Path (Join-Path $home_ '.depot/settings.cfg') -Value $lines
         $env_ = @{
             HOME = $home_; USERPROFILE = $home_
-            RUST_LOG = 'info'; OMSI_PROFILE = '1'; OMSI_SEED = $Seed; OMSI_MAX_FPS = '0'
+            RUST_LOG = 'info'; OMSI_PROFILE = '1'; OMSI_SEED = $Seed; OMSI_MAX_FPS = '1000'
             OMSI_GPU_TIMERS = $(if ($GpuTimers) { '1' } else { $null })
             OMSI_DEBUG_DRAWS = $(if ($DrawCounts) { '1' } else { $null })
         }
@@ -66,7 +66,7 @@ foreach ($level in $Msaa) {
             )
             Write-Output "$name : $binary $($arguments -join ' ')"
             $p = Start-Process -FilePath $binary -ArgumentList $arguments -WorkingDirectory $repo `
-                -WindowStyle Minimized -RedirectStandardOutput (Join-Path $outDir "$name.stdout.log") `
+                -WindowStyle Normal -RedirectStandardOutput (Join-Path $outDir "$name.stdout.log") `
                 -RedirectStandardError (Join-Path $outDir "$name.stderr.log") -PassThru
             $p.WaitForExit()
             if ($p.ExitCode -ne 0) { Write-Warning "$name exited with $($p.ExitCode)" }

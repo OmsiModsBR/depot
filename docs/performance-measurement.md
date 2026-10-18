@@ -15,11 +15,11 @@ candidates to rule in or out, not conclusions.
 
 1. **One variable at a time.** Same executable, map, bus, spawn point, time, date, seed,
    traffic count and window size; change only the thing under test.
-2. **Release build, vsync off, no frame cap** (`OMSI_MAX_FPS=0`; the scripts set vsync to 0
+2. **Release build, vsync off, no frame cap** (`OMSI_MAX_FPS=1000`, the value that means "no limit"; `0` means the monitor's refresh rate; the scripts set vsync to 0
    unless told otherwise). A frame cap or vsync hides exactly the frame times being studied.
 3. **At least 3 runs per configuration**, the first one discarded if the shader/pipeline
    caches were cold. Report all of them, not the best.
-4. **Quiet machine.** Close the browser, overlays and capture tools. Note any that stay on.
+4. **Quiet machine, visible window.** Close the browser, overlays and capture tools, and do not minimise or cover the game window: a hidden window is not drawn and is paced at 30 FPS, which measures a different workload. Note any overlay that stays on.
 5. **Write down the machine once** (see the template) and keep it with the numbers: GPU and
    driver version, CPU, RAM, OS, graphics API (`OMSI_BACKEND` if forced), display resolution.
 6. **Attach the raw `game.log`** of each run to the issue. The summary table is for reading;

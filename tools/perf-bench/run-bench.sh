@@ -30,7 +30,7 @@ for level in $MSAA; do
     { [ -f "$HOME/.depot/settings.cfg" ] && grep -v -E '^(msaa|vsync)=' "$HOME/.depot/settings.cfg" || true; } > "$h/.depot/settings.cfg"
     printf 'msaa=%s\nvsync=%s\n' "$level" "$VSYNC" >> "$h/.depot/settings.cfg"
     echo "$name"
-    HOME="$h" RUST_LOG=info OMSI_PROFILE=1 OMSI_SEED="$SEED" OMSI_MAX_FPS=0 \
+    HOME="$h" RUST_LOG=info OMSI_PROFILE=1 OMSI_SEED="$SEED" OMSI_MAX_FPS=1000 \
       "$repo/$EXE" --root "$ROOT" --no-menu --map "$MAP" --bus "$BUS" --time "$TIME" \
         --traffic "$TRAFFIC" --passengers --schedule --spawn "$SPAWN" --view "$VIEW" \
         --exit-after "$SECONDS_RUN" > "$out/$name.stdout.log" 2> "$out/$name.stderr.log" || echo "$name exited non-zero"

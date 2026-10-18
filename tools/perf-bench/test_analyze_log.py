@@ -51,6 +51,12 @@ class Analyze(unittest.TestCase):
         # sub-stages ("render.encode") never win over their parent
         self.assertEqual(r["dominant"], {"tiles": 5, "gpu": 1})
 
+    def test_adjacent_slow_frames_are_one_freeze(self):
+        frames = [1000, 1001, 1002, 1300, 1301, 1600, 1601, 1900, 1901, 2200, 2201, 2500, 2501]
+        st = [{"frame": f, "ms": 100, "outside": 0, "stages": [("tiles", 90)], "at": None} for f in frames]
+        out = analyze_log.summarise_stutters(st)
+        self.assertEqual((out["events"], out["interval_frames"], out["regular"]), (6, 300, True))
+
     def test_table_has_one_column_per_log(self):
         out = analyze_log.table([analyze_log.parse(self.path)] * 2)
         self.assertIn("| MSAA | 8 | 8 |", out)

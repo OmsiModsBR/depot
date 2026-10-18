@@ -25,6 +25,7 @@ GPU_PASS = re.compile(r"profile gpu pass (\S+)\s*: ([\d.]+) ms")
 COUNT = re.compile(r"profile count (\S+): ([\d.]+) a frame")
 STAGE = re.compile(r"\bprofile ([\w.]+?)\s*: ([\d.]+) ms/frame")
 CPU = re.compile(r"profile: since 15 s ([\d.]+) ms wall and ([\d.]+) ms CPU")
+GROUP_FRAMES = 5
 TS = re.compile(r"^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)")
 
 
@@ -77,14 +78,21 @@ def summarise_stutters(stutters):
         top.append(("(outside the stages)", s["outside"]))
         name = max(top, key=lambda p: p[1])[0]
         out["dominant"][name] = out["dominant"].get(name, 0) + 1
-    if len(stutters) >= 3:
-        gaps = [b["frame"] - a["frame"] for a, b in zip(stutters, stutters[1:])]
+    # frames over 50 ms within GROUP_FRAMES of each other are one freeze; spacing runs from the
+    # first frame of one freeze to the first of the next
+    firsts = []
+    for s in stutters:
+        if not firsts or s["frame"] - last_frame > GROUP_FRAMES:
+            firsts.append(s)
+        last_frame = s["frame"]
+    out["events"] = len(firsts)
+    if len(firsts) >= 3:
+        gaps = [b["frame"] - a["frame"] for a, b in zip(firsts, firsts[1:])]
         out["interval_frames"] = statistics.median(gaps)
-        # a stutter a few frames after another is one event, so spacing uses the first of each run
-        if all(s["at"] for s in stutters):
-            secs = [(b["at"] - a["at"]).total_seconds() for a, b in zip(stutters, stutters[1:])]
+        if all(s["at"] for s in firsts):
+            secs = [(b["at"] - a["at"]).total_seconds() for a, b in zip(firsts, firsts[1:])]
             out["interval_s"] = statistics.median(secs)
-        if len(stutters) >= 6 and statistics.mean(gaps) > 0:
+        if len(firsts) >= 6 and statistics.mean(gaps) > 0:
             out["regular"] = statistics.pstdev(gaps) / statistics.mean(gaps) < 0.25
     return out
 
@@ -101,7 +109,7 @@ def table(runs):
         ("average fps", lambda r: r.get("fps", "?")),
         ("frames over 50 ms", lambda r: r.get("over50", "?")),
         ("worst frame (ms)", lambda r: r.get("worst_ms", "?")),
-        ("stutter lines", lambda r: len(r["stutters"])),
+        ("stutter lines (freezes)", lambda r: f"{len(r['stutters'])} ({r['events']})"),
         ("median gap between stutters (frames)", lambda r: r["interval_frames"] if r["interval_frames"] is not None else "-"),
         ("median gap between stutters (s)", lambda r: r["interval_s"] if r["interval_s"] is not None else "-"),
         ("regular spacing", lambda r: {None: "-", True: "yes", False: "no"}[r["regular"]]),
