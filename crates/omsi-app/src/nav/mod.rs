@@ -187,9 +187,9 @@ enum LinesHit {
     RoutePick(usize),
     /// The timetable in place of the list, and back.
     Sheet,
-    /// A day group (a weekday: 0, 5, 6) and a departure (its time, s).
+    /// A day group (a weekday: 0, 5, 6) and a departure (its time and trip).
     Day(usize),
-    Dep(u32),
+    Dep(crate::line_times::DepKey),
     /// Back from a departure's stops to the departures.
     Back,
     /// Tick every line of the tab on show, or clear them when all are ticked.
@@ -228,7 +228,7 @@ struct LinesView {
     /// departure picked (s of the day); `jump` takes the list to the next departure.
     sheet: bool,
     day: Option<usize>,
-    dep: Option<u32>,
+    dep: Option<crate::line_times::DepKey>,
     jump: bool,
 }
 
