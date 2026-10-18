@@ -431,6 +431,8 @@ O guia de estilo do projeto diz que formatos OMSI são lidos só em `omsi-cfg`, 
 
    Feito no passo 4: `cloud_texture` lê o `Weather/clouds.cfg` com `Envir::load` e acha o tipo com `Envir::cloud_type`, sem diferenciar maiúsculas. Um bloco desativado (`-<DISABLED>-`) agora fica de fora, como no OMSI. O `CloudKind` fica para a Frente E3.
 3. **Fontes `.oft`** (`lan_mods.rs:336`) usam `Font::load_all`; o `[name]` do launcher e os textos de tile do editor (`editor.rs`) passam por `omsi-map` com `omsi_cfg::decode_text`.
+
+   As fontes foram feitas no passo 5: o pacote de mods da LAN lê cada `.oft` com `Font::load_all` e leva o bitmap e o alfa das fontes em uso. O `[name]` do launcher e os textos de tile do editor ficam para um passo seguinte.
 4. **`handle_keyword` de `omsi-model`** (cerca de 620 linhas, `lib.rs:623`) se divide por família (malha e animação, `matl_*`, luzes, texturas dinâmicas, partículas), sem mudar a delegação do `.sco`.
 5. **Um `DdsHeader::parse`** usado por `dds::decode` e `gpu::dds_blocks`, um `IMAGE_EXTENSIONS` só e o `CP437_HIGH` duplicado de `vfs.rs:97` trocado pelo de `codepage`.
 6. **Testes de `.o3d`** (cabeçalhos v1, v3 e v4, índices longos, vértices embaralhados, tag desconhecida, arquivo truncado), que hoje não existem, e os nomes de textura `str8` decodificados por `codepage` em vez de 1252 fixo. Os testes entram antes de qualquer mudança no leitor.
