@@ -188,7 +188,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("shadow_size", "launcher>game", "a negative size is kept; the game cannot read it and uses 2048"),
     ("ui_opacity", "launcher>game", "no 0.2-1 range, and 0 instead of 0.85 for what is no number"),
     ("min_obj_size", "launcher>game", "no 0-0.2 range"),
-    ("max_fps", "launcher>game", "a negative limit is kept (the launcher writes 0)"),
     ("max_obj_dist", "launcher>game", "a negative distance is kept (the game reads it as 0, no limit)"),
     ("vol_ai", "launcher>game", "no 0-1 range"),
     ("vol_scenery", "launcher>game", "no 0-1 range"),
