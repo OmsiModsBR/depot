@@ -128,7 +128,11 @@ pub enum TextureError {
     Decode(PathBuf, String),
 }
 
+/// The extensions a texture is looked for under, in the order they are tried.
 pub const EXTENSIONS: [&str; 5] = ["dds", "bmp", "tga", "jpg", "png"];
+
+/// Every extension read as an image (`EXTENSIONS` and `jpeg`).
+pub const IMAGE_EXTENSIONS: [&str; 6] = ["dds", "bmp", "jpg", "jpeg", "png", "tga"];
 
 /// Decode an image file into RGBA8.
 pub fn decode_file(path: &Path) -> Result<Image, TextureError> {
@@ -393,11 +397,11 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
             .map(|s| s.to_ascii_lowercase())
     };
     let want = Path::new(name);
-    if !want.extension().and_then(|x| x.to_str()).is_some_and(|x| {
-        ["dds", "bmp", "jpg", "jpeg", "png", "tga"]
-            .iter()
-            .any(|t| x.eq_ignore_ascii_case(t))
-    }) {
+    if !want
+        .extension()
+        .and_then(|x| x.to_str())
+        .is_some_and(|x| IMAGE_EXTENSIONS.iter().any(|t| x.eq_ignore_ascii_case(t)))
+    {
         return None;
     }
     let candidates = index.get(&key(want)?)?;
@@ -458,11 +462,11 @@ fn texture_index(top: &str) -> HashMap<String, Vec<PathBuf>> {
             let p = dir.join(name);
             if is_dir {
                 stack.push(p);
-            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| {
-                ["dds", "bmp", "jpg", "png", "tga"]
-                    .iter()
-                    .any(|t| x.eq_ignore_ascii_case(t))
-            }) {
+            } else if p
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| EXTENSIONS.iter().any(|t| x.eq_ignore_ascii_case(t)))
+            {
                 if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
                     out.entry(stem.to_ascii_lowercase()).or_default().push(p);
                 }
