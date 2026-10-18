@@ -191,8 +191,8 @@ marker = icons/terminal.png | 30 | 1200.5 | 840.0 | Central Terminal
 marker = icons/depot.png | 54 | 1650.0 | 410.5 | Bus depot
 ```
 
-- `icon`: a PNG (straight alpha, up to 1024 x 1024) under the package folder, no `..` in the
-  path. Pictures are packed into one texture; a picture that cannot be read leaves out its lines.
+- `icon`: a PNG (straight alpha, up to 1024 x 1024) under the package folder. The path is relative, of plain names separated by `/` or `\`: one
+  that is empty, absolute, names a drive or share (any `:`), or has an empty, `.` or `..` part is refused and its line is ignored. Pictures are packed into one texture; a picture that cannot be read leaves out its lines.
 - `x`, `y`: metres of the author's grid (section 3). `name` is for people reading the file.
 - Drawn upright at their place on the navigator and the city map, always visible, no text.
 - A map without the file shows none.

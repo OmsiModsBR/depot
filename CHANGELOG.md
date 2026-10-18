@@ -10,6 +10,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
 
 ### Fixed
+- A map package's icon path can no longer point outside the package: absolute paths, drives (`C:`),
+  shares and `.`/`..`/empty parts leave the marker out (before, only `..` was refused).
 - In the lines panel's timetable, two trips leaving at the same minute are told apart: picking one
   shows its own stops, not the other's.
 - The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
