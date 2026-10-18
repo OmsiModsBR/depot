@@ -892,6 +892,12 @@ fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
     }
 }
 
+/// Whether a `[mass]` (t) is a stock bicycle's. They weigh exactly 0.3 t; anything lighter
+/// (a motorcycle at 0.125 t) is no bicycle and keeps to the road's limit like a car.
+fn is_bicycle_mass(mass: f32) -> bool {
+    (mass - 0.3).abs() < 1e-3
+}
+
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
 fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     let r = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
@@ -2828,9 +2834,8 @@ impl Traffic {
             // (a truck keeps to the limit like the cars, up to a truck's own 80-90 km/h: it
             // took 38-47 on every road, crawling along 80 km/h roads, #327)
             80.0 + (seed % 10) as f32
-        } else if kind == LaneKind::Street && ty.def.mass > 0.0 && ty.def.mass <= 0.3 {
-            // a bicycle (stock ones weigh exactly 0.3 t): 15-21 km/h, the `vmax` range their
-            // script cuts the drive at (#327)
+        } else if kind == LaneKind::Street && is_bicycle_mass(ty.def.mass) {
+            // a bicycle: 15-21 km/h, the `vmax` range their script cuts the drive at (#327)
             15.0 + (seed % 7) as f32
         } else {
             100.0
@@ -8330,3 +8335,18 @@ mod junction_scenarios;
 
 #[cfg(test)]
 mod junction_tests;
+
+#[cfg(test)]
+mod bicycle_cap_tests {
+    use super::is_bicycle_mass;
+
+    #[test]
+    fn only_the_stock_bicycle_mass_is_capped() {
+        assert!(is_bicycle_mass(0.3));
+        // a motorcycle (0.125 t) and other light vehicles are not bicycles
+        assert!(!is_bicycle_mass(0.125));
+        assert!(!is_bicycle_mass(0.2));
+        assert!(!is_bicycle_mass(0.0));
+        assert!(!is_bicycle_mass(0.95));
+    }
+}
