@@ -2,6 +2,7 @@
 //! not, any bit depth 8/15/16/24/32, ignoring inconsistent descriptor alpha bits.
 
 use crate::Image;
+use omsi_cfg::bytes::le16;
 
 pub fn decode(b: &[u8]) -> Result<Image, String> {
     if b.len() < 18 {
@@ -10,11 +11,11 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
     let id_len = b[0] as usize;
     let cmap_type = b[1];
     let img_type = b[2];
-    let cmap_start = u16::from_le_bytes([b[3], b[4]]) as usize;
-    let cmap_len = u16::from_le_bytes([b[5], b[6]]) as usize;
+    let cmap_start = le16(b, 3) as usize;
+    let cmap_len = le16(b, 5) as usize;
     let cmap_bpp = b[7] as usize;
-    let width = u16::from_le_bytes([b[12], b[13]]) as usize;
-    let height = u16::from_le_bytes([b[14], b[15]]) as usize;
+    let width = le16(b, 12) as usize;
+    let height = le16(b, 14) as usize;
     let bpp = b[16] as usize;
     let desc = b[17];
     let top_down = desc & 0x20 != 0;

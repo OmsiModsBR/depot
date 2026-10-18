@@ -24,6 +24,7 @@
 //! draws), only what standing water throws, which OMSI knows nothing of, on top.
 
 use glam::{DVec3, Mat4, Vec3};
+use omsi_geometry::util::smoothstep;
 use omsi_render::SmokeParticle;
 
 /// How far the puddle threshold drops with the wetness (`PUDDLE_SPREAD` in `enhanced.wgsl`
@@ -92,11 +93,6 @@ fn vnoise_f(px: f32, py: f32, freq: f32, ox: f32, oy: f32) -> f32 {
     let ab = a + (b - a) * ux;
     let cd = c + (d - c) * ux;
     ab + (cd - ab) * uy
-}
-
-fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
-    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// One tyre on the road, as the spray needs it.
@@ -381,10 +377,7 @@ impl Spray {
 
     /// 0..1
     fn rand(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        (self.rng >> 40) as f32 / (1u64 << 24) as f32
+        omsi_geometry::util::unit_f32(&mut self.rng)
     }
 
     /// Puffs alive now.

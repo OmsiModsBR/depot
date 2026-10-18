@@ -16,6 +16,7 @@ use super::tyre::{lin, Lateral, Substep, Work};
 use crate::physics::domain::params::{BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEP_DT};
 use crate::physics::domain::{BodyInputs, GroundProbe, Impact, Joint, JointKind, RigidBody};
 use glam::{DVec3, Mat3, Quat, Vec3};
+use omsi_geometry::util::wrap_deg;
 use omsi_vehicle::Vehicle;
 use std::borrow::Cow;
 
@@ -52,7 +53,7 @@ impl Joint {
     pub fn angles(&self, bodies: &[RigidBody]) -> (f32, f32) {
         let (hl, pl, _) = bodies[self.lead].heading_pitch_bank();
         let (hf, pf, _) = bodies[self.follow].heading_pitch_bank();
-        let alpha = ((hl - hf + 540.0).rem_euclid(360.0) - 180.0) as f32;
+        let alpha = wrap_deg(hl - hf) as f32;
         (alpha.to_radians(), (pl - pf).to_radians())
     }
 

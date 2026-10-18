@@ -155,9 +155,7 @@ impl Profiles {
 
     fn save_to(&self, path: &Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(path.parent().unwrap())?;
-        let temp = path.with_extension("json.tmp");
-        std::fs::write(&temp, serde_json::to_vec_pretty(self)?)?;
-        std::fs::rename(temp, path)?;
+        omsi_cfg::write_atomic(path, serde_json::to_vec_pretty(self)?)?;
         Ok(())
     }
 }

@@ -157,9 +157,8 @@ pub fn save(prefix: &str, keep: Option<&[String]>) {
         if let Some(d) = p.parent() {
             let _ = std::fs::create_dir_all(d);
         }
-        let tmp = p.with_extension("json.tmp");
         if let Ok(b) = serde_json::to_vec(&*s) {
-            if std::fs::write(&tmp, b).is_ok() && std::fs::rename(&tmp, &p).is_ok() {
+            if omsi_cfg::write_atomic(&p, b).is_ok() {
                 s.dirty = false;
             }
         }

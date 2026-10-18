@@ -114,11 +114,7 @@ impl Situation {
             "\r\n[myvehicle]\r\n{}\r\n\r\n[view]\r\n{}\r\n",
             self.my_vehicle, self.view
         ));
-        let mut bytes = vec![0xFF, 0xFE];
-        for u in t.encode_utf16() {
-            bytes.extend_from_slice(&u.to_le_bytes());
-        }
-        std::fs::write(path, bytes)
+        std::fs::write(path, omsi_cfg::encode_utf16_bom(&t))
     }
 
     pub fn load(path: &Path) -> Result<Situation, omsi_cfg::CfgError> {
