@@ -186,11 +186,7 @@ impl Pipelines {
                 vertex: wgpu::VertexState {
                     module: scene_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                    }],
+                    buffers: &[Vertex::LAYOUT],
                     compilation_options: Default::default(),
                 },
                 primitive: one_sided_primitive(cull),
@@ -257,41 +253,40 @@ impl Pipelines {
                     let mut primitive = one_sided_primitive(cull);
                     // Mirroring reverses winding. Keep authored one-sided geometry.
                     primitive.front_face = wgpu::FrontFace::Ccw;
-                    vehicle.push(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some("puddle vehicle capture"),
-                        layout: Some(&capture_layout),
-                        vertex: wgpu::VertexState {
-                            module: scene_shader,
-                            entry_point: Some("vs_puddle_vehicle"),
-                            buffers: &[wgpu::VertexBufferLayout {
-                                array_stride: std::mem::size_of::<Vertex>() as u64,
-                                step_mode: wgpu::VertexStepMode::Vertex,
-                                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                            }],
-                            compilation_options: Default::default(),
-                        },
-                        primitive,
-                        depth_stencil: Some(wgpu::DepthStencilState {
-                            format: DEPTH_FORMAT,
-                            depth_write_enabled: Some(kind != PIPE_BLEND_NO_WRITE),
-                            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                            stencil: Default::default(),
-                            bias: Default::default(),
+                    vehicle.push(
+                        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: Some("puddle vehicle capture"),
+                            layout: Some(&capture_layout),
+                            vertex: wgpu::VertexState {
+                                module: scene_shader,
+                                entry_point: Some("vs_puddle_vehicle"),
+                                buffers: &[Vertex::LAYOUT],
+                                compilation_options: Default::default(),
+                            },
+                            primitive,
+                            depth_stencil: Some(wgpu::DepthStencilState {
+                                format: DEPTH_FORMAT,
+                                depth_write_enabled: Some(kind != PIPE_BLEND_NO_WRITE),
+                                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                                stencil: Default::default(),
+                                bias: Default::default(),
+                            }),
+                            multisample: Default::default(),
+                            fragment: Some(wgpu::FragmentState {
+                                module: scene_shader,
+                                entry_point: Some("fs_puddle_vehicle"),
+                                targets: &[Some(wgpu::ColorTargetState {
+                                    format: HDR_FORMAT,
+                                    blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE)
+                                        .then_some(wgpu::BlendState::ALPHA_BLENDING),
+                                    write_mask: wgpu::ColorWrites::ALL,
+                                })],
+                                compilation_options: Default::default(),
+                            }),
+                            multiview_mask: None,
+                            cache: None,
                         }),
-                        multisample: Default::default(),
-                        fragment: Some(wgpu::FragmentState {
-                            module: scene_shader,
-                            entry_point: Some("fs_puddle_vehicle"),
-                            targets: &[Some(wgpu::ColorTargetState {
-                                format: HDR_FORMAT,
-                                blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE).then_some(wgpu::BlendState::ALPHA_BLENDING),
-                                write_mask: wgpu::ColorWrites::ALL,
-                            })],
-                            compilation_options: Default::default(),
-                        }),
-                        multiview_mask: None,
-                        cache: None,
-                    }));
+                    );
                 }
             }
         }
