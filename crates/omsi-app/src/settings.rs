@@ -630,7 +630,7 @@ impl Settings {
                 "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
                 "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
                 "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = v.trim().to_ascii_lowercase(),
+                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), _ => "auto".to_string() },
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),
