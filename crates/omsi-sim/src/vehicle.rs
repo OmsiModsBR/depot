@@ -1,8 +1,8 @@
 //! A road vehicle: its type (definition + compiled scripts + model) and instances.
 
-use crate::particles::ParticleSet;
 use crate::anim::MeshAnimator;
 use crate::host::VehicleHost;
+use crate::particles::ParticleSet;
 use crate::physics::{Controls, Dynamics, KinematicModel, VehicleMotion};
 use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
@@ -25,19 +25,21 @@ mod visuals;
 mod weather;
 mod winding;
 
-use props::PropsPlan;
 pub use ai_frame::AiFrame;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
+use props::PropsPlan;
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
-pub use trailer::{body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart};
+pub use trailer::{
+    body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart,
+};
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
 pub use weather::{relative_humidity, road_grip};
 
-use physics_bridge::OmsiFrames;
 #[cfg(test)]
 use physics_bridge::scripts_acceleration;
+use physics_bridge::OmsiFrames;
 
 pub struct VehicleInstance {
     /// `A_Trans_*` taken over OMSI's frames (see [`OmsiFrames`]).
@@ -344,7 +346,10 @@ impl VehicleInstance {
         };
         VehicleInstance {
             a_trans: OmsiFrames::default(),
-            particles: ParticleSet::new(ty.model.particle_systems(), std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9),
+            particles: ParticleSet::new(
+                ty.model.particle_systems(),
+                std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9,
+            ),
             light_fade: Vec::new(),
             v_springfactor,
             rest_sag,
@@ -362,7 +367,14 @@ impl VehicleInstance {
             v_brakeforce: v("Brakeforce"),
             v_clutch: v("Clutch").or_else(|| v("clutch_pedal")),
             v_pax_req: (0..PAX_DOORS)
-                .flat_map(|i| [format!("PAX_Entry{i}_Req"), format!("PAX_Exit{i}_Req"), format!("PAX_Entry{i}_Busy"), format!("PAX_Exit{i}_Busy")])
+                .flat_map(|i| {
+                    [
+                        format!("PAX_Entry{i}_Req"),
+                        format!("PAX_Exit{i}_Req"),
+                        format!("PAX_Entry{i}_Busy"),
+                        format!("PAX_Exit{i}_Busy"),
+                    ]
+                })
                 .filter_map(|n| v(&n))
                 .collect(),
             v_accel: [v("A_Trans_X"), v("A_Trans_Y"), v("A_Trans_Z")],
@@ -464,11 +476,19 @@ impl VehicleInstance {
     /// the body's vertical acceleration and its roll and pitch at the seat's place (the
     /// driver's camera) push a spring (3000) and damper (2000) on 150 kg; ±10 cm at most.
     fn update_driver_seat(&mut self, dt: f32) {
-        let Some(id) = self.ty.program.var("Driver_Seat_VertTransl") else { return };
+        let Some(id) = self.ty.program.var("Driver_Seat_VertTransl") else {
+            return;
+        };
         if dt <= 0.0 {
             return;
         }
-        let seat = self.ty.def.cameras_driver.first().map(|c| c.pos).unwrap_or([0.0; 3]);
+        let seat = self
+            .ty
+            .def
+            .cameras_driver
+            .first()
+            .map(|c| c.pos)
+            .unwrap_or([0.0; 3]);
         let (acc_z, omega) = match self.rigid() {
             Some(rb) => (rb.accel_body.z - 9.81, rb.omega),
             None => (0.0, Vec3::ZERO),

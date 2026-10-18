@@ -43,7 +43,7 @@ use crate::scene::World;
 use crate::traffic::Traffic;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
-use omsi_geometry::util::wrap_deg;
+use omsi_geometry::util::{angle_diff, wrap_deg};
 use omsi_render::{AlphaMode, Camera, MaterialId, MeshId, Renderer, Scene};
 use omsi_sim::crowd::{self, Block, CrowdParams, PathGraph, Walker};
 use omsi_sim::human::{skin, Activity, HumanType};
@@ -855,7 +855,7 @@ fn train_heading(heading: f64, trailers: &[PartFrame], local: Vec3) -> f64 {
         if w <= 0.0 {
             break;
         }
-        here += crowd::angle_diff(here, t.heading) * w as f64;
+        here += angle_diff(here, t.heading) * w as f64;
         if w < 1.0 {
             break;
         }
@@ -3155,7 +3155,7 @@ impl Humans {
             .filter(|(_, stop)| stop.is_named(&name))
             .min_by(|(_, a), (_, b)| {
                 let back =
-                    |stop: &PaxStop| crowd::angle_diff(vehicle.heading, stop.heading).abs() > 100.0;
+                    |stop: &PaxStop| angle_diff(vehicle.heading, stop.heading).abs() > 100.0;
                 back(a).cmp(&back(b)).then_with(|| {
                     (a.pos - vehicle.position)
                         .length_squared()
@@ -3184,7 +3184,7 @@ impl Humans {
                 .iter()
                 .filter(|s| (s.1 - pos).length() < reach)
                 .min_by(|a, c| {
-                    let back = |s: &(i64, DVec3, f64)| crowd::angle_diff(heading, s.2).abs() > 100.0;
+                    let back = |s: &(i64, DVec3, f64)| angle_diff(heading, s.2).abs() > 100.0;
                     back(a)
                         .cmp(&back(c))
                         .then((a.1 - pos).length().total_cmp(&(c.1 - pos).length()))
@@ -4153,7 +4153,7 @@ impl Humans {
             for bn in buses.iter_mut() {
                 let accel = match self.bus_motion.get(&bn.id) {
                     Some(&(v0, h0, a0)) => {
-                        let yaw_rate = crowd::angle_diff(h0, bn.heading).to_radians() / dt as f64;
+                        let yaw_rate = angle_diff(h0, bn.heading).to_radians() / dt as f64;
                         let raw = DVec2::new(bn.speed * yaw_rate, (bn.speed - v0) / dt as f64).clamp(DVec2::splat(-6.0), DVec2::splat(6.0));
                         a0 + (raw - a0) * (1.0 - (-(dt as f64) / 0.2).exp())
                     }
@@ -4746,7 +4746,7 @@ impl Humans {
         // rate follows the angle still to go, up to the most a walker or a stander turns
         let turned = match target {
             Some(t) => {
-                let left = crowd::angle_diff(current, t);
+                let left = angle_diff(current, t);
                 let max_rate = if walking { 260.0 } else { 140.0 };
                 let rate = (left.abs() * 5.0).min(max_rate).max(12.0);
                 crowd::turn_towards(current, t, rate, dt64)

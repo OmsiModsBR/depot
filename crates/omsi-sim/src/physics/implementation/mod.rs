@@ -15,6 +15,11 @@ mod train;
 mod tyre;
 mod wheel;
 
-pub use spec::{ai_rotation_point, kinematic_mass_kg, kinematic_rest_sag, kinematic_wheel_rest_loads, mass_kg, wheel_rest_loads, wheel_rest_loads_supported};
 pub(crate) use spec::coupled_rolling_resistance;
-pub use train::{hang_followers, place_train, point_load_shares, step_train, step_train_with, support_rest_loads};
+pub use spec::{
+    ai_rotation_point, kinematic_mass_kg, kinematic_rest_sag, kinematic_wheel_rest_loads, mass_kg,
+    wheel_rest_loads, wheel_rest_loads_supported,
+};
+pub use train::{
+    hang_followers, place_train, point_load_shares, step_train, step_train_with, support_rest_loads,
+};

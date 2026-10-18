@@ -16,6 +16,7 @@
 //! being cut off by it in a straight line (see `omsi_render::SmokeParticle::ground`).
 
 use glam::{DVec3, Mat4, Vec3};
+use omsi_geometry::util::unit_f32;
 use omsi_model::{ParticleSystemDef, PsRange, PsValue};
 use std::sync::RwLock;
 
@@ -112,7 +113,13 @@ impl ParticleSet {
         ParticleSet {
             emitters: defs
                 .into_iter()
-                .map(|def| Emitter { def, particles: Vec::new(), carry: 0.0, burst_done: false, ended: Vec::new() })
+                .map(|def| Emitter {
+                    def,
+                    particles: Vec::new(),
+                    carry: 0.0,
+                    burst_done: false,
+                    ended: Vec::new(),
+                })
                 .collect(),
             rng: seed | 1,
         }
@@ -125,15 +132,14 @@ impl ParticleSet {
     /// Live particles of every emitter, and whether each glows (`--PS_emissive--`) and its
     /// picture.
     pub fn particles(&self) -> impl Iterator<Item = (&Particle, &ParticleSystemDef)> {
-        self.emitters.iter().flat_map(|e| e.particles.iter().map(move |p| (p, &e.def)))
+        self.emitters
+            .iter()
+            .flat_map(|e| e.particles.iter().map(move |p| (p, &e.def)))
     }
 
     /// -1..1
     fn rand(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        ((self.rng >> 40) as f32 / (1u64 << 24) as f32) * 2.0 - 1.0
+        unit_f32(&mut self.rng) * 2.0 - 1.0
     }
 
     fn draw(&mut self, r: &PsRange, value: &dyn Fn(&str) -> f32) -> f32 {
@@ -152,7 +158,14 @@ impl ParticleSet {
     /// frame (a vehicle's: where its wheels touch the road, see
     /// `VehicleInstance::contact_plane`). `ground` is asked at most once, and only when a
     /// particle is set off from the emitter itself.
-    pub fn update_over(&mut self, dt: f32, origin: DVec3, rot: Mat4, ground: &dyn Fn() -> [f32; 3], value: &dyn Fn(&str) -> f32) {
+    pub fn update_over(
+        &mut self,
+        dt: f32,
+        origin: DVec3,
+        rot: Mat4,
+        ground: &dyn Fn() -> [f32; 3],
+        value: &dyn Fn(&str) -> f32,
+    ) {
         if self.emitters.is_empty() || dt <= 0.0 {
             return;
         }
@@ -172,7 +185,8 @@ impl ParticleSet {
                     }
                     // (braked against the air, which moves with the wind: smoke drifts off
                     // with it - it rose straight up in a gale, #1798)
-                    p.vel = wind + (p.vel - wind) * p.brake.clamp(BRAKE_MIN, 1.5).powf(dt * BRAKE_RATE);
+                    p.vel =
+                        wind + (p.vel - wind) * p.brake.clamp(BRAKE_MIN, 1.5).powf(dt * BRAKE_RATE);
                     p.vel.z -= 9.81 * p.gravity * dt;
                     p.pos += p.vel.as_dvec3() * dt as f64;
                     true
@@ -186,7 +200,9 @@ impl ParticleSet {
                     continue;
                 }
             }
-            let dir = rot.transform_vector3(Vec3::from(def.dir)).normalize_or_zero();
+            let dir = rot
+                .transform_vector3(Vec3::from(def.dir))
+                .normalize_or_zero();
             // where new particles start: the emitter itself, or the particles of the one it
             // is attached to - and the ground under them: the owner's under the emitter, a
             // parent particle's own
@@ -198,7 +214,13 @@ impl ParticleSet {
                     let pe = &self.emitters[parent];
                     match mode {
                         1 => burst_sources = pe.ended.clone(),
-                        _ => sources = pe.particles.iter().map(|p| (p.pos, if mode == 2 { -p.vel } else { dir }, p.ground)).collect(),
+                        _ => {
+                            sources = pe
+                                .particles
+                                .iter()
+                                .map(|p| (p.pos, if mode == 2 { -p.vel } else { dir }, p.ground))
+                                .collect()
+                        }
                     }
                 }
                 Some(_) => {}
@@ -207,7 +229,11 @@ impl ParticleSet {
                     // (asked for only when something will be set off from here)
                     let floor = if freq > 0.0 || bursts {
                         let g = *plane.get_or_insert_with(ground);
-                        let under = Vec3::new(def.pos[0], def.pos[1], g[0] + g[1] * def.pos[0] + g[2] * def.pos[1]);
+                        let under = Vec3::new(
+                            def.pos[0],
+                            def.pos[1],
+                            g[0] + g[1] * def.pos[0] + g[2] * def.pos[1],
+                        );
                         origin.z + rot.transform_vector3(under).z as f64
                     } else {
                         f64::NEG_INFINITY
@@ -248,7 +274,13 @@ impl ParticleSet {
         }
     }
 
-    fn new_particle(&mut self, def: &ParticleSystemDef, at: DVec3, dir: Vec3, value: &dyn Fn(&str) -> f32) -> Particle {
+    fn new_particle(
+        &mut self,
+        def: &ParticleSystemDef,
+        at: DVec3,
+        dir: Vec3,
+        value: &dyn Fn(&str) -> f32,
+    ) -> Particle {
         let speed = eval(&def.velocity.0, value);
         let spread = eval(&def.velocity.1, value);
         let vel = if def.velocity_all_round {
@@ -285,7 +317,30 @@ mod tests {
     use super::*;
 
     fn smoke(freq: f32) -> ParticleSystemDef {
-        let p: Vec<String> = ["0", "-5", "0.4", "0", "-1", "0", "2", "0.2", &freq.to_string(), "2", "0.95", "-0.2", "0.5", "3", "0.8", "0", "0.6", "0.6", "0.6"].iter().map(|s| s.to_string()).collect();
+        let p: Vec<String> = [
+            "0",
+            "-5",
+            "0.4",
+            "0",
+            "-1",
+            "0",
+            "2",
+            "0.2",
+            &freq.to_string(),
+            "2",
+            "0.95",
+            "-0.2",
+            "0.5",
+            "3",
+            "0.8",
+            "0",
+            "0.6",
+            "0.6",
+            "0.6",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         ParticleSystemDef::from_smoke(&p)
     }
 
@@ -293,15 +348,32 @@ mod tests {
     fn exhaust_puffs_rise_grow_and_fade() {
         let mut s = ParticleSet::new(vec![smoke(20.0)], 7);
         for _ in 0..30 {
-            s.update(1.0 / 30.0, DVec3::new(100.0, 200.0, 10.0), Mat4::IDENTITY, &|_| 0.0);
+            s.update(
+                1.0 / 30.0,
+                DVec3::new(100.0, 200.0, 10.0),
+                Mat4::IDENTITY,
+                &|_| 0.0,
+            );
         }
         let ps: Vec<&Particle> = s.particles().map(|(p, _)| p).collect();
-        assert!(ps.len() >= 18 && ps.len() <= 21, "{} particles after a second at 20/s", ps.len());
+        assert!(
+            ps.len() >= 18 && ps.len() <= 21,
+            "{} particles after a second at 20/s",
+            ps.len()
+        );
         let oldest = ps.iter().max_by(|a, b| a.age.total_cmp(&b.age)).unwrap();
-        assert!(oldest.pos.y < 195.0, "blown out backwards: {:?}", oldest.pos);
+        assert!(
+            oldest.pos.y < 195.0,
+            "blown out backwards: {:?}",
+            oldest.pos
+        );
         assert!(oldest.size() > 2.5, "grown to {}", oldest.size());
         assert!(oldest.alpha() < 0.5, "faded to {}", oldest.alpha());
-        assert!(oldest.vel.length() < 2.0, "slowed to {}", oldest.vel.length());
+        assert!(
+            oldest.vel.length() < 2.0,
+            "slowed to {}",
+            oldest.vel.length()
+        );
     }
 
     /// One puff of `def` set off on the first frame (its frequency read from `f`), then
@@ -329,7 +401,10 @@ mod tests {
         let at_60 = one_puff(def.clone(), 1.0 / 60.0, 30).vel.length();
         let at_30 = one_puff(def, 1.0 / 30.0, 15).vel.length();
         let want = 2.0 * 0.5f32.powi(10);
-        assert!((at_60 - want).abs() < want * 0.01 && (at_30 - want).abs() < want * 0.01, "half a second at 60 fps {at_60}, at 30 fps {at_30}, want {want}");
+        assert!(
+            (at_60 - want).abs() < want * 0.01 && (at_30 - want).abs() < want * 0.01,
+            "half a second at 60 fps {at_60}, at 30 fps {at_30}, want {want}"
+        );
     }
 
     /// A puff remembers the height of the ground under where it was set off: the plane its
@@ -343,11 +418,22 @@ mod tests {
         };
         let rot = Mat4::from_rotation_z(1.0);
         let mut s = ParticleSet::new(vec![smoke(31.0)], 5);
-        s.update_over(1.0 / 30.0, DVec3::new(100.0, 200.0, 10.0), rot, &plane, &|_| 0.0);
+        s.update_over(
+            1.0 / 30.0,
+            DVec3::new(100.0, 200.0, 10.0),
+            rot,
+            &plane,
+            &|_| 0.0,
+        );
         let p = s.particles().next().unwrap().0;
         // the emitter at (0, -5, 0.4): the plane 0.2 m under the origin there
         assert!((p.ground - 9.8).abs() < 1e-4, "ground {}", p.ground);
-        assert!(p.pos.z > p.ground, "set off {} over the ground {}", p.pos.z, p.ground);
+        assert!(
+            p.pos.z > p.ground,
+            "set off {} over the ground {}",
+            p.pos.z,
+            p.ground
+        );
         assert_eq!(asked.get(), 1);
         // (nothing set off: the plane is not asked for)
         let mut quiet = ParticleSet::new(vec![smoke(0.0)], 5);
@@ -355,7 +441,12 @@ mod tests {
         assert_eq!(asked.get(), 1);
         // a scenery object's: its own z = 0
         let mut o = ParticleSet::new(vec![smoke(31.0)], 5);
-        o.update(1.0 / 30.0, DVec3::new(0.0, 0.0, 33.0), Mat4::IDENTITY, &|_| 0.0);
+        o.update(
+            1.0 / 30.0,
+            DVec3::new(0.0, 0.0, 33.0),
+            Mat4::IDENTITY,
+            &|_| 0.0,
+        );
         assert_eq!(o.particles().next().unwrap().0.ground, 33.0);
     }
 
@@ -368,8 +459,15 @@ mod tests {
         }
         let spins: Vec<f32> = s.particles().map(|(p, _)| p.spin).collect();
         assert!(spins.len() > 40);
-        assert!(spins.iter().all(|a| (0.0..std::f32::consts::TAU).contains(a)), "{spins:?}");
-        let (lo, hi) = spins.iter().fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
+        assert!(
+            spins
+                .iter()
+                .all(|a| (0.0..std::f32::consts::TAU).contains(a)),
+            "{spins:?}"
+        );
+        let (lo, hi) = spins
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(lo, hi), a| (lo.min(*a), hi.max(*a)));
         assert!(lo < 1.0 && hi > 5.0, "spins {lo}..{hi}");
     }
 
@@ -379,7 +477,13 @@ mod tests {
         p.freq.0 = PsValue::Var("auspuff_freq".into());
         let mut s = ParticleSet::new(vec![p], 3);
         for _ in 0..30 {
-            s.update(1.0 / 30.0, DVec3::ZERO, Mat4::IDENTITY, &|n| if n == "auspuff_freq" { 0.0 } else { 1.0 });
+            s.update(1.0 / 30.0, DVec3::ZERO, Mat4::IDENTITY, &|n| {
+                if n == "auspuff_freq" {
+                    0.0
+                } else {
+                    1.0
+                }
+            });
         }
         assert_eq!(s.particles().count(), 0);
         for _ in 0..60 {

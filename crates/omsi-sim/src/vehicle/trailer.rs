@@ -1,6 +1,12 @@
 //! The parts coupled behind a vehicle (an articulated bus's rear sections, a lorry's
 //! trailers): how they hang on their coupling and where they are drawn.
 
+use super::pose::camera_in_body;
+use super::props::{MeshProps, PropsPlan};
+use super::skin::{rest_transforms, skin_key, skin_vertices};
+use super::vehicle_type::VehicleType;
+use super::visuals::{is_shadow_mesh, onto_plane};
+use super::{articulation, VehicleInstance};
 use crate::anim::MeshAnimator;
 use crate::particles::ParticleSet;
 use glam::{DVec3, Mat4, Quat, Vec3};
@@ -8,12 +14,6 @@ use omsi_script::Program;
 use omsi_vehicle::Vehicle;
 use std::path::Path;
 use std::sync::Arc;
-use super::pose::camera_in_body;
-use super::props::{MeshProps, PropsPlan};
-use super::skin::{rest_transforms, skin_key, skin_vertices};
-use super::vehicle_type::VehicleType;
-use super::visuals::{is_shadow_mesh, onto_plane};
-use super::{articulation, VehicleInstance};
 
 impl VehicleInstance {
     /// Coupled vehicles follow and animate from this vehicle's variables.
@@ -35,7 +35,9 @@ impl VehicleInstance {
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let (mut prev_c, mut b_prev) = (self.position, 0.0f64);
         for t in &mut trailers {
-            let (lp, lr) = lead.map(|(p, r, _)| (p, r)).unwrap_or((self.position, self.body_rotation()));
+            let (lp, lr) = lead
+                .map(|(p, r, _)| (p, r))
+                .unwrap_or((self.position, self.body_rotation()));
             let c = t.coupling_point(lp, lr);
             let b_c = b_prev + (c - prev_c).truncate().length();
             if let Some(p) = at_behind(b_c + t.pivot_length() as f64) {
@@ -187,7 +189,10 @@ fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
     };
     // (none declared is the model origin, as OMSI keeps it; an AI copy's type is given the
     // coupling it has always had - see `VehicleType::load_ai`)
-    let p = coupling.as_ref().map(|c| Vec3::from(c.pos)).unwrap_or(Vec3::ZERO);
+    let p = coupling
+        .as_ref()
+        .map(|c| Vec3::from(c.pos))
+        .unwrap_or(Vec3::ZERO);
     // Rail couplings are declared in the path frame. Express them in the model frame
     // so body_rotation can turn a negative-bogie body without moving its joints.
     if body_reversed(def, false) {
@@ -335,7 +340,8 @@ impl TrailerPart {
         // AG300's, set ahead of its axle) followed it as if it were a fixed one (#322);
         // the stock GN92's line is its axle, a semitrailer's the middle of its axle group,
         // and rail cars name none.
-        let turning_line = (ty.def.rot_pnt_long != 0.0 && !ty.def.axles.is_empty()).then_some(ty.def.rot_pnt_long);
+        let turning_line =
+            (ty.def.rot_pnt_long != 0.0 && !ty.def.axles.is_empty()).then_some(ty.def.rot_pnt_long);
         let axle_long = if let Some(r) = turning_line {
             r
         } else if body_reversed(&ty.def, reversed) {
@@ -370,7 +376,11 @@ impl TrailerPart {
             .map(|(a, (axle, z))| {
                 let axle = crate::physics::AxleSpec::of(axle);
                 let r = axle.kinematic_radius;
-                (r - z.unwrap_or(r), loads.get(a).copied().unwrap_or(0.0), axle.sag_spring)
+                (
+                    r - z.unwrap_or(r),
+                    loads.get(a).copied().unwrap_or(0.0),
+                    axle.sag_spring,
+                )
             })
             .collect();
         let v_brakes = (0..ty.def.axles.len())
@@ -468,7 +478,12 @@ impl TrailerPart {
     /// A trailer follows its tractor's heading; it pitches between the coupling and the
     /// ground under its axle, and leans as the vehicle does.
     pub fn body_rotation(&self) -> Mat4 {
-        body_rotation(self.heading, self.pitch, self.bank, body_reversed(&self.ty.def, self.reversed))
+        body_rotation(
+            self.heading,
+            self.pitch,
+            self.bank,
+            body_reversed(&self.ty.def, self.reversed),
+        )
     }
 
     pub fn body_heading(&self) -> f64 {
@@ -555,7 +570,11 @@ impl TrailerPart {
     /// part in front, `pitch_offset` ahead of the coupling towards its body; the coupling
     /// point itself for a puller's joint.
     pub fn pitch_hinge(&self, lead_pos: DVec3, lead_rot: Mat4) -> DVec3 {
-        let ahead = if self.coupling_back.y < 0.0 { 1.0 } else { -1.0 };
+        let ahead = if self.coupling_back.y < 0.0 {
+            1.0
+        } else {
+            -1.0
+        };
         let p = self.coupling_back + Vec3::new(0.0, ahead * self.pitch_offset, 0.0);
         lead_pos + lead_rot.transform_point3(p).as_dvec3()
     }

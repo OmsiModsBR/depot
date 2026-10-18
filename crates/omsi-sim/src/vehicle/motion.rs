@@ -1,11 +1,11 @@
 //! A vehicle's motion: the driver's controls, the physics step and the rigid body.
 
-use crate::physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
-use glam::Vec3;
 use super::physics_bridge::{body_wheel_shown, driven_rpm, script_speed, DriveInputs};
 use super::trailer::{body_heading, TrailerPart};
 use super::weather::road_grip;
 use super::VehicleInstance;
+use crate::physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
+use glam::Vec3;
 
 impl VehicleInstance {
     pub fn set_controls(&mut self, c: Controls) {
@@ -61,7 +61,10 @@ impl VehicleInstance {
 
     /// The rigid body taken out for its step (`step_rigid` puts it back), if the vehicle has one.
     fn take_rigid(&mut self) -> Option<crate::physics::RigidBody> {
-        match std::mem::replace(&mut self.dynamics, Dynamics::Kinematic(KinematicModel::default())) {
+        match std::mem::replace(
+            &mut self.dynamics,
+            Dynamics::Kinematic(KinematicModel::default()),
+        ) {
             Dynamics::Rigid(rb) => Some(rb),
             other => {
                 self.dynamics = other;
@@ -72,7 +75,11 @@ impl VehicleInstance {
 
     /// The vehicle's physics as it stands, to be put back with `set_physics_state`.
     pub fn physics_state(&self) -> PhysicsState {
-        PhysicsState { dynamics: self.dynamics.clone(), motion: self.motion.clone(), controls: self.controls }
+        PhysicsState {
+            dynamics: self.dynamics.clone(),
+            motion: self.motion.clone(),
+            controls: self.controls,
+        }
     }
 
     pub fn set_physics_state(&mut self, state: PhysicsState) {
@@ -119,7 +126,14 @@ impl VehicleInstance {
     /// The axle that steers: the frontmost, as the rigid body takes it (the simple model
     /// took the first listed, which is not always the front one).
     fn steered_axle(&self) -> usize {
-        self.ty.def.axles.iter().enumerate().max_by(|a, b| a.1.long.total_cmp(&b.1.long)).map(|(i, _)| i).unwrap_or(0)
+        self.ty
+            .def
+            .axles
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.long.total_cmp(&b.1.long))
+            .map(|(i, _)| i)
+            .unwrap_or(0)
     }
 
     /// Set the forward speed (m/s), for tests that need a run-up without the road.
@@ -129,7 +143,11 @@ impl VehicleInstance {
             Dynamics::Rigid(rb) => Some(rb),
             Dynamics::Kinematic(_) => None,
         };
-        let parts = self.trailers.iter_mut().filter_map(|t| t.body.as_mut()).map(|b| &mut b.rb);
+        let parts = self
+            .trailers
+            .iter_mut()
+            .filter_map(|t| t.body.as_mut())
+            .map(|b| &mut b.rb);
         for rb in lead.into_iter().chain(parts) {
             rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * v;
         }
@@ -275,7 +293,11 @@ impl VehicleInstance {
             }
         }
         self.show_velocity(script_speed(self.motion.velocity_kmh()));
-        self.show_n_wheel(driven_rpm(&self.motion.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_n_wheel(driven_rpm(
+            &self.motion.wheels,
+            |w| w[0].driven,
+            |w| w[0].rpm,
+        ));
         self.show_a_trans(self.motion.accel);
         // Wheel_Rotation_* and Axle_Steering_* are radians in the original: the stock
         // model.cfg turns a wheel with anim_rot ... 57.29577951308232 (180/pi) and the
@@ -287,7 +309,16 @@ impl VehicleInstance {
         for ai in 0..self.v_wheels.len() {
             for si in 0..2 {
                 let ws = self.motion.wheels[ai][si].clone();
-                let shown = [ws.rotation_deg.to_radians(), ws.rpm, if ai == self.steered_axle() { steer } else { 0.0 }, ws.suspension];
+                let shown = [
+                    ws.rotation_deg.to_radians(),
+                    ws.rpm,
+                    if ai == self.steered_axle() {
+                        steer
+                    } else {
+                        0.0
+                    },
+                    ws.suspension,
+                ];
                 self.show_wheel(ai, si, shown);
             }
         }
@@ -304,7 +335,12 @@ impl VehicleInstance {
         // each part pulls or holds back along its own heading: the third section of a
         // double articulated bus in a bend does not point where the second does
         let dir_of = |t: &TrailerPart| {
-            let h = if t.pivot.is_some() { t.heading } else { self.heading }.to_radians();
+            let h = if t.pivot.is_some() {
+                t.heading
+            } else {
+                self.heading
+            }
+            .to_radians();
             Vec3::new(h.sin() as f32, h.cos() as f32, 0.0)
         };
         self.trailers
@@ -404,14 +440,23 @@ impl VehicleInstance {
                     obstacles.extend(cw.obstacles_near_solid(&probe_box, Some(&solid)));
                 }
                 obstacles.extend(dynamic.iter().copied());
-                let impacts = rb.collide(bb, &obstacles, &|i| obstacles[i].id >= 0 && knocked.contains(&obstacles[i].id), slice);
+                let impacts = rb.collide(
+                    bb,
+                    &obstacles,
+                    &|i| obstacles[i].id >= 0 && knocked.contains(&obstacles[i].id),
+                    slice,
+                );
                 for hit in impacts {
                     let o = obstacles[hit.obstacle];
                     if hit.broke && o.id >= 0 && !knocked.contains(&o.id) {
                         knocked.push(o.id);
                     }
                     // (one hit per obstacle a frame, the hardest, as a single slice gives)
-                    match hits.iter_mut().find(|(_, p): &&mut (crate::physics::Impact, crate::collision::Obb)| o.id != -1 && p.id == o.id) {
+                    match hits.iter_mut().find(
+                        |(_, p): &&mut (crate::physics::Impact, crate::collision::Obb)| {
+                            o.id != -1 && p.id == o.id
+                        },
+                    ) {
                         Some((h, _)) if h.energy >= hit.energy => {}
                         Some(x) => *x = (hit, o),
                         None => hits.push((hit, o)),
@@ -435,7 +480,12 @@ impl VehicleInstance {
                 worst = Some(*hit);
             }
         }
-        let touching: Vec<i64> = hits.iter().map(|(_, o)| o).filter(|o| o.mass > 0.0).map(|o| o.id).collect();
+        let touching: Vec<i64> = hits
+            .iter()
+            .map(|(_, o)| o)
+            .filter(|o| o.mass > 0.0)
+            .map(|o| o.id)
+            .collect();
         for (hit, o) in &hits {
             if hit.broke && o.id >= 0 && !self.knocked.contains(&o.id) {
                 self.knocked.push(o.id);

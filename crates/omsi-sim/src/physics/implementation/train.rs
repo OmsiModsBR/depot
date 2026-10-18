@@ -13,7 +13,10 @@
 
 use super::spec::{split, wheel_rest_loads_supported};
 use super::tyre::{lin, Lateral, Substep, Work};
-use crate::physics::domain::params::{BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT, SUBSTEP_DT};
+use crate::physics::domain::params::{
+    BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT,
+    SUBSTEP_DT,
+};
 use crate::physics::domain::{BodyInputs, GroundProbe, Impact, Joint, JointKind, RigidBody};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_geometry::util::wrap_deg;
@@ -38,7 +41,11 @@ impl Joint {
             alpha_max: alpha.to_radians(),
             beta_min: beta_min.to_radians(),
             beta_max: beta_max.to_radians(),
-            kind: if kind == 0.0 { JointKind::Ball } else { JointKind::Articulation },
+            kind: if kind == 0.0 {
+                JointKind::Ball
+            } else {
+                JointKind::Articulation
+            },
         }
     }
 
@@ -59,16 +66,24 @@ impl Joint {
 
     /// How far apart (m) the two bodies hold the ball.
     pub fn gap(&self, bodies: &[RigidBody]) -> f32 {
-        self.ball(&bodies[self.lead], &bodies[self.follow]).2.length()
+        self.ball(&bodies[self.lead], &bodies[self.follow])
+            .2
+            .length()
     }
 
     /// The pitch axis (world): the lead's transverse axis at a pusher's hinge, the follower's
     /// at a puller's ball; and the yaw axis, the other body's vertical.
     fn axes(&self, lead: &RigidBody, follow: &RigidBody) -> (Vec3, Vec3) {
         if self.pitch_offset > 0.0 {
-            (lead.orientation.mul_vec3(Vec3::X), follow.orientation.mul_vec3(Vec3::Z))
+            (
+                lead.orientation.mul_vec3(Vec3::X),
+                follow.orientation.mul_vec3(Vec3::Z),
+            )
         } else {
-            (follow.orientation.mul_vec3(Vec3::X), lead.orientation.mul_vec3(Vec3::Z))
+            (
+                follow.orientation.mul_vec3(Vec3::X),
+                lead.orientation.mul_vec3(Vec3::Z),
+            )
         }
     }
 
@@ -82,7 +97,11 @@ impl Joint {
             let a = lead.orientation.mul_vec3(Vec3::X);
             let to = (ball_f - hinge).as_vec3();
             let back = to - a * to.dot(a);
-            let back = if back.length() > 1e-3 { back.normalize() } else { -lead.orientation.mul_vec3(Vec3::Y) };
+            let back = if back.length() > 1e-3 {
+                back.normalize()
+            } else {
+                -lead.orientation.mul_vec3(Vec3::Y)
+            };
             back * self.pitch_offset
         } else {
             Vec3::ZERO
@@ -125,7 +144,13 @@ struct Side {
 
 impl Side {
     fn new(b: &RigidBody, s: &Substep, l: &Lateral) -> Side {
-        Side { rot: s.rot, fwd: s.body_fwd, m: l.m, mt: l.mt, inertia: b.inertia }
+        Side {
+            rot: s.rot,
+            fwd: s.body_fwd,
+            m: l.m,
+            mt: l.mt,
+            inertia: b.inertia,
+        }
     }
 
     /// The velocity of a linear impulse `p` and the world angular velocity of an angular one.
@@ -134,7 +159,8 @@ impl Side {
     }
 
     fn ang(&self, l: Vec3) -> Vec3 {
-        self.rot.mul_vec3(self.rot.inverse().mul_vec3(l) / self.inertia)
+        self.rot
+            .mul_vec3(self.rot.inverse().mul_vec3(l) / self.inertia)
     }
 
     fn apply(&self, l: &mut Lateral, p: Vec3, ang: Vec3) {
@@ -149,12 +175,18 @@ impl Side {
 
 impl Row {
     fn velocity(&self, sa: &Side, la: &Lateral, sb: &Side, lb: &Lateral) -> f32 {
-        self.a_lin.dot(la.v) + self.a_ang.dot(sa.rot.mul_vec3(la.w)) + self.b_lin.dot(lb.v) + self.b_ang.dot(sb.rot.mul_vec3(lb.w))
+        self.a_lin.dot(la.v)
+            + self.a_ang.dot(sa.rot.mul_vec3(la.w))
+            + self.b_lin.dot(lb.v)
+            + self.b_ang.dot(sb.rot.mul_vec3(lb.w))
     }
 
     /// What one unit of impulse along `other` does to this row's velocity.
     fn coupling(&self, other: &Row, sa: &Side, sb: &Side) -> f32 {
-        self.a_lin.dot(sa.lin(other.a_lin)) + self.a_ang.dot(sa.ang(other.a_ang)) + self.b_lin.dot(sb.lin(other.b_lin)) + self.b_ang.dot(sb.ang(other.b_ang))
+        self.a_lin.dot(sa.lin(other.a_lin))
+            + self.a_ang.dot(sa.ang(other.a_ang))
+            + self.b_lin.dot(sb.lin(other.b_lin))
+            + self.b_ang.dot(sb.ang(other.b_ang))
     }
 
     fn apply(&self, sa: &Side, la: &mut Lateral, sb: &Side, lb: &mut Lateral, lambda: f32) {
@@ -200,9 +232,18 @@ fn bias(err: f32, h: f32) -> f32 {
 }
 
 impl JointRows {
-    fn new(j: &Joint, bodies: &[RigidBody], subs: &[Substep], lats: &[Lateral], h: f32) -> JointRows {
+    fn new(
+        j: &Joint,
+        bodies: &[RigidBody],
+        subs: &[Substep],
+        lats: &[Lateral],
+        h: f32,
+    ) -> JointRows {
         let (lead, follow) = (&bodies[j.lead], &bodies[j.follow]);
-        let sides = [Side::new(lead, &subs[j.lead], &lats[j.lead]), Side::new(follow, &subs[j.follow], &lats[j.follow])];
+        let sides = [
+            Side::new(lead, &subs[j.lead], &lats[j.lead]),
+            Side::new(follow, &subs[j.follow], &lats[j.follow]),
+        ];
         let (sa, sb) = (&sides[0], &sides[1]);
         // The ball as the lead's link holds it moves with the lead, and pitches about the
         // hinge (axis `a`) as the follower pitches against the lead.
@@ -213,7 +254,12 @@ impl JointRows {
         let a_link = a.cross(link);
         let point = [Vec3::X, Vec3::Y, Vec3::Z].map(|e| {
             let s = e.dot(a_link);
-            Row { a_lin: e, a_ang: r_lead.cross(e) - a * s, b_lin: -e, b_ang: a * s - r_follow.cross(e) }
+            Row {
+                a_lin: e,
+                a_ang: r_lead.cross(e) - a * s,
+                b_lin: -e,
+                b_ang: a * s - r_follow.cross(e),
+            }
         });
         let mut k = Mat3::ZERO;
         for c in 0..3 {
@@ -221,29 +267,63 @@ impl JointRows {
                 k.col_mut(c)[r] = point[r].coupling(&point[c], sa, sb);
             }
         }
-        let point_k_inv = if k.determinant().abs() > 1e-12 { k.inverse() } else { Mat3::ZERO };
+        let point_k_inv = if k.determinant().abs() > 1e-12 {
+            k.inverse()
+        } else {
+            Mat3::ZERO
+        };
         let point_target = Vec3::new(bias(err.x, h), bias(err.y, h), bias(err.z, h));
         let mut scalars = Vec::new();
         let mut push = |row: Row, target: f32, unilateral: bool| {
             let k = row.coupling(&row, sa, sb);
             if k > 1e-9 {
-                scalars.push(Scalar { row, target, inv_k: 1.0 / k, unilateral, acc: 0.0 });
+                scalars.push(Scalar {
+                    row,
+                    target,
+                    inv_k: 1.0 / k,
+                    unilateral,
+                    acc: 0.0,
+                });
             }
         };
         let (pitch_axis, yaw_axis) = j.axes(lead, follow);
         if j.kind == JointKind::Articulation {
             // no roll between the sections: the yaw axis stays square to the pitch axis
-            let (p, q) = if j.pitch_offset > 0.0 { (pitch_axis, yaw_axis) } else { (yaw_axis, pitch_axis) };
+            let (p, q) = if j.pitch_offset > 0.0 {
+                (pitch_axis, yaw_axis)
+            } else {
+                (yaw_axis, pitch_axis)
+            };
             let n = p.cross(q);
-            push(Row { a_ang: n, b_ang: -n, ..Default::default() }, bias(p.dot(q), h), false);
+            push(
+                Row {
+                    a_ang: n,
+                    b_ang: -n,
+                    ..Default::default()
+                },
+                bias(p.dot(q), h),
+                false,
+            );
         }
         // the limits: alpha grows as the follower turns left of the lead, beta as it pitches
         // down against it (d alpha / dt = (w_f - w_l) . yaw, d beta / dt = (w_l - w_f) . pitch)
         let (alpha, beta) = j.angles(bodies);
         let mut limit = |gap: f32, a_ang: Vec3| {
             if gap < LIMIT_WINDOW {
-                let target = if gap > 0.0 { -gap / h } else { bias(gap, h).abs() };
-                push(Row { a_ang, b_ang: -a_ang, ..Default::default() }, target, true);
+                let target = if gap > 0.0 {
+                    -gap / h
+                } else {
+                    bias(gap, h).abs()
+                };
+                push(
+                    Row {
+                        a_ang,
+                        b_ang: -a_ang,
+                        ..Default::default()
+                    },
+                    target,
+                    true,
+                );
             }
         };
         if j.kind == JointKind::Articulation {
@@ -252,7 +332,13 @@ impl JointRows {
         }
         limit(j.beta_max - beta, -pitch_axis);
         limit(beta - j.beta_min, pitch_axis);
-        JointRows { sides, point, point_k_inv, point_target, scalars }
+        JointRows {
+            sides,
+            point,
+            point_k_inv,
+            point_target,
+            scalars,
+        }
     }
 
     fn solve(&mut self, j: &Joint, lats: &mut [Lateral]) {
@@ -280,8 +366,23 @@ impl JointRows {
 /// one [`BodyInputs`] per body. Each body is stepped as [`RigidBody::step`] steps one alone:
 /// the same substeps, its own pitch and roll damping, and should any body come out of the
 /// step at no number, the whole train stays where it stood, at rest.
-pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, inputs: &[BodyInputs], probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
-    step_train_with(bodies, joints, dt, drive_torque, inputs, probe, &mut |_, _| {});
+pub fn step_train(
+    bodies: &mut [RigidBody],
+    joints: &[Joint],
+    dt: f32,
+    drive_torque: f32,
+    inputs: &[BodyInputs],
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+) {
+    step_train_with(
+        bodies,
+        joints,
+        dt,
+        drive_torque,
+        inputs,
+        probe,
+        &mut |_, _| {},
+    );
 }
 
 /// [`step_train`], with `after_slice(bodies, slice)` called after each slice of the step
@@ -292,7 +393,15 @@ pub fn step_train(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_tor
 /// before it left over (the first body keeps that, `RigidBody::unstepped`), in slices of at
 /// most [`SLICE_DT`]; whatever the frame rate, the same drive makes the same motion.
 #[allow(clippy::too_many_arguments)]
-pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, drive_torque: f32, inputs: &[BodyInputs], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, after_slice: &mut dyn FnMut(&mut [RigidBody], f32)) {
+pub fn step_train_with(
+    bodies: &mut [RigidBody],
+    joints: &[Joint],
+    dt: f32,
+    drive_torque: f32,
+    inputs: &[BodyInputs],
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    after_slice: &mut dyn FnMut(&mut [RigidBody], f32),
+) {
     assert_eq!(bodies.len(), inputs.len());
     if bodies.is_empty() {
         return;
@@ -300,7 +409,11 @@ pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, driv
     // a long frame (below 20 fps) is stepped in slices, so that the body covers the whole
     // frame the clock, the odometer and the scripts count (it was cut to 50 ms: at 10 fps the
     // bus went half as far as the time went on)
-    let dt = if dt.is_finite() { dt.clamp(0.0, FRAME_DT_MAX) } else { 0.0 };
+    let dt = if dt.is_finite() {
+        dt.clamp(0.0, FRAME_DT_MAX)
+    } else {
+        0.0
+    };
     // A script's value that is no number - a bus's `M_Wheel` or a brake force of 0/0 or
     // 1/0 - put the whole body at NaN within a step: the bus vanished and the steering's
     // clamp stopped the game a frame later ("min > max, or either was NaN", #1045).
@@ -308,14 +421,43 @@ pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, driv
     // (a value of the file's), it stays where it stood before, at rest.
     let finite = |x: f32| if x.is_finite() { x } else { 0.0 };
     let drive_torque = finite(drive_torque);
-    let brakes: Vec<Cow<[f32]>> = inputs.iter().map(|i| if i.brake.iter().all(|b| b.is_finite()) { Cow::Borrowed(i.brake) } else { Cow::Owned(i.brake.iter().map(|&b| finite(b)).collect()) }).collect();
+    let brakes: Vec<Cow<[f32]>> = inputs
+        .iter()
+        .map(|i| {
+            if i.brake.iter().all(|b| b.is_finite()) {
+                Cow::Borrowed(i.brake)
+            } else {
+                Cow::Owned(i.brake.iter().map(|&b| finite(b)).collect())
+            }
+        })
+        .collect();
     let steers: Vec<Option<f32>> = inputs.iter().map(|i| i.steer.map(finite)).collect();
     let air: Vec<bool> = inputs.iter().map(|i| i.air).collect();
-    let before: Vec<_> = bodies.iter().map(|b| (b.position, b.orientation, b.steer_deg, b.wheels.iter().map(|w| (w.compression, w.touch)).collect::<Vec<_>>())).collect();
+    let before: Vec<_> = bodies
+        .iter()
+        .map(|b| {
+            (
+                b.position,
+                b.orientation,
+                b.steer_deg,
+                b.wheels
+                    .iter()
+                    .map(|w| (w.compression, w.touch))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
     // Every driven wheel of the train takes its share of `M_Wheel`. A body without
     // driven wheels of its own (a pusher's front section) was pushed by nothing: the
     // count was clamped to one and the torque went to wheels that do not drive.
-    let driven = bodies.iter().map(|b| b.wheels.iter().filter(|w| w.driven).count() + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()).sum::<usize>().max(1) as f32;
+    let driven = bodies
+        .iter()
+        .map(|b| {
+            b.wheels.iter().filter(|w| w.driven).count()
+                + b.coupled.iter().map(|d| d.driven_wheels).sum::<usize>()
+        })
+        .sum::<usize>()
+        .max(1) as f32;
     // the substeps this frame: what fits in the time it brings and what was left over (a
     // hair's breadth short of a whole one counts as one: 1/60 s is four 1/240 s substeps,
     // not three and a remainder)
@@ -334,12 +476,27 @@ pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, driv
     while left > 0 {
         let n = left.min(per_slice);
         left -= n;
-        slice(bodies, joints, n, drive_torque, driven, &brakes, &steers, &air, probe, &mut scratch, &mut accel);
+        slice(
+            bodies,
+            joints,
+            n,
+            drive_torque,
+            driven,
+            &brakes,
+            &steers,
+            &air,
+            probe,
+            &mut scratch,
+            &mut accel,
+        );
         after_slice(bodies, n as f32 * SUBSTEP_DT);
         for (b, impacts) in bodies.iter_mut().zip(impacts.iter_mut()) {
             // (one impact per obstacle a frame, as a single slice gives)
             for m in b.wheel_impacts.drain(..) {
-                match impacts.iter_mut().find(|x: &&mut Impact| x.obstacle == m.obstacle) {
+                match impacts
+                    .iter_mut()
+                    .find(|x: &&mut Impact| x.obstacle == m.obstacle)
+                {
                     Some(x) if x.energy >= m.energy => {}
                     Some(x) => *x = m,
                     None => impacts.push(m),
@@ -355,7 +512,12 @@ pub fn step_train_with(bodies: &mut [RigidBody], joints: &[Joint], dt: f32, driv
             b.accel_body = a / substeps as f32;
         }
     }
-    if !bodies.iter().all(|b| b.position.is_finite() && b.orientation.is_finite() && b.velocity.is_finite() && b.omega.is_finite()) {
+    if !bodies.iter().all(|b| {
+        b.position.is_finite()
+            && b.orientation.is_finite()
+            && b.velocity.is_finite()
+            && b.omega.is_finite()
+    }) {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| log::warn!("vehicle physics: the body's state became no number; it stays where it was, at rest"));
         for (b, (position, orientation, steer_deg, wheels)) in bodies.iter_mut().zip(before) {
@@ -388,17 +550,38 @@ impl SolverScratch {
         fn each<T: Default>(n: usize) -> Vec<T> {
             (0..n).map(|_| T::default()).collect()
         }
-        SolverScratch { subs: each(n), lats: each(n), works: each(n), rows: Vec::new() }
+        SolverScratch {
+            subs: each(n),
+            lats: each(n),
+            works: each(n),
+            rows: Vec::new(),
+        }
     }
 }
 
 /// `substeps` substeps of [`SUBSTEP_DT`] of the whole train, the bodies' accelerations added
 /// to `accel`.
 #[allow(clippy::too_many_arguments)]
-fn slice(bodies: &mut [RigidBody], joints: &[Joint], substeps: usize, drive_torque: f32, driven: f32, brakes: &[Cow<[f32]>], steers: &[Option<f32>], air: &[bool], probe: &dyn Fn(f64, f64, f64) -> GroundProbe, scratch: &mut SolverScratch, accel: &mut [Vec3]) {
+fn slice(
+    bodies: &mut [RigidBody],
+    joints: &[Joint],
+    substeps: usize,
+    drive_torque: f32,
+    driven: f32,
+    brakes: &[Cow<[f32]>],
+    steers: &[Option<f32>],
+    air: &[bool],
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    scratch: &mut SolverScratch,
+    accel: &mut [Vec3],
+) {
     let n = bodies.len();
     let h = SUBSTEP_DT;
-    let passes = if joints.is_empty() { PASSES } else { JOINT_PASSES };
+    let passes = if joints.is_empty() {
+        PASSES
+    } else {
+        JOINT_PASSES
+    };
     let braked: f32 = brakes.iter().map(|b| b.iter().sum::<f32>()).sum();
     let mass: f32 = bodies.iter().map(|b| b.mass).sum();
     for _ in 0..substeps {
@@ -407,21 +590,42 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], substeps: usize, drive_torq
         let kappas: Vec<f32> = (0..n)
             .map(|i| match steers[i] {
                 Some(s) => s.clamp(-1.0, 1.0) * bodies[i].inv_min_turn_radius,
-                None => joints.iter().find(|j| j.follow == i).map_or(0.0, |j| j.kappa(bodies)),
+                None => joints
+                    .iter()
+                    .find(|j| j.follow == i)
+                    .map_or(0.0, |j| j.kappa(bodies)),
             })
             .collect();
         for (b, k) in bodies.iter_mut().zip(kappas) {
             b.steer_to(k);
         }
-        let SolverScratch { subs, lats, works, rows } = &mut *scratch;
+        let SolverScratch {
+            subs,
+            lats,
+            works,
+            rows,
+        } = &mut *scratch;
         for i in 0..n {
-            bodies[i].prepare(h, drive_torque, driven, &brakes[i], air[i], probe, &mut subs[i], &mut works[i]);
+            bodies[i].prepare(
+                h,
+                drive_torque,
+                driven,
+                &brakes[i],
+                air[i],
+                probe,
+                &mut subs[i],
+                &mut works[i],
+            );
         }
         for i in 0..n {
             bodies[i].lateral_start(&subs[i], h, &mut lats[i]);
         }
         rows.clear();
-        rows.extend(joints.iter().map(|j| JointRows::new(j, bodies, subs, lats, h)));
+        rows.extend(
+            joints
+                .iter()
+                .map(|j| JointRows::new(j, bodies, subs, lats, h)),
+        );
         for _ in 0..passes {
             for i in 0..n {
                 bodies[i].lateral_pass(&subs[i], &mut lats[i], h);
@@ -440,7 +644,12 @@ fn slice(bodies: &mut [RigidBody], joints: &[Joint], substeps: usize, drive_torq
         // away so the bus stands truly still (the vertical velocity stays: the suspension
         // may still be settling). (The whole train or none of it: a section stopped on its
         // own was pulled along by the other through the joint.)
-        if bodies.iter().all(|b| Vec3::new(b.velocity.x, b.velocity.y, 0.0).length() < 0.03) && drive_torque.abs() < 1.0 && braked > 0.02 * mass * 9.81 {
+        if bodies
+            .iter()
+            .all(|b| Vec3::new(b.velocity.x, b.velocity.y, 0.0).length() < 0.03)
+            && drive_torque.abs() < 1.0
+            && braked > 0.02 * mass * 9.81
+        {
             for b in bodies.iter_mut() {
                 b.velocity.x = 0.0;
                 b.velocity.y = 0.0;
@@ -490,11 +699,16 @@ pub fn place_train(bodies: &mut [RigidBody], joints: &[Joint], origin: DVec3, he
 pub fn hang_followers(bodies: &mut [RigidBody], joints: &[Joint], headings: &[f64]) {
     for j in joints {
         let lead = &bodies[j.lead];
-        let ball = lead.position + lead.orientation.mul_vec3(j.anchor_lead - lead.cog).as_dvec3();
+        let ball = lead.position
+            + lead
+                .orientation
+                .mul_vec3(j.anchor_lead - lead.cog)
+                .as_dvec3();
         let f = &mut bodies[j.follow];
         let heading = headings.get(j.follow).copied().unwrap_or(0.0);
         let rot = Quat::from_rotation_z((-heading).to_radians() as f32);
-        let origin = ball - rot.mul_vec3(j.anchor_follow).as_dvec3() - DVec3::Z * f.rest_sag() as f64;
+        let origin =
+            ball - rot.mul_vec3(j.anchor_follow).as_dvec3() - DVec3::Z * f.rest_sag() as f64;
         f.place(origin, heading);
     }
 }
@@ -504,7 +718,11 @@ impl RigidBody {
     /// (m): where [`RigidBody::place`] puts it.
     pub(super) fn rest_sag(&self) -> f32 {
         let n = self.wheels.len().max(1) as f32;
-        self.wheels.iter().map(|w| w.radius - w.attach.z - w.rest_compression().min(BUMP)).sum::<f32>() / n
+        self.wheels
+            .iter()
+            .map(|w| w.radius - w.attach.z - w.rest_compression().min(BUMP))
+            .sum::<f32>()
+            / n
     }
 }
 

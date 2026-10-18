@@ -1,6 +1,5 @@
 //! What the weather does to a vehicle: the air's humidity and the road's grip.
 
-
 pub use omsi_content::weather::psychro::relative_humidity;
 
 /// The tyres' friction coefficient on the road under them: `street_cond` as the weather sets
@@ -61,12 +60,28 @@ mod grip_tests {
         }
         let ty = Arc::new(VehicleType::load(&root, &bus).expect("Agora S"));
         let i = (0..ty.meshes.len())
-            .find(|&i| ty.model.meshes[ty.meshes[i].def_index].file.to_ascii_lowercase().contains("retarderhebel_2"))
+            .find(|&i| {
+                ty.model.meshes[ty.meshes[i].def_index]
+                    .file
+                    .to_ascii_lowercase()
+                    .contains("retarderhebel_2")
+            })
             .expect("the Agora's retarder lever");
         let vm = &ty.meshes[i];
-        let bound = vm.skin.iter().find(|b| b.def_index.is_some()).expect("Bone.001");
-        assert!(vm.skin.iter().any(|b| b.def_index.is_none()), "the unbound Bone is kept");
-        let k = ty.meshes.iter().position(|m| Some(m.def_index) == bound.def_index).unwrap();
+        let bound = vm
+            .skin
+            .iter()
+            .find(|b| b.def_index.is_some())
+            .expect("Bone.001");
+        assert!(
+            vm.skin.iter().any(|b| b.def_index.is_none()),
+            "the unbound Bone is kept"
+        );
+        let k = ty
+            .meshes
+            .iter()
+            .position(|m| Some(m.def_index) == bound.def_index)
+            .unwrap();
         let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(crate::SimClock::default()));
         v.update_visuals(0.02);
         let rest = v.mesh_transforms.clone();
@@ -75,7 +90,10 @@ mod grip_tests {
             v.update_visuals(0.05);
         }
         let bone = v.mesh_transforms[k] * rest[k].inverse();
-        assert!(bone.abs_diff_eq(Mat4::IDENTITY, 1e-3) == false, "the lever's dummy did not move");
+        assert!(
+            bone.abs_diff_eq(Mat4::IDENTITY, 1e-3) == false,
+            "the lever's dummy did not move"
+        );
         let (pos, _) = v.skinned(i).expect("skinned lever");
         let mut checked = 0;
         for &(vi, w) in &bound.weights {
@@ -87,7 +105,12 @@ mod grip_tests {
             // (1 - w) where it was modelled, w with the bone, in the mesh's own frame
             let want = rest[i].inverse() * (Mat4::IDENTITY * (1.0 - w) + bone * w);
             let want = want.transform_point3(p);
-            assert!((pos[vi] - want).length() < 1e-4, "vertex {vi} (weight {w}): {:?} for {:?}", pos[vi], want);
+            assert!(
+                (pos[vi] - want).length() < 1e-4,
+                "vertex {vi} (weight {w}): {:?} for {:?}",
+                pos[vi],
+                want
+            );
             checked += 1;
         }
         assert!(checked > 0, "no vertex shared between the two bones");
@@ -111,12 +134,20 @@ mod grip_tests {
         }
         let ty = Arc::new(VehicleType::load(&root, &bus).expect("Agora L"));
         let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-        v.attach_trailer_ex(Arc::new(VehicleType::load(&root, &trail).expect("Agora L trail")), false);
+        v.attach_trailer_ex(
+            Arc::new(VehicleType::load(&root, &trail).expect("Agora L trail")),
+            false,
+        );
         v.update_visuals(0.02);
         let find = |v: &VehicleInstance, n: &str| {
             v.ty.meshes
                 .iter()
-                .position(|m| v.ty.model.meshes[m.def_index].file.to_ascii_lowercase().ends_with(n))
+                .position(|m| {
+                    v.ty.model.meshes[m.def_index]
+                        .file
+                        .to_ascii_lowercase()
+                        .ends_with(n)
+                })
                 .expect(n)
         };
         let (arch, bone_b) = (find(&v, "gelenk_arch.o3d"), find(&v, "bone_b.o3d"));
@@ -128,7 +159,10 @@ mod grip_tests {
             // where the rear section lies, in the front section's frame
             let rel = v.body_rotation().inverse() * v.trailers[0].body_rotation();
             let back = rel.transform_vector3(-Vec3::Y);
-            assert!(back.z.abs() > 0.03, "the sections are not pitched apart ({back:?})");
+            assert!(
+                back.z.abs() > 0.03,
+                "the sections are not pitched apart ({back:?})"
+            );
             for k in [arch, bone_b] {
                 let d = v.mesh_transforms[k].transform_vector3(-Vec3::Y);
                 assert!(
