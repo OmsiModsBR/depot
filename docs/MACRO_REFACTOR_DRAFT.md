@@ -428,6 +428,8 @@ O guia de estilo do projeto diz que formatos OMSI são lidos só em `omsi-cfg`, 
 
    Feito no passo 3: `omsi_content::input` virou pasta, com `gamectrler` (`Func`, `DeviceCfg`, `read`, `parse`, `to_text`, `write` com a conferência de ida e volta, `axis_shape` e `AXIS_SHAPES`) e `stock_keys`. O antigo `load_game_controllers`, que só o `omsi-check` usava, deu lugar a `gamectrler::read`. O `omsi-app` reexporta o que usa e ficou com o caminho do arquivo, a regra do `[FFScale]` 0/0 herdado do OMSI e o mapeamento dos dispositivos.
 2. **`[cloudtype]`** (`weather_setup.rs:346-351`) passa por `omsi_content::Envir::load`, com um `CloudKind` lido uma vez (Frente E3).
+
+   Feito no passo 4: `cloud_texture` lê o `Weather/clouds.cfg` com `Envir::load` e acha o tipo com `Envir::cloud_type`, sem diferenciar maiúsculas. Um bloco desativado (`-<DISABLED>-`) agora fica de fora, como no OMSI. O `CloudKind` fica para a Frente E3.
 3. **Fontes `.oft`** (`lan_mods.rs:336`) usam `Font::load_all`; o `[name]` do launcher e os textos de tile do editor (`editor.rs`) passam por `omsi-map` com `omsi_cfg::decode_text`.
 4. **`handle_keyword` de `omsi-model`** (cerca de 620 linhas, `lib.rs:623`) se divide por família (malha e animação, `matl_*`, luzes, texturas dinâmicas, partículas), sem mudar a delegação do `.sco`.
 5. **Um `DdsHeader::parse`** usado por `dds::decode` e `gpu::dds_blocks`, um `IMAGE_EXTENSIONS` só e o `CP437_HIGH` duplicado de `vfs.rs:97` trocado pelo de `codepage`.
