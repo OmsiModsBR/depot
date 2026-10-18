@@ -781,10 +781,13 @@ impl Navigator {
         // the map's surface (buffer 7), once per surface and anchor
         let mut surface_verts = None;
         if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
-            let key = self.surface_version * 4 + self.light as u64 + 2 * self.show_contours as u64;
+            // (the contour lines are fainter the wider the view: the strength is part of the key)
+            let strength = if self.show_contours { crate::map_surface::contour_strength(self.city.mpp) } else { 0.0 };
+            let band = if strength >= 1.0 { 0 } else if strength >= 0.5 { 1 } else { 2 };
+            let key = (self.surface_version * 4 + self.light as u64 + 2 * self.show_contours as u64) * 3 + band;
             if self.city.surface.map(|m| m.0 != key || m.2 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, None, self.light, self.show_contours);
+                sf.build(&mut p, anchor, None, self.light, strength);
                 self.city.surface = Some((key, p.len(), anchor));
                 surface_verts = Some(p.verts);
             }
@@ -1009,19 +1012,15 @@ impl Navigator {
                 }
                 ui.text(&mut self.atlas, &self.fonts, &name, px, weight, at, Align::Center, if l.kind == 0 { ink_dim } else { ink });
             }
-            // the terrain view: the height written on the index contours, semi-transparent
-            if self.show_contours && self.city.mpp < 40.0 {
+            // the terrain view: the heights written on the contour lines, semi-transparent
+            if self.show_contours {
                 if let Some(sf) = self.surface.clone() {
                     let px = 11.5 * s;
                     let col = if self.light { Color::rgba(110, 72, 34, 0.62) } else { Color::rgba(236, 206, 156, 0.55) };
-                    let mut shown: Vec<Vec2> = Vec::new();
-                    for (at, height) in sf.contour_marks() {
-                        let p = to_screen(at.extend(0.0));
-                        if !win.pad(30.0 * s, 30.0 * s).contains(p) || shown.iter().any(|q| (*q - p).length() < 120.0 * s) {
-                            continue;
-                        }
-                        shown.push(p);
-                        ui.text(&mut self.atlas, &self.fonts, &format!("{height} m"), px, Weight::Medium, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
+                    let inside = win.pad(30.0 * s, 30.0 * s);
+                    let marks = crate::map_surface::marks_to_write(sf.contour_marks(), self.city.mpp, s, |at| to_screen(at.extend(0.0)), |p| inside.contains(p));
+                    for (p, m) in marks {
+                        ui.text(&mut self.atlas, &self.fonts, &format!("{} m", m.height), px, if m.index { Weight::Medium } else { Weight::Regular }, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
                     }
                 }
             }
