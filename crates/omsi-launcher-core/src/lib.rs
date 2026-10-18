@@ -2007,7 +2007,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ssao" | "shadows" | "shadow_blobs" | "navigator" | "enhanced" | "triple_screen" | "triple_span" | "triple_hud_center" | "vr" | "vr_desktop_mirror" | "fullscreen" | "vsync" | "exact_fare" | "detail_textures" | "texture_compression" | "chat" | "tooltips" | "name_tags" | "show_fps" | "clouds" | "doppler" | "driver" | "use_real_time" | "use_real_date" | "use_real_year" | "collision_vehicles" | "collision_objects" | "collision_pedestrians" | "head_movement" | "driverview_smooth" | "hands_in_cab" | "alt_view" | "precision_zoom" => v[&k] = json!(b(val)),
             "maintenance" | "ai_unsched_factor" | "ai_max_scheduled" if k != "ai_unsched_factor" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
             // (a percentage, 0 to 300, as the game reads it)
-            "ai_unsched_factor" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.clamp(0.0, 300.0) as i64).unwrap_or(0)),
+            // (a percentage with its fraction, as the game keeps it)
+            "ai_unsched_factor" => v[&k] = val.trim_end_matches('%').parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).map(|x| if x.fract() == 0.0 { json!(x as i64) } else { json!(x) }).unwrap_or(json!(100)),
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
@@ -2051,7 +2052,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             // (what is no finite number is the default, as the game reads it)
             "seat_x" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
-            "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" if k != "head_tracking_x_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" if !matches!(k.as_str(), "head_tracking_x_sens" | "head_tracking_yaw_sens") => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_yaw_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
             // (a value of 2 or less is a fraction of full, x100, as the game reads it)
             "head_tracking_x_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
             "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
@@ -2298,7 +2301,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let text = format!(
         "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
-        n("ai_unsched_factor", 100).clamp(0, 300),
+        f("ai_unsched_factor", 100.0).clamp(0.0, 300.0),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
@@ -2358,7 +2361,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("seat_pitch_deg", 0.0).clamp(-45.0, 45.0),
         b("steer_look", false),
         b("head_tracking", false),
-        f("head_tracking_yaw_sens", 100.0).clamp(0.0, 100.0),
+        { let p = f("head_tracking_yaw_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
         f("head_tracking_pitch_sens", 100.0).clamp(0.0, 100.0),
         f("head_tracking_roll_sens", 100.0).clamp(0.0, 100.0),
         { let p = f("head_tracking_x_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },

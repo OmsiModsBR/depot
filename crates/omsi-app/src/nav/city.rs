@@ -98,7 +98,7 @@ impl Navigator {
             (st.sheet, st.jump) = (true, true);
             st.route.insert(i, d.parse().unwrap_or(0));
             if let Some((h, m)) = it.next().and_then(|t| t.split_once(':')) {
-                st.dep = Some(h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60);
+                st.dep = Some(crate::line_times::DepKey { t: h.parse::<u32>().unwrap_or(0) * 3600 + m.parse::<u32>().unwrap_or(0) * 60, trip: None, profile: None });
             }
         }
     }
@@ -205,7 +205,7 @@ impl Navigator {
         match h {
             LinesHit::Sheet => (st.sheet, st.dep, st.jump, st.scroll) = (!st.sheet, None, true, 0.0),
             LinesHit::Day(d) => (st.day, st.dep, st.jump, st.scroll) = (Some(d), None, true, 0.0),
-            LinesHit::Dep(t) => (st.dep, st.scroll) = (Some(t), 0.0),
+            LinesHit::Dep(k) => (st.dep, st.scroll) = (Some(k), 0.0),
             LinesHit::Back => (st.dep, st.jump, st.scroll) = (None, true, 0.0),
             LinesHit::All => {
                 if shown.iter().all(|i| st.selected.contains(i)) {
@@ -309,7 +309,9 @@ impl Navigator {
         }
         if let Some(i) = focus {
             let l = &lines[i];
-            if sf.times(&self.chrono, self.date).line(&l.number).is_some() {
+            // (the button shows until the timetable has been read and the line is found not to have one; opening
+            // a line reads nothing)
+            if sf.times_read(self.date).is_none_or(|t| t.line(&l.number).is_some()) {
                 let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
                 ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
@@ -357,12 +359,25 @@ impl Navigator {
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
         ui.rounded(list_panel, 8.0 * s, ink);
-        if let Some(i) = focus.filter(|&i| self.city.lines.sheet && sf.times(&self.chrono, self.date).line(&lines[i].number).is_some()) {
-            let rows = self.sheet_panel(ui, &sf, i, list_panel, s, lt, &mut hits);
+        if let Some(i) = focus.filter(|_| self.city.lines.sheet) {
+            // the timetable is read only now that it is asked for
+            let Some(timetable) = sf.times(&self.chrono, self.date) else {
+                ui.text(&mut self.atlas, &self.fonts, lt.loading, 13.0 * s, Weight::Medium, Vec2::new(x0 + pad, ly + 24.0 * s), Align::Left, TEXT_DIM);
+                self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
+                self.city.lines.list = None;
+                self.city.lines.hits = hits;
+                return;
+            };
+            if timetable.line(&lines[i].number).is_none() {
+                // read, and this line has none: back to the list
+                self.city.lines.sheet = false;
+            } else {
+            let rows = self.sheet_panel(ui, &sf, &timetable, i, list_panel, s, lt, &mut hits);
             self.city.lines.panel = Some(Rect::new(x0, top, pw, ly + panel_h - top));
             self.city.lines.list = Some(rows);
             self.city.lines.hits = hits;
             return;
+            }
         }
         ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
         let dated: Vec<usize> = (0..lines.len()).filter(|&i| sf.line_on(i, self.date)).collect();
@@ -486,15 +501,14 @@ impl Navigator {
     /// departures by the hour and - once one is picked - when its bus is at each stop (the same times are
     /// written on the map). Returns the scrolling area.
     #[allow(clippy::too_many_arguments)]
-    fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
+    fn sheet_panel(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, timetable: &crate::line_times::LineTimes, i: usize, area: Rect, s: f32, lt: &LinesText, hits: &mut Vec<(Rect, LinesHit)>) -> Rect {
         use crate::line_times::clock;
-        let timetable = sf.times(&self.chrono, self.date);
         let sheet = timetable.line(&sf.lines()[i].number).expect("the caller checked");
         let (x0, y0, pw, pad) = (area.x, area.y, area.w, 14.0 * s);
         let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let deps = sheet.departures(dir, day);
-        let pick = self.city.lines.dep.and_then(|t| deps.iter().copied().find(|d| d.t as u32 == t));
+        let pick = self.city.lines.dep.and_then(|k| deps.iter().copied().find(|d| d.is(&k)));
         ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", lt.timetable, lt.towards).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
         if pick.is_some() {
             let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
@@ -572,7 +586,7 @@ impl Navigator {
                     let rr = Rect::new(x0 + pad + 42.0 * s + k as f32 * 43.0 * s, ry + 3.0 * s, 39.0 * s, row_h - 6.0 * s);
                     ui.rounded(rr, 4.0 * s, tab(Some(d.t as u32) == next));
                     ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", (d.t / 60.0).round() as i64 % 60), 14.5 * s, Weight::Bold, rr, Align::Center, TEXT);
-                    hits.push((rr, LinesHit::Dep(d.t as u32)));
+                    hits.push((rr, LinesHit::Dep(d.key())));
                 }
             }
             scroll_bar(ui, self.city.lines.scroll, max, vis, lines.len(), row_h);
@@ -583,10 +597,10 @@ impl Navigator {
     /// The departure picked, on the map: a dot and the time at each stop it calls at, as many as fit
     /// (the ends first); the stops are where the map's own stop objects stand.
     fn sheet_labels(&mut self, ui: &mut Painter, sf: &crate::map_surface::MapSurface, i: usize, s: f32, to_screen: &dyn Fn(DVec3) -> Vec2, view: (f32, f32)) {
-        let timetable = sf.times(&self.chrono, self.date);
+        let Some(timetable) = sf.times(&self.chrono, self.date) else { return };
         let Some(sheet) = timetable.line(&sf.lines()[i].number) else { return };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
-        let Some(d) = self.city.lines.dep.and_then(|t| sheet.departures(dir, day).into_iter().find(|d| d.t as u32 == t)) else { return };
+        let Some(d) = self.city.lines.dep.and_then(|k| sheet.departures(dir, day).into_iter().find(|d| d.is(&k))) else { return };
         let stops: Vec<_> = sheet.stops(d).into_iter().filter(|x| x.stops).collect();
         let n = stops.len();
         let mut placed: Vec<Rect> = Vec::new();

@@ -8,6 +8,74 @@ use omsi_timetable::TimetableData;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// The timetable of one date, read away from the frame: `get` never waits. The first call for a date starts a
+/// thread that reads everything and sends it back; the frames after that look for the answer. A thread that dies
+/// leaves an empty timetable for its date (so it is not tried again every frame); an answer for a date no longer
+/// asked for is dropped and the current date is asked again.
+pub struct TimesCache {
+    load: std::sync::Arc<dyn Fn(i32) -> LineTimes + Send + Sync>,
+    state: std::sync::Mutex<CacheState>,
+}
+
+#[derive(Default)]
+struct CacheState {
+    done: Option<(i32, std::sync::Arc<LineTimes>)>,
+    pending: Option<(i32, std::sync::mpsc::Receiver<LineTimes>)>,
+}
+
+impl TimesCache {
+    pub fn new(load: impl Fn(i32) -> LineTimes + Send + Sync + 'static) -> TimesCache {
+        TimesCache { load: std::sync::Arc::new(load), state: Default::default() }
+    }
+
+    /// What has been read for `date`, without starting a read (None: not read yet, or for another date).
+    pub fn peek(&self, date: i32) -> Option<std::sync::Arc<LineTimes>> {
+        let st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        st.done.as_ref().filter(|(d, _)| *d == date).map(|(_, t)| t.clone())
+    }
+
+    /// The timetable of `date`; None while it is being read.
+    pub fn get(&self, date: i32) -> Option<std::sync::Arc<LineTimes>> {
+        use std::sync::mpsc::TryRecvError;
+        let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((d, t)) = &st.done {
+            if *d == date {
+                return Some(t.clone());
+            }
+        }
+        if let Some((asked, rx)) = &st.pending {
+            let asked = *asked;
+            match rx.try_recv() {
+                Ok(t) => {
+                    st.pending = None;
+                    if asked == date {
+                        let t = std::sync::Arc::new(t);
+                        st.done = Some((date, t.clone()));
+                        return Some(t);
+                    }
+                }
+                // (still reading: for a date that is over, it finishes first and the current one is asked then)
+                Err(TryRecvError::Empty) => return None,
+                Err(TryRecvError::Disconnected) => {
+                    st.pending = None;
+                    if asked == date {
+                        let t = std::sync::Arc::new(LineTimes::default());
+                        st.done = Some((date, t.clone()));
+                        return Some(t);
+                    }
+                }
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let load = self.load.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(load(date));
+        });
+        st.pending = Some((date, rx));
+        None
+    }
+}
+
 /// A tour's mask when the file says nothing: every weekday, holidays and both school periods.
 const ALL_DAYS: i32 = 1023;
 
@@ -28,6 +96,26 @@ pub struct Dep {
     pub mask: i32,
     trip: u16,
     profile: u8,
+}
+
+/// Which departure is picked: its time (s) and, when it is known, its trip and profile, since two trips (or
+/// one trip with two profiles, whose stop times differ) can leave at the same time. A time alone (typed by hand) means the first departure at that time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DepKey {
+    pub t: u32,
+    pub trip: Option<u16>,
+    pub profile: Option<u8>,
+}
+
+impl Dep {
+    pub fn key(&self) -> DepKey {
+        DepKey { t: self.t as u32, trip: Some(self.trip), profile: Some(self.profile) }
+    }
+
+    /// Whether this is the departure `pick` names.
+    pub fn is(&self, pick: &DepKey) -> bool {
+        self.t as u32 == pick.t && pick.trip.is_none_or(|trip| trip == self.trip) && pick.profile.is_none_or(|p| p == self.profile)
+    }
 }
 
 /// A trip's stations (id and name) and when its bus is at each, per profile.
@@ -316,6 +404,81 @@ pub fn clock(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wait(c: &TimesCache, date: i32) -> std::sync::Arc<LineTimes> {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if let Some(t) = c.get(date) {
+                return t;
+            }
+            assert!(std::time::Instant::now() < end, "the read never arrived");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn the_timetable_is_read_in_a_thread_once_per_date() {
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let n = reads.clone();
+        let c = TimesCache::new(move |_| {
+            n.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            LineTimes::default()
+        });
+        assert!(c.peek(20260101).is_none(), "peek never starts a read");
+        assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(c.get(20260101).is_none(), "the first call does not wait");
+        let a = wait(&c, 20260101);
+        let b = c.get(20260101).expect("cached");
+        assert!(std::sync::Arc::ptr_eq(&a, &b), "the same object, no new read");
+        assert!(c.peek(20260101).is_some());
+        assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // another date is read again
+        assert!(c.peek(20260102).is_none());
+        let _ = wait(&c, 20260102);
+        assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn a_read_that_dies_leaves_an_empty_timetable_for_its_date() {
+        let c = TimesCache::new(|_| panic!("a broken file"));
+        let t = wait(&c, 20260101);
+        assert!(t.line("1").is_none());
+        let again = c.get(20260101).expect("not tried again");
+        assert!(std::sync::Arc::ptr_eq(&t, &again));
+    }
+
+    #[test]
+    fn an_answer_for_a_past_date_is_dropped_and_the_current_one_asked() {
+        let c = TimesCache::new(|d| {
+            if d == 1 {
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            LineTimes::default()
+        });
+        assert!(c.get(1).is_none());
+        assert!(c.get(2).is_none(), "date 1 is still being read");
+        let _ = wait(&c, 2);
+        assert!(c.peek(1).is_none());
+    }
+
+    #[test]
+    fn two_departures_at_one_time_are_told_apart_by_their_trip() {
+        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 1, profile: 0 });
+        let pick = b.key();
+        assert!(!a.is(&pick) && b.is(&pick));
+        // a bare time is the first departure at that time
+        let bare = DepKey { t: 3600, trip: None, profile: None };
+        assert!(a.is(&bare) && b.is(&bare));
+        assert!(!Dep { t: 3660.0, ..a }.is(&bare));
+    }
+
+    #[test]
+    fn two_profiles_of_one_trip_at_one_time_are_told_apart() {
+        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 0, profile: 1 });
+        let pick = b.key();
+        assert!(!a.is(&pick) && b.is(&pick));
+    }
 
     #[test]
     fn the_school_period_bit_follows_the_holiday_ranges() {
