@@ -12,6 +12,8 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Fixed
 - The city map's view turns smoothly (the short way round) when the compass changes how it is turned, or
   the vehicle's heading changes, instead of jumping.
+- In the lines panel's timetable, two trips leaving at the same minute are told apart: picking one
+  shows its own stops, not the other's.
 - The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
   thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.
 - The terrain view of the city map writes the heights of the ordinary contour lines too when zoomed in

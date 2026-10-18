@@ -98,6 +98,26 @@ pub struct Dep {
     profile: u8,
 }
 
+/// Which departure is picked: its time (s) and, when it is known, its trip and profile, since two trips (or
+/// one trip with two profiles, whose stop times differ) can leave at the same time. A time alone (typed by hand) means the first departure at that time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DepKey {
+    pub t: u32,
+    pub trip: Option<u16>,
+    pub profile: Option<u8>,
+}
+
+impl Dep {
+    pub fn key(&self) -> DepKey {
+        DepKey { t: self.t as u32, trip: Some(self.trip), profile: Some(self.profile) }
+    }
+
+    /// Whether this is the departure `pick` names.
+    pub fn is(&self, pick: &DepKey) -> bool {
+        self.t as u32 == pick.t && pick.trip.is_none_or(|trip| trip == self.trip) && pick.profile.is_none_or(|p| p == self.profile)
+    }
+}
+
 /// A trip's stations (id and name) and when its bus is at each, per profile.
 struct Run {
     stops: Vec<(i64, String)>,
@@ -440,6 +460,24 @@ mod tests {
         assert!(c.get(2).is_none(), "date 1 is still being read");
         let _ = wait(&c, 2);
         assert!(c.peek(1).is_none());
+    }
+
+    #[test]
+    fn two_departures_at_one_time_are_told_apart_by_their_trip() {
+        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 1, profile: 0 });
+        let pick = b.key();
+        assert!(!a.is(&pick) && b.is(&pick));
+        // a bare time is the first departure at that time
+        let bare = DepKey { t: 3600, trip: None, profile: None };
+        assert!(a.is(&bare) && b.is(&bare));
+        assert!(!Dep { t: 3660.0, ..a }.is(&bare));
+    }
+
+    #[test]
+    fn two_profiles_of_one_trip_at_one_time_are_told_apart() {
+        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 0, profile: 1 });
+        let pick = b.key();
+        assert!(!a.is(&pick) && b.is(&pick));
     }
 
     #[test]
