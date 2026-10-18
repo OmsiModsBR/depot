@@ -3,7 +3,9 @@
 
 use super::probe::{Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE};
 use super::{atmosphere, clouds};
-use crate::gpu::{buffer_init, float_tex, fullscreen_pipeline, target_2d};
+use crate::gpu::{
+    buffer_init, float_tex, fullscreen_pipeline, sampler_entry, target_2d, uniform_entry,
+};
 
 /// The sky's GPU resources and the sky last computed.
 pub(crate) struct SkyResources {
@@ -100,29 +102,14 @@ impl SkyResources {
             wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
         let sky_lut_view = sky_lut.create_view(&Default::default());
-        let uniform_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        };
         let probe_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("probe"),
             entries: &[
-                uniform_entry(0),
-                uniform_entry(11),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 13,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
+                uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
+                uniform_entry(11, wgpu::ShaderStages::VERTEX_FRAGMENT),
+                sampler_entry(13),
                 float_tex(14),
-                uniform_entry(15),
+                uniform_entry(15, wgpu::ShaderStages::VERTEX_FRAGMENT),
                 wgpu::BindGroupLayoutEntry {
                     binding: 16,
                     visibility: wgpu::ShaderStages::FRAGMENT,

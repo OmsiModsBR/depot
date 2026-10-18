@@ -41,4 +41,7 @@ pub(crate) use lost::{
 };
 pub(crate) use open::{basic_pipelines, fallback_load, fallback_store, BASIC_PIPELINES};
 pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};
-pub(crate) use util::{fullscreen_pipeline, mip_levels, target_2d};
+pub(crate) use util::{
+    depth_texture_entry, fullscreen_pipeline, mip_levels, sampler_entry, target_2d, texture_entry,
+    uniform_entry,
+};

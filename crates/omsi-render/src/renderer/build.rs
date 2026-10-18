@@ -5,8 +5,8 @@ use super::state::Renderer;
 use crate::assets::{AssetStore, TexAddressing};
 use crate::effects::{puddles, rt};
 use crate::gpu::{
-    basic_pipelines, color_targets, sixteen_texture_units, target_2d, GpuContext, Samplers,
-    DEPTH_FORMAT, GL_BACKEND, RT_GBUF,
+    basic_pipelines, color_targets, sixteen_texture_units, target_2d, uniform_entry, GpuContext,
+    Samplers, DEPTH_FORMAT, GL_BACKEND, RT_GBUF,
 };
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
@@ -62,16 +62,7 @@ impl Renderer {
         let light_map = LightMapAtlas::new(&device);
         let snow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("snow"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
+            entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
         });
         let sprites = SpriteResources::new(&device, &queue, &snow_layout);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

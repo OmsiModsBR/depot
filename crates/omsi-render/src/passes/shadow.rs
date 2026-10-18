@@ -1,7 +1,9 @@
 //! The shadow pass: the sun's cascades and the street lamps' maps, and their pipelines.
 
 use super::draw::{encode_batches, Batch, PIPE_ALPHA_TEST, PIPE_OPAQUE};
-use crate::gpu::{array_layout_entry, basic_pipelines, pass_timer, target_2d, DEPTH_FORMAT};
+use crate::gpu::{
+    array_layout_entry, basic_pipelines, pass_timer, target_2d, uniform_entry, DEPTH_FORMAT,
+};
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::scene::Scene;
 use glam::{DVec3, Mat4, Vec3};
@@ -344,16 +346,7 @@ impl ShadowResources {
         let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("shadow camera"),
             entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
+                uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
                 array_layout_entry(1, wgpu::ShaderStages::VERTEX, true),
                 array_layout_entry(2, wgpu::ShaderStages::VERTEX, true),
                 array_layout_entry(10, wgpu::ShaderStages::VERTEX, false),

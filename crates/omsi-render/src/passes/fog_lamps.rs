@@ -1,6 +1,9 @@
 //! The lamps' light in the fog: worked out at half size and added onto the picture.
 
-use crate::gpu::{array_path, basic_pipelines, fullscreen_pipeline, pass_timer, ArrayPath};
+use crate::gpu::{
+    array_path, basic_pipelines, depth_texture_entry, fullscreen_pipeline, pass_timer,
+    uniform_entry, ArrayPath,
+};
 use crate::lighting::Lighting;
 use crate::scene::Scene;
 use crate::shaders::fog_lamps_shader_source;
@@ -27,26 +30,8 @@ pub(crate) fn fog_lamps_pipelines(
     let fog_lamps_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fog lamps"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
+            depth_texture_entry(1),
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,

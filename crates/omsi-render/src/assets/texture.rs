@@ -1,7 +1,9 @@
 //! Textures: the GPU texture slot, preparing and fitting images, uploads with their mip
 //! chains, and replacing or shrinking textures already in the scene.
 
-use crate::gpu::{fullscreen_pipeline, gl_worker_turn, mip_levels, target_2d};
+use crate::gpu::{
+    fullscreen_pipeline, gl_worker_turn, mip_levels, sampler_entry, target_2d, texture_entry,
+};
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
@@ -525,24 +527,7 @@ pub(crate) fn mip_pipeline(
     });
     let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("mip"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
+        entries: &[texture_entry(0), sampler_entry(1)],
     });
     let mip_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("mip"),
