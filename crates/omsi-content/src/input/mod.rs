@@ -1,5 +1,8 @@
 //! `Inputs/keyboard.cfg`, `Inputs/gamectrler.cfg`, `Inputs/*.kyb` (unit `mc_input`).
 
+pub mod gamectrler;
+pub mod stock_keys;
+
 use omsi_cfg::CfgFile;
 use std::path::Path;
 
@@ -248,59 +251,6 @@ impl KeyboardCfg {
         }
         std::fs::write(path, t)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct GameController {
-    pub name: String,
-    pub index: i32,
-    /// 16 values: per logical axis (steer, throttle, brake, clutch, combined …) the device
-    /// axis number and inversion flag.
-    pub axes: Vec<i32>,
-    pub buttons: Vec<(String, i32)>,
-    pub ff_scale: (f32, f32),
-}
-
-pub fn load_game_controllers(path: &Path) -> Result<Vec<GameController>, omsi_cfg::CfgError> {
-    let f = CfgFile::read(path)?;
-    let mut out: Vec<GameController> = Vec::new();
-    let mut r = f.reader();
-    while let Some(kw) = r.next_keyword() {
-        match kw.as_str() {
-            "ctrl" => out.push(GameController {
-                name: r.str().to_string(),
-                index: r.i32(),
-                ..Default::default()
-            }),
-            "axis" => {
-                let v = (0..16).map(|_| r.i32()).collect();
-                if let Some(c) = out.last_mut() {
-                    c.axes = v;
-                }
-            }
-            "buttons" => {
-                let n = r.count(omsi_cfg::limits::MAX_LIST_COUNT);
-                let mut b = Vec::with_capacity(n);
-                for _ in 0..n {
-                    let a = r.str().to_string();
-                    let i = r.i32();
-                    b.push((a, i));
-                }
-                if let Some(c) = out.last_mut() {
-                    c.buttons = b;
-                }
-            }
-            "ffscale" => {
-                let a = r.f32();
-                let b = r.f32();
-                if let Some(c) = out.last_mut() {
-                    c.ff_scale = (a, b);
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(out)
 }
 
 /// `.kyb`: `scancode<TAB>name` lines.

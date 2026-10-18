@@ -174,7 +174,7 @@ pub(crate) struct Args {
     /// Situation file (.osn): map, date/time, weather, the player's vehicle and its tour.
     #[arg(long)]
     pub(crate) situation: Option<String>,
-    /// Write the state after --drive to this .osn file (offscreen), or bind F5 in the window.
+    /// Write the state after --drive to this .osn file (offscreen runs only; the window has no key for it).
     #[arg(long)]
     pub(crate) save_situation: Option<PathBuf>,
     /// Offscreen: put the camera behind AI car with this id (from OMSI_DEBUG_TRAFFIC logs),

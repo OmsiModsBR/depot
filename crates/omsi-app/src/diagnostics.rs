@@ -5,7 +5,7 @@
 pub(crate) fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -> Option<String> {
     use omsi_content::input::KEY_HOLD;
     let b = bindings.iter().find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
-    let stock = crate::stock_keys::STOCK_KEYS
+    let stock = omsi_content::input::stock_keys::STOCK_KEYS
         .iter()
         .any(|(a, s, m)| a.eq_ignore_ascii_case(action) && *s == b.scan_code && (m & !KEY_HOLD) == (b.modifier & !KEY_HOLD));
     (!stock).then(|| crate::keys::key_name(b.scan_code as i64, b.modifier as i64))
@@ -148,7 +148,7 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
         .filter(|rb| rb.velocity().truncate().length() > 1.0)
         .map(|rb| {
             let d = (rb.velocity().x as f64).atan2(rb.velocity().y as f64).to_degrees() - v.heading;
-            let d = (d + 540.0).rem_euclid(360.0) - 180.0;
+            let d = omsi_geometry::util::wrap_deg(d);
             let d = if d.abs() > 90.0 { (d + 360.0).rem_euclid(360.0) - 180.0 } else { d };
             format!(" slip {d:+.2}")
         })

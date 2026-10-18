@@ -88,12 +88,12 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 }
 
 /// The keys held with `modifier` (a chord: `KEY_SHIFT` …) that the file in use binds otherwise than OMSI 2's
-/// own assignment ([`crate::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
+/// own assignment ([`omsi_content::input::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else { return Default::default() };
-    let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
+    let stock: std::collections::HashSet<(String, i32, i32)> = omsi_content::input::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
     m.vehicles
         .iter()
         .chain(m.game.iter())

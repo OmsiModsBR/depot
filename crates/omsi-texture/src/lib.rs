@@ -6,6 +6,7 @@
 //! `_LOW` variants. A `<texture>.cfg` sidecar carries per-texture flags.
 
 use hashbrown::HashMap;
+use omsi_cfg::bytes::{get_le16, get_le32};
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -37,6 +38,7 @@ fn load_limited(
 }
 
 pub mod pbr;
+pub mod srgb;
 pub use gpu::{gpu_options, set_gpu_options, GpuOptions, PixelFormat, TextureData};
 
 #[derive(Debug, Clone)]
@@ -209,16 +211,8 @@ pub fn decode_bytes(bytes: &[u8], path: &Path) -> Result<Image, TextureError> {
 /// A copy of a palette bitmap whose colour count (`biClrUsed`, `biClrImportant`) is cut to
 /// what its bit depth can index; None when there is nothing to cut.
 fn bmp_clamped_palette(bytes: &[u8]) -> Option<Vec<u8>> {
-    let u16_at = |o: usize| {
-        bytes
-            .get(o..o + 2)
-            .map(|b| u16::from_le_bytes([b[0], b[1]]))
-    };
-    let u32_at = |o: usize| {
-        bytes
-            .get(o..o + 4)
-            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    };
+    let u16_at = |o: usize| get_le16(bytes, o);
+    let u32_at = |o: usize| get_le32(bytes, o);
     let bits = u16_at(28)? as u32;
     if !(1..=8).contains(&bits) {
         return None;
@@ -239,12 +233,8 @@ fn bmp_clamped_palette(bytes: &[u8]) -> Option<Vec<u8>> {
 /// the `image` crate refuses the file. The masks after a 40-byte header stay where they are
 /// (the pixel offset already points past them). None when the bitmap is not one of those.
 fn bmp24_bitfields(bytes: &[u8]) -> Option<Vec<u8>> {
-    let bits = bytes
-        .get(28..30)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))?;
-    let compression = bytes
-        .get(30..34)
-        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))?;
+    let bits = get_le16(bytes, 28)?;
+    let compression = get_le32(bytes, 30)?;
     if bits != 24 || compression != 3 {
         return None;
     }
@@ -260,19 +250,12 @@ fn bmp24_bitfields(bytes: &[u8]) -> Option<Vec<u8>> {
 /// scheme are 32-bit bitmaps named `.dds`), and their fourth byte is the reflection mask
 /// of the paint. Returns whether the alpha was taken over.
 fn bmp32_alpha(bytes: &[u8], width: u32, height: u32, rgba: &mut [u8]) -> bool {
-    let u32_at = |o: usize| {
-        bytes
-            .get(o..o + 4)
-            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    };
+    let u32_at = |o: usize| get_le32(bytes, o);
     let (Some(offset), Some(raw_h), Some(compression)) = (u32_at(10), u32_at(22), u32_at(30))
     else {
         return false;
     };
-    let bpp = bytes
-        .get(28..30)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))
-        .unwrap_or(0);
+    let bpp = get_le16(bytes, 28).unwrap_or(0);
     if bpp != 32 || compression != 0 {
         return false;
     }

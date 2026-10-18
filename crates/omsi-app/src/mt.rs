@@ -275,10 +275,7 @@ fn worker() {
                     if let Some(p) = cache_file(&lang) {
                         let _ = std::fs::create_dir_all(p.parent().unwrap());
                         if let Ok(b) = serde_json::to_vec_pretty(&snapshot) {
-                            let tmp = p.with_extension("part");
-                            if std::fs::write(&tmp, b).is_ok() {
-                                let _ = std::fs::rename(&tmp, &p);
-                            }
+                            let _ = omsi_cfg::write_atomic(&p, b);
                         }
                     }
                 }
