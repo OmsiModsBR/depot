@@ -624,7 +624,7 @@ Environment variables, all off unless set. The useful ones:
 | --- | --- |
 | `OMSI_PROFILE=1`, `OMSI_GPU_TIMERS`, `OMSI_DEBUG_DRAWS` | frame split and memory, per-pass GPU times, draw and changed-instance counts |
 | `OMSI_MIRROR_HUD=n` | offscreen: lay the mirror panels (`mirror_hud` 1..3) over the picture |
-| `OMSI_SEED=n` | repeat a session: the scripts' `random` is seeded per session (the log says which seed) |
+| `OMSI_SEED=n` | repeat a session: the scripts' `random` and the cars on the parking spaces are seeded per session (the log says which seed) |
 | `OMSI_INPUT="t=3 move x,y; t=3.2 press; t=4 key F3; …"` | drive the real window handlers (mouse, keys, `look`/`turn`) from a script |
 | `OMSI_CHURN=x,y` | offscreen check of tile streaming: load the tiles around that far point, unload the start area, unload the far tiles and load the start area again, so the picture is drawn from recycled GPU slots |
 | `OMSI_HIDE_WINDOW=from,to` | pretend the window is hidden for those seconds |
