@@ -10,11 +10,15 @@ pub const MIN_SCALE: f32 = 0.75;
 
 pub const BG: Color = Color::hex(0x101215);
 pub const SIDE: Color = Color::hex(0x0c0d10);
+pub const PANEL: Color = Color::hex(0x171a1f);
+pub const PANEL_2: Color = Color::hex(0x1e2229);
 pub const LINE: Color = Color::hex(0x2b2f37);
 pub const FG: Color = Color::hex(0xe9eaec);
 pub const MUTED: Color = Color::hex(0x9aa0aa);
 pub const ACCENT: Color = Color::hex(0xf0a30a);
 pub const NAV_TEXT: Color = Color::hex(0xc9ccd2);
+pub const OK: Color = Color::hex(0x4fc27a);
+pub const WARN: Color = Color::hex(0xe0a030);
 pub const ON_ACCENT: Color = Color::hex(0x14120a);
 
 pub const SIDEBAR_W: f32 = 264.0;

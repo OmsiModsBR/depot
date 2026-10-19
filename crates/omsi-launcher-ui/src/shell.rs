@@ -2,6 +2,7 @@
 
 use crate::look::*;
 use crate::pages::Page;
+use crate::vehicles::VehiclesView;
 use glam::Vec2;
 use omsi_ui::paint::Align;
 use omsi_ui::widgets::{id_of, Ui};
@@ -12,6 +13,7 @@ pub struct Shell {
     pub page: Page,
     /// The texture of the logo in the interface pipeline, when it has been loaded.
     pub logo: Option<(usize, f32)>,
+    pub vehicles: VehiclesView,
 }
 
 impl Default for Shell {
@@ -27,7 +29,11 @@ pub fn nav_id(page: Page) -> u64 {
 
 impl Shell {
     pub fn new(page: Page) -> Shell {
-        Shell { page, logo: None }
+        Shell {
+            page,
+            logo: None,
+            vehicles: VehiclesView::default(),
+        }
     }
 
     /// Draw one frame into `ui` (already begun, in design units: the window's size divided by
@@ -83,7 +89,7 @@ impl Shell {
         ui.text(
             page.title(),
             Vec2::new(68.0, r.y + r.h * 0.5 + 6.0),
-            17.0 * TEXT_SCALE * 0.86,
+            17.0 * TEXT_SCALE,
             weight,
             c,
             Align::Left,
@@ -98,7 +104,7 @@ impl Shell {
         ui.text(
             &self.page.title().to_uppercase(),
             Vec2::new(x0, 46.0),
-            13.0 * TEXT_SCALE * 0.86,
+            13.0 * TEXT_SCALE,
             Weight::Medium,
             ACCENT,
             Align::Left,
@@ -111,6 +117,11 @@ impl Shell {
             FG,
             Align::Left,
         );
+        let area = Rect::new(x0, 0.0, w - x0 - 28.0, h);
+        if self.page == Page::Vehicles {
+            self.vehicles.draw(ui, area);
+            return;
+        }
         let r = Rect::new(x0, 130.0, w - x0 - 28.0, (h - 130.0 - 60.0).max(120.0));
         ui.panel(r);
         ui.text_in(

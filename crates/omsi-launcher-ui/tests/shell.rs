@@ -54,3 +54,27 @@ fn the_foot_stays_inside_a_small_window() {
         assert!(r.bottom() <= size.y + 0.5, "{page:?} is below the window");
     }
 }
+
+#[test]
+fn a_click_on_a_vehicle_row_and_a_paint_chooses_them() {
+    use omsi_launcher_ui::vehicles::VehiclesView;
+    let mut shell = Shell::new(Page::Vehicles);
+    shell.vehicles = VehiclesView::with_catalog(omsi_launcher_ui::sample::vehicles());
+    let mut ui = Ui::new();
+    frame(&mut shell, &mut ui, None);
+    assert_eq!(shell.vehicles.chosen(), (0, 0));
+    let row = ui.drawn[&omsi_ui::widgets::id_of("vehicles:row:1")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
+    );
+    assert_eq!(shell.vehicles.chosen(), (1, 0));
+    let chip = ui.drawn[&omsi_ui::widgets::id_of("vehicles:paint:1")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(chip.x + 10.0, chip.y + 10.0)),
+    );
+    assert_eq!(shell.vehicles.chosen(), (1, 1));
+}
