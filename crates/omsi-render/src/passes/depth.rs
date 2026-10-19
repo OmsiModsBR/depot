@@ -1,6 +1,6 @@
 //! The depth prepass and the ambient occlusion (SSAO), with their pipelines and uniform.
 
-use super::draw::{encode_batches, one_sided_primitive, Batch};
+use super::draw::{encode_batches, one_sided_primitive, Batch, PostPass};
 use crate::gpu::{
     depth_texture_entry, fullscreen_pipeline, pass_timer, uniform_entry, DEPTH_FORMAT,
 };
@@ -239,25 +239,10 @@ impl SsaoPass {
                 let Some(pipe) = pipe.as_ref().filter(|_| ao_on) else {
                     break;
                 };
-                let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("ssao"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: target,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: pass_timer(tset.as_ref(), timed, pass_label),
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                pass.set_pipeline(pipe);
-                pass.set_bind_group(0, bg, &[]);
-                pass.draw(0..3, 0..1);
+                PostPass::new("ssao", target)
+                    .load(wgpu::LoadOp::Clear(wgpu::Color::WHITE))
+                    .timer(pass_timer(tset.as_ref(), timed, pass_label))
+                    .draw(prepass_encoder, pipe, &[bg]);
             }
         }
     }
