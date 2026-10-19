@@ -1,12 +1,17 @@
 //! The player's screenshots, by map.
 //!
-//! The game writes a screenshot as `<content>/Screenshots/omsi_<seconds>.png` (seconds since
-//! the Unix epoch) and nothing in the file says which map it shows. A session summary,
-//! though, is written when the map is left, with the map's folder name and the time it
-//! ended (`~/.depot/sessions/<time>-<process>.json`). A screenshot therefore belongs to the
-//! first session that ended after it was taken, if that session ended not more than
-//! `MAX_SPAN` seconds later (a game that crashed writes no summary: its screenshots must not
-//! be given to the next session on another map).
+//! The game writes a screenshot as `<content>/Screenshots/omsi_<seconds>__<map>__<vehicle>.png`
+//! (seconds since the Unix epoch; the map and vehicle are folder names made safe for file
+//! names, the vehicle only when the player is in one; the contract of #258). Older captures,
+//! `omsi_<seconds>.png`, say nothing about the map: for those only, a session summary
+//! decides. It is written when the map is left, with the map's folder name and the time it
+//! ended (`~/.depot/sessions/<time>-<process>.json`), so such a screenshot belongs to the
+//! first session that ended after it, if that session ended not more than `MAX_SPAN` seconds
+//! later (a game that crashed writes no summary: its screenshots must not be given to the
+//! next session on another map).
+//!
+//! `parse` and `safe_part` copy the game's own naming functions (`screenshot_name` in
+//! `omsi-app`, #258) because this crate does not depend on the game; keep them in step.
 
 use crate::Session;
 use std::path::{Path, PathBuf};
@@ -19,15 +24,61 @@ pub const MAX_SPAN: u64 = 12 * 3600;
 pub struct Shot {
     pub path: PathBuf,
     pub time: u64,
+    /// The map in the file name (already made safe), if it has one.
+    pub map: Option<String>,
 }
 
-/// The seconds in a game screenshot's file name (`omsi_1760000000.png`), if it is one.
-pub fn time_of(name: &str) -> Option<u64> {
+const SEP: &str = "__";
+const MAX_PART: usize = 48;
+
+/// A folder name as the game writes it inside a file name.
+pub fn safe_part(raw: &str) -> String {
+    let mut out = String::new();
+    let mut last_us = false;
+    for c in raw.trim().chars() {
+        let bad = c.is_control()
+            || matches!(
+                c,
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '_'
+            );
+        let c = if bad || c.is_whitespace() { '_' } else { c };
+        if c == '_' {
+            if last_us {
+                continue;
+            }
+            last_us = true;
+        } else {
+            last_us = false;
+        }
+        out.push(c);
+    }
+    let out: String = out.chars().take(MAX_PART).collect();
+    let out = out
+        .trim_matches(|c| c == '_' || c == '.' || c == ' ')
+        .to_string();
+    let stem = out.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit());
+    if reserved {
+        format!("{out}_")
+    } else {
+        out
+    }
+}
+
+/// The seconds and the map (if any) in a game screenshot's file name
+/// (`omsi_1760000000.png`, `omsi_1760000000__Grundorf__MB_O305.png`), if it is one.
+pub fn parse(name: &str) -> Option<(u64, Option<String>)> {
     let (stem, ext) = name.rsplit_once('.')?;
     if !ext.eq_ignore_ascii_case("png") && !ext.eq_ignore_ascii_case("jpg") {
         return None;
     }
-    stem.strip_prefix("omsi_")?.parse().ok()
+    let mut parts = stem.strip_prefix("omsi_")?.split(SEP);
+    let secs = parts.next()?.parse().ok()?;
+    let map = parts.next().filter(|s| !s.is_empty()).map(str::to_string);
+    Some((secs, map))
 }
 
 /// The game's screenshots in `dir`, oldest first.
@@ -36,8 +87,12 @@ pub fn list(dir: &Path) -> Vec<Shot> {
         .map(|rd| {
             rd.flatten()
                 .filter_map(|e| {
-                    let time = time_of(&e.file_name().to_string_lossy())?;
-                    Some(Shot { path: e.path(), time })
+                    let (time, map) = parse(&e.file_name().to_string_lossy())?;
+                    Some(Shot {
+                        path: e.path(),
+                        time,
+                        map,
+                    })
                 })
                 .collect()
         })
@@ -46,15 +101,21 @@ pub fn list(dir: &Path) -> Vec<Shot> {
     out
 }
 
-/// The screenshots of `map` among `shots`, oldest first, given the sessions written so far.
+/// The screenshots of `map` among `shots`, oldest first. A screenshot named after a map
+/// belongs to that map; one with no map in its name belongs to the session that ended
+/// after it (see the module notes).
 pub fn of_map(shots: &[Shot], sessions: &[Session], map: &str) -> Vec<PathBuf> {
     let mut ends: Vec<(u64, &str)> = sessions.iter().map(|s| (s.time, s.map.as_str())).collect();
     ends.sort_by_key(|e| e.0);
+    let wanted = safe_part(map);
     shots
         .iter()
-        .filter(|shot| {
-            let next = ends.iter().find(|(end, _)| *end >= shot.time);
-            matches!(next, Some((end, m)) if end - shot.time <= MAX_SPAN && m.eq_ignore_ascii_case(map))
+        .filter(|shot| match &shot.map {
+            Some(m) => m.eq_ignore_ascii_case(&wanted),
+            None => {
+                let next = ends.iter().find(|(end, _)| *end >= shot.time);
+                matches!(next, Some((end, m)) if end - shot.time <= MAX_SPAN && m.eq_ignore_ascii_case(map))
+            }
         })
         .map(|s| s.path.clone())
         .collect()
@@ -63,7 +124,9 @@ pub fn of_map(shots: &[Shot], sessions: &[Session], map: &str) -> Vec<PathBuf> {
 /// The screenshots of `map` in the content folder's `Screenshots`, oldest first (none when
 /// there is no content folder or no session summary).
 pub fn for_map(map: &str) -> Vec<PathBuf> {
-    let Some(content) = crate::content_dir() else { return Vec::new() };
+    let Some(content) = crate::content_dir() else {
+        return Vec::new();
+    };
     let shots = list(&content.join("Screenshots"));
     if shots.is_empty() {
         return Vec::new();
@@ -87,16 +150,43 @@ mod tests {
         Shot {
             path: PathBuf::from(format!("omsi_{time}.png")),
             time,
+            map: None,
         }
     }
 
     #[test]
     fn only_the_games_own_file_names_are_screenshots() {
-        assert_eq!(time_of("omsi_1760000000.png"), Some(1760000000));
-        assert_eq!(time_of("omsi_1760000000.PNG"), Some(1760000000));
-        assert_eq!(time_of("omsi_1760000000.bmp"), None);
-        assert_eq!(time_of("holiday.png"), None);
-        assert_eq!(time_of("omsi_x.png"), None);
+        assert_eq!(parse("omsi_1760000000.png"), Some((1760000000, None)));
+        assert_eq!(parse("omsi_1760000000.PNG"), Some((1760000000, None)));
+        assert_eq!(parse("omsi_1760000000.bmp"), None);
+        assert_eq!(parse("holiday.png"), None);
+        assert_eq!(parse("omsi_x.png"), None);
+    }
+
+    #[test]
+    fn the_map_is_read_from_the_file_name() {
+        assert_eq!(
+            parse("omsi_5__Grundorf__MB_O305.png"),
+            Some((5, Some("Grundorf".into())))
+        );
+        assert_eq!(
+            parse("omsi_5__Berlin.png"),
+            Some((5, Some("Berlin".into())))
+        );
+    }
+
+    #[test]
+    fn a_named_screenshot_needs_no_session_and_an_unnamed_one_still_uses_it() {
+        let named = Shot {
+            path: PathBuf::from("omsi_9__Berlin_Mitte.png"),
+            time: 9,
+            map: Some("Berlin_Mitte".into()),
+        };
+        let old = shot(10);
+        let sessions = [session(11, "Berlin Mitte")];
+        assert_eq!(of_map(&[named.clone()], &[], "Berlin Mitte").len(), 1);
+        assert!(of_map(&[named], &sessions, "Other").is_empty());
+        assert_eq!(of_map(&[old], &sessions, "Berlin Mitte").len(), 1);
     }
 
     #[test]
