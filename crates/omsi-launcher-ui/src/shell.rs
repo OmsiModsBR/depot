@@ -1,6 +1,7 @@
 //! The launcher without a window: the sidebar, the page chosen and its body.
 
 use crate::look::*;
+use crate::maps::MapsView;
 use crate::pages::Page;
 use crate::vehicles::VehiclesView;
 use glam::Vec2;
@@ -14,6 +15,7 @@ pub struct Shell {
     /// The texture of the logo in the interface pipeline, when it has been loaded.
     pub logo: Option<(usize, f32)>,
     pub vehicles: VehiclesView,
+    pub maps: MapsView,
 }
 
 impl Default for Shell {
@@ -33,6 +35,7 @@ impl Shell {
             page,
             logo: None,
             vehicles: VehiclesView::default(),
+            maps: MapsView::default(),
         }
     }
 
@@ -118,9 +121,16 @@ impl Shell {
             Align::Left,
         );
         let area = Rect::new(x0, 0.0, w - x0 - 28.0, h);
-        if self.page == Page::Vehicles {
-            self.vehicles.draw(ui, area);
-            return;
+        match self.page {
+            Page::Vehicles => {
+                self.vehicles.draw(ui, area);
+                return;
+            }
+            Page::Maps => {
+                self.maps.draw(ui, area);
+                return;
+            }
+            _ => {}
         }
         let r = Rect::new(x0, 130.0, w - x0 - 28.0, (h - 130.0 - 60.0).max(120.0));
         ui.panel(r);

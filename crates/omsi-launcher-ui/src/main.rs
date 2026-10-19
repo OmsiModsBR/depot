@@ -3,7 +3,7 @@
 //!
 //! * no arguments: the launcher window;
 //! * `--page NAME`: start on that page (`vehicles`, `maps`, ...);
-//! * `--sample`: made-up vehicles instead of the installed ones (for pictures);
+//! * `--sample`: made-up vehicles and maps instead of the installed ones (for pictures);
 //! * `--shot FILE.png [--size WxH]`: draw the page into a picture and exit, with no window.
 
 use omsi_launcher_ui::{offscreen, window, Page, Shell};
@@ -29,6 +29,8 @@ fn main() {
         shell.vehicles = omsi_launcher_ui::vehicles::VehiclesView::with_catalog(
             omsi_launcher_ui::sample::vehicles(),
         );
+        shell.maps =
+            omsi_launcher_ui::maps::MapsView::with_catalog(omsi_launcher_ui::sample::maps());
     }
     let result = match value("--shot") {
         Some(file) => {
