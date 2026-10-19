@@ -1,6 +1,6 @@
 # New UI: foundations (design draft)
 
-Status: draft for discussion. Tracks UI-A of #166. Nothing here is implemented, and nothing in this document changes behavior.
+Status: design document. Tracks UI-A of #166. This document changes no behavior. What the draft pull requests already implement is listed under "Implementation status" below; everything else here is still a plan.
 
 The new UI consumes the settings model of #151. A new screen is not evidence of parity, and no existing function, shortcut or file compatibility may disappear because of it.
 
@@ -93,12 +93,28 @@ Each step is its own small pull request with before/after screenshots, a navigat
 - resolution matrix: 1280x720, 1366x768, 1920x1080, ultrawide, DPI 100/150/200%
 - broken helper, missing preview, corrupt cache: launcher stays usable
 
+## Implementation status
+
+Built as stacked draft pull requests, merged in order only when the maintainer confirms:
+
+| Part of this document | State |
+| --- | --- |
+| Keyboard focus in the widget kit (Tab order, Enter or Space, a visible ring), off by default (#321) | draft; arrow keys on sliders and lists, and Tab into a text field, are not done |
+| Separate launcher program, sidebar only (#252) | draft; the launcher inside the game binary stays the fallback |
+| Vehicles and Maps pages on the real catalog, with the status labels of section 3 (#253, #254) | draft; scripts, textures and sounds are shown as "not checked yet", never "found" |
+| Loading screen with the player's screenshots as a slow slideshow (#255) | draft |
+| Pause menu column with the city-map bar (#256) | draft; the caller supplies the items and the map |
+| Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
+| Offscreen example drawing every screen with placeholder data (#250) | draft |
+
+Not started: design tokens moved into `omsi-ui` (the colors still live next to each screen), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The screens are not wired into the game's own menus yet.
+
 ## Open decisions (maintainer)
 
-- final launcher/game transport and whether the interface toolkit stays `omsi-ui` (recommended) or something else after a spike
+- final launcher/game transport (the toolkit stays `omsi-ui`)
 - cache key strategy
 - diagnostic states and criteria
-- loading screen background priority and what it may show
+- decided: the loading screen's background is the player's own screenshots of that map, as a slideshow, and the default background when there are none; the Alt bar never pauses the simulation
 
 ## References
 
