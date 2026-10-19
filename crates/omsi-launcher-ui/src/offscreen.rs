@@ -10,18 +10,27 @@ use std::path::Path;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
-/// The adapter and device, for the picture or the window.
-pub fn device(
+/// The adapter and device, for the picture.
+pub fn device(instance: &wgpu::Instance) -> Result<(wgpu::Device, wgpu::Queue)> {
+    let (_, device, queue) = adapter_device(instance, None)?;
+    Ok((device, queue))
+}
+
+/// The adapter and the device made from it (the window needs the adapter too: the surface's
+/// capabilities are asked of the adapter the device came from, not of a second one).
+pub fn adapter_device(
     instance: &wgpu::Instance,
     surface: Option<&wgpu::Surface<'_>>,
-) -> Result<(wgpu::Device, wgpu::Queue)> {
+) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         compatible_surface: surface,
         ..Default::default()
     }))
     .map_err(|e| anyhow!("no graphics adapter: {e}"))?;
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-        .map_err(|e| anyhow!("no graphics device: {e}"))
+    let (device, queue) =
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+            .map_err(|e| anyhow!("no graphics device: {e}"))?;
+    Ok((adapter, device, queue))
 }
 
 /// The logo into `gpu`: its texture and its height over its width.
@@ -80,7 +89,7 @@ pub fn draw_into(
 /// Write the launcher on `shell`'s page as a PNG of `w` x `h` pixels.
 pub fn shot(shell: &mut Shell, (w, h): (u32, u32), out: &Path) -> Result<()> {
     let instance = wgpu::Instance::default();
-    let (device, queue) = device(&instance, None)?;
+    let (device, queue) = device(&instance)?;
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let mut ui = Ui::new();
     let mut gpu = Gpu::new(&device, format, 4, ui.atlas.size);

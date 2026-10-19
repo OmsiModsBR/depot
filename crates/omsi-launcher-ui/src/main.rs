@@ -34,12 +34,13 @@ fn main() {
     }
     let result = match value("--shot") {
         Some(file) => {
-            let size = value("--size")
-                .and_then(|s| {
-                    let (w, h) = s.split_once('x')?;
-                    Some((w.parse().ok()?, h.parse().ok()?))
-                })
-                .unwrap_or((1672, 941));
+            let size = match value("--size") {
+                Some(s) => parse_size(&s).unwrap_or_else(|| {
+                    eprintln!("invalid --size {s:?}: expected WIDTHxHEIGHT, like 1672x941");
+                    std::process::exit(2);
+                }),
+                None => (1672, 941),
+            };
             offscreen::shot(&mut shell, size, std::path::Path::new(&file))
         }
         None => window::run(shell),
@@ -47,5 +48,27 @@ fn main() {
     if let Err(e) = result {
         eprintln!("error: {e:#}");
         std::process::exit(1);
+    }
+}
+
+/// `WIDTHxHEIGHT` in pixels; both at least 1 and at most 16384 (the picture is made in memory).
+fn parse_size(s: &str) -> Option<(u32, u32)> {
+    let (w, h) = s.split_once('x')?;
+    let (w, h): (u32, u32) = (w.parse().ok()?, h.parse().ok()?);
+    ((1..=16384).contains(&w) && (1..=16384).contains(&h)).then_some((w, h))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_size;
+
+    #[test]
+    fn size_is_width_x_height_or_nothing() {
+        assert_eq!(parse_size("1672x941"), Some((1672, 941)));
+        for bad in [
+            "", "1672", "x", "0x10", "10x0", "axb", "1672x", "99999x10", "-1x5",
+        ] {
+            assert_eq!(parse_size(bad), None, "{bad}");
+        }
     }
 }
