@@ -1,12 +1,13 @@
-//! `depot-launcher-next`: the new launcher (a draft; the launcher in the game binary is still
-//! the one that ships).
+//! A picture of the launcher's pages, with no window (the launcher itself is the game's, see
+//! `omsi-app::launcher`):
 //!
-//! * no arguments: the launcher window;
-//! * `--page NAME`: start on that page (`vehicles`, `maps`, ...);
-//! * `--sample`: made-up vehicles and maps instead of the installed ones (for pictures);
-//! * `--shot FILE.png [--size WxH]`: draw the page into a picture and exit, with no window.
+//! `cargo run -p omsi-launcher-ui --example launcher_shot -- --shot FILE.png [--page NAME]
+//! [--size WxH] [--sample]`
+//!
+//! * `--page NAME`: that page (`vehicles`, `maps`, ...);
+//! * `--sample`: made-up vehicles and maps instead of the installed ones.
 
-use omsi_launcher_ui::{offscreen, window, Page, Shell};
+use omsi_launcher_ui::{offscreen, Page, Shell};
 
 fn main() {
     env_logger::init();
@@ -32,20 +33,18 @@ fn main() {
         shell.maps =
             omsi_launcher_ui::maps::MapsView::with_catalog(omsi_launcher_ui::sample::maps());
     }
-    let result = match value("--shot") {
-        Some(file) => {
-            let size = match value("--size") {
-                Some(s) => parse_size(&s).unwrap_or_else(|| {
-                    eprintln!("invalid --size {s:?}: expected WIDTHxHEIGHT, like 1672x941");
-                    std::process::exit(2);
-                }),
-                None => (1672, 941),
-            };
-            offscreen::shot(&mut shell, size, std::path::Path::new(&file))
-        }
-        None => window::run(shell),
+    let Some(file) = value("--shot") else {
+        eprintln!("usage: launcher_shot --shot FILE.png [--page NAME] [--size WxH] [--sample]");
+        std::process::exit(2);
     };
-    if let Err(e) = result {
+    let size = match value("--size") {
+        Some(s) => parse_size(&s).unwrap_or_else(|| {
+            eprintln!("invalid --size {s:?}: expected WIDTHxHEIGHT, like 1672x941");
+            std::process::exit(2);
+        }),
+        None => (1672, 941),
+    };
+    if let Err(e) = offscreen::shot(&mut shell, size, std::path::Path::new(&file)) {
         eprintln!("error: {e:#}");
         std::process::exit(1);
     }

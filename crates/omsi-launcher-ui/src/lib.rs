@@ -1,8 +1,8 @@
-//! The new launcher: a separate program, drawn with `omsi-ui`, with no 3D world in it.
+//! The launcher's look and its new pages, drawn with `omsi-ui`, with no 3D world in them.
 //!
-//! `Shell` is everything that is not a window: the sidebar, the page chosen and the page's
-//! body. The window (`window`) and the picture written to a file (`offscreen`) both draw it,
-//! so what a test or a screenshot sees is what the window shows.
+//! The game's launcher window (`omsi-app::launcher`) draws the sidebar (`shell::Sidebar`) and
+//! the Vehicles and Maps pages from here. `Shell` puts the same sidebar and pages together
+//! without the game, for pictures (`offscreen`, the `launcher_shot` example) and tests.
 
 pub mod kit;
 pub mod look;
@@ -12,7 +12,6 @@ pub mod pages;
 pub mod sample;
 pub mod shell;
 pub mod vehicles;
-pub mod window;
 
 pub use pages::Page;
 pub use shell::Shell;
