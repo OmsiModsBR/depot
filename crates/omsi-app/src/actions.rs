@@ -234,6 +234,8 @@ impl App {
         self.input_away = true;
         self.release_vehicle_keys();
         self.keys.clear();
+        // (the Alt bar's pending tap and keys: their releases will not come)
+        self.new_ui.alt.reset_input();
         if let Some(p) = self.player.as_mut() {
             p.release();
         }

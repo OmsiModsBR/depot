@@ -1,4 +1,4 @@
-//! The new interface in the game, behind `OMSI_NEW_UI=1` (off by default).
+//! The new interface in the game.
 //!
 //! Today this is the Esc menu: while the game menu is open at its top level, the column of
 //! sections from `omsi_ui::pause_menu` is drawn over the window's picture through the
@@ -16,7 +16,7 @@ use glam::Vec2;
 use omsi_ui::pause_menu::{self, Item, Kind, Section, View};
 use omsi_ui::widgets::Ui;
 use omsi_ui::{Draw, Gpu};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use winit::event_loop::ActiveEventLoop;
 
@@ -25,12 +25,6 @@ const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png")
 /// The design the menu is made for, in points (the same as the launcher's).
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
-
-/// Whether the new interface is on (`OMSI_NEW_UI=1`).
-pub(crate) fn enabled() -> bool {
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| omsi_cfg::flags::NEW_UI.text().as_deref() == Some("1"))
-}
 
 /// Pixels per design point for a window of `w` x `h` pixels.
 pub(crate) fn scale_for(w: u32, h: u32) -> f32 {
@@ -365,12 +359,11 @@ impl NewUi {
 }
 
 impl App {
-    /// Whether the new Esc menu is the one showing: the interface is on, the game menu is open
-    /// at its top level (no list opened from it), and the picture is the plain window's (the
-    /// triple screen and the headset have their own layouts).
+    /// Whether the new Esc menu is the one showing: the game menu is open at its top level (no
+    /// list opened from it), and the picture is the plain window's (the triple screen and the
+    /// headset keep the HUD's menu, their own layouts).
     pub(crate) fn new_menu_active(&self) -> bool {
-        enabled()
-            && self.game_menu.is_some()
+        self.game_menu.is_some()
             && self.chooser.is_none()
             && self.list_kind.is_none()
             && !self.vr_active()
@@ -398,9 +391,6 @@ impl App {
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
-        if !enabled() {
-            return;
-        }
         if let Some(r) = self.renderer.as_mut() {
             self.new_ui.install(r);
         }
