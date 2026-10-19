@@ -11,10 +11,12 @@
 //! * [`widgets`]: the immediate-mode widget kit (buttons, toggles, sliders, dropdowns, text
 //!   fields, scrolling lists) the launcher draws its pages with.
 
+pub mod alt_bar;
 pub mod atlas;
 pub mod gpu;
 pub mod i18n;
 pub mod icons;
+pub mod ingame;
 pub mod loading;
 pub mod nav;
 pub mod paint;
