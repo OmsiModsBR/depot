@@ -7,6 +7,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- A panic inside a script block now logs the name of every block it passes through (the macros
+  and the trigger or frame block that called them), then goes on as before (#47). Nothing is
+  caught or hidden.
 - Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
 
 ### Fixed
