@@ -192,6 +192,11 @@ impl App {
     /// window, and the release of a press it took. The game does not see it then.
     pub(crate) fn add_click(&mut self, pressed: bool) -> bool {
         if !self.add_window_active() {
+            // (hidden behind the Esc menu or the report: the overlay lets go of a press it
+            // had, so its release is the game's)
+            if let Some(win) = self.new_ui.add.as_mut() {
+                win.pressed = false;
+            }
             return false;
         }
         let over = self.over_add_window();
@@ -199,10 +204,11 @@ impl App {
             return false;
         };
         if pressed {
+            // (a press outside: its release is the game's too)
+            win.pressed = over;
             if !over {
                 return false;
             }
-            win.pressed = true;
             self.new_ui.push_input(WinInput::Press);
             true
         } else if std::mem::take(&mut win.pressed) {
