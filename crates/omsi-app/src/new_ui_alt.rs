@@ -50,12 +50,12 @@ const IN_MENU: &str = "Open it from the Esc menu (it pauses the game)";
 /// The buttons, in the order of the bar (rows of five).
 pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     use OwnedGlyph::{Icon, Text};
-    let tr = |s: &str| omsi_ui::tr(s).to_string();
+    // (English: the widgets translate what they draw, a second time would garble it)
     let b = |id, glyph, title: &str, off: Option<&str>| OwnedButton {
         id,
         glyph,
-        title: tr(title),
-        disabled: off.map(tr),
+        title: title.to_string(),
+        disabled: off.map(String::from),
     };
     let need = |ok: bool, why: &'static str| (!ok).then_some(why);
     vec![
