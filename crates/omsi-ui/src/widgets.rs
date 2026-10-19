@@ -215,6 +215,8 @@ pub struct Ui {
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
+    /// Keyboard focus over the clickable widgets (off unless `nav.enabled`).
+    pub nav: crate::nav::KeyNav,
     /// The widget that took the mouse wheel this frame (the innermost scroll area).
     wheel_taken: bool,
     anims: HashMap<Id, f32>,
@@ -254,6 +256,7 @@ impl Ui {
             hot: None,
             active: None,
             focus: None,
+            nav: Default::default(),
             wheel_taken: false,
             anims: HashMap::new(),
             scroll: HashMap::new(),
@@ -339,6 +342,8 @@ impl Ui {
                 }
             }
         }
+        let modal = self.popup.is_some() || self.date_popup.is_some();
+        self.nav.begin(&mut self.input, &mut self.focus, modal);
     }
 
     fn push_layer(&mut self, clip: Rect, radius: f32) {
@@ -480,10 +485,12 @@ impl Ui {
             self.active = Some(id);
         }
         let held = self.active == Some(id) && self.input.down;
-        let clicked = self.active == Some(id) && self.input.released && h;
+        let mut clicked = self.active == Some(id) && self.input.released && h;
         if self.active == Some(id) && self.input.released {
             self.active = None;
         }
+        let visible = self.rect_visible(r);
+        clicked |= self.nav.seen(id, r, visible);
         (h, held, clicked)
     }
 
@@ -1500,6 +1507,14 @@ impl Ui {
                 12.5,
                 Weight::Medium,
                 TEXT_SOFT,
+            );
+        }
+        if let Some(r) = self.nav.ring() {
+            self.p().rounded_border(
+                Rect::new(r.x - 2.0, r.y - 2.0, r.w + 4.0, r.h + 4.0),
+                8.0,
+                2.0,
+                ACCENT,
             );
         }
         let mut layers = Vec::new();
