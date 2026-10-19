@@ -276,6 +276,10 @@ flags! {
     /// Log, every this many seconds (5 by default), what the player's bus and the
     /// environment sound.
     DEBUG_SOUND = "OMSI_DEBUG_SOUND", Number, Diagnostic, "omsi-app::weather_setup";
+    /// Log, every this many seconds (10 by default), how the sound device's callbacks come
+    /// (late ones, blocks mixed too slowly, waits for the voice list) and the loops started
+    /// again soon after they stopped.
+    DEBUG_AUDIO = "OMSI_DEBUG_AUDIO", Number, Diagnostic, "omsi-audio::mixer";
     /// Load the tiles around this far point (`x,y`), then the start area again, so that the
     /// picture is drawn from recycled GPU slots.
     CHURN = "OMSI_CHURN", Text, Diagnostic, "omsi-app::world_load";
