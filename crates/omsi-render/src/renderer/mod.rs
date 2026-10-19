@@ -8,6 +8,7 @@ mod encode;
 mod frame;
 mod lights;
 mod lists;
+mod open;
 mod options;
 mod output;
 mod passes;
@@ -16,6 +17,7 @@ mod reflections;
 mod sky;
 mod state;
 mod targets;
+mod upload;
 
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
 pub use state::{Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};

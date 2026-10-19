@@ -3,7 +3,7 @@
 
 use super::ao::AoTargets;
 use super::hdr::HdrTargets;
-use crate::gpu::DEPTH_FORMAT;
+use crate::gpu::{target_2d, DEPTH_FORMAT};
 use std::collections::HashMap;
 
 impl TargetCache {
@@ -50,26 +50,22 @@ impl TargetCache {
             height: h,
             depth_or_array_layers: 1,
         };
-        let color = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("msaa colour"),
+        let color = target_2d(
+            device,
+            "msaa colour",
             size,
-            mip_level_count: 1,
-            sample_count: samples,
-            dimension: wgpu::TextureDimension::D2,
-            format: format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        let depth = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("msaa depth"),
+            samples,
+            format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        );
+        let depth = target_2d(
+            device,
+            "msaa depth",
             size,
-            mip_level_count: 1,
-            sample_count: samples,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
+            samples,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        );
         let t = (
             color.create_view(&Default::default()),
             depth.create_view(&Default::default()),
@@ -85,20 +81,18 @@ impl TargetCache {
                 return;
             }
         }
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("depth"),
-            size: wgpu::Extent3d {
+        let tex = target_2d(
+            device,
+            "depth",
+            wgpu::Extent3d {
                 width: w,
                 height: h,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        );
         let view = tex.create_view(&Default::default());
         self.depth = Some((tex, view, w, h));
     }
@@ -120,22 +114,20 @@ impl TargetCache {
             return t.clone();
         }
         self.evict();
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("scaled scene"),
-            size: wgpu::Extent3d {
+        let tex = target_2d(
+            device,
+            "scaled scene",
+            wgpu::Extent3d {
                 width: w,
                 height: h,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            1,
+            format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        );
         let view = tex.create_view(&Default::default());
         let bg = picture_group(&view);
         self.scale_targets

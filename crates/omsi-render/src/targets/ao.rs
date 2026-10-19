@@ -2,7 +2,7 @@
 //! fog worked out beside them.
 
 use super::{GroupParts, TargetCache};
-use crate::gpu::DEPTH_FORMAT;
+use crate::gpu::{target_2d, DEPTH_FORMAT};
 
 /// The textures of the ambient-occlusion pass for one target size.
 pub(crate) struct AoTargets {
@@ -40,22 +40,20 @@ impl TargetCache {
             height: h,
             depth_or_array_layers: 1,
         };
-        let depth = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("prepass depth"),
+        let depth = target_2d(
+            device,
+            "prepass depth",
             size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | if puddles {
                     wgpu::TextureUsages::COPY_SRC
                 } else {
                     wgpu::TextureUsages::empty()
                 },
-            view_formats: &[],
-        });
+        );
         // the AO itself at half size: four times fewer pixels, and the blur hides the rest
         let half = wgpu::Extent3d {
             width: w.div_ceil(2),
@@ -63,19 +61,16 @@ impl TargetCache {
             depth_or_array_layers: 1,
         };
         let mk = |label: &str| {
-            device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: half,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
+            target_2d(
+                device,
+                label,
+                half,
+                1,
                 // r the occlusion, g the view depth (m) it was worked out at: the main
                 // pass upsamples it by depth, not bilinearly (see `ao_at` in shader.wgsl)
-                format: wgpu::TextureFormat::Rg16Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            })
+                wgpu::TextureFormat::Rg16Float,
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            )
         };
         let ao = mk("ssao");
         let blur = mk("ssao blur");
@@ -106,23 +101,19 @@ impl TargetCache {
         // the SSAO pass reads no AO texture, but the layout wants one: bind the blur target
         let ssao_bg = bg("ssao", &blur_view);
         let blur_bg = bg("ssao blur", &ao_view);
-        let fog_view = device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("fog lamps"),
-                // (one row more: the sun's visibility, see fog_lamps.wgsl)
-                size: wgpu::Extent3d {
-                    height: half.height + 1,
-                    ..half
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba16Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            })
-            .create_view(&Default::default());
+        let fog_view = target_2d(
+            device,
+            "fog lamps",
+            // (one row more: the sun's visibility, see fog_lamps.wgsl)
+            wgpu::Extent3d {
+                height: half.height + 1,
+                ..half
+            },
+            1,
+            wgpu::TextureFormat::Rgba16Float,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
         let fog_bg = fog_lamps.map(|fog_lamps| {
             // (the half-size pass reads no result: the layout wants one, the AO's is bound)
             [&ao_view, &fog_view].map(|read| {

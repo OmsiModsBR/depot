@@ -5,7 +5,9 @@ use crate::assets::AssetStore;
 use crate::assets::MaterialUniform;
 #[cfg(test)]
 use crate::assets::{AlphaMode, MaterialExtra};
-use crate::gpu::{pass_timer, DEPTH_FORMAT, HDR_FORMAT};
+use crate::gpu::{
+    fullscreen_pipeline, pass_timer, sampler_entry, target_2d, DEPTH_FORMAT, HDR_FORMAT,
+};
 #[cfg(test)]
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
@@ -132,12 +134,7 @@ impl Pipelines {
                     wgpu::TextureViewDimension::D2,
                 ),
                 texture(4, float, wgpu::TextureViewDimension::D2),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
+                sampler_entry(5),
                 texture(6, float, wgpu::TextureViewDimension::Cube),
                 texture(
                     7,
@@ -163,34 +160,19 @@ impl Pipelines {
             immediate_size: 0,
         });
         let pipeline = |entry| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
+            fullscreen_pipeline(
+                device,
+                entry,
+                &pipeline_layout,
+                &shader,
+                "vs_main",
+                entry,
+                wgpu::ColorTargetState {
+                    format: HDR_FORMAT,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
                 },
-                primitive: wgpu::PrimitiveState {
-                    cull_mode: None,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(entry),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: HDR_FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
+            )
         };
         let glass_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("puddle glass depth"),
@@ -204,11 +186,7 @@ impl Pipelines {
                 vertex: wgpu::VertexState {
                     module: scene_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                    }],
+                    buffers: &[Vertex::LAYOUT],
                     compilation_options: Default::default(),
                 },
                 primitive: one_sided_primitive(cull),
@@ -275,41 +253,40 @@ impl Pipelines {
                     let mut primitive = one_sided_primitive(cull);
                     // Mirroring reverses winding. Keep authored one-sided geometry.
                     primitive.front_face = wgpu::FrontFace::Ccw;
-                    vehicle.push(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some("puddle vehicle capture"),
-                        layout: Some(&capture_layout),
-                        vertex: wgpu::VertexState {
-                            module: scene_shader,
-                            entry_point: Some("vs_puddle_vehicle"),
-                            buffers: &[wgpu::VertexBufferLayout {
-                                array_stride: std::mem::size_of::<Vertex>() as u64,
-                                step_mode: wgpu::VertexStepMode::Vertex,
-                                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-                            }],
-                            compilation_options: Default::default(),
-                        },
-                        primitive,
-                        depth_stencil: Some(wgpu::DepthStencilState {
-                            format: DEPTH_FORMAT,
-                            depth_write_enabled: Some(kind != PIPE_BLEND_NO_WRITE),
-                            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                            stencil: Default::default(),
-                            bias: Default::default(),
+                    vehicle.push(
+                        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: Some("puddle vehicle capture"),
+                            layout: Some(&capture_layout),
+                            vertex: wgpu::VertexState {
+                                module: scene_shader,
+                                entry_point: Some("vs_puddle_vehicle"),
+                                buffers: &[Vertex::LAYOUT],
+                                compilation_options: Default::default(),
+                            },
+                            primitive,
+                            depth_stencil: Some(wgpu::DepthStencilState {
+                                format: DEPTH_FORMAT,
+                                depth_write_enabled: Some(kind != PIPE_BLEND_NO_WRITE),
+                                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                                stencil: Default::default(),
+                                bias: Default::default(),
+                            }),
+                            multisample: Default::default(),
+                            fragment: Some(wgpu::FragmentState {
+                                module: scene_shader,
+                                entry_point: Some("fs_puddle_vehicle"),
+                                targets: &[Some(wgpu::ColorTargetState {
+                                    format: HDR_FORMAT,
+                                    blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE)
+                                        .then_some(wgpu::BlendState::ALPHA_BLENDING),
+                                    write_mask: wgpu::ColorWrites::ALL,
+                                })],
+                                compilation_options: Default::default(),
+                            }),
+                            multiview_mask: None,
+                            cache: None,
                         }),
-                        multisample: Default::default(),
-                        fragment: Some(wgpu::FragmentState {
-                            module: scene_shader,
-                            entry_point: Some("fs_puddle_vehicle"),
-                            targets: &[Some(wgpu::ColorTargetState {
-                                format: HDR_FORMAT,
-                                blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE).then_some(wgpu::BlendState::ALPHA_BLENDING),
-                                write_mask: wgpu::ColorWrites::ALL,
-                            })],
-                            compilation_options: Default::default(),
-                        }),
-                        multiview_mask: None,
-                        cache: None,
-                    }));
+                    );
                 }
             }
         }
@@ -387,63 +364,54 @@ impl PuddleTargets {
     ) -> Self {
         let size = trace_size(w, h);
         let source_depth = ao_depth.texture().clone();
-        let hit_depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("puddle hit depth including glass"),
-            size: wgpu::Extent3d {
+        let hit_depth = target_2d(
+            &ctx.device,
+            "puddle hit depth including glass",
+            wgpu::Extent3d {
                 width: w,
                 height: h,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::COPY_DST
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        );
         let hit_depth_view = hit_depth.create_view(&Default::default());
         let target = |label, (width, height)| {
-            ctx.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: HDR_FORMAT,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                &ctx.device,
+                label,
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                1,
+                HDR_FORMAT,
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+            )
+            .create_view(&Default::default())
         };
         let trace = target("puddle reflection rays", size);
         let vehicle_view = target("puddle player vehicle", size);
-        let vehicle_depth = ctx
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("puddle player vehicle depth"),
-                size: wgpu::Extent3d {
-                    width: size.0,
-                    height: size.1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
-            .create_view(&Default::default());
+        let vehicle_depth = target_2d(
+            &ctx.device,
+            "puddle player vehicle depth",
+            wgpu::Extent3d {
+                width: size.0,
+                height: size.1,
+                depth_or_array_layers: 1,
+            },
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        )
+        .create_view(&Default::default());
         let blur = target("puddle reflection horizontal filter", size);
         let filtered = target("puddle reflection filtered", size);
         let view = target("scene with puddle reflections", (w, h));

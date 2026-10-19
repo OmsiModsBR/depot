@@ -5,8 +5,8 @@ use super::state::Renderer;
 use crate::assets::{AssetStore, TexAddressing};
 use crate::effects::{puddles, rt};
 use crate::gpu::{
-    basic_pipelines, color_targets, sixteen_texture_units, GpuContext, Samplers, DEPTH_FORMAT,
-    GL_BACKEND, RT_GBUF,
+    basic_pipelines, color_targets, sixteen_texture_units, target_2d, uniform_entry, GpuContext,
+    Samplers, DEPTH_FORMAT, GL_BACKEND, RT_GBUF,
 };
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
@@ -36,20 +36,18 @@ impl Renderer {
         let gpu = GpuContext::open(&device, format, msaa, options.ray_tracing);
         if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("build") && msaa > 1 {
             // test hook for the fallback in `new_with`: a sample count no device takes
-            let _ = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("invalid"),
-                size: wgpu::Extent3d {
+            let _ = target_2d(
+                &device,
+                "invalid",
+                wgpu::Extent3d {
                     width: 4,
                     height: 4,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
-                sample_count: 3,
-                dimension: wgpu::TextureDimension::D2,
+                3,
                 format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            );
         }
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
         // which the depth prepass relies on to the last bit (see `VsOut::clip`).
@@ -64,16 +62,7 @@ impl Renderer {
         let light_map = LightMapAtlas::new(&device);
         let snow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("snow"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
+            entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
         });
         let sprites = SpriteResources::new(&device, &queue, &snow_layout);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -81,11 +70,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layouts.camera_layout), Some(&layouts.material_layout)],
             immediate_size: 0,
         });
-        let vertex_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
-        };
+        let vertex_layout = Vertex::LAYOUT;
         let shadows = ShadowResources::new(
             &device,
             shadow_size,

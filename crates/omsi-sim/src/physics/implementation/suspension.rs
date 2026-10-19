@@ -4,7 +4,9 @@
 
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
-use crate::physics::domain::params::{BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K};
+use crate::physics::domain::params::{
+    BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K,
+};
 use crate::physics::domain::{GroundProbe, RigidBody};
 use glam::{DVec3, Vec3};
 
@@ -14,14 +16,31 @@ impl RigidBody {
     /// the ground (`found`: the slope each stands on and where it touches) as contacts for the
     /// tyre forces, onto `contacts`.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn wheel_contacts(&mut self, h: f32, drive_torque: f32, driven: f32, brake: &[f32], found: &[Option<(f32, f32)>], force: &mut Vec3, torque: &mut Vec3, probe: &dyn Fn(f64, f64, f64) -> GroundProbe, contacts: &mut Vec<Contact>) {
+    pub(super) fn wheel_contacts(
+        &mut self,
+        h: f32,
+        drive_torque: f32,
+        driven: f32,
+        brake: &[f32],
+        found: &[Option<(f32, f32)>],
+        force: &mut Vec3,
+        torque: &mut Vec3,
+        probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+        contacts: &mut Vec<Contact>,
+    ) {
         let rot = self.orientation;
         let up = rot.mul_vec3(Vec3::Z);
         let n_wheels = self.wheels.len().max(1) as f32;
         let (position, cog) = (self.position, self.cog);
         let omega_world = rot.mul_vec3(self.omega);
         for (i, w) in self.wheels.iter_mut().enumerate() {
-            let TyreFrame { fwd, right, fwd_h, hub0, hub } = TyreFrame::of(w, rot, position, cog);
+            let TyreFrame {
+                fwd,
+                right,
+                fwd_h,
+                hub0,
+                hub,
+            } = TyreFrame::of(w, rot, position, cog);
             let r = w.radius;
             // pressed into a face: pushed back out
             let mut f_world = Vec3::ZERO;
@@ -54,8 +73,13 @@ impl RigidBody {
             // Measured from the hub less the `.bus` file's tyre radius instead, a mod whose
             // tyre mesh is larger than that radius stood with its wheels drawn sunk a few
             // centimetres into the road.
-            let plane0 = position + rot.mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog).as_dvec3();
-            let under = probe(plane0.x, plane0.y, top).below.or_else(|| probe(plane0.x, plane0.y, plane0.z + OMSI_PROBE_HEIGHT).below);
+            let plane0 = position
+                + rot
+                    .mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog)
+                    .as_dvec3();
+            let under = probe(plane0.x, plane0.y, top)
+                .below
+                .or_else(|| probe(plane0.x, plane0.y, plane0.z + OMSI_PROBE_HEIGHT).below);
             let t = under.map(|g| (g - plane0.z) as f32);
             if let Some(g) = under {
                 w.ground_z = g;
@@ -72,7 +96,11 @@ impl RigidBody {
             }
             let travel = t.unwrap_or(-DROOP);
             let full = if k > 1.0 { w.max_force / k } else { BUMP };
-            w.compression_rate = if w.touch.is_some() { (travel.clamp(-DROOP, full) - w.compression) / h } else { 0.0 };
+            w.compression_rate = if w.touch.is_some() {
+                (travel.clamp(-DROOP, full) - w.compression) / h
+            } else {
+                0.0
+            };
             w.compression = travel.clamp(-DROOP, full);
             w.touch = t;
             let on = t.is_some_and(|t| k * t >= 0.0);
@@ -84,7 +112,14 @@ impl RigidBody {
             *torque += Vec3::new(0.0, -w.lever * n, 0.0);
             let Some((slope, contact_dx)) = found[i].filter(|_| tyre_f > 0.0) else {
                 // off the ground the wheel keeps its turning (a brake stops it)
-                let (drive_w, brake_w) = (if w.driven { drive_torque / r / driven } else { 0.0 }, brake.get(i).copied().unwrap_or(0.0).max(0.0));
+                let (drive_w, brake_w) = (
+                    if w.driven {
+                        drive_torque / r / driven
+                    } else {
+                        0.0
+                    },
+                    brake.get(i).copied().unwrap_or(0.0).max(0.0),
+                );
                 let before = w.spin;
                 w.spin += h * w.inertia_inv * (drive_w - sign(w.spin) * brake_w);
                 if before != 0.0 && sign(before) != sign(w.spin) && brake_w > 0.0 {
@@ -97,7 +132,10 @@ impl RigidBody {
                 // world): the strut still pushes on the body
                 let f = f_world + up * n;
                 *force += f;
-                *torque += rot.inverse().mul_vec3((hub - self.position).as_vec3()).cross(rot.inverse().mul_vec3(f));
+                *torque += rot
+                    .inverse()
+                    .mul_vec3((hub - self.position).as_vec3())
+                    .cross(rot.inverse().mul_vec3(f));
                 continue;
             };
             // The ground pushes along its own normal; the strut carries the part along
@@ -120,8 +158,13 @@ impl RigidBody {
                 fwd,
                 right,
                 base: f_world + up * n + step,
-                drive: if w.driven { drive_torque / r / driven } else { 0.0 },
-                brake: brake.get(i).copied().unwrap_or(0.0).max(0.0) + self.rolling_resistance / n_wheels,
+                drive: if w.driven {
+                    drive_torque / r / driven
+                } else {
+                    0.0
+                },
+                brake: brake.get(i).copied().unwrap_or(0.0).max(0.0)
+                    + self.rolling_resistance / n_wheels,
                 grip,
                 v_long,
                 lateral: true,

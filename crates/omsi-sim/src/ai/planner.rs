@@ -22,7 +22,11 @@ pub const PULL_OUT_ACCEL: f32 = 1.0;
 /// well before it.
 pub fn pull_out_ramps(real: f32, front: f32, rolling: bool) -> Vec<f32> {
     let base = real + 0.5 * front;
-    let (factors, max): (&[f32], f32) = if rolling { (&[1.0, 0.8, 0.6, 0.45], 20.0) } else { (&[1.5, 1.2, 1.0, 0.8, 0.6], 12.0) };
+    let (factors, max): (&[f32], f32) = if rolling {
+        (&[1.0, 0.8, 0.6, 0.45], 20.0)
+    } else {
+        (&[1.5, 1.2, 1.0, 0.8, 0.6], 12.0)
+    };
     let mut out: Vec<f32> = Vec::new();
     for f in factors {
         let r = (base * f).clamp(4.0, max);
@@ -63,17 +67,38 @@ pub fn straight_pull_out(side: f32, ramp: f32) -> impl Fn(f32) -> DVec3 {
 /// in the middle of the lane, the oncoming lane `side` metres over) with
 /// `PULL_OUT_CLEARANCE` to spare, and half a metre more for where it comes to rest.
 /// `extent` is (origin to front bumper, to rear bumper, half width).
-pub fn pull_out_room(def: &Vehicle, extent: (f32, f32, f32), obstacle_half_width: f64, side: f32) -> f32 {
+pub fn pull_out_room(
+    def: &Vehicle,
+    extent: (f32, f32, f32),
+    obstacle_half_width: f64,
+    side: f32,
+) -> f32 {
     let (front, _, _) = extent;
     let bus_half_len = 6.0;
     let mut gap = 0.75f32;
     while gap <= 12.0 {
-        let obstacle = crate::collision::Obb::vehicle(DVec2::new(0.0, (front + gap) as f64 + bus_half_len), 0.0, bus_half_len, bus_half_len, obstacle_half_width);
+        let obstacle = crate::collision::Obb::vehicle(
+            DVec2::new(0.0, (front + gap) as f64 + bus_half_len),
+            0.0,
+            bus_half_len,
+            bus_half_len,
+            obstacle_half_width,
+        );
         for ramp in pull_out_ramps(gap, front, false) {
             let way = straight_pull_out(side, ramp);
             let mut body = AiBody::new(def, MotionKind::Road);
             body.place(&way, None, None, 0.0);
-            if body.sweep_clearance(&way, 0.0, PULL_OUT_WAIT, PULL_OUT_ACCEL, 8.0, gap + 6.0, extent, &[obstacle]) >= PULL_OUT_CLEARANCE {
+            if body.sweep_clearance(
+                &way,
+                0.0,
+                PULL_OUT_WAIT,
+                PULL_OUT_ACCEL,
+                8.0,
+                gap + 6.0,
+                extent,
+                &[obstacle],
+            ) >= PULL_OUT_CLEARANCE
+            {
                 return gap + 0.5;
             }
         }
@@ -95,15 +120,34 @@ impl AiBody {
     /// is what decides whether a car standing a few metres behind a bus can get its front
     /// corner past the bus's.
     #[allow(clippy::too_many_arguments)]
-    pub fn sweep_clearance(&self, way: &dyn Fn(f32) -> DVec3, speed: f32, wait: f32, accel: f32, v_max: f32, distance: f32, extent: (f32, f32, f32), obstacles: &[crate::collision::Obb]) -> f64 {
+    pub fn sweep_clearance(
+        &self,
+        way: &dyn Fn(f32) -> DVec3,
+        speed: f32,
+        wait: f32,
+        accel: f32,
+        v_max: f32,
+        distance: f32,
+        extent: (f32, f32, f32),
+        obstacles: &[crate::collision::Obb],
+    ) -> f64 {
         let mut body = self.clone();
         let (front, rear, half_width) = extent;
         let dt = 1.0 / 20.0;
         let mut v = speed.max(0.0);
         let mut x = 0.0f32;
         let gap = |b: &AiBody| {
-            let me = crate::collision::Obb::vehicle(b.position.truncate(), b.heading, front as f64, rear as f64, half_width as f64);
-            obstacles.iter().map(|o| me.separation(o)).fold(f64::MAX, f64::min)
+            let me = crate::collision::Obb::vehicle(
+                b.position.truncate(),
+                b.heading,
+                front as f64,
+                rear as f64,
+                half_width as f64,
+            );
+            obstacles
+                .iter()
+                .map(|o| me.separation(o))
+                .fold(f64::MAX, f64::min)
         };
         let mut best = gap(&body);
         if v < 0.05 {
