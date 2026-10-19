@@ -1,7 +1,7 @@
 //! The Direct3D 9Ex renderer. Windows only; all `unsafe` FFI of the crate lives in this module.
 //!
-//! Direct3D 9Ex is used rather than plain Direct3D 9: Depot needs Windows 10 or later, where
-//! 9Ex is always present, and with it resources survive the device being occluded or the
+//! Direct3D 9Ex is used rather than plain Direct3D 9: this crate needs Windows 10 or later
+//! (the minimum of Rust's Windows targets), where 9Ex is always present, and with it resources survive the device being occluded or the
 //! display mode changing. Only a removed device (driver reset) has to be rebuilt.
 //!
 //! Scope of phase 1: an off-screen or window target, textures (one level), meshes, and the
@@ -14,8 +14,8 @@ use windows::Win32::Graphics::Direct3D9::*;
 use windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow;
 
 use crate::backend::{
-    AlphaMode, DrawBatch, FrameDesc, MeshDesc, MeshHandle, RenderBackend, TextureDesc,
-    TextureHandle,
+    handle_index, AlphaMode, DrawBatch, FrameDesc, MeshDesc, MeshHandle, RenderBackend,
+    TextureDesc, TextureHandle,
 };
 use crate::{BackendError, Caps, Result, ShaderModel};
 
@@ -27,6 +27,8 @@ pub const ALPHA_TEST_REF: u32 = 128;
 // HRESULTs of the device states (d3d9.h). DEVICEHUNG/DEVICEREMOVED need a new device.
 const DEVICE_LOST: windows::core::HRESULT = windows::core::HRESULT(0x88760868_u32 as i32);
 const DEVICE_NOT_RESET: windows::core::HRESULT = windows::core::HRESULT(0x88760869_u32 as i32);
+// D3DERR_NOTAVAILABLE: no hardware device of the requested kind (no usable driver).
+const NOT_AVAILABLE: windows::core::HRESULT = windows::core::HRESULT(0x8876086A_u32 as i32);
 const DEVICE_REMOVED: windows::core::HRESULT = windows::core::HRESULT(0x88760870_u32 as i32);
 const DEVICE_HUNG: windows::core::HRESULT = windows::core::HRESULT(0x88760874_u32 as i32);
 
@@ -36,6 +38,7 @@ fn map_err(e: windows::core::Error) -> BackendError {
             BackendError::DeviceLost
         }
         c if c == DEVICE_NOT_RESET => BackendError::DeviceNotReset,
+        c if c == NOT_AVAILABLE => BackendError::Unsupported(e.to_string()),
         _ => BackendError::Backend(e.to_string()),
     }
 }
@@ -78,7 +81,7 @@ struct Pipeline {
 
 /// An open Direct3D 9Ex device on the default adapter.
 pub struct D3d9Device {
-    // Kept so the factory outlives the device, as Direct3D 9 expects.
+    // Held for the device's lifetime; COM reference counting keeps the drop order safe.
     _d3d: IDirect3D9Ex,
     device: IDirect3DDevice9Ex,
     caps: Caps,
@@ -87,6 +90,8 @@ pub struct D3d9Device {
     pipeline: Pipeline,
     textures: Vec<IDirect3DTexture9>,
     meshes: Vec<Mesh>,
+    /// Bumped by `recover`, so handles from before it are rejected.
+    generation: u32,
     offscreen: Option<Offscreen>,
     frame: Option<FrameDesc>,
 }
@@ -207,6 +212,7 @@ impl D3d9Device {
                 pipeline,
                 textures: Vec::new(),
                 meshes: Vec::new(),
+                generation: 0,
                 offscreen: None,
                 frame: None,
             })
@@ -482,7 +488,10 @@ impl RenderBackend for D3d9Device {
         desc.validate(&self.caps)?;
         let t = Self::upload_texture(&self.device, desc.width, desc.height, &desc.rgba)?;
         self.textures.push(t);
-        Ok(TextureHandle(self.textures.len() as u32 - 1))
+        Ok(TextureHandle {
+            index: self.textures.len() as u32 - 1,
+            generation: self.generation,
+        })
     }
 
     fn create_mesh(&mut self, desc: &MeshDesc) -> Result<MeshHandle> {
@@ -548,7 +557,10 @@ impl RenderBackend for D3d9Device {
                 triangles: desc.indices.len() as u32 / 3,
             });
         }
-        Ok(MeshHandle(self.meshes.len() as u32 - 1))
+        Ok(MeshHandle {
+            index: self.meshes.len() as u32 - 1,
+            generation: self.generation,
+        })
     }
 
     fn begin_frame(&mut self, frame: &FrameDesc) -> Result<()> {
@@ -581,16 +593,19 @@ impl RenderBackend for D3d9Device {
             }
             self.set_frame_states()?;
             self.device.BeginScene().map_err(map_err)?;
-            self.device
-                .Clear(
-                    0,
-                    std::ptr::null(),
-                    (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) as u32,
-                    rgba_to_argb(frame.clear_rgba),
-                    1.0,
-                    0,
-                )
-                .map_err(map_err)?;
+            let cleared = self.device.Clear(
+                0,
+                std::ptr::null(),
+                (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) as u32,
+                rgba_to_argb(frame.clear_rgba),
+                1.0,
+                0,
+            );
+            if let Err(e) = cleared {
+                // Close the scene, or the next `begin_frame` could never open one.
+                let _ = self.device.EndScene();
+                return Err(map_err(e));
+            }
         }
         self.frame = Some(frame.clone());
         Ok(())
@@ -600,15 +615,14 @@ impl RenderBackend for D3d9Device {
         if self.frame.is_none() {
             return Err(BackendError::InvalidArgument("draw outside a frame".into()));
         }
-        let mesh = self
-            .meshes
-            .get(batch.mesh.0 as usize)
-            .ok_or_else(|| BackendError::InvalidArgument("unknown mesh".into()))?;
+        let m = batch.mesh;
+        let mesh =
+            &self.meshes[handle_index(m.index, m.generation, self.generation, self.meshes.len())?];
         let texture = match batch.texture {
-            Some(t) => self
-                .textures
-                .get(t.0 as usize)
-                .ok_or_else(|| BackendError::InvalidArgument("unknown texture".into()))?,
+            Some(t) => {
+                &self.textures
+                    [handle_index(t.index, t.generation, self.generation, self.textures.len())?]
+            }
             None => &self.pipeline.white,
         };
         let (test, blend) = match batch.alpha {
@@ -664,7 +678,9 @@ impl RenderBackend for D3d9Device {
 
     fn recover(&mut self) -> Result<()> {
         let (w, h) = self.window_size;
+        let generation = self.generation.wrapping_add(1);
         *self = Self::open_with(self.target, w, h)?;
+        self.generation = generation;
         Ok(())
     }
 }

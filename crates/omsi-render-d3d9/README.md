@@ -23,8 +23,10 @@ the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 
 ### Choices worth knowing
 
-* **Direct3D 9Ex**, not plain 9: Depot needs Windows 10+, where 9Ex is always present and
-  resources survive occlusion and mode changes. Only a removed device is rebuilt.
+* **Direct3D 9Ex**, not plain 9: this crate needs Windows 10 or later (the minimum of Rust's
+  Windows targets since Rust 1.78), where 9Ex is always present and resources survive
+  occlusion and mode changes. Only a removed device is rebuilt. This is a requirement of the
+  crate, not a statement about the platforms Depot supports.
 * The device is created with `D3DCREATE_FPU_PRESERVE`, so Direct3D does not switch the
   thread's x87 unit to single precision behind the simulation's back.
 * **Alpha test and blending are render states**, applied after the pixel shader, as Direct3D
@@ -33,6 +35,11 @@ the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 * Culling is off until the meshes' winding is settled with the content loader.
 * Shaders are compiled when the device opens (two small shaders, milliseconds). A cache on disk
   can come when there are more of them; nothing generated is committed.
+* `d3dcompiler_47.dll` is bound at load time through the normal DLL search order. Before this
+  crate is wired into the game it must be loaded explicitly from the system directory, so the
+  game does not pick up a copy planted next to it.
+* Resources are never freed yet (textures and meshes only grow); freeing comes with the
+  scene-level interface.
 
 ## Dependencies and provenance
 
@@ -47,8 +54,14 @@ workspace version, with the Direct3D 9, Direct3D (blob), FXC (compiler) and GDI 
 * compiles every shader for `vs_3_0`/`ps_3_0` (CPU only, so it runs on CI without a GPU), and
 * runs device tests that draw small scenes off-screen and check the pixels: clear, texture
   times tint, untextured batches, alpha test at the reference, blend, depth order and the
-  matrix layout. They skip themselves without a Direct3D 9Ex driver with Shader Model 3.0;
-  the log says which adapter ran them.
+  matrix layout, and `recover` rejecting old handles. They skip themselves only when there is
+  no Direct3D 9Ex driver or the device is below the floor; any other failure to open fails
+  them. The log says which adapter ran them.
+
+Verified on the maintainer's PC (Intel UHD 630, 16/16 at the first phase-1 head): the shader
+compile tests and the off-screen device tests; the window example opened. **Not covered by
+any test:** `resize`, the window swap chain and present, `status` on a lost or occluded
+device, and `recover` after a real device removal (it cannot be forced portably).
 
 ## Next steps
 

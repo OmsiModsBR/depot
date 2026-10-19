@@ -4,10 +4,39 @@
 
 use crate::{BackendError, Caps, Result};
 
+/// A texture of a backend. Carries the device generation it was made in, so a handle from
+/// before [`RenderBackend::recover`] is rejected instead of naming a new resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureHandle(pub u32);
+pub struct TextureHandle {
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
+}
+
+/// A mesh of a backend; see [`TextureHandle`] for the generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MeshHandle(pub u32);
+pub struct MeshHandle {
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
+}
+
+/// Checks a handle's parts against a backend's current generation and resource count.
+pub(crate) fn handle_index(
+    index: u32,
+    generation: u32,
+    current: u32,
+    count: usize,
+) -> Result<usize> {
+    if generation != current {
+        return Err(BackendError::InvalidArgument(
+            "handle from before the device was recovered".into(),
+        ));
+    }
+    let i = index as usize;
+    if i >= count {
+        return Err(BackendError::InvalidArgument("unknown handle".into()));
+    }
+    Ok(i)
+}
 
 /// The alpha handling of a material, as the content declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +157,7 @@ pub struct NullBackend {
     caps: Caps,
     textures: u32,
     meshes: u32,
+    generation: u32,
     in_frame: Option<FrameDesc>,
     pub batches_drawn: usize,
     pub lost: bool,
@@ -139,6 +169,7 @@ impl NullBackend {
             caps,
             textures: 0,
             meshes: 0,
+            generation: 0,
             in_frame: None,
             batches_drawn: 0,
             lost: false,
@@ -163,20 +194,30 @@ impl RenderBackend for NullBackend {
         self.check_alive()?;
         desc.validate(&self.caps)?;
         self.textures += 1;
-        Ok(TextureHandle(self.textures - 1))
+        Ok(TextureHandle {
+            index: self.textures - 1,
+            generation: self.generation,
+        })
     }
 
     fn create_mesh(&mut self, desc: &MeshDesc) -> Result<MeshHandle> {
         self.check_alive()?;
         desc.validate(&self.caps)?;
         self.meshes += 1;
-        Ok(MeshHandle(self.meshes - 1))
+        Ok(MeshHandle {
+            index: self.meshes - 1,
+            generation: self.generation,
+        })
     }
 
     fn begin_frame(&mut self, frame: &FrameDesc) -> Result<()> {
         self.check_alive()?;
         if self.in_frame.is_some() {
             return Err(BackendError::InvalidArgument("frame already begun".into()));
+        }
+        let max = self.caps.max_texture_size;
+        if frame.width == 0 || frame.height == 0 || frame.width.max(frame.height) > max {
+            return Err(BackendError::InvalidArgument("target size".into()));
         }
         self.in_frame = Some(frame.clone());
         Ok(())
@@ -187,8 +228,19 @@ impl RenderBackend for NullBackend {
         if self.in_frame.is_none() {
             return Err(BackendError::InvalidArgument("draw outside a frame".into()));
         }
-        if batch.mesh.0 >= self.meshes || batch.texture.is_some_and(|t| t.0 >= self.textures) {
-            return Err(BackendError::InvalidArgument("unknown handle".into()));
+        handle_index(
+            batch.mesh.index,
+            batch.mesh.generation,
+            self.generation,
+            self.meshes as usize,
+        )?;
+        if let Some(t) = batch.texture {
+            handle_index(
+                t.index,
+                t.generation,
+                self.generation,
+                self.textures as usize,
+            )?;
         }
         self.batches_drawn += 1;
         Ok(())
@@ -209,12 +261,13 @@ impl RenderBackend for NullBackend {
             .iter()
             .copied()
             .cycle()
-            .take((f.width * f.height * 4) as usize)
+            .take(f.width as usize * f.height as usize * 4)
             .collect())
     }
 
     fn recover(&mut self) -> Result<()> {
         self.lost = false;
+        self.generation += 1;
         self.textures = 0;
         self.meshes = 0;
         self.in_frame = None;
@@ -278,7 +331,7 @@ mod tests {
         .unwrap();
         b.draw(&batch).unwrap();
         let bad = DrawBatch {
-            mesh: MeshHandle(9),
+            mesh: MeshHandle { index: 9, ..m },
             ..batch
         };
         assert!(b.draw(&bad).is_err());
@@ -320,5 +373,48 @@ mod tests {
         ));
         b.recover().unwrap();
         assert!(b.create_mesh(&tri()).is_ok());
+    }
+
+    #[test]
+    fn handles_from_before_recovery_are_rejected() {
+        let mut b = backend();
+        let old = b.create_mesh(&tri()).unwrap();
+        b.recover().unwrap();
+        let new = b.create_mesh(&tri()).unwrap();
+        assert_eq!(old.index, new.index, "same slot, different generation");
+        b.begin_frame(&FrameDesc {
+            width: 1,
+            height: 1,
+            clear_rgba: [0.0; 4],
+        })
+        .unwrap();
+        let batch = |mesh| DrawBatch {
+            mesh,
+            texture: None,
+            alpha: AlphaMode::Opaque,
+            mvp: [0.0; 16],
+            tint: [1.0; 4],
+        };
+        assert!(b.draw(&batch(old)).is_err());
+        b.draw(&batch(new)).unwrap();
+    }
+
+    #[test]
+    fn frame_size_is_checked() {
+        let mut b = backend();
+        assert!(b
+            .begin_frame(&FrameDesc {
+                width: 0,
+                height: 1,
+                clear_rgba: [0.0; 4]
+            })
+            .is_err());
+        assert!(b
+            .begin_frame(&FrameDesc {
+                width: 4096,
+                height: 1,
+                clear_rgba: [0.0; 4]
+            })
+            .is_err());
     }
 }

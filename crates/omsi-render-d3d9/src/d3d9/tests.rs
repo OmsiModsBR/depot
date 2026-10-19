@@ -16,10 +16,13 @@ fn device() -> Option<D3d9Device> {
             eprintln!("D3D9Ex adapter: {:?}", dev.caps());
             Some(dev)
         }
-        Err(e) => {
-            eprintln!("no usable Direct3D 9Ex device here ({e}); skipping");
+        // Only a missing driver or a device below the floor skips; any other failure to
+        // open is a real failure.
+        Err(BackendError::Unsupported(why)) => {
+            eprintln!("no usable Direct3D 9Ex device here ({why}); skipping");
             None
         }
+        Err(e) => panic!("opening the device failed: {e}"),
     }
 }
 
@@ -195,13 +198,19 @@ fn bad_handles_and_frames_are_rejected() {
     );
     assert!(dev
         .draw(&DrawBatch {
-            mesh: MeshHandle(99),
+            mesh: MeshHandle {
+                index: 99,
+                generation: dev.generation
+            },
             ..batch.clone()
         })
         .is_err());
     assert!(dev
         .draw(&DrawBatch {
-            texture: Some(TextureHandle(99)),
+            texture: Some(TextureHandle {
+                index: 99,
+                generation: dev.generation
+            }),
             ..batch
         })
         .is_err());
@@ -238,4 +247,27 @@ fn transform_is_column_major() {
             }
         }
     }
+}
+
+#[test]
+fn recover_rebuilds_the_device_and_rejects_old_handles() {
+    let Some(mut dev) = device() else { return };
+    let old = dev.create_mesh(&quad(0.5)).unwrap();
+    dev.recover().unwrap();
+    dev.status().expect("rebuilt device is usable");
+    let new = dev.create_mesh(&quad(0.5)).unwrap();
+    dev.begin_frame(&frame([0., 0., 0., 1.])).unwrap();
+    let batch = |mesh| DrawBatch {
+        mesh,
+        texture: None,
+        alpha: AlphaMode::Opaque,
+        mvp: IDENTITY,
+        tint: [0., 1., 0., 1.],
+    };
+    assert!(
+        dev.draw(&batch(old)).is_err(),
+        "a handle from before recover is rejected"
+    );
+    dev.draw(&batch(new)).unwrap();
+    assert!(all_near(&dev.end_frame().unwrap(), [0, 255, 0, 255], 1));
 }
