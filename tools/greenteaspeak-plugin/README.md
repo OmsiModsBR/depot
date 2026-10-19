@@ -18,7 +18,7 @@ through GreenTeaSpeak* switches it off in the game.
 
 ## For server owners
 
-In `server.cfg` (a dedicated server) or `~/.openomsi/voice.cfg` (a game hosting by code):
+In `server.cfg` (a dedicated server) or `~/.depot/voice.cfg` (a game hosting by code):
 
 ```
 voice_server_uid = abcdEFGH1234abcdEFGH1234abc=
@@ -41,7 +41,7 @@ hear them through proximity. The channel's password is sent to every player who 
 The plugin listens on `127.0.0.1:38088` (its storage key `port` changes that; this machine
 only). The game connects and sends one JSON object a line.
 
-The first line is `hello` with `key`: the contents of `~/.openomsi/voice-plugin.key`, which
+The first line is `hello` with `key`: the contents of `~/.depot/voice-plugin.key`, which
 the game makes the first time it looks for the plugin (the storage key `keyFile` names
 another file). A connection whose first line is not that - a web page posting to the port,
 anything that looks like HTTP - is hung up on before anything of it is done. The plugin

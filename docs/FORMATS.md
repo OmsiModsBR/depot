@@ -683,7 +683,8 @@ onlytypes end types_prefered number_tour.
   map's `global.cfg`, a `.bus`/`.ovh` or a `.owt`, in a file named after the stem:
   `global_ENG.dsc` beside `global.cfg`. The German text is the file's own description, so
   only other languages have a `.dsc`, and a language without one falls back to `_ENG`. They
-  are Latin-1 like the rest, except that some were saved as UTF-16 with a byte-order mark.
+  are read like the other text files, in the code page their author wrote them in, and some
+  were saved as UTF-16 with a byte-order mark (`omsi_content::Dsc`).
 * Sound conditions: `[conditionSingle]` / `[conditionInt]` give the variable, the **value**
   and then the relation - 0 `<>`, 1 `=`, 2 `<`, 3 `>`, 4 `<=`, 5 `>=` (`engine_n 200 3` =
   the engine runs, `velocity 2 2` = standing); `[conditionBool]` has no relation and
@@ -724,7 +725,7 @@ most mods, 1 while it plays (no sound.cfg uses it); the Sound Extension plugin's
 `SndExt_Radio` - the station button pressed (1..n, 0 = off; the W906 Sprinter and the
 Procity show their own station names for it) with `SndVol_Radio` - the volume knob (0..1,
 the Sprinter's goes to 2) and `SndExt_RadioPlaylist` for its USB/CD modes. Project Depot
-plays internet stations for them (`~/.openomsi/radio.cfg`). Streams in HE-AAC with a
+plays internet stations for them (`~/.depot/radio.cfg`). Streams in HE-AAC with a
 program config element (some `.aacp` stations) are not decoded; MP3, AAC-LC and Ogg are.
 
 A radio whose display is a text of its script gets the station and the song that play,

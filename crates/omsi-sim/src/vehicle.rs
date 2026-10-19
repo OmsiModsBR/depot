@@ -1,8 +1,8 @@
 //! A road vehicle: its type (definition + compiled scripts + model) and instances.
 
-use crate::particles::ParticleSet;
 use crate::anim::MeshAnimator;
 use crate::host::VehicleHost;
+use crate::particles::ParticleSet;
 use crate::physics::{Controls, Dynamics, KinematicModel, VehicleMotion};
 use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
@@ -10,34 +10,34 @@ use omsi_script::{State, Vm};
 use std::sync::Arc;
 
 mod ai_frame;
-mod articulation;
+pub(crate) mod articulation;
 mod builtins;
-mod motion;
-mod physics_bridge;
+pub(crate) mod motion;
+pub(crate) mod physics_bridge;
 mod pose;
-mod props;
-mod radio;
-mod scripts;
+pub(crate) mod props;
+pub(crate) mod radio;
+pub(crate) mod scripts;
 mod skin;
-mod trailer;
-mod vehicle_type;
-mod visuals;
-mod weather;
-mod winding;
+pub(crate) mod trailer;
+pub(crate) mod vehicle_type;
+pub(crate) mod visuals;
+pub(crate) mod weather;
+pub(crate) mod winding;
 
-use props::PropsPlan;
 pub use ai_frame::AiFrame;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
+use props::PropsPlan;
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
-pub use trailer::{body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart};
+pub use trailer::{
+    body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart,
+};
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
 pub use weather::{relative_humidity, road_grip};
 
 use physics_bridge::OmsiFrames;
-#[cfg(test)]
-use physics_bridge::scripts_acceleration;
 
 pub struct VehicleInstance {
     /// `A_Trans_*` taken over OMSI's frames (see [`OmsiFrames`]).
@@ -72,7 +72,7 @@ pub struct VehicleInstance {
     pub ground: Option<std::sync::Arc<dyn Fn(f64, f64) -> Option<f64> + Send + Sync>>,
     /// What the wheels stand on: the highest face at or below a height and the lowest one
     /// above it. Without it the wheels stand on `ground`.
-    pub contact: Option<std::sync::Arc<dyn crate::rigid::Ground>>,
+    pub contact: Option<std::sync::Arc<dyn crate::physics::Ground>>,
     /// Vehicles coupled behind this one.
     pub trailers: Vec<TrailerPart>,
     /// How many coupled parts the lead body's rest loads were worked out for (`step_bodies`).
@@ -125,7 +125,7 @@ pub struct VehicleInstance {
     /// The AI odometer at the last `update_ai` (the wheels roll the difference).
     ai_odometer: f32,
     /// Kilometres driven this session (the odometer's `kmcounter_*`).
-    driven_km: f64,
+    pub(crate) driven_km: f64,
     /// The odometer's start was set from `[kmcounter_init]` (see `update_engine_vars`).
     km_started: bool,
     /// The cabin air as the engine keeps it (°C, g/m³), and the value last written, so that
@@ -137,7 +137,7 @@ pub struct VehicleInstance {
     /// the coupled parts and the scripts still run every frame.
     pub ai_visuals: bool,
     ai_visuals_missed: f32,
-    var_index: HashMap<String, omsi_script::VarId>,
+    pub(crate) var_index: HashMap<String, omsi_script::VarId>,
     /// Where each mesh's material properties come from, resolved against `var_index`
     /// (rebuilt when the vehicle gains engine variables).
     props_plan: PropsPlan,
@@ -322,18 +322,7 @@ impl VehicleInstance {
                 ]
             })
             .collect();
-        let rest_sag: Vec<(f32, f32)> = {
-            let rb = crate::rigid::RigidBody::from_definition(&ty.def, &ty.hub_heights(0));
-            (0..motion.wheels.len())
-                .map(|a| {
-                    let w = &rb.wheels[a * 2];
-                    (
-                        w.rest_compression().min(crate::rigid::BUMP),
-                        w.radius - w.attach.z,
-                    )
-                })
-                .collect()
-        };
+        let rest_sag = crate::physics::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
         // An AI copy has no rigid body: it stands on the contact plane of its wheels
         // (`ai::AiBody`), and what the modelled tyre reaches below its hub less than
         // the model thinks lifts it. An axle the model does not move with `Axle_Suspension`
@@ -355,7 +344,10 @@ impl VehicleInstance {
         };
         VehicleInstance {
             a_trans: OmsiFrames::default(),
-            particles: ParticleSet::new(ty.model.particle_systems(), std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9),
+            particles: ParticleSet::new(
+                ty.model.particle_systems(),
+                std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9,
+            ),
             light_fade: Vec::new(),
             v_springfactor,
             rest_sag,
@@ -373,7 +365,14 @@ impl VehicleInstance {
             v_brakeforce: v("Brakeforce"),
             v_clutch: v("Clutch").or_else(|| v("clutch_pedal")),
             v_pax_req: (0..PAX_DOORS)
-                .flat_map(|i| [format!("PAX_Entry{i}_Req"), format!("PAX_Exit{i}_Req"), format!("PAX_Entry{i}_Busy"), format!("PAX_Exit{i}_Busy")])
+                .flat_map(|i| {
+                    [
+                        format!("PAX_Entry{i}_Req"),
+                        format!("PAX_Exit{i}_Req"),
+                        format!("PAX_Entry{i}_Busy"),
+                        format!("PAX_Exit{i}_Busy"),
+                    ]
+                })
                 .filter_map(|n| v(&n))
                 .collect(),
             v_accel: [v("A_Trans_X"), v("A_Trans_Y"), v("A_Trans_Z")],
@@ -475,11 +474,19 @@ impl VehicleInstance {
     /// the body's vertical acceleration and its roll and pitch at the seat's place (the
     /// driver's camera) push a spring (3000) and damper (2000) on 150 kg; ±10 cm at most.
     fn update_driver_seat(&mut self, dt: f32) {
-        let Some(id) = self.ty.program.var("Driver_Seat_VertTransl") else { return };
+        let Some(id) = self.ty.program.var("Driver_Seat_VertTransl") else {
+            return;
+        };
         if dt <= 0.0 {
             return;
         }
-        let seat = self.ty.def.cameras_driver.first().map(|c| c.pos).unwrap_or([0.0; 3]);
+        let seat = self
+            .ty
+            .def
+            .cameras_driver
+            .first()
+            .map(|c| c.pos)
+            .unwrap_or([0.0; 3]);
         let (acc_z, omega) = match self.rigid() {
             Some(rb) => (rb.accel_body.z - 9.81, rb.omega),
             None => (0.0, Vec3::ZERO),
@@ -570,7 +577,7 @@ impl VehicleInstance {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
             let under = contact
                 .as_ref()
-                .and_then(|c| crate::rigid::Ground::probe(&**c, w.x, w.y, w.z).below)
+                .and_then(|c| crate::physics::Ground::probe(&**c, w.x, w.y, w.z).below)
                 .or_else(|| g(w.x, w.y));
             match under {
                 Some(h) => (w.z - h) as f32,
@@ -587,6 +594,3 @@ impl VehicleInstance {
             .unwrap_or(true)
     }
 }
-
-#[cfg(test)]
-mod tests;

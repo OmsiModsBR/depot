@@ -125,7 +125,7 @@ fn descending_object_path_joins_do_not_lift_the_rear_axle() {
                 .collect();
             let ground = |_x: f64, y: f64, top: f64| {
                 let z = 10.0 - 0.03 * y;
-                omsi_sim::rigid::GroundProbe {
+                omsi_sim::physics::GroundProbe {
                     below: (z <= top).then_some(z),
                     above: None,
                 }

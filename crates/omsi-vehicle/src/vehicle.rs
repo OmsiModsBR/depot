@@ -118,7 +118,10 @@ pub struct Vehicle {
     pub view_ticketselling: Option<usize>,
     pub camera_std: usize,
     pub camera_outside_center: [f32; 3],
+    /// `[mass]` as the file gives it (in tonnes, as OMSI reads it).
     pub mass: f32,
+    /// The file has no `[mass]`: OMSI weighs it at 1 t (`mass` keeps this parser's 1000).
+    pub mass_missing: bool,
     pub moment_of_inertia: [f32; 3],
     pub bounding_box: Option<[f32; 6]>,
     /// `[cog]`: centre of gravity (x right, y forward, z up) of the physics object.
@@ -342,6 +345,7 @@ impl Vehicle {
                 VehicleKind::Bus
             },
             mass: 1000.0,
+            mass_missing: true,
             ..Default::default()
         };
         let base = file.dir().to_path_buf();
@@ -415,7 +419,10 @@ impl Vehicle {
                 }
                 "set_camera_std" => v.camera_std = r.usize(),
                 "set_camera_outside_center" => v.camera_outside_center = r.f32s::<3>(),
-                "mass" => v.mass = r.f32(),
+                "mass" => {
+                    v.mass = r.f32();
+                    v.mass_missing = false;
+                }
                 "momentofintertia" => v.moment_of_inertia = r.f32s::<3>(),
                 "boundingbox" => {
                     // (the sizes as magnitudes: a mod's box given -2.62 m wide crossed the
@@ -741,7 +748,9 @@ mod tests {
             (-2.577, 2.4, 1.4, 1.023, 280.0, 116.0, 20.0, true, 0.015)
         );
         assert_eq!(v.mass, 10.9);
+        assert!(!v.mass_missing);
         assert_eq!(v.cog, Some([0.0, 0.2, 0.8]));
+        assert!(Vehicle::parse(&CfgFile::from_str("x.bus", "[schwerpunkt]\n1.2\n")).mass_missing);
     }
 
     /// `[add_camera_reflexion_static]` is one more reflection camera, numbered with the

@@ -3,6 +3,7 @@
 //! where the device takes block formats and the result is close enough, RGBA otherwise.
 
 use crate::bc::{self, Bc};
+use crate::dds::DdsHeader;
 use crate::{Image, TextureError};
 use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -381,38 +382,28 @@ pub fn prepare_single_level(img: Image, alpha_only: bool) -> (TextureData, Prepa
     )
 }
 
-fn u32_at(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
-
 /// A DDS file with DXT blocks as it is: (format, width, height, levels found in the file,
 /// offset of the data). None for anything else.
 fn dds_blocks(bytes: &[u8]) -> Option<(PixelFormat, u32, u32, u32, usize)> {
-    if bytes.len() < 128 || &bytes[..4] != b"DDS " {
-        return None;
-    }
-    let flags = u32_at(bytes, 8);
-    let height = u32_at(bytes, 12);
-    let width = u32_at(bytes, 16);
-    let mips = u32_at(bytes, 28);
-    let pf_flags = u32_at(bytes, 80);
-    let fourcc = &bytes[84..88];
+    let h = DdsHeader::parse(bytes)?;
+    let (flags, height, width, mips) = (h.flags, h.height, h.width, h.mips);
     // (a cube map is made into a sphere map by the decoder, never passed on as blocks)
-    if pf_flags & 0x4 == 0 || u32_at(bytes, 112) & 0x200 != 0 {
+    if h.pf_flags & 0x4 == 0 || h.caps2 & 0x200 != 0 {
         return None;
     }
-    let (format, offset) = match fourcc {
-        b"DXT1" => (PixelFormat::Bc1, 128),
-        b"DXT2" | b"DXT3" => (PixelFormat::Bc2, 128),
-        b"DXT4" | b"DXT5" => (PixelFormat::Bc3, 128),
-        b"DX10" if bytes.len() >= 148 => match u32_at(bytes, 128) {
-            70..=72 => (PixelFormat::Bc1, 148),
-            73..=75 => (PixelFormat::Bc2, 148),
-            76..=78 => (PixelFormat::Bc3, 148),
+    let format = match &h.fourcc {
+        b"DXT1" => PixelFormat::Bc1,
+        b"DXT2" | b"DXT3" => PixelFormat::Bc2,
+        b"DXT4" | b"DXT5" => PixelFormat::Bc3,
+        b"DX10" => match h.dxgi? {
+            70..=72 => PixelFormat::Bc1,
+            73..=75 => PixelFormat::Bc2,
+            76..=78 => PixelFormat::Bc3,
             _ => return None,
         },
         _ => return None,
     };
+    let offset = h.data_start;
     if width == 0
         || height == 0
         || width as usize > crate::MAX_DIMENSION

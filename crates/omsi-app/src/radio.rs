@@ -5,7 +5,7 @@
 //! knob). Here those variables tune in a list of internet stations, streamed while they
 //! play (see `omsi_audio::radio`); Shift+R steps through the list.
 //!
-//! The stations are kept in `~/.openomsi/radio.cfg`, one `name = address` per line
+//! The stations are kept in `~/.depot/radio.cfg`, one `name = address` per line
 //! (MP3, AAC or Ogg streams, or .m3u/.pls playlists), with `volume = 0..1`; the file is
 //! written with a default list the first time. A map can bring stations of its own: a
 //! `radio.cfg` of the same kind beside its global.cfg, whose stations come before the
@@ -108,8 +108,7 @@ pub(crate) fn save_stations(list: &[(String, String)]) -> std::io::Result<()> {
 }
 
 fn config_path() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("radio.cfg"))
+    Some(omsi_cfg::paths::data_dir()?.join("radio.cfg"))
 }
 
 /// The stream addresses an OMSI radio plugin keeps in its text files under `plugins`
@@ -235,7 +234,7 @@ fn parse_stations(text: &str) -> (Vec<(String, String)>, Option<f32>, Frequencie
 fn map_stations(map_cfg: &std::path::Path) -> (Vec<(String, String)>, Frequencies) {
     let Some(dir) = map_cfg.parent() else { return Default::default() };
     let Ok(bytes) = omsi_cfg::vfs::read(&dir.join("radio.cfg")) else { return Default::default() };
-    let (stations, _, frequencies) = parse_stations(&omsi_cfg::codepage::decode(&bytes));
+    let (stations, _, frequencies) = parse_stations(&omsi_cfg::decode_text(&bytes));
     (stations, frequencies)
 }
 

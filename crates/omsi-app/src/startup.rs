@@ -88,12 +88,12 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 }
 
 /// The keys held with `modifier` (a chord: `KEY_SHIFT` …) that the file in use binds otherwise than OMSI 2's
-/// own assignment ([`crate::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
+/// own assignment ([`omsi_content::input::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else { return Default::default() };
-    let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
+    let stock: std::collections::HashSet<(String, i32, i32)> = omsi_content::input::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
     m.vehicles
         .iter()
         .chain(m.game.iter())
@@ -118,26 +118,23 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
     if !omsi_cfg::is_programs_folder(&cand) && (cand.exists() || std::fs::create_dir_all(&cand).is_ok()) && omsi_cfg::is_writable(&cand) {
         Some(cand)
     } else {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        let fallback = PathBuf::from(home).join(".depot").join("content");
+        let fallback = omsi_cfg::paths::data_dir()?.join("content");
         let _ = omsi_cfg::ensure_content_layout(&fallback);
         Some(fallback)
     }
 }
 
-/// Where a save goes when the content folder takes none (`~/.openomsi/content`): a game
+/// Where a save goes when the content folder takes none (`~/.depot/content`): a game
 /// unpacked into Program Files, or a folder Windows' controlled folder access guards, said
 /// "Could not save: access is denied (os error 5)" (#1673). The launcher lists the saves
 /// there as well.
 pub(crate) fn save_fallback_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("content"))
+    Some(omsi_cfg::paths::data_dir()?.join("content"))
 }
 
 /// Where the last working installation was remembered.
 pub(crate) fn root_memo() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot-root"))
+    omsi_cfg::paths::root_memo()
 }
 
 /// Find the OMSI 2 installation without being told where it is.
@@ -152,8 +149,8 @@ pub(crate) fn find_root() -> Option<PathBuf> {
         }
     }
     // the folder the launcher was told about (Setup)
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".depot/launcher.json")) {
+    if let Some(data) = omsi_cfg::paths::data_dir() {
+        if let Ok(t) = std::fs::read_to_string(data.join("launcher.json")) {
             if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
                 first.push(r);
             }

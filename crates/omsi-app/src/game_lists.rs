@@ -2203,6 +2203,8 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "ai_unsched_factor" => vec![("25", "25%"), ("50", "50%"), ("75", "75%"), ("100", "100%"), ("150", "150%"), ("200", "200%")],
         "ai_max_scheduled" => vec![("0", "All"), ("10", "At most 10"), ("25", "At most 25"), ("50", "At most 50")],
         "ai_max_parked" => vec![("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")],
+        "autosave_minutes" => vec![("0", "Off"), ("2", "Every 2 minutes"), ("5", "Every 5 minutes"), ("10", "Every 10 minutes"), ("15", "Every 15 minutes")],
+        "ai_max_humans" => vec![("50", "At most 50"), ("100", "At most 100"), ("200", "At most 200"), ("400", "At most 400"), ("800", "At most 800")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
         "vr_scale" => vec![("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")],
         "vr_head_smoothing_ms" => vec![("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")],
@@ -2315,6 +2317,8 @@ fn options_pages(app: &App) -> Vec<Page> {
         pick("ai_unsched_factor", "Random traffic", later),
         pick("ai_max_scheduled", "Timetable vehicles", later),
         pick("ai_max_parked", "Parked cars", later),
+        pick("autosave_minutes", "Autosave", "How often the last situation is saved automatically while you play"),
+        pick("ai_max_humans", "People", "The most people in the world at once: waiting at stops, walking or riding. Takes effect when the game starts the next time"),
     ]
         .into_iter()
         .flatten()
@@ -2799,7 +2803,7 @@ static PENDING_SETTINGS: std::sync::Mutex<(Vec<(String, String)>, Option<std::ti
 const SETTINGS_FLUSH_MS: u128 = 250;
 static SETTINGS_CACHE: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
-/// Write one key of `~/.openomsi/settings.cfg` (the launcher's file; the other lines
+/// Write one key of `~/.depot/settings.cfg` (the launcher's file; the other lines
 /// stay as they are). The write is delayed a moment and joined with the ones that follow.
 /// The key the seat of the player's bus is kept under (`settings::bus_seats`): its `.bus`
 /// file, relative to the installation where it lies in it.

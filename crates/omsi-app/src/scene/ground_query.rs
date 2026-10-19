@@ -30,7 +30,7 @@ pub fn drive_probe(
     x: f64,
     y: f64,
     top: f64,
-) -> omsi_sim::rigid::GroundProbe {
+) -> omsi_sim::physics::GroundProbe {
     let key = tile_key(x, y);
     let surface = surfaces.read().get(&key).cloned();
     let terrain = terrains.read().get(&key).cloned();
@@ -52,7 +52,7 @@ pub(super) fn probe_tile(
     x: f64,
     y: f64,
     top: f64,
-) -> omsi_sim::rigid::GroundProbe {
+) -> omsi_sim::physics::GroundProbe {
     let lx = (x - key.0 as f64 * tile_size()) as f32;
     let ly = (y - key.1 as f64 * tile_size()) as f32;
     let mut probe = omsi_geometry::Probe::default();
@@ -123,7 +123,7 @@ pub(super) fn probe_tile(
             }
         }
     }
-    omsi_sim::rigid::GroundProbe {
+    omsi_sim::physics::GroundProbe {
         below: probe.below.map(|z| z as f64),
         above: probe.above.map(|z| z as f64),
     }
@@ -177,15 +177,15 @@ pub struct DriveGround {
 
 type TileRefs = ((i32, i32), Option<Arc<TileSurface>>, Option<Arc<Terrain>>);
 
-impl omsi_sim::rigid::Ground for DriveGround {
-    fn probe(&self, x: f64, y: f64, top: f64) -> omsi_sim::rigid::GroundProbe {
+impl omsi_sim::physics::Ground for DriveGround {
+    fn probe(&self, x: f64, y: f64, top: f64) -> omsi_sim::physics::GroundProbe {
         drive_probe(&self.terrains, &self.surfaces, x, y, top)
     }
 
     /// The tiles under the vehicle are looked up once per step, not twice for every one of
     /// the few hundred points its tyres ask for (each a lock of both maps the loader works
     /// on, two lookups and two reference counts).
-    fn session(&self) -> Box<dyn Fn(f64, f64, f64) -> omsi_sim::rigid::GroundProbe + '_> {
+    fn session(&self) -> Box<dyn Fn(f64, f64, f64) -> omsi_sim::physics::GroundProbe + '_> {
         let tiles: std::cell::RefCell<Vec<TileRefs>> =
             std::cell::RefCell::new(Vec::with_capacity(4));
         Box::new(move |x, y, top| {

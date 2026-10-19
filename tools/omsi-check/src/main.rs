@@ -168,8 +168,8 @@ fn check_scripts(root: &Path, verbose: bool) {
     let program_root = if root.join("program").is_dir() {
         root.to_path_buf()
     } else {
-        std::env::var_os("HOME")
-            .and_then(|h| std::fs::read_to_string(Path::new(&h).join(".openomsi-root")).ok())
+        omsi_cfg::paths::root_memo()
+            .and_then(|memo| std::fs::read_to_string(memo).ok())
             .map(|s| PathBuf::from(s.trim()))
             .filter(|p| p.join("program").is_dir())
             .unwrap_or_else(|| root.to_path_buf())
@@ -793,9 +793,9 @@ fn check_misc(root: &Path, verbose: bool) {
         Ok(_) => errors.push("keyboard.cfg: empty".into()),
         Err(e) => errors.push(e.to_string()),
     }
-    if let Err(e) = omsi_content::input::load_game_controllers(&root.join("Inputs/gamectrler.cfg"))
-    {
-        errors.push(e.to_string());
+    let gamectrler = root.join("Inputs/gamectrler.cfg");
+    if let Err(e) = omsi_content::input::gamectrler::read(&gamectrler) {
+        errors.push(format!("{}: {e}", gamectrler.display()));
     }
     match omsi_content::Options::load(&root.join("options.cfg")) {
         Ok(o) if o.values.len() > 10 => {}

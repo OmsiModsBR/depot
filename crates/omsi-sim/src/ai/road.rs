@@ -22,7 +22,11 @@ impl AiBody {
             // spawned, or put somewhere else: stand on the way, straight
             let ahead = way(self.rot_long + 2.0).truncate();
             let d = ahead - target;
-            self.heading = if d.length() > 1e-3 { d.x.atan2(d.y).to_degrees() } else { self.heading };
+            self.heading = if d.length() > 1e-3 {
+                d.x.atan2(d.y).to_degrees()
+            } else {
+                self.heading
+            };
             self.rear = target;
             self.steer = 0.0;
             self.steer_cmd = 0.0;
@@ -32,22 +36,36 @@ impl AiBody {
         let right = DVec2::new(fwd.y, -fwd.x);
         // the planner's position along the way leads; the body keeps up with it
         let along = (target - self.rear).dot(fwd) as f32;
-        let v = if speed < 0.02 && along.abs() < 0.05 { 0.0 } else { (speed + 1.5 * along).clamp(0.0, speed + 3.0) };
+        let v = if speed < 0.02 && along.abs() < 0.05 {
+            0.0
+        } else {
+            (speed + 1.5 * along).clamp(0.0, speed + 3.0)
+        };
         let look = (1.2 * self.wheelbase).max(3.5) + 0.6 * speed.min(20.0);
         let g = way(self.rot_long + look).truncate() - self.rear;
-        let alpha = (g.dot(right) as f32).atan2(g.dot(fwd) as f32).clamp(-FRAC_PI_2, FRAC_PI_2);
+        let alpha = (g.dot(right) as f32)
+            .atan2(g.dot(fwd) as f32)
+            .clamp(-FRAC_PI_2, FRAC_PI_2);
         let reach = (g.length() as f32).max(1.0);
         // The way itself says how tight it bends here: a junction's turn laid tighter than
         // the model's `[inv_min_turnradius]` still has to be followed - capped at the
         // model's lock the car ran wide of it, through the kerb, the corner house and the
         // people on the pavement (#249; OMSI's AI keeps to its path). The lock the bend
         // needs, and a little more, is allowed, and the wheel may turn that much faster.
-        let (a, b, c) = (way(self.rot_long).truncate(), way(self.rot_long + 0.5 * look).truncate(), way(self.rot_long + look).truncate());
+        let (a, b, c) = (
+            way(self.rot_long).truncate(),
+            way(self.rot_long + 0.5 * look).truncate(),
+            way(self.rot_long + look).truncate(),
+        );
         let (u, w) = (b - a, c - b);
         let turn = (u.x * w.y - u.y * w.x).atan2(u.dot(w)).abs() as f32;
         let bend_k = if look > 0.1 { 2.0 * turn / look } else { 0.0 };
         let need = (bend_k * self.wheelbase).atan().to_degrees() * 1.15;
-        let limit = if omsi_cfg::flags::AI_MODEL_LOCK.is_set() { self.max_steer } else { self.max_steer.max(need.min(60.0)) };
+        let limit = if omsi_cfg::flags::AI_MODEL_LOCK.is_set() {
+            self.max_steer
+        } else {
+            self.max_steer.max(need.min(60.0))
+        };
         // OMSI_DEBUG_AI_WIDE: every tenth of a second a car stands over 1.5 m beside its way
         if omsi_cfg::flags::DEBUG_AI_WIDE.is_set() {
             let off = ((target - self.rear).dot(right)).abs();
@@ -59,7 +77,10 @@ impl AiBody {
                 }
             }
         }
-        let want = (2.0 * self.wheelbase * alpha.sin() / reach).atan().to_degrees().clamp(-limit, limit);
+        let want = (2.0 * self.wheelbase * alpha.sin() / reach)
+            .atan()
+            .to_degrees()
+            .clamp(-limit, limit);
         if dt > 0.0 {
             let rate = self.steer_rate * dt * if limit > self.max_steer { 1.5 } else { 1.0 };
             self.steer_cmd += (want - self.steer_cmd).clamp(-rate, rate);
@@ -70,7 +91,11 @@ impl AiBody {
         let mid = dir(self.heading + dpsi.to_degrees() * 0.5);
         self.rear += mid * (v * dt) as f64;
         self.heading = (self.heading + dpsi.to_degrees()).rem_euclid(360.0);
-        self.yaw_rate = if dt > 0.0 { (dpsi / dt as f64) as f32 } else { 0.0 };
+        self.yaw_rate = if dt > 0.0 {
+            (dpsi / dt as f64) as f32
+        } else {
+            0.0
+        };
         self.a_lat = v * v * k;
         let o = self.rear - dir(self.heading) * self.rot_long as f64;
         self.position.x = o.x;
@@ -80,7 +105,13 @@ impl AiBody {
     /// The body on its springs over the ground under its wheels: the plane through the
     /// contact points is where the body wants to be, braking and cornering lean it off
     /// that plane, and the difference is how far each wheel moves in its arch.
-    pub(super) fn settle(&mut self, dt: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) {
+    pub(super) fn settle(
+        &mut self,
+        dt: f32,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::physics::Ground>,
+    ) {
         let fwd = dir(self.heading);
         let right = DVec2::new(fwd.y, -fwd.x);
         let origin = self.position.truncate();
@@ -114,13 +145,25 @@ impl AiBody {
             // starts over the wheel's last contact, or over the lane where it has none yet.
             // Without the world's faces, the plain height sampler.
             let last = self.contact_z[k];
-            let from = if last.is_finite() && (last - path_z).abs() < AI_RAY_UP { last.max(path_z) } else { path_z };
+            let from = if last.is_finite() && (last - path_z).abs() < AI_RAY_UP {
+                last.max(path_z)
+            } else {
+                path_z
+            };
             let (drawn, deeper) = match contact {
                 Some(c) => {
                     let below = c.probe(p.x, p.y, from + AI_RAY_UP).below;
-                    (below.filter(|g| *g >= path_z - AI_DROP), below.filter(|g| *g < path_z - AI_DROP && *g > path_z - AI_RAY_UP))
+                    (
+                        below.filter(|g| *g >= path_z - AI_DROP),
+                        below.filter(|g| *g < path_z - AI_DROP && *g > path_z - AI_RAY_UP),
+                    )
                 }
-                None => (ground.and_then(|g| g(p.x, p.y)).filter(|g| (*g - path_z).abs() < AI_RAY_UP), None),
+                None => (
+                    ground
+                        .and_then(|g| g(p.x, p.y))
+                        .filter(|g| (*g - path_z).abs() < AI_RAY_UP),
+                    None,
+                ),
             };
             low.push(deeper);
             contacts.push((w.lat, w.long, drawn.unwrap_or(path_z)));
@@ -144,7 +187,13 @@ impl AiBody {
         // least-squares plane h = a + b·long + c·lat (the wheels sit symmetrically, so the
         // two slopes separate)
         let n = contacts.len().max(1) as f64;
-        let (ml, mt, mh) = contacts.iter().fold((0.0, 0.0, 0.0), |acc, c| (acc.0 + c.1 as f64 / n, acc.1 + c.0 as f64 / n, acc.2 + c.2 / n));
+        let (ml, mt, mh) = contacts.iter().fold((0.0, 0.0, 0.0), |acc, c| {
+            (
+                acc.0 + c.1 as f64 / n,
+                acc.1 + c.0 as f64 / n,
+                acc.2 + c.2 / n,
+            )
+        });
         let (mut sll, mut slh, mut stt, mut sth) = (0.0, 0.0, 0.0, 0.0);
         for c in &contacts {
             let (dl, dt_, dh) = (c.1 as f64 - ml, c.0 as f64 - mt, c.2 - mh);
@@ -162,16 +211,28 @@ impl AiBody {
         match self.ground {
             Some((z0, p0, r0)) if (zg - self.z).abs() < 1.0 && dt > 0.0 => {
                 let k = (dt / 0.1).min(1.0);
-                let rates = [((zg - z0) / dt as f64) as f32, (pg - p0) / dt, (rg - r0) / dt];
+                let rates = [
+                    ((zg - z0) / dt as f64) as f32,
+                    (pg - p0) / dt,
+                    (rg - r0) / dt,
+                ];
                 for (r, new) in self.ground_rate.iter_mut().zip(rates) {
                     *r += (new.clamp(-5.0, 5.0) - *r) * k;
                 }
                 let steps = 4;
                 let h = dt / steps as f32;
                 for _ in 0..steps {
-                    let az = (self.spring[0] * (zg - self.z) as f32 + self.damper[0] * (self.ground_rate[0] - self.vz)) / self.mass;
-                    let ap = (self.spring[1] * (pg - self.pitch) + self.damper[1] * (self.ground_rate[1] - self.vpitch) + self.mass * self.a_long * self.cog) / self.inertia[0];
-                    let ar = (self.spring[2] * (rg - self.roll) + self.damper[2] * (self.ground_rate[2] - self.vroll) - self.mass * self.a_lat * self.cog) / self.inertia[1];
+                    let az = (self.spring[0] * (zg - self.z) as f32
+                        + self.damper[0] * (self.ground_rate[0] - self.vz))
+                        / self.mass;
+                    let ap = (self.spring[1] * (pg - self.pitch)
+                        + self.damper[1] * (self.ground_rate[1] - self.vpitch)
+                        + self.mass * self.a_long * self.cog)
+                        / self.inertia[0];
+                    let ar = (self.spring[2] * (rg - self.roll)
+                        + self.damper[2] * (self.ground_rate[2] - self.vroll)
+                        - self.mass * self.a_lat * self.cog)
+                        / self.inertia[1];
                     self.vz += az * h;
                     self.vpitch += ap * h;
                     self.vroll += ar * h;

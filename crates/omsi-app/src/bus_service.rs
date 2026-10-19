@@ -763,6 +763,54 @@ mod tests {
         assert!(s.must_serve(&stop(2, 200.0), 170.0));
     }
 
+    /// Steps `s` once every half second from `from` up to `to`, as the traffic does, and
+    /// returns the first time `stop_when` holds.
+    fn run_until(
+        s: &mut BusService,
+        st: &mut AiState,
+        v: &mut VehicleInstance,
+        net: &Network,
+        from: f64,
+        to: f64,
+        stop_when: impl Fn(&BusService) -> bool,
+    ) -> Option<f64> {
+        let mut t = from;
+        while t < to {
+            let ctx = Ctx { net, way: &[], day_time: t, dt: 0.5, id: 1, stopped: 0.0, passing: false, kerb_swerve: None, wanted: None, debug: false };
+            s.step(st, v, &ctx);
+            if stop_when(s) {
+                return Some(t);
+            }
+            t += 0.5;
+        }
+        None
+    }
+
+    /// A timetable bus that reaches the last stop of its trip early stands there until
+    /// the next trip of its tour is due, and leaves on it no sooner than its departure.
+    #[test]
+    fn a_bus_early_at_the_end_of_a_trip_waits_for_the_next_trips_departure() {
+        use omsi_sim::traffic::LaneBuilder;
+        let net = Network {
+            lanes: vec![LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 200.0, 0.0, 0.0, LaneKind::Street, 3.0)],
+            ..Default::default()
+        };
+        let mut st = AiState::new(0, 10.0, 1);
+        st.route = vec![0];
+        let mut v = crate::schedule::tests::script_test_vehicle("{frame}\n{end}\n", "", "");
+        // the last stop of the first trip, due at 1000 s; the bus is there at 500
+        let stop = |id: i64, s: f32, depart: f64| Stop::from_tuple((0, s, 0.0, depart, id, 0.0));
+        let mut b = BusService::new(vec![stop(1, 10.3, 1000.0)]);
+        b.last_stop = Some(1);
+        let done = run_until(&mut b, &mut st, &mut v, &net, 500.0, 2000.0, |b| b.trip_done()).expect("the trip ends");
+        assert!(done >= 1000.0 - EARLY_LEAVE, "the first trip is over at {done}");
+        // the tour's next trip leaves the same place at 1300 s: the bus takes it on in place
+        b.restart(vec![stop(2, 10.3, 1300.0), stop(3, 150.0, 1500.0)], true);
+        let left = run_until(&mut b, &mut st, &mut v, &net, done, 3000.0, |b| b.stops.len() == 1).expect("it sets off");
+        assert!(left >= 1300.0, "left at {left} for a trip that leaves at 1300");
+        assert!(left < 1310.0, "left at {left}: it waits for no more than the doors take to close");
+    }
+
     #[test]
     fn station_side_comes_from_the_stop_it_boards_at() {
         let stop = |side: f32| Stop::from_tuple((0, 0.0, 0.0, 0.0, 1, side));

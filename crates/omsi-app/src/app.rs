@@ -8,7 +8,7 @@ use crate::humans;
 use crate::memory::texture_budget;
 use crate::menu;
 use crate::money;
-use crate::navigator;
+use crate::nav;
 use crate::player::Player;
 use crate::puddles;
 use crate::radio;
@@ -76,7 +76,7 @@ pub(crate) struct App {
     pub(crate) duty_places: bool,
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
-    pub(crate) navigator: Option<navigator::Navigator>,
+    pub(crate) navigator: Option<nav::Navigator>,
     pub(crate) vr_nav_profiles: crate::vr_navigator::Profiles,
     pub(crate) vr_nav_edit: Option<crate::vr_navigator::Editing>,
     /// The window spans the triple screen's three monitors: fullscreen would shrink it to one.
@@ -769,7 +769,7 @@ impl App {
                 if self.camera.is_none() {
                     self.camera = Some(cam);
                 }
-                self.navigator = Some(navigator::Navigator::new(
+                self.navigator = Some(nav::Navigator::new(
                     self.settings.navigator,
                     self.settings.ui_opacity,
                     &self.settings.navigator_corner,
@@ -1130,7 +1130,7 @@ pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) ->
 }
 
 /// What the map needs and this installation lacks, said on the screen and written to
-/// `~/.openomsi/missing_content.txt` by add-on folder: a map short of an add-on showed
+/// `~/.depot/missing_content.txt` by add-on folder: a map short of an add-on showed
 /// holes, bare roads and white objects, and nobody could tell that from a fault of the game.
 pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>) {
     let (files, textures) = w.missing_content();

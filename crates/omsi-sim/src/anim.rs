@@ -29,7 +29,9 @@ pub struct MeshAnimator {
 
 /// Convert an o3d pivot matrix (D3D frame, column-vector form) to the model frame.
 pub fn pivot_from_mesh(m: &omsi_o3d::Mesh) -> Mat4 {
-    let s = Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+    let s = Mat4::from_cols_array(&[
+        1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ]);
     s * m.transform * s
 }
 
@@ -58,10 +60,21 @@ impl MeshAnimator {
                 if var.is_none() && !a.variable.is_empty() {
                     log::warn!("animation variable {} not found", a.variable);
                 }
-                (a.clone(), origin_matrix(&a.origins, pivot), AnimState { var, value: 0.0, initialized: false })
+                (
+                    a.clone(),
+                    origin_matrix(&a.origins, pivot),
+                    AnimState {
+                        var,
+                        value: 0.0,
+                        initialized: false,
+                    },
+                )
             })
             .collect();
-        Self { anims, parent: None }
+        Self {
+            anims,
+            parent: None,
+        }
     }
 
     pub fn has_animations(&self) -> bool {
@@ -93,7 +106,9 @@ impl MeshAnimator {
                 st.value = v;
             }
             let local = match a.kind {
-                Some(AnimKind::Rot) => Mat4::from_quat(Quat::from_rotation_x(-st.value.to_radians())),
+                Some(AnimKind::Rot) => {
+                    Mat4::from_quat(Quat::from_rotation_x(-st.value.to_radians()))
+                }
                 Some(AnimKind::Trans) => Mat4::from_translation(Vec3::new(st.value, 0.0, 0.0)),
                 None => Mat4::IDENTITY,
             };
@@ -128,11 +143,25 @@ pub fn link_parents(animators: &mut [MeshAnimator], defs: &[&MeshDef]) {
         return;
     }
     for (i, a) in animators.iter_mut().enumerate() {
-        a.parent = defs.get(i).and_then(|d| d.anim_parent.as_deref()).map(str::trim).filter(|n| !n.is_empty()).and_then(|name| {
-            let named = |d: &&&MeshDef| d.mesh_ident.as_deref().map(|m| m.trim().eq_ignore_ascii_case(name)).unwrap_or(false);
-            // (one only listed after it: taken all the same, as before)
-            defs[..i.min(defs.len())].iter().rposition(|d| named(&d)).or_else(|| defs.iter().position(|d| named(&d)))
-        }).filter(|p| *p != i);
+        a.parent = defs
+            .get(i)
+            .and_then(|d| d.anim_parent.as_deref())
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .and_then(|name| {
+                let named = |d: &&&MeshDef| {
+                    d.mesh_ident
+                        .as_deref()
+                        .map(|m| m.trim().eq_ignore_ascii_case(name))
+                        .unwrap_or(false)
+                };
+                // (one only listed after it: taken all the same, as before)
+                defs[..i.min(defs.len())]
+                    .iter()
+                    .rposition(|d| named(&d))
+                    .or_else(|| defs.iter().position(|d| named(&d)))
+            })
+            .filter(|p| *p != i);
     }
 }
 
@@ -173,51 +202,5 @@ pub fn apply_parents(animators: &[MeshAnimator], transforms: &mut [Mat4]) {
             };
             done[c] = true;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn animator(parent: Option<usize>) -> MeshAnimator {
-        MeshAnimator { anims: Vec::new(), parent }
-    }
-
-    #[test]
-    fn parents_compose_down_the_chain() {
-        // 2 -> 0 -> 1 (the parent of 0 is listed after it)
-        let mut a = vec![animator(Some(1)), animator(None), animator(Some(0))];
-        let t0 = Mat4::from_translation(Vec3::new(0.0, 1.0, 0.0));
-        let t1 = Mat4::from_rotation_z(0.5);
-        let t2 = Mat4::from_translation(Vec3::new(2.0, 0.0, 0.0));
-        let mut xf = vec![t0, t1, t2];
-        apply_parents(&a, &mut xf);
-        assert!(xf[1].abs_diff_eq(t1, 1e-6));
-        assert!(xf[0].abs_diff_eq(t1 * t0, 1e-6));
-        assert!(xf[2].abs_diff_eq(t1 * t0 * t2, 1e-6));
-        // a loop is cut instead of hanging
-        a[1].parent = Some(2);
-        let mut xf = vec![t0, t1, t2];
-        apply_parents(&a, &mut xf);
-        assert!(xf.iter().all(|m| m.is_finite()));
-    }
-
-    #[test]
-    fn parents_found_by_mesh_ident() {
-        let desk = MeshDef { mesh_ident: Some("zahltisch".into()), ..Default::default() };
-        let key = MeshDef { anim_parent: Some("Zahltisch ".into()), ..Default::default() };
-        let lost = MeshDef { anim_parent: Some("nobody".into()), ..Default::default() };
-        let mut a = vec![animator(None), animator(None), animator(None)];
-        link_parents(&mut a, &[&key, &desk, &lost]);
-        assert_eq!(a.iter().map(|a| a.parent).collect::<Vec<_>>(), vec![Some(1), None, None]);
-        // two door variants with the same arm names: each leaf hangs on the arm before it
-        let arm_a = MeshDef { mesh_ident: Some("arm".into()), ..Default::default() };
-        let leaf_a = MeshDef { anim_parent: Some("arm".into()), ..Default::default() };
-        let arm_b = MeshDef { mesh_ident: Some("arm".into()), ..Default::default() };
-        let leaf_b = MeshDef { anim_parent: Some("arm".into()), ..Default::default() };
-        let mut a = vec![animator(None), animator(None), animator(None), animator(None)];
-        link_parents(&mut a, &[&arm_a, &leaf_a, &arm_b, &leaf_b]);
-        assert_eq!(a.iter().map(|a| a.parent).collect::<Vec<_>>(), vec![None, Some(0), None, Some(2)]);
     }
 }

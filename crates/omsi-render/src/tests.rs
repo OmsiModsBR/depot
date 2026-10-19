@@ -644,12 +644,7 @@ fn meshes_coming_and_going_tile_by_tile_keep_the_pages_from_growing() {
     // a long drive across a map brings them; the scene's pages must not keep growing
     let mut tiles: Vec<Vec<MeshId>> = Vec::new();
     let mut seed = 0x1234_5678u64;
-    let mut rand = move || {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        seed
-    };
+    let mut rand = move || omsi_geometry::util::xorshift64(&mut seed);
     let mut most = 0;
     for round in 0..300 {
         let tile: Vec<MeshId> = (0..400)

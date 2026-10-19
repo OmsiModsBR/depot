@@ -146,13 +146,13 @@ picture **drawn by the game's renderer** - its model, paint, materials, reflecti
 shadows exactly as in the game, under the light of the chosen time and weather - drawn
 again only when something changes; drag on it to turn the bus, scroll to zoom. Its pages:
 
-* **Drive** - four steps: the bus (search, liveries, depot file, number plate), the route (map, start
-  point, line and tour - the lines that run on the chosen date), time and weather (time,
-  date, season, traffic, passengers, timetable buses, autostart, *LAN play: host / join*,
-  the weather presets that suit the season), and the roadbook with the IBIS codes; the
-  summary and **Start the duty** bottom right.
+* **Drive** - three steps: *Bus* (search, liveries, depot file, number plate), *Day & weather*
+  (time, date, season, traffic, passengers, timetable buses, autostart, *LAN play: host / join*,
+  the weather presets that suit the season) and *Map & duty* (the map, start point, line and
+  tour - the lines that run on the chosen date - with the roadbook and the IBIS codes, or
+  free driving); the summary and **Start the duty** bottom right.
 * **Profile** - hours, experience and level, from OMSI's own `.odr` personnel files plus
-  the session summaries the game writes to `~/.openomsi/sessions`.
+  the session summaries the game writes to `~/.depot/sessions`.
 * **Settings** - everything in `settings.cfg` below, saved as it changes; keys the page
   does not manage are kept as they are. One tab for each thing one comes to change:
   *Graphics* (the quality preset first, the screen, distances and memory), *Driving* (keys,
@@ -234,7 +234,7 @@ lines, as in the game, whose default date is 1989-05-30.
 
 ## Settings, enhanced graphics, the navigator
 
-`~/.openomsi/settings.cfg` (written by the launcher's settings page, or by hand) holds
+`~/.depot/settings.cfg` (written by the launcher's settings page, or by hand) holds
 `msaa` (1/2/4/8; a count the GPU cannot do falls back to the next lower one), `anisotropy`
 (1..16), `ssao`, `shadows`, `shadow_size`, `shadow_blobs` (the models' `[isshadow]` shadow
 meshes, OMSI's flat blob under a vehicle, laid on the road its wheels stand on; off, only the
@@ -376,7 +376,7 @@ OMSI, and the puddles' spray on top. Spray is thrown
 within 100 m of the camera (less of it farther off), at most 1400 puffs at once; none shows
 inside the bus the camera is in.
 
-The vanilla look stays the default. The navigator (`crates/omsi-app/src/navigator.rs`) sits in a corner of the screen (lower
+The vanilla look stays the default. The navigator (`crates/omsi-app/src/nav/`) sits in a corner of the screen (lower
 left by default), after the Route Advisor of Euro Truck Simulator 2: small, dark and half
 transparent, a tilted 3D map that turns with the bus and zooms out with speed - the roads
 of the lane network, the trip's route with arrows along it, coloured stretch by stretch by
@@ -422,7 +422,7 @@ Under **Seat position**, **Head pitch** adjusts the driver's neutral view angle 
 screens, and is included when taking offscreen screenshots. Manual looking and head tracking
 remain relative to this setting; **Reset the seat position** resets it along with the seat
 offsets. The seat set in the game menu is kept for each bus on its own (`seats.cfg` in the
-`.openomsi` folder): fitted to one bus, the others keep the views their `.bus` files give
+`.depot` folder): fitted to one bus, the others keep the views their `.bus` files give
 (or the seat of the launcher's settings, for a bus never fitted), and resetting it puts
 that bus's views back as its file has them.
 
@@ -515,7 +515,7 @@ your router or local services; the radio display says "blocked: ..." and `game.l
 Plain `http://` stations are refused too unless you start the game with `OMSI_RADIO_ALLOW_HTTP=1`
 (the private ranges stay blocked even then).
 
-**Your stations.** `~/.openomsi/radio.cfg` (on Windows `C:\Users\<you>\.openomsi\radio.cfg`)
+**Your stations.** `~/.depot/radio.cfg` (on Windows `C:\Users\<you>\.depot\radio.cfg`)
 is written with a few stations the first time the game starts. One station a line, the
 first line on the first button:
 
@@ -551,7 +551,7 @@ running through its line where they do not fit (ten characters on Dmitrij's "Mag
 P3ta's SOR buses and its kin, whose first line then shows the map's frequency for the
 place, e.g. `94.6 MHz`). Without stations, or with the radio off, a display shows its own texts.
 
-**When nothing plays.** `~/.openomsi/game.log` says what happened:
+**When nothing plays.** `~/.depot/game.log` says what happened:
 `radio: 23 stations` (the list), `radio: station 1 Radiozurnal (https://…)` (a button
 pressed), then `Radio 1: Radiozurnal - buffering …` and the song, or `no signal (…)` with
 the reason - mostly an address that is not a stream or a station that is down. No `radio:
@@ -571,7 +571,7 @@ Big maps are kept within memory by compressed textures, a texture budget
 (`texture_memory`), a timetable fleet read ahead and trimmed again, and tiles that give
 everything back when they unload: Ahlheim V5 at its main station with traffic, passengers
 and the timetable peaks at 1.93 GB instead of 8.75 GB (see `docs/ARCHITECTURE.md`,
-*Memory*). The game's log is `~/.openomsi/game.log` (the launcher's `launcher.log`
+*Memory*). The game's log is `~/.depot/game.log` (the launcher's `launcher.log`
 beside it), and the first line of both is the build they were made from.
 
 ## Object editor
@@ -611,7 +611,7 @@ panel has a yellow frame, and:
 * **Esc** (or Ctrl+Shift+M again) ends the editor and keeps the layout.
 
 A new panel has the shape of the mirror's glass in the model. The layout is kept per bus in
-`~/.openomsi/mirror_hud.cfg`. The setting `mirror_hud` (0 off, 1 the right mirror, 2 the left,
+`~/.depot/mirror_hud.cfg`. The setting `mirror_hud` (0 off, 1 the right mirror, 2 the left,
 3 both) gives a bus with no layout of its own its first panels. The panels need the mirrors
 themselves to be drawn (`mirror_size` not 0); they are redrawn at the rate `mirror_refresh`
 sets, also when the glass is not in the view.
@@ -705,7 +705,7 @@ switches it off, `OMSI_DEBUG_VAR_SYNC=<variable>` logs what arrives for one vari
 (its map, bus, objects, splines, AI vehicles and people from the content folder or archives,
 also a content folder inside the OMSI 2 folder) is listed with a SHA-256 per file and served
 over TCP on the session's port; a joining game fetches what it lacks before it loads the map
-and keeps the downloads for the next time (`~/.openomsi/lan-store`). Listing a big add-on map
+and keeps the downloads for the next time (`~/.depot/lan-store`). Listing a big add-on map
 takes the host a while after it starts (Novi Sad, 27 000 files: 20 s on a fast computer); a joining game waits
 for it. Maps installed straight into the OMSI 2 folder are not passed on: both players need
 them.

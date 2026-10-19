@@ -32,10 +32,7 @@ impl Money {
     }
 
     fn rand_f(&mut self) -> f32 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        (self.rng >> 40) as f32 / (1u64 << 24) as f32
+        omsi_geometry::util::unit_f32(&mut self.rng)
     }
 
     /// Every coin and note of the currency as (index, value): the coins first, then the

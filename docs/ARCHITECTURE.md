@@ -23,7 +23,7 @@ state.
 | `mc_d3d_classes` (Direct3D 9)          | `omsi-render` (wgpu)          | the vanilla picture complete (materials, lights, night maps, reflections, mirrors, shadow cascades); `enhanced` is a physically based renderer of its own |
 | `mc_Form_Main`, main loop              | `omsi-app`                    | offscreen + window, start menu, HUD, tile streaming; the original's dialogs are the launcher |
 | vehicle runtime                        | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
-| AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `rigid` + `physics` (wheels, collisions) |
+| AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `physics` (wheels, collisions) |
 | Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game's own window (wgpu, `omsi-ui`): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
 | - (no original counterpart)            | `omsi-net`, `omsi-app::lan`   | LAN play: UDP session, bit-packed vehicle states, chat |
 
@@ -158,7 +158,7 @@ budget.
    Also done: passengers on AI buses, ticket selling at the cash desk (ticket pack,
    `GivenTicket`), AI trains from `.zug` files on rail tracks (reversed cars), crossing
    right of way, body dynamics, HUD and start menu.
-   Also: rigid-body physics (`omsi-sim::rigid`), `[matl_change]/[matl_item]` variants,
+   Also: rigid-body physics (`omsi-sim::physics`), `[matl_change]/[matl_item]` variants,
    envmap reflections, lightmaps, precipitation, cash desk money, chrono events,
    situations, LODs, HUD and menu.
    Also: AI lane changes (overtaking, keeping right), passengers walking the cabin path
@@ -239,13 +239,13 @@ budget.
    physics step (they trembled a seat-width behind the bus); SSAO with an ordered 4x4
    pattern and a 6x6 depth-aware blur, 5x5 PCF shadows; weather changes the light
    (overcast, rain, fog over the whole sky, snow textures and cover on any map);
-   `~/.openomsi/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
+   `~/.depot/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
    fullscreen); the ETS2-style navigator (`omsi-app::navigator`, N); AI cars spawn out of
    sight; pedestrians walk both ways along the pavements (`Network::prev`); a procedural
    gait/stance/sitting pose; Shift+U also sets the IBIS to the duty (without the AI
    trigger, which switched the NL202's electrics off); stop announcements verified through
    the IBIS-2 'next stop' key; `--export-glb` writes the bus as glTF; session summaries in
-   `~/.openomsi/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
+   `~/.depot/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
    ACES, grading and vignette; since f9770c1 its own physically based renderer without them);
    and the Tauri launcher in `launcher/` (profile with hours/XP/level, bus with 3D
    preview and liveries, depot, line, tour, roadbook with the IBIS codes, time, date,
@@ -1002,7 +1002,7 @@ position, message) is `PluginIo`'s new default methods. Tests: `crates/omsi-plug
 
 Matched to the observable behaviour of OMSI 2 and put in place of our own guesses:
 
-* **Driving physics** (`omsi-sim::rigid`; ODE there only
+* **Driving physics** (`omsi-sim::physics`; ODE there only
   knocks over crash objects). Across the tyres OMSI has no slip angle: in its holding state
   the bus follows its steering geometry outright, and only when the bend asks more
   than mu x the load on all tyres, or a wheel spins or locks, does each axle slide with at

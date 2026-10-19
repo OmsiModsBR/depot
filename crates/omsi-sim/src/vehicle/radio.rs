@@ -18,7 +18,9 @@ impl VehicleInstance {
     /// own is known (`radio_frequency`: a map says which frequency its stations are on,
     /// and where) that one stands there instead.
     pub(super) fn show_radio_text(&mut self) {
-        let Some(text) = self.radio_text.as_ref() else { return };
+        let Some(text) = self.radio_text.as_ref() else {
+            return;
+        };
         let frequency = self.radio_frequency.as_deref();
         let p = &self.ty.program;
         if let Some(i) = p.str_var("Snd_Radio_Text") {
@@ -27,16 +29,30 @@ impl VehicleInstance {
             }
             // (this kind keeps its frequency apart, `90.9 MHz@` in `mp3_freq`, and the
             // display begins with it)
-            if let (Some(frequency), Some(display), Some(own)) = (frequency, p.str_var("magnitola_1"), p.str_var("mp3_freq")) {
+            if let (Some(frequency), Some(display), Some(own)) =
+                (frequency, p.str_var("magnitola_1"), p.str_var("mp3_freq"))
+            {
                 let own = &self.state.str_vars[own as usize];
-                if let Some(shown) = own_frequency(own, &self.state.str_vars[display as usize], frequency) {
+                if let Some(shown) =
+                    own_frequency(own, &self.state.str_vars[display as usize], frequency)
+                {
                     self.state.str_vars[display as usize] = shown;
                 }
             }
             return;
         }
-        let (Some(display), Some(track)) = (p.str_var("magnitola_1"), p.str_var("mp3_display_track_name")) else { return };
-        if let Some(shown) = magnitola_line(&self.state.str_vars[track as usize], &self.state.str_vars[display as usize], text, frequency) {
+        let (Some(display), Some(track)) = (
+            p.str_var("magnitola_1"),
+            p.str_var("mp3_display_track_name"),
+        ) else {
+            return;
+        };
+        if let Some(shown) = magnitola_line(
+            &self.state.str_vars[track as usize],
+            &self.state.str_vars[display as usize],
+            text,
+            frequency,
+        ) {
             self.state.str_vars[display as usize] = shown;
         }
     }
@@ -47,7 +63,7 @@ impl VehicleInstance {
 /// display shows something else (its welcome, the volume), while the radio is stopped (no
 /// station behind the `@`) or off (`text` empty). `own` is the frequency the station is
 /// really on, where that is known: it stands for the script's.
-fn magnitola_line(track: &str, shown: &str, text: &str, own: Option<&str>) -> Option<String> {
+pub fn magnitola_line(track: &str, shown: &str, text: &str, own: Option<&str>) -> Option<String> {
     if text.is_empty() || shown != track {
         return None;
     }
@@ -58,37 +74,10 @@ fn magnitola_line(track: &str, shown: &str, text: &str, own: Option<&str>) -> Op
 /// A display that begins with the script's frequency (`script`: `90.9 MHz@`), with the
 /// station's own in its place. None while it shows something else, and for the script's
 /// `STOPPED@`, which is no frequency.
-fn own_frequency(script: &str, shown: &str, own: &str) -> Option<String> {
+pub fn own_frequency(script: &str, shown: &str, own: &str) -> Option<String> {
     if !script.ends_with('@') || !script.starts_with(|c: char| c.is_ascii_digit()) {
         return None;
     }
     let rest = shown.strip_prefix(script)?;
     Some(format!("{own}@{rest}"))
-}
-
-#[cfg(test)]
-mod radio_text_tests {
-    use super::{magnitola_line, own_frequency};
-
-    #[test]
-    fn the_station_line_is_replaced_while_the_display_shows_it() {
-        assert_eq!(magnitola_line("90.9 MHz@R-ZURNAL", "90.9 MHz@R-ZURNAL", "Radio 1   ", None).as_deref(), Some("90.9 MHz@Radio 1   "));
-        // its welcome and the volume are the display's own
-        assert_eq!(magnitola_line("90.9 MHz@R-ZURNAL", " WELCOME  ", "Radio 1", None), None);
-        assert_eq!(magnitola_line("90.9 MHz@R-ZURNAL", "VOLUME@ 15", "Radio 1", None), None);
-        // stopped, and a radio that plays nothing
-        assert_eq!(magnitola_line("STOPPED@", "STOPPED@", "Radio 1", None), None);
-        assert_eq!(magnitola_line("90.9 MHz@R-ZURNAL", "90.9 MHz@R-ZURNAL", "", None), None);
-    }
-
-    #[test]
-    fn the_stations_own_frequency_stands_for_the_scripts() {
-        assert_eq!(magnitola_line("90.9 MHz@R-ZURNAL", "90.9 MHz@R-ZURNAL", "Radio 1   ", Some("94.6 MHz")).as_deref(), Some("94.6 MHz@Radio 1   "));
-        assert_eq!(magnitola_line("STOPPED@", "STOPPED@", "Radio 1", Some("94.6 MHz")), None);
-        // the kind that keeps its frequency apart
-        assert_eq!(own_frequency("90.9 MHz@", "90.9 MHz@Radio 1   ", "94.6 MHz").as_deref(), Some("94.6 MHz@Radio 1   "));
-        assert_eq!(own_frequency("90.9 MHz@", "94.6 MHz@Radio 1   ", "94.6 MHz"), None);
-        assert_eq!(own_frequency("90.9 MHz@", " WELCOME  ", "94.6 MHz"), None);
-        assert_eq!(own_frequency("STOPPED@", "STOPPED@", "94.6 MHz"), None);
-    }
 }

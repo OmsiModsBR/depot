@@ -2,7 +2,7 @@
 
 use super::physics_bridge::driven_rpm;
 use super::VehicleInstance;
-use crate::rigid::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
+use crate::physics::{AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN};
 
 /// Motion state handed to `VehicleInstance::update_ai`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -89,7 +89,9 @@ impl VehicleInstance {
                 // (the axle's angle, the same for both sides, as OMSI hands it to the
                 // scripts: see `RigidBody::axle_steer`)
                 let steer = if arm > AI_STEER_ARM_MIN {
-                    (arm * k).atan().clamp(-AI_AXLE_STEER_MAX, AI_AXLE_STEER_MAX)
+                    (arm * k)
+                        .atan()
+                        .clamp(-AI_AXLE_STEER_MAX, AI_AXLE_STEER_MAX)
                 } else {
                     0.0
                 };
@@ -104,7 +106,11 @@ impl VehicleInstance {
                 self.show_wheel(ai_idx, si, shown);
             }
         }
-        self.show_n_wheel(driven_rpm(&self.motion.wheels, |w| w[0].driven, |w| w[0].rpm));
+        self.show_n_wheel(driven_rpm(
+            &self.motion.wheels,
+            |w| w[0].driven,
+            |w| w[0].rpm,
+        ));
         self.show_a_trans(self.motion.accel);
         // `AI` is the engine's "this vehicle is driven by the AI" flag; the police and
         // ambulance script sounds the siren whenever `AI` is 0 and the car rolls, which is
@@ -139,7 +145,10 @@ impl VehicleInstance {
             // Urumqi61 lie left, the ordinary ones right). Off a stop it is 0 (OMSI's
             // default), so a script that reads it there does the same as ever.
             ("AI_Scheduled_AtStation_Side", ai.at_station_side),
-            ("TrafficPriorityWarningNeeded", ai.priority_warning as i32 as f32),
+            (
+                "TrafficPriorityWarningNeeded",
+                ai.priority_warning as i32 as f32,
+            ),
         ] {
             self.set_var(name, v);
         }

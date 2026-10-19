@@ -65,4 +65,35 @@ impl Envir {
         }
         e
     }
+
+    /// The cloud type of that name (`Weather/clouds.cfg` lists them with the same
+    /// `[cloudtype]` blocks), ignoring case and surrounding blanks as OMSI does.
+    pub fn cloud_type(&self, name: &str) -> Option<&CloudType> {
+        let name = name.trim();
+        self.cloud_types
+            .iter()
+            .find(|t| t.name.trim().eq_ignore_ascii_case(name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cloud_types_are_found_by_name() {
+        let f = CfgFile::from_bytes(
+            Path::new("clouds.cfg"),
+            b"[cloudtype]\r\nCumulus 1\r\ncu1.dds\r\n2000\r\nsct\r\n\r\n\
+              [cloudtype]\r\nOvercast\r\novc.dds\r\n800\r\novc\r\n",
+        );
+        let e = Envir::parse(&f);
+        assert_eq!(e.cloud_types.len(), 2);
+        let ovc = e.cloud_type("overcast").unwrap();
+        assert_eq!(ovc.texture, "ovc.dds");
+        assert_eq!(ovc.height, 800.0);
+        assert_eq!(ovc.code, "ovc");
+        assert_eq!(e.cloud_type(" Cumulus 1 ").unwrap().texture, "cu1.dds");
+        assert!(e.cloud_type("Cumulus 2").is_none());
+    }
 }

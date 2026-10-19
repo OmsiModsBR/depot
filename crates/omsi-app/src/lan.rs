@@ -14,7 +14,7 @@
 //!   plus the horn and indicator relay of `[sound]`) play where it stands;
 //! - the chat line (V to type, Enter to send) with join and leave notices.
 //!
-//! While a session runs the game keeps `~/.openomsi/lan/<instance>.json` up to date
+//! While a session runs the game keeps `~/.depot/lan/<instance>.json` up to date
 //! (role, session code, address, players, warnings), which is where the launcher reads the
 //! code to show it with a copy button. `<instance>` is the id the launcher gives the game in
 //! `OMSI_INSTANCE`, else the process id.
@@ -23,6 +23,7 @@ use crate::scene::{self, World};
 use crate::cli::Args;
 use crate::player::Player;
 use glam::DVec3;
+use omsi_geometry::util::{wrap_deg, wrap_deg_f32};
 use omsi_net::{Footprint, LanEvent, LanSession, PartPose, Pose, Role};
 use omsi_render::{Renderer, Scene};
 use omsi_script::VarId;
@@ -1633,10 +1634,7 @@ fn write_status(lan: &LanSession, game: &LanGame, player: Option<&Player>) {
                     if let Some(dir) = p.parent() {
                         let _ = std::fs::create_dir_all(dir);
                     }
-                    let tmp = p.with_extension("json.tmp");
-                    if std::fs::write(&tmp, bytes).is_ok() {
-                        let _ = std::fs::rename(&tmp, &p);
-                    }
+                    let _ = omsi_cfg::write_atomic(&p, bytes);
                 }
             })
             .ok()
@@ -1672,7 +1670,7 @@ fn relative_position(me: &omsi_sim::VehicleInstance, pose: &Pose) -> String {
 }
 
 /// The other players for the navigator and the city map (#1011, #1080); `my_id` is ours.
-pub fn nav_players(game: &LanGame, my_id: u32) -> Vec<crate::navigator::NavPlayer> {
+pub fn nav_players(game: &LanGame, my_id: u32) -> Vec<crate::nav::NavPlayer> {
     let bus_of = |id: u32| game.remotes.get(&id).map(|r| (r.vehicle.position, r.vehicle.heading));
     let mut out: Vec<_> = game.remotes.values().filter_map(|r| nav_player(&r.last, &r.name, (r.vehicle.position, r.vehicle.heading), my_id, bus_of)).collect();
     // (always in the same order: the tags of two players close together do not swap)
@@ -1683,7 +1681,7 @@ pub fn nav_players(game: &LanGame, my_id: u32) -> Vec<crate::navigator::NavPlaye
 /// A player as the maps show them: with the bus they drive (`bus`: as drawn here), else on
 /// foot where they walk - riding in a third player's bus, with that bus (`bus_of`; the
 /// walker's own point lags behind it), and not at all in ours, which is our own arrow.
-fn nav_player(pose: &Pose, name: &str, bus: (DVec3, f64), my_id: u32, bus_of: impl Fn(u32) -> Option<(DVec3, f64)>) -> Option<crate::navigator::NavPlayer> {
+fn nav_player(pose: &Pose, name: &str, bus: (DVec3, f64), my_id: u32, bus_of: impl Fn(u32) -> Option<(DVec3, f64)>) -> Option<crate::nav::NavPlayer> {
     let (position, heading) = match pose.walker {
         None => bus,
         Some(w) => match w.aboard {
@@ -1693,7 +1691,7 @@ fn nav_player(pose: &Pose, name: &str, bus: (DVec3, f64), my_id: u32, bus_of: im
         },
     };
     let name = if name.trim().is_empty() { format!("player {}", pose.id) } else { name.trim().to_string() };
-    Some(crate::navigator::NavPlayer { position, heading, name })
+    Some(crate::nav::NavPlayer { position, heading, name })
 }
 
 /// The other players' name tags, as ETS2 has them: the name over the bus's roof and a
@@ -2168,7 +2166,7 @@ fn along(lanes: &[Lane], prev: &[Vec<usize>], lane: usize, s: f32, d: f32) -> Op
 }
 
 fn heading_gap(a: f32, b: f32) -> f32 {
-    ((a - b + 540.0).rem_euclid(360.0) - 180.0).abs()
+    wrap_deg_f32(a - b).abs()
 }
 
 /// Move our bus off anything standing where it spawned: along the road it stands on, the
@@ -2771,7 +2769,7 @@ impl RemoteVehicle {
 }
 
 fn lerp_angle(a: f64, b: f64, t: f64) -> f64 {
-    let d = (b - a + 540.0).rem_euclid(360.0) - 180.0;
+    let d = wrap_deg(b - a);
     (a + d * t).rem_euclid(360.0)
 }
 
@@ -2811,7 +2809,7 @@ fn place_remote_rear(v: &mut omsi_sim::VehicleInstance, rear: &[(DVec3, f64)]) {
 }
 
 fn ease_heading(from: f64, to: f64, k: f64) -> f64 {
-    let dh = (to - from + 540.0).rem_euclid(360.0) - 180.0;
+    let dh = wrap_deg(to - from);
     if dh.abs() > 90.0 {
         to
     } else {

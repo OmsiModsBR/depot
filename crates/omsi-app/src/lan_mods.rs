@@ -7,7 +7,7 @@
 //! their number in it: no path a client names is ever opened. A joining game asks for the
 //! list before its world is loaded, fetches what it does not have in the same version
 //! (compared by SHA-256), checks every file against the list's size and hash, and keeps
-//! them in a folder of its own for this session (`~/.openomsi/lan-mods/<pid>`), which
+//! them in a folder of its own for this session (`~/.depot/lan-mods/<pid>`), which
 //! becomes the first content root. The folder goes when the session ends (and one left by a
 //! game that did not end cleanly goes at the next start).
 //!
@@ -333,20 +333,13 @@ fn collect(args: &Args) -> (Manifest, Vec<PathBuf>) {
             if is_dir || !n.to_lowercase().ends_with(".oft") {
                 continue;
             }
-            let Ok(text) = omsi_cfg::vfs::read_text(&dir.join(&n)) else { continue };
-            let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
-            let mut wanted = false;
-            let mut bitmaps: Vec<String> = Vec::new();
-            for (i, l) in lines.iter().enumerate() {
-                if l.eq_ignore_ascii_case("[newfont]") {
-                    let name = lines.get(i + 1).map(|x| x.to_lowercase()).unwrap_or_default();
-                    if fonts_used.contains(&name) {
-                        wanted = true;
-                        bitmaps.extend(lines.iter().skip(i + 2).take(2).map(|b| b.to_string()));
-                    }
-                }
-            }
-            if !wanted {
+            let Ok(fonts) = omsi_content::Font::load_all(&dir.join(&n)) else { continue };
+            let bitmaps: Vec<String> = fonts
+                .iter()
+                .filter(|f| fonts_used.contains(&f.name.trim().to_lowercase()))
+                .flat_map(|f| [f.bitmap.trim().to_string(), f.alpha.trim().to_string()])
+                .collect();
+            if bitmaps.is_empty() {
                 continue;
             }
             for f in std::iter::once(n.clone()).chain(bitmaps) {
@@ -529,10 +522,9 @@ fn handle(stream: TcpStream, session: u64, ready: &Mutex<Option<Arc<(Manifest, V
 // -------------------------------------------------------------------------------------
 // the joining player
 
-/// The session folder of this game (`~/.openomsi/lan-mods/<pid>`).
+/// The session folder of this game (`~/.depot/lan-mods/<pid>`).
 fn sandbox_base() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".depot").join("lan-mods"))
+    Some(omsi_cfg::paths::data_dir()?.join("lan-mods"))
 }
 
 static SANDBOX: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -658,7 +650,7 @@ fn open(host: SocketAddr, session: u64) -> Result<(TcpStream, BufReader<TcpStrea
     Ok((out, input))
 }
 
-/// The downloads kept between sessions, by their SHA-256 (`~/.openomsi/lan-store`): a
+/// The downloads kept between sessions, by their SHA-256 (`~/.depot/lan-store`): a
 /// map fetched once is not fetched again at the next join.
 fn store_dir() -> Option<PathBuf> {
     sandbox_base().map(|b| b.with_file_name("lan-store"))
@@ -845,8 +837,7 @@ pub fn fetch(args: &mut Args, host: SocketAddr, session: u64, progress: &mut dyn
                 continue;
             }
             let stored = store.join(&e.sha256);
-            let tmp = store.join(format!("{}.part", e.sha256));
-            std::fs::write(&tmp, &data).and_then(|_| std::fs::rename(&tmp, &stored)).map_err(|x| format!("{}: {x}", e.path))?;
+            omsi_cfg::write_atomic(&stored, &data).map_err(|x| format!("{}: {x}", e.path))?;
             place(&stored, &target).map_err(|x| format!("{}: {x}", e.path))?;
             done += len;
             report.fetched += 1;

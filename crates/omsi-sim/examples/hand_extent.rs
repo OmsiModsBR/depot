@@ -6,7 +6,10 @@ fn main() {
     let ty = omsi_sim::human::HumanType::load(std::path::Path::new(&p)).expect("load");
     let rig = &ty.rig;
     let hand_len = (ty.joints.finger - ty.joints.hand).length();
-    println!("links hand {:?} finger {:?} -> hand_len {hand_len:.3}", ty.joints.hand, ty.joints.finger);
+    println!(
+        "links hand {:?} finger {:?} -> hand_len {hand_len:.3}",
+        ty.joints.hand, ty.joints.finger
+    );
     for side in 0..2 {
         let slot = omsi_sim::human::hand_slot(side) as u8;
         let w = rig.wrist[side];

@@ -1,7 +1,7 @@
 //! The games the launcher started. Any number may run at once: each gets its own log
 //! (`game.log`, `game-2.log`, ...), an id (passed to the game in `OMSI_INSTANCE`) and a
-//! registry file `~/.openomsi/instances/<id>.json`, so that every launcher window (and
-//! `--cli instances`) sees them. The game itself writes `~/.openomsi/lan/<id>.json`
+//! registry file `~/.depot/instances/<id>.json`, so that every launcher window (and
+//! `--cli instances`) sees them. The game itself writes `~/.depot/lan/<id>.json`
 //! while a LAN session runs; its code and players are shown with the instance.
 //!
 //! A process id is reused once its process has ended, so an entry also keeps when its
@@ -78,10 +78,7 @@ fn write(inst: &Instance) {
     let d = dir();
     let _ = std::fs::create_dir_all(&d);
     let p = d.join(format!("{}.json", inst.id));
-    let tmp = p.with_extension("json.tmp");
-    if std::fs::write(&tmp, serde_json::to_vec_pretty(inst).unwrap_or_default()).is_ok() {
-        let _ = std::fs::rename(&tmp, &p);
-    }
+    let _ = omsi_cfg::write_atomic(&p, serde_json::to_vec_pretty(inst).unwrap_or_default());
 }
 
 /// Collect the exit codes of our children that finished.

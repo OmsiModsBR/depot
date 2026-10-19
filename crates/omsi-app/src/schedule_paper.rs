@@ -66,11 +66,9 @@ pub(crate) fn update_vehicle(
 }
 
 fn cache_dir() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    let data = omsi_cfg::paths::data_dir()
         .ok_or_else(|| anyhow!("cannot locate the Project Depot user data folder"))?;
-    Ok(home.join(".depot").join("cache").join("schedules"))
+    Ok(data.join("cache").join("schedules"))
 }
 
 fn set_filename(vehicle: &mut VehicleInstance, value: &str) {

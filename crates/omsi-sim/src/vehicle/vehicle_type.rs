@@ -1,7 +1,9 @@
 //! A vehicle's type: its definition, compiled scripts, model, meshes and paint schemes.
 
-use anyhow::{Context, Result};
+use super::builtins::{builtin_str_vars, builtin_vars};
+use super::winding::{winding_pack, WindingVotes};
 use crate::anim::pivot_from_mesh;
+use anyhow::{Context, Result};
 use glam::{Mat4, Vec3};
 use hashbrown::HashMap;
 use omsi_geometry::{mesh_from_o3d, MeshData};
@@ -10,8 +12,6 @@ use omsi_script::{compile, CompileInput, Program};
 use omsi_vehicle::Vehicle;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use super::builtins::{builtin_str_vars, builtin_vars};
-use super::winding::{winding_pack, WindingVotes};
 
 /// A bone of a `[smoothskin]` mesh: the model mesh whose animation moves it (`[setbone]
 /// name id`, the id counting the meshes of the model's first level of detail - the GN92's and
@@ -169,7 +169,15 @@ fn mesh_path(root: &Path, dir: &Path, model_dir: &Path, file: &str) -> PathBuf {
     }
     let model = omsi_cfg::resolve_path(dir, "model");
     let parent = model_dir.parent().map(Path::to_path_buf);
-    for base in [Some(dir.to_path_buf()), Some(model), parent, Some(root.to_path_buf())].into_iter().flatten() {
+    for base in [
+        Some(dir.to_path_buf()),
+        Some(model),
+        parent,
+        Some(root.to_path_buf()),
+    ]
+    .into_iter()
+    .flatten()
+    {
         let p = omsi_cfg::resolve_path(&base, file);
         if omsi_cfg::vfs::exists(&p) {
             return p;
@@ -187,6 +195,19 @@ fn mesh_path(root: &Path, dir: &Path, model_dir: &Path, file: &str) -> PathBuf {
     first
 }
 
+/// The couplings an AI copy's parts join at where its file declares none: 4 m ahead of and
+/// behind its origin, 0.3 m up (see [`VehicleType::load_ai`]).
+pub fn ai_couplings(def: &mut Vehicle) {
+    def.coupling_front
+        .get_or_insert(omsi_vehicle::vehicle::Coupling {
+            pos: [0.0, 4.0, 0.3],
+        });
+    def.coupling_back
+        .get_or_insert(omsi_vehicle::vehicle::Coupling {
+            pos: [0.0, -4.0, 0.3],
+        });
+}
+
 impl VehicleType {
     pub fn load(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, true)
@@ -199,7 +220,10 @@ impl VehicleType {
             .mesh_boxes
             .iter()
             .filter(|(lo, hi)| hi.x > lo.x || hi.y > lo.y)
-            .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(a, b), (lo, hi)| (a.min(*lo), b.max(*hi)));
+            .fold(
+                (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+                |(a, b), (lo, hi)| (a.min(*lo), b.max(*hi)),
+            );
         (hi.y > lo.y).then_some((lo, hi))
     }
 
@@ -215,13 +239,24 @@ impl VehicleType {
     /// A type for AI copies: its meshes are measured (the tyres) and let go - nothing but
     /// the upload to the GPU needs them, and a timetable fleet kept half a gigabyte of
     /// vertices on the CPU. [`VehicleType::mesh_data`] reads a mesh again.
+    ///
+    /// A file without `[coupling_front]` or `[coupling_back]` couples an AI copy's parts 4 m
+    /// ahead of or behind its origin, 0.3 m up, as it always has; the player's vehicle couples
+    /// it at the origin, where OMSI keeps a coupling the file does not declare.
+    /// And a `[boundingbox]` much longer or wider than the model is cut down to the model's
+    /// for an AI copy; the player's vehicle keeps the declared one.
     pub fn load_ai(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, false)
     }
 
     fn load_with(root: &Path, bus_file: &Path, keep_meshes: bool) -> Result<VehicleType> {
-        let def =
+        // (the types without their meshes are the AI's copies)
+        let ai_copy = !keep_meshes;
+        let mut def =
             Vehicle::load(bus_file).with_context(|| format!("loading {}", bus_file.display()))?;
+        if ai_copy {
+            ai_couplings(&mut def);
+        }
         let dir = def.dir().to_path_buf();
         let model_rel = def.model.clone().context("vehicle has no [model]")?;
         let model_path = omsi_cfg::resolve_path(&dir, &model_rel);
@@ -248,7 +283,8 @@ impl VehicleType {
         let mut missing_packs: Vec<(String, usize)> = Vec::new();
         // (by the vehicle pack each mesh comes from, see `winding_pack`)
         let mut turned: Vec<(usize, String)> = Vec::new();
-        let mut votes: std::collections::HashMap<String, WindingVotes> = std::collections::HashMap::new();
+        let mut votes: std::collections::HashMap<String, WindingVotes> =
+            std::collections::HashMap::new();
         if !model.lods.is_empty() {
             let start = model.lods[0].first_mesh;
             let end = model
@@ -267,9 +303,7 @@ impl VehicleType {
                                     let id = md
                                         .bones
                                         .iter()
-                                        .find(|(n, _)| {
-                                            n.trim().eq_ignore_ascii_case(b.name.trim())
-                                        })
+                                        .find(|(n, _)| n.trim().eq_ignore_ascii_case(b.name.trim()))
                                         .map(|(_, id)| *id)
                                         .filter(|id| *id >= 0);
                                     SkinBone {
@@ -286,10 +320,17 @@ impl VehicleType {
                             Vec::new()
                         };
                         // (a mesh none of whose bones is bound moves as a rigid one)
-                        let skin = if skin.iter().any(|b| b.def_index.is_some()) { skin } else { Vec::new() };
+                        let skin = if skin.iter().any(|b| b.def_index.is_some()) {
+                            skin
+                        } else {
+                            Vec::new()
+                        };
                         let pack = winding_pack(&p);
                         match omsi_geometry::positive_det_faces_forward(&m) {
-                            Some(forward) => votes.entry(pack.clone()).or_default().record(forward, m.triangles.len()),
+                            Some(forward) => votes
+                                .entry(pack.clone())
+                                .or_default()
+                                .record(forward, m.triangles.len()),
                             None => {}
                         }
                         if omsi_geometry::turns_round(&m) {
@@ -307,15 +348,16 @@ impl VehicleType {
                             keep_winding: false,
                         })
                     }
-                    Err(e) => {
-                        match omsi_cfg::missing_vehicle_pack(&p) {
-                            Some(pack) => match missing_packs.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(&pack)) {
-                                Some(m) => m.1 += 1,
-                                None => missing_packs.push((pack, 1)),
-                            },
-                            None => log::warn!("{}: {e}", p.display()),
-                        }
-                    }
+                    Err(e) => match omsi_cfg::missing_vehicle_pack(&p) {
+                        Some(pack) => match missing_packs
+                            .iter_mut()
+                            .find(|(n, _)| n.eq_ignore_ascii_case(&pack))
+                        {
+                            Some(m) => m.1 += 1,
+                            None => missing_packs.push((pack, 1)),
+                        },
+                        None => log::warn!("{}: {e}", p.display()),
+                    },
                 }
             }
         }
@@ -348,14 +390,25 @@ impl VehicleType {
         }
         // the model's own items, after the `.cti` files' (their textures in the first
         // `[CTC]` folder, as a `.cti` of that folder has them)
-        let item_dir = model.ctc.first().map(|c| omsi_cfg::resolve_path(&dir, &c.path)).unwrap_or_else(|| dir.clone());
+        let item_dir = model
+            .ctc
+            .first()
+            .map(|c| omsi_cfg::resolve_path(&dir, &c.path))
+            .unwrap_or_else(|| dir.clone());
         for it in &model.items {
-            match paint_schemes.last_mut().filter(|s: &&mut PaintScheme| s.name.eq_ignore_ascii_case(&it.name) && s.dir == item_dir) {
+            match paint_schemes.last_mut().filter(|s: &&mut PaintScheme| {
+                s.name.eq_ignore_ascii_case(&it.name) && s.dir == item_dir
+            }) {
                 Some(s) => {
                     s.textures.push((it.ctc.clone(), it.texture.clone()));
                     s.set_vars.extend(it.set_vars.iter().cloned());
                 }
-                None => paint_schemes.push(PaintScheme { name: it.name.clone(), dir: item_dir.clone(), textures: vec![(it.ctc.clone(), it.texture.clone())], set_vars: it.set_vars.clone() }),
+                None => paint_schemes.push(PaintScheme {
+                    name: it.name.clone(),
+                    dir: item_dir.clone(),
+                    textures: vec![(it.ctc.clone(), it.texture.clone())],
+                    set_vars: it.set_vars.clone(),
+                }),
             }
         }
         let texchanges = omsi_model::load_texchanges(&dir, &model.texchanges);
@@ -363,22 +416,38 @@ impl VehicleType {
         let mesh_boxes: Vec<(Vec3, Vec3)> = meshes
             .iter()
             .map(|m| {
-                let lo = m.data.positions.iter().fold(Vec3::splat(f32::MAX), |a, p| a.min(*p));
-                let hi = m.data.positions.iter().fold(Vec3::splat(f32::MIN), |a, p| a.max(*p));
-                if lo.x <= hi.x { (lo, hi) } else { (Vec3::ZERO, Vec3::ZERO) }
+                let lo = m
+                    .data
+                    .positions
+                    .iter()
+                    .fold(Vec3::splat(f32::MAX), |a, p| a.min(*p));
+                let hi = m
+                    .data
+                    .positions
+                    .iter()
+                    .fold(Vec3::splat(f32::MIN), |a, p| a.max(*p));
+                if lo.x <= hi.x {
+                    (lo, hi)
+                } else {
+                    (Vec3::ZERO, Vec3::ZERO)
+                }
             })
             .collect();
         let mesh_bounds = if keep_meshes {
-            meshes.iter().map(|m| omsi_geometry::bounding_sphere(&m.data.positions)).collect()
+            meshes
+                .iter()
+                .map(|m| omsi_geometry::bounding_sphere(&m.data.positions))
+                .collect()
         } else {
             vec![(Vec3::ZERO, 0.0); meshes.len()]
         };
         // A `[boundingbox]` much longer or wider than the model itself: the W906 Sprinter mod
         // declares 12 m for a 7 m van (copied from a bus), and the walkers ran into an
         // invisible wall metres ahead of its nose and behind its tail, the traffic kept its
-        // distance from nothing. The box is cut down to the model (never made bigger).
-        let mut def = def;
-        if let Some(bb) = def.bounding_box.as_mut() {
+        // distance from nothing. An AI copy's box is cut down to the model (never made
+        // bigger); the player's vehicle keeps the box its file declares, as OMSI does - a
+        // box that does not fit the model is the model's to fix.
+        if let Some(bb) = def.bounding_box.as_mut().filter(|_| ai_copy) {
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
             for m in &meshes {
                 for p in &m.data.positions {
@@ -461,7 +530,9 @@ impl VehicleType {
             .collect()
     }
 
-    /// Unloaded hub height per axle for the physics: the model's wheel centre, raised by what
+    /// Unloaded hub height per axle for the kinematic model (the AI's copies and the parts
+    /// that follow them; the player's rigid body takes its hubs from the `.bus` alone): the
+    /// model's wheel centre, raised by what
     /// the `.bus` tyre is larger than the modelled one. The tyre then touches the road exactly
     /// where the physics puts the contact - the stock SD202's wheels are modelled 1.6 cm
     /// below the model's ground plane and stood that much in the asphalt. A model that says
@@ -471,15 +542,15 @@ impl VehicleType {
     /// plane) cannot show them sitting up in their arches: that axle hangs its wheels as much
     /// lower as the load compresses the spring, and the body keeps its unloaded height.
     pub fn hub_heights(&self, first_axle: usize) -> Vec<Option<f32>> {
-        let loads = crate::rigid::wheel_rest_loads(&self.def);
+        let loads = crate::physics::kinematic_wheel_rest_loads(&self.def);
         self.def
             .axles
             .iter()
             .zip(self.wheel_geometry(first_axle))
             .enumerate()
             .map(|(a, (axle, g))| {
-                let axle = crate::rigid::AxleSpec::of(axle);
-                let r = axle.radius;
+                let axle = crate::physics::AxleSpec::of(axle);
+                let r = axle.kinematic_radius;
                 let model = g
                     .map(|(z, r_mesh)| z + (r - r_mesh))
                     .filter(|z| (z - r).abs() <= 0.08);
@@ -487,7 +558,7 @@ impl VehicleType {
                     return model;
                 }
                 let k = axle.sag_spring;
-                let sag = (loads.get(a).copied().unwrap_or(0.0) / k).min(crate::rigid::BUMP);
+                let sag = (loads.get(a).copied().unwrap_or(0.0) / k).min(crate::physics::BUMP);
                 Some(model.unwrap_or(r) - sag)
             })
             .collect()
@@ -521,7 +592,9 @@ impl VehicleType {
     /// shone white. A body texture is never a flat colour, so the livery stays the model's.
     /// Values are full paths.
     pub fn default_substitutions(&self, root: &Path) -> HashMap<String, String> {
-        static CACHE: std::sync::OnceLock<parking_lot::Mutex<HashMap<PathBuf, HashMap<String, String>>>> = std::sync::OnceLock::new();
+        static CACHE: std::sync::OnceLock<
+            parking_lot::Mutex<HashMap<PathBuf, HashMap<String, String>>>,
+        > = std::sync::OnceLock::new();
         let cache = CACHE.get_or_init(|| parking_lot::Mutex::new(HashMap::new()));
         if let Some(m) = cache.lock().get(&self.def.path) {
             return m.clone();
@@ -530,7 +603,11 @@ impl VehicleType {
         if let Some(first) = self.paint_schemes.first() {
             let dirs = self.texture_dirs(root);
             for (name, default) in &self.model.ctc_textures {
-                let Some((_, file)) = first.textures.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) else {
+                let Some((_, file)) = first
+                    .textures
+                    .iter()
+                    .find(|(n, _)| n.eq_ignore_ascii_case(name))
+                else {
                     continue;
                 };
                 // only a display's colour: a material that shows a script or text texture
@@ -538,16 +615,27 @@ impl VehicleType {
                 // [useTextTexture]). Window paint and a body's transparency map are CTC
                 // textures of one flat tone as well (the LiAZ's `Kuzov_trans.dds`), and the
                 // first repaint's put its livery over the windows as large splashes.
-                let display = self.model.meshes.iter().flat_map(|m| m.materials.iter()).any(|o| {
-                    o.texture.trim().eq_ignore_ascii_case(default.trim())
-                        && (o.transmap.as_deref().is_some_and(|t| t.trim().starts_with("\\S:"))
-                            || o.use_script_texture.is_some()
-                            || o.use_text_texture.is_some())
-                });
+                let display = self
+                    .model
+                    .meshes
+                    .iter()
+                    .flat_map(|m| m.materials.iter())
+                    .any(|o| {
+                        o.texture.trim().eq_ignore_ascii_case(default.trim())
+                            && (o
+                                .transmap
+                                .as_deref()
+                                .is_some_and(|t| t.trim().starts_with("\\S:"))
+                                || o.use_script_texture.is_some()
+                                || o.use_text_texture.is_some())
+                    });
                 if !display {
                     continue;
                 }
-                let own = dirs.iter().map(|d| omsi_cfg::resolve_path(d, default)).find(|p| omsi_cfg::vfs::is_file(p));
+                let own = dirs
+                    .iter()
+                    .map(|d| omsi_cfg::resolve_path(d, default))
+                    .find(|p| omsi_cfg::vfs::is_file(p));
                 let Some(own) = own else { continue };
                 if !flat_placeholder(&own) {
                     continue;
@@ -555,7 +643,10 @@ impl VehicleType {
                 let theirs = omsi_cfg::resolve_path(&first.dir, file);
                 if omsi_cfg::vfs::is_file(&theirs) {
                     log::info!("{}: CTC texture '{name}' is a flat placeholder ({default}); the first paint scheme's {file} lights it", self.def.path.display());
-                    map.insert(default.to_ascii_lowercase(), theirs.to_string_lossy().into_owned());
+                    map.insert(
+                        default.to_ascii_lowercase(),
+                        theirs.to_string_lossy().into_owned(),
+                    );
                 }
             }
         }
@@ -583,7 +674,9 @@ impl VehicleType {
             return Some(std::borrow::Cow::Borrowed(&m.data));
         }
         match omsi_o3d::load_mesh(&m.file) {
-            Ok(o) => Some(std::borrow::Cow::Owned(omsi_geometry::mesh_from_o3d_turning(&o, !m.keep_winding))),
+            Ok(o) => Some(std::borrow::Cow::Owned(
+                omsi_geometry::mesh_from_o3d_turning(&o, !m.keep_winding),
+            )),
             Err(e) => {
                 log::warn!("{}: {e}", m.file.display());
                 None
@@ -613,7 +706,9 @@ impl VehicleType {
 
 /// A texture of one flat, colourless tone (a stand-in the paint schemes replace).
 fn flat_placeholder(p: &Path) -> bool {
-    let Ok(img) = omsi_texture::decode_file(p) else { return false };
+    let Ok(img) = omsi_texture::decode_file(p) else {
+        return false;
+    };
     let n = (img.width as usize * img.height as usize).max(1);
     let step = (n / 4096).max(1);
     let (mut sum, mut sq, mut k) = ([0f64; 3], [0f64; 3], 0f64);
@@ -629,8 +724,11 @@ fn flat_placeholder(p: &Path) -> bool {
         return false;
     }
     let mean: Vec<f64> = sum.iter().map(|s| s / k).collect();
-    let spread = (0..3).map(|c| (sq[c] / k - mean[c] * mean[c]).max(0.0).sqrt()).fold(0.0, f64::max);
-    let chroma = mean.iter().cloned().fold(0.0, f64::max) - mean.iter().cloned().fold(255.0, f64::min);
+    let spread = (0..3)
+        .map(|c| (sq[c] / k - mean[c] * mean[c]).max(0.0).sqrt())
+        .fold(0.0, f64::max);
+    let chroma =
+        mean.iter().cloned().fold(0.0, f64::max) - mean.iter().cloned().fold(255.0, f64::min);
     // (a few black cells for the unlit part of a matrix are allowed: the median tone matters)
     spread < 40.0 && chroma < 20.0
 }

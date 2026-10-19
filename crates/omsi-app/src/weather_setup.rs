@@ -4,6 +4,10 @@ use crate::cli::Args;
 use crate::lights;
 use crate::scene;
 use crate::startup::{CLASSIC, CLOUDS, ENHANCED};
+pub(crate) use omsi_content::weather::psychro::{
+    absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
+    relative_humidity_percent as relative_humidity,
+};
 use omsi_render::{Renderer, Scene};
 use std::path::Path;
 
@@ -100,19 +104,6 @@ impl CustomWeather {
             pressure:c.pressure,clouds:(cloud.into(),c.cloud_base_m),precip:vec![c.precip as f32,c.precip_intensity,0.0,0.0,0.0],
             ground_wet:[c.road_wetness*255.0,0.0,0.0],snow:c.snow_cover,snow_on_road:c.snow_on_road}
     }
-}
-fn saturation_vapour_pressure(temp_c:f32)->f32{6.112*((17.67*temp_c)/(temp_c+243.5)).exp()}
-pub(crate) fn absolute_humidity(temp_c:f32,relative:f32)->f32{
-    let vapour=saturation_vapour_pressure(temp_c)*relative.clamp(0.0,100.0)/100.0;
-    (216.7*vapour/(temp_c+273.15).max(1.0)).max(0.0)
-}
-pub(crate) fn relative_humidity(temp_c:f32,absolute:f32)->f32{
-    let vapour=absolute.max(0.0)*(temp_c+273.15).max(1.0)/216.7;
-    (vapour/saturation_vapour_pressure(temp_c).max(0.001)*100.0).clamp(0.0,100.0)
-}
-pub(crate) fn dew_point_c(temp_c:f32,relative:f32)->f32{
-    let rh=(relative.clamp(0.1,100.0)/100.0).ln();
-    let g=rh+17.67*temp_c/(243.5+temp_c); 243.5*g/(17.67-g)
 }
 pub(crate) fn custom_weather(text:Option<&str>)->Option<CustomWeather>{text.and_then(CustomWeather::parse)}
 
@@ -333,7 +324,7 @@ pub(crate) fn cloud_field(cover: Option<&omsi_texture::Image>) -> omsi_texture::
     stretch(&mut tall);
     let to_srgb = |x: f32| -> u8 {
         let x = x.clamp(0.0, 1.0);
-        let s = if x <= 0.003_130_8 { x * 12.92 } else { 1.055 * x.powf(1.0 / 2.4) - 0.055 };
+        let s = omsi_texture::srgb::from_linear(x);
         (s * 255.0 + 0.5) as u8
     };
     // the weather's picture, sampled bilinearly (it tiles as well), its brightness the cover
@@ -374,17 +365,8 @@ fn cloud_texture(root: &Path, kind: &str) -> Option<omsi_texture::Image> {
     if kind.is_empty() || kind.starts_with("-1") {
         return None;
     }
-    let cfg = omsi_cfg::vfs::read(&root.join("Weather").join("clouds.cfg")).ok()?;
-    let text = omsi_cfg::codepage::decode(&cfg);
-    let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
-    let mut file = None;
-    for i in 0..lines.len() {
-        if lines[i].eq_ignore_ascii_case("[cloudtype]") && lines.get(i + 1).map(|n| n.eq_ignore_ascii_case(kind)).unwrap_or(false) {
-            file = lines.get(i + 2).map(|s| s.to_string());
-            break;
-        }
-    }
-    let file = file?;
+    let clouds = omsi_content::Envir::load(&root.join("Weather").join("clouds.cfg")).ok()?;
+    let file = clouds.cloud_type(kind)?.texture.trim().to_string();
     let mut img = omsi_texture::decode_file(&omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&root, "Texture"), &file)).ok()?;
     if img.has_alpha {
         for px in img.rgba.chunks_mut(4) {
@@ -588,7 +570,7 @@ pub(crate) fn metar_airports(root:&std::path::Path)->Vec<(String,String)>{
     static CACHE:std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf,Vec<(String,String)>>>>=std::sync::OnceLock::new();
     let cache=CACHE.get_or_init(||std::sync::Mutex::new(std::collections::HashMap::new()));
     if let Some(v)=cache.lock().unwrap_or_else(|e|e.into_inner()).get(root).cloned(){return v}
-    let text=std::fs::read(omsi_cfg::resolve_path(root,"Weather/ICAO.txt")).map(|b|omsi_cfg::codepage::decode(&b)).unwrap_or_default();
+    let text=std::fs::read(omsi_cfg::resolve_path(root,"Weather/ICAO.txt")).map(|b|omsi_cfg::decode_text(&b)).unwrap_or_default();
     let mut v:Vec<(String,String)>=text.lines().filter_map(|l|l.split_once(" - ").map(|(c,n)|(c.trim().to_ascii_uppercase(),format!("{} - {}",c.trim(),n.trim()))))
         .filter(|(c,_)|c.len()==4&&c.chars().all(|x|x.is_ascii_alphabetic())).collect();
     if !v.iter().any(|a|a.0=="EDDB"){v.push(("EDDB".into(),"EDDB - Berlin Brandenburg".into()))}

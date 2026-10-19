@@ -6,7 +6,26 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Changed
+- Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
+
 ### Fixed
+- The city map's view turns smoothly (the short way round) when the compass changes how it is turned, or
+  the vehicle's heading changes, instead of jumping.
+- The city map's lines panel (and the "you are on" chip) is translated into every interface language through the
+  catalog, not only Portuguese and English, and decimals take the comma in every language that writes them so
+  (before, only Portuguese did). A test checks every text of the panel exists in all languages.
+- A map package's icon path can no longer point outside the package: absolute paths, drives (`C:`),
+  shares and `.`/`..`/empty parts leave the marker out (before, only `..` was refused).
+- In the lines panel's timetable, two trips leaving at the same minute are told apart: picking one
+  shows its own stops, not the other's.
+- The lines panel no longer stalls the frame reading a big map's timetable: it is read in a background
+  thread ("Loading timetable…" meanwhile), and only when the timetable is opened, not when a line is.
+- The terrain view of the city map writes the heights of the ordinary contour lines too when zoomed in
+  (the index lines' only from farther away), and the contour lines are drawn fainter as the view widens.
+- The lines panel's timetable follows the session's date like the AI buses do: a tour that runs only in
+  term time or only in school holidays (`Holidays.txt`) no longer shows up together with the other, and
+  the timetable is read again when the date changes.
 - Destination signs, IBIS screens and ticket printer output come back with a saved situation
   (#34): the scripts draw them only when something changes, so the variables alone brought
   them back empty. Each vehicle's `[scripttexture]` images are saved next to the situation as
