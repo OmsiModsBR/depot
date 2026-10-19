@@ -55,6 +55,7 @@ mod lights;
 mod launcher;
 mod menu;
 mod new_ui;
+mod new_ui_add;
 mod new_ui_alt;
 mod new_ui_loading;
 mod mirror_hud;

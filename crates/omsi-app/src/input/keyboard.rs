@@ -213,6 +213,10 @@ impl App {
             } else if !pressed {
                 self.keys.remove(&code);
             }
+            // Esc closes the new interface's "Add vehicle" window before anything else
+            if self.add_key(code, pressed) {
+                return;
+            }
             // the Alt bar of the new interface: a tap of Alt, and its keys while the keyboard is on it
             if self.alt_key(code, pressed, repeat) {
                 return;

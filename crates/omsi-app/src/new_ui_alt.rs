@@ -59,14 +59,19 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     };
     let need = |ok: bool, why: &'static str| (!ok).then_some(why);
     vec![
-        b("add", Icon("add"), "Add vehicle", Some(NOT_YET)),
+        b("add", Icon("add"), "Add vehicle", None),
         b(
             "swap",
             Icon("sync_alt"),
             "Switch vehicle",
             need(ctx.other_vehicle, "There is no other vehicle to drive"),
         ),
-        b("remove", Icon("close"), "Remove vehicle", Some(NOT_YET)),
+        b(
+            "remove",
+            Icon("close"),
+            "Remove vehicle",
+            need(ctx.player, "No vehicle to remove"),
+        ),
         b(
             "reposition",
             Icon("download"),
@@ -306,7 +311,9 @@ impl App {
     /// game nor close or open any menu.
     fn alt_do(&mut self, id: &str) {
         match id {
+            "add" => self.open_add_vehicle(),
             "swap" => self.switch_vehicle(),
+            "remove" => self.remove_driven_vehicle(),
             "skip" => self.skip_next_stop(),
             "repair" | "wash" | "refuel" => self.run_service(id),
             "shot" => self.take_screenshot(),
@@ -478,14 +485,14 @@ mod tests {
                 .map(|b| b.id)
                 .collect()
         };
-        assert_eq!(enabled_ids(&AltCtx::default()), vec!["shot"]);
+        assert_eq!(enabled_ids(&AltCtx::default()), vec!["add", "shot"]);
         assert_eq!(
             enabled_ids(&all_on()),
-            vec!["swap", "skip", "repair", "wash", "refuel", "shot"]
+            vec!["add", "swap", "remove", "skip", "repair", "wash", "refuel", "shot"]
         );
         // what is not in the game yet stays dim whatever the state
         let bs = buttons(&all_on());
-        for id in ["add", "remove", "ai", "accident", "help"] {
+        for id in ["ai", "accident", "help"] {
             let b = bs.iter().find(|b| b.id == id).unwrap();
             assert!(b.disabled.is_some(), "{id} should be dim");
         }
@@ -543,9 +550,9 @@ mod tests {
         let bs = buttons(&all_on());
         let id = |i: Option<usize>| bs[i.unwrap()].id;
         let first = step_focus(&bs, None, Nav::Right);
-        assert_eq!(id(first), "swap");
+        assert_eq!(id(first), "add");
         let next = step_focus(&bs, first, Nav::Right);
-        assert_eq!(id(next), "skip");
+        assert_eq!(id(next), "swap");
         // Left from the first goes round to the last
         assert_eq!(id(step_focus(&bs, first, Nav::Left)), "shot");
         // Down goes along the column to the next usable one, round the bar if need be
@@ -554,13 +561,14 @@ mod tests {
         let shot = bs.iter().position(|b| b.id == "shot");
         assert_eq!(id(step_focus(&bs, shot, Nav::Up)), "refuel");
         // nothing usable in the column: stays
-        assert_eq!(id(step_focus(&bs, first, Nav::Down)), "swap");
-        // nowhere usable: stays
+        assert_eq!(id(step_focus(&bs, next, Nav::Down)), "swap");
+        // only two usable: Right goes between them, Down stays
         let none = buttons(&AltCtx::default());
         let shot = none.iter().position(|b| b.id == "shot");
-        assert_eq!(step_focus(&none, shot, Nav::Right), shot);
+        let add = none.iter().position(|b| b.id == "add");
+        assert_eq!(step_focus(&none, shot, Nav::Right), add);
         assert_eq!(step_focus(&none, shot, Nav::Down), shot);
-        assert_eq!(step_focus(&none, None, Nav::Right), shot);
+        assert_eq!(step_focus(&none, None, Nav::Right), add);
     }
 
     #[test]
