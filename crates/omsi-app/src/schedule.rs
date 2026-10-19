@@ -4803,6 +4803,12 @@ impl PlayerDuty {
         &self.trips[self.trip_index]
     }
 
+    /// The bus has stood at the current trip's last stop with a passenger door open: the
+    /// trip is over (the end-of-trip report opens then).
+    pub fn terminus_served(&self) -> bool {
+        self.served_terminus.is_some()
+    }
+
     pub fn trip_done(&self) -> bool {
         self.done
     }

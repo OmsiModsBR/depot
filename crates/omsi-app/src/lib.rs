@@ -58,6 +58,7 @@ mod new_ui;
 mod new_ui_add;
 mod new_ui_alt;
 mod new_ui_loading;
+mod new_ui_report;
 mod mirror_hud;
 mod map_surface;
 mod nav;

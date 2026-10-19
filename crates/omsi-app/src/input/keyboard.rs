@@ -213,6 +213,10 @@ impl App {
             } else if !pressed {
                 self.keys.remove(&code);
             }
+            // the new interface's end-of-trip report has the keys while it shows
+            if self.report_key(code, pressed) {
+                return;
+            }
             // Esc closes the new interface's "Add vehicle" window before anything else
             if self.add_key(code, pressed) {
                 return;

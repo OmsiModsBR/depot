@@ -239,6 +239,9 @@ impl App {
         if let Some(w) = self.new_ui.add.as_mut() {
             w.forget_press();
         }
+        if let Some(r) = self.new_ui.report.as_mut() {
+            r.forget_press();
+        }
         if let Some(p) = self.player.as_mut() {
             p.release();
         }

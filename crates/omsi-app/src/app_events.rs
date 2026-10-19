@@ -1605,6 +1605,7 @@ impl ApplicationHandler for App {
                 if !self.paused {
                     self.tick_service(dt);
                 }
+                let mut finished = None;
                 if let (Some(d), Some(p), Some(w), false) = (
                     self.duty.as_mut(),
                     self.player.as_mut(),
@@ -1624,6 +1625,10 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
+                    // (the trip served to its last stop: its report, once)
+                    if d.terminus_served() {
+                        finished = Some(((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index));
+                    }
                     #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
@@ -1641,6 +1646,9 @@ impl ApplicationHandler for App {
                     ) {
                         log::warn!("driver timetable paper: {e:#}");
                     }
+                }
+                if let Some((key, trip)) = finished {
+                    self.trip_finished(key, trip);
                 }
                 if let Some(p) = self.player.as_mut() {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
@@ -3304,7 +3312,7 @@ impl App {
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
         // over the new interface's "Add vehicle" window the wheel scrolls its list
-        if self.add_wheel(amount) { return; }
+        if self.report_wheel(amount) || self.add_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3401,6 +3409,10 @@ impl App {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
+        }
+        // the new interface's end-of-trip report takes every click while it shows
+        if self.report_click(pressed) {
+            return;
         }
         // the new interface's "Add vehicle" window takes the clicks on it
         if self.add_click(pressed) {

@@ -5,6 +5,7 @@
 
 use crate::career::{EARLY_DEPARTURE, LATE_ARRIVAL};
 use crate::schedule::{PlannedTrip, PlayerDuty};
+use omsi_ui::ingame::{ReportRow, StopState};
 use std::path::PathBuf;
 
 /// One stop of a trip in the log.
@@ -19,6 +20,18 @@ struct Row {
     /// The trip begins here (no arrival to tell) / ends here (no departure).
     first: bool,
     last: bool,
+}
+
+/// A trip's report: its title, a row per stop, and the totals as (label, value).
+pub(crate) type TripLines = (String, Vec<ReportRow>, Vec<(&'static str, String)>);
+
+impl Row {
+    /// Whether the bus arrived late here, and whether it left early (as the career counts).
+    fn judged(&self) -> (bool, bool) {
+        let late = !self.first && self.arrived.is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
+        let early = !self.last && self.left.is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
+        (late, early)
+    }
 }
 
 pub(crate) struct Journey {
@@ -73,6 +86,45 @@ impl Journey {
         true
     }
 
+    /// What the end-of-trip report shows of trip `t` (its place in the duty): its title, a
+    /// row per stop and the totals, as the log counts them.
+    pub(crate) fn report(&self, t: usize) -> Option<TripLines> {
+        let title = self.trips.get(t)?.clone();
+        let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
+        let (mut served, mut late, mut early) = (0, 0, 0);
+        let mut out = Vec::new();
+        for (i, r) in rows.iter().enumerate() {
+            let (is_late, is_early) = r.judged();
+            // (the first stop is about its departure, and a stop left early; every other
+            // about its arrival)
+            let by_departure = r.first || (is_early && !is_late);
+            let [plan, real, diff] = if by_departure { times(r.plan.1, r.left) } else { times(r.plan.0, r.arrived) };
+            let state = if r.arrived.is_some() || r.left.is_some() {
+                served += 1;
+                late += is_late as usize;
+                early += is_early as usize;
+                if is_late {
+                    StopState::Late
+                } else if is_early {
+                    StopState::LeftEarly
+                } else {
+                    StopState::OnTime
+                }
+            } else if rows[i + 1..].iter().any(|x| x.arrived.is_some() || x.left.is_some()) {
+                StopState::Missed
+            } else {
+                StopState::None
+            };
+            out.push(ReportRow { stop: r.name.clone(), scheduled: plan, actual: real, deviation: diff, state });
+        }
+        let totals = vec![
+            ("Stops served", format!("{served} of {}", rows.len())),
+            ("Late arrivals", late.to_string()),
+            ("Early departures", early.to_string()),
+        ];
+        Some((title, out, totals))
+    }
+
     fn row(&mut self, (trip, stop): (usize, usize)) -> Option<&mut Row> {
         self.rows.iter_mut().find(|r| r.trip == trip && r.stop == stop)
     }
@@ -92,8 +144,7 @@ impl Journey {
             for (i, r) in rows.iter().enumerate() {
                 let arr = if r.first { [String::new(), String::new(), String::new()] } else { times(r.plan.0, r.arrived) };
                 let dep = if r.last { [String::new(), String::new(), String::new()] } else { times(r.plan.1, r.left) };
-                let is_late = !r.first && r.arrived.is_some_and(|a| (a - r.plan.0).round() > LATE_ARRIVAL);
-                let is_early = !r.last && r.left.is_some_and(|l| (l - r.plan.1).round() < EARLY_DEPARTURE);
+                let (is_late, is_early) = r.judged();
                 let status = if r.arrived.is_some() || r.left.is_some() {
                     served += 1;
                     late += is_late as usize;
@@ -238,6 +289,16 @@ mod tests {
         assert!(line("Muzealna").contains("08:15:00  08:14:30  -00:00:30"), "{text}");
         assert!(!text.contains("Trip 2"), "a trip not begun is not in it yet: {text}");
         assert!(text.contains("Stops served: 3, late: 1, left early: 0"), "{text}");
+        // the end-of-trip report shows the same
+        let (title, rows, totals) = j.report(0).expect("trip 1");
+        assert_eq!(title, "Trip 1  ·  5 to Muzealna  ·  08:00:00");
+        let states: Vec<StopState> = rows.iter().map(|r| r.state).collect();
+        assert_eq!(states, vec![StopState::OnTime, StopState::Late, StopState::Missed, StopState::OnTime]);
+        assert_eq!((rows[0].scheduled.as_str(), rows[0].actual.as_str()), ("08:00:00", "08:00:57"));
+        assert_eq!(rows[3].deviation, "-00:00:30");
+        assert_eq!(totals[0], ("Stops served", "3 of 4".to_string()));
+        assert_eq!(totals[1], ("Late arrivals", "1".to_string()));
+        assert!(j.report(5).is_none());
         let _ = std::fs::remove_dir_all(&dir);
         // a duty taken up at its second trip: the first is not in it
         let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", dir.clone());
