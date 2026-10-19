@@ -7,7 +7,7 @@ The new UI consumes the settings model of #151. A new screen is not evidence of 
 ## Where we are
 
 - The launcher is a window of the game binary (`omsi-app::launcher`), drawn with `omsi-ui` (wgpu, no WebView) in the same process as the game renderer. `crates/omsi-launcher-core` holds the launcher logic that does not need a window and also ships a command-line launcher (`depot-launcher --cli`), which must keep working.
-- `omsi-ui` already provides text, icons, an atlas and a painter (rounded boxes, shadows, lines). The launcher look lives in `omsi-app/src/launcher/theme.rs` as plain constants.
+- `omsi-ui` already provides text, icons, an atlas, a painter (rounded boxes, shadows, lines), the immediate-mode widget kit (moved there in #181) and the design tokens in `omsi_ui::theme`. `omsi-app/src/launcher/theme.rs` only re-exports them, so the launcher and the in-game menus share one look today.
 
 ## Goals
 
@@ -20,7 +20,11 @@ Non-goals: WebView, C++, a new toolkit, multiplayer, plug-ins, renaming the proj
 
 ## 1. Design tokens and components
 
-Move the constants of `theme.rs` into `omsi-ui` as named tokens (colors, radii, spacing, row height, type scale, elevation) with a dark theme first. Reusable components, each with the states normal, hover, focus, pressed, disabled (with a reason), loading, empty, error:
+The colors are already named tokens in `omsi_ui::theme`. Grow that module with the rest (radii, spacing, row height, type scale, elevation), dark theme first.
+
+Two token sets exist on purpose until the new look becomes the default: `omsi_ui::theme` is the current look, shared with the game's menus; the new launcher keeps the v5 colors and measures in its own `look.rs` (#252) so that the current look does not move. Folding `look.rs` into `omsi_ui::theme` is part of migration step 5, when the new launcher becomes the default.
+
+Reusable components, each with the states normal, hover, focus, pressed, disabled (with a reason), loading, empty, error:
 
 - sidebar navigation (collapsible), tabs, buttons, switches, selects, sliders, search field
 - virtualized list and grid (large mod collections must scroll without building every row)
@@ -29,15 +33,27 @@ Move the constants of `theme.rs` into `omsi-ui` as named tokens (colors, radii, 
 
 Rules: keyboard-only operation with a visible focus ring and a defined tab order; layout works from 1280x720 up, DPI scale 100-200%, windowed and fullscreen; contrast checked per token pair. Do not copy mockup pixels; mockups are references for hierarchy, not specs.
 
-Layer priority (highest first), to be tested: modal dialog, pause menu, shortcut bar, tooltip, map, editor, HUD, cabin controls. Esc closes the topmost closable layer only.
+Layer priority (not part of C6 step 1b): it is introduced with the step that wires the pause menu and the Alt bar into the game, and its order will be defined in one place in `omsi-ui` (a layer enum the game's frame reads) with a test for each pair. Until then Esc keeps its current meaning in each screen. Priority (highest first): modal dialog, pause menu, shortcut bar, tooltip, map, editor, HUD, cabin controls. Esc closes the topmost closable layer only.
+
+## Acceptance for C6 step 1b (keyboard focus in the kit)
+
+C6 step 1b of #61 can start from this list; #321 implements exactly it:
+
+- Tab and Shift+Tab walk the clickable widgets in the order they are drawn, wrapping around.
+- Enter or Space presses the chosen widget; nothing is pressed before a key has chosen one.
+- A visible ring marks the chosen widget; a mouse press or Esc takes it away.
+- An open dropdown or date picker keeps the keys; Tab leaves a focused text field.
+- Off by default: a caller that does not ask for it behaves exactly as before.
+
+Not required for 1b, and left for a later step: arrow keys on sliders and lists, and Tab entering a text field.
 
 ## 2. Launcher and game as separate processes
 
 Components:
 
 - `launcher` process: content catalog, settings store, profiles, mods, sessions, diagnostics, preview cache. Reuses `omsi-launcher-core`; must not depend on the game's `App` or scene.
-- `game` process: the runtime, started by the launcher with explicit arguments (as today).
-- `preview helper`: the game binary in a preview mode (proposed flag `--preview`, not yet existing) that renders one bus and paint to an image and exits.
+- `game` process: the runtime, started by the launcher with explicit arguments (as today; together with the `settings.cfg` round trip of T0.3 this is the baseline contract that the transport chosen in the spike must stay compatible with).
+- `preview helper`: the game binary in a preview mode (proposed flag `--preview`, not yet existing) that renders one bus and paint to an image and exits. It sits beside the existing `--export-glb` mode (which writes the vehicle as a glTF file for the launcher's 3D preview) and reuses its way of resolving the bus and paint and its limits, rather than adding a second path.
 
 ### Launcher/game contract (proposal)
 
@@ -87,7 +103,7 @@ Each step is its own small pull request with before/after screenshots, a navigat
 
 ## 6. Regression checklist for every UI pull request
 
-- keyboard shortcuts: Esc, Alt+Enter, Alt+S, P, Shift+M/N/Y, Insert, F-keys, Alt+I/J/K/L, Ctrl combinations (Alt alone must not swallow combinations)
+- keyboard shortcuts: every key listed in `docs/USER_GUIDE.md` (the "Running" and "The launcher" sections) still does what it did, and Alt alone must not swallow combinations
 - settings still persist and apply with the same timing
 - mods drag and drop, in-place ZIP install, timetable copy editor, parallel sessions, driver profiles, original-folder setup, `--cli`
 - resolution matrix: 1280x720, 1366x768, 1920x1080, ultrawide, DPI 100/150/200%
@@ -107,7 +123,7 @@ Built as stacked draft pull requests, merged in order only when the maintainer c
 | Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
 | Offscreen example drawing every screen with placeholder data (#250) | draft |
 
-Not started: design tokens moved into `omsi-ui` (the colors still live next to each screen), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The screens are not wired into the game's own menus yet.
+Not started: the v5 look inside `omsi_ui::theme` (the new launcher keeps it in its own `look.rs` for now), the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The screens are not wired into the game's own menus yet.
 
 ## Open decisions (maintainer)
 
