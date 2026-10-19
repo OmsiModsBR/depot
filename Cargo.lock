@@ -3235,6 +3235,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-launcher-ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "glam",
+ "image",
+ "log",
+ "omsi-launcher-core",
+ "omsi-ui",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "omsi-map"
 version = "0.1.0"
 dependencies = [

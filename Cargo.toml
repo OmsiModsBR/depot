@@ -21,6 +21,7 @@ members = [
     "crates/omsi-plugin/demo",
     "crates/omsi-ui",
     "crates/omsi-launcher-core",
+    "crates/omsi-launcher-ui",
     "crates/omsi-app",
     "tools/omsi-check",
 ]
