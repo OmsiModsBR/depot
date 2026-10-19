@@ -101,6 +101,19 @@ pub fn list(dir: &Path) -> Vec<Shot> {
     out
 }
 
+/// The map's folder name in a session summary's `map`, which is the path the game was started
+/// with (`maps/Grundorf/global.cfg`); a bare folder name stays as it is.
+fn folder_of(map: &str) -> &str {
+    let p = map.trim_end_matches(['/', '\\']);
+    let mut it = p.rsplit(['/', '\\']).filter(|s| !s.is_empty());
+    let last = it.next().unwrap_or("");
+    if last.to_ascii_lowercase().ends_with(".cfg") {
+        it.next().unwrap_or(last)
+    } else {
+        last
+    }
+}
+
 /// The screenshots of `map` among `shots`, oldest first. A screenshot named after a map
 /// belongs to that map; one with no map in its name belongs to the session that ended
 /// after it (see the module notes).
@@ -114,7 +127,7 @@ pub fn of_map(shots: &[Shot], sessions: &[Session], map: &str) -> Vec<PathBuf> {
             Some(m) => m.eq_ignore_ascii_case(&wanted),
             None => {
                 let next = ends.iter().find(|(end, _)| *end >= shot.time);
-                matches!(next, Some((end, m)) if end - shot.time <= MAX_SPAN && m.eq_ignore_ascii_case(map))
+                matches!(next, Some((end, m)) if end - shot.time <= MAX_SPAN && folder_of(m).eq_ignore_ascii_case(map))
             }
         })
         .map(|s| s.path.clone())
@@ -161,6 +174,16 @@ mod tests {
         assert_eq!(parse("omsi_1760000000.bmp"), None);
         assert_eq!(parse("holiday.png"), None);
         assert_eq!(parse("omsi_x.png"), None);
+    }
+
+    #[test]
+    fn a_session_map_given_as_a_path_is_matched_by_its_folder() {
+        assert_eq!(folder_of("maps/Grundorf/global.cfg"), "Grundorf");
+        assert_eq!(folder_of("maps\\Grundorf\\Global.cfg"), "Grundorf");
+        assert_eq!(folder_of("Grundorf"), "Grundorf");
+        let sessions = [session(11, "maps/Grundorf/global.cfg")];
+        assert_eq!(of_map(&[shot(10)], &sessions, "grundorf").len(), 1);
+        assert!(of_map(&[shot(10)], &sessions, "Berlin").is_empty());
     }
 
     #[test]
