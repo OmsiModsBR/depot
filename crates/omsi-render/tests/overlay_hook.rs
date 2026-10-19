@@ -19,6 +19,17 @@ fn camera() -> Camera {
 
 #[test]
 fn the_hook_draws_over_the_picture_at_full_size_and_can_be_taken_away() {
+    // (the game runs on a main thread with an 8 MB stack, see .cargo/config.toml; a test
+    // thread has 2 MB, which a frame's setup does not fit on Windows)
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(hook_draws_and_goes_away)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn hook_draws_and_goes_away() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let Ok(mut renderer) = pollster::block_on(Renderer::new_with(
         &instance,
