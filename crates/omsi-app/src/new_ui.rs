@@ -131,6 +131,35 @@ pub(crate) fn menu_frame(
     }
 }
 
+/// The game menu's lines in the order the column shows them (section by section, each in the
+/// game's own order), as indices into `items`.
+pub(crate) fn display_order(items: &[(&str, &str)]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..items.len()).collect();
+    order.sort_by_key(|&k| place(items[k].0).0);
+    order
+}
+
+/// The line after (or before) `from` in the displayed order, skipping greyed-out ones.
+pub(crate) fn step_displayed(
+    items: &[(&str, &str)],
+    from: usize,
+    down: bool,
+    off: &dyn Fn(usize) -> bool,
+) -> usize {
+    let order = display_order(items);
+    let n = order.len();
+    let Some(at) = order.iter().position(|&k| k == from) else {
+        return from;
+    };
+    for i in 1..=n {
+        let next = if down { (at + i) % n } else { (at + n - i % n) % n };
+        if !off(order[next]) {
+            return order[next];
+        }
+    }
+    from
+}
+
 impl MenuFrame {
     fn with_view<R>(&self, f: impl FnOnce(&View) -> R, logo: Option<(usize, f32)>) -> R {
         let sections: Vec<Section> = self
@@ -317,6 +346,11 @@ impl App {
         )
     }
 
+    /// Arrow keys in the new menu walk the lines as they are shown.
+    pub(crate) fn new_menu_step(&self, from: usize, down: bool) -> usize {
+        step_displayed(&self.game_menu_items(), from, down, &|k| self.menu_item_off(k))
+    }
+
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
         if !enabled() {
@@ -360,6 +394,28 @@ mod tests {
 
     fn items() -> Vec<(&'static str, &'static str)> {
         crate::input::menus::GAME_MENU.to_vec()
+    }
+
+    #[test]
+    fn arrow_keys_follow_the_displayed_order() {
+        // the tour lines sit in "Session", right under Resume, though the game lists them later
+        let list = [
+            ("resume", "Resume"),
+            ("options", "Options..."),
+            ("map", "City map"),
+            ("duty", "Line and tour..."),
+            ("skipstop", "Skip the next stop"),
+            ("quit", "End the session"),
+        ];
+        let none = |_: usize| false;
+        assert_eq!(display_order(&list), vec![0, 3, 4, 1, 2, 5]);
+        assert_eq!(step_displayed(&list, 0, true, &none), 3);
+        assert_eq!(step_displayed(&list, 4, true, &none), 1);
+        assert_eq!(step_displayed(&list, 1, false, &none), 4);
+        assert_eq!(step_displayed(&list, 5, true, &none), 0);
+        assert_eq!(step_displayed(&list, 0, false, &none), 5);
+        // a greyed-out line is stepped over
+        assert_eq!(step_displayed(&list, 0, true, &|k| k == 3), 4);
     }
 
     #[test]
