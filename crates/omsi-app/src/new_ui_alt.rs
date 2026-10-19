@@ -40,6 +40,8 @@ pub(crate) struct AltCtx {
     pub player: bool,
     pub other_vehicle: bool,
     pub stop_to_skip: bool,
+    /// A vehicle follows the mouse, not yet put down.
+    pub placing: bool,
 }
 
 /// Why a button for something the game does not have yet cannot be used.
@@ -59,7 +61,12 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     };
     let need = |ok: bool, why: &'static str| (!ok).then_some(why);
     vec![
-        b("add", Icon("add"), "Add vehicle", None),
+        b(
+            "add",
+            Icon("add"),
+            "Add vehicle",
+            ctx.placing.then_some(crate::new_ui_add::PLACING),
+        ),
         b(
             "swap",
             Icon("sync_alt"),
@@ -292,6 +299,7 @@ impl App {
             player: self.player.is_some(),
             other_vehicle: !self.placed.is_empty(),
             stop_to_skip: self.duty.as_ref().is_some_and(|d| d.stop_to_skip()),
+            placing: self.placing.is_some(),
         }
     }
 
@@ -453,6 +461,7 @@ mod tests {
             player: true,
             other_vehicle: true,
             stop_to_skip: true,
+            placing: false,
         }
     }
 
@@ -490,6 +499,12 @@ mod tests {
             enabled_ids(&all_on()),
             vec!["add", "swap", "remove", "skip", "repair", "wash", "refuel", "shot"]
         );
+        // one vehicle on the mouse at a time
+        let placing = AltCtx {
+            placing: true,
+            ..all_on()
+        };
+        assert!(!enabled_ids(&placing).contains(&"add"));
         // what is not in the game yet stays dim whatever the state
         let bs = buttons(&all_on());
         for id in ["ai", "accident", "help"] {

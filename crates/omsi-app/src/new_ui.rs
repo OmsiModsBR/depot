@@ -355,6 +355,7 @@ impl Overlay {
                 self.ui.input.down = false;
             }
             Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
+            Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
             None if add.is_none() && report.is_none() => self.ui.input.down = false,
             None => {}
         }

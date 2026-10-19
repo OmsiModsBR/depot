@@ -22,6 +22,8 @@ pub(crate) enum WinInput {
     Press,
     Release,
     Wheel(f32),
+    /// The window lost the mouse: a press it holds ends without a click.
+    Lost,
 }
 
 /// What the overlay draws of the window, owned so that it can cross to the renderer.
@@ -69,6 +71,8 @@ pub(crate) struct AddWindow {
 }
 
 const RANDOM_LIVERY: &str = "Random livery";
+/// Why no vehicle is added now.
+pub(crate) const PLACING: &str = "Put down the vehicle on the mouse first";
 const MAP_DEPOT: &str = "The map's depot file";
 
 impl AddWindow {
@@ -114,11 +118,6 @@ impl AddWindow {
         self.depot = 0;
     }
 
-    /// The window lost the mouse: the release of a press it took will not come.
-    pub(crate) fn forget_press(&mut self) {
-        self.pressed = false;
-    }
-
     pub(crate) fn vehicle_file(&self, i: usize) -> Option<&str> {
         self.vehicles.get(i).map(|v| v.1.as_str())
     }
@@ -159,6 +158,11 @@ impl App {
 
     /// Open the window (the Alt bar's "Add vehicle"), with the vehicles the place list has.
     pub(crate) fn open_add_vehicle(&mut self) {
+        // (one vehicle on the mouse at a time: a second would leave the first where it was)
+        if self.placing.is_some() {
+            self.service_msg = Some((PLACING.into(), 3.0));
+            return;
+        }
         self.load_vehicle_list();
         let vehicles = crate::game_lists::place_choices(self);
         if vehicles.is_empty() {
@@ -250,6 +254,10 @@ impl App {
                 AddVehicleEvent::Livery(i) => win.set_livery(i),
                 AddVehicleEvent::Depot(i) => win.set_depot(i),
                 AddVehicleEvent::Place => {
+                    if self.placing.is_some() {
+                        self.service_msg = Some((PLACING.into(), 3.0));
+                        continue;
+                    }
                     let placement = win.placement();
                     self.new_ui.close_add();
                     if let Some((bus, livery, depot)) = placement {

@@ -69,6 +69,15 @@ impl App {
             }
             return;
         }
+        // the new interface's end-of-trip report has the keys while it shows
+        if self.report_key(code, pressed) {
+            return;
+        }
+        // Esc closes the new interface's "Add vehicle" window before anything else (the city
+        // map, the mirror editor)
+        if self.add_key(code, pressed) {
+            return;
+        }
         // The mirror panels (see mirror_hud.rs): Ctrl+M shows or hides them, Ctrl+Shift+M
         // starts and ends their editor; in the editor Insert, Delete, C and Esc are its keys.
         if self.in_cab && self.game_menu.is_none() && self.player.is_some() {
@@ -212,14 +221,6 @@ impl App {
                 self.keys.insert(code);
             } else if !pressed {
                 self.keys.remove(&code);
-            }
-            // the new interface's end-of-trip report has the keys while it shows
-            if self.report_key(code, pressed) {
-                return;
-            }
-            // Esc closes the new interface's "Add vehicle" window before anything else
-            if self.add_key(code, pressed) {
-                return;
             }
             // the Alt bar of the new interface: a tap of Alt, and its keys while the keyboard is on it
             if self.alt_key(code, pressed, repeat) {
