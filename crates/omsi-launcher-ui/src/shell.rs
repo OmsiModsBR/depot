@@ -41,6 +41,11 @@ impl Shell {
 
     /// Draw one frame into `ui` (already begun, in design units: the window's size divided by
     /// the scale `look::scale_for` gives).
+    /// Whether a page still waits for something, so the window keeps drawing without input.
+    pub fn busy(&self) -> bool {
+        self.vehicles.busy() || self.maps.busy()
+    }
+
     pub fn draw(&mut self, ui: &mut Ui) {
         let (w, h) = (ui.size.x, ui.size.y);
         ui.p().rect(Rect::new(0.0, 0.0, w, h), BG);
