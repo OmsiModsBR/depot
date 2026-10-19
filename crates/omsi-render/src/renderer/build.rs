@@ -520,6 +520,7 @@ impl Renderer {
             env_heading: Default::default(),
             blend_by_origin: false,
             stats: Default::default(),
+            overlay_hook: None,
             counts: Default::default(),
             rt,
         }

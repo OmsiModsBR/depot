@@ -27,12 +27,15 @@ pub(crate) struct FrameContext<'a> {
     pub(crate) cu: CameraUniform,
     /// What `Output::flags` says: the window's picture, the texture left out, the projection.
     pub(crate) with_overlays: bool,
+    /// The window's own picture (`Output::Window`), the only one the overlay hook is called for.
+    pub(crate) window_picture: bool,
     pub(crate) exclude_texture: Option<TextureId>,
     pub(crate) projection: Option<Mat4>,
     /// The render origin; the window's width (`full_w`) and the picture's size (smaller with
     /// the render scale); whether it goes through a scaled target, and its aspect.
     pub(crate) ro: DVec3,
     pub(crate) full_w: u32,
+    pub(crate) full_h: u32,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) vanilla_fxaa: bool,
@@ -660,10 +663,12 @@ impl Renderer {
                 lamp_shadows,
                 cu,
                 with_overlays,
+                window_picture: output.is_window(),
                 exclude_texture,
                 projection,
                 ro,
                 full_w,
+                full_h,
                 width,
                 height,
                 vanilla_fxaa,

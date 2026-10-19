@@ -7,7 +7,7 @@ use crate::gpu::{
 };
 use crate::lighting::Lighting;
 use crate::output::Output;
-use crate::renderer::{scene_scale_for, RenderOptions, Renderer};
+use crate::renderer::{scene_scale_for, OverlayHook, RenderOptions, Renderer};
 use crate::scene::{Camera, Scene, TextureId, TripleScreen};
 use glam::Mat4;
 
@@ -121,6 +121,16 @@ impl Renderer {
 
     pub fn format(&self) -> wgpu::TextureFormat {
         self.gpu.format
+    }
+
+    /// Have `hook` draw over the window's picture each frame, after the HUD and before the
+    /// picture is delivered (for an interface layer the renderer knows nothing about). It
+    /// gets the device, the queue, the frame's command encoder, the picture (in `format()`)
+    /// and its size in pixels. `None` takes it away. Only the window's picture calls it, not
+    /// the mirrors', the headset's or the triple screen's panels (those are not covered yet). The
+    /// hook runs on the render thread, inside the frame, and must not block.
+    pub fn set_overlay_hook(&mut self, hook: Option<OverlayHook>) {
+        self.overlay_hook = hook;
     }
 
     /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
