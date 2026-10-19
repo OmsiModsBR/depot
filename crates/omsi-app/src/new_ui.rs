@@ -287,7 +287,9 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
-        let scale = menu.scale((w, h));
+        let scale = menu
+            .as_ref()
+            .map_or_else(|| scale_for(w, h), |m| m.scale((w, h)));
         let size = Vec2::new(w as f32, h as f32) / scale;
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
