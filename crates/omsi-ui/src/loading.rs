@@ -249,15 +249,34 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
         let tx = p.x + 129.0;
         text(ui, c.title, tx, y + 26.0, 19.0, Weight::Bold, FG);
         text(ui, c.sub, tx, y + 49.0, 12.0, Weight::Regular, ACCENT);
+        let (w, px) = (p.w - 129.0 - 16.0, 13.0 * TS);
+        let text = fit_lines(ui, c.description, w, px, 2);
         ui.paragraph(
-            c.description,
+            &text,
             Vec2::new(tx, y + 72.0),
-            p.w - 129.0 - 16.0,
-            13.0 * TS,
+            w,
+            px,
             Weight::Regular,
             MUTED,
         );
     }
+}
+
+/// `text` cut at a word, with an ellipsis, so that it wraps to at most `lines` lines of `width`.
+fn fit_lines(ui: &Ui, text: &str, width: f32, px: f32, lines: usize) -> String {
+    let max_h = px * 1.38 * lines as f32 + 0.5;
+    if ui.paragraph_height(text, width, px, Weight::Regular) <= max_h {
+        return text.to_string();
+    }
+    let mut words: Vec<&str> = text.split_whitespace().collect();
+    while !words.is_empty() {
+        words.pop();
+        let cut = format!("{}\u{2026}", words.join(" "));
+        if ui.paragraph_height(&cut, width, px, Weight::Regular) <= max_h {
+            return cut;
+        }
+    }
+    String::new()
 }
 
 #[cfg(test)]
