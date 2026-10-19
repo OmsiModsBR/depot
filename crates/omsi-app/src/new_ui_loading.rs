@@ -123,7 +123,7 @@ impl App {
             description: String::new(),
         });
         let frame = LoadingFrame {
-            version: env!("CARGO_PKG_VERSION").to_string(),
+            version: crate::startup::VERSION.to_string(),
             heading: heading(name.trim(), &self.args.time),
             stage: stage(done, total),
             progress: done as f32 / total.max(1) as f32,

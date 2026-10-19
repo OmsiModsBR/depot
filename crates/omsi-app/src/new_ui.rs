@@ -264,6 +264,19 @@ struct Overlay {
 }
 
 impl Overlay {
+    fn new(shared: Shared, format: wgpu::TextureFormat) -> Overlay {
+        Overlay {
+            shared,
+            format,
+            ui: Ui::new(),
+            gpu: None,
+            logo: None,
+            last: Instant::now(),
+            slide_tex: Vec::new(),
+            show: omsi_ui::loading::Slideshow::new(0),
+        }
+    }
+
     fn draw(
         &mut self,
         device: &wgpu::Device,
@@ -400,16 +413,7 @@ impl NewUi {
         if self.installed {
             return;
         }
-        let mut overlay = Overlay {
-            shared: self.shared.clone(),
-            format: renderer.format(),
-            ui: Ui::new(),
-            gpu: None,
-            logo: None,
-            last: Instant::now(),
-            slide_tex: Vec::new(),
-            show: omsi_ui::loading::Slideshow::new(0),
-        };
+        let mut overlay = Overlay::new(self.shared.clone(), renderer.format());
         renderer.set_overlay_hook(Some(Box::new(move |device, queue, encoder, view, size| {
             overlay.draw(device, queue, encoder, view, size)
         })));
@@ -689,7 +693,7 @@ mod tests {
     /// is drawn while no menu is open.
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
-    fn the_overlay_draws_the_column_over_the_picture_and_nothing_without_a_menu() {
+    fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
             eprintln!("no graphics adapter: skipped");
@@ -715,14 +719,7 @@ mod tests {
         });
         let view = tex.create_view(&Default::default());
         let shared: Shared = Default::default();
-        let mut overlay = Overlay {
-            shared: shared.clone(),
-            format,
-            ui: Ui::new(),
-            gpu: None,
-            logo: None,
-            last: Instant::now(),
-        };
+        let mut overlay = Overlay::new(shared.clone(), format);
         let clear = |enc: &mut wgpu::CommandEncoder| {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -823,5 +820,42 @@ mod tests {
             resume[0] > 200 && resume[2] < 60,
             "Resume is the accent row: {resume:?}"
         );
+        // the loading screen: with no screenshot yet the default background covers the picture
+        {
+            let mut s = shared.lock().unwrap();
+            s.menu = None;
+            s.loading = Some(crate::new_ui_loading::LoadingFrame {
+                heading: "Example map".into(),
+                progress: 0.5,
+                ..Default::default()
+            });
+        }
+        let empty = read(&mut overlay);
+        let corner = px(&empty, 1600, 60);
+        assert!(
+            corner[1] < 100,
+            "the default background, not the picture: {corner:?}"
+        );
+        // a screenshot arrives (all red): it is the background now
+        shared
+            .lock()
+            .unwrap()
+            .slides
+            .push(crate::new_ui_loading::Decoded {
+                w: 16,
+                h: 9,
+                rgba: [255, 0, 0, 255].repeat(16 * 9),
+            });
+        let shown = read(&mut overlay);
+        let corner = px(&shown, 1600, 60);
+        assert!(
+            corner[0] > corner[1] + 40 && corner[0] > corner[2] + 40,
+            "the screenshot shows: {corner:?}"
+        );
+        // the map is there: the screen is gone and the picture is the game's again
+        shared.lock().unwrap().loading = None;
+        let after = read(&mut overlay);
+        assert_eq!(px(&after, 1600, 60), px(&plain, 1600, 60));
+        assert!(overlay.slide_tex.is_empty());
     }
 }
