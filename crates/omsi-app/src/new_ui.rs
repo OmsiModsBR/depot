@@ -1,4 +1,4 @@
-//! The new interface in the game, behind `OMSI_NEW_UI=1` (off by default).
+//! The new interface in the game: on by default, `OMSI_NEW_UI=0` brings back the HUD's menu.
 //!
 //! Today this is the Esc menu: while the game menu is open at its top level, the column of
 //! sections from `omsi_ui::pause_menu` is drawn over the window's picture through the
@@ -26,10 +26,18 @@ const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png")
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
 
-/// Whether the new interface is on (`OMSI_NEW_UI=1`).
+/// Whether the new interface is on: it is, unless `OMSI_NEW_UI` says `0`, `false`, `off` or
+/// `no` (then the HUD's menu is the Esc menu again and the Alt bar is not there).
 pub(crate) fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| omsi_cfg::flags::NEW_UI.text().as_deref() == Some("1"))
+    *ON.get_or_init(|| switch(omsi_cfg::flags::NEW_UI.text().as_deref()))
+}
+
+fn switch(value: Option<&str>) -> bool {
+    !matches!(
+        value.map(|v| v.trim().to_ascii_lowercase()).as_deref(),
+        Some("0" | "false" | "off" | "no")
+    )
 }
 
 /// Pixels per design point for a window of `w` x `h` pixels.
@@ -503,6 +511,17 @@ mod tests {
         assert!(f.scale((720, 405)) < scale_for(720, 405));
         // a window that is large enough keeps the usual scale
         assert_eq!(f.scale((1672, 941)), scale_for(1672, 941));
+    }
+
+    #[test]
+    fn the_new_interface_is_on_unless_it_is_switched_off() {
+        assert!(switch(None));
+        assert!(switch(Some("1")));
+        assert!(switch(Some("")));
+        assert!(switch(Some("yes")));
+        for off in ["0", "false", "FALSE", "off", " No "] {
+            assert!(!switch(Some(off)), "{off}");
+        }
     }
 
     #[test]

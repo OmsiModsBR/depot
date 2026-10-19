@@ -1,4 +1,4 @@
-//! The Alt bar in the running game, drawn by the new interface (`OMSI_NEW_UI=1`).
+//! The Alt bar in the running game, drawn by the new interface (on unless `OMSI_NEW_UI=0`).
 //!
 //! A tap of Alt (pressed and let go with no other key or button between) shows or hides the
 //! bar; a click on a button does it. The bar never pauses the game and never opens the Esc
