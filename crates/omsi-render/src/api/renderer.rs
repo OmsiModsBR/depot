@@ -7,7 +7,7 @@ use crate::gpu::{
 };
 use crate::lighting::Lighting;
 use crate::output::Output;
-use crate::renderer::{scene_scale_for, RenderOptions, Renderer};
+use crate::renderer::{scene_scale_for, OverlayHook, RenderOptions, Renderer};
 use crate::scene::{Camera, Scene, TextureId, TripleScreen};
 use glam::Mat4;
 
@@ -127,21 +127,9 @@ impl Renderer {
     /// picture is delivered (for an interface layer the renderer knows nothing about). It
     /// gets the device, the queue, the frame's command encoder, the picture (in `format()`)
     /// and its size in pixels. `None` takes it away. Only the window's picture calls it, not
-    /// the mirrors', the headset's or the triple screen's panels.
-    pub fn set_overlay_hook(
-        &mut self,
-        hook: Option<
-            Box<
-                dyn FnMut(
-                        &wgpu::Device,
-                        &wgpu::Queue,
-                        &mut wgpu::CommandEncoder,
-                        &wgpu::TextureView,
-                        (u32, u32),
-                    ) + Send,
-            >,
-        >,
-    ) {
+    /// the mirrors', the headset's or the triple screen's panels (those are not covered yet). The
+    /// hook runs on the render thread, inside the frame, and must not block.
+    pub fn set_overlay_hook(&mut self, hook: Option<OverlayHook>) {
         self.overlay_hook = hook;
     }
 

@@ -16,8 +16,9 @@ use crate::sky::SkyResources;
 use crate::targets::TargetCache;
 
 /// What is drawn over the window's finished picture: the device, the queue, the frame's
-/// command encoder, the window's picture and its size in pixels.
-pub(crate) type OverlayHook = Box<
+/// command encoder, the window's picture and its size in pixels. It runs on the render
+/// thread, inside the frame: it must not block.
+pub type OverlayHook = Box<
     dyn FnMut(
             &wgpu::Device,
             &wgpu::Queue,

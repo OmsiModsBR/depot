@@ -285,8 +285,9 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        // (the window's picture only: whoever holds the hook draws over it, at full size)
-        if with_overlays {
+        // (the window's picture only: whoever holds the hook draws over it, at full size; a
+        // triple screen's panels are not covered)
+        if f.window_picture {
             if let Some(hook) = self.overlay_hook.as_mut() {
                 hook(
                     &self.device,
