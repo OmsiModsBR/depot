@@ -12,7 +12,8 @@ fn bus(name: &str, maker: &str, kind: &str, installed: bool, paints: &[&str]) ->
         folder: name.into(),
         description: "Technical sheet\nEngine, power, gearbox, maximum speed, length and weight, as the author wrote them (example text).\n\nCredits\nModelling and conversion, as credited by the author (example text).".into(),
         default_paint: paints.first().map(|p| p.to_string()).unwrap_or_default(),
-        paints: paints.iter().map(|p| p.to_string()).collect(),
+        // the first is the bus's own livery; the rest are repaints, as the catalog lists them
+        paints: paints.iter().skip(1).map(|p| p.to_string()).collect(),
         hofs: vec!["Depot A".into(), "Depot B".into()],
         installed,
         missing_packs: Vec::new(),

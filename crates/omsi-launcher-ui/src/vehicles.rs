@@ -25,7 +25,8 @@ pub struct VehiclesView {
     catalog: Catalog,
     query: String,
     selected: usize,
-    paint: usize,
+    /// The paint chosen among the bus's paints; `None` is the bus's own default livery.
+    paint: Option<usize>,
     /// A bus (its file) and paint to show once the catalog is there (`select`).
     pending: Option<(String, String)>,
     /// "Drive this bus" was clicked: the bus's file and the paint (`take_use`).
@@ -38,7 +39,7 @@ impl Default for VehiclesView {
             catalog: Catalog::NotStarted,
             query: String::new(),
             selected: 0,
-            paint: 0,
+            paint: None,
             pending: None,
             used: None,
         }
@@ -54,16 +55,51 @@ impl VehiclesView {
         }
     }
 
-    /// The vehicle chosen in the library, and its paint.
-    pub fn chosen(&self) -> (usize, usize) {
+    /// The vehicle chosen in the library, and its paint (`None`: the default livery).
+    pub fn chosen(&self) -> (usize, Option<usize>) {
         (self.selected, self.paint)
     }
 
-    /// Take `list` as the catalog when none has been read yet (the host has it already).
+    /// Take `list` as the catalog (the host's, which it reads again after Setup or an
+    /// install). The bus shown stays the one it was when it is still in the list.
     pub fn set_catalog(&mut self, list: Vec<VehicleInfo>) {
-        if matches!(self.catalog, Catalog::NotStarted) {
-            self.catalog = Catalog::Ready(Rc::new(list));
+        let keep = match &self.catalog {
+            Catalog::Ready(old) => old
+                .get(self.selected)
+                .map(|v| (v.file.clone(), self.paint_name(v))),
+            _ => None,
+        };
+        self.catalog = Catalog::Ready(Rc::new(list));
+        if let (Some(keep), None) = (keep, &self.pending) {
+            self.pending = Some(keep);
         }
+        self.selected = 0;
+        self.paint = None;
+        self.apply_pending();
+    }
+
+    /// How many buses the catalog holds, once it is read.
+    pub fn catalog_len(&self) -> Option<usize> {
+        match &self.catalog {
+            Catalog::Ready(list) => Some(list.len()),
+            _ => None,
+        }
+    }
+
+    /// Read the catalog again on the next frame when reading it failed (the OMSI 2 folder
+    /// may have been chosen since).
+    pub fn retry_if_failed(&mut self) {
+        if matches!(self.catalog, Catalog::Failed(_)) {
+            self.catalog = Catalog::NotStarted;
+        }
+    }
+
+    /// The chosen paint's name for `v`, empty for the default livery.
+    fn paint_name(&self, v: &VehicleInfo) -> String {
+        self.paint
+            .and_then(|i| v.paints.get(i))
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Show the bus whose file is `file`, in `paint` (empty: its first), when it is in the
@@ -82,7 +118,7 @@ impl VehiclesView {
         };
         if let Some(i) = list.iter().position(|v| v.file.eq_ignore_ascii_case(&file)) {
             self.selected = i;
-            self.paint = list[i].paints.iter().position(|p| *p == paint).unwrap_or(0);
+            self.paint = list[i].paints.iter().position(|p| *p == paint);
             self.query.clear();
         }
     }
@@ -189,7 +225,7 @@ impl VehiclesView {
         let shown = self.shown(&list);
         if !shown.is_empty() && !shown.contains(&self.selected) {
             self.selected = shown[0];
-            self.paint = 0;
+            self.paint = None;
         }
         let top = body.y + 100.0;
         let rows_h = (body.h - 100.0 - 24.0).max(300.0);
@@ -286,7 +322,7 @@ impl VehiclesView {
         });
         if let Some(i) = picked {
             self.selected = i;
-            self.paint = 0;
+            self.paint = None;
         }
     }
 
@@ -399,7 +435,8 @@ impl VehiclesView {
     }
 
     fn paints(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
-        let n = v.map(|v| v.paints.len()).unwrap_or(0);
+        // the bus's own livery and its repaints, as the chips show them
+        let n = v.map(|v| v.paints.len() + 1).unwrap_or(0);
         card(ui, r, "Paints", Some(&format!("{n} found")));
         let Some(v) = v else { return };
         let area = Rect::new(r.x + 12.0, r.y + 44.0, r.w - 24.0, r.h - 52.0);
@@ -407,15 +444,25 @@ impl VehiclesView {
         let chosen = self.paint;
         ui.scroll_area("vehicles:paints", area, &mut |ui, view| {
             let (mut x, mut y) = (view.x, view.y);
-            for (i, p) in v.paints.iter().enumerate() {
-                let label = shorten(p, 28);
+            let chips = std::iter::once((
+                None,
+                shorten(default_livery(v), 28),
+                "vehicles:paint:default".to_string(),
+            ))
+            .chain(
+                v.paints
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| (Some(i), shorten(p, 28), format!("vehicles:paint:{i}"))),
+            );
+            for (i, label, id) in chips {
                 let w = ui.width(&label, 13.0 * TEXT_SCALE, Weight::Medium) + 28.0;
                 if x + w > view.right() - 8.0 {
                     x = view.x;
                     y += 42.0;
                 }
                 let chip = Rect::new(x, y, w, 34.0);
-                if ui.row(&format!("vehicles:paint:{i}"), chip, i == chosen) {
+                if ui.row(&id, chip, i == chosen) {
                     picked = Some(i);
                 }
                 ui.text_in(
@@ -453,10 +500,11 @@ impl VehiclesView {
         let bus = v
             .map(|v| omsi_launcher_lib::display_bus_name(&v.name))
             .unwrap_or_default();
-        let paint = v
-            .and_then(|v| v.paints.get(self.paint))
-            .cloned()
-            .unwrap_or_default();
+        let paint = match v {
+            Some(v) if self.paint.is_some() => self.paint_name(v),
+            Some(v) => default_livery(v).to_string(),
+            None => String::new(),
+        };
         let mut y = r.y + 58.0;
         for (k, val) in [("Bus", bus), ("Paint", paint)] {
             ui.p()
@@ -484,12 +532,17 @@ impl VehiclesView {
             v.is_some(),
         ) {
             if let Some(v) = v {
-                self.used = Some((
-                    v.file.clone(),
-                    v.paints.get(self.paint).cloned().unwrap_or_default(),
-                ));
+                self.used = Some((v.file.clone(), self.paint_name(v)));
             }
         }
+    }
+}
+
+/// The name of a bus's own livery (no repaint), as the Drive page names it.
+fn default_livery(v: &VehicleInfo) -> &str {
+    match v.default_paint.trim() {
+        "" => "Default paint",
+        name => name,
     }
 }
 

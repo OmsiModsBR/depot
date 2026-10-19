@@ -23,9 +23,8 @@ pub struct MapsView {
     catalog: Catalog,
     query: String,
     selected: usize,
-    entry: usize,
-    /// A start point was picked (else the start is automatic: the game's choice).
-    entry_picked: bool,
+    /// The start point picked in the map's list; `None` is automatic (the game's choice).
+    entry: Option<usize>,
     /// A map (its file) and start point to show once the catalog is there (`select`).
     pending: Option<(String, i32)>,
     /// "Drive on this map" was clicked: the map's file and the start point's place in its
@@ -39,8 +38,7 @@ impl Default for MapsView {
             catalog: Catalog::NotStarted,
             query: String::new(),
             selected: 0,
-            entry: 0,
-            entry_picked: false,
+            entry: None,
             pending: None,
             used: None,
         }
@@ -56,15 +54,43 @@ impl MapsView {
         }
     }
 
-    /// The map chosen in the library, and its start point.
-    pub fn chosen(&self) -> (usize, usize) {
+    /// The map chosen in the library, and its start point (`None`: automatic).
+    pub fn chosen(&self) -> (usize, Option<usize>) {
         (self.selected, self.entry)
     }
 
-    /// Take `list` as the catalog when none has been read yet (the host has it already).
+    /// Take `list` as the catalog (the host's, which it reads again after Setup or an
+    /// install). The map shown stays the one it was when it is still in the list.
     pub fn set_catalog(&mut self, list: Vec<MapInfo>) {
-        if matches!(self.catalog, Catalog::NotStarted) {
-            self.catalog = Catalog::Ready(Rc::new(list));
+        let keep = match &self.catalog {
+            Catalog::Ready(old) => old.get(self.selected).map(|m| {
+                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
+                (m.file.clone(), entry)
+            }),
+            _ => None,
+        };
+        self.catalog = Catalog::Ready(Rc::new(list));
+        if let (Some(keep), None) = (keep, &self.pending) {
+            self.pending = Some(keep);
+        }
+        self.selected = 0;
+        self.entry = None;
+        self.apply_pending();
+    }
+
+    /// How many maps the catalog holds, once it is read.
+    pub fn catalog_len(&self) -> Option<usize> {
+        match &self.catalog {
+            Catalog::Ready(list) => Some(list.len()),
+            _ => None,
+        }
+    }
+
+    /// Read the catalog again on the next frame when reading it failed (the OMSI 2 folder
+    /// may have been chosen since).
+    pub fn retry_if_failed(&mut self) {
+        if matches!(self.catalog, Catalog::Failed(_)) {
+            self.catalog = Catalog::NotStarted;
         }
     }
 
@@ -87,8 +113,7 @@ impl MapsView {
             let known = usize::try_from(entry)
                 .ok()
                 .filter(|&e| e < list[i].entry_points.len());
-            self.entry = known.unwrap_or(0);
-            self.entry_picked = known.is_some();
+            self.entry = known;
             self.query.clear();
         }
     }
@@ -189,8 +214,7 @@ impl MapsView {
         let shown = self.shown(&list);
         if !shown.is_empty() && !shown.contains(&self.selected) {
             self.selected = shown[0];
-            self.entry = 0;
-            self.entry_picked = false;
+            self.entry = None;
         }
         let top = body.y + 100.0;
         let rows_h = (body.h - 100.0 - 24.0).max(300.0);
@@ -275,8 +299,7 @@ impl MapsView {
         });
         if let Some(i) = picked {
             self.selected = i;
-            self.entry = 0;
-            self.entry_picked = false;
+            self.entry = None;
         }
     }
 
@@ -351,14 +374,20 @@ impl MapsView {
         let chosen = self.entry;
         ui.scroll_area("maps:starts", area, &mut |ui, view| {
             let mut y = view.y;
-            for (i, e) in m.entry_points.iter().enumerate() {
+            let rows = std::iter::once((None, "Automatic", "maps:start:auto".to_string())).chain(
+                m.entry_points
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| (Some(i), e.name.as_str(), format!("maps:start:{i}"))),
+            );
+            for (i, name, id) in rows {
                 let row = Rect::new(view.x, y, view.w - 8.0, 36.0);
-                if ui.row(&format!("maps:start:{i}"), row, i == chosen) {
+                if ui.row(&id, row, i == chosen) {
                     picked = Some(i);
                 }
                 clipped(
                     ui,
-                    &e.name,
+                    name,
                     row.x + 16.0,
                     row.y + 18.0,
                     row.w - 32.0,
@@ -372,19 +401,18 @@ impl MapsView {
         });
         if let Some(i) = picked {
             self.entry = i;
-            self.entry_picked = true;
         }
     }
 
     fn launch(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
         card(ui, r, "Launch preparation", None);
         let map = m.map(map_title).unwrap_or_default();
-        let start = if self.entry_picked {
-            m.and_then(|m| m.entry_points.get(self.entry))
+        let start = match self.entry {
+            Some(e) => m
+                .and_then(|m| m.entry_points.get(e))
                 .map(|e| e.name.clone())
-                .unwrap_or_default()
-        } else {
-            "Automatic".to_string()
+                .unwrap_or_default(),
+            None => "Automatic".to_string(),
         };
         let mut y = r.y + 58.0;
         for (k, val) in [("Map", map), ("Start point", start)] {
@@ -413,11 +441,7 @@ impl MapsView {
             m.is_some(),
         ) {
             if let Some(m) = m {
-                let entry = if self.entry_picked {
-                    self.entry as i32
-                } else {
-                    -1
-                };
+                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
                 self.used = Some((m.file.clone(), entry));
             }
         }
