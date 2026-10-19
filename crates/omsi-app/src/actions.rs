@@ -236,9 +236,9 @@ impl App {
         self.keys.clear();
         // (the Alt bar's pending tap and keys: their releases will not come)
         self.new_ui.alt.reset_input();
-        if let Some(w) = self.new_ui.add.as_mut() {
-            w.forget_press();
-        }
+        // (the "Add vehicle" window closes: a press it took has no release coming, and
+        // the overlay would go on dragging what was under it)
+        self.new_ui.close_add();
         if let Some(p) = self.player.as_mut() {
             p.release();
         }
