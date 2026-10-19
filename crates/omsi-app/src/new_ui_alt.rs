@@ -1,4 +1,4 @@
-//! The Alt bar in the running game, drawn by the new interface (`OMSI_NEW_UI=1`).
+//! The Alt bar in the running game, drawn by the new interface.
 //!
 //! A tap of Alt (pressed and let go with no other key or button between) shows or hides the
 //! bar; a click on a button does it. The bar never pauses the game and never opens the Esc
@@ -12,7 +12,7 @@
 //! the bar's own and nothing else is.
 
 use crate::app::App;
-use crate::new_ui::{enabled, scale_for};
+use crate::new_ui::scale_for;
 use glam::Vec2;
 use omsi_ui::alt_bar::{self, Button, Glyph, State as BarState, COLUMNS};
 use omsi_ui::widgets::Ui;
@@ -235,6 +235,15 @@ pub(crate) struct AltState {
 }
 
 impl AltState {
+    /// The window lost the keys (Alt+Tab, a dialog): no tap, press or key is pending any more,
+    /// since their releases will not come.
+    pub(crate) fn reset_input(&mut self) {
+        self.tap = false;
+        self.swallowed = false;
+        self.taken.clear();
+        self.focus = None;
+    }
+
     pub(crate) fn alt_down(&mut self) {
         self.tap = true;
     }
@@ -244,9 +253,10 @@ impl AltState {
         self.tap = false;
     }
 
-    /// Alt came up. True when it was a tap and the bar was shown or hidden by it.
-    pub(crate) fn alt_up(&mut self) -> bool {
-        let tap = std::mem::take(&mut self.tap);
+    /// Alt came up. True when it was a tap and the bar was shown or hidden by it. With
+    /// `allowed` false (the Esc menu is open) the tap ends and does nothing.
+    pub(crate) fn alt_up(&mut self, allowed: bool) -> bool {
+        let tap = std::mem::take(&mut self.tap) && allowed;
         if tap {
             self.open = !self.open;
             if !self.open {
@@ -262,11 +272,10 @@ fn is_alt(code: KeyCode) -> bool {
 }
 
 impl App {
-    /// Whether the bar is showing: the new interface is on, a session is running, the Esc menu
-    /// is not open, and the picture is the plain window's.
+    /// Whether the bar is showing: a session is running, the Esc menu is not open, and the
+    /// picture is the plain window's.
     pub(crate) fn alt_bar_active(&self) -> bool {
-        enabled()
-            && self.new_ui.alt.open
+        self.new_ui.alt.open
             && self.menu.is_none()
             && self.game_menu.is_none()
             && !self.vr_active()
@@ -308,9 +317,6 @@ impl App {
     /// A press or release of the left button (or a tap). True when the bar takes it; the game
     /// does not see it then.
     pub(crate) fn alt_click(&mut self, pressed: bool) -> bool {
-        if !enabled() {
-            return false;
-        }
         if !pressed {
             return std::mem::take(&mut self.new_ui.alt.swallowed);
         }
@@ -339,14 +345,14 @@ impl App {
 
     /// A key press or release, before the game sees it. True when the bar takes it.
     pub(crate) fn alt_key(&mut self, code: KeyCode, pressed: bool, repeat: bool) -> bool {
-        if !enabled() || self.menu.is_some() {
+        if self.menu.is_some() {
             return false;
         }
         if is_alt(code) {
             if pressed && !repeat {
                 self.new_ui.alt.alt_down();
-            } else if !pressed && self.game_menu.is_none() {
-                self.new_ui.alt.alt_up();
+            } else if !pressed {
+                self.new_ui.alt.alt_up(self.game_menu.is_none());
             }
             return false;
         }
@@ -489,25 +495,47 @@ mod tests {
     fn a_tap_of_alt_shows_the_bar_and_a_second_hides_it_but_alt_with_a_key_does_not() {
         let mut s = AltState::default();
         s.alt_down();
-        assert!(s.alt_up());
+        assert!(s.alt_up(true));
         assert!(s.open);
         // Alt+S (the quicksave) is not a tap
         s.alt_down();
         s.other_down();
-        assert!(!s.alt_up());
+        assert!(!s.alt_up(true));
         assert!(s.open);
         // nor is Alt with a click
         s.alt_down();
         s.other_down();
-        assert!(!s.alt_up());
+        assert!(!s.alt_up(true));
         s.focus = Some(3);
         s.alt_down();
-        assert!(s.alt_up());
+        assert!(s.alt_up(true));
         assert!(!s.open);
         assert_eq!(s.focus, None);
         // an Alt release with no press seen (the window had lost the focus) does nothing
-        assert!(!s.alt_up());
+        assert!(!s.alt_up(true));
         assert!(!s.open);
+    }
+
+    #[test]
+    fn a_tap_with_the_esc_menu_open_ends_without_a_toggle_and_lost_input_clears_everything() {
+        let mut s = AltState::default();
+        // Alt down and up while the Esc menu is open: nothing is left pending
+        s.alt_down();
+        assert!(!s.alt_up(false));
+        assert!(!s.open);
+        // (the menu closed meanwhile: a release without a new press is not a tap)
+        assert!(!s.alt_up(true));
+        assert!(!s.open);
+        // Alt+Tab: the release of Alt never comes, and what was pending must not toggle later
+        s.open = true;
+        s.alt_down();
+        s.swallowed = true;
+        s.focus = Some(2);
+        s.taken.insert(KeyCode::ArrowDown);
+        s.reset_input();
+        assert!(!s.alt_up(true));
+        assert!(s.open, "the bar stays as it was");
+        assert!(!s.swallowed && s.focus.is_none() && s.taken.is_empty());
     }
 
     #[test]
