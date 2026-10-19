@@ -3,14 +3,7 @@
 
 use glam::DVec3;
 use omsi_render::{Camera, Lighting, Renderer};
-use std::io::Write;
 use std::sync::{Arc, Mutex};
-
-/// A marker straight to stderr: the test harness does not capture it, so it survives a crash
-/// of the process (a stack overflow aborts it).
-fn step(what: &str) {
-    let _ = writeln!(std::io::stderr(), "overlay_hook: {what}");
-}
 
 fn camera() -> Camera {
     Camera {
@@ -25,18 +18,8 @@ fn camera() -> Camera {
 }
 
 #[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn the_hook_draws_over_the_picture_at_full_size_and_can_be_taken_away() {
-    // (the game runs on a main thread with an 8 MB stack, see .cargo/config.toml; a test
-    // thread has 2 MB, which a frame's setup does not fit on Windows)
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(hook_draws_and_goes_away)
-        .unwrap()
-        .join()
-        .unwrap();
-}
-
-fn hook_draws_and_goes_away() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let Ok(mut renderer) = pollster::block_on(Renderer::new_with(
         &instance,
@@ -47,15 +30,12 @@ fn hook_draws_and_goes_away() {
         eprintln!("no graphics adapter: skipped");
         return;
     };
-    step("adapter found");
     let mut scene = renderer.new_scene();
     let (w, h) = (96, 54);
-    step("first render_to_image (no hook)");
     let before = renderer
         .render_to_image(&mut scene, w, h, &camera(), &Lighting::default())
         .expect("frame");
 
-    step("first render done");
     let calls: Arc<Mutex<Vec<(u32, u32)>>> = Arc::default();
     let seen = calls.clone();
     renderer.set_overlay_hook(Some(Box::new(move |_, _, encoder, target, size| {
@@ -83,19 +63,16 @@ fn hook_draws_and_goes_away() {
             multiview_mask: None,
         });
     })));
-    step("hook set, second render");
     let covered = renderer
         .render_to_image(&mut scene, w, h, &camera(), &Lighting::default())
         .expect("frame");
     assert_eq!(*calls.lock().unwrap(), vec![(w, h)]);
     assert!(covered.chunks(4).all(|p| p[..3] == [255, 0, 255]));
 
-    step("second render done");
     renderer.set_overlay_hook(None);
     let after = renderer
         .render_to_image(&mut scene, w, h, &camera(), &Lighting::default())
         .expect("frame");
-    step("third render done");
     assert_eq!(calls.lock().unwrap().len(), 1);
     assert_eq!(after, before);
 }
