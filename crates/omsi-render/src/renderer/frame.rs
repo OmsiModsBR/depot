@@ -33,6 +33,7 @@ pub(crate) struct FrameContext<'a> {
     /// the render scale); whether it goes through a scaled target, and its aspect.
     pub(crate) ro: DVec3,
     pub(crate) full_w: u32,
+    pub(crate) full_h: u32,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) vanilla_fxaa: bool,
@@ -664,6 +665,7 @@ impl Renderer {
                 projection,
                 ro,
                 full_w,
+                full_h,
                 width,
                 height,
                 vanilla_fxaa,

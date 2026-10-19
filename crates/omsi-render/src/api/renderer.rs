@@ -123,6 +123,28 @@ impl Renderer {
         self.gpu.format
     }
 
+    /// Have `hook` draw over the window's picture each frame, after the HUD and before the
+    /// picture is delivered (for an interface layer the renderer knows nothing about). It
+    /// gets the device, the queue, the frame's command encoder, the picture (in `format()`)
+    /// and its size in pixels. `None` takes it away. Only the window's picture calls it, not
+    /// the mirrors', the headset's or the triple screen's panels.
+    pub fn set_overlay_hook(
+        &mut self,
+        hook: Option<
+            Box<
+                dyn FnMut(
+                        &wgpu::Device,
+                        &wgpu::Queue,
+                        &mut wgpu::CommandEncoder,
+                        &wgpu::TextureView,
+                        (u32, u32),
+                    ) + Send,
+            >,
+        >,
+    ) {
+        self.overlay_hook = hook;
+    }
+
     /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
     pub fn scene_scale(&self, width: u32, height: u32) -> f32 {
         let s = scene_scale_for(self.options.render_scale, width, height);
