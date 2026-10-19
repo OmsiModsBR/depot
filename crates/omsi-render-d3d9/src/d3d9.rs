@@ -194,6 +194,8 @@ mod tests {
             eprintln!("no Direct3D 9 device here; skipping");
             return;
         };
+        // Printed so a test log shows which adapter (the default one) was exercised.
+        eprintln!("D3D9 adapter: {:?}", dev.caps());
         dev.status().expect("fresh device is usable");
         let px = dev
             .clear_and_read(4, 2, [1.0, 0.0, 0.0, 1.0])
