@@ -118,6 +118,10 @@ impl Renderer {
                 vertices: &cpu.0,
                 indices: &cpu.1,
             });
+        } else if self.mirroring() {
+            log::warn!(
+                "asset mirror: mesh {id} was prepared before the mirror was set; not mirrored"
+            );
         }
         id
     }
@@ -138,6 +142,10 @@ impl Renderer {
                 id,
                 texture: MirrorTexture::Data(data),
             });
+        } else if self.mirroring() {
+            log::warn!(
+                "asset mirror: texture {id} was prepared before the mirror was set; not mirrored"
+            );
         }
         id
     }

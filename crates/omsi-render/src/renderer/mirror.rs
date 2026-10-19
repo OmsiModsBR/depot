@@ -11,18 +11,31 @@ use crate::passes::{
     PIPE_TERRAIN_PAINT,
 };
 use crate::scene::{MaterialId, MeshId, TextureId, Vertex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::cell::RefCell;
 
-/// Set while some renderer has an asset mirror: meshes and textures prepared on other
-/// threads ([`crate::prepare_mesh`], [`crate::prepare_texture`]) then keep their CPU data for it.
-static CPU_COPIES: AtomicBool = AtomicBool::new(false);
+/// A renderer's asset mirror. Counted in [`crate::assets`] while it is set, so prepared
+/// assets keep their CPU copies; dropping the renderer stops it.
+#[derive(Default)]
+pub(crate) struct MirrorSlot(RefCell<Option<AssetMirror>>);
 
-pub(crate) fn keep_cpu_copies() -> bool {
-    CPU_COPIES.load(Ordering::Relaxed)
+impl MirrorSlot {
+    pub(crate) fn set(&self, mirror: Option<AssetMirror>) {
+        let mut slot = self.0.borrow_mut();
+        match (slot.is_some(), mirror.is_some()) {
+            (false, true) => crate::assets::mirror_started(),
+            (true, false) => crate::assets::mirror_stopped(),
+            _ => {}
+        }
+        *slot = mirror;
+    }
 }
 
-pub(crate) fn set_keep_cpu_copies(on: bool) {
-    CPU_COPIES.store(on, Ordering::Relaxed);
+impl Drop for MirrorSlot {
+    fn drop(&mut self) {
+        if self.0.get_mut().is_some() {
+            crate::assets::mirror_stopped();
+        }
+    }
 }
 
 /// A texture's pixels as they reached this renderer.
@@ -71,7 +84,7 @@ pub enum MirrorEvent<'a> {
 }
 
 /// Receives the asset events; see [`MirrorEvent`].
-pub type AssetMirror = Box<dyn FnMut(MirrorEvent<'_>)>;
+pub type AssetMirror = Box<dyn FnMut(MirrorEvent<'_>) + Send>;
 
 /// How a batch is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,7 +175,7 @@ pub struct FramePlan {
 }
 
 /// Receives each window picture's plan with the scene it was made from.
-pub type PlanSink = Box<dyn FnMut(&FramePlan, &crate::scene::Scene)>;
+pub type PlanSink = Box<dyn FnMut(&FramePlan, &crate::scene::Scene) + Send>;
 
 /// The plan of the picture `f` with the lists `lists`.
 pub(crate) fn plan_of(
@@ -200,12 +213,12 @@ pub(crate) fn plan_of(
 impl super::Renderer {
     /// Hands `event` to the asset mirror, if there is one.
     pub(crate) fn mirror(&self, event: MirrorEvent<'_>) {
-        if let Some(m) = self.asset_mirror.borrow_mut().as_mut() {
+        if let Some(m) = self.asset_mirror.0.borrow_mut().as_mut() {
             m(event);
         }
     }
 
     pub(crate) fn mirroring(&self) -> bool {
-        self.asset_mirror.borrow().is_some()
+        self.asset_mirror.0.borrow().is_some()
     }
 }

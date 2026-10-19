@@ -26,5 +26,5 @@ pub use mirror::{
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
 pub use state::{OverlayHook, Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};
 
-pub(crate) use mirror::{keep_cpu_copies, set_keep_cpu_copies};
+pub(crate) use mirror::MirrorSlot;
 pub(crate) use options::scene_scale_for;

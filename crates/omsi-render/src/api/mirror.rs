@@ -1,15 +1,15 @@
 //! The public methods for a second renderer: the asset mirror and the frame plan.
-use crate::renderer::{set_keep_cpu_copies, AssetMirror, PlanSink, Renderer};
+use crate::renderer::{AssetMirror, PlanSink, Renderer};
 use crate::scene::Scene;
 
 impl Renderer {
     /// Sends every mesh and texture of the scenes this renderer keeps to `mirror` as it goes
     /// up, in CPU form, from now on (None stops). Set it before the first asset is added:
-    /// what went up before is not sent again. While set, meshes and textures prepared on other
+    /// what went up before is not sent again (a mesh or texture prepared before it was set is
+    /// added without being mirrored, with a warning in the log). While set, meshes and textures prepared on other
     /// threads keep a CPU copy until they are added.
     pub fn set_asset_mirror(&mut self, mirror: Option<AssetMirror>) {
-        set_keep_cpu_copies(mirror.is_some());
-        *self.asset_mirror.borrow_mut() = mirror;
+        self.asset_mirror.set(mirror);
     }
 
     /// Hands the plan of each window picture to `sink`, after culling and before this

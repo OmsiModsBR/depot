@@ -277,7 +277,7 @@ pub fn prepare_meshes(
     paged: bool,
 ) -> Vec<PreparedMesh> {
     let _turn = gl_worker_turn();
-    let copies = crate::renderer::keep_cpu_copies();
+    let copies = super::keep_cpu_copies();
     make_meshes(device, queue, data, paged)
         .into_iter()
         .zip(data)

@@ -78,7 +78,7 @@ pub struct Renderer {
     pub(crate) overlay_hook: Option<OverlayHook>,
     /// A second renderer's copy of the assets and of each window picture's plan (see
     /// `mirror.rs`).
-    pub(crate) asset_mirror: std::cell::RefCell<Option<super::AssetMirror>>,
+    pub(crate) asset_mirror: super::MirrorSlot,
     pub(crate) plan_sink: Option<super::PlanSink>,
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.

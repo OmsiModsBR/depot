@@ -112,7 +112,7 @@ pub fn prepare_texture(
     }
     Some(PreparedTexture(
         GpuTexture::new(texture, (w, h), texture_bytes(format, w, h, levels)),
-        crate::renderer::keep_cpu_copies().then(|| Box::new(data.clone())),
+        super::keep_cpu_copies().then(|| Box::new(data.clone())),
     ))
 }
 

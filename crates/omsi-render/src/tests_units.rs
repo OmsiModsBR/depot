@@ -901,17 +901,15 @@ fn opaque_and_transmapped_materials_ignore_dynamic_alpha() {
     assert_eq!(Renderer::clamp_slot_alpha(0.0, AlphaMode::Test, true), 1.0);
 }
 
-/// The asset mirror receives meshes and textures as they go up, and the plan sink receives
-/// the window picture's batches with per-draw data the plan's list points at.
-#[test]
-fn mirror_and_plan_describe_what_is_drawn() {
-    use std::cell::RefCell;
-    use std::rc::Rc;
+/// The mirror tests change the process's count of mirroring renderers; they run one at a time.
+static MIRROR_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn noop_renderer() -> Renderer {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::NOOP;
     descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
     let instance = wgpu::Instance::new(descriptor);
-    let mut renderer = pollster::block_on(Renderer::new_with(
+    pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
@@ -921,12 +919,77 @@ fn mirror_and_plan_describe_what_is_drawn() {
             ..Default::default()
         },
     ))
-    .expect("noop renderer");
+    .expect("noop renderer")
+}
 
-    let events: Rc<RefCell<Vec<String>>> = Rc::default();
+fn triangle() -> MeshData {
+    MeshData {
+        positions: vec![
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+        ],
+        normals: vec![-Vec3::Y; 3],
+        uvs: vec![glam::Vec2::ZERO; 3],
+        indices: vec![0, 1, 2],
+        ranges: vec![(0, 3, 0)],
+        ..Default::default()
+    }
+}
+
+/// The renderer goes to other threads (the launcher drops it on one), mirror or not.
+#[test]
+fn a_renderer_with_a_mirror_is_still_send() {
+    fn send<T: Send>() {}
+    send::<Renderer>();
+    send::<AssetMirror>();
+    send::<PlanSink>();
+}
+
+/// Without a mirror nothing keeps CPU copies, and turning a mirror off (or dropping its
+/// renderer) stops them again.
+#[test]
+fn without_a_mirror_nothing_is_kept() {
+    let _serial = MIRROR_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut renderer = noop_renderer();
+    let prepared = crate::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
+    assert!(prepared.1.is_none(), "no mirror: no CPU copy");
+    assert!(!renderer.mirroring());
+
+    renderer.set_asset_mirror(Some(Box::new(|_| {})));
+    assert!(crate::assets::keep_cpu_copies());
+    // a second renderer turning its own (absent) mirror off changes nothing for the first
+    let mut other = noop_renderer();
+    other.set_asset_mirror(None);
+    assert!(crate::assets::keep_cpu_copies());
+    let kept = crate::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
+    assert!(
+        kept.1.is_some(),
+        "a mirror: the CPU copy waits for the mirror"
+    );
+
+    renderer.set_asset_mirror(None);
+    assert!(!crate::assets::keep_cpu_copies());
+    renderer.set_asset_mirror(Some(Box::new(|_| {})));
+    drop(renderer);
+    assert!(
+        !crate::assets::keep_cpu_copies(),
+        "a dropped renderer stops its mirror"
+    );
+}
+
+/// The asset mirror receives meshes and textures as they go up, and the plan sink receives
+/// the window picture's batches with per-draw data the plan's list points at.
+#[test]
+fn mirror_and_plan_describe_what_is_drawn() {
+    use std::sync::{Arc, Mutex};
+    let _serial = MIRROR_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut renderer = noop_renderer();
+
+    let events: Arc<Mutex<Vec<String>>> = Arc::default();
     let seen = events.clone();
     renderer.set_asset_mirror(Some(Box::new(move |e: MirrorEvent<'_>| {
-        seen.borrow_mut().push(match e {
+        seen.lock().unwrap().push(match e {
             MirrorEvent::Mesh {
                 id,
                 vertices,
@@ -942,26 +1005,16 @@ fn mirror_and_plan_describe_what_is_drawn() {
             MirrorEvent::MoveTexture { from, into } => format!("move texture {from} {into}"),
         });
     })));
-    let plans: Rc<RefCell<Vec<(FramePlan, usize)>>> = Rc::default();
+    let plans: Arc<Mutex<Vec<(FramePlan, usize)>>> = Arc::default();
     let got = plans.clone();
     renderer.set_plan_sink(Some(Box::new(move |plan: &FramePlan, scene: &Scene| {
-        got.borrow_mut()
+        got.lock()
+            .unwrap()
             .push((plan.clone(), scene.slot_models().len()));
     })));
 
     let mut scene = renderer.new_scene();
-    let data = MeshData {
-        positions: vec![
-            Vec3::new(-1.0, 0.0, 0.0),
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-        ],
-        normals: vec![-Vec3::Y; 3],
-        uvs: vec![glam::Vec2::ZERO; 3],
-        indices: vec![0, 1, 2],
-        ranges: vec![(0, 3, 0)],
-        ..Default::default()
-    };
+    let data = triangle();
     let mesh = renderer.add_mesh(&mut scene, &data);
     let image = omsi_texture::Image {
         width: 2,
@@ -979,7 +1032,7 @@ fn mirror_and_plan_describe_what_is_drawn() {
         vec![mat],
     );
     {
-        let e = events.borrow();
+        let e = events.lock().unwrap();
         assert!(e.contains(&format!("mesh {mesh} 3 3")), "{e:?}");
         assert!(e.contains(&format!("texture {tex}")), "{e:?}");
     }
@@ -1010,7 +1063,7 @@ fn mirror_and_plan_describe_what_is_drawn() {
     };
     renderer.render(&mut scene, &view, 64, 64, &camera, &Lighting::default());
 
-    let plans = plans.borrow();
+    let plans = plans.lock().unwrap();
     assert_eq!(plans.len(), 1, "one window picture, one plan");
     let (plan, slots) = &plans[0];
     assert_eq!((plan.width, plan.height), (64, 64));
