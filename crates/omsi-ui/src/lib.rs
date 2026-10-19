@@ -15,6 +15,7 @@ pub mod atlas;
 pub mod gpu;
 pub mod i18n;
 pub mod icons;
+pub mod nav;
 pub mod paint;
 pub mod text;
 pub mod theme;
