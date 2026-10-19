@@ -86,6 +86,7 @@ fn main() {
         subtitle: "Line 50 \u{b7} Example route",
         clock: "08:42",
         state: "paused",
+        selected: None,
     };
     let mut o = common::Offscreen::new((1672, 941));
     o.shot(&format!("{dir}/pause-menu.png"), |ui| {

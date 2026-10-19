@@ -2261,7 +2261,8 @@ impl ApplicationHandler for App {
                 }
                 *self.profile.entry("scripted").or_default() += __t.elapsed().as_secs_f64();
                 // (the game menu's lines, for the interface below)
-                let menu_lines = if self.game_menu.is_some() { self.game_menu_items() } else { Vec::new() };
+                let new_menu = self.new_menu_active();
+                let menu_lines = if self.game_menu.is_some() && !new_menu { self.game_menu_items() } else { Vec::new() };
                 // (the mirror editor's keys and the panel under the cursor, while it is on)
                 let mirror_help = match (self.player.as_ref(), self.mirror_hud_size()) {
                     (Some(p), Some(size)) => self.mirror_hud.help_lines(p, self.hud_cursor(), size),
@@ -2616,7 +2617,8 @@ impl ApplicationHandler for App {
                             paused: self.paused,
                             menu: match chooser_sel {
                                 Some(k) => Some((k, &chooser_items[..])),
-                                None => self.game_menu.map(|k| (k, &menu_lines[..])),
+                                // (the new menu draws the top level itself)
+                                None => self.game_menu.filter(|_| !new_menu).map(|k| (k, &menu_lines[..])),
                             },
                             menu_disabled,
                             menu_kind,
@@ -2694,6 +2696,8 @@ impl ApplicationHandler for App {
                 let mut finish = false;
                 let mut reconfigure = false;
                 let shot = self.shot.take();
+                // the new interface's overlay and the frame it draws (when it is on)
+                self.new_ui_update();
                 if let Some(s) = self.surface.as_ref() {
                     let (w, h) = (s.config.width, s.config.height);
                     self.touch_prepare(w, h);
@@ -3402,6 +3406,10 @@ impl App {
         }
         // the game menu takes the clicks while it is open
         if self.game_menu.is_some() {
+            // (the new menu, when it is the one showing, takes the press; a release ends a drag as before)
+            if state == ElementState::Pressed && self.new_menu_click(event_loop) {
+                return;
+            }
             if state == ElementState::Pressed {
                 // (a tap or a click: only what is under the finger or the mouse is lit)
                 self.menu_kbd = false;

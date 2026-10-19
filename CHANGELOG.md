@@ -7,6 +7,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- New Esc menu (draft of the new interface), off by default: with `OMSI_NEW_UI=1` the game menu's top level is drawn by `omsi-ui` over the paused picture (the renderer's overlay hook) instead of the HUD's lines. The lines, their keys and what they do are the game menu's own; the lists behind "Options...", "Controls..." and the like are still the HUD's. Without the variable nothing changes.
 - Draw-order characterization tests for blended slots (#41): a window and an opaque panel behind it, drawn with and without model order, recorded as they stand. Test-only, run with `--ignored` on a graphics adapter.
 - A panic inside a script block now logs the name of every block it passes through (the macros
   and the trigger or frame block that called them), then goes on as before (#47). Nothing is

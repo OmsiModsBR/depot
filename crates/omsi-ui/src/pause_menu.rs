@@ -58,6 +58,8 @@ pub struct View<'a> {
     pub clock: &'a str,
     /// "PAUSED"
     pub state: &'a str,
+    /// The item the keyboard is on: lit as under a mouse (the caller moves it with the keys).
+    pub selected: Option<&'a str>,
 }
 
 pub struct Output<'a> {
@@ -100,6 +102,42 @@ fn row_height(view: &View, h: f32) -> f32 {
     ((h - 142.0 - heads - 24.0) / items.max(1) as f32).clamp(26.0, 37.0)
 }
 
+/// Where one item sits (in the points `draw` works in).
+pub struct Row<'a> {
+    pub id: &'a str,
+    pub rect: Rect,
+    /// Whether it can be clicked.
+    pub enabled: bool,
+}
+
+/// The items' rectangles for a window of `size` points, in the order `draw` lays them out.
+pub fn rows<'a>(view: &'a View<'a>, size: glam::Vec2) -> Vec<Row<'a>> {
+    let step = row_height(view, size.y);
+    let mut head = 142.0;
+    let mut out = Vec::new();
+    for section in view.sections {
+        let mut top = head + 13.0;
+        for item in &section.items {
+            out.push(Row {
+                id: item.id,
+                rect: Rect::new(10.0, top, COLUMN_W - 21.0, step),
+                enabled: item.disabled.is_none(),
+            });
+            top += step;
+        }
+        head = top + 18.0;
+    }
+    out
+}
+
+/// The item under `point` (in points) that can be clicked, if any.
+pub fn hit<'a>(view: &'a View<'a>, size: glam::Vec2, point: glam::Vec2) -> Option<&'a str> {
+    rows(view, size)
+        .into_iter()
+        .find(|r| r.enabled && r.rect.contains(point))
+        .map(|r| r.id)
+}
+
 /// Draw the menu column and the map's bar over the whole window.
 pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     let (w, h) = (ui.size.x, ui.size.y);
@@ -136,7 +174,9 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
                     ui.p().rect(r, Color::hex(0x2a2518));
                     ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
                 }
-                _ if hover && enabled => ui.p().rect(r, Color::WHITE.alpha(0.06)),
+                _ if (hover || view.selected == Some(item.id)) && enabled => {
+                    ui.p().rect(r, Color::WHITE.alpha(0.06))
+                }
                 _ => {}
             }
             let (label_c, icon_c) = match item.kind {
@@ -268,6 +308,7 @@ mod tests {
             subtitle: "Line 50",
             clock: "08:42",
             state: "paused",
+            selected: None,
         };
         let run = |ui: &mut Ui| {
             ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.016);
@@ -307,6 +348,41 @@ mod tests {
     }
 
     #[test]
+    fn the_rows_are_where_draw_puts_them_and_hit_finds_the_clickable_ones() {
+        let secs = sections();
+        let size = Vec2::new(1672.0, 941.0);
+        let view = View {
+            logo: None,
+            sections: &secs,
+            title: "",
+            subtitle: "",
+            clock: "",
+            state: "",
+            selected: Some("skip"),
+        };
+        let mut ui = Ui::new();
+        ui.begin(size, 1.0, 0.016);
+        draw(&mut ui, &view);
+        ui.finish();
+        let rows = rows(&view, size);
+        assert_eq!(rows.len(), 3);
+        for r in &rows {
+            assert_eq!(
+                ui.drawn[&id_of(&format!("pause:{}", r.id))],
+                r.rect,
+                "{}",
+                r.id
+            );
+        }
+        let mid = |r: &Row| Vec2::new(r.rect.x + 20.0, r.rect.y + r.rect.h * 0.5);
+        assert_eq!(hit(&view, size, mid(&rows[0])), Some("resume"));
+        // (a disabled item and the space between items are not hits)
+        assert_eq!(hit(&view, size, mid(&rows[1])), None);
+        assert_eq!(hit(&view, size, Vec2::new(500.0, 500.0)), None);
+        assert_eq!(hit(&view, size, mid(&rows[2])), Some("quit"));
+    }
+
+    #[test]
     fn the_rows_shrink_to_keep_every_item_inside_a_small_window() {
         let secs = sections();
         let view = View {
@@ -316,6 +392,7 @@ mod tests {
             subtitle: "",
             clock: "",
             state: "",
+            selected: None,
         };
         assert!(row_height(&view, 941.0) <= 37.0);
         assert!(row_height(&view, 300.0) >= 26.0);

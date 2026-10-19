@@ -977,6 +977,10 @@ impl App {
             }
             return;
         }
+        // (the new menu has no list to scroll)
+        if self.new_menu_active() {
+            return;
+        }
         self.wheel_acc += amount;
         let steps = self.wheel_acc.trunc() as i64;
         if steps == 0 {
@@ -1204,6 +1208,12 @@ impl App {
     pub(crate) fn menu_cursor_kind(&self) -> u8 {
         if self.menu_drag.is_some() || self.menu_scroll_drag || self.dd_scroll_drag.is_some() || self.pane_scroll_drag.is_some() {
             return 4;
+        }
+        if self.new_menu_active() {
+            // (the new menu is drawn by the renderer: its lines are not the HUD's rectangles)
+            let Some(s) = self.surface.as_ref() else { return 0 };
+            let at = glam::Vec2::new(self.cursor.0, self.cursor.1);
+            return u8::from(self.new_menu_frame().hit(at, (s.config.width, s.config.height)).is_some());
         }
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.cursor;

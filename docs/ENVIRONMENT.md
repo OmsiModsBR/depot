@@ -22,6 +22,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_MAX_FPS` | number | `omsi-app::app_events` | yes | The frame rate limit, in place of the setting. |
 | `OMSI_MOBILE` | switch | `omsi-app::ui` | yes | The phone's layout on a computer (the rail kept clear of a camera hole). |
 | `OMSI_MUTE` | switch | `omsi-audio::mixer` | yes | Silence: the mixer plays nothing. |
+| `OMSI_NEW_UI` | text | `omsi-app::new_ui` |  | `1`: the Esc menu is drawn by the new interface (`omsi-ui`) in place of the HUD's lines. Off by default; the HUD's menu stays as it was, and is what the lists behind its lines ("Options...", "Controls...") still use. |
 | `OMSI_NO_AO` | switch | `omsi-render::renderer::frame` | yes | No ambient occlusion. |
 | `OMSI_NO_BC` | switch | `omsi-render::api::renderer` | yes | Textures uploaded as RGBA, not compressed on the GPU. |
 | `OMSI_NO_BUMP` | switch | `omsi-app::scene` | yes | No bump maps on vehicles and objects. |

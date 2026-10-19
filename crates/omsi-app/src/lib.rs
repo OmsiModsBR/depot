@@ -54,6 +54,7 @@ mod lan_world;
 mod lights;
 mod launcher;
 mod menu;
+mod new_ui;
 mod mirror_hud;
 mod map_surface;
 mod nav;
@@ -632,6 +633,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         pending_time: None,
         world_day: None,
         autosave_t: 0.0,
+        new_ui: Default::default(),
         timetable: false,
         dragging: false,
         html_pressed: None,

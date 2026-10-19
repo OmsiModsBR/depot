@@ -3,7 +3,7 @@
 
 mod editor_input;
 mod keyboard;
-mod menus;
+pub(crate) mod menus;
 mod mouse;
 
 pub(crate) use menus::*;

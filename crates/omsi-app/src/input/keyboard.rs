@@ -883,8 +883,14 @@ impl App {
             // P changes only the simulation state, even while a menu is open.
             KeyCode::KeyP if !modified => self.toggle_pause(),
             KeyCode::Escape => self.close_game_menu(),
-            KeyCode::ArrowUp | KeyCode::KeyW => self.game_menu = Some(self.menu_step(sel, n, false)),
-            KeyCode::ArrowDown | KeyCode::KeyS => self.game_menu = Some(self.menu_step(sel, n, true)),
+            KeyCode::ArrowUp | KeyCode::KeyW => {
+                let k = if self.new_menu_active() { self.new_menu_step(sel, false) } else { self.menu_step(sel, n, false) };
+                self.game_menu = Some(k);
+            }
+            KeyCode::ArrowDown | KeyCode::KeyS => {
+                let k = if self.new_menu_active() { self.new_menu_step(sel, true) } else { self.menu_step(sel, n, true) };
+                self.game_menu = Some(k);
+            }
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => self.menu_choose(event_loop, sel),
             _ => {}
         }
