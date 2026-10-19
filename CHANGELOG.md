@@ -6,6 +6,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Added
+- `omsi-render-d3d9`, the isolated foundation of a future legacy Direct3D 9 renderer: a small backend interface with a GPU-less test implementation, and (Windows only) device bring-up with capability reading, off-screen clear/read-back and device-loss handling. Nothing depends on it, the game renders as before, and no new hardware is declared supported.
+
 ### Changed
 - New Esc menu: the game menu's top level is drawn by `omsi-ui` over the paused picture (the renderer's overlay hook) instead of the HUD's lines. The lines, their keys and what they do are the game menu's own; the lists behind "Options...", "Controls..." and the like are still the HUD's. It is the only Esc menu on a plain window; the triple screen and VR keep the HUD's menu.
 - New Alt bar: a tap of Alt (with no other key or button between) shows or hides the bar of icon buttons at the bottom right; it never pauses the game and is hidden while the Esc menu is open. Switch vehicle, skip the next stop, repair, wash, refuel and screenshot run directly; what the game does not have yet is dim, with the reason. Alt+Down puts the keyboard on the bar (arrows, Enter or Space, Esc to leave).
