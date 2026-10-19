@@ -158,7 +158,6 @@ fn nav_row(h: f32) -> f32 {
     NAV_ROW.min((foot_top - NAV_TOP) / Page::listed().len() as f32)
 }
 
-
 #[cfg(test)]
 mod nav_tests {
     use super::*;
@@ -169,7 +168,10 @@ mod nav_tests {
             let row = nav_row(h);
             let end = NAV_TOP + Page::listed().len() as f32 * row;
             let foot_top = h - 45.0 - Page::foot().len() as f32 * FOOT_ROW;
-            assert!(end <= foot_top + 0.01, "h={h}: pages end at {end}, foot starts at {foot_top}");
+            assert!(
+                end <= foot_top + 0.01,
+                "h={h}: pages end at {end}, foot starts at {foot_top}"
+            );
             assert!(row <= NAV_ROW);
         }
         assert_eq!(nav_row(941.0), NAV_ROW);
