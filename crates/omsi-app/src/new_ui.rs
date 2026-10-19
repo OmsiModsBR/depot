@@ -240,6 +240,10 @@ impl MenuFrame {
 pub(crate) struct State {
     menu: Option<MenuFrame>,
     alt: Option<crate::new_ui_alt::AltFrame>,
+    /// The loading screen, while the first area of the map loads.
+    loading: Option<crate::new_ui_loading::LoadingFrame>,
+    /// Screenshots decoded on their thread and not yet in the GPU.
+    slides: Vec<crate::new_ui_loading::Decoded>,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -254,6 +258,9 @@ struct Overlay {
     gpu: Option<Gpu>,
     logo: Option<(usize, f32)>,
     last: Instant,
+    /// The loading screen's pictures in the GPU, and how far its slideshow is.
+    slide_tex: Vec<omsi_ui::loading::Slide>,
+    show: omsi_ui::loading::Slideshow,
 }
 
 impl Overlay {
@@ -265,11 +272,29 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, alt, mouse) = match self.shared.lock() {
-            Ok(s) => (s.menu.clone(), s.alt.clone(), s.mouse),
+        let (menu, alt, loading, mouse, arrived) = match self.shared.lock() {
+            Ok(mut s) => {
+                let arrived = std::mem::take(&mut s.slides);
+                (
+                    s.menu.clone(),
+                    s.alt.clone(),
+                    s.loading.clone(),
+                    s.mouse,
+                    arrived,
+                )
+            }
             Err(_) => return,
         };
-        if menu.is_none() && alt.is_none() {
+        if loading.is_none() && !self.slide_tex.is_empty() {
+            // (the loading screen is over: its pictures leave the GPU)
+            if let Some(gpu) = self.gpu.as_mut() {
+                for s in self.slide_tex.drain(..) {
+                    gpu.free(s.tex);
+                }
+            }
+            self.show = omsi_ui::loading::Slideshow::new(0);
+        }
+        if menu.is_none() && alt.is_none() && loading.is_none() {
             return;
         }
         let now = Instant::now();
@@ -293,7 +318,40 @@ impl Overlay {
         let size = Vec2::new(w as f32, h as f32) / scale;
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
-        if let Some(menu) = menu {
+        if let Some(l) = loading {
+            for d in arrived.into_iter().take(crate::new_ui_loading::MAX_SLIDES) {
+                if self.slide_tex.len() >= crate::new_ui_loading::MAX_SLIDES {
+                    break;
+                }
+                let tex = gpu.add_image(device, queue, d.w, d.h, &d.rgba);
+                self.slide_tex.push(omsi_ui::loading::Slide {
+                    tex,
+                    aspect: d.w as f32 / d.h as f32,
+                });
+            }
+            self.show.set_count(self.slide_tex.len());
+            self.show.update(dt);
+            fn card(
+                c: &Option<crate::new_ui_loading::CardText>,
+            ) -> Option<omsi_ui::loading::Card<'_>> {
+                c.as_ref().map(|c| omsi_ui::loading::Card {
+                    title: &c.title,
+                    sub: &c.sub,
+                    description: &c.description,
+                })
+            }
+            let view = omsi_ui::loading::View {
+                version: &l.version,
+                heading: &l.heading,
+                stage: &l.stage,
+                progress: l.progress,
+                logo: self.logo,
+                bus: card(&l.bus),
+                map: card(&l.map),
+                slides: &self.slide_tex,
+            };
+            omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
+        } else if let Some(menu) = menu {
             // (the world behind the menu is dimmed, the column and the bar drawn over it)
             self.ui.p().rect(
                 omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
@@ -332,12 +390,13 @@ impl Overlay {
 pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
+    slides_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
 }
 
 impl NewUi {
     /// Hand the renderer the overlay (once).
-    fn install(&mut self, renderer: &mut omsi_render::Renderer) {
+    pub(crate) fn install(&mut self, renderer: &mut omsi_render::Renderer) {
         if self.installed {
             return;
         }
@@ -348,11 +407,47 @@ impl NewUi {
             gpu: None,
             logo: None,
             last: Instant::now(),
+            slide_tex: Vec::new(),
+            show: omsi_ui::loading::Slideshow::new(0),
         };
         renderer.set_overlay_hook(Some(Box::new(move |device, queue, encoder, view, size| {
             overlay.draw(device, queue, encoder, view, size)
         })));
         self.installed = true;
+    }
+
+    /// What the loading screen says now (`None`: it is over).
+    pub(crate) fn set_loading(&self, frame: Option<crate::new_ui_loading::LoadingFrame>) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.loading = frame;
+        }
+    }
+
+    /// Once per session: list the map's screenshots and decode the latest on a thread of
+    /// their own, handing them to the overlay one by one.
+    pub(crate) fn start_slides(&mut self, map_folder: &str) {
+        if self.slides_started {
+            return;
+        }
+        self.slides_started = true;
+        let shared = self.shared.clone();
+        let map = map_folder.to_string();
+        let _ = std::thread::Builder::new()
+            .name("loading-slides".into())
+            .spawn(move || {
+                let paths = crate::new_ui_loading::recent(
+                    omsi_launcher_lib::screenshots::for_map(&map),
+                    crate::new_ui_loading::MAX_SLIDES,
+                );
+                for p in paths {
+                    if let Some(d) = crate::new_ui_loading::decode(&p) {
+                        match shared.lock() {
+                            Ok(mut s) => s.slides.push(d),
+                            Err(_) => return,
+                        }
+                    }
+                }
+            });
     }
 
     fn set(&self, menu: Option<MenuFrame>, alt: Option<crate::new_ui_alt::AltFrame>, mouse: Vec2) {

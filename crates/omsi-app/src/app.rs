@@ -931,7 +931,7 @@ impl App {
         let Some(cam) = self.starting.take() else {
             return true;
         };
-        let (Some(renderer), Some(mut scene)) = (self.renderer.take(), self.scene.take()) else {
+        let (Some(mut renderer), Some(mut scene)) = (self.renderer.take(), self.scene.take()) else {
             self.starting = Some(cam);
             return true;
         };
@@ -950,6 +950,8 @@ impl App {
             None => None,
         };
         let Some((done, total)) = progress else {
+            // (the loading screen of the new interface is over)
+            self.new_ui.set_loading(None);
             let w = self.world.clone().expect("world");
             log::info!(
                 "map ready after {:.2} s: {} tiles loaded",
@@ -961,36 +963,11 @@ impl App {
             self.scene = Some(scene);
             return true;
         };
-        let name = self
-            .world
-            .as_ref()
-            .map(|w| {
-                if w.global.friendly_name.trim().is_empty() {
-                    w.global.name.clone()
-                } else {
-                    w.global.friendly_name.clone()
-                }
-            })
-            .unwrap_or_default();
+        // the loading screen of the new interface, drawn by the renderer's hook over the blank picture
+        self.new_loading_update(&mut renderer, done, total);
         let mut reconfigure = false;
-        if let (Some(ui), Some(s), Some(win)) = (
-            self.ui.as_mut(),
-            self.surface.as_ref(),
-            self.window.as_ref(),
-        ) {
+        if let (Some(s), Some(win)) = (self.surface.as_ref(), self.window.as_ref()) {
             scene.overlays.clear();
-            let dpi = win.scale_factor() as f32;
-            let scale = dpi * crate::ui::size_factor(s.config.height as f32, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
-            ui.loading(
-                &renderer,
-                &mut scene,
-                s.config.width as f32,
-                s.config.height as f32,
-                scale,
-                name.trim(),
-                "",
-                done as f32 / total.max(1) as f32,
-            );
             let acquired = s.surface.get_current_texture();
             // a swapchain that no longer fits the window (Vulkan says so after the switch
             // to full screen, without a resize event) is made again, as the game's own
