@@ -693,7 +693,7 @@ impl Navigator {
             let key = self.surface_version * 2 + self.light as u64;
             if self.surface_mesh.map(|m| m.0 != key || m.1 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light, false);
+                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light, 0.0);
                 self.surface_mesh = Some((key, anchor, p.len()));
                 surface_verts = Some(p.verts);
             }

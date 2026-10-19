@@ -4,7 +4,7 @@
 use super::PuddleTargets;
 use super::{GroupParts, TargetCache};
 use crate::assets::AssetStore;
-use crate::gpu::{rt_gbuf, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
+use crate::gpu::{rt_gbuf, target_2d, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
 
 /// High-range colour targets of the enhanced path for one size: the multisampled one the
 /// scene is drawn into, the single-sampled one it resolves into, the glow's levels, the
@@ -70,22 +70,19 @@ impl TargetCache {
                     | wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_SRC
             };
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: tw.max(1),
-                        height: th.max(1),
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                device,
+                label,
+                wgpu::Extent3d {
+                    width: tw.max(1),
+                    height: th.max(1),
+                    depth_or_array_layers: 1,
+                },
+                samples,
+                format,
+                usage,
+            )
+            .create_view(&Default::default())
         };
         let msaa_view = (samples > 1).then(|| target("hdr msaa", w, h, fmt, samples));
         let view = target("hdr", w, h, fmt, 1);

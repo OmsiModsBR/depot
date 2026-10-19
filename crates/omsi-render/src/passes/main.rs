@@ -6,7 +6,7 @@ use super::draw::{
     PIPE_BLEND_NO_WRITE,
 };
 use crate::assets::upload_texture;
-use crate::gpu::pass_timer;
+use crate::gpu::{pass_timer, sampler_entry, texture_entry};
 use crate::lighting::Lighting;
 use crate::scene::{Scene, TextureId};
 use crate::shaders::{snowfall_flakes, SnowUniform};
@@ -559,24 +559,7 @@ impl SpriteResources {
         // coronas: camera group + a corona texture group
         let corona_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("corona"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
+            entries: &[texture_entry(0), sampler_entry(1)],
         });
         // corona sprite: soft radial falloff
         let cs = 64u32;

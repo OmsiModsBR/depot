@@ -15,8 +15,8 @@
 //! as clear, 7 the rays unfiltered, 8 / 9 / 10 the reflections' rays and weights (OMSI_DEBUG_ENHANCED=1 and 2 show the traced shadow and occlusion).
 use crate::assets::AlphaMode;
 use crate::assets::AssetStore;
-use crate::gpu::Samplers;
 use crate::gpu::{pass_timer, HDR_FORMAT};
+use crate::gpu::{target_2d, Samplers};
 use crate::lighting::Lighting;
 use crate::scene::{bounding_sphere, instance_scale, Camera, Instance, MeshId, Scene, Vertex};
 use crate::sky::SkyResources;
@@ -476,22 +476,19 @@ impl RayTracer {
             reflect,
             composite,
             refl: None,
-            spare: device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("rt spare"),
-                    size: wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default()),
+            spare: target_2d(
+                device,
+                "rt spare",
+                wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                1,
+                wgpu::TextureFormat::Rgba16Float,
+                wgpu::TextureUsages::STORAGE_BINDING,
+            )
+            .create_view(&Default::default()),
         }
     }
 
@@ -536,25 +533,22 @@ impl RayTracer {
             return false;
         }
         let mk = |label: &str| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC
-                        | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                device,
+                label,
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                1,
+                wgpu::TextureFormat::Rgba16Float,
+                wgpu::TextureUsages::STORAGE_BINDING
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+            )
+            .create_view(&Default::default())
         };
         self.targets = Some(Targets {
             size: (w, h),
@@ -1137,24 +1131,19 @@ impl RayTracer {
         let half = (w.div_ceil(refl_div()), h.div_ceil(refl_div()));
         if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
             let mk = |label: &str| {
-                parts
-                    .device
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: Some(label),
-                        size: wgpu::Extent3d {
-                            width: half.0,
-                            height: half.1,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba16Float,
-                        usage: wgpu::TextureUsages::STORAGE_BINDING
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    })
-                    .create_view(&Default::default())
+                target_2d(
+                    &parts.device,
+                    label,
+                    wgpu::Extent3d {
+                        width: half.0,
+                        height: half.1,
+                        depth_or_array_layers: 1,
+                    },
+                    1,
+                    wgpu::TextureFormat::Rgba16Float,
+                    wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                )
+                .create_view(&Default::default())
             };
             rt.refl = Some((half, mk("rt reflection rays")));
         }

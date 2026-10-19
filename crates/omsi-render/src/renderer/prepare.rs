@@ -1,61 +1,13 @@
-//! Preparing a frame: the instances' records, the camera bind group, the draw lists, and
-//! falling back when the device cannot keep up.
+//! Preparing a frame: the camera bind group, the draw lists, and falling back when the
+//! device cannot keep up. The instances' records are uploaded in `upload`.
 
 use super::options::RenderOptions;
 use super::state::Renderer;
 use crate::assets::RT_BUFFERS;
 use crate::gpu::{array_path, sixteen_texture_units, ArrayPath, GpuArray};
-use crate::passes::surface_instance_code;
-use crate::scene::{Instance, Scene, ENHANCED_CAMERA_TEXTURES};
-use glam::{DVec3, Mat4, Vec3};
+use crate::scene::{Scene, ENHANCED_CAMERA_TEXTURES};
 
 impl Renderer {
-    /// Upload instance transforms (call after building or changing the scene).
-    /// The per-draw entries of one instance: one model matrix and two parameter vectors
-    /// per material slot.
-    pub(crate) fn instance_entries(
-        i: &Instance,
-        ro: DVec3,
-        mats: &mut Vec<[[f32; 4]; 4]>,
-        params: &mut Vec<[f32; 4]>,
-    ) {
-        let m =
-            (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
-        let vis = if i.visible { 1.0 } else { 0.0 };
-        for (k, a) in i.slot_alpha.iter().enumerate() {
-            mats.push(m);
-            let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
-            params.push([*a, vis, uv[0], uv[1]]);
-            params.push([
-                i.slot_light.get(k).copied().unwrap_or(1.0),
-                i.slot_night.get(k).copied().unwrap_or(1.0),
-                // (a lamp code is 1 or more, a plain brightness below 1)
-                if i.interior_lamps != 0 {
-                    i.interior_lamps as f32
-                } else {
-                    i.interior.min(0.99)
-                },
-                // the surface flag: 1 ground, 2 a vehicle's shadow blob (no snow on it),
-                // 1.25 a legacy pulled decal, 0.9 an OMSI-ordered surface (weather
-                // classification without view-space pull), 0.75 a painted ground layer;
-                // below -500 a vehicle part, -(5000 + the roof height relative to origin)
-                if let Some(roof) = i.roof.filter(|_| !i.blob && !i.surface) {
-                    let z = (i.origin - ro).z as f32
-                        + i.transform.transform_point3(Vec3::new(0.0, 0.0, roof)).z;
-                    -(5000.0 + z.clamp(-4000.0, 4000.0))
-                } else {
-                    surface_instance_code(
-                        i.blob,
-                        i.ground_layer,
-                        i.decal,
-                        i.surface,
-                        i.surface_bias,
-                    )
-                },
-            ]);
-        }
-    }
-
     pub(crate) fn rebuild_camera_bind_group(&self, scene: &mut Scene) {
         let (Some(model_buf), Some(params_buf), Some(light_buf), Some(grid_buf), Some(draw_buf)) = (
             &scene.model_buf,

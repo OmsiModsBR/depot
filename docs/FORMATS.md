@@ -683,7 +683,8 @@ onlytypes end types_prefered number_tour.
   map's `global.cfg`, a `.bus`/`.ovh` or a `.owt`, in a file named after the stem:
   `global_ENG.dsc` beside `global.cfg`. The German text is the file's own description, so
   only other languages have a `.dsc`, and a language without one falls back to `_ENG`. They
-  are Latin-1 like the rest, except that some were saved as UTF-16 with a byte-order mark.
+  are read like the other text files, in the code page their author wrote them in, and some
+  were saved as UTF-16 with a byte-order mark (`omsi_content::Dsc`).
 * Sound conditions: `[conditionSingle]` / `[conditionInt]` give the variable, the **value**
   and then the relation - 0 `<>`, 1 `=`, 2 `<`, 3 `>`, 4 `<=`, 5 `>=` (`engine_n 200 3` =
   the engine runs, `velocity 2 2` = standing); `[conditionBool]` has no relation and

@@ -1,6 +1,8 @@
 //! How the scene's per-draw arrays reach the shaders on this device: storage buffers, or
 //! textures where the device cannot read one.
 
+use super::target_2d;
+
 /// How the per-draw arrays (the model matrices, the instance parameters, the draw list) and
 /// the point lights reach the scene shader on this device (set in `Renderer::new_on`).
 /// Older OpenGL chips cannot read a storage buffer in a vertex shader - an Intel HD 2500, a
@@ -75,24 +77,22 @@ impl GpuArray {
         if rows == max_rows {
             log::warn!("{label}: {texels} values do not fit a texture of {ARRAY_TEX_WIDTH} x {max_rows}; the rest are not drawn");
         }
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: wgpu::Extent3d {
+        let texture = target_2d(
+            device,
+            label,
+            wgpu::Extent3d {
                 width: ARRAY_TEX_WIDTH,
                 height: rows,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: if texel == 16 {
+            1,
+            if texel == 16 {
                 wgpu::TextureFormat::Rgba32Float
             } else {
                 wgpu::TextureFormat::R32Uint
             },
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
         let view = texture.create_view(&Default::default());
         GpuArray::Texture {
             texture,

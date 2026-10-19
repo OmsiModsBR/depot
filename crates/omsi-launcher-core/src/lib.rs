@@ -659,7 +659,7 @@ pub fn list_maps() -> Result<Vec<MapInfo>> {
         let Some(d) = dirs.into_iter().find(|d| omsi_cfg::vfs::is_file(&d.join("global.cfg"))) else { continue };
         let key = format!("map|{lang}|{}", d.display());
         let mut stamped = vec![d.clone(), d.join("global.cfg"), d.join("ailists.cfg")];
-        stamped.extend(dsc_candidates(&d.join("global.cfg"), lang));
+        stamped.extend(omsi_content::Dsc::candidates(&d.join("global.cfg"), lang));
         let stamp = index::files_stamp(&stamped);
         keys.push(key.clone());
         let info: Option<MapInfo> = index::cached(&key, stamp, || (read_map(&d, &folder, lang), Vec::new()));
@@ -697,7 +697,7 @@ fn read_map(d: &Path, folder: &str, lang: &str) -> Option<MapInfo> {
         }
     };
     // `global_ENG.dsc` (the language of the settings) names and describes the map
-    let dsc = find_dsc(&d.join("global.cfg"), lang);
+    let dsc = omsi_content::Dsc::find(&d.join("global.cfg"), lang);
     let friendly = dsc.as_ref().and_then(|x| x.name.first().cloned()).unwrap_or_else(|| g.friendly_name.trim().to_string());
     let description = dsc.map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| g.description.trim().to_string());
     let mut entries: Vec<EntryInfo> = g.entry_points.iter().map(|e| EntryInfo { index: e.index, name: e.name.trim().to_string() }).collect();
@@ -1029,7 +1029,7 @@ fn read_vehicle_folder(folder: &str, dirs: &[PathBuf], lang: &str) -> (Vec<Vehic
         let (paints, paint_dirs) = paint_schemes(&v);
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
-        let description = find_dsc(f, lang).map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| v.description.trim().to_string());
+        let description = omsi_content::Dsc::find(f, lang).map(|x| x.description).filter(|t| !t.is_empty()).unwrap_or_else(|| v.description.trim().to_string());
         let missing_packs = model.as_deref().map(missing_packs_of).unwrap_or_default();
         if !missing_packs.is_empty() {
             log_line(&format!("vehicles: {} borrows parts from packs that are not installed: {}", f.display(), missing_packs.join(", ")));
@@ -1067,7 +1067,7 @@ pub fn list_weather() -> Result<Vec<WeatherInfo>> {
     for f in files {
         // the description in the settings' language lives in `<name>_ENG.dsc`
         let mut stamped = vec![f.clone()];
-        stamped.extend(dsc_candidates(&f, lang));
+        stamped.extend(omsi_content::Dsc::candidates(&f, lang));
         let key = format!("wx|{lang}|{}", f.display());
         keys.push(key.clone());
         let info: Option<WeatherInfo> = index::cached(&key, index::files_stamp(&stamped), || (read_weather(&f, lang), Vec::new()));
@@ -1081,7 +1081,7 @@ fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
     let w = omsi_content::weather::Weather::load(f).ok()?;
     let stem = f.file_stem().unwrap().to_string_lossy().to_string();
     // (the `[name]` of the file is not part of the description: "Ground Fog Heavy ground fog ...")
-    let description = find_dsc(f, lang).map(|x| x.description.replace('\n', " ")).filter(|t| !t.is_empty()).unwrap_or_else(|| w.description.replace('\n', " "));
+    let description = omsi_content::Dsc::find(f, lang).map(|x| x.description.replace('\n', " ")).filter(|t| !t.is_empty()).unwrap_or_else(|| w.description.replace('\n', " "));
     let precip = match w.precip.first().copied().unwrap_or(0.0) as i32 {
         1 => format!("rain {:.0}%", w.precip.get(1).copied().unwrap_or(0.0) / 255.0 * 100.0),
         2 => format!("snow {:.0}%", w.precip.get(1).copied().unwrap_or(0.0) / 255.0 * 100.0),
@@ -1095,68 +1095,6 @@ fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
 fn content_language() -> &'static str {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
     language_code(settings_from_text(text.as_deref())["language"].as_str().unwrap_or("ENG"))
-}
-
-/// The description files OMSI reads for `file` (`global.cfg` -> `global_ENG.dsc`), in the
-/// order they are tried: the language itself, then English for a language that has none
-/// (German is the files' own language, so German falls back to the file itself).
-fn dsc_candidates(file: &Path, lang: &str) -> Vec<PathBuf> {
-    let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let mut langs = vec![lang];
-    if lang != "DEU" && lang != "ENG" {
-        langs.push("ENG");
-    }
-    langs.into_iter().map(|l| file.with_file_name(format!("{stem}_{l}.dsc"))).collect()
-}
-
-/// A `.dsc` file: the `[name]` / `[friendlyname]` lines and the `[description]` text.
-struct Dsc {
-    name: Vec<String>,
-    description: String,
-}
-
-fn parse_dsc(text: &str) -> Dsc {
-    let mut name = Vec::new();
-    let mut desc: Vec<&str> = Vec::new();
-    let mut section = "";
-    for line in text.lines() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            section = if t.eq_ignore_ascii_case("[name]") || t.eq_ignore_ascii_case("[friendlyname]") {
-                "name"
-            } else if t.eq_ignore_ascii_case("[description]") {
-                "description"
-            } else {
-                ""
-            };
-            continue;
-        }
-        match section {
-            "name" if !t.is_empty() => name.push(t.to_string()),
-            "name" => section = "",
-            "description" => desc.push(line.trim_end()),
-            _ => {}
-        }
-    }
-    Dsc { name, description: desc.join("\n").trim().to_string() }
-}
-
-fn find_dsc(file: &Path, lang: &str) -> Option<Dsc> {
-    dsc_candidates(file, lang).iter().find_map(|p| omsi_cfg::vfs::read(p).ok()).map(|b| parse_dsc(&encoding_latin1(&b)))
-}
-
-/// OMSI's text files are Latin-1, except that some description files were saved as
-/// UTF-16 with a byte-order mark.
-fn encoding_latin1(b: &[u8]) -> String {
-    if b.len() >= 2 && b[0] == 0xFF && b[1] == 0xFE {
-        let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        return String::from_utf16_lossy(&u);
-    }
-    if b.len() >= 2 && b[0] == 0xFE && b[1] == 0xFF {
-        let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
-        return String::from_utf16_lossy(&u);
-    }
-    b.iter().map(|&c| c as char).collect()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1985,9 +1923,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
-            "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
-            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
-            "pax_density" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| if x > 5.0 { x / 100.0 } else { x }).unwrap_or(1.0)),
+            // (a size the game can read, else its default 2048)
+            "shadow_size" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(2048)),
+            // (a count the game can read, else its default 4)
+            "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
+            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" if k != "vol_ai" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
+            // (0 to 1, as the game reads it)
+            "vol_ai" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(1.0)),
+            "pax_density" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x > 5.0 { x / 100.0 } else { x }).map(|x| x.clamp(0.0, 3.0)).unwrap_or(1.0)),
             "triple_fov_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "triple_width_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(200.0, 2000.0)).unwrap_or(600.0)),
             "triple_distance_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(200.0, 3000.0)).unwrap_or(650.0)),
@@ -1997,27 +1940,36 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "triple_eye_height_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-500.0, 500.0)).unwrap_or(0.0)),
             "vr_scale" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 1.0)).unwrap_or(0.65)),
             "vr_head_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 30.0) as i64).unwrap_or(0)),
-            "vr_mirror_rate" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.0, 360.0) as i64).unwrap_or(16)),
+            "vr_mirror_rate" => v[&k] = val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.0, 360.0)).map(|x| if x.fract() == 0.0 { json!(x as i64) } else { json!(x) }).unwrap_or(json!(16)),
             "mirror_size" => v[&k] = json!(val.parse::<i64>().map(|x| if x == 0 { 0 } else { x.clamp(64, 2048) }).unwrap_or(256)),
             "mirror_refresh" => v[&k] = json!(mirror_refresh(val)),
-            "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
+            "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
             "max_obj_dist" => v[&k] = if val.eq_ignore_ascii_case("auto") { json!("auto") } else { json!(val.parse::<f64>().map(|m| (m.round() as i64).to_string()).unwrap_or_else(|_| "auto".into())) },
             "ssao" | "shadows" | "shadow_blobs" | "navigator" | "enhanced" | "triple_screen" | "triple_span" | "triple_hud_center" | "vr" | "vr_desktop_mirror" | "fullscreen" | "vsync" | "exact_fare" | "detail_textures" | "texture_compression" | "chat" | "tooltips" | "name_tags" | "show_fps" | "clouds" | "doppler" | "driver" | "use_real_time" | "use_real_date" | "use_real_year" | "collision_vehicles" | "collision_objects" | "collision_pedestrians" | "head_movement" | "driverview_smooth" | "hands_in_cab" | "alt_view" | "precision_zoom" => v[&k] = json!(b(val)),
-            "maintenance" | "ai_unsched_factor" | "ai_max_scheduled" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            "ai_max_scheduled" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            // (0 to 4, as the game reads it)
+            "maintenance" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.clamp(0.0, 4.0) as i64).unwrap_or(0)),
+            // (a percentage, 0 to 300, as the game reads it)
+            // (a percentage with its fraction, as the game keeps it)
+            "ai_unsched_factor" => v[&k] = val.trim_end_matches('%').parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).map(|x| if x.fract() == 0.0 { json!(x as i64) } else { json!(x) }).unwrap_or(json!(100)),
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
-            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
+            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" if k != "navigator_corner" => v[&k] = json!(val),
+            // (the game lowercases it)
+            "navigator_corner" => v[&k] = json!(val.to_ascii_lowercase()),
             "ctrl_off" => v[&k] = json!(val),
             "metar_station" => v[&k] = json!(val.chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()),
             "resolution" | "window_size" => v["resolution"] = json!(resolution_text(val)),
             "graphics_api" => v[&k] = json!(match val.to_ascii_lowercase().as_str() { "vulkan" => "vulkan", "dx12" => "dx12", "gl" => "gl", _ => "auto" }),
             "shadow_casters" => v[&k] = json!(if val.eq_ignore_ascii_case("omsi") { "omsi" } else { "all" }),
             "ctrl_deadzone" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0).clamp(0.0, 0.3)),
-            "mouse_sens" => v[&k] = json!(val.parse::<f64>().unwrap_or(1.0).clamp(0.1, 3.0)),
+            // (what is no finite number is the default, as the game reads it)
+            "mouse_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.1, 3.0)),
             "ui_scale" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 2.0)),
             "chat_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 3.0)),
-            "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
+            // (what is no finite number is the default, as the game reads it)
+            "wheel_range" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(900.0).clamp(90.0, 2880.0)),
             "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
             "outside_fov" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
             "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
@@ -2035,18 +1987,33 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "head_idle" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(0.0)),
             "head_idle_pace" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 2.0)).unwrap_or(1.0)),
             "pedal_throttle" | "pedal_brake" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.25, 4.0)).unwrap_or(1.0)),
-            "ff_road_vib" | "ff_engine_vib" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0)),
+            "ff_road_vib" | "ff_engine_vib" if k != "ff_engine_vib" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0)),
+            // (what is no finite number is the default, as the game reads it)
+            "ff_engine_vib" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0)),
             "ff_fade" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 1.5)).unwrap_or(0.28)),
-            "seat_x" | "seat_y" | "seat_z" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
+            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
+            // (what is no finite number is the default, as the game reads it)
+            "seat_x" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
             "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
-            "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" if !matches!(k.as_str(), "head_tracking_x_sens" | "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_y_sens") => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_y_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_roll_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_pitch_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_yaw_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            // (a value of 2 or less is a fraction of full, x100, as the game reads it)
+            "head_tracking_x_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x }).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
             "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "machine_translation" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_orientation" => v[&k] = json!(if matches!(val, "north" | "heading") { val } else { "map" }),
             "info_bar" => v[&k] = json!(b(val)),
             "autosave_minutes" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5)),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
-            "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
+            // (what is no finite number is the default, as the game reads it)
+            "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|| "1".into())),
             "language" => v[&k] = json!(language_code(val)),
             "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
@@ -2283,7 +2250,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let text = format!(
         "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
-        n("ai_unsched_factor", 100).clamp(0, 300),
+        f("ai_unsched_factor", 100.0).clamp(0.0, 300.0),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
@@ -2343,11 +2310,11 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("seat_pitch_deg", 0.0).clamp(-45.0, 45.0),
         b("steer_look", false),
         b("head_tracking", false),
-        f("head_tracking_yaw_sens", 100.0).clamp(0.0, 100.0),
-        f("head_tracking_pitch_sens", 100.0).clamp(0.0, 100.0),
-        f("head_tracking_roll_sens", 100.0).clamp(0.0, 100.0),
-        f("head_tracking_x_sens", 100.0).clamp(0.0, 100.0),
-        f("head_tracking_y_sens", 100.0).clamp(0.0, 100.0),
+        { let p = f("head_tracking_yaw_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
+        { let p = f("head_tracking_pitch_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
+        { let p = f("head_tracking_roll_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
+        { let p = f("head_tracking_x_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
+        { let p = f("head_tracking_y_sens", 100.0).clamp(0.0, 100.0); if p <= 2.0 { p / 100.0 } else { p } },
         f("head_tracking_z_sens", 100.0).clamp(0.0, 100.0),
         b("head_tracking_invert_yaw", false),
         b("head_tracking_invert_pitch", false),
@@ -2558,9 +2525,7 @@ fn save_slots(dir: &Path) -> Vec<SavedSituation> {
             // (the `[name]` line alone: the lists ask again every few seconds, and a whole
             // situation holds every variable of every vehicle; the game writes them in
             // UTF-16, as OMSI does)
-            let text = std::fs::read(&f).map(|b| omsi_cfg::decode_text(&b[..b.len().min(8192) & !1])).unwrap_or_default();
-            let mut lines = text.lines().map(str::trim);
-            let name = lines.by_ref().find(|l| l.eq_ignore_ascii_case("[name]")).and_then(|_| lines.next()).map(str::to_string).filter(|n| !n.is_empty()).unwrap_or_else(|| f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+            let name = std::fs::read(&f).ok().and_then(|b| omsi_content::Situation::read_name(&b[..b.len().min(8192) & !1])).unwrap_or_else(|| f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
             SavedSituation { saved: modified_secs(&f), file: f, name }
         })
         .collect();
@@ -3006,19 +2971,6 @@ mod tests {
         assert!(!text.contains("discord_status") && !text.contains("discord_app_id"), "{text}");
     }
 
-    #[test]
-    fn dsc_files_give_name_and_description() {
-        let d = super::parse_dsc("\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n");
-        assert_eq!(d.name, vec!["MAN", "NL202 - EN92", "Beige"]);
-        assert_eq!(d.description, "Although the BVG did not purchase\n\n-Technical specifications-");
-        let w = super::parse_dsc("[name]\r\nGround Fog\r\n\r\n[description]\r\nHeavy ground fog limits the maximum visibility dangerously!\r\n[end]\r\n");
-        assert_eq!(w.name, vec!["Ground Fog"]);
-        assert_eq!(w.description, "Heavy ground fog limits the maximum visibility dangerously!");
-        let p = std::path::Path::new("/x/maps/Spandau/global.cfg");
-        assert_eq!(super::dsc_candidates(p, "ENG"), vec![std::path::PathBuf::from("/x/maps/Spandau/global_ENG.dsc")]);
-        assert_eq!(super::dsc_candidates(p, "FRA").len(), 2);
-        assert_eq!(super::dsc_candidates(std::path::Path::new("/v/MAN_EN92_main.bus"), "DEU"), vec![std::path::PathBuf::from("/v/MAN_EN92_main_DEU.dsc")]);
-    }
 
     use super::*;
 

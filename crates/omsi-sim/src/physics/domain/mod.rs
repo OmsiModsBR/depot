@@ -5,7 +5,7 @@ mod body;
 mod ground;
 mod impact;
 mod kinematic;
-pub(in crate::physics) mod params;
+pub(crate) mod params;
 mod spec;
 mod train;
 mod vehicle;
