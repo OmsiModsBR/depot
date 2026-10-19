@@ -215,6 +215,8 @@ pub struct Ui {
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
+    /// Keyboard focus over the clickable widgets (off unless `nav.enabled`).
+    pub nav: crate::nav::KeyNav,
     /// The widget that took the mouse wheel this frame (the innermost scroll area).
     wheel_taken: bool,
     anims: HashMap<Id, f32>,
@@ -254,6 +256,7 @@ impl Ui {
             hot: None,
             active: None,
             focus: None,
+            nav: Default::default(),
             wheel_taken: false,
             anims: HashMap::new(),
             scroll: HashMap::new(),
@@ -339,6 +342,8 @@ impl Ui {
                 }
             }
         }
+        let modal = self.popup.is_some() || self.date_popup.is_some();
+        self.nav.begin(&mut self.input, &mut self.focus, modal);
     }
 
     fn push_layer(&mut self, clip: Rect, radius: f32) {
@@ -525,6 +530,19 @@ impl Ui {
         (h, held, clicked)
     }
 
+    /// `interact` for a widget that does something when clicked: with the keyboard focus on
+    /// (`nav.enabled`) it is also a stop for Tab, and Enter or Space press it. Sliders, text
+    /// fields, scroll bars and the cells inside a field use plain `interact`: nothing would
+    /// happen on Enter there.
+    pub fn interact_key(&mut self, id: Id, r: Rect) -> (bool, bool, bool) {
+        let (h, held, mut clicked) = self.interact(id, r);
+        if self.nav.enabled {
+            let seen = intersect(self.clip_now(), r);
+            clicked |= self.nav.seen(id, r, seen);
+        }
+        (h, held, clicked)
+    }
+
     pub fn tooltip(&mut self, r: Rect, text: &str) {
         if self.hover(r) && !self.input.down {
             let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
@@ -698,7 +716,7 @@ impl Ui {
         kind: ButtonKind,
     ) -> bool {
         let id = id_of(name);
-        let (h, held, clicked) = self.interact(id, r);
+        let (h, held, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
         let rr = if held { r.inset(0.5) } else { r };
         let (fill, text_c, edge) = match kind {
@@ -757,7 +775,7 @@ impl Ui {
     pub fn icon_button(&mut self, name: &str, c: Vec2, r: f32, icon: &str, tip: &str) -> bool {
         let id = id_of(name);
         let rect = Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r);
-        let (h, _, clicked) = self.interact(id, rect);
+        let (h, _, clicked) = self.interact_key(id, rect);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         self.p().circle(c, r, Color::WHITE.alpha(0.06 * t));
         self.icon(icon, c, r * 1.1, if h { TEXT } else { TEXT_DIM });
@@ -770,7 +788,7 @@ impl Ui {
     /// A switch: returns true when it was flipped.
     pub fn toggle(&mut self, name: &str, r: Rect, value: &mut bool, label: &str) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         if clicked {
             *value = !*value;
         }
@@ -937,7 +955,7 @@ impl Ui {
                 self.popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self.popup.as_ref().map(|p| p.id == id).unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
@@ -1337,7 +1355,7 @@ impl Ui {
                 self.date_popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self
             .date_popup
             .as_ref()
@@ -1485,7 +1503,7 @@ impl Ui {
     /// A row of a list: hover highlight, the chosen one marked. Returns clicked.
     pub fn row(&mut self, name: &str, r: Rect, selected: bool) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         let s = self.anim(id ^ 4, if selected { 1.0 } else { 0.0 }, 0.1);
         if s > 0.01 {
@@ -1539,6 +1557,9 @@ impl Ui {
                 Weight::Medium,
                 TEXT_SOFT,
             );
+        }
+        if let Some(r) = self.nav.ring() {
+            self.p().rounded_border(r, 8.0, 2.0, ACCENT);
         }
         let mut layers = Vec::new();
         let mut verts = Vec::new();
