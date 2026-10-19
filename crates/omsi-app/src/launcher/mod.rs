@@ -8,6 +8,7 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+mod diagnostics;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -26,6 +27,7 @@ mod dialogs;
 
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_ui::Page as UiPage;
 use omsi_render::{Renderer, SurfaceState};
 use omsi_ui::paint::Align;
 use omsi_ui::{Draw, Rect, Weight};
@@ -42,6 +44,8 @@ use winit::window::{Window, WindowId};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Drive,
+    Vehicles,
+    Maps,
     Multiplayer,
     Profile,
     Settings,
@@ -50,21 +54,52 @@ pub enum Page {
     Mods,
     Tutorials,
     Timetable,
+    Diagnostics,
     Setup,
 }
 
-// (the Multiplayer page is hidden: multiplayer is disabled in this version)
-const PAGES: [(Page, &str, &str); 9] = [
-    (Page::Drive, "Drive", "directions_bus"),
-    (Page::Profile, "Profile", "badge"),
-    (Page::Settings, "Settings", "tune"),
-    (Page::Controls, "Controls", "keyboard"),
-    (Page::Sessions, "Sessions", "sports_esports"),
-    (Page::Mods, "Mods", "extension"),
-    (Page::Tutorials, "Tutorials", "help"),
-    (Page::Timetable, "Timetable", "schedule"),
-    (Page::Setup, "Setup", "folder_open"),
-];
+impl Page {
+    /// The sidebar's page (`omsi_launcher_ui`): every page but the hidden Multiplayer.
+    fn shown(self) -> Option<UiPage> {
+        Some(match self {
+            Page::Drive => UiPage::Drive,
+            Page::Vehicles => UiPage::Vehicles,
+            Page::Maps => UiPage::Maps,
+            Page::Multiplayer => return None,
+            Page::Profile => UiPage::Profile,
+            Page::Settings => UiPage::Settings,
+            Page::Controls => UiPage::Controls,
+            Page::Sessions => UiPage::Sessions,
+            Page::Mods => UiPage::Mods,
+            Page::Tutorials => UiPage::Tutorials,
+            Page::Timetable => UiPage::Timetable,
+            Page::Diagnostics => UiPage::Diagnostics,
+            Page::Setup => UiPage::Setup,
+        })
+    }
+
+    fn of(p: UiPage) -> Page {
+        match p {
+            UiPage::Drive => Page::Drive,
+            UiPage::Vehicles => Page::Vehicles,
+            UiPage::Maps => Page::Maps,
+            UiPage::Mods => Page::Mods,
+            UiPage::Timetable => Page::Timetable,
+            UiPage::Sessions => Page::Sessions,
+            UiPage::Profile => Page::Profile,
+            UiPage::Controls => Page::Controls,
+            UiPage::Tutorials => Page::Tutorials,
+            UiPage::Diagnostics => Page::Diagnostics,
+            UiPage::Settings => Page::Settings,
+            UiPage::Setup => Page::Setup,
+        }
+    }
+
+    /// The page called `name` (`OMSI_LAUNCHER_PAGE`, the input script), any case.
+    fn named(name: &str) -> Option<Page> {
+        UiPage::named(name).map(Page::of)
+    }
+}
 
 #[cfg(not(target_os = "android"))]
 type Clipboard = arboard::Clipboard;
@@ -88,8 +123,8 @@ impl Clipboard {
     }
 }
 
-/// Width of the left rail (points).
-pub const RAIL_W: f32 = 236.0;
+/// Width of the sidebar (points).
+pub const RAIL_W: f32 = omsi_launcher_ui::look::SIDEBAR_W;
 
 /// How often the launcher made its device again after losing it (see `recover_device`).
 static LAUNCHER_RECOVERIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -109,6 +144,13 @@ pub struct Launcher {
     /// The launcher made for a phone (see `phone`).
     pub phone: phone::PhoneView,
     pub pages: pages::PagesView,
+    /// The Vehicles and Maps pages (`omsi_launcher_ui`).
+    pub vehicles: omsi_launcher_ui::vehicles::VehiclesView,
+    pub maps: omsi_launcher_ui::maps::MapsView,
+    /// The logo at the top of the sidebar, in the interface pipeline.
+    logo: Option<(usize, f32)>,
+    /// The graphics adapter the launcher draws with (shown on Diagnostics).
+    adapter: String,
     #[cfg(feature = "lan")]
     pub mp: multiplayer::MultiplayerView,
     /// Server icons in the interface pipeline (by server address), and those decoded but
@@ -186,6 +228,10 @@ impl Launcher {
         drive: drive::DriveView::default(),
         phone: phone::PhoneView::default(),
         pages: pages::PagesView::default(),
+        vehicles: Default::default(),
+        maps: Default::default(),
+        logo: None,
+        adapter: String::new(),
         #[cfg(feature = "lan")]
         mp: multiplayer::MultiplayerView::default(),
         icons: Default::default(),
@@ -237,18 +283,9 @@ impl Launcher {
         app.state.set_status(why, true);
     }
     if let Some(p) = omsi_cfg::flags::LAUNCHER_PAGE.text() {
-        if let Some((pg, _, _)) = PAGES.iter().find(|(_, n, _)| n.eq_ignore_ascii_case(p.split(':').next().unwrap_or(""))) {
-            app.page = *pg;
-            // (the phone's tab for it)
-            app.phone.tab = match pg {
-                Page::Drive => phone::Tab::Play,
-                Page::Multiplayer => phone::Tab::Online,
-                Page::Mods => phone::Tab::Mods,
-                other => {
-                    app.phone.page = Some(*other);
-                    phone::Tab::More
-                }
-            };
+        if let Some(pg) = Page::named(p.split(':').next().unwrap_or("")) {
+            app.go(pg);
+            app.page_anim = 1.0;
         }
         // (`OMSI_LAUNCHER_PAGE=more`, `=sheet-bus` …: the phone's More, or one of its sheets)
         match p.as_str() {
@@ -287,6 +324,7 @@ impl Launcher {
         self.map_gen = 0;
         self.mapview.drop_gpu();
         self.icons.clear();
+        self.logo = None;
     }
 
     /// The window, its surface and the renderer, given up for the game (a phone plays in the
@@ -316,6 +354,14 @@ impl Launcher {
 
     /// The surface for the window the launcher has (created again after the app was in the
     /// background: a phone takes the window's surface away meanwhile).
+    /// The interface's pipeline on `renderer`'s device, with the sidebar's logo in it.
+    fn new_gpu(&mut self, renderer: &Renderer) -> omsi_ui::Gpu {
+        let mut gpu = omsi_ui::Gpu::new(&renderer.device, renderer.format(), 4, self.ui.atlas.size);
+        self.logo = omsi_launcher_ui::offscreen::load_logo(&mut gpu, &renderer.device, &renderer.queue);
+        self.adapter = renderer.adapter_name.clone();
+        gpu
+    }
+
     fn make_surface(&mut self) {
         let Some(window) = self.window.clone() else { return };
         if self.renderer.is_none() {
@@ -331,7 +377,7 @@ impl Launcher {
                     std::process::exit(1);
                 }
             };
-            self.gpu = Some(omsi_ui::Gpu::new(&renderer.device, renderer.format(), 4, self.ui.atlas.size));
+            self.gpu = Some(self.new_gpu(&renderer));
             self.ui.atlas = omsi_ui::Atlas::new(self.ui.atlas.size);
             self.renderer = Some(renderer);
         }
@@ -407,7 +453,7 @@ impl ApplicationHandler for Launcher {
             }
         };
         log::info!("launcher window {}x{} (scale {:.2}), adapter {}", size.width, size.height, window.scale_factor(), renderer.adapter_name);
-        self.gpu = Some(omsi_ui::Gpu::new(&renderer.device, renderer.format(), 4, self.ui.atlas.size));
+        self.gpu = Some(self.new_gpu(&renderer));
         self.window = Some(window);
         self.surface = Some(surface);
         self.renderer = Some(renderer);
@@ -854,7 +900,8 @@ impl Launcher {
             }
         }
         let draws: Vec<Draw> = ranges.iter().enumerate().map(|(k, (r, tex))| Draw { buffer: 0, range: r.clone(), layer: k, texture: *tex }).collect();
-        let bg = wgpu::Color { r: 0.0056, g: 0.0056, b: 0.0056, a: 1.0 };
+        // (the launcher's background, `look::BG`, in linear light)
+        let bg = wgpu::Color { r: 0.0052, g: 0.0060, b: 0.0075, a: 1.0 };
         if let Some(gpu) = self.gpu.as_mut() {
             gpu.upload(&renderer.device, &renderer.queue, 0, &verts);
             gpu.upload_atlas(&renderer.queue, &mut self.ui.atlas);
@@ -952,8 +999,8 @@ impl Launcher {
                 // `focus 0` / `focus 1`: the window loses or gets the keyboard
                 "focus" => self.set_focus(arg.trim() != "0"),
                 "page" => {
-                    if let Some((pg, _, _)) = PAGES.iter().find(|(_, n, _)| n.eq_ignore_ascii_case(arg.trim())) {
-                        self.go(*pg);
+                    if let Some(pg) = Page::named(arg.trim()) {
+                        self.go(pg);
                     }
                 }
                 _ => log::warn!("launcher input: what is '{cmd}'?"),
@@ -1036,6 +1083,9 @@ impl Launcher {
         let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
         match self.page {
             Page::Drive => drive::draw(self, content),
+            Page::Vehicles => self.vehicles_page(content),
+            Page::Maps => self.maps_page(content),
+            Page::Diagnostics => diagnostics::draw(self, content),
             #[cfg(feature = "lan")]
             Page::Multiplayer => multiplayer::draw(self, content),
             #[cfg(not(feature = "lan"))]
@@ -1202,66 +1252,96 @@ impl Launcher {
                 Page::Profile => self.state.load_profile(),
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
+                Page::Vehicles => {
+                    self.vehicles.retry_if_failed();
+                    self.refresh_catalogs();
+                    self.vehicles.select(&self.state.choice.bus, &self.state.choice.paint);
+                }
+                Page::Maps => {
+                    self.maps.retry_if_failed();
+                    self.refresh_catalogs();
+                    self.maps.select(&self.state.choice.map, self.state.choice.entry);
+                }
                 _ => {}
             }
         }
     }
 
+    /// The sidebar over the page's left side (a scrolled page passes under it): the pages,
+    /// and the driver at its foot.
     fn rail(&mut self) {
         let size = self.ui.size;
-        let rail = Rect::new(0.0, 0.0, RAIL_W, size.y);
-        self.ui.solid(rail);
-        self.ui.p().rect(rail, RAIL);
-        self.ui.p().rect(Rect::new(RAIL_W - 1.0, 0.0, 1.0, size.y), EDGE);
-        self.ui.text("Project Depot", Vec2::new(24.0, 46.0), 20.0, Weight::Bold, TEXT, Align::Left);
-        self.ui.text(crate::startup::VERSION, Vec2::new(24.0, 64.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
-        let mut y = 96.0;
         let running = self.state.instances.iter().filter(|i| i.running).count();
         let jobs = self.state.jobs.iter().filter(|j| j.finished.is_none()).count();
-        for (p, name, icon) in PAGES {
-            let r = Rect::new(12.0, y, RAIL_W - 24.0, 38.0);
-            let id = ui::id_of(&format!("nav-{name}"));
-            let (h, _, clicked) = self.ui.interact(id, r);
-            if clicked {
-                self.go(p);
-            }
-            let sel = self.page == p;
-            if sel {
-                self.ui.p().rounded(r, 6.0, SELECTED);
-                self.ui.p().rounded(Rect::new(r.x, r.y + 10.0, 2.0, r.h - 20.0), 1.0, ACCENT);
-            } else if h {
-                self.ui.p().rounded(r, 6.0, HOVER);
-            }
-            let c = if sel { TEXT } else if h { TEXT_SOFT } else { TEXT_DIM };
-            self.ui.icon(icon, Vec2::new(r.x + 20.0, r.center().y), 18.0, c);
-            self.ui.text_in(name, Rect::new(r.x + 40.0, r.y, r.w - 70.0, r.h), 13.5, if sel { Weight::Medium } else { Weight::Regular }, c, Align::Left);
-            let count = match p {
-                Page::Sessions => running,
-                Page::Mods => jobs,
-                _ => 0,
-            };
-            if count > 0 {
-                self.ui.text_in(&count.to_string(), Rect::new(r.right() - 30.0, r.y, 20.0, r.h), 12.0, Weight::Bold, if p == Page::Sessions { OK } else { ACCENT }, Align::Right);
-            }
-            y += 42.0;
+        let mut badges = Vec::new();
+        if running > 0 {
+            badges.push((UiPage::Sessions, running.to_string(), OK));
         }
-        // the driver, quietly at the bottom
-        let card = Rect::new(12.0, size.y - 64.0, RAIL_W - 24.0, 48.0);
-        let id = ui::id_of("rail-profile");
-        let (h, _, clicked) = self.ui.interact(id, card);
-        if clicked {
-            self.go(Page::Profile);
-        }
-        if h {
-            self.ui.p().rounded(card, 6.0, HOVER);
+        if jobs > 0 {
+            badges.push((UiPage::Mods, jobs.to_string(), ACCENT));
         }
         let (level, name) = match &self.state.profile {
             Some(p) => (p.level, p.name.clone()),
             None => (1, self.state.config.profile.clone()),
         };
-        self.ui.icon("account_circle", Vec2::new(card.x + 22.0, card.center().y), 24.0, TEXT_DIM);
-        self.ui.text_in(if name.is_empty() { "No driver" } else { &name }, Rect::new(card.x + 42.0, card.y + 6.0, card.w - 48.0, 18.0), 13.0, Weight::Medium, TEXT, Align::Left);
-        self.ui.text_in(&format!("Level {level}"), Rect::new(card.x + 42.0, card.y + 24.0, card.w - 48.0, 16.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
+        let name = if name.is_empty() { "No driver".to_string() } else { name };
+        let level = format!("Level {level}");
+        let bar = omsi_launcher_ui::shell::Sidebar {
+            page: self.page.shown().unwrap_or(UiPage::Drive),
+            logo: self.logo,
+            badges: &badges,
+            footer: (&name, &level),
+        };
+        match bar.draw(&mut self.ui, size.y) {
+            Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
+            Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
+            None => {}
+        }
+    }
+
+    /// Give the Vehicles and Maps pages the host's catalogs when those differ from what the
+    /// pages show (the host reads them again after Setup or an install, and fills them as its
+    /// scan goes on).
+    fn refresh_catalogs(&mut self) {
+        let host = self.state.vehicles.len();
+        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+            self.vehicles.set_catalog(self.state.vehicles.clone());
+        }
+        let host = self.state.maps.len();
+        if host > 0 && self.maps.catalog_len() != Some(host) {
+            self.maps.set_catalog(self.state.maps.clone());
+        }
+    }
+
+    /// The Vehicles page; "Drive this bus" takes the bus and its paint to the Drive page.
+    fn vehicles_page(&mut self, area: Rect) {
+        self.refresh_catalogs();
+        omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Vehicles, area.x, area.y - 28.0);
+        let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        self.vehicles.draw(&mut self.ui, body);
+        if let Some((file, paint)) = self.vehicles.take_use() {
+            self.state.select_bus(&file);
+            self.state.choice.paint = paint;
+            self.state.touched();
+            self.drive.tab = 0;
+            self.go(Page::Drive);
+        }
+    }
+
+    /// The Maps page; "Drive on this map" takes the map and its start point to the Drive
+    /// page.
+    fn maps_page(&mut self, area: Rect) {
+        self.refresh_catalogs();
+        omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
+        let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        self.maps.draw(&mut self.ui, body);
+        if let Some((file, entry)) = self.maps.take_use() {
+            self.state.select_map(&file);
+            self.state.choice.entry = entry;
+            self.state.touched();
+            self.drive.tab = 2;
+            self.go(Page::Drive);
+        }
     }
 
     fn status_bar(&mut self) {
@@ -1304,4 +1384,22 @@ impl Launcher {
 /// ambient occlusion, a small shadow map, 4x MSAA for the edges whatever the game uses.
 fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
     omsi_render::RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, render_scale: 1.0, ..settings.render_options() }
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::{Page, UiPage};
+
+    /// Every page of the sidebar is a page of the launcher and back, and the names the input
+    /// script and `OMSI_LAUNCHER_PAGE` use find them.
+    #[test]
+    fn the_sidebar_pages_are_the_launchers() {
+        for p in UiPage::ALL {
+            let page = Page::of(p);
+            assert_eq!(page.shown(), Some(p));
+            assert_eq!(Page::named(&p.title().to_lowercase()), Some(page));
+        }
+        assert_eq!(Page::Multiplayer.shown(), None);
+        assert_eq!(Page::named("nope"), None);
+    }
 }
