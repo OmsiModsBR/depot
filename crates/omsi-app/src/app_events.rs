@@ -112,6 +112,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // (a mouse button of any kind makes Alt a modifier, not a tap, for the Alt bar)
+        if matches!(event, WindowEvent::MouseInput { state: ElementState::Pressed, .. }) {
+            self.new_ui.alt.other_down();
+        }
         match event {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();

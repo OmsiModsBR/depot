@@ -230,6 +230,8 @@ pub(crate) struct AltState {
     tap: bool,
     /// A press on the bar was taken, so its release is too.
     swallowed: bool,
+    /// Keys whose press the bar took: their release is the bar's too.
+    taken: std::collections::HashSet<KeyCode>,
 }
 
 impl AltState {
@@ -348,9 +350,34 @@ impl App {
             }
             return false;
         }
+        // the release of a key whose press the bar took is the bar's; any other reaches the
+        // game, whatever the state of the bar (a bound chord must see both its ends)
+        if !pressed {
+            return self.new_ui.alt.taken.remove(&code);
+        }
+        // (a held key the bar took repeats for the bar; only the arrows move the keyboard again)
+        let arrow = matches!(
+            code,
+            KeyCode::ArrowLeft | KeyCode::ArrowRight | KeyCode::ArrowUp | KeyCode::ArrowDown
+        );
+        if repeat
+            && self.new_ui.alt.taken.contains(&code)
+            && !(arrow && self.new_ui.alt.focus.is_some())
+        {
+            return true;
+        }
+        let took = self.alt_key_press(code, repeat);
+        if took && !repeat {
+            self.new_ui.alt.taken.insert(code);
+        }
+        took
+    }
+
+    /// A key press (or its repeat) while the bar may want it. True when the bar takes it.
+    fn alt_key_press(&mut self, code: KeyCode, repeat: bool) -> bool {
         let alt_held =
             self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight);
-        if pressed && alt_held {
+        if alt_held {
             self.new_ui.alt.other_down();
         }
         if !self.alt_bar_active() {
@@ -360,8 +387,8 @@ impl App {
         let focused = self.new_ui.alt.focus.is_some();
         // Alt+Down puts the keyboard on the bar, and takes it off again
         if code == KeyCode::ArrowDown && alt_held {
-            if !pressed || repeat {
-                return true;
+            if repeat {
+                return self.new_ui.alt.taken.contains(&code);
             }
             if self.chord_bound(code, false, false, true) {
                 return false;
@@ -387,9 +414,6 @@ impl App {
         let press = matches!(code, KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space);
         if nav.is_none() && !press && code != KeyCode::Escape {
             return false;
-        }
-        if !pressed {
-            return true;
         }
         if let Some(nav) = nav {
             let from = self.new_ui.alt.focus;
