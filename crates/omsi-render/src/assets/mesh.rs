@@ -255,7 +255,11 @@ pub(crate) fn make_meshes(
 
 /// A mesh on the GPU, made on a worker thread; [`Renderer::add_prepared_mesh`] puts it into
 /// a scene.
-pub struct PreparedMesh(pub(crate) GpuMesh);
+pub struct PreparedMesh(
+    pub(crate) GpuMesh,
+    /// The vertices and indices, kept while a renderer mirrors its assets.
+    pub(crate) Option<Box<(Vec<Vertex>, Vec<u32>)>>,
+);
 
 /// Make a mesh's GPU buffers on any thread (the device takes calls from all of them).
 pub fn prepare_mesh(device: &wgpu::Device, queue: &wgpu::Queue, data: &MeshData) -> PreparedMesh {
@@ -273,9 +277,16 @@ pub fn prepare_meshes(
     paged: bool,
 ) -> Vec<PreparedMesh> {
     let _turn = gl_worker_turn();
+    let copies = crate::renderer::keep_cpu_copies();
     make_meshes(device, queue, data, paged)
         .into_iter()
-        .map(PreparedMesh)
+        .zip(data)
+        .map(|(m, d)| {
+            PreparedMesh(
+                m,
+                copies.then(|| Box::new((mesh_vertices(d), d.indices.clone()))),
+            )
+        })
         .collect()
 }
 

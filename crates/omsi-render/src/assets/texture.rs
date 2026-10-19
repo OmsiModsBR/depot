@@ -7,7 +7,11 @@ use crate::gpu::{
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
-pub struct PreparedTexture(pub(crate) GpuTexture);
+pub struct PreparedTexture(
+    pub(crate) GpuTexture,
+    /// The levels as uploaded, kept while a renderer mirrors its assets.
+    pub(crate) Option<Box<omsi_texture::TextureData>>,
+);
 
 impl PreparedTexture {
     pub fn bytes(&self) -> u64 {
@@ -106,11 +110,10 @@ pub fn prepare_texture(
             phys,
         );
     }
-    Some(PreparedTexture(GpuTexture::new(
-        texture,
-        (w, h),
-        texture_bytes(format, w, h, levels),
-    )))
+    Some(PreparedTexture(
+        GpuTexture::new(texture, (w, h), texture_bytes(format, w, h, levels)),
+        crate::renderer::keep_cpu_copies().then(|| Box::new(data.clone())),
+    ))
 }
 
 pub(crate) fn upload_texture(
