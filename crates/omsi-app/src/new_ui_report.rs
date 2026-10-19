@@ -56,7 +56,54 @@ impl Report {
     }
 }
 
+/// A trip at its last stop: (line, tour, trip in the tour), its place in the duty, where
+/// the stop is.
+pub(crate) type Watch = ((String, String, usize), usize, glam::DVec3);
+
+/// Within this of the last stop, stopped with a passenger door open, the trip is over (the
+/// duty's own distance for being at a stop).
+const AT_TERMINUS: f64 = 25.0;
+/// Further than this from it, the bus has left without opening (no report).
+const LEFT_TERMINUS: f64 = 60.0;
+
+/// What becomes of the watch on a trip's end: `Some(true)` the report opens, `Some(false)`
+/// the watch ends without one, `None` it goes on. `still_done`: the duty is still on that
+/// trip, at its end.
+fn watch_outcome(distance: f64, doors: bool, still_done: bool) -> Option<bool> {
+    if distance < AT_TERMINUS && doors {
+        Some(true)
+    } else if distance > LEFT_TERMINUS && !still_done {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 impl App {
+    /// After each duty update: `done` the trip at its last stop (if the duty is on one),
+    /// `bus` where the bus is, `doors` whether it stands with a passenger door open. The
+    /// report opens once the bus stands at that stop with a door open, even when the duty
+    /// has gone on to the next trip meanwhile (a late arrival).
+    pub(crate) fn trip_watch(&mut self, done: Option<Watch>, bus: glam::DVec3, doors: bool) {
+        let still_done = done.is_some();
+        if let Some(w) = done {
+            if self.new_ui.report_shown.as_ref() != Some(&w.0) {
+                self.new_ui.report_watch = Some(w);
+            }
+        }
+        let Some((key, trip, at)) = self.new_ui.report_watch.clone() else {
+            return;
+        };
+        match watch_outcome((bus - at).length(), doors, still_done) {
+            Some(true) => {
+                self.new_ui.report_watch = None;
+                self.trip_finished(key, trip);
+            }
+            Some(false) => self.new_ui.report_watch = None,
+            None => {}
+        }
+    }
+
     /// Whether the report is showing (on the plain window, with no Esc menu over it).
     pub(crate) fn report_active(&self) -> bool {
         self.new_ui.report.is_some()
@@ -66,8 +113,8 @@ impl App {
             && !self.settings.triple.enabled
     }
 
-    /// After each duty update: open the report when the trip `key` (line, tour, trip in the
-    /// tour; `trip` its place in the duty) has just been served to its end. Once a trip.
+    /// Open the report of the trip `key` (line, tour, trip in the tour; `trip` its place in
+    /// the duty), served to its end. Once a trip.
     pub(crate) fn trip_finished(&mut self, key: (String, String, usize), trip: usize) {
         if self.new_ui.report_shown.as_ref() == Some(&key) {
             return;
@@ -167,5 +214,24 @@ impl App {
             self.close_report();
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_report_waits_for_the_doors_at_the_last_stop() {
+        // standing there with a door open: the report
+        assert_eq!(watch_outcome(5.0, true, false), Some(true));
+        // there with the doors shut, the duty on the next trip already: still waiting
+        assert_eq!(watch_outcome(5.0, false, false), None);
+        // on the way to the stand, doors shut: waiting
+        assert_eq!(watch_outcome(40.0, false, false), None);
+        // gone without opening: no report
+        assert_eq!(watch_outcome(80.0, false, false), Some(false));
+        // still on that trip's end (a terminus with a layover far off): waiting
+        assert_eq!(watch_outcome(80.0, false, true), None);
     }
 }

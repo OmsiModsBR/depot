@@ -1625,10 +1625,12 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
-                    // (the trip served to its last stop: its report, once)
-                    if d.terminus_served() {
-                        finished = Some(((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index));
-                    }
+                    // (the trip at its last stop: its report once the doors open there, even
+                    // if the duty has moved on to the next trip by then)
+                    let done = d.trip_done().then(|| d.trip().stops.last().and_then(|s| s.position)).flatten();
+                    let candidate = done.map(|at| ((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index, at));
+                    let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36 && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
+                    finished = Some((candidate, p.vehicle.position, doors));
                     #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
@@ -1647,8 +1649,8 @@ impl ApplicationHandler for App {
                         log::warn!("driver timetable paper: {e:#}");
                     }
                 }
-                if let Some((key, trip)) = finished {
-                    self.trip_finished(key, trip);
+                if let Some((candidate, bus, doors)) = finished {
+                    self.trip_watch(candidate, bus, doors);
                 }
                 if let Some(p) = self.player.as_mut() {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);

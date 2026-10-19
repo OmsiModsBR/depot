@@ -103,12 +103,11 @@ impl Journey {
                 served += 1;
                 late += is_late as usize;
                 early += is_early as usize;
-                if is_late {
-                    StopState::Late
-                } else if is_early {
-                    StopState::LeftEarly
-                } else {
-                    StopState::OnTime
+                match (is_late, is_early) {
+                    (true, true) => StopState::LateLeftEarly,
+                    (true, false) => StopState::Late,
+                    (false, true) => StopState::LeftEarly,
+                    _ => StopState::OnTime,
                 }
             } else if rows[i + 1..].iter().any(|x| x.arrived.is_some() || x.left.is_some()) {
                 StopState::Missed
@@ -305,5 +304,23 @@ mod tests {
         assert!(j.arrived((1, 0), -60.0));
         let text = j.text();
         assert!(text.contains("Trip 2  ·  5 to Muzealna  ·  08:20:00") && !text.contains("Trip 1"), "{text}");
+    }
+
+    /// A stop reached late and left before its departure time says both.
+    #[test]
+    fn a_late_arrival_that_leaves_early_says_both() {
+        let t0 = 8.0 * 3600.0;
+        let trips = [trip(&[("Metro Mlociny", t0), ("Zajezdnia", t0 + 300.0), ("Muzealna", t0 + 900.0)])];
+        let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", std::env::temp_dir());
+        // (a stop with a layover: due at 08:05, leaving at 08:10)
+        j.rows[1].plan.1 = t0 + 600.0;
+        assert!(j.left((0, 0), (0.0, 0.0)));
+        assert!(j.left((0, 1), (240.0, -180.0)));
+        let (_, rows, totals) = j.report(0).expect("trip 1");
+        assert_eq!(rows[1].state, StopState::LateLeftEarly);
+        assert_eq!(rows[1].deviation, "+00:04:00");
+        assert!(j.text().lines().any(|l| l.starts_with("Zajezdnia") && l.ends_with("late, left early")));
+        assert_eq!(totals[1], ("Late arrivals", "1".to_string()));
+        assert_eq!(totals[2], ("Early departures", "1".to_string()));
     }
 }

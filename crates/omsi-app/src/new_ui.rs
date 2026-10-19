@@ -461,6 +461,9 @@ pub(crate) struct NewUi {
     pub(crate) report: Option<crate::new_ui_report::Report>,
     /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
     pub(crate) report_shown: Option<(String, String, usize)>,
+    /// A trip at its last stop whose report waits for the doors to open there: its key, its
+    /// place in the duty and where that stop is.
+    pub(crate) report_watch: Option<crate::new_ui_report::Watch>,
 }
 
 impl NewUi {

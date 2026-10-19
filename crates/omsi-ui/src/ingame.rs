@@ -360,6 +360,8 @@ pub enum StopState {
     OnTime,
     Late,
     LeftEarly,
+    /// Arrived late and left before its time.
+    LateLeftEarly,
     /// Passed without being served, with a later stop served.
     Missed,
     /// Not reached (the trip ended before it, or it is not known).
@@ -437,7 +439,9 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         body.w - 2.0,
         (r.bottom() - foot - totals_h - 8.0 - (head_y + 34.0)).max(ROW_H),
     );
-    ui.scroll_area("report:rows", rows_area, &mut |ui, view| {
+    // (each trip's report starts at its first stop: the id is the trip's)
+    let scroll = format!("report:rows:{}", v.title);
+    ui.scroll_area(&scroll, rows_area, &mut |ui, view| {
         for (i, row) in v.rows.iter().enumerate() {
             let rr = Rect::new(view.x, view.y + i as f32 * ROW_H, view.w - 8.0, ROW_H);
             if rr.bottom() < rows_area.y || rr.y > rows_area.bottom() {
@@ -448,6 +452,7 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
                 StopState::OnTime => ("OK", Some(GOOD)),
                 StopState::Late => ("late", Some(BAD)),
                 StopState::LeftEarly => ("left early", Some(SOON)),
+                StopState::LateLeftEarly => ("late, left early", Some(BAD)),
                 StopState::Missed => ("missed", Some(BAD)),
                 StopState::None => ("", None),
             };
