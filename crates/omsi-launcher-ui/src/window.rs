@@ -2,19 +2,23 @@
 //! frame. Nothing here knows a page; `Shell` draws them.
 
 use crate::look::scale_for;
-use crate::offscreen::{device, draw_into, load_logo};
+use crate::offscreen::{adapter_device, draw_into, load_logo};
 use crate::Shell;
 use anyhow::Result;
 use glam::Vec2;
 use omsi_ui::widgets::{Key, Modifiers, Ui};
 use omsi_ui::Gpu;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
+
+/// How long the window keeps drawing after an input event: hover and press animations settle
+/// within this. An idle launcher draws nothing and sleeps until the next event.
+const AWAKE: Duration = Duration::from_millis(600);
 
 struct Surface {
     window: Arc<Window>,
@@ -32,6 +36,8 @@ struct App {
     modifiers: Modifiers,
     state: Option<Surface>,
     last: Instant,
+    /// Drawing goes on until then; every input event pushes it forward (see `AWAKE`).
+    awake_until: Instant,
     error: Option<anyhow::Error>,
 }
 
@@ -46,6 +52,7 @@ pub fn run(shell: Shell) -> Result<()> {
         modifiers: Modifiers::default(),
         state: None,
         last: Instant::now(),
+        awake_until: Instant::now(),
         error: None,
     };
     event_loop.run_app(&mut app)?;
@@ -66,8 +73,8 @@ impl App {
             )?,
         );
         let surface = self.instance.create_surface(window.clone())?;
-        let (device, queue) = device(&self.instance, Some(&surface))?;
-        let caps = surface.get_capabilities(&device_adapter(&self.instance, &surface)?);
+        let (adapter, device, queue) = adapter_device(&self.instance, Some(&surface))?;
+        let caps = surface.get_capabilities(&adapter);
         let format = caps
             .formats
             .iter()
@@ -141,15 +148,6 @@ impl App {
     }
 }
 
-/// The adapter the surface was made for (its capabilities are asked of it).
-fn device_adapter(instance: &wgpu::Instance, surface: &wgpu::Surface<'_>) -> Result<wgpu::Adapter> {
-    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        compatible_surface: Some(surface),
-        ..Default::default()
-    }))
-    .map_err(|e| anyhow::anyhow!("no graphics adapter: {e}"))
-}
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
@@ -159,12 +157,19 @@ impl ApplicationHandler for App {
                 return;
             }
         }
+        self.awake_until = Instant::now() + AWAKE;
         if let Some(s) = self.state.as_ref() {
             s.window.request_redraw();
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.awake_until = Instant::now() + AWAKE;
+            if let Some(s) = self.state.as_ref() {
+                s.window.request_redraw();
+            }
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -229,9 +234,12 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 self.redraw();
-                // animations (hover, selection) settle over a few frames: draw until they do
-                if let Some(s) = self.state.as_ref() {
-                    s.window.request_redraw();
+                // animations (hover, selection) settle over a few frames after an input event,
+                // and a page still reading its catalog needs a frame when the thread finishes
+                if Instant::now() < self.awake_until || self.shell.busy() {
+                    if let Some(s) = self.state.as_ref() {
+                        s.window.request_redraw();
+                    }
                 }
             }
             _ => {}

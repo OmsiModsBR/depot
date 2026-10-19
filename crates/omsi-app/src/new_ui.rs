@@ -115,16 +115,17 @@ pub(crate) fn menu_frame(
         sections[at].items.push(OwnedItem {
             id: (*id).to_string(),
             icon,
-            label: omsi_ui::tr(label).to_string(),
+            // (English: the widgets translate what they draw, a second time would garble it)
+            label: (*label).to_string(),
             key,
             kind,
-            disabled: off(k).then(|| omsi_ui::tr("Not available now").to_string()),
+            disabled: off(k).then(|| "Not available now".to_string()),
         });
     }
     sections.retain(|s| !s.items.is_empty());
     MenuFrame {
         sections,
-        title: omsi_ui::tr("Game menu").to_string(),
+        title: "Game menu".to_string(),
         clock,
         state: if paused { "paused" } else { "menu open" },
         selected: selected.and_then(|k| items.get(k)).map(|m| m.0.to_string()),
@@ -197,9 +198,35 @@ impl MenuFrame {
         f(&view)
     }
 
+    /// Pixels per design point for this menu in a window of `size` pixels: the usual one, or
+    /// less when the lines would run off the bottom of a short window.
+    pub(crate) fn scale(&self, size: (u32, u32)) -> f32 {
+        let (w, h) = (size.0 as f32, size.1 as f32);
+        let natural = (w / DESIGN.0).min(h / DESIGN.1);
+        let mut s = natural.max(MIN_SCALE);
+        for _ in 0..4 {
+            let pts = Vec2::new(w, h) / s;
+            let bottom = self.with_view(
+                |v| {
+                    pause_menu::rows(v, pts)
+                        .iter()
+                        .map(|r| r.rect.y + r.rect.h)
+                        .fold(0.0, f32::max)
+                },
+                None,
+            );
+            let need = (bottom + 16.0) * s;
+            if need <= h {
+                return s;
+            }
+            s = (s * h / need).max(natural);
+        }
+        natural
+    }
+
     /// The id of the clickable line under `px` (window pixels) in a window of `size` pixels.
     pub(crate) fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<String> {
-        let scale = scale_for(size.0, size.1);
+        let scale = self.scale(size);
         let pts = Vec2::new(size.0 as f32, size.1 as f32) / scale;
         self.with_view(
             |v| pause_menu::hit(v, pts, px / scale).map(String::from),
@@ -260,7 +287,7 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
-        let scale = scale_for(w, h);
+        let scale = menu.scale((w, h));
         let size = Vec2::new(w as f32, h as f32) / scale;
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
@@ -437,6 +464,43 @@ mod tests {
         assert_eq!(step_displayed(&list, 0, false, &none), 5);
         // a greyed-out line is stepped over
         assert_eq!(step_displayed(&list, 0, true, &|k| k == 3), 4);
+    }
+
+    #[test]
+    fn a_long_menu_fits_a_short_window_and_its_last_line_can_be_clicked() {
+        let mut list = items();
+        list.push(("copycode", "Copy server code"));
+        list.push(("admin", "Administration..."));
+        let f = menu_frame(&list, None, &|_| false, String::new(), true);
+        for size in [(720u32, 405u32), (960, 540), (1280, 720), (1672, 941)] {
+            let s = f.scale(size);
+            assert!(s > 0.0 && s <= scale_for(size.0, size.1) + 1e-6);
+            let pts = Vec2::new(size.0 as f32, size.1 as f32) / s;
+            let bottom = f.with_view(
+                |v| {
+                    pause_menu::rows(v, pts)
+                        .iter()
+                        .map(|r| (r.rect.y + r.rect.h) * s)
+                        .fold(0.0, f32::max)
+                },
+                None,
+            );
+            assert!(bottom <= size.1 as f32, "{size:?}: lines end at {bottom}");
+            // the last line, found where it is drawn
+            let last = f.with_view(
+                |v| {
+                    let r = pause_menu::rows(v, pts);
+                    r.last().map(|r| (r.id.to_string(), r.rect.center() * s))
+                },
+                None,
+            );
+            let (id, at) = last.unwrap();
+            assert_eq!(f.hit(at, size).as_deref(), Some(id.as_str()), "{size:?}");
+        }
+        // (where the usual scale would run off the bottom, the menu gets smaller)
+        assert!(f.scale((720, 405)) < scale_for(720, 405));
+        // a window that is large enough keeps the usual scale
+        assert_eq!(f.scale((1672, 941)), scale_for(1672, 941));
     }
 
     #[test]
