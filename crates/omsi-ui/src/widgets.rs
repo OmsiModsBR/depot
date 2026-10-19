@@ -485,12 +485,23 @@ impl Ui {
             self.active = Some(id);
         }
         let held = self.active == Some(id) && self.input.down;
-        let mut clicked = self.active == Some(id) && self.input.released && h;
+        let clicked = self.active == Some(id) && self.input.released && h;
         if self.active == Some(id) && self.input.released {
             self.active = None;
         }
-        let visible = self.rect_visible(r);
-        clicked |= self.nav.seen(id, r, visible);
+        (h, held, clicked)
+    }
+
+    /// `interact` for a widget that does something when clicked: with the keyboard focus on
+    /// (`nav.enabled`) it is also a stop for Tab, and Enter or Space press it. Sliders, text
+    /// fields, scroll bars and the cells inside a field use plain `interact`: nothing would
+    /// happen on Enter there.
+    pub fn interact_key(&mut self, id: Id, r: Rect) -> (bool, bool, bool) {
+        let (h, held, mut clicked) = self.interact(id, r);
+        if self.nav.enabled {
+            let seen = intersect(self.clip_now(), r);
+            clicked |= self.nav.seen(id, r, seen);
+        }
         (h, held, clicked)
     }
 
@@ -667,7 +678,7 @@ impl Ui {
         kind: ButtonKind,
     ) -> bool {
         let id = id_of(name);
-        let (h, held, clicked) = self.interact(id, r);
+        let (h, held, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
         let rr = if held { r.inset(0.5) } else { r };
         let (fill, text_c, edge) = match kind {
@@ -726,7 +737,7 @@ impl Ui {
     pub fn icon_button(&mut self, name: &str, c: Vec2, r: f32, icon: &str, tip: &str) -> bool {
         let id = id_of(name);
         let rect = Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r);
-        let (h, _, clicked) = self.interact(id, rect);
+        let (h, _, clicked) = self.interact_key(id, rect);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         self.p().circle(c, r, Color::WHITE.alpha(0.06 * t));
         self.icon(icon, c, r * 1.1, if h { TEXT } else { TEXT_DIM });
@@ -739,7 +750,7 @@ impl Ui {
     /// A switch: returns true when it was flipped.
     pub fn toggle(&mut self, name: &str, r: Rect, value: &mut bool, label: &str) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         if clicked {
             *value = !*value;
         }
@@ -906,7 +917,7 @@ impl Ui {
                 self.popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self.popup.as_ref().map(|p| p.id == id).unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
@@ -1306,7 +1317,7 @@ impl Ui {
                 self.date_popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self
             .date_popup
             .as_ref()
@@ -1454,7 +1465,7 @@ impl Ui {
     /// A row of a list: hover highlight, the chosen one marked. Returns clicked.
     pub fn row(&mut self, name: &str, r: Rect, selected: bool) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         let s = self.anim(id ^ 4, if selected { 1.0 } else { 0.0 }, 0.1);
         if s > 0.01 {
@@ -1510,12 +1521,7 @@ impl Ui {
             );
         }
         if let Some(r) = self.nav.ring() {
-            self.p().rounded_border(
-                Rect::new(r.x - 2.0, r.y - 2.0, r.w + 4.0, r.h + 4.0),
-                8.0,
-                2.0,
-                ACCENT,
-            );
+            self.p().rounded_border(r, 8.0, 2.0, ACCENT);
         }
         let mut layers = Vec::new();
         let mut verts = Vec::new();
