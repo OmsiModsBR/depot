@@ -1253,15 +1253,13 @@ impl Launcher {
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
                 Page::Vehicles => {
-                    if !self.state.vehicles.is_empty() {
-                        self.vehicles.set_catalog(self.state.vehicles.clone());
-                    }
+                    self.vehicles.retry_if_failed();
+                    self.refresh_catalogs();
                     self.vehicles.select(&self.state.choice.bus, &self.state.choice.paint);
                 }
                 Page::Maps => {
-                    if !self.state.maps.is_empty() {
-                        self.maps.set_catalog(self.state.maps.clone());
-                    }
+                    self.maps.retry_if_failed();
+                    self.refresh_catalogs();
                     self.maps.select(&self.state.choice.map, self.state.choice.entry);
                 }
                 _ => {}
@@ -1301,8 +1299,23 @@ impl Launcher {
         }
     }
 
+    /// Give the Vehicles and Maps pages the host's catalogs when those differ from what the
+    /// pages show (the host reads them again after Setup or an install, and fills them as its
+    /// scan goes on).
+    fn refresh_catalogs(&mut self) {
+        let host = self.state.vehicles.len();
+        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+            self.vehicles.set_catalog(self.state.vehicles.clone());
+        }
+        let host = self.state.maps.len();
+        if host > 0 && self.maps.catalog_len() != Some(host) {
+            self.maps.set_catalog(self.state.maps.clone());
+        }
+    }
+
     /// The Vehicles page; "Drive this bus" takes the bus and its paint to the Drive page.
     fn vehicles_page(&mut self, area: Rect) {
+        self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Vehicles, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         self.vehicles.draw(&mut self.ui, body);
@@ -1318,6 +1331,7 @@ impl Launcher {
     /// The Maps page; "Drive on this map" takes the map and its start point to the Drive
     /// page.
     fn maps_page(&mut self, area: Rect) {
+        self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         self.maps.draw(&mut self.ui, body);
