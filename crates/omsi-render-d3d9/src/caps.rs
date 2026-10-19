@@ -35,11 +35,11 @@ pub struct Caps {
 }
 
 impl Caps {
-    /// The minimum the planned "Vanilla only" profile needs: programmable shaders and
-    /// textures of at least 2048. Declares nothing about *supported* hardware; that is a
-    /// product decision.
-    pub fn meets_profile_floor(&self) -> bool {
-        self.shader_model >= ShaderModel::Sm2 && self.max_texture_size >= 2048
+    /// The renderer's floor (maintainers' decision, 2026-10-19): Shader Model 3.0 in both
+    /// stages and textures of at least 2048. Declares nothing about *supported* hardware;
+    /// that is a separate product decision.
+    pub fn meets_floor(&self) -> bool {
+        self.shader_model >= ShaderModel::Sm3 && self.max_texture_size >= 2048
     }
 }
 
@@ -67,8 +67,8 @@ mod tests {
 
     #[test]
     fn profile_floor() {
-        assert!(caps(ShaderModel::Sm2, 2048).meets_profile_floor());
-        assert!(!caps(ShaderModel::None, 4096).meets_profile_floor());
-        assert!(!caps(ShaderModel::Sm3, 1024).meets_profile_floor());
+        assert!(caps(ShaderModel::Sm3, 2048).meets_floor());
+        assert!(!caps(ShaderModel::Sm2, 4096).meets_floor());
+        assert!(!caps(ShaderModel::Sm3, 1024).meets_floor());
     }
 }

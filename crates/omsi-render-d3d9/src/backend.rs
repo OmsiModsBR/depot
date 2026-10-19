@@ -34,6 +34,61 @@ pub struct MeshDesc {
     pub indices: Vec<u32>,
 }
 
+/// Floats per vertex in [`MeshDesc::vertices`].
+pub const VERTEX_FLOATS: usize = 8;
+
+impl TextureDesc {
+    /// The checks every backend applies before creating the texture.
+    pub fn validate(&self, caps: &Caps) -> Result<()> {
+        if self.width == 0
+            || self.height == 0
+            || self.rgba.len() != (self.width as usize * self.height as usize * 4)
+        {
+            return Err(BackendError::InvalidArgument("texture data size".into()));
+        }
+        let max = caps.max_texture_size;
+        if self.width > max || self.height > max {
+            return Err(BackendError::Unsupported(format!(
+                "texture larger than {max}"
+            )));
+        }
+        if !caps.non_pow2_textures
+            && !(self.width.is_power_of_two() && self.height.is_power_of_two())
+        {
+            return Err(BackendError::Unsupported(
+                "texture size is not a power of two".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl MeshDesc {
+    pub fn vertex_count(&self) -> u32 {
+        (self.vertices.len() / VERTEX_FLOATS) as u32
+    }
+
+    /// The checks every backend applies before creating the mesh.
+    pub fn validate(&self, caps: &Caps) -> Result<()> {
+        if self.vertices.is_empty() || !self.vertices.len().is_multiple_of(VERTEX_FLOATS) {
+            return Err(BackendError::InvalidArgument(
+                "vertex data is not 8 floats per vertex".into(),
+            ));
+        }
+        let count = self.vertex_count();
+        if self.indices.is_empty()
+            || !self.indices.len().is_multiple_of(3)
+            || self.indices.iter().any(|&i| i >= count)
+        {
+            return Err(BackendError::InvalidArgument("indices".into()));
+        }
+        if !caps.index32 && count > 0x1_0000 {
+            return Err(BackendError::Unsupported("32-bit indices".into()));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DrawBatch {
     pub mesh: MeshHandle,
@@ -41,6 +96,8 @@ pub struct DrawBatch {
     pub alpha: AlphaMode,
     /// Column-major model-view-projection.
     pub mvp: [f32; 16],
+    /// Multiplies the texture's colour and alpha (RGBA).
+    pub tint: [f32; 4],
 }
 
 #[derive(Debug, Clone)]
@@ -104,39 +161,14 @@ impl RenderBackend for NullBackend {
 
     fn create_texture(&mut self, desc: &TextureDesc) -> Result<TextureHandle> {
         self.check_alive()?;
-        if desc.width == 0
-            || desc.height == 0
-            || desc.rgba.len() != (desc.width * desc.height * 4) as usize
-        {
-            return Err(BackendError::InvalidArgument("texture data size".into()));
-        }
-        let max = self.caps.max_texture_size;
-        if desc.width > max || desc.height > max {
-            return Err(BackendError::Unsupported(format!(
-                "texture larger than {max}"
-            )));
-        }
+        desc.validate(&self.caps)?;
         self.textures += 1;
         Ok(TextureHandle(self.textures - 1))
     }
 
     fn create_mesh(&mut self, desc: &MeshDesc) -> Result<MeshHandle> {
         self.check_alive()?;
-        if desc.vertices.is_empty() || !desc.vertices.len().is_multiple_of(8) {
-            return Err(BackendError::InvalidArgument(
-                "vertex data is not 8 floats per vertex".into(),
-            ));
-        }
-        let count = (desc.vertices.len() / 8) as u32;
-        if desc.indices.is_empty()
-            || !desc.indices.len().is_multiple_of(3)
-            || desc.indices.iter().any(|&i| i >= count)
-        {
-            return Err(BackendError::InvalidArgument("indices".into()));
-        }
-        if !self.caps.index32 && count > 65_536 {
-            return Err(BackendError::Unsupported("32-bit indices".into()));
-        }
+        desc.validate(&self.caps)?;
         self.meshes += 1;
         Ok(MeshHandle(self.meshes - 1))
     }
@@ -235,6 +267,7 @@ mod tests {
             texture: None,
             alpha: AlphaMode::Opaque,
             mvp: [0.0; 16],
+            tint: [1.0; 4],
         };
         assert!(b.draw(&batch).is_err(), "draw outside a frame");
         b.begin_frame(&FrameDesc {
