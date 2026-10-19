@@ -96,8 +96,13 @@ impl Shell {
 /// The page's small letter-spaced name and its title, left at `x`, from `top` down (the page's
 /// body starts 100 points under `top`).
 pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
+    heading(ui, page.title(), x, top);
+}
+
+/// `title` as a page's heading (see `page_heading`); returns the title's width.
+pub fn heading(ui: &mut Ui, title: &str, x: f32, top: f32) -> f32 {
     ui.text(
-        &page.title().to_uppercase(),
+        &title.to_uppercase(),
         Vec2::new(x, top + 46.0),
         13.0 * TEXT_SCALE,
         Weight::Medium,
@@ -105,13 +110,14 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
         Align::Left,
     );
     ui.text(
-        page.title(),
+        title,
         Vec2::new(x, top + 82.0),
         40.0,
         Weight::Bold,
         FG,
         Align::Left,
     );
+    ui.width(title, 40.0, Weight::Bold)
 }
 
 /// What a click on the sidebar asks for.

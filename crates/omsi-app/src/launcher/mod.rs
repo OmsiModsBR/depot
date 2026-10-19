@@ -1352,16 +1352,28 @@ impl Launcher {
         self.ui.tooltip(r, &text);
     }
 
-    /// A page's title and what it is for.
+    /// A page's title and what it is for: the heading of the new look (the page's name small
+    /// and in the accent over its title), the line beside the title. A phone keeps its own.
     pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
-        self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
-        if !sub.is_empty() {
-            // (a narrow window: the line stops short of the tabs some pages put top right,
-            // it ran under them on a phone)
-            let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-            self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+        if mobile::mobile() {
+            self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
+            if !sub.is_empty() {
+                // (a narrow window: the line stops short of the tabs some pages put top right,
+                // it ran under them on a phone)
+                let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
+                self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+            }
+            return Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0));
         }
-        Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0))
+        let tw = omsi_launcher_ui::shell::heading(&mut self.ui, title, r.x, r.y - 28.0);
+        if !sub.is_empty() {
+            // (kept clear of the tabs some pages put top right)
+            let x = r.x + tw + 20.0;
+            let line = Rect::new(x, r.y + 36.0, (r.right() - 300.0 - x).max(0.0), 20.0);
+            self.ui.text_in(sub, line, 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+            self.ui.tooltip(line, sub);
+        }
+        Rect::new(r.x, r.y + 72.0, r.w, (r.h - 72.0).max(0.0))
     }
 }
 
