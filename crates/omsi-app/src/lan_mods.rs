@@ -333,20 +333,13 @@ fn collect(args: &Args) -> (Manifest, Vec<PathBuf>) {
             if is_dir || !n.to_lowercase().ends_with(".oft") {
                 continue;
             }
-            let Ok(text) = omsi_cfg::vfs::read_text(&dir.join(&n)) else { continue };
-            let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
-            let mut wanted = false;
-            let mut bitmaps: Vec<String> = Vec::new();
-            for (i, l) in lines.iter().enumerate() {
-                if l.eq_ignore_ascii_case("[newfont]") {
-                    let name = lines.get(i + 1).map(|x| x.to_lowercase()).unwrap_or_default();
-                    if fonts_used.contains(&name) {
-                        wanted = true;
-                        bitmaps.extend(lines.iter().skip(i + 2).take(2).map(|b| b.to_string()));
-                    }
-                }
-            }
-            if !wanted {
+            let Ok(fonts) = omsi_content::Font::load_all(&dir.join(&n)) else { continue };
+            let bitmaps: Vec<String> = fonts
+                .iter()
+                .filter(|f| fonts_used.contains(&f.name.trim().to_lowercase()))
+                .flat_map(|f| [f.bitmap.trim().to_string(), f.alpha.trim().to_string()])
+                .collect();
+            if bitmaps.is_empty() {
                 continue;
             }
             for f in std::iter::once(n.clone()).chain(bitmaps) {

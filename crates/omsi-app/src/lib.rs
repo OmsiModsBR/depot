@@ -30,6 +30,7 @@ mod touch;
 mod placing;
 mod mt;
 mod about;
+mod screenshot_name;
 mod actions;
 mod env_file;
 mod ambience;
@@ -129,7 +130,6 @@ pub(crate) enum ServerCfg {}
 mod services;
 mod situation;
 mod spawn;
-mod stock_keys;
 mod startup;
 mod state_trace;
 mod teleport;

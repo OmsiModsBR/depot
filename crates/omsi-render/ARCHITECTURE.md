@@ -65,7 +65,8 @@ detail) runs in `renderer/lists.rs`. None of these imports out of layer.
    `use super::*`: the import list is the domain's dependency map. Nothing imports from `api`;
    only `renderer` and `api` import from `output`. The globs left in `lib.rs` serve only the tests
    (`tests.rs`, `tests_units.rs`) and go when those move to their domains.
-   `scripts/check-render-layers.sh` lists the imports that break this rule, and CI fails on any.
+   `scripts/check-render-layers.sh` lists the imports that break this rule, grouped ones
+   (`use crate::{a, b}`) included, and CI fails on any.
 4. **Smallest visibility.** `pub(super)` inside a domain, `pub(crate)` only for what another
    domain uses.
 5. **A pass keeps its parts together.** Pipelines, uniform, layout and encoding sit in the

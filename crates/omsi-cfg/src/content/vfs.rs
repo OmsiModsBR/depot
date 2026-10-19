@@ -72,18 +72,9 @@ fn bad(msg: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
 
-/// Code page 437, the encoding of entry names written without the UTF-8 flag (what the
-/// Windows zip tools of the OMSI years produced for "Straße" or "Bahnübergang").
-const CP437_HIGH: [char; 128] = [
-    'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å', 'É', 'æ', 'Æ',
-    'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', '¢', '£', '¥', '₧', 'ƒ', 'á', 'í', 'ó', 'ú', 'ñ', 'Ñ',
-    'ª', 'º', '¿', '⌐', '¬', '½', '¼', '¡', '«', '»', '░', '▒', '▓', '│', '┤', '╡', '╢', '╖', '╕',
-    '╣', '║', '╗', '╝', '╜', '╛', '┐', '└', '┴', '┬', '├', '─', '┼', '╞', '╟', '╚', '╔', '╩', '╦',
-    '╠', '═', '╬', '╧', '╨', '╤', '╥', '╙', '╘', '╒', '╓', '╫', '╪', '┘', '┌', '█', '▄', '▌', '▐',
-    '▀', 'α', 'ß', 'Γ', 'π', 'Σ', 'σ', 'µ', 'τ', 'Φ', 'Θ', 'Ω', 'δ', '∞', 'φ', 'ε', '∩', '≡', '±',
-    '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', '\u{a0}',
-];
-
+/// An entry name: UTF-8 when flagged or valid, else code page 437, the encoding of names
+/// written without the UTF-8 flag (what the Windows zip tools of the OMSI years produced for
+/// "Straße" or "Bahnübergang").
 fn decode_name(raw: &[u8], utf8: bool) -> String {
     if utf8 || raw.is_ascii() {
         return String::from_utf8_lossy(raw).into_owned();
@@ -97,7 +88,7 @@ fn decode_name(raw: &[u8], utf8: bool) -> String {
                 if b < 0x80 {
                     b as char
                 } else {
-                    CP437_HIGH[(b - 0x80) as usize]
+                    crate::codepage::CP437_HIGH[(b - 0x80) as usize]
                 }
             })
             .collect(),

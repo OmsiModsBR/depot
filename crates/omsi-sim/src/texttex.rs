@@ -13,16 +13,36 @@ pub struct FontLibrary {
     atlases: HashMap<String, Option<Arc<FontAtlas>>>,
     root: std::path::PathBuf,
     /// Every `[newfont]` of every content root's `Fonts/*.oft`, in lookup order; read once.
-    index: Option<Vec<Font>>,
+    pub(crate) index: Option<Vec<Font>>,
 }
 
 /// Style words at the end of a font name ("churafont++ 32x8 Bold").
-const STYLE_WORDS: &[&str] = &["bold", "heavy", "black", "light", "thin", "medium", "regular", "italic", "narrow", "condensed", "wide"];
+const STYLE_WORDS: &[&str] = &[
+    "bold",
+    "heavy",
+    "black",
+    "light",
+    "thin",
+    "medium",
+    "regular",
+    "italic",
+    "narrow",
+    "condensed",
+    "wide",
+];
 
 /// A font name without its trailing style words, lower case: the family and size.
-fn family_of(name: &str) -> String {
-    let mut words: Vec<String> = name.split_whitespace().map(|w| w.to_ascii_lowercase()).collect();
-    while words.len() > 1 && words.last().map(|w| STYLE_WORDS.contains(&w.as_str())).unwrap_or(false) {
+pub(crate) fn family_of(name: &str) -> String {
+    let mut words: Vec<String> = name
+        .split_whitespace()
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    while words.len() > 1
+        && words
+            .last()
+            .map(|w| STYLE_WORDS.contains(&w.as_str()))
+            .unwrap_or(false)
+    {
         words.pop();
     }
     words.join(" ")
@@ -40,7 +60,11 @@ fn size_of(name: &str) -> Option<(u32, u32)> {
 
 impl FontLibrary {
     pub fn new(root: &Path) -> FontLibrary {
-        FontLibrary { atlases: HashMap::new(), root: root.to_path_buf(), index: None }
+        FontLibrary {
+            atlases: HashMap::new(),
+            root: root.to_path_buf(),
+            index: None,
+        }
     }
 
     fn index(&mut self) -> &[Font] {
@@ -62,7 +86,17 @@ impl FontLibrary {
                     folders.push(d);
                 }
             }
-            files.sort_by_cached_key(|p| (folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX), p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()));
+            files.sort_by_cached_key(|p| {
+                (
+                    folders
+                        .iter()
+                        .position(|d| Some(d.as_path()) == p.parent())
+                        .unwrap_or(usize::MAX),
+                    p.file_name()
+                        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                        .unwrap_or_default(),
+                )
+            });
             // Two files of one folder naming the same font: the one read later takes its place,
             // as in the original (the LiAZ's `ANX_S.oft` spells its "ц" as "=", and a
             // "ANX_S - копия.oft" lying beside it, read first, left the letter out). A
@@ -70,15 +104,25 @@ impl FontLibrary {
             let mut all: Vec<Font> = Vec::new();
             let mut folder_of: Vec<usize> = Vec::new();
             for p in files {
-                if !p.extension().map(|x| x.eq_ignore_ascii_case("oft")).unwrap_or(false) {
+                if !p
+                    .extension()
+                    .map(|x| x.eq_ignore_ascii_case("oft"))
+                    .unwrap_or(false)
+                {
                     continue;
                 }
-                let folder = folders.iter().position(|d| Some(d.as_path()) == p.parent()).unwrap_or(usize::MAX);
+                let folder = folders
+                    .iter()
+                    .position(|d| Some(d.as_path()) == p.parent())
+                    .unwrap_or(usize::MAX);
                 // `Font::path` is the .oft (read through the VFS): its bitmaps lie next to it
                 if let Ok(list) = Font::load_all(&p) {
                     for f in list {
                         let key = f.name.trim().to_ascii_lowercase();
-                        match all.iter().position(|o| o.name.trim().to_ascii_lowercase() == key) {
+                        match all
+                            .iter()
+                            .position(|o| o.name.trim().to_ascii_lowercase() == key)
+                        {
                             Some(k) if folder_of[k] == folder => all[k] = f,
                             Some(_) => {}
                             None => {
@@ -97,7 +141,9 @@ impl FontLibrary {
     /// Whether a font of exactly this name is installed.
     pub fn has_exact(&mut self, name: &str) -> bool {
         let wanted = name.trim();
-        self.index().iter().any(|f| f.name.trim().eq_ignore_ascii_case(wanted))
+        self.index()
+            .iter()
+            .any(|f| f.name.trim().eq_ignore_ascii_case(wanted))
     }
 
     /// The font called `name`, or - when there is none - one of the same family and size in
@@ -112,7 +158,10 @@ impl FontLibrary {
             return None;
         }
         let index = self.index();
-        if let Some(f) = index.iter().find(|f| f.name.trim().eq_ignore_ascii_case(wanted)) {
+        if let Some(f) = index
+            .iter()
+            .find(|f| f.name.trim().eq_ignore_ascii_case(wanted))
+        {
             return Some(f.clone());
         }
         let family = family_of(wanted);
@@ -126,27 +175,43 @@ impl FontLibrary {
             .iter()
             .filter(|f| size_of(&f.name) == size_of(wanted))
             .find(|f| f.name.trim().eq_ignore_ascii_case(&family))
-            .or_else(|| index.iter().filter(|f| size_of(&f.name) == size_of(wanted)).find(|f| family_of(&f.name) == family));
+            .or_else(|| {
+                index
+                    .iter()
+                    .filter(|f| size_of(&f.name) == size_of(wanted))
+                    .find(|f| family_of(&f.name) == family)
+            });
         let Some(sibling) = sibling else {
             // a display whose font is missing is worth a line in the log: it is the first
             // thing to look at when letters come out wrong on a matrix or a plate
             log::warn!("font \"{wanted}\" is in no Fonts folder of any content root");
             return None;
         };
-        log::warn!("font \"{wanted}\" not found; drawing with \"{}\" (same family and size)", sibling.name.trim());
+        log::warn!(
+            "font \"{wanted}\" not found; drawing with \"{}\" (same family and size)",
+            sibling.name.trim()
+        );
         Some(sibling.clone())
     }
 
     /// `get` with the built-in image decoder.
     pub fn load(&mut self, name: &str) -> Option<Arc<FontAtlas>> {
-        self.get(name, &|p| omsi_texture::decode_file(p).ok().map(|i| (i.width, i.height, i.rgba)))
+        self.get(name, &|p| {
+            omsi_texture::decode_file(p)
+                .ok()
+                .map(|i| (i.width, i.height, i.rgba))
+        })
     }
 
     /// Fonts are looked up by their `[newfont]` name across all `Fonts/*.oft` files of every
     /// content root (installed mods first, then the installation): a mod's display fonts
     /// live in the content folder, and looking only in the installation's `Fonts` left the
     /// O530's number plate, matrix and dashboard displays empty.
-    pub fn get(&mut self, name: &str, decode: &dyn Fn(&Path) -> Option<(u32, u32, Vec<u8>)>) -> Option<Arc<FontAtlas>> {
+    pub fn get(
+        &mut self,
+        name: &str,
+        decode: &dyn Fn(&Path) -> Option<(u32, u32, Vec<u8>)>,
+    ) -> Option<Arc<FontAtlas>> {
         let key = name.to_ascii_lowercase();
         if let Some(a) = self.atlases.get(&key) {
             return a.clone();
@@ -154,13 +219,22 @@ impl FontLibrary {
         let found = self.find(name);
         let atlas = found.and_then(|f| {
             // the bitmaps sit beside the .oft that names them
-            let fonts_dir = f.path.parent().map(Path::to_path_buf).unwrap_or_else(|| self.root.join("Fonts"));
+            let fonts_dir = f
+                .path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| self.root.join("Fonts"));
             let alpha_path = omsi_cfg::resolve_path(&fonts_dir, &f.alpha);
             let color_path = omsi_cfg::resolve_path(&fonts_dir, &f.bitmap);
             let (aw, ah, alpha) = decode(&alpha_path)?;
-            let color = match (color_path != alpha_path).then(|| decode(&color_path)).flatten() {
+            let color = match (color_path != alpha_path)
+                .then(|| decode(&color_path))
+                .flatten()
+            {
                 Some((cw, ch, c)) if (cw, ch) == (aw, ah) => c,
-                Some((cw, ch, c)) if cw > 0 && ch > 0 && c.len() == (cw * ch * 4) as usize => color_at_alpha_pixels(&c, cw, ch, aw, ah),
+                Some((cw, ch, c)) if cw > 0 && ch > 0 && c.len() == (cw * ch * 4) as usize => {
+                    color_at_alpha_pixels(&c, cw, ch, aw, ah)
+                }
                 _ => alpha.clone(),
             };
             Some(Arc::new(FontAtlas::new(f, aw, ah, color, alpha)))
@@ -204,7 +278,12 @@ pub struct TextTextureState {
 
 impl TextTextureState {
     pub fn new(def: TextTexture, atlas: Option<Arc<FontAtlas>>) -> Self {
-        Self { def, atlas, last_text: None, pending: None }
+        Self {
+            def,
+            atlas,
+            last_text: None,
+            pending: None,
+        }
     }
 
     /// Re-render when the string variable changed. Returns true when a new image is pending.
@@ -220,51 +299,18 @@ impl TextTextureState {
     /// The picture of `text` in this texture's font, size, colour and placement.
     pub fn image(&self, text: &str) -> Vec<u8> {
         let (w, h) = (self.def.width.max(1) as u32, self.def.height.max(1) as u32);
-        let rgb = [self.def.color[0] as u8, self.def.color[1] as u8, self.def.color[2] as u8];
-        let align = omsi_content::font::TextAlign { orientation: self.def.orientation, grid: self.def.grid };
+        let rgb = [
+            self.def.color[0] as u8,
+            self.def.color[1] as u8,
+            self.def.color[2] as u8,
+        ];
+        let align = omsi_content::font::TextAlign {
+            orientation: self.def.orientation,
+            grid: self.def.grid,
+        };
         match &self.atlas {
             Some(a) => a.render_aligned(text, w, h, self.def.full_color, rgb, align),
             None => vec![0u8; (w * h * 4) as usize],
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A full-colour font whose colour bitmap is not the alpha's size takes each glyph
-    /// pixel's colour from the same pixel of the colour bitmap, as OMSI reads it, not
-    /// the alpha's white (#829).
-    #[test]
-    fn a_colour_bitmap_of_another_size_still_colours_the_glyphs() {
-        let dir = std::path::PathBuf::from("/fonts");
-        let font = Font { path: dir.join("colour.oft"), name: "Colour".into(), bitmap: "colour.bmp".into(), alpha: "colour_alpha.bmp".into(), height: 4, gap: 0, chars: Vec::new() };
-        let mut lib = FontLibrary::new(&dir);
-        lib.index = Some(vec![font]);
-        // a 4 x 4 white alpha under a 2 x 2 swatch: red, green / blue, yellow
-        let swatch = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 0, 255]];
-        let decode = |p: &Path| -> Option<(u32, u32, Vec<u8>)> {
-            match p.file_name()?.to_str()? {
-                "colour_alpha.bmp" => Some((4, 4, vec![255; 64])),
-                "colour.bmp" => Some((2, 2, swatch.concat())),
-                _ => None,
-            }
-        };
-        let atlas = lib.get("Colour", &decode).expect("the font loads");
-        assert_eq!((atlas.width, atlas.height), (4, 4));
-        for (x, y) in [(0usize, 0usize), (1, 0), (0, 1), (1, 1), (3, 2)] {
-            let i = (y * 4 + x) * 4;
-            assert_eq!(atlas.color[i..i + 4], swatch[(y % 2) * 2 + x % 2], "pixel ({x}, {y})");
-        }
-    }
-
-    #[test]
-    fn font_families() {
-        assert_eq!(family_of("churafont++ Numeric 26x11 Bold"), "churafont++ numeric 26x11");
-        assert_eq!(family_of("churafont++ 32x10 Heavy"), "churafont++ 32x10");
-        assert_eq!(family_of("churafont++ 14x10"), "churafont++ 14x10");
-        assert_eq!(family_of("Bold"), "bold");
-        assert_eq!(family_of("LEERFELD"), "leerfeld");
     }
 }

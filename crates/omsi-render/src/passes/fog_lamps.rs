@@ -1,6 +1,9 @@
 //! The lamps' light in the fog: worked out at half size and added onto the picture.
 
-use crate::gpu::{array_path, basic_pipelines, pass_timer, ArrayPath};
+use crate::gpu::{
+    array_path, basic_pipelines, depth_texture_entry, fullscreen_pipeline, pass_timer,
+    uniform_entry, ArrayPath,
+};
 use crate::lighting::Lighting;
 use crate::scene::Scene;
 use crate::shaders::fog_lamps_shader_source;
@@ -27,26 +30,8 @@ pub(crate) fn fog_lamps_pipelines(
     let fog_lamps_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("fog lamps"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
+            depth_texture_entry(1),
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,
@@ -78,35 +63,19 @@ pub(crate) fn fog_lamps_pipelines(
                 immediate_size: 0,
             });
             let make = |entry: &str, blend: Option<wgpu::BlendState>| {
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(entry),
-                    layout: Some(&layout),
-                    vertex: wgpu::VertexState {
-                        module: &module,
-                        entry_point: Some("vs_fog_lamps"),
-                        buffers: &[],
-                        compilation_options: Default::default(),
+                fullscreen_pipeline(
+                    device,
+                    entry,
+                    &layout,
+                    &module,
+                    "vs_fog_lamps",
+                    entry,
+                    wgpu::ColorTargetState {
+                        format: hdr_format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
                     },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        cull_mode: None,
-                        ..Default::default()
-                    },
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &module,
-                        entry_point: Some(entry),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: hdr_format,
-                            blend,
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                        compilation_options: Default::default(),
-                    }),
-                    multiview_mask: None,
-                    cache: None,
-                })
+                )
             };
             // (the second added onto what is there)
             let add = wgpu::BlendState {
