@@ -58,7 +58,7 @@ impl Report {
 
 /// A trip at its last stop: (line, tour, trip in the tour), its place in the duty, where
 /// the stop is.
-pub(crate) type Watch = ((String, String, usize), usize, glam::DVec3);
+pub(crate) type Watch = (TripKey, usize, glam::DVec3);
 
 /// Within this of the last stop, stopped with a passenger door open, the trip is over (the
 /// duty's own distance for being at a stop).
@@ -79,29 +79,59 @@ fn watch_outcome(distance: f64, doors: bool, still_done: bool) -> Option<bool> {
     }
 }
 
+/// A trip: (line, tour, trip in the tour).
+pub(crate) type TripKey = (String, String, usize);
+
+/// One duty update for the watch: `done` the trip at its last stop (if the duty is on one),
+/// `shown` the trip whose report has opened last, `bus` where the bus is, `doors` whether it
+/// stands with a passenger door open. The trip whose report opens now, with its place in the
+/// duty.
+fn watch_step(
+    watch: &mut Option<Watch>,
+    shown: Option<&TripKey>,
+    done: Option<Watch>,
+    bus: glam::DVec3,
+    doors: bool,
+) -> Option<(TripKey, usize)> {
+    let still_done = done.is_some();
+    if let Some(w) = done {
+        if shown != Some(&w.0) {
+            *watch = Some(w);
+        }
+    }
+    let (_, _, at) = watch.as_ref()?;
+    match watch_outcome((bus - *at).length(), doors, still_done)? {
+        true => watch.take().map(|(key, trip, _)| (key, trip)),
+        false => {
+            *watch = None;
+            None
+        }
+    }
+}
+
 impl App {
-    /// After each duty update: `done` the trip at its last stop (if the duty is on one),
-    /// `bus` where the bus is, `doors` whether it stands with a passenger door open. The
-    /// report opens once the bus stands at that stop with a door open, even when the duty
-    /// has gone on to the next trip meanwhile (a late arrival).
+    /// After each duty update (see [`watch_step`]). The report opens once the bus stands at
+    /// the trip's last stop with a door open, even when the duty has gone on to the next trip
+    /// meanwhile (a late arrival).
     pub(crate) fn trip_watch(&mut self, done: Option<Watch>, bus: glam::DVec3, doors: bool) {
-        let still_done = done.is_some();
-        if let Some(w) = done {
-            if self.new_ui.report_shown.as_ref() != Some(&w.0) {
-                self.new_ui.report_watch = Some(w);
-            }
+        let ui = &mut self.new_ui;
+        if let Some((key, trip)) = watch_step(
+            &mut ui.report_watch,
+            ui.report_shown.as_ref(),
+            done,
+            bus,
+            doors,
+        ) {
+            self.trip_finished(key, trip);
         }
-        let Some((key, trip, at)) = self.new_ui.report_watch.clone() else {
-            return;
-        };
-        match watch_outcome((bus - at).length(), doors, still_done) {
-            Some(true) => {
-                self.new_ui.report_watch = None;
-                self.trip_finished(key, trip);
-            }
-            Some(false) => self.new_ui.report_watch = None,
-            None => {}
-        }
+    }
+
+    /// A duty taken or given up: its trips are new ones (their reports open again, and the
+    /// journey log starts a file of its own even for the same line and tour).
+    pub(crate) fn duty_changed(&mut self) {
+        self.journey = None;
+        self.new_ui.report_shown = None;
+        self.new_ui.report_watch = None;
     }
 
     /// Whether the report is showing (on the plain window, with no Esc menu over it).
@@ -115,7 +145,7 @@ impl App {
 
     /// Open the report of the trip `key` (line, tour, trip in the tour; `trip` its place in
     /// the duty), served to its end. Once a trip.
-    pub(crate) fn trip_finished(&mut self, key: (String, String, usize), trip: usize) {
+    pub(crate) fn trip_finished(&mut self, key: TripKey, trip: usize) {
         if self.new_ui.report_shown.as_ref() == Some(&key) {
             return;
         }
@@ -233,5 +263,63 @@ mod tests {
         assert_eq!(watch_outcome(80.0, false, false), Some(false));
         // still on that trip's end (a terminus with a layover far off): waiting
         assert_eq!(watch_outcome(80.0, false, true), None);
+    }
+
+    /// A late arrival: the duty is on the next trip before the doors open, and the report
+    /// still opens, once.
+    #[test]
+    fn a_late_arrival_still_gets_its_report_once() {
+        let key: TripKey = ("5".into(), "1".into(), 3);
+        let stop = glam::DVec3::new(100.0, 0.0, 0.0);
+        let near = glam::DVec3::new(95.0, 0.0, 0.0);
+        let mut watch = None;
+        // stopped at the last stop, doors shut: the trip is done
+        assert_eq!(
+            watch_step(&mut watch, None, Some((key.clone(), 2, stop)), near, false),
+            None
+        );
+        // the duty goes on to the next trip (it is due): the doors open
+        assert_eq!(watch_step(&mut watch, None, None, near, false), None);
+        assert_eq!(
+            watch_step(&mut watch, None, None, near, true),
+            Some((key.clone(), 2))
+        );
+        assert!(watch.is_none());
+        // a trip whose report has opened is not watched again
+        assert_eq!(
+            watch_step(
+                &mut watch,
+                Some(&key),
+                Some((key.clone(), 2, stop)),
+                near,
+                true
+            ),
+            None
+        );
+        assert!(watch.is_none());
+        // driven off without opening: no report later
+        let next: TripKey = ("5".into(), "1".into(), 4);
+        assert_eq!(
+            watch_step(
+                &mut watch,
+                Some(&key),
+                Some((next.clone(), 3, stop)),
+                near,
+                false
+            ),
+            None
+        );
+        assert_eq!(
+            watch_step(
+                &mut watch,
+                Some(&key),
+                None,
+                glam::DVec3::new(200.0, 0.0, 0.0),
+                false
+            ),
+            None
+        );
+        assert!(watch.is_none());
+        assert_eq!(watch_step(&mut watch, Some(&key), None, near, true), None);
     }
 }

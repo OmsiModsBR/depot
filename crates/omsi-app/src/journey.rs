@@ -27,6 +27,11 @@ pub(crate) type TripLines = (String, Vec<ReportRow>, Vec<(&'static str, String)>
 
 impl Row {
     /// Whether the bus arrived late here, and whether it left early (as the career counts).
+    /// Whether the bus has been at this stop.
+    fn reached(&self) -> bool {
+        self.arrived.is_some() || self.left.is_some()
+    }
+
     fn judged(&self) -> (bool, bool) {
         let late = !self.first && self.arrived.is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
         let early = !self.last && self.left.is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
@@ -91,6 +96,9 @@ impl Journey {
     pub(crate) fn report(&self, t: usize) -> Option<TripLines> {
         let title = self.trips.get(t)?.clone();
         let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
+        // (a duty taken up or resumed in the middle of the trip: the stops before are not the
+        // driver's)
+        let from = rows.iter().position(|r| r.reached()).unwrap_or(rows.len());
         let (mut served, mut late, mut early) = (0, 0, 0);
         let mut out = Vec::new();
         for (i, r) in rows.iter().enumerate() {
@@ -99,7 +107,7 @@ impl Journey {
             // about its arrival)
             let by_departure = r.first || (is_early && !is_late);
             let [plan, real, diff] = if by_departure { times(r.plan.1, r.left) } else { times(r.plan.0, r.arrived) };
-            let state = if r.arrived.is_some() || r.left.is_some() {
+            let state = if r.reached() {
                 served += 1;
                 late += is_late as usize;
                 early += is_early as usize;
@@ -109,7 +117,7 @@ impl Journey {
                     (false, true) => StopState::LeftEarly,
                     _ => StopState::OnTime,
                 }
-            } else if rows[i + 1..].iter().any(|x| x.arrived.is_some() || x.left.is_some()) {
+            } else if i > from && rows[i + 1..].iter().any(|x| x.reached()) {
                 StopState::Missed
             } else {
                 StopState::None
@@ -117,7 +125,7 @@ impl Journey {
             out.push(ReportRow { stop: r.name.clone(), scheduled: plan, actual: real, deviation: diff, state });
         }
         let totals = vec![
-            ("Stops served", format!("{served} of {}", rows.len())),
+            ("Stops served", format!("{served} of {}", rows.len() - from)),
             ("Late arrivals", late.to_string()),
             ("Early departures", early.to_string()),
         ];
@@ -136,15 +144,15 @@ impl Journey {
         for (t, title) in self.trips.iter().enumerate() {
             let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
             // (a trip is in it once the bus has reached one of its stops: a tour has dozens)
-            if rows.iter().all(|r| r.arrived.is_none() && r.left.is_none()) {
+            let Some(from) = rows.iter().position(|r| r.reached()) else {
                 continue;
-            }
+            };
             out.push_str(&format!("\n{title}\n{rule}\n{:<30}  {:>9} {:>9} {:>10}   {:>9} {:>9} {:>10}   Status\n{rule}\n", "Stop", "Arr. plan", "Arr. real", "Diff", "Dep. plan", "Dep. real", "Diff"));
             for (i, r) in rows.iter().enumerate() {
                 let arr = if r.first { [String::new(), String::new(), String::new()] } else { times(r.plan.0, r.arrived) };
                 let dep = if r.last { [String::new(), String::new(), String::new()] } else { times(r.plan.1, r.left) };
                 let (is_late, is_early) = r.judged();
-                let status = if r.arrived.is_some() || r.left.is_some() {
+                let status = if r.reached() {
                     served += 1;
                     late += is_late as usize;
                     early += is_early as usize;
@@ -154,7 +162,7 @@ impl Journey {
                         (false, true) => "left early",
                         _ => "OK",
                     }
-                } else if rows[i + 1..].iter().any(|x| x.arrived.is_some() || x.left.is_some()) {
+                } else if i > from && rows[i + 1..].iter().any(|x| x.reached()) {
                     "missed"
                 } else {
                     ""
@@ -304,6 +312,15 @@ mod tests {
         assert!(j.arrived((1, 0), -60.0));
         let text = j.text();
         assert!(text.contains("Trip 2  ·  5 to Muzealna  ·  08:20:00") && !text.contains("Trip 1"), "{text}");
+        // taken up (or resumed) at the third stop: the first two are not missed
+        let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", dir.clone());
+        assert!(j.arrived((0, 2), 0.0));
+        assert!(j.arrived((0, 3), 0.0));
+        let (_, rows, totals) = j.report(0).expect("trip 1");
+        let states: Vec<StopState> = rows.iter().map(|r| r.state).collect();
+        assert_eq!(states, vec![StopState::None, StopState::None, StopState::OnTime, StopState::OnTime]);
+        assert_eq!(totals[0], ("Stops served", "2 of 2".to_string()));
+        assert!(!j.text().contains("missed"), "{}", j.text());
     }
 
     /// A stop reached late and left before its departure time says both.
