@@ -125,6 +125,51 @@ pub fn chosen<'a, T>(list: &'a [T], shown: &[usize], selected: usize) -> Option<
     }
 }
 
+/// The accent button at the foot of a "Launch preparation" card, with a quiet line under it.
+/// A dim one when `enabled` is false. True when it was clicked.
+pub fn action(ui: &mut Ui, id: &str, b: Rect, label: &str, note: &str, enabled: bool) -> bool {
+    let (hover, down, clicked) = if enabled {
+        ui.interact_key(omsi_ui::widgets::id_of(id), b)
+    } else {
+        (false, false, false)
+    };
+    let fill = match (enabled, hover || down) {
+        (false, _) => PANEL_2,
+        (true, true) => ACCENT.mix(Color::WHITE, 0.12),
+        (true, false) => ACCENT,
+    };
+    ui.solid(b);
+    ui.p().rounded(b, 6.0, fill);
+    ui.text_in(
+        label,
+        b,
+        14.0 * TEXT_SCALE,
+        Weight::Bold,
+        if enabled { ON_ACCENT } else { MUTED },
+        Align::Center,
+    );
+    clipped(
+        ui,
+        note,
+        b.x,
+        b.bottom() + 22.0,
+        b.w,
+        12.0,
+        Weight::Regular,
+        MUTED,
+    );
+    enabled && clicked
+}
+
+/// The page body's width in the design (the window less the sidebar and the margins).
+pub const BODY_W: f32 = DESIGN_W - SIDEBAR_W - 56.0;
+
+/// A column `w` points wide in the design, in a body `body_w` wide: as designed, or narrower in
+/// a smaller window (down to 60 %), so the column between keeps room.
+pub fn fit(w: f32, body_w: f32) -> f32 {
+    w * (body_w / BODY_W).clamp(0.6, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::shorten;

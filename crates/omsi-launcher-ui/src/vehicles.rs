@@ -26,6 +26,10 @@ pub struct VehiclesView {
     query: String,
     selected: usize,
     paint: usize,
+    /// A bus (its file) and paint to show once the catalog is there (`select`).
+    pending: Option<(String, String)>,
+    /// "Drive this bus" was clicked: the bus's file and the paint (`take_use`).
+    used: Option<(String, String)>,
 }
 
 impl Default for VehiclesView {
@@ -35,6 +39,8 @@ impl Default for VehiclesView {
             query: String::new(),
             selected: 0,
             paint: 0,
+            pending: None,
+            used: None,
         }
     }
 }
@@ -51,6 +57,39 @@ impl VehiclesView {
     /// The vehicle chosen in the library, and its paint.
     pub fn chosen(&self) -> (usize, usize) {
         (self.selected, self.paint)
+    }
+
+    /// Take `list` as the catalog when none has been read yet (the host has it already).
+    pub fn set_catalog(&mut self, list: Vec<VehicleInfo>) {
+        if matches!(self.catalog, Catalog::NotStarted) {
+            self.catalog = Catalog::Ready(Rc::new(list));
+        }
+    }
+
+    /// Show the bus whose file is `file`, in `paint` (empty: its first), when it is in the
+    /// catalog; one not yet read is shown once it is.
+    pub fn select(&mut self, file: &str, paint: &str) {
+        self.pending = Some((file.to_string(), paint.to_string()));
+        self.apply_pending();
+    }
+
+    fn apply_pending(&mut self) {
+        let Catalog::Ready(list) = &self.catalog else {
+            return;
+        };
+        let Some((file, paint)) = self.pending.take() else {
+            return;
+        };
+        if let Some(i) = list.iter().position(|v| v.file.eq_ignore_ascii_case(&file)) {
+            self.selected = i;
+            self.paint = list[i].paints.iter().position(|p| *p == paint).unwrap_or(0);
+            self.query.clear();
+        }
+    }
+
+    /// The bus (its file) and paint "Drive this bus" was clicked for, once.
+    pub fn take_use(&mut self) -> Option<(String, String)> {
+        self.used.take()
     }
 
     /// Start reading the catalog if that has not begun.
@@ -146,6 +185,7 @@ impl VehiclesView {
                 return;
             }
         };
+        self.apply_pending();
         let shown = self.shown(&list);
         if !shown.is_empty() && !shown.contains(&self.selected) {
             self.selected = shown[0];
@@ -155,8 +195,8 @@ impl VehiclesView {
         let rows_h = (body.h - 100.0 - 24.0).max(300.0);
         let upper_h = (rows_h * 0.6).floor();
         let lower_h = rows_h - upper_h - 16.0;
-        let lib = Rect::new(body.x, top, 335.0, upper_h);
-        let details_w = 392.0;
+        let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
+        let details_w = kit::fit(392.0, body.w);
         let details = Rect::new(body.right() - details_w, top, details_w, upper_h);
         let preview = Rect::new(
             lib.right() + 16.0,
@@ -169,8 +209,8 @@ impl VehiclesView {
         self.preview(ui, preview);
         self.details(ui, details, chosen);
         let y2 = top + upper_h + 16.0;
-        let launch_w = 426.0;
-        let files_w = 330.0;
+        let launch_w = kit::fit(426.0, body.w);
+        let files_w = kit::fit(330.0, body.w);
         let launch = Rect::new(body.right() - launch_w, y2, launch_w, lower_h);
         let files = Rect::new(launch.x - 16.0 - files_w, y2, files_w, lower_h);
         let paints = Rect::new(body.x, y2, files.x - 16.0 - body.x, lower_h);
@@ -255,7 +295,7 @@ impl VehiclesView {
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
         ui.p().rect(inner, PANEL_2);
         ui.text_in(
-            "No preview yet. Previews come from a helper program that is not part of this step.",
+            "No picture of this bus here yet. The Drive page shows it in 3D.",
             inner.inset(24.0),
             14.0 * TEXT_SCALE,
             Weight::Regular,
@@ -435,25 +475,21 @@ impl VehiclesView {
             y += 40.0;
         }
         let b = Rect::new(r.x + 19.0, r.bottom() - 100.0, r.w - 38.0, 48.0);
-        ui.p().rounded(b, 6.0, PANEL_2);
-        ui.text_in(
-            "START DRIVING",
-            b,
-            14.0 * TEXT_SCALE,
-            Weight::Bold,
-            MUTED,
-            Align::Center,
-        );
-        clipped(
+        if kit::action(
             ui,
-            "Starting a session comes with the Drive page.",
-            r.x + 19.0,
-            r.bottom() - 30.0,
-            r.w - 38.0,
-            12.0,
-            Weight::Regular,
-            MUTED,
-        );
+            "vehicles:use",
+            b,
+            "DRIVE THIS BUS",
+            "Takes this bus and paint to the Drive page.",
+            v.is_some(),
+        ) {
+            if let Some(v) = v {
+                self.used = Some((
+                    v.file.clone(),
+                    v.paints.get(self.paint).cloned().unwrap_or_default(),
+                ));
+            }
+        }
     }
 }
 
