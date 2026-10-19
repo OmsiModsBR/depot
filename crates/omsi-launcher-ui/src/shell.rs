@@ -62,9 +62,10 @@ impl Shell {
             let lw = SIDEBAR_W - 40.0;
             ui.image(Rect::new(20.0, 24.0, lw, lw * aspect), tex, 0.0);
         }
+        let row = nav_row(h);
         for (i, &page) in Page::listed().iter().enumerate() {
-            let top = NAV_TOP + i as f32 * NAV_ROW;
-            self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, NAV_ROW));
+            let top = NAV_TOP + i as f32 * row;
+            self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, row));
         }
         let foot = Page::foot();
         for (i, &page) in foot.iter().enumerate() {
@@ -147,5 +148,30 @@ impl Shell {
             MUTED,
             Align::Left,
         );
+    }
+}
+
+/// The height of a listed page's row in a window `h` design points high: the design's, or less
+/// when the foot entries would otherwise cover the last pages.
+fn nav_row(h: f32) -> f32 {
+    let foot_top = h - 45.0 - Page::foot().len() as f32 * FOOT_ROW;
+    NAV_ROW.min((foot_top - NAV_TOP) / Page::listed().len() as f32)
+}
+
+
+#[cfg(test)]
+mod nav_tests {
+    use super::*;
+
+    #[test]
+    fn listed_pages_never_reach_the_foot_entries() {
+        for h in [540.0_f32, 720.0, 941.0, 2160.0] {
+            let row = nav_row(h);
+            let end = NAV_TOP + Page::listed().len() as f32 * row;
+            let foot_top = h - 45.0 - Page::foot().len() as f32 * FOOT_ROW;
+            assert!(end <= foot_top + 0.01, "h={h}: pages end at {end}, foot starts at {foot_top}");
+            assert!(row <= NAV_ROW);
+        }
+        assert_eq!(nav_row(941.0), NAV_ROW);
     }
 }
