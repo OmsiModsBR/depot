@@ -181,8 +181,12 @@ impl RigidBody {
     pub fn spawned_inside(&self) -> Option<&[i64]> {
         self.spawned_inside.as_deref()
     }
+}
 
-    /// The wheels, to set what a test or a script changes on them (see the setters of
+/// What the tests set on a body, built only with the `test-support` feature.
+#[cfg(feature = "test-support")]
+impl RigidBody {
+    /// The wheels, to set what a test changes on them (see the setters of
     /// [`RigidWheel`]).
     pub fn wheels_mut(&mut self) -> &mut [RigidWheel] {
         &mut self.wheels
@@ -196,5 +200,15 @@ impl RigidBody {
     /// Sets the grip of the road under the body.
     pub fn set_friction(&mut self, friction: f32) {
         self.friction = friction;
+    }
+
+    /// The trailers' parts towed by the body, to change their brakes.
+    pub fn coupled_mut(&mut self) -> &mut Vec<CoupledPart> {
+        &mut self.coupled
+    }
+
+    /// Sets the mass (kg).
+    pub fn set_mass(&mut self, mass: f32) {
+        self.mass = mass;
     }
 }

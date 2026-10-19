@@ -1,14 +1,19 @@
 //! Where a vehicle's body is in the world, and its cameras.
 
-use glam::{DVec3, Mat4, Vec3};
 use super::trailer::{body_heading, body_reversed, body_rotation};
 use super::visuals::{fit_plane, is_shadow_mesh, onto_plane, wheel_ground};
 use super::VehicleInstance;
+use glam::{DVec3, Mat4, Vec3};
 
 impl VehicleInstance {
     /// Rotation of the vehicle body (model frame → world, without translation).
     pub fn body_rotation(&self) -> Mat4 {
-        body_rotation(self.heading, self.pitch, self.bank, body_reversed(&self.ty.def, false))
+        body_rotation(
+            self.heading,
+            self.pitch,
+            self.bank,
+            body_reversed(&self.ty.def, false),
+        )
     }
 
     pub fn body_heading(&self) -> f64 {
@@ -99,15 +104,22 @@ impl VehicleInstance {
 
 /// A camera in a body's own matrix (`rot`, at `position`): see
 /// `VehicleInstance::camera_world_full`.
-pub(super) fn camera_in_body(position: DVec3, rot: Mat4, cam: &omsi_vehicle::Camera) -> (DVec3, f32, f32, f32) {
+pub(super) fn camera_in_body(
+    position: DVec3,
+    rot: Mat4,
+    cam: &omsi_vehicle::Camera,
+) -> (DVec3, f32, f32, f32) {
     let (sy, cy) = cam.yaw.to_radians().sin_cos();
     let (sp, cp) = cam.pitch.to_radians().sin_cos();
     let f_local = Vec3::new(sy * cp, cy * cp, sp);
     let r_local = Vec3::new(cy, -sy, 0.0);
     let f = rot.transform_vector3(f_local).normalize_or(Vec3::Y);
-    let up = rot.transform_vector3(r_local.cross(f_local)).normalize_or(Vec3::Z);
+    let up = rot
+        .transform_vector3(r_local.cross(f_local))
+        .normalize_or(Vec3::Z);
     let local = Vec3::new(cam.pos[0], cam.pos[1], cam.pos[2]);
-    let eye = position + rot.transform_point3(local).as_dvec3() - (f * cam.dist.max(0.0)).as_dvec3();
+    let eye =
+        position + rot.transform_point3(local).as_dvec3() - (f * cam.dist.max(0.0)).as_dvec3();
     let yaw = f.x.atan2(f.y).to_degrees();
     let pitch = f.z.clamp(-1.0, 1.0).asin().to_degrees();
     // (the roll the renderer's `Camera::up` turns back into this up)

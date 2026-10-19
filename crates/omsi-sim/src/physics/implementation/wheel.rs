@@ -27,7 +27,11 @@ impl RigidWheel {
         let ground = c.v_long / r;
         let mu_n = friction * c.grip;
         if !self.slipping {
-            let wanted = if c.v_long.abs() > STANDING { c.drive - c.brake * c.v_long.signum() } else { f_long_wanted };
+            let wanted = if c.v_long.abs() > STANDING {
+                c.drive - c.brake * c.v_long.signum()
+            } else {
+                f_long_wanted
+            };
             if wanted.abs() > mu_n * SLIP_MARGIN && mu_n > 0.0 {
                 self.slipping = true;
                 self.locked = false;
@@ -48,7 +52,9 @@ impl RigidWheel {
             }
             if !self.locked {
                 let before = self.spin;
-                self.spin += h * self.inertia_inv * (c.drive - sign(self.spin) * c.brake - sign(slide_before) * mu_n);
+                self.spin += h
+                    * self.inertia_inv
+                    * (c.drive - sign(self.spin) * c.brake - sign(slide_before) * mu_n);
                 if before != 0.0 && sign(before) != sign(self.spin) && c.brake > 0.0 {
                     self.spin = 0.0;
                     self.locked = true;
@@ -57,7 +63,11 @@ impl RigidWheel {
             let slide_after = self.spin * r - c.v_long;
             // gripping again: the wheel's speed crossed the ground's (or both stand)
             // (a slide that only now begins - zero before - has crossed nothing)
-            if sign(slide_after) * sign(slide_before) < 0.0 || (c.v_long.abs() < STANDING && self.spin.abs() * r < STANDING && c.drive.abs() <= c.brake.max(mu_n)) {
+            if sign(slide_after) * sign(slide_before) < 0.0
+                || (c.v_long.abs() < STANDING
+                    && self.spin.abs() * r < STANDING
+                    && c.drive.abs() <= c.brake.max(mu_n))
+            {
                 self.slipping = false;
                 self.locked = false;
                 self.spin = ground;
@@ -94,6 +104,12 @@ impl TyreFrame {
         let right = rot.mul_vec3(Vec3::new(ang.cos(), -ang.sin(), 0.0));
         let hub0 = position + rot.mul_vec3(w.attach - cog).as_dvec3();
         let hub = hub0 + (up * w.compression.max(-DROOP)).as_dvec3();
-        TyreFrame { fwd, right, fwd_h: Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y), hub0, hub }
+        TyreFrame {
+            fwd,
+            right,
+            fwd_h: Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y),
+            hub0,
+            hub,
+        }
     }
 }

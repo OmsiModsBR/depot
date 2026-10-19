@@ -1,7 +1,9 @@
 //! Textures: the GPU texture slot, preparing and fitting images, uploads with their mip
 //! chains, and replacing or shrinking textures already in the scene.
 
-use crate::gpu::gl_worker_turn;
+use crate::gpu::{
+    fullscreen_pipeline, gl_worker_turn, mip_levels, sampler_entry, target_2d, texture_entry,
+};
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
@@ -118,7 +120,7 @@ pub(crate) fn upload_texture(
     mipmaps: bool,
 ) -> GpuTexture {
     let mip_count = if mipmaps {
-        (32 - img.width.max(img.height).leading_zeros()).max(1)
+        mip_levels(img.width, img.height)
     } else {
         1
     };
@@ -400,6 +402,119 @@ pub(crate) fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels:
         .sum()
 }
 
+/// Texture `t` without its `n` finest mip levels: the coarser levels copied into a smaller
+/// texture on the GPU. None when it cannot shrink so far (a block format needs sides that
+/// are multiples of four).
+pub(crate) fn drop_top_levels(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    t: &GpuTexture,
+    n: u32,
+) -> Option<GpuTexture> {
+    let (w, h) = t.size;
+    let levels = t.texture.mip_level_count();
+    let format = t.texture.format();
+    if n == 0 || n >= levels || !t.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+        return None;
+    }
+    let (nw, nh) = ((w >> n).max(1), (h >> n).max(1));
+    let (bw, bh) = format.block_dimensions();
+    if nw % bw != 0 || nh % bh != 0 {
+        return None;
+    }
+    let new_levels = levels - n;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: nw,
+            height: nh,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: new_levels,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("drop levels"),
+    });
+    for l in 0..new_levels {
+        let (lw, lh) = ((nw >> l).max(1), (nh >> l).max(1));
+        let size = wgpu::Extent3d {
+            width: lw.div_ceil(bw) * bw,
+            height: lh.div_ceil(bh) * bh,
+            depth_or_array_layers: 1,
+        };
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &t.texture,
+                mip_level: l + n,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: l,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            size,
+        );
+    }
+    queue.submit([encoder.finish()]);
+    Some(GpuTexture::new(
+        texture,
+        (nw, nh),
+        texture_bytes(format, nw, nh, new_levels),
+    ))
+}
+
+/// How fast textures go up to the GPU, in MB/s: four 1024x1024 RGBA uploads timed.
+pub(crate) fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f64 {
+    let n = 1024u32;
+    let size = wgpu::Extent3d {
+        width: n,
+        height: n,
+        depth_or_array_layers: 1,
+    };
+    let texture = target_2d(
+        device,
+        "upload check",
+        size,
+        1,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureUsages::COPY_DST,
+    );
+    let data = vec![0u8; (n * n * 4) as usize];
+    let rounds = 4;
+    let t = std::time::Instant::now();
+    for _ in 0..rounds {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(n * 4),
+                rows_per_image: Some(n),
+            },
+            size,
+        );
+    }
+    let secs = t.elapsed().as_secs_f64().max(1e-6);
+    queue.submit([]);
+    texture.destroy();
+    (data.len() * rounds) as f64 / 1e6 / secs
+}
+
 /// The mip map generator (mip.wgsl): its bind group layout, pipeline and sampler.
 pub(crate) fn mip_pipeline(
     device: &wgpu::Device,
@@ -412,59 +527,26 @@ pub(crate) fn mip_pipeline(
     });
     let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("mip"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
+        entries: &[texture_entry(0), sampler_entry(1)],
     });
     let mip_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("mip"),
         bind_group_layouts: &[Some(&mip_layout)],
         immediate_size: 0,
     });
-    let mip_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("mip"),
-        layout: Some(&mip_pl),
-        vertex: wgpu::VertexState {
-            module: &mip_shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
+    let mip_pipeline = fullscreen_pipeline(
+        device,
+        "mip",
+        &mip_pl,
+        &mip_shader,
+        "vs_main",
+        "fs_main",
+        wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
         },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &mip_shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
+    );
     let mip_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
