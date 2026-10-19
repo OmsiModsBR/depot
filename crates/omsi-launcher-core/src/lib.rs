@@ -1923,7 +1923,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
-            "msaa" | "shadow_size" if k != "msaa" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
+            // (a size the game can read, else its default 2048)
+            "shadow_size" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(2048)),
             // (a count the game can read, else its default 4)
             "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size" if k != "vol_ai" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
@@ -1945,7 +1946,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
             "max_obj_dist" => v[&k] = if val.eq_ignore_ascii_case("auto") { json!("auto") } else { json!(val.parse::<f64>().map(|m| (m.round() as i64).to_string()).unwrap_or_else(|_| "auto".into())) },
             "ssao" | "shadows" | "shadow_blobs" | "navigator" | "enhanced" | "triple_screen" | "triple_span" | "triple_hud_center" | "vr" | "vr_desktop_mirror" | "fullscreen" | "vsync" | "exact_fare" | "detail_textures" | "texture_compression" | "chat" | "tooltips" | "name_tags" | "show_fps" | "clouds" | "doppler" | "driver" | "use_real_time" | "use_real_date" | "use_real_year" | "collision_vehicles" | "collision_objects" | "collision_pedestrians" | "head_movement" | "driverview_smooth" | "hands_in_cab" | "alt_view" | "precision_zoom" => v[&k] = json!(b(val)),
-            "maintenance" | "ai_unsched_factor" | "ai_max_scheduled" if k != "ai_unsched_factor" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            "ai_max_scheduled" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            // (0 to 4, as the game reads it)
+            "maintenance" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.clamp(0.0, 4.0) as i64).unwrap_or(0)),
             // (a percentage, 0 to 300, as the game reads it)
             // (a percentage with its fraction, as the game keeps it)
             "ai_unsched_factor" => v[&k] = val.trim_end_matches('%').parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).map(|x| if x.fract() == 0.0 { json!(x as i64) } else { json!(x) }).unwrap_or(json!(100)),
