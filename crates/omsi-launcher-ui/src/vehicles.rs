@@ -8,6 +8,7 @@ use omsi_launcher_lib::VehicleInfo;
 use omsi_ui::paint::Align;
 use omsi_ui::widgets::{matches, Ui};
 use omsi_ui::{Rect, Weight};
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
 /// The longest description drawn: third-party text, bounded.
@@ -16,7 +17,7 @@ const DESCRIPTION_CHARS: usize = 1200;
 enum Catalog {
     NotStarted,
     Loading(Receiver<Result<Vec<VehicleInfo>, String>>),
-    Ready(Vec<VehicleInfo>),
+    Ready(Rc<Vec<VehicleInfo>>),
     Failed(String),
 }
 
@@ -42,7 +43,7 @@ impl VehiclesView {
     /// A page showing `list` (screenshots and tests).
     pub fn with_catalog(list: Vec<VehicleInfo>) -> VehiclesView {
         VehiclesView {
-            catalog: Catalog::Ready(list),
+            catalog: Catalog::Ready(Rc::new(list)),
             ..Default::default()
         }
     }
@@ -69,7 +70,7 @@ impl VehiclesView {
     pub fn poll(&mut self) {
         if let Catalog::Loading(rx) = &self.catalog {
             match rx.try_recv() {
-                Ok(Ok(list)) => self.catalog = Catalog::Ready(list),
+                Ok(Ok(list)) => self.catalog = Catalog::Ready(Rc::new(list)),
                 Ok(Err(e)) => self.catalog = Catalog::Failed(e),
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
@@ -103,7 +104,7 @@ impl VehiclesView {
         self.load();
         self.poll();
         let list = match &self.catalog {
-            Catalog::Ready(l) => l.clone(),
+            Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
                 let r = Rect::new(body.x, body.y + 100.0, body.w, 120.0);
                 card(ui, r, "Vehicles could not be listed", None);
@@ -146,8 +147,8 @@ impl VehiclesView {
             }
         };
         let shown = self.shown(&list);
-        if !shown.contains(&self.selected) {
-            self.selected = shown.first().copied().unwrap_or(0);
+        if !shown.is_empty() && !shown.contains(&self.selected) {
+            self.selected = shown[0];
             self.paint = 0;
         }
         let top = body.y + 100.0;
@@ -164,7 +165,7 @@ impl VehiclesView {
             upper_h,
         );
         self.library(ui, lib, &list, &shown);
-        let chosen = list.get(self.selected);
+        let chosen = kit::chosen(&list, &shown, self.selected);
         self.preview(ui, preview);
         self.details(ui, details, chosen);
         let y2 = top + upper_h + 16.0;
@@ -543,5 +544,8 @@ mod tests {
         assert_eq!(v.shown(&list), vec![2]);
         v.query = "no such bus".into();
         assert!(v.shown(&list).is_empty());
+        // and then no vehicle is chosen, not the first one
+        let shown = v.shown(&list);
+        assert!(kit::chosen(&list, &shown, v.selected).is_none());
     }
 }

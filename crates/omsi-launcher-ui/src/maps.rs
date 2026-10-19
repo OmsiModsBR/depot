@@ -7,6 +7,7 @@ use omsi_launcher_lib::MapInfo;
 use omsi_ui::paint::Align;
 use omsi_ui::widgets::{matches, Ui};
 use omsi_ui::{Rect, Weight};
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
 const DESCRIPTION_CHARS: usize = 1200;
@@ -14,7 +15,7 @@ const DESCRIPTION_CHARS: usize = 1200;
 enum Catalog {
     NotStarted,
     Loading(Receiver<Result<Vec<MapInfo>, String>>),
-    Ready(Vec<MapInfo>),
+    Ready(Rc<Vec<MapInfo>>),
     Failed(String),
 }
 
@@ -40,7 +41,7 @@ impl MapsView {
     /// A page showing `list` (pictures and tests).
     pub fn with_catalog(list: Vec<MapInfo>) -> MapsView {
         MapsView {
-            catalog: Catalog::Ready(list),
+            catalog: Catalog::Ready(Rc::new(list)),
             ..Default::default()
         }
     }
@@ -64,7 +65,7 @@ impl MapsView {
     fn poll(&mut self) {
         if let Catalog::Loading(rx) = &self.catalog {
             match rx.try_recv() {
-                Ok(Ok(list)) => self.catalog = Catalog::Ready(list),
+                Ok(Ok(list)) => self.catalog = Catalog::Ready(Rc::new(list)),
                 Ok(Err(e)) => self.catalog = Catalog::Failed(e),
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
@@ -95,7 +96,7 @@ impl MapsView {
         self.load();
         self.poll();
         let list = match &self.catalog {
-            Catalog::Ready(l) => l.clone(),
+            Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
                 let r = Rect::new(body.x, body.y + 100.0, body.w, 120.0);
                 card(ui, r, "Maps could not be listed", None);
@@ -138,8 +139,8 @@ impl MapsView {
             }
         };
         let shown = self.shown(&list);
-        if !shown.contains(&self.selected) {
-            self.selected = shown.first().copied().unwrap_or(0);
+        if !shown.is_empty() && !shown.contains(&self.selected) {
+            self.selected = shown[0];
             self.entry = 0;
         }
         let top = body.y + 100.0;
@@ -156,7 +157,7 @@ impl MapsView {
             upper_h,
         );
         self.library(ui, lib, &list, &shown);
-        let chosen = list.get(self.selected);
+        let chosen = kit::chosen(&list, &shown, self.selected);
         self.picture(ui, mid, chosen);
         self.files(ui, files, chosen);
         let y2 = top + upper_h + 16.0;
@@ -452,5 +453,10 @@ mod tests {
         assert_eq!(v.shown(&list).len(), 3);
         v.query = "city".into();
         assert_eq!(v.shown(&list), vec![1]);
+        // a search that matches nothing leaves no map chosen, not the first one
+        v.query = "no such map".into();
+        let shown = v.shown(&list);
+        assert!(shown.is_empty());
+        assert!(kit::chosen(&list, &shown, v.selected).is_none());
     }
 }

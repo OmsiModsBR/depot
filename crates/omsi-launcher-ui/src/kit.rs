@@ -115,6 +115,16 @@ pub fn shorten(s: &str, n: usize) -> String {
     }
 }
 
+/// The selected entry of `list`, only while the search still shows it (`None` when the
+/// search matches nothing, so the detail cards say so instead of showing a hidden entry).
+pub fn chosen<'a, T>(list: &'a [T], shown: &[usize], selected: usize) -> Option<&'a T> {
+    if shown.contains(&selected) {
+        list.get(selected)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::shorten;
