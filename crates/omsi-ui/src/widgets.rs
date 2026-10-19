@@ -457,6 +457,44 @@ impl Ui {
         self.push_layer(c, rad);
     }
 
+    /// A picture of texture `tex` (`aspect`: its width over its height) covering `r` with its
+    /// centre, the overhang cut, drawn with opacity `alpha`.
+    pub fn image_cover(&mut self, r: Rect, tex: usize, aspect: f32, alpha: f32) {
+        let clip = intersect(self.clip_now(), r);
+        self.push_layer(clip, 0.0);
+        self.layers.last_mut().unwrap().2 = tex;
+        // the part of the picture that is shown: the whole of one side, a middle strip of the other
+        let want = r.w / r.h.max(1.0);
+        let (u, v) = if aspect > want {
+            (want / aspect, 1.0)
+        } else {
+            (1.0, aspect / want)
+        };
+        let sprite = crate::Sprite {
+            uv: [
+                (1.0 - u) * 0.5,
+                (1.0 - v) * 0.5,
+                (1.0 + u) * 0.5,
+                (1.0 + v) * 0.5,
+            ],
+            w: r.w,
+            h: r.h,
+            ascent: 0.0,
+        };
+        self.p().sprite(
+            sprite,
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.w, r.h),
+            Color::WHITE.alpha(alpha),
+        );
+        let (c, rad) = self
+            .clip_stack
+            .last()
+            .copied()
+            .unwrap_or((Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0));
+        self.push_layer(c, rad);
+    }
+
     /// Mark `r` as interface (the showroom does not orbit under it).
     pub fn solid(&mut self, r: Rect) {
         if r.contains(self.input.mouse) {
