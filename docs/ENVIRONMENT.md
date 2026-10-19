@@ -41,7 +41,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_OPENXR_SCALE` | number | `omsi-app::openxr` |  | The size of the VR picture against the headset's recommendation. |
 | `OMSI_RADIO_ALLOW_HTTP` | text | `omsi-audio::url_guard` |  | `1`, `true` or `yes`: radio stations on plain `http` are allowed. |
 | `OMSI_SAFE_GPU` | number | `omsi-app::settings` | yes | How many times in a row the game started again after a lost graphics device (set by the game itself; any number starts it with the safe graphics settings). |
-| `OMSI_SEED` | number | `omsi-app` | yes | Repeat a session: the scripts' `random` is seeded with this number. |
+| `OMSI_SEED` | number | `omsi-app` | yes | Repeat a session: the scripts' `random` and the cars on the parking spaces are seeded with this number. |
 | `OMSI_TEXTURE_MEMORY` | number | `omsi-app::memory` | yes | The texture budget in MB, in place of the setting (an eighth of the machine's memory when neither says). |
 | `OMSI_TOUCH` | switch | `omsi-app::platform` | yes | The on-screen controls of a phone on a computer too. |
 | `OMSI_TRACKIR_NATIVE` | text | `omsi-app::headtrack` |  | `0`: TrackIR read through its own interface left off. |

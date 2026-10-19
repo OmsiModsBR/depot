@@ -448,7 +448,7 @@ flags! {
     TOUCH = "OMSI_TOUCH", Switch, User, "omsi-app::platform", env_txt;
     /// The phone's layout on a computer (the rail kept clear of a camera hole).
     MOBILE = "OMSI_MOBILE", Switch, User, "omsi-app::ui", env_txt;
-    /// Repeat a session: the scripts' `random` is seeded with this number.
+    /// Repeat a session: the scripts' `random` and the cars on the parking spaces are seeded with this number.
     SEED = "OMSI_SEED", Number, User, "omsi-app", env_txt;
     /// VR through OpenXR, whatever the setting says (Windows; the old switch, kept for
     /// existing VR runs).
