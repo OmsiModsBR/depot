@@ -213,6 +213,10 @@ impl App {
             } else if !pressed {
                 self.keys.remove(&code);
             }
+            // the Alt bar of the new interface: a tap of Alt, and its keys while the keyboard is on it
+            if self.alt_key(code, pressed, repeat) {
+                return;
+            }
             // Alt+Enter: full screen on and off
             if pressed && !repeat && matches!(code, KeyCode::Enter | KeyCode::NumpadEnter) && (self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight)) {
                 if self.spanned {

@@ -133,9 +133,10 @@ flags! {
 
     // --- settings
 
-    /// `1`: the Esc menu is drawn by the new interface (`omsi-ui`) in place of the HUD's lines.
-    /// Off by default; the HUD's menu stays as it was, and is what the lists behind its lines
-    /// ("Options...", "Controls...") still use.
+    /// `1`: the Esc menu is drawn by the new interface (`omsi-ui`) in place of the HUD's lines,
+    /// and a tap of Alt shows the Alt bar (it never pauses the game). Off by default; the HUD's
+    /// menu stays as it was, and is what the lists behind its lines ("Options...", "Controls...")
+    /// still use.
     NEW_UI = "OMSI_NEW_UI", Text, User, "omsi-app::new_ui";
     /// Silence: the mixer plays nothing.
     MUTE = "OMSI_MUTE", Switch, User, "omsi-audio::mixer", env_txt;

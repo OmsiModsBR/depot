@@ -112,6 +112,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // (a mouse button of any kind makes Alt a modifier, not a tap, for the Alt bar)
+        if matches!(event, WindowEvent::MouseInput { state: ElementState::Pressed, .. }) {
+            self.new_ui.alt.other_down();
+        }
         match event {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();
@@ -3395,6 +3399,10 @@ impl App {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
+        }
+        // the Alt bar of the new interface takes the clicks on it (never the game's)
+        if self.alt_click(pressed) {
+            return;
         }
         let state = if pressed { ElementState::Pressed } else { ElementState::Released };
         // placing a vehicle: a click sets it down

@@ -239,6 +239,7 @@ impl MenuFrame {
 #[derive(Default)]
 pub(crate) struct State {
     menu: Option<MenuFrame>,
+    alt: Option<crate::new_ui_alt::AltFrame>,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -264,11 +265,13 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, mouse) = match self.shared.lock() {
-            Ok(s) => (s.menu.clone(), s.mouse),
+        let (menu, alt, mouse) = match self.shared.lock() {
+            Ok(s) => (s.menu.clone(), s.alt.clone(), s.mouse),
             Err(_) => return,
         };
-        let Some(menu) = menu else { return };
+        if menu.is_none() && alt.is_none() {
+            return;
+        }
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32();
         self.last = now;
@@ -284,21 +287,28 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
-        let scale = menu.scale((w, h));
+        let scale = menu
+            .as_ref()
+            .map_or_else(|| scale_for(w, h), |m| m.scale((w, h)));
         let size = Vec2::new(w as f32, h as f32) / scale;
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
-        // (the world behind the menu is dimmed, the column and the bar drawn over it)
-        self.ui.p().rect(
-            omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
-            omsi_ui::Color::hex(0x000000).alpha(0.35),
-        );
-        menu.with_view(
-            |v| {
-                pause_menu::draw(&mut self.ui, v);
-            },
-            self.logo,
-        );
+        if let Some(menu) = menu {
+            // (the world behind the menu is dimmed, the column and the bar drawn over it)
+            self.ui.p().rect(
+                omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
+                omsi_ui::Color::hex(0x000000).alpha(0.35),
+            );
+            menu.with_view(
+                |v| {
+                    pause_menu::draw(&mut self.ui, v);
+                },
+                self.logo,
+            );
+        } else if let Some(alt) = alt {
+            // (the world is not dimmed: the game goes on behind the bar)
+            alt.draw(&mut self.ui);
+        }
         let (layers, verts, ranges) = self.ui.finish();
         let draws: Vec<Draw> = ranges
             .iter()
@@ -322,6 +332,7 @@ impl Overlay {
 pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
+    pub(crate) alt: crate::new_ui_alt::AltState,
 }
 
 impl NewUi {
@@ -344,9 +355,10 @@ impl NewUi {
         self.installed = true;
     }
 
-    fn set(&self, menu: Option<MenuFrame>, mouse: Vec2) {
+    fn set(&self, menu: Option<MenuFrame>, alt: Option<crate::new_ui_alt::AltFrame>, mouse: Vec2) {
         if let Ok(mut s) = self.shared.lock() {
             s.menu = menu;
+            s.alt = alt;
             s.mouse = mouse;
         }
     }
@@ -393,8 +405,13 @@ impl App {
             self.new_ui.install(r);
         }
         let menu = self.new_menu_active().then(|| self.new_menu_frame());
+        // (the Esc menu hides the bar and takes the keys back)
+        if self.game_menu.is_some() {
+            self.new_ui.alt.focus = None;
+        }
+        let alt = self.alt_bar_active().then(|| self.alt_frame());
         self.new_ui
-            .set(menu, Vec2::new(self.cursor.0, self.cursor.1));
+            .set(menu, alt, Vec2::new(self.cursor.0, self.cursor.1));
     }
 
     /// A left click while the game menu is open: when the new menu is showing, a click on one of

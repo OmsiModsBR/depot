@@ -55,6 +55,7 @@ mod lights;
 mod launcher;
 mod menu;
 mod new_ui;
+mod new_ui_alt;
 mod mirror_hud;
 mod map_surface;
 mod nav;
