@@ -95,10 +95,10 @@ fn place(id: &str) -> (usize, &'static str, &'static str, Kind) {
 const SECTIONS: [&str; 3] = ["Session", "Settings", "Game"];
 
 /// The menu for the game menu's lines `items` ((what, label), as `game_menu_items` gives
-/// them), the line `selected` on the keyboard, and `off(k)` for a greyed-out line `k`.
+/// them), the line `selected` on the keyboard (none while the mouse leads), and `off(k)` for a greyed-out line `k`.
 pub(crate) fn menu_frame(
     items: &[(&str, &str)],
-    selected: usize,
+    selected: Option<usize>,
     off: &dyn Fn(usize) -> bool,
     clock: String,
     paused: bool,
@@ -127,7 +127,7 @@ pub(crate) fn menu_frame(
         title: omsi_ui::tr("Game menu").to_string(),
         clock,
         state: if paused { "paused" } else { "menu open" },
-        selected: items.get(selected).map(|m| m.0.to_string()),
+        selected: selected.and_then(|k| items.get(k)).map(|m| m.0.to_string()),
     }
 }
 
@@ -306,11 +306,11 @@ impl App {
     }
 
     /// The menu as it is drawn now.
-    fn new_menu_frame(&self) -> MenuFrame {
+    pub(crate) fn new_menu_frame(&self) -> MenuFrame {
         let items = self.game_menu_items();
         menu_frame(
             &items,
-            self.game_menu.unwrap_or(0),
+            self.menu_kbd.then(|| self.game_menu.unwrap_or(0)),
             &|k| self.menu_item_off(k),
             crate::schedule::hhmm(self.clock.time),
             self.paused,
@@ -363,9 +363,16 @@ mod tests {
     }
 
     #[test]
+    fn mouse_led_menu_lights_no_keyboard_line() {
+        let list = [("resume", "Resume"), ("quit", "Quit")];
+        let f = menu_frame(&list, None, &|_| false, String::new(), true);
+        assert!(f.selected.is_none());
+    }
+
+    #[test]
     fn every_line_of_the_game_menu_is_placed_once_in_the_order_the_game_has_them() {
         let list = items();
-        let f = menu_frame(&list, 0, &|_| false, "08:42".into(), true);
+        let f = menu_frame(&list, Some(0), &|_| false, "08:42".into(), true);
         let ids: Vec<&str> = f
             .sections
             .iter()
@@ -395,7 +402,7 @@ mod tests {
     fn the_keyboard_line_is_lit_and_a_greyed_out_line_cannot_be_hit() {
         let list = items();
         let skip = list.iter().position(|m| m.0 == "options").unwrap();
-        let f = menu_frame(&list, skip, &|k| k == skip, String::new(), false);
+        let f = menu_frame(&list, Some(skip), &|k| k == skip, String::new(), false);
         assert_eq!(f.selected.as_deref(), Some("options"));
         assert_eq!(f.state, "menu open");
         let size = (1672, 941);
@@ -421,7 +428,7 @@ mod tests {
     #[test]
     fn a_click_is_found_at_any_window_size() {
         let list = items();
-        let f = menu_frame(&list, 0, &|_| false, String::new(), true);
+        let f = menu_frame(&list, Some(0), &|_| false, String::new(), true);
         for size in [(1280u32, 720u32), (1672, 941), (3840, 2160)] {
             let scale = scale_for(size.0, size.1);
             let pts = Vec2::new(size.0 as f32, size.1 as f32) / scale;
@@ -548,7 +555,7 @@ mod tests {
             .all(|p| p[0] == 0 && p[2] == 0 && p[1] > 100));
         // a menu: the column (left) is dark, the world to its right is the picture dimmed
         shared.lock().unwrap().menu =
-            Some(menu_frame(&items(), 0, &|_| false, "08:42".into(), true));
+            Some(menu_frame(&items(), Some(0), &|_| false, "08:42".into(), true));
         let drawn = read(&mut overlay);
         let column = px(&drawn, 300, 700);
         let world = px(&drawn, 1500, 800);
@@ -558,7 +565,7 @@ mod tests {
             "the world is dimmed, not covered: {world:?}"
         );
         // and the rows are where the hit test says: the accent row of "Resume" is orange
-        let rows = menu_frame(&items(), 0, &|_| false, String::new(), true).with_view(
+        let rows = menu_frame(&items(), Some(0), &|_| false, String::new(), true).with_view(
             |v| {
                 pause_menu::rows(v, Vec2::new(w as f32, h as f32))
                     .into_iter()

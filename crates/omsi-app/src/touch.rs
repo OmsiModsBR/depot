@@ -573,7 +573,9 @@ impl App {
             }
             // the list follows the finger, line for line
             Role::Menu => {
-                if self.touch.fingers[k].moved {
+                if self.new_menu_active() {
+                    // (the new menu has no list to drag; a tap is still a click)
+                } else if self.touch.fingers[k].moved {
                     // (no line lit under a finger that scrolls)
                     self.on_cursor(-1e4, -1e4);
                     let (start, row_h) = self.ui.as_ref().map(|u| (u.menu_start as f32, u.menu_row_h.max(1.0))).unwrap_or((0.0, 1.0));
