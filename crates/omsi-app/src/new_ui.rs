@@ -152,7 +152,11 @@ pub(crate) fn step_displayed(
         return from;
     };
     for i in 1..=n {
-        let next = if down { (at + i) % n } else { (at + n - i % n) % n };
+        let next = if down {
+            (at + i) % n
+        } else {
+            (at + n - i % n) % n
+        };
         if !off(order[next]) {
             return order[next];
         }
@@ -348,7 +352,9 @@ impl App {
 
     /// Arrow keys in the new menu walk the lines as they are shown.
     pub(crate) fn new_menu_step(&self, from: usize, down: bool) -> usize {
-        step_displayed(&self.game_menu_items(), from, down, &|k| self.menu_item_off(k))
+        step_displayed(&self.game_menu_items(), from, down, &|k| {
+            self.menu_item_off(k)
+        })
     }
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
@@ -610,8 +616,13 @@ mod tests {
             .chunks(4)
             .all(|p| p[0] == 0 && p[2] == 0 && p[1] > 100));
         // a menu: the column (left) is dark, the world to its right is the picture dimmed
-        shared.lock().unwrap().menu =
-            Some(menu_frame(&items(), Some(0), &|_| false, "08:42".into(), true));
+        shared.lock().unwrap().menu = Some(menu_frame(
+            &items(),
+            Some(0),
+            &|_| false,
+            "08:42".into(),
+            true,
+        ));
         let drawn = read(&mut overlay);
         let column = px(&drawn, 300, 700);
         let world = px(&drawn, 1500, 800);
