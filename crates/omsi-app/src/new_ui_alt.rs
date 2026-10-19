@@ -1,4 +1,4 @@
-//! The Alt bar in the running game, drawn by the new interface (on unless `OMSI_NEW_UI=0`).
+//! The Alt bar in the running game, drawn by the new interface.
 //!
 //! A tap of Alt (pressed and let go with no other key or button between) shows or hides the
 //! bar; a click on a button does it. The bar never pauses the game and never opens the Esc
@@ -12,7 +12,7 @@
 //! the bar's own and nothing else is.
 
 use crate::app::App;
-use crate::new_ui::{enabled, scale_for};
+use crate::new_ui::scale_for;
 use glam::Vec2;
 use omsi_ui::alt_bar::{self, Button, Glyph, State as BarState, COLUMNS};
 use omsi_ui::widgets::Ui;
@@ -262,11 +262,10 @@ fn is_alt(code: KeyCode) -> bool {
 }
 
 impl App {
-    /// Whether the bar is showing: the new interface is on, a session is running, the Esc menu
-    /// is not open, and the picture is the plain window's.
+    /// Whether the bar is showing: a session is running, the Esc menu is not open, and the
+    /// picture is the plain window's.
     pub(crate) fn alt_bar_active(&self) -> bool {
-        enabled()
-            && self.new_ui.alt.open
+        self.new_ui.alt.open
             && self.menu.is_none()
             && self.game_menu.is_none()
             && !self.vr_active()
@@ -308,9 +307,6 @@ impl App {
     /// A press or release of the left button (or a tap). True when the bar takes it; the game
     /// does not see it then.
     pub(crate) fn alt_click(&mut self, pressed: bool) -> bool {
-        if !enabled() {
-            return false;
-        }
         if !pressed {
             return std::mem::take(&mut self.new_ui.alt.swallowed);
         }
@@ -339,7 +335,7 @@ impl App {
 
     /// A key press or release, before the game sees it. True when the bar takes it.
     pub(crate) fn alt_key(&mut self, code: KeyCode, pressed: bool, repeat: bool) -> bool {
-        if !enabled() || self.menu.is_some() {
+        if self.menu.is_some() {
             return false;
         }
         if is_alt(code) {

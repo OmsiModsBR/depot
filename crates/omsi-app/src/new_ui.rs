@@ -1,4 +1,4 @@
-//! The new interface in the game: on by default, `OMSI_NEW_UI=0` brings back the HUD's menu.
+//! The new interface in the game.
 //!
 //! Today this is the Esc menu: while the game menu is open at its top level, the column of
 //! sections from `omsi_ui::pause_menu` is drawn over the window's picture through the
@@ -16,7 +16,7 @@ use glam::Vec2;
 use omsi_ui::pause_menu::{self, Item, Kind, Section, View};
 use omsi_ui::widgets::Ui;
 use omsi_ui::{Draw, Gpu};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use winit::event_loop::ActiveEventLoop;
 
@@ -25,20 +25,6 @@ const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png")
 /// The design the menu is made for, in points (the same as the launcher's).
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
-
-/// Whether the new interface is on: it is, unless `OMSI_NEW_UI` says `0`, `false`, `off` or
-/// `no` (then the HUD's menu is the Esc menu again and the Alt bar is not there).
-pub(crate) fn enabled() -> bool {
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| switch(omsi_cfg::flags::NEW_UI.text().as_deref()))
-}
-
-fn switch(value: Option<&str>) -> bool {
-    !matches!(
-        value.map(|v| v.trim().to_ascii_lowercase()).as_deref(),
-        Some("0" | "false" | "off" | "no")
-    )
-}
 
 /// Pixels per design point for a window of `w` x `h` pixels.
 pub(crate) fn scale_for(w: u32, h: u32) -> f32 {
@@ -373,12 +359,11 @@ impl NewUi {
 }
 
 impl App {
-    /// Whether the new Esc menu is the one showing: the interface is on, the game menu is open
-    /// at its top level (no list opened from it), and the picture is the plain window's (the
-    /// triple screen and the headset have their own layouts).
+    /// Whether the new Esc menu is the one showing: the game menu is open at its top level (no
+    /// list opened from it), and the picture is the plain window's (the triple screen and the
+    /// headset keep the HUD's menu, their own layouts).
     pub(crate) fn new_menu_active(&self) -> bool {
-        enabled()
-            && self.game_menu.is_some()
+        self.game_menu.is_some()
             && self.chooser.is_none()
             && self.list_kind.is_none()
             && !self.vr_active()
@@ -406,9 +391,6 @@ impl App {
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
-        if !enabled() {
-            return;
-        }
         if let Some(r) = self.renderer.as_mut() {
             self.new_ui.install(r);
         }
@@ -511,17 +493,6 @@ mod tests {
         assert!(f.scale((720, 405)) < scale_for(720, 405));
         // a window that is large enough keeps the usual scale
         assert_eq!(f.scale((1672, 941)), scale_for(1672, 941));
-    }
-
-    #[test]
-    fn the_new_interface_is_on_unless_it_is_switched_off() {
-        assert!(switch(None));
-        assert!(switch(Some("1")));
-        assert!(switch(Some("")));
-        assert!(switch(Some("yes")));
-        for off in ["0", "false", "FALSE", "off", " No "] {
-            assert!(!switch(Some(off)), "{off}");
-        }
     }
 
     #[test]
