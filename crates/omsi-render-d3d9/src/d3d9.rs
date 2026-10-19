@@ -11,18 +11,22 @@ use crate::{BackendError, Caps, Result, ShaderModel};
 // HRESULTs of the two recoverable device states (d3d9.h: D3DERR_DEVICELOST/NOTRESET).
 const DEVICE_LOST: windows::core::HRESULT = windows::core::HRESULT(0x88760868_u32 as i32);
 const DEVICE_NOT_RESET: windows::core::HRESULT = windows::core::HRESULT(0x88760869_u32 as i32);
+// D3DERR_NOTAVAILABLE: no hardware device of the requested kind (no usable driver).
+const NOT_AVAILABLE: windows::core::HRESULT = windows::core::HRESULT(0x8876086A_u32 as i32);
 
 fn map_err(e: windows::core::Error) -> BackendError {
     match e.code() {
         c if c == DEVICE_LOST => BackendError::DeviceLost,
         c if c == DEVICE_NOT_RESET => BackendError::DeviceNotReset,
+        c if c == NOT_AVAILABLE => BackendError::Unsupported(e.to_string()),
         _ => BackendError::Backend(e.to_string()),
     }
 }
 
 /// An open Direct3D 9 device on the default adapter.
 pub struct D3d9Device {
-    d3d: IDirect3D9,
+    // Held for the device's lifetime; COM reference counting keeps the drop order safe.
+    _d3d: IDirect3D9,
     device: IDirect3DDevice9,
     caps: Caps,
 }
@@ -84,7 +88,11 @@ impl D3d9Device {
             .map_err(map_err)?;
             let device =
                 device.ok_or_else(|| BackendError::Backend("no device returned".into()))?;
-            Ok(Self { d3d, device, caps })
+            Ok(Self {
+                _d3d: d3d,
+                device,
+                caps,
+            })
         }
     }
 
@@ -144,23 +152,29 @@ impl D3d9Device {
             let sysmem =
                 sysmem.ok_or_else(|| BackendError::Backend("no readback surface".into()))?;
 
-            self.device.SetRenderTarget(0, &target).map_err(map_err)?;
-            self.device.BeginScene().map_err(map_err)?;
-            let cleared =
-                self.device
-                    .Clear(0, std::ptr::null(), D3DCLEAR_TARGET as u32, argb, 1.0, 0);
-            let ended = self.device.EndScene();
-            cleared.map_err(map_err)?;
-            ended.map_err(map_err)?;
-            self.device
-                .GetRenderTargetData(&target, &sysmem)
-                .map_err(map_err)?;
+            // The device's own target is put back on every exit, so no default-pool surface
+            // of ours stays bound (which would make a later `Reset` fail).
+            let previous = self.device.GetRenderTarget(0).map_err(map_err)?;
+            let drawn = (|| {
+                self.device.SetRenderTarget(0, &target)?;
+                self.device.BeginScene()?;
+                let cleared =
+                    self.device
+                        .Clear(0, std::ptr::null(), D3DCLEAR_TARGET as u32, argb, 1.0, 0);
+                let ended = self.device.EndScene();
+                cleared?;
+                ended?;
+                self.device.GetRenderTargetData(&target, &sysmem)
+            })();
+            let restored = self.device.SetRenderTarget(0, &previous);
+            drawn.map_err(map_err)?;
+            restored.map_err(map_err)?;
 
             let mut locked = D3DLOCKED_RECT::default();
             sysmem
                 .LockRect(&mut locked, std::ptr::null(), D3DLOCK_READONLY as u32)
                 .map_err(map_err)?;
-            let mut out = Vec::with_capacity((width * height * 4) as usize);
+            let mut out = Vec::with_capacity(width as usize * height as usize * 4);
             for y in 0..height as usize {
                 let row = std::slice::from_raw_parts(
                     (locked.pBits as *const u8).add(y * locked.Pitch as usize),
@@ -175,12 +189,6 @@ impl D3d9Device {
             Ok(out)
         }
     }
-
-    /// Kept so the factory outlives the device, as Direct3D 9 expects.
-    #[allow(dead_code)]
-    fn factory(&self) -> &IDirect3D9 {
-        &self.d3d
-    }
 }
 
 #[cfg(test)]
@@ -190,9 +198,14 @@ mod tests {
     /// Needs a Direct3D 9 driver (CI runners without a GPU may have none): skips if absent.
     #[test]
     fn clear_and_read_back() {
-        let Ok(dev) = D3d9Device::open() else {
-            eprintln!("no Direct3D 9 device here; skipping");
-            return;
+        // Only a missing driver skips; any other failure to open is a real failure.
+        let dev = match D3d9Device::open() {
+            Ok(dev) => dev,
+            Err(BackendError::Unsupported(why)) => {
+                eprintln!("no Direct3D 9 device here ({why}); skipping");
+                return;
+            }
+            Err(e) => panic!("opening the device failed: {e}"),
         };
         // Printed so a test log shows which adapter (the default one) was exercised.
         eprintln!("D3D9 adapter: {:?}", dev.caps());

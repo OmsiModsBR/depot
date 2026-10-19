@@ -27,8 +27,12 @@ workspace version, with the `Win32_Graphics_Direct3D9` feature. No new packages 
 ## Testing
 
 `cargo test -p omsi-render-d3d9` runs the interface tests on every platform. On Windows it also
-runs a device test that skips itself when no Direct3D 9 driver is present, so a runner without
-a GPU stays green without proving anything about the device path.
+runs a device test that skips itself only when no Direct3D 9 driver is present (any other
+failure to open fails the test), and prints the adapter it ran on.
+
+Verified so far: opening the device, reading its capabilities, and clearing and reading back an
+off-screen target (maintainer's PC, Intel UHD 630). **Not tested:** device loss and `reset()`,
+which cannot be forced portably.
 
 ## Next steps (each its own change, after the `omsi-render` refactor in #61 finishes)
 
