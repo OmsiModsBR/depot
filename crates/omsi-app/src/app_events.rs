@@ -3396,6 +3396,10 @@ impl App {
                 return;
             }
         }
+        // the Alt bar of the new interface takes the clicks on it (never the game's)
+        if self.alt_click(pressed) {
+            return;
+        }
         let state = if pressed { ElementState::Pressed } else { ElementState::Released };
         // placing a vehicle: a click sets it down
         if self.placing.is_some() && self.game_menu.is_none() {

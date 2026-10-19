@@ -71,6 +71,7 @@ fn main() {
     ];
     let mut state = State {
         chosen: Some("reposition".into()),
+        focus: None,
     };
     o.shot(&format!("{dir}/alt-bar.png"), |ui| {
         scene(ui);

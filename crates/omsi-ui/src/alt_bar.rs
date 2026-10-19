@@ -46,6 +46,8 @@ pub struct Button<'a> {
 #[derive(Default, Debug, Clone)]
 pub struct State {
     pub chosen: Option<String>,
+    /// The button the keyboard is on (a ring round it), if the game drives the bar by keys.
+    pub focus: Option<String>,
 }
 
 /// The panel's size for `n` buttons.
@@ -55,6 +57,32 @@ pub fn panel_size(n: usize) -> Vec2 {
         18.0 + COLUMNS as f32 * CELL_W + (COLUMNS - 1) as f32 * GAP,
         HEADER_H + 9.0 + rows * (CELL_H + 6.0) + 4.0,
     )
+}
+
+/// Where button `i` is, for a bar whose top left corner is `at`.
+fn cell_rect(at: Vec2, i: usize) -> Rect {
+    let (col, row) = ((i % COLUMNS) as f32, (i / COLUMNS) as f32);
+    Rect::new(
+        at.x + 9.0 + col * (CELL_W + GAP),
+        at.y + HEADER_H + 9.0 + row * (CELL_H + 6.0),
+        CELL_W,
+        CELL_H,
+    )
+}
+
+/// The panel's rectangle for `n` buttons with its top left corner at `at`.
+pub fn panel_rect(at: Vec2, n: usize) -> Rect {
+    let size = panel_size(n);
+    Rect::new(at.x, at.y, size.x, size.y)
+}
+
+/// The button under `point` (`None` over the gaps, the header and outside the panel). A
+/// disabled button is found too: the caller knows which can be used.
+pub fn hit(at: Vec2, n: usize, point: Vec2) -> Option<usize> {
+    (0..n).find(|&i| {
+        let r = cell_rect(at, i);
+        point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -83,13 +111,7 @@ pub fn draw<'a>(
     let mut clicked = None;
     let mut hovered = None;
     for (i, b) in buttons.iter().enumerate() {
-        let (col, row) = ((i % COLUMNS) as f32, (i / COLUMNS) as f32);
-        let r = Rect::new(
-            p.x + 9.0 + col * (CELL_W + GAP),
-            p.y + HEADER_H + 9.0 + row * (CELL_H + 6.0),
-            CELL_W,
-            CELL_H,
-        );
+        let r = cell_rect(at, i);
         let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
         let enabled = b.disabled.is_none();
         let chosen = state.chosen.as_deref() == Some(b.id);
@@ -103,6 +125,9 @@ pub fn draw<'a>(
         );
         ui.p()
             .rounded_border(r, 0.0, 1.0, if chosen { ACCENT } else { LINE });
+        if state.focus.as_deref() == Some(b.id) {
+            ui.p().rounded_border(r, 0.0, 2.0, FG);
+        }
         let c = if enabled { ACCENT } else { ACCENT.alpha(0.3) };
         match b.glyph {
             Glyph::Icon(name) => ui.icon(name, r.center(), 20.0, c),
@@ -119,7 +144,7 @@ pub fn draw<'a>(
                 );
             }
         }
-        if hover {
+        if hover || state.focus.as_deref() == Some(b.id) {
             hovered = Some(b);
         }
         if click && enabled {
@@ -272,6 +297,36 @@ mod tests {
         let warn = centre(&ui, "warn");
         assert_eq!(frame(&mut ui, &bs, &mut st, Some(warn)), None);
         assert_eq!(st.chosen.as_deref(), Some("swap"));
+    }
+
+    #[test]
+    fn hit_finds_the_buttons_where_draw_puts_them() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State::default();
+        frame(&mut ui, &bs, &mut st, None);
+        let at = Vec2::new(1366.0, 723.0);
+        for (i, b) in bs.iter().enumerate() {
+            let c = ui.drawn[&id_of(&format!("alt:{}", b.id))].center();
+            assert_eq!(hit(at, bs.len(), c), Some(i));
+        }
+        assert_eq!(hit(at, bs.len(), Vec2::new(0.0, 0.0)), None);
+        // the header and the gap between two buttons are no button
+        assert_eq!(hit(at, bs.len(), at + Vec2::new(20.0, 10.0)), None);
+        let r = panel_rect(at, bs.len());
+        assert!(r.w > 0.0 && r.h > 0.0);
+    }
+
+    #[test]
+    fn a_focused_button_is_not_a_choice() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State {
+            focus: Some("swap".into()),
+            ..Default::default()
+        };
+        assert_eq!(frame(&mut ui, &bs, &mut st, None), None);
+        assert!(st.chosen.is_none());
     }
 
     #[test]
