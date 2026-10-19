@@ -20,6 +20,6 @@ mod targets;
 mod upload;
 
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
-pub use state::{Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};
+pub use state::{OverlayHook, Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};
 
 pub(crate) use options::scene_scale_for;
