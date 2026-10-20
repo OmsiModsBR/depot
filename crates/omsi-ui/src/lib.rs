@@ -12,6 +12,7 @@
 //!   fields, scrolling lists) the launcher draws its pages with.
 
 pub mod alt_bar;
+pub mod alt_windows;
 pub mod atlas;
 pub mod gpu;
 pub mod i18n;

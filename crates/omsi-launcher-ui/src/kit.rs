@@ -34,12 +34,12 @@ pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     ui.solid(r);
     ui.p().rounded(r, 8.0, PANEL);
     ui.p().rounded_border(r, 8.0, 1.0, LINE);
-    text(
+    spaced(
         ui,
-        &title.to_uppercase(),
+        &omsi_ui::tr(title).to_uppercase(),
         r.x + 19.0,
         r.y + 23.0,
-        13.0,
+        13.0 * TEXT_SCALE,
         Weight::Bold,
         FG,
     );
@@ -56,6 +56,45 @@ pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     }
 }
 
+/// A card's title, letter-spaced as `card` draws it, at the top of `r` (the panel less its
+/// padding, as `omsi_ui`'s `Ui::heading` takes it); returns the rest of `r` under it.
+pub fn heading(ui: &mut Ui, r: Rect, title: &str) -> Rect {
+    let px = 13.0 * TEXT_SCALE;
+    let s = fit_spaced(ui, title, px, r.w - 1.0);
+    spaced(ui, &s, r.x + 1.0, r.y + 9.0, px, Weight::Bold, FG);
+    Rect::new(r.x, r.y + 26.0, r.w, (r.h - 26.0).max(0.0))
+}
+
+/// The title of a part further down a card (as the concept's "AUTHOR'S DESCRIPTION"):
+/// smaller, quieter, letter-spaced, at the top of `r`.
+pub fn subheading(ui: &mut Ui, r: Rect, title: &str) {
+    let px = 12.0 * TEXT_SCALE;
+    let s = fit_spaced(ui, title, px, r.w - 1.0);
+    spaced(ui, &s, r.x + 1.0, r.y + 12.0, px, Weight::Bold, MUTED);
+}
+
+/// `title` translated, in capitals and cut with an ellipsis so that `spaced` draws it in `room`
+/// points at `px` (a card's title may be a name: a device's, a line's).
+fn fit_spaced(ui: &mut Ui, title: &str, px: f32, room: f32) -> String {
+    let full = omsi_ui::tr(title).to_uppercase();
+    let width = |ui: &mut Ui, s: &str| {
+        let gap = px * 0.14;
+        let mut buf = [0u8; 4];
+        let w: f32 = s
+            .chars()
+            .map(|ch| ui.width(ch.encode_utf8(&mut buf), px, Weight::Bold) + gap)
+            .sum();
+        (w - gap).max(0.0)
+    };
+    let mut n = full.chars().count();
+    let mut out = full.clone();
+    while n > 1 && width(ui, &out) > room {
+        n -= 1;
+        out = shorten(&full, n);
+    }
+    out
+}
+
 /// Text left-aligned at `x`, centred on the line `cy`; returns its width.
 pub fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) -> f32 {
     let px = px * TEXT_SCALE;
@@ -69,6 +108,28 @@ pub fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: C
         Align::Left,
     );
     w
+}
+
+/// Text letter-spaced (as the concept's card titles and headings), left-aligned at `x` and
+/// centred on the line `cy`, `px` already scaled; returns its width.
+pub fn spaced(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) -> f32 {
+    let gap = px * 0.14;
+    let mut at = x;
+    let mut buf = [0u8; 4];
+    for ch in s.chars() {
+        let g = ch.encode_utf8(&mut buf);
+        let w = ui.width(g, px, weight);
+        ui.text_in(
+            g,
+            Rect::new(at, cy - px, w + 2.0, px * 2.0),
+            px,
+            weight,
+            c,
+            Align::Left,
+        );
+        at += w + gap;
+    }
+    (at - x - gap).max(0.0)
 }
 
 /// Text ending at `x`.
@@ -168,6 +229,17 @@ pub const BODY_W: f32 = DESIGN_W - SIDEBAR_W - 56.0;
 /// a smaller window (down to 60 %), so the column between keeps room.
 pub fn fit(w: f32, body_w: f32) -> f32 {
     w * (body_w / BODY_W).clamp(0.6, 1.0)
+}
+
+/// `s` cut with an ellipsis to fit `room` pixels at `px`.
+pub fn fit_text(ui: &mut Ui, s: &str, px: f32, room: f32) -> String {
+    let mut n = s.chars().count();
+    let mut out = s.to_string();
+    while n > 1 && ui.width(&out, px, Weight::Regular) > room {
+        n -= 1;
+        out = shorten(s, n);
+    }
+    out
 }
 
 #[cfg(test)]
