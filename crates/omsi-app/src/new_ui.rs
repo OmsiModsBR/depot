@@ -2267,8 +2267,14 @@ mod tests {
         let shown = shoot(&mut scene);
         save("triple-5760x1080-page", &shown, size);
         ui.page = None;
+        // the end-of-trip report, on the centre screen too
+        let report = crate::new_ui_report::ReportFrame::for_test();
+        ui.set(None, None, None, Some(report), away, Some(area));
+        let reported = shoot(&mut scene);
+        save("triple-5760x1080-report", &reported, size);
+        ui.set(None, None, None, None, away, Some(area));
         // on the centre screen only: the side screens are the world's as they were
-        for (name, img) in [("menu", &menu), ("page", &shown)] {
+        for (name, img) in [("menu", &menu), ("page", &shown), ("report", &reported)] {
             assert_eq!(
                 apart(img, &world, size.0, 0, 1920),
                 0,

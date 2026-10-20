@@ -4,8 +4,9 @@
 //! door open, and pauses the simulation (not in a LAN session, which runs on for the other
 //! players), as the Esc menu does. It shows the trip's stops with their planned and actual
 //! times as the journey log has them. "Continue", Enter, Space or Esc closes it and the game
-//! goes on as it was. The triple screen and the headset have no report (their layouts are
-//! their own); the journey log has the same in the content folder's `Journeys`.
+//! goes on as it was. On a triple screen it stands on the centre screen, as the Esc menu does;
+//! the headset has no report yet (the journey log has the same in the content folder's
+//! `Journeys`).
 
 use crate::app::App;
 use crate::new_ui_add::WinInput;
@@ -36,6 +37,30 @@ impl ReportFrame {
                 totals: &self.totals,
             },
         )
+    }
+}
+
+#[cfg(test)]
+impl ReportFrame {
+    /// A trip of three stops, for the overlay's tests.
+    pub(crate) fn for_test() -> Self {
+        let row = |stop: &str, at: &str, state| ReportRow {
+            stop: stop.into(),
+            scheduled: at.into(),
+            actual: at.into(),
+            deviation: "0:00".into(),
+            state,
+        };
+        ReportFrame {
+            title: "50 · Central Station".into(),
+            note: "paused",
+            rows: vec![
+                row("Depot", "08:44", ingame::StopState::OnTime),
+                row("Market", "08:47", ingame::StopState::OnTime),
+                row("Central Station", "08:54", ingame::StopState::OnTime),
+            ],
+            totals: vec![("stops served", "3".into())],
+        }
     }
 }
 
@@ -134,13 +159,12 @@ impl App {
         self.new_ui.report_watch = None;
     }
 
-    /// Whether the report is showing (on the plain window, with no Esc menu over it).
+    /// Whether the report is showing (not in the headset, with no Esc menu over it).
     pub(crate) fn report_active(&self) -> bool {
         self.new_ui.report.is_some()
             && self.game_menu.is_none()
             && self.menu.is_none()
             && !self.vr_active()
-            && !self.settings.triple.enabled
     }
 
     /// Open the report of the trip `key` (line, tour, trip in the tour; `trip` its place in
@@ -150,7 +174,7 @@ impl App {
             return;
         }
         self.new_ui.report_shown = Some(key);
-        if self.vr_active() || self.settings.triple.enabled {
+        if self.vr_active() {
             return;
         }
         let Some((title, rows, totals)) = self.journey.as_ref().and_then(|j| j.report(trip)) else {
