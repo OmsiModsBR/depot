@@ -26,12 +26,12 @@ struct Row {
 pub(crate) type TripLines = (String, Vec<ReportRow>, Vec<(&'static str, String)>);
 
 impl Row {
-    /// Whether the bus arrived late here, and whether it left early (as the career counts).
     /// Whether the bus has been at this stop.
     fn reached(&self) -> bool {
         self.arrived.is_some() || self.left.is_some()
     }
 
+    /// Whether the bus arrived late here, and whether it left early (as the career counts).
     fn judged(&self) -> (bool, bool) {
         let late = !self.first && self.arrived.is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
         let early = !self.last && self.left.is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
