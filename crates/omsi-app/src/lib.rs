@@ -233,6 +233,9 @@ pub fn run() -> Result<()> {
         if omsi_cfg::flags::LAUNCHER.is_set() && open_launcher()? {
             return Ok(());
         }
+        if let Some(pid) = args.parent_pid {
+            startup::end_with(pid);
+        }
         launcher_statics();
         return launcher::run(graphics_instance());
     }

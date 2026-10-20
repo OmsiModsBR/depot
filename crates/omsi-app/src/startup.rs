@@ -27,6 +27,44 @@ pub(crate) fn shift_held_now(keys: &hashbrown::HashSet<KeyCode>) -> bool {
     keys.contains(&KeyCode::ShiftLeft) || keys.contains(&KeyCode::ShiftRight)
 }
 
+/// The launcher ends when the program that started it (`depot-launcher`, process `pid`) does,
+/// stopped by hand included: else it stayed open on its own, and its preview helper with it
+/// (the helper ends with the launcher, its input closing). Sessions it started go on.
+pub(crate) fn end_with(pid: u32) {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+            fn WaitForSingleObject(h: isize, ms: u32) -> u32;
+        }
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        const INFINITE: u32 = 0xFFFF_FFFF;
+        // SAFETY: a handle of the launcher's own, kept until the process ends (that program
+        // waits for the launcher, so `pid` is still its own here)
+        let h = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+        if h == 0 {
+            log::warn!("launcher: the program that started it ({pid}) is not found; it is not followed");
+            return;
+        }
+        std::thread::spawn(move || {
+            // SAFETY: as above
+            unsafe { WaitForSingleObject(h, INFINITE) };
+            log::warn!("launcher: the program that started it ended, so does the launcher");
+            std::process::exit(0);
+        });
+    }
+    #[cfg(unix)]
+    std::thread::spawn(move || loop {
+        // (a process whose parent ends is handed to another one)
+        if std::os::unix::process::parent_id() != pid {
+            log::warn!("launcher: the program that started it ended, so does the launcher");
+            std::process::exit(0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    });
+}
+
 /// Log lines to the error output and to a file.
 pub(crate) struct Tee(pub std::fs::File);
 

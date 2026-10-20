@@ -619,7 +619,9 @@ impl ApplicationHandler for Launcher {
         // Device given up while a game runs: still need a redraw when the game ends so the
         // device is opened again (Occluded alone used to leave the resting picture forever).
         let resume_needed = !mobile::mobile() && self.gfx.is_none() && !self.state.in_game();
-        let occluded = self.occluded && self.shot.is_none() && !resting && !waking && !resume_needed
+        // (a minimized window is hidden too, whether or not the system said it was covered)
+        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
+        let occluded = (self.occluded || minimized) && self.shot.is_none() && !resting && !waking && !resume_needed
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
             0.5
@@ -643,8 +645,8 @@ impl ApplicationHandler for Launcher {
             self.last = Instant::now();
             self.run_script();
             self.state.update(dt);
-            // (no page shows the preview while the window is hidden: its helper ends)
-            self.preview.update(dt, None);
+            // (no page shows the preview while the window is hidden: its helper ends at once)
+            self.preview.stop();
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.gfx.is_none() && !self.state.in_game() {
@@ -828,7 +830,7 @@ impl Launcher {
         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
         // (not while a game runs: the launcher looked at meanwhile loads no bus onto the card)
         if !look.bus.is_empty() && !look.map.is_empty() && !self.state.in_game() {
-            self.preview.want(look);
+            self.preview.want_picture(look);
         }
 
         // --- the interface
@@ -1233,10 +1235,13 @@ impl Launcher {
     /// Where the preview's picture comes from, in the lower left of `r`: kept from an earlier
     /// time (the helper draws the live one only while the page shows it) or drawn live.
     fn preview_badge(&mut self, r: Rect) {
-        let t = if self.preview.has_picture() && self.preview.from_cache {
-            "Image from cache · live view only on this page"
-        } else if self.preview.live {
+        let t = if self.preview.live {
             "Preview helper: running"
+        } else if self.preview.has_picture() && self.preview.picture_only() {
+            // (a page that shows the kept picture: the live view when the player turns it)
+            "Image from cache · drag it to see it live"
+        } else if self.preview.has_picture() && self.preview.from_cache {
+            "Image from cache · live view only on this page"
         } else {
             return;
         };
