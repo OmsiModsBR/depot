@@ -642,7 +642,7 @@ impl D3d9Device {
     /// shader's constants c20..c22 for them.
     fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 3]> {
         // (no grid: one of no cells, which no point is on)
-        const NO_GRID: [f32; 4] = [0.0, 0.0, 1.0, 0.0];
+        const NO_GRID: [f32; 4] = [0.0; 4];
         let none = [NO_GRID, [0.0; 4], [0.0; 4]];
         self.bind_lamp_counts(0, 0)?;
         let (max_w, max_h) = self.scene_caps.max_texture;
@@ -726,8 +726,10 @@ impl D3d9Device {
         }
         let places = grid_info[3] as i32;
         self.bind_lamp_counts(kept, places)?;
-        let place = if places > 0 && lamps.place[2] > 0.0 {
-            lamps.place
+        // the cell of a point is floor(xy / side - corner / side)
+        let [x, y, side, cells] = lamps.place;
+        let place = if places > 0 && side > 0.0 {
+            [1.0 / side, -x / side, -y / side, cells]
         } else {
             NO_GRID
         };
