@@ -13,6 +13,7 @@
 
 pub mod backend;
 pub mod caps;
+pub mod scene;
 
 #[cfg(windows)]
 pub mod d3d9;
@@ -22,6 +23,9 @@ pub use backend::{
     TextureHandle,
 };
 pub use caps::{Caps, ShaderModel};
+pub use scene::{
+    DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexFormat,
+};
 
 /// Errors a legacy backend reports. `DeviceLost` is recoverable through
 /// [`RenderBackend::recover`]; the others are not.

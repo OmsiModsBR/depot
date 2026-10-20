@@ -9,7 +9,7 @@ const IDENTITY: [f32; 16] = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
 ];
 
-fn device() -> Option<D3d9Device> {
+pub(super) fn device() -> Option<D3d9Device> {
     match D3d9Device::open() {
         Ok(dev) => {
             // Printed so a test log shows which adapter (the default one) was exercised.

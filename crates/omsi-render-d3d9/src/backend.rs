@@ -99,22 +99,7 @@ impl MeshDesc {
 
     /// The checks every backend applies before creating the mesh.
     pub fn validate(&self, caps: &Caps) -> Result<()> {
-        if self.vertices.is_empty() || !self.vertices.len().is_multiple_of(VERTEX_FLOATS) {
-            return Err(BackendError::InvalidArgument(
-                "vertex data is not 8 floats per vertex".into(),
-            ));
-        }
-        let count = self.vertex_count();
-        if self.indices.is_empty()
-            || !self.indices.len().is_multiple_of(3)
-            || self.indices.iter().any(|&i| i >= count)
-        {
-            return Err(BackendError::InvalidArgument("indices".into()));
-        }
-        if !caps.index32 && count > 0x1_0000 {
-            return Err(BackendError::Unsupported("32-bit indices".into()));
-        }
-        Ok(())
+        crate::scene::validate_mesh(&self.vertices, &self.indices, caps.index32)
     }
 }
 
