@@ -219,4 +219,66 @@ fn main() {
             },
         );
     });
+    o.shot(&format!("{dir}/trip-report.png"), |ui| {
+        scene(ui);
+        use omsi_ui::ingame::{ReportRow, StopState};
+        let row = |stop: &str, plan: &str, real: &str, diff: &str, state| ReportRow {
+            stop: stop.into(),
+            scheduled: plan.into(),
+            actual: real.into(),
+            deviation: diff.into(),
+            state,
+        };
+        let rows = vec![
+            row(
+                "Depot",
+                "08:00:00",
+                "08:00:20",
+                "+00:00:20",
+                StopState::OnTime,
+            ),
+            row(
+                "Main Street",
+                "08:12:00",
+                "08:15:05",
+                "+00:03:05",
+                StopState::Late,
+            ),
+            row("Market", "08:25:00", "", "", StopState::Missed),
+            row(
+                "Town Hall",
+                "08:31:00",
+                "08:30:10",
+                "-00:00:50",
+                StopState::LeftEarly,
+            ),
+            row(
+                "Central Station",
+                "08:42:00",
+                "08:41:20",
+                "-00:00:40",
+                StopState::OnTime,
+            ),
+        ];
+        let totals = [
+            ("Stops served", "4 of 5".to_string()),
+            ("Late arrivals", "1".to_string()),
+            ("Early departures", "1".to_string()),
+        ];
+        let size = ui.size;
+        ui.p().rect(
+            Rect::new(0.0, 0.0, size.x, size.y),
+            Color::hex(0x000000).alpha(0.35),
+        );
+        omsi_ui::ingame::trip_report(
+            ui,
+            size,
+            &omsi_ui::ingame::TripReport {
+                title: "Trip 3  \u{b7}  50 to Central Station  \u{b7}  08:00:00",
+                note: "paused",
+                rows: &rows,
+                totals: &totals,
+            },
+        );
+    });
 }

@@ -22,6 +22,8 @@ pub(crate) enum WinInput {
     Press,
     Release,
     Wheel(f32),
+    /// The window lost the mouse: a press it holds ends without a click.
+    Lost,
 }
 
 /// What the overlay draws of the window, owned so that it can cross to the renderer.
@@ -147,6 +149,7 @@ impl App {
     /// layout of its own (triple screen, headset) is in the way.
     pub(crate) fn add_window_active(&self) -> bool {
         self.new_ui.add.is_some()
+            && self.new_ui.report.is_none()
             && self.game_menu.is_none()
             && self.menu.is_none()
             && !self.vr_active()

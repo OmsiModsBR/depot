@@ -69,6 +69,10 @@ impl App {
             }
             return;
         }
+        // the new interface's end-of-trip report has the keys while it shows
+        if self.report_key(code, pressed) {
+            return;
+        }
         // Esc closes the new interface's "Add vehicle" window before anything else (the city
         // map, the mirror editor)
         if self.add_key(code, pressed) {

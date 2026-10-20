@@ -22,6 +22,22 @@ use winit::event_loop::ActiveEventLoop;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
+/// The logo is shrunk to this width before it goes to the GPU (twice what the screens draw
+/// it at, so it stays sharp at 150% and is not thinned out from 2000 pixels at once).
+const LOGO_WIDTH: u32 = 640;
+
+/// The wordmark ready for the GPU: shrunk, and its black field made see-through, so that over
+/// the loading screen's photos and the dimmed world it stands with no black box round it.
+fn logo_rgba() -> Option<image::RgbaImage> {
+    let img = image::load_from_memory(LOGO).ok()?;
+    let h = (img.height() as u64 * LOGO_WIDTH as u64 / img.width().max(1) as u64).max(1) as u32;
+    let mut img = img
+        .resize_exact(LOGO_WIDTH, h, image::imageops::FilterType::Lanczos3)
+        .to_rgba8();
+    omsi_ui::loading::unmatte_black(&mut img);
+    Some(img)
+}
+
 /// The design the menu is made for, in points (the same as the launcher's).
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
@@ -236,14 +252,23 @@ pub(crate) struct State {
     alt: Option<crate::new_ui_alt::AltFrame>,
     /// The "Add vehicle" window.
     add: Option<crate::new_ui_add::AddFrame>,
-    /// Clicks and the wheel over that window, not yet handed to it (one a frame).
-    add_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
+    /// The end-of-trip report.
+    report: Option<crate::new_ui_report::ReportFrame>,
+    /// "Continue" was clicked in the report.
+    report_done: bool,
+    /// Clicks and the wheel over the window showing, not yet handed to it (one a frame).
+    win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
     /// The loading screen, while the first area of the map loads.
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
     slides: Vec<crate::new_ui_loading::Decoded>,
+    /// The bus's block of the loading card, once its file has been read.
+    bus_card: Option<crate::new_ui_loading::CardText>,
+    /// Which loading the screenshots and the bus card being read belong to (one more each
+    /// time a loading is over).
+    loading_gen: u64,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -264,6 +289,8 @@ struct Overlay {
     /// The loading screen's pictures in the GPU, and how far its slideshow is.
     slide_tex: Vec<omsi_ui::loading::Slide>,
     show: omsi_ui::loading::Slideshow,
+    /// The loading those pictures belong to (`State::loading_gen`).
+    gen: u64,
 }
 
 impl Overlay {
@@ -278,6 +305,7 @@ impl Overlay {
             last: Instant::now(),
             slide_tex: Vec::new(),
             show: omsi_ui::loading::Slideshow::new(0),
+            gen: 0,
         }
     }
 
@@ -289,29 +317,32 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, alt, add, add_input, loading, mouse, arrived) = match self.shared.lock() {
-            Ok(mut s) => {
-                let arrived = std::mem::take(&mut s.slides);
-                let input = if s.add.is_some() {
-                    s.add_input.pop_front()
-                } else {
-                    s.add_input.clear();
-                    None
-                };
-                (
-                    s.menu.clone(),
-                    s.alt.clone(),
-                    s.add.clone(),
-                    input,
-                    s.loading.clone(),
-                    s.mouse,
-                    arrived,
-                )
-            }
-            Err(_) => return,
-        };
-        if loading.is_none() && !self.slide_tex.is_empty() {
-            // (the loading screen is over: its pictures leave the GPU)
+        let (menu, alt, add, report, win_input, loading, mouse, arrived, gen) =
+            match self.shared.lock() {
+                Ok(mut s) => {
+                    let arrived = std::mem::take(&mut s.slides);
+                    let input = if s.add.is_some() || s.report.is_some() {
+                        s.win_input.pop_front()
+                    } else {
+                        s.win_input.clear();
+                        None
+                    };
+                    (
+                        s.menu.clone(),
+                        s.alt.clone(),
+                        s.add.clone(),
+                        s.report.clone(),
+                        input,
+                        s.loading.clone(),
+                        s.mouse,
+                        arrived,
+                        s.loading_gen,
+                    )
+                }
+                Err(_) => return,
+            };
+        if (loading.is_none() || gen != self.gen) && !self.slide_tex.is_empty() {
+            // (the loading screen is over, or another one began: its pictures leave the GPU)
             if let Some(gpu) = self.gpu.as_mut() {
                 for s in self.slide_tex.drain(..) {
                     gpu.free(s.tex);
@@ -319,7 +350,9 @@ impl Overlay {
             }
             self.show = omsi_ui::loading::Slideshow::new(0);
         }
-        if menu.is_none() && alt.is_none() && add.is_none() && loading.is_none() {
+        self.gen = gen;
+        if menu.is_none() && alt.is_none() && add.is_none() && report.is_none() && loading.is_none()
+        {
             return;
         }
         let now = Instant::now();
@@ -334,8 +367,7 @@ impl Overlay {
             gpu
         });
         if self.logo.is_none() {
-            if let Ok(img) = image::load_from_memory(LOGO) {
-                let img = img.to_rgba8();
+            if let Some(img) = logo_rgba() {
                 let tex = gpu.add_image(device, queue, img.width(), img.height(), img.as_raw());
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
@@ -345,7 +377,7 @@ impl Overlay {
             .map_or_else(|| scale_for(w, h), |m| m.scale((w, h)));
         let size = Vec2::new(w as f32, h as f32) / scale;
         // (the window's click or wheel of this frame, see `NewUi::push_input`)
-        match add_input {
+        match win_input {
             Some(crate::new_ui_add::WinInput::Press) => {
                 self.ui.input.pressed = true;
                 self.ui.input.down = true;
@@ -355,7 +387,8 @@ impl Overlay {
                 self.ui.input.down = false;
             }
             Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
-            None if add.is_none() => self.ui.input.down = false,
+            Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
+            None if add.is_none() && report.is_none() => self.ui.input.down = false,
             None => {}
         }
         self.ui.begin(size, scale, dt);
@@ -373,23 +406,26 @@ impl Overlay {
             }
             self.show.set_count(self.slide_tex.len());
             self.show.update(dt);
-            fn card(
-                c: &Option<crate::new_ui_loading::CardText>,
-            ) -> Option<omsi_ui::loading::Card<'_>> {
+            fn card<'a>(
+                c: &'a Option<crate::new_ui_loading::CardText>,
+                icon: &'a str,
+            ) -> Option<omsi_ui::loading::Card<'a>> {
                 c.as_ref().map(|c| omsi_ui::loading::Card {
                     title: &c.title,
                     sub: &c.sub,
                     description: &c.description,
+                    icon,
                 })
             }
             let view = omsi_ui::loading::View {
                 version: &l.version,
                 heading: &l.heading,
                 stage: &l.stage,
+                activity: &l.activity,
                 progress: l.progress,
                 logo: self.logo,
-                bus: card(&l.bus),
-                map: card(&l.map),
+                bus: card(&l.bus, "directions_bus"),
+                map: card(&l.map, "map"),
                 slides: &self.slide_tex,
             };
             omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
@@ -405,6 +441,17 @@ impl Overlay {
                 },
                 self.logo,
             );
+        } else if let Some(report) = report {
+            // (the simulation stands still behind the report, as behind the menu)
+            self.ui.p().rect(
+                omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
+                omsi_ui::Color::hex(0x000000).alpha(0.35),
+            );
+            if report.draw(&mut self.ui, size) {
+                if let Ok(mut s) = self.shared.lock() {
+                    s.report_done = true;
+                }
+            }
         } else {
             // (the world is not dimmed: the game goes on behind the bar and the window)
             if let Some(alt) = alt {
@@ -442,9 +489,17 @@ pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
     slides_started: bool,
+    bus_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
+    /// The end-of-trip report, while it is open.
+    pub(crate) report: Option<crate::new_ui_report::Report>,
+    /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
+    pub(crate) report_shown: Option<(String, String, usize)>,
+    /// A trip at its last stop whose report waits for the doors to open there: its key, its
+    /// place in the duty and where that stop is.
+    pub(crate) report_watch: Option<crate::new_ui_report::Watch>,
 }
 
 impl NewUi {
@@ -475,7 +530,26 @@ impl NewUi {
         }
     }
 
-    /// Once per session: list the map's screenshots and decode the latest on a thread of
+    /// The loading screen is over, or a new drive's is about to start: it is taken down, and
+    /// the next one lists its own map's screenshots and reads its own bus. What a thread of
+    /// the last one still hands over is dropped (it belongs to another loading).
+    pub(crate) fn reset_loading(&mut self) {
+        self.slides_started = false;
+        self.bus_started = false;
+        if let Ok(mut s) = self.shared.lock() {
+            s.loading = None;
+            s.slides.clear();
+            s.bus_card = None;
+            s.loading_gen = s.loading_gen.wrapping_add(1);
+        }
+    }
+
+    /// The loading the threads started now belong to.
+    fn loading_gen(&self) -> u64 {
+        self.shared.lock().map(|s| s.loading_gen).unwrap_or(0)
+    }
+
+    /// Once per loading: list the map's screenshots and decode the latest on a thread of
     /// their own, handing them to the overlay one by one.
     pub(crate) fn start_slides(&mut self, map_folder: &str) {
         if self.slides_started {
@@ -483,6 +557,7 @@ impl NewUi {
         }
         self.slides_started = true;
         let shared = self.shared.clone();
+        let gen = self.loading_gen();
         let map = map_folder.to_string();
         let _ = std::thread::Builder::new()
             .name("loading-slides".into())
@@ -494,12 +569,43 @@ impl NewUi {
                 for p in paths {
                     if let Some(d) = crate::new_ui_loading::decode(&p) {
                         match shared.lock() {
-                            Ok(mut s) => s.slides.push(d),
-                            Err(_) => return,
+                            Ok(mut s) if s.loading_gen == gen => s.slides.push(d),
+                            _ => return,
                         }
                     }
                 }
             });
+    }
+
+    /// Once per loading: read the bus's file (`bus`, under `root`) on a thread of its own for
+    /// the loading card's name, maker, paint and description.
+    pub(crate) fn start_bus(&mut self, root: &std::path::Path, bus: &str, paint: Option<&str>) {
+        if self.bus_started {
+            return;
+        }
+        self.bus_started = true;
+        let shared = self.shared.clone();
+        let gen = self.loading_gen();
+        let path = omsi_cfg::resolve_path(root, bus);
+        let folder = crate::screenshot_name::folder_of(bus).unwrap_or_default();
+        let paint = paint.map(str::to_string);
+        let _ = std::thread::Builder::new()
+            .name("loading-bus".into())
+            .spawn(move || {
+                let Ok(v) = omsi_vehicle::Vehicle::load(&path) else {
+                    return;
+                };
+                let card = crate::new_ui_loading::bus_card(&v, &folder, paint.as_deref());
+                match shared.lock() {
+                    Ok(mut s) if s.loading_gen == gen => s.bus_card = Some(card),
+                    _ => {}
+                }
+            });
+    }
+
+    /// The bus's block of the loading card, when its file has been read.
+    pub(crate) fn bus_card(&self) -> Option<crate::new_ui_loading::CardText> {
+        self.shared.lock().ok().and_then(|s| s.bus_card.clone())
     }
 
     fn set(
@@ -507,20 +613,38 @@ impl NewUi {
         menu: Option<MenuFrame>,
         alt: Option<crate::new_ui_alt::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
+        report: Option<crate::new_ui_report::ReportFrame>,
         mouse: Vec2,
     ) {
         if let Ok(mut s) = self.shared.lock() {
             s.menu = menu;
             s.alt = alt;
             s.add = add;
+            s.report = report;
             s.mouse = mouse;
         }
     }
 
-    /// Hand the "Add vehicle" window a click or a turn of the wheel over it.
+    /// Whether "Continue" was clicked in the report since the last call.
+    pub(crate) fn take_report_done(&self) -> bool {
+        match self.shared.lock() {
+            Ok(mut s) => std::mem::take(&mut s.report_done),
+            Err(_) => false,
+        }
+    }
+
+    /// Forget the clicks still on their way to a window that closed.
+    pub(crate) fn clear_win_input(&self) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.win_input.clear();
+            s.report_done = false;
+        }
+    }
+
+    /// Hand the window showing a click or a turn of the wheel over it.
     pub(crate) fn push_input(&self, input: crate::new_ui_add::WinInput) {
         if let Ok(mut s) = self.shared.lock() {
-            s.add_input.push_back(input);
+            s.win_input.push_back(input);
         }
     }
 
@@ -537,7 +661,7 @@ impl NewUi {
         self.add = None;
         if let Ok(mut s) = self.shared.lock() {
             s.add = None;
-            s.add_input.clear();
+            s.win_input.clear();
             s.add_events.clear();
         }
     }
@@ -587,9 +711,21 @@ impl App {
         }
         let alt = self.alt_bar_active().then(|| self.alt_frame());
         self.add_events();
-        let add = self.add_frame();
-        self.new_ui
-            .set(menu, alt, add, Vec2::new(self.cursor.0, self.cursor.1));
+        self.report_events();
+        let report = self.report_frame();
+        // (the report stands over everything else of the game, and pauses it)
+        let (alt, add) = if report.is_some() {
+            (None, None)
+        } else {
+            (alt, self.add_frame())
+        };
+        self.new_ui.set(
+            menu,
+            alt,
+            add,
+            report,
+            Vec2::new(self.cursor.0, self.cursor.1),
+        );
     }
 
     /// A left click while the game menu is open: when the new menu is showing, a click on one of
@@ -619,6 +755,52 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_loading_reads_its_own_bus_and_screenshots_again() {
+        let mut ui = NewUi::default();
+        let card = crate::new_ui_loading::CardText {
+            title: "First bus".into(),
+            ..Default::default()
+        };
+        // a first drive's loading: started, its bus read, a screenshot waiting
+        ui.slides_started = true;
+        ui.bus_started = true;
+        {
+            let mut s = ui.shared.lock().unwrap();
+            s.bus_card = Some(card.clone());
+            s.slides.push(crate::new_ui_loading::Decoded {
+                w: 1,
+                h: 1,
+                rgba: vec![0; 4],
+            });
+            s.loading = Some(Default::default());
+        }
+        let gen = ui.loading_gen();
+        assert_eq!(ui.bus_card(), Some(card));
+        // it is over (or the next drive starts): nothing of it is left, and the next
+        // loading starts its threads again
+        ui.reset_loading();
+        assert!(!ui.slides_started && !ui.bus_started);
+        assert_eq!(ui.bus_card(), None);
+        let s = ui.shared.lock().unwrap();
+        assert!(s.slides.is_empty() && s.loading.is_none());
+        // what a thread of the first loading still hands over is told apart and dropped
+        assert_ne!(s.loading_gen, gen);
+    }
+
+    #[test]
+    fn the_logo_is_shrunk_and_has_no_black_box_round_it() {
+        let img = logo_rgba().expect("the wordmark");
+        assert_eq!(img.width(), LOGO_WIDTH);
+        // the corner (the black field) is clear, the letters are whole
+        assert_eq!(img.get_pixel(0, 0)[3], 0);
+        let opaque = img.pixels().filter(|p| p[3] == 255).count();
+        assert!(
+            opaque > (img.width() * img.height()) as usize / 10,
+            "{opaque}"
+        );
+    }
 
     fn items() -> Vec<(&'static str, &'static str)> {
         crate::input::menus::GAME_MENU.to_vec()
