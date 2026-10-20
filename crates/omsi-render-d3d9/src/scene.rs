@@ -220,13 +220,41 @@ pub struct SceneBatch {
     pub instances: Range<u32>,
 }
 
-/// What a material is drawn with.
-#[derive(Debug, Clone, Copy)]
+/// How a material's textures are addressed (`[matl_texadress_*]`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TexAddress {
+    /// Repeating.
+    #[default]
+    Wrap,
+    /// Every other repeat mirrored.
+    Mirror,
+    /// Clamped at the edge (and `[matl_texadress_border]`, whose colour the shader puts
+    /// outside).
+    Clamp,
+    /// Mirrored once about 0, then clamped (the shader takes the absolute value).
+    MirrorOnce,
+}
+
+/// What a material is drawn with. A map the uniform says it has but that is not uploaded
+/// reads as nothing: black for the night and light maps and the sphere map, white for the
+/// diffuse texture, the transmap and the reflection mask, flat for the bump map.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct SceneMaterial<'a> {
-    /// The diffuse texture (white when none or not uploaded).
+    /// The diffuse texture.
     pub texture: Option<usize>,
     /// `[matl_transmap]` (its alpha replaces the diffuse alpha when the uniform says so).
     pub transmap: Option<usize>,
+    /// `[matl_nightmap]`: added at night (or always, for a switched one).
+    pub nightmap: Option<usize>,
+    /// `[matl_lightmap]` (the terrain's detail texture on a terrain material).
+    pub lightmap: Option<usize>,
+    /// `[matl_envmap]`: the sphere map reflected on it, by the factor in the uniform.
+    pub envmap: Option<usize>,
+    /// `[matl_envmap_mask]`: its alpha masks the reflection.
+    pub env_mask: Option<usize>,
+    /// `[matl_bumpmap]`: a height map (alpha) whose slope moves the sphere-map lookup.
+    pub bump: Option<usize>,
+    pub address: TexAddress,
     /// [`MATERIAL_VECTORS`] vectors.
     pub uniform: &'a [[f32; 4]],
 }
@@ -246,6 +274,30 @@ pub struct SceneLight {
     pub fog: [f32; 4],
     /// rgb the light from above, w 1 for the vanilla picture.
     pub sky_color: [f32; 4],
+    /// The camera's right and up axes (xyz), which lay the sphere maps out.
+    pub cam_right: [f32; 4],
+    pub cam_up: [f32; 4],
+}
+
+/// The `[matl_envmap]` factor x 255 x its light (each channel at most 1), truncated, and the
+/// three put together as one packed colour without saturation: a factor over 1 spills into
+/// the next channel as Direct3D's texture factor does (a factor of 10 at full light reads
+/// almost white).
+pub fn env_factor(factor: f32, light: [f32; 3]) -> [f32; 3] {
+    let m = light.map(|l| (l.clamp(0.0, 1.0) * factor.max(0.0) * 255.0) as u32);
+    let packed = (0xffu32 << 24) | m[0].wrapping_shl(16) | m[1].wrapping_shl(8) | m[2];
+    [packed >> 16, packed >> 8, packed].map(|c| (c & 0xff) as f32 / 255.0)
+}
+
+/// The reflection weight of a `[matl_envmap]` material of `factor` under `light`, as the
+/// scene shader takes it: rgb for a material without a mask, w the light a mask's alpha is
+/// multiplied by (the sun's mean; the map's lamps are not drawn yet).
+pub fn env_weights(factor: f32, light: &SceneLight) -> [f32; 4] {
+    let s = light.sun_color;
+    let g = ((s[0] + s[1] + s[2]) / 3.0).clamp(0.0, 1.0);
+    let a = light.ambient;
+    let k = env_factor(factor, [a[0] + g, a[1] + g, a[2] + g]);
+    [k[0], k[1], k[2], g]
 }
 
 /// One picture of the scene.
@@ -414,6 +466,27 @@ mod tests {
             material: 0,
             instances,
         }
+    }
+
+    #[test]
+    fn the_reflection_factor_spills_as_a_packed_colour() {
+        let k = env_factor(0.5, [1.0, 0.5, 0.0]);
+        assert_eq!(k, [127.0 / 255.0, 63.0 / 255.0, 0.0]);
+        // a factor of 10 at full light: 2550 a channel, OR-ed into its neighbours
+        let k = env_factor(10.0, [1.0; 3]);
+        let p = (0xffu32 << 24) | (2550 << 16) | (2550 << 8) | 2550;
+        assert_eq!(
+            k,
+            [(p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff].map(|c| c as f32 / 255.0)
+        );
+        let light = SceneLight {
+            sun_color: [0.6, 0.6, 0.6, 0.0],
+            ambient: [0.2, 0.2, 0.2, 0.0],
+            ..Default::default()
+        };
+        let w = env_weights(1.0, &light);
+        assert_eq!(w[3], 0.6);
+        assert_eq!(w[0], ((0.8f32 * 255.0) as u32) as f32 / 255.0);
     }
 
     #[test]

@@ -161,6 +161,9 @@ pub struct FramePlan {
     pub ambient: [f32; 4],
     pub fog: [f32; 4],
     pub sky_color: [f32; 4],
+    /// The camera's right and up axes (xyz), which lay out the sphere maps of `[matl_envmap]`.
+    pub cam_right: [f32; 4],
+    pub cam_up: [f32; 4],
     /// The sky's colour the picture is cleared to, as the lighting gives it (w 1).
     pub clear: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
@@ -196,6 +199,8 @@ pub(crate) fn plan_of(
         ambient: cu.ambient,
         fog: cu.fog,
         sky_color: cu.sky_color,
+        cam_right: cu.cam_right,
+        cam_up: cu.cam_up,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),

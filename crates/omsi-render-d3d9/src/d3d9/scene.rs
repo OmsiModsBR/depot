@@ -7,11 +7,14 @@ use windows::Win32::Graphics::Direct3D9::*;
 use super::{make_mesh, map_err, shader, some, write_buffer, D3d9Device, Mesh};
 use crate::scene::{
     mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneMaterial,
-    SceneTexture, TexFormat, ALPHA_CUT, INSTANCE_FLOATS, MATERIAL_VECTORS,
+    SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS, MATERIAL_VECTORS,
 };
 use crate::{BackendError, Result};
 
 const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
+
+/// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
+const SAMPLERS: u32 = 7;
 
 /// What the scene layer may use beyond the floor, read when the device opens.
 #[derive(Debug, Clone, Copy, Default)]
@@ -79,6 +82,17 @@ struct ScenePipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
+    /// Bound for a night, light or sphere map that is not there: it adds nothing.
+    black: IDirect3DTexture9,
+}
+
+/// The sampler states of an addressing.
+fn address_mode(a: TexAddress) -> u32 {
+    match a {
+        TexAddress::Wrap => D3DTADDRESS_WRAP.0 as u32,
+        TexAddress::Mirror => D3DTADDRESS_MIRROR.0 as u32,
+        TexAddress::Clamp | TexAddress::MirrorOnce => D3DTADDRESS_CLAMP.0 as u32,
+    }
 }
 
 /// The scene's resources. Ids are the game's (slots it reuses), so they index sparse lists.
@@ -282,9 +296,20 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
         Usage: 0,
         UsageIndex: 0,
     });
+    let black = make_texture(
+        device,
+        &SceneTexture {
+            width: 1,
+            height: 1,
+            format: TexFormat::Rgba8,
+            levels: &[vec![0, 0, 0, 0]],
+            make_mips: false,
+        },
+    )?;
     // SAFETY: the bytecode and element arrays outlive the calls.
     unsafe {
         Ok(ScenePipeline {
+            black,
             decl: device
                 .CreateVertexDeclaration(elements.as_ptr())
                 .map_err(map_err)?,
@@ -586,17 +611,24 @@ impl D3d9Device {
             d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
             d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
             d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
-            for stage in 0..2 {
+            for stage in 0..SAMPLERS {
                 for (state, value) in [
                     (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP.0 as u32),
-                    (D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP.0 as u32),
                 ] {
                     d.SetSamplerState(stage, state, value).map_err(map_err)?;
                 }
             }
+            let vs_light = [
+                light.sun_dir,
+                light.sun_color,
+                light.sky_color,
+                light.cam_right,
+                light.cam_up,
+            ];
+            d.SetVertexShaderConstantF(6, vs_light.as_ptr().cast(), vs_light.len() as u32)
+                .map_err(map_err)?;
             d.SetVertexShaderConstantF(0, frame.view_proj.as_ptr().cast(), 4)
                 .map_err(map_err)?;
             d.SetVertexShaderConstantF(4, light.cam_pos.as_ptr(), 1)
@@ -644,19 +676,7 @@ impl D3d9Device {
                     current.2 = Some(b.surface);
                 }
                 if current.3 != Some(b.material) {
-                    let texture = |id: Option<usize>| {
-                        id.and_then(|i| self.scene.textures.get(i))
-                            .and_then(Option::as_ref)
-                            .unwrap_or(&self.pipeline.white)
-                    };
-                    d.SetPixelShaderConstantF(
-                        0,
-                        m.uniform.as_ptr().cast(),
-                        MATERIAL_VECTORS as u32,
-                    )
-                    .map_err(map_err)?;
-                    d.SetTexture(0, texture(m.texture)).map_err(map_err)?;
-                    d.SetTexture(1, texture(m.transmap)).map_err(map_err)?;
+                    self.bind_material(&m, &frame.light)?;
                     current.3 = Some(b.material);
                 }
                 let n = b.instances.end - b.instances.start;
@@ -684,6 +704,79 @@ impl D3d9Device {
         }
         if skipped > 0 {
             log::debug!("d3d9 scene: {skipped} batches without their mesh or material");
+        }
+        Ok(())
+    }
+}
+
+impl D3d9Device {
+    /// The material's uniform, maps, addressing and the constants worked out from them.
+    fn bind_material(&self, m: &SceneMaterial, light: &crate::scene::SceneLight) -> Result<()> {
+        let d = &self.device;
+        let pipeline = self.scene.pipeline.as_ref().expect("built before");
+        let found = |id: Option<usize>| {
+            id.and_then(|i| self.scene.textures.get(i))
+                .and_then(Option::as_ref)
+        };
+        let white = &self.pipeline.white;
+        let black = &pipeline.black;
+        let env = found(m.envmap);
+        let bump = found(m.bump);
+        let u = m.uniform;
+        // (a sphere map that is not there reflects nothing: its weight is 0)
+        let env_k = if env.is_some() {
+            crate::scene::env_weights(u[3][1], light)
+        } else {
+            [0.0; 4]
+        };
+        let mut bump_texel = [0.0f32; 4];
+        if let Some(t) = bump {
+            let mut desc = D3DSURFACE_DESC::default();
+            // SAFETY: the out-parameter is a live local; level 0 exists.
+            unsafe { t.GetLevelDesc(0, &mut desc) }.map_err(map_err)?;
+            bump_texel = [
+                1.0 / desc.Width.max(1) as f32,
+                1.0 / desc.Height.max(1) as f32,
+                0.0,
+                0.0,
+            ];
+        }
+        let terrain = u[2][0] > 0.5;
+        let address = address_mode(m.address);
+        // a terrain's transmap and night map cover one tile: clamped at its edge
+        let tile = if terrain {
+            D3DTADDRESS_CLAMP.0 as u32
+        } else {
+            address
+        };
+        let maps = [
+            (found(m.texture).unwrap_or(white), address),
+            (found(m.transmap).unwrap_or(white), tile),
+            (found(m.nightmap).unwrap_or(black), tile),
+            (found(m.lightmap).unwrap_or(black), address),
+            (env.unwrap_or(black), address),
+            (found(m.env_mask).unwrap_or(white), address),
+            (bump.unwrap_or(white), address),
+        ];
+        let vs = [u[5], u[1]];
+        let ps = [bump_texel, env_k];
+        // SAFETY: plain calls on a live device; the constant arrays outlive them; the
+        // textures belong to this device.
+        unsafe {
+            d.SetPixelShaderConstantF(0, u.as_ptr().cast(), MATERIAL_VECTORS as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(18, ps.as_ptr().cast(), ps.len() as u32)
+                .map_err(map_err)?;
+            d.SetVertexShaderConstantF(11, vs.as_ptr().cast(), vs.len() as u32)
+                .map_err(map_err)?;
+            for (stage, (texture, address)) in maps.iter().enumerate() {
+                let stage = stage as u32;
+                d.SetTexture(stage, *texture).map_err(map_err)?;
+                d.SetSamplerState(stage, D3DSAMP_ADDRESSU, *address)
+                    .map_err(map_err)?;
+                d.SetSamplerState(stage, D3DSAMP_ADDRESSV, *address)
+                    .map_err(map_err)?;
+            }
         }
         Ok(())
     }

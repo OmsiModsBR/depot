@@ -3,8 +3,8 @@
 use super::tests::device;
 use super::*;
 use crate::scene::{
-    DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexFormat,
-    MATERIAL_VECTORS,
+    DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexAddress,
+    TexFormat, MATERIAL_VECTORS,
 };
 
 const W: u32 = 8;
@@ -118,8 +118,8 @@ fn draw(
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
             texture,
-            transmap: None,
             uniform: u,
+            ..Default::default()
         })
     })
     .unwrap();
@@ -266,8 +266,8 @@ fn depth_is_reversed_nearer_is_greater() {
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
             texture: Some(m),
-            transmap: None,
             uniform,
+            ..Default::default()
         })
     })
     .unwrap();
@@ -382,9 +382,8 @@ fn a_frame_pointing_outside_its_data_is_refused() {
     };
     let material = |_| {
         Some(SceneMaterial {
-            texture: None,
-            transmap: None,
             uniform: &u,
+            ..Default::default()
         })
     };
     assert!(matches!(
@@ -515,4 +514,211 @@ fn a_device_opened_again_gets_the_scene_back() {
     dev.clear_scene();
     dev.recover().unwrap();
     assert!(!dev.has_scene_mesh(2) && !dev.has_scene_texture(1));
+}
+
+/// Draws one opaque quad of mesh 0 with `material`, its instance's second vector `second`.
+fn draw_one(
+    dev: &mut D3d9Device,
+    material: SceneMaterial,
+    second: [f32; 4],
+    light: SceneLight,
+) -> Vec<u8> {
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(0, &v, &i).unwrap();
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light,
+        list: &[0],
+        models: &[IDENTITY],
+        params: &[VISIBLE, second],
+        main: &[batch(DrawKind::Opaque, 0, 0, 0..1)],
+        cab: &[],
+        surface_bias: -24,
+    };
+    dev.draw_scene(&frame, |_| Some(material)).unwrap();
+    dev.end_frame().unwrap()
+}
+
+fn dark() -> SceneLight {
+    let mut l = light([0.0; 4]);
+    l.ambient = [0.0; 4];
+    l
+}
+
+#[test]
+fn night_maps_show_by_night_or_always_when_switched() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 1, [40, 120, 220, 255]);
+    let mut u = uniform(0.0);
+    u[2][3] = 1.0; // has a night map
+    let mut night = dark();
+    night.sun_color[3] = 1.0;
+    fn m(u: &[[f32; 4]; MATERIAL_VECTORS]) -> SceneMaterial<'_> {
+        SceneMaterial {
+            uniform: u,
+            nightmap: Some(1),
+            ..Default::default()
+        }
+    }
+    // (black under no light: what shows is the night map alone)
+    let lit = [0.0, 1.0, 0.0, 0.0];
+    let px = draw_one(&mut dev, m(&u), lit, night);
+    assert!(all(&px, [40, 120, 220, 255], 2), "night: {:?}", &px[..4]);
+    let px = draw_one(&mut dev, m(&u), lit, dark());
+    assert!(all(&px, [0, 0, 0, 255], 1), "day: {:?}", &px[..4]);
+    // an instance whose lights are off
+    let px = draw_one(&mut dev, m(&u), SECOND, night);
+    assert!(all(&px, [0, 0, 0, 255], 1), "off: {:?}", &px[..4]);
+    u[2][3] = 2.0; // switched: by day too
+    let px = draw_one(&mut dev, m(&u), SECOND, dark());
+    assert!(all(&px, [40, 120, 220, 255], 2), "switched: {:?}", &px[..4]);
+}
+
+#[test]
+fn light_maps_light_the_texture_as_strong_as_the_instance_says() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    rgba(&mut dev, 1, [100, 150, 200, 255]);
+    let mut u = uniform(0.0);
+    u[3][0] = 1.0; // has a light map
+    let m = SceneMaterial {
+        texture: Some(0),
+        lightmap: Some(1),
+        uniform: &u,
+        ..Default::default()
+    };
+    let px = draw_one(&mut dev, m, [1.0, 0.0, 0.0, 0.0], dark());
+    assert!(all(&px, [100, 150, 200, 255], 2), "{:?}", &px[..4]);
+    let px = draw_one(&mut dev, m, SECOND, dark());
+    assert!(all(&px, [0, 0, 0, 255], 1), "none: {:?}", &px[..4]);
+}
+
+#[test]
+fn sphere_maps_mix_in_by_their_factor_or_their_mask() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 0, 0, 255]);
+    rgba(&mut dev, 1, [0, 0, 255, 255]);
+    let mut u = uniform(0.0);
+    u[3][1] = 0.5; // the reflection factor
+    let mut m = SceneMaterial {
+        texture: Some(0),
+        envmap: Some(1),
+        uniform: &u,
+        ..Default::default()
+    };
+    // the factor x 255, truncated: 127 of 255 of the reflection
+    let px = draw_one(&mut dev, m, SECOND, light([0.0; 4]));
+    assert!(all(&px, [128, 0, 127, 255], 2), "factor: {:?}", &px[..4]);
+    // a sphere map that is not there reflects nothing
+    m.envmap = Some(9);
+    let px = draw_one(&mut dev, m, SECOND, light([0.0; 4]));
+    assert!(all(&px, [255, 0, 0, 255], 1), "missing: {:?}", &px[..4]);
+    // masked: the mask's alpha times the sun's light
+    let mut masked = u;
+    masked[3][3] = 1.0;
+    let mut sun = light([0.0; 4]);
+    sun.sun_color = [1.0, 1.0, 1.0, 0.0];
+    for (alpha, want) in [(0u8, [255, 0, 0, 255]), (255, [0, 0, 255, 255])] {
+        rgba(&mut dev, 2, [0, 0, 0, alpha]);
+        let m = SceneMaterial {
+            texture: Some(0),
+            envmap: Some(1),
+            env_mask: Some(2),
+            uniform: &masked,
+            ..Default::default()
+        };
+        let px = draw_one(&mut dev, m, SECOND, sun);
+        assert!(all(&px, want, 2), "mask {alpha}: {:?}", &px[..4]);
+    }
+}
+
+#[test]
+fn the_specular_highlight_is_added_to_the_lit_colour() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [0, 0, 0, 255]);
+    let mut u = uniform(0.0);
+    u[5] = [1.0, 1.0, 1.0, 8.0];
+    // the camera straight in front of the face, the light from above on it
+    let mut l = dark();
+    l.cam_pos = [0.0, 0.0, 10.0, 0.0];
+    l.sky_color = [1.0, 1.0, 1.0, 1.0];
+    let m = SceneMaterial {
+        texture: Some(0),
+        uniform: &u,
+        ..Default::default()
+    };
+    let px = draw_one(&mut dev, m, SECOND, l);
+    assert!(all(&px, [255, 255, 255, 255], 8), "{:?}", &px[..4]);
+    u[5][3] = 0.0; // no highlight
+    let m = SceneMaterial {
+        texture: Some(0),
+        uniform: &u,
+        ..Default::default()
+    };
+    let px = draw_one(&mut dev, m, SECOND, l);
+    assert!(all(&px, [0, 0, 0, 255], 1), "none: {:?}", &px[..4]);
+}
+
+#[test]
+fn clamped_textures_do_not_repeat() {
+    let Some(mut dev) = device() else { return };
+    // left column red, right column blue
+    let row = [[255, 0, 0, 255], [0, 0, 255, 255]].concat();
+    let levels = vec![[row.clone(), row].concat()];
+    dev.set_scene_texture(
+        0,
+        &SceneTexture {
+            width: 2,
+            height: 2,
+            format: TexFormat::Rgba8,
+            levels: &levels,
+            make_mips: false,
+        },
+    )
+    .unwrap();
+    let u = uniform(0.0);
+    // the texture moved by 3/4: u runs 0.75..1.75
+    let shifted = [1.0, 1.0, 0.75, 0.0];
+    let draw = |dev: &mut D3d9Device, address| {
+        let (v, i) = quad(0.5);
+        dev.set_scene_mesh(0, &v, &i).unwrap();
+        dev.begin_frame(&FrameDesc {
+            width: W,
+            height: H,
+            clear_rgba: [0.0, 0.0, 0.0, 1.0],
+        })
+        .unwrap();
+        let frame = SceneFrame {
+            view_proj: IDENTITY,
+            light: light([0.0; 4]),
+            list: &[0],
+            models: &[IDENTITY],
+            params: &[shifted, SECOND],
+            main: &[batch(DrawKind::Opaque, 0, 0, 0..1)],
+            cab: &[],
+            surface_bias: -24,
+        };
+        dev.draw_scene(&frame, |_| {
+            Some(SceneMaterial {
+                texture: Some(0),
+                address,
+                uniform: &u,
+                ..Default::default()
+            })
+        })
+        .unwrap();
+        dev.end_frame().unwrap()
+    };
+    let px = draw(&mut dev, TexAddress::Clamp);
+    assert!(all(&px, [0, 0, 255, 255], 2), "clamped: {px:?}");
+    // repeated, the middle of the quad reads the next repeat's left column
+    let px = draw(&mut dev, TexAddress::Wrap);
+    let at = (4 * 4) as usize;
+    assert!(px[at] > px[at + 2], "wrapped: {:?}", &px[at..at + 4]);
 }
