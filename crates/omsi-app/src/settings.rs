@@ -795,6 +795,10 @@ impl Settings {
     pub fn lock_vanilla(&mut self) {
         self.graphics = "vanilla".into();
         self.enhanced = false;
+        // (what a Vanilla file is loaded without, see `from_text`)
+        self.shadows = false;
+        self.ssao = false;
+        self.detail_textures = false;
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
@@ -886,6 +890,13 @@ mod tests {
             if cfg!(windows) {
                 assert_eq!(loaded.graphics, "vanilla");
                 assert!(loaded.classic() && !loaded.enhanced && !loaded.ray_tracing());
+                // as a file that says graphics=vanilla is loaded
+                let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
+                assert_eq!((loaded.shadows, loaded.ssao, loaded.detail_textures), (file.shadows, file.ssao, file.detail_textures));
+                assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
+                // VR takes DirectX 12 instead, with the graphics as chosen
+                let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
+                assert_eq!(vr.graphics, g);
             } else {
                 assert_eq!(loaded, chosen);
             }

@@ -520,9 +520,10 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
 }
 
 /// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
-/// Graphics is Vanilla there, and fixed.
+/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
 fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9")
+    let vr = get(s, "vr").as_bool().unwrap_or(false) || omsi_cfg::flags::OPENXR.is_set();
+    cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9") && !vr
 }
 
 /// How the game looks and how fast it runs.
@@ -2882,6 +2883,12 @@ mod settings_tests {
         assert_eq!(ui.drawn.contains_key(&id_of("s-graphics")), !cfg!(windows));
         assert_eq!(ui.drawn.contains_key(&id_of("s-shadow")), !cfg!(windows));
         assert_eq!(s["graphics"], json!("enhanced"));
+
+        // (VR takes DirectX 12 instead: the choice stays)
+        s["vr"] = json!(true);
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        s["vr"] = json!(false);
 
         s["graphics_api"] = json!("vulkan");
         let ui = drawn(&mut s);
