@@ -223,7 +223,8 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
     crate::launcher_statics();
     let settings = crate::settings::Settings::load();
     let instance = crate::startup::graphics_instance();
-    let mut renderer = pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), super::showroom_options(&settings)))?;
+    // (the renderer's setup waited for on the heap, not on this thread's stack)
+    let mut renderer = pollster::block_on(Box::pin(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), super::showroom_options(&settings))))?;
     log::info!("preview helper: drawing on {}", renderer.adapter_name);
     let mut room = Showroom::new();
     let mut size: Option<(u32, u32)> = None;
@@ -345,17 +346,30 @@ pub fn helper_main() -> anyhow::Result<()> {
     });
     // (each message in one write, the output locked only for it: a stray print of another
     // thread waits its turn, and `read_msg` passes over it)
-    let out = std::io::stdout();
-    let mut buf = Vec::new();
-    serve(rx, |m| {
-        buf.clear();
-        if write_msg(&mut buf, &m).is_err() {
-            return false;
-        }
-        let mut o = out.lock();
-        o.write_all(&buf).and_then(|_| o.flush()).is_ok()
-    })
+    // The drawing on a thread with a stack of its own: on the process's main thread (1 MB on
+    // Windows when the program does not say otherwise) opening the renderer overflowed it, and
+    // the helper ended before it kept a single picture.
+    std::thread::Builder::new()
+        .name("preview-helper".into())
+        .stack_size(HELPER_STACK)
+        .spawn(move || {
+            let out = std::io::stdout();
+            let mut buf = Vec::new();
+            serve(rx, |m| {
+                buf.clear();
+                if write_msg(&mut buf, &m).is_err() {
+                    return false;
+                }
+                let mut o = out.lock();
+                o.write_all(&buf).and_then(|_| o.flush()).is_ok()
+            })
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("the preview helper stopped on an error"))?
 }
+
+/// The stack of the thread that draws the preview (as much as the game's main thread has).
+const HELPER_STACK: usize = 64 << 20;
 
 /// The helper's log: its lines, written again for each helper (the launcher's own window has
 /// no console on Windows, and a helper's lines on its error output went nowhere).
@@ -379,6 +393,7 @@ impl Link {
         if cfg!(target_os = "android") {
             std::thread::Builder::new()
                 .name("preview-helper".into())
+                .stack_size(HELPER_STACK)
                 .spawn(move || {
                     if let Err(e) = serve(cmd_rx, |m| msg_tx.send(m).is_ok()) {
                         log::warn!("preview helper: {e:#}");
