@@ -5,6 +5,7 @@
 //!
 //! The screenshots are listed and decoded on a thread of their own (a few, shrunk to fit the
 //! screen) and handed over one by one; the overlay, which must not block, only uploads them.
+//! The bus's own name, maker and description are read from its file on another, once.
 
 use crate::app::App;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,8 @@ pub(crate) struct LoadingFrame {
     pub version: String,
     pub heading: String,
     pub stage: String,
+    /// Under the bar, left of the percentage.
+    pub activity: String,
     pub progress: f32,
     pub bus: Option<CardText>,
     pub map: Option<CardText>,
@@ -40,12 +43,55 @@ pub(crate) struct Decoded {
     pub rgba: Vec<u8>,
 }
 
-/// "Example map · 08:00"
-pub(crate) fn heading(map: &str, time: &str) -> String {
-    match (map.trim(), time.trim()) {
-        ("", t) => t.to_string(),
-        (m, "") => m.to_string(),
-        (m, t) => format!("{m} \u{b7} {t}"),
+/// "Example map · Line 50 · 08:00" (the parts there are).
+pub(crate) fn heading(map: &str, line: Option<&str>, time: &str) -> String {
+    let line = line
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(|l| format!("Line {l}"));
+    [
+        Some(map.trim().to_string()),
+        line,
+        Some(time.trim().to_string()),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<_>>()
+    .join(" \u{b7} ")
+}
+
+/// What is being done, under the bar: the map's files are read before its first tile comes.
+pub(crate) fn activity(done: usize) -> &'static str {
+    if done == 0 {
+        "Reading the map"
+    } else {
+        "Preparing the world"
+    }
+}
+
+/// The bus's block of the card from its file: its type as the title, the maker and the paint
+/// under it, the author's description. `folder` names it when the file gives no name; a paint
+/// asked for by its number is left out (the file's default one is shown then).
+pub(crate) fn bus_card(v: &omsi_vehicle::Vehicle, folder: &str, paint: Option<&str>) -> CardText {
+    let title = [v.type_name.trim(), folder.trim()]
+        .into_iter()
+        .find(|t| !t.is_empty())
+        .unwrap_or_default()
+        .to_string();
+    let paint = paint
+        .map(str::trim)
+        .filter(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit()))
+        .unwrap_or(v.default_paint.trim());
+    let sub = [v.manufacturer.trim(), paint]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" \u{b7} ");
+    CardText {
+        title,
+        sub,
+        description: short(&v.description, DESCRIPTION_CHARS),
     }
 }
 
@@ -104,6 +150,10 @@ impl App {
         self.new_ui.install(renderer);
         let map_folder = folder(&self.args.map);
         self.new_ui.start_slides(&map_folder);
+        if let Some(b) = self.args.bus.as_deref() {
+            self.new_ui
+                .start_bus(&self.args.root, b, self.args.paint.as_deref());
+        }
         let (name, description) = self
             .world
             .as_ref()
@@ -117,15 +167,19 @@ impl App {
                 (name, g.description.clone())
             })
             .unwrap_or_default();
-        let bus = self.args.bus.as_deref().map(|b| CardText {
-            title: folder(b),
-            sub: String::new(),
-            description: String::new(),
+        // (the folder's name until the bus's file has been read)
+        let bus = self.args.bus.as_deref().map(|b| {
+            self.new_ui.bus_card().unwrap_or_else(|| CardText {
+                title: folder(b),
+                sub: String::new(),
+                description: String::new(),
+            })
         });
         let frame = LoadingFrame {
             version: crate::startup::VERSION.to_string(),
-            heading: heading(name.trim(), &self.args.time),
+            heading: heading(name.trim(), self.args.line.as_deref(), &self.args.time),
             stage: stage(done, total),
+            activity: activity(done).to_string(),
             progress: done as f32 / total.max(1) as f32,
             bus,
             map: Some(CardText {
@@ -148,13 +202,50 @@ mod tests {
 
     #[test]
     fn the_heading_and_the_stage_read_as_in_the_mockup() {
-        assert_eq!(heading("Example map", "08:00"), "Example map \u{b7} 08:00");
-        assert_eq!(heading("", "08:00"), "08:00");
-        assert_eq!(heading("Example map", " "), "Example map");
+        assert_eq!(
+            heading("Example map", Some("50"), "08:00"),
+            "Example map \u{b7} Line 50 \u{b7} 08:00"
+        );
+        assert_eq!(
+            heading("Example map", None, "08:00"),
+            "Example map \u{b7} 08:00"
+        );
+        assert_eq!(heading("", Some(" "), "08:00"), "08:00");
+        assert_eq!(heading("Example map", None, " "), "Example map");
+        assert_eq!(activity(0), "Reading the map");
+        assert_eq!(activity(62), "Preparing the world");
         assert_eq!(
             stage(62, 100),
             "Loading map tiles (first area) \u{b7} 62 of 100"
         );
+    }
+
+    #[test]
+    fn the_bus_block_reads_as_in_the_mockup() {
+        let v = omsi_vehicle::Vehicle {
+            manufacturer: "Example Maker".into(),
+            type_name: "Example bus A".into(),
+            default_paint: "Default paint".into(),
+            description: "Author's description,\nfirst lines.".into(),
+            ..Default::default()
+        };
+        let c = bus_card(&v, "EXAMPLE_BUS", None);
+        assert_eq!(c.title, "Example bus A");
+        assert_eq!(c.sub, "Example Maker \u{b7} Default paint");
+        assert_eq!(c.description, "Author's description, first lines.");
+        // a paint asked for by name is shown, by number the default one
+        assert_eq!(
+            bus_card(&v, "", Some("Red")).sub,
+            "Example Maker \u{b7} Red"
+        );
+        assert_eq!(
+            bus_card(&v, "", Some("3")).sub,
+            "Example Maker \u{b7} Default paint"
+        );
+        // a file with no name: the folder's
+        let bare = omsi_vehicle::Vehicle::default();
+        let c = bus_card(&bare, "EXAMPLE_BUS", None);
+        assert_eq!((c.title.as_str(), c.sub.as_str()), ("EXAMPLE_BUS", ""));
     }
 
     #[test]

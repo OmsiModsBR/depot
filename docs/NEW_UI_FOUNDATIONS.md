@@ -119,7 +119,7 @@ Built as stacked draft pull requests, merged in order only when the maintainer c
 | Launcher sidebar and pages (#252) | the game's own launcher window draws them (no separate program); Drive, Mods, Timetable, Sessions, Profile, Controls, Tutorials, Settings and Setup keep their current look for now |
 | Vehicles and Maps pages on the real catalog, with the status labels of section 3 (#253, #254) | in the game's launcher; "Drive this bus" / "Drive on this map" hand the choice to Drive. Scripts, textures and sounds are shown as "not checked yet", never "found" |
 | Diagnostics page | in the game's launcher: build, graphics adapter, OMSI 2 folder check, log path, games running |
-| Loading screen with the player's screenshots as a slow slideshow (#255) | draft |
+| Loading screen with the player's screenshots as a slow slideshow (#255) | in the game, laid out after the loading concept (v2) at 1920x1080, 1672x941 and 2560x1080 and at 150%: logo with no black box, the veil over the photo, the bar, the "Loading" card with the bus read from its file and the map; tested for the 6 s hold and 3.5 s fade, the default background, and text that never overflows. The bus and map thumbnails are icons until the content offers pictures |
 | Pause menu column with the city-map bar (#256) | draft; the caller supplies the items and the map |
 | Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
 | Offscreen example drawing every screen with placeholder data (#250) | draft |
