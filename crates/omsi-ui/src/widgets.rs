@@ -577,8 +577,8 @@ impl Ui {
             .text(atlas, fonts, text, px, weight, at, align, c)
     }
 
-    /// [`Ui::text`] of a text that is not the interface's own: drawn as it is, not looked up
-    /// in the translations.
+    /// [`Ui::text`] of a text that is not the interface's own (a map's or a bus's name, an
+    /// author's description): drawn as it is, not looked up in the translations.
     pub fn text_as_is(
         &mut self,
         text: &str,
@@ -622,6 +622,55 @@ impl Ui {
             .unwrap()
             .1
             .text_in(atlas, fonts, text, px, weight, r, align, c)
+    }
+
+    /// Text on its baseline with `tracking` pixels more between its letters (the small
+    /// letter-spaced capitals of headings and labels); returns its width. Drawn as it is (the
+    /// caller translates the text before it makes it capitals), letter by letter, each where
+    /// the whole text would put it plus the spacing, so the font's kerning is kept.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_spaced(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+        tracking: f32,
+    ) -> f32 {
+        let n = text.chars().count();
+        let w = self.fonts.width_as_is(text, px, weight) + tracking * n.saturating_sub(1) as f32;
+        let x0 = match align {
+            Align::Left => at.x,
+            Align::Center => at.x - w * 0.5,
+            Align::Right => at.x - w,
+        };
+        let Ui {
+            atlas,
+            fonts,
+            layers,
+            ..
+        } = self;
+        let p = &mut layers.last_mut().unwrap().1;
+        for (k, (i, ch)) in text.char_indices().enumerate() {
+            if ch.is_whitespace() {
+                continue;
+            }
+            let x = x0 + fonts.width_as_is(&text[..i], px, weight) + tracking * k as f32;
+            let s = &text[i..i + ch.len_utf8()];
+            p.text_as_is(
+                atlas,
+                fonts,
+                s,
+                px,
+                weight,
+                Vec2::new(x, at.y),
+                Align::Left,
+                c,
+            );
+        }
+        w
     }
 
     /// Several lines broken at spaces to `width`; returns the height used.
