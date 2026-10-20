@@ -695,8 +695,6 @@ mod tests {
         }
     }
 
-    /// The overlay itself, on a real adapter: the column is drawn over a picture and nothing
-    /// is drawn while no menu is open.
     /// Under "DirectX9 (D3D9Ex)" the overlay's draws go to the mirror too: the whole atlas
     /// first, then the vertices and the draw, and nothing while no screen is shown.
     #[test]
@@ -770,6 +768,8 @@ mod tests {
         assert_eq!(seen.lock().unwrap().last().map(String::as_str), Some("gone"));
     }
 
+    /// The overlay itself, on a real adapter: the column is drawn over a picture and nothing
+    /// is drawn while no menu is open.
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
