@@ -630,7 +630,7 @@ impl Settings {
                 "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
                 "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
                 "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), _ => "auto".to_string() },
+                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9".to_string(), _ => "auto".to_string() },
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),
@@ -847,6 +847,18 @@ mod tests {
         assert!(!super::Settings::default().info_bar);
         assert!(super::Settings::from_text("info_bar=1\n").info_bar);
         assert!(!super::Settings::from_text("info_bar=0\n").info_bar);
+    }
+
+    /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    #[test]
+    fn d3d9_is_a_windows_graphics_api() {
+        let want = if cfg!(windows) { "d3d9" } else { "auto" };
+        for v in ["d3d9", "D3D9Ex", "dx9"] {
+            let s = super::Settings::from_text(&format!("graphics_api={v}\n"));
+            assert_eq!(s.graphics_api, want);
+            assert_eq!(super::Settings::from_text(&s.to_text()).graphics_api, want);
+        }
+        assert_eq!(super::Settings::default().graphics_api, "auto");
     }
 
     #[test]
