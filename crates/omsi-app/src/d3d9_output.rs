@@ -23,7 +23,7 @@ use omsi_render::{
 };
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLight,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLamps, SceneLight,
     SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
@@ -155,6 +155,7 @@ impl Inner {
                 "only the vanilla look is drawn here; the chosen one is drawn vanilla",
             );
         }
+        let lights = scene.frame_lights();
         let frame = SceneFrame {
             view_proj: plan.view_proj,
             light: SceneLight {
@@ -173,6 +174,11 @@ impl Inner {
             main: &self.main,
             cab: &self.cab,
             surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
+            lamps: SceneLamps {
+                lights: &lights,
+                grid: scene.frame_light_grid(),
+                place: plan.light_grid,
+            },
         };
         let material = |id: usize| {
             scene.materials.get(id).map(|m| SceneMaterial {

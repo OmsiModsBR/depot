@@ -164,6 +164,9 @@ pub struct FramePlan {
     /// The camera's right and up axes (xyz), which lay out the sphere maps of `[matl_envmap]`.
     pub cam_right: [f32; 4],
     pub cam_up: [f32; 4],
+    /// Where the lamps' grid lies: x, y its south-west corner (render-origin relative), z a
+    /// cell's side, w the cells per side (see [`crate::Scene::frame_lights`]).
+    pub light_grid: [f32; 4],
     /// The sky's colour the picture is cleared to, as the lighting gives it (w 1).
     pub clear: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
@@ -201,6 +204,7 @@ pub(crate) fn plan_of(
         sky_color: cu.sky_color,
         cam_right: cu.cam_right,
         cam_up: cu.cam_up,
+        light_grid: cu.light_grid,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
@@ -215,6 +219,27 @@ pub(crate) fn plan_of(
             .map(PlanBatch::from_batch)
             .collect(),
         overlays: f.overlays.clone(),
+    }
+}
+
+impl crate::scene::Scene {
+    /// The lights of the last frame as this renderer's shaders read them, four vectors each:
+    /// xyz the position (render-origin relative) and the radius (0: a light only the
+    /// enhanced path draws), rgb the colour and the intensity, the spot's direction and the
+    /// cosine of its outer cone (below -1.5 a point light), then the cosine of the inner cone,
+    /// the core radius, a headlamp's beam and the radius. The vehicles' interior lamps come
+    /// first, at the indices their instances name.
+    pub fn frame_lights(&self) -> std::borrow::Cow<'_, [[f32; 4]]> {
+        match bytemuck::try_cast_slice(&self.last_lights) {
+            Ok(v) => std::borrow::Cow::Borrowed(v),
+            Err(_) => std::borrow::Cow::Owned(bytemuck::pod_collect_to_vec(&self.last_lights)),
+        }
+    }
+
+    /// The last frame's lamp grid: per cell (row by row from the south-west, see
+    /// [`FramePlan::light_grid`]) a fixed number of light indices, `u32::MAX` for none.
+    pub fn frame_light_grid(&self) -> &[u32] {
+        &self.last_grid
     }
 }
 

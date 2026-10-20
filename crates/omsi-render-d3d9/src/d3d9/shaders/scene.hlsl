@@ -12,10 +12,14 @@
 // terrain's night map), the sphere map of [matl_envmap] with its mask and its bump map, and
 // the D3D material's specular highlight, lit at the vertex.
 //
-// Not yet here (later phases): shadows and ambient occlusion (taken as 1), the map's lamps
-// and the vehicles' interior lamps (and the tile light maps of the splines), the detail
-// noise, swaying trees, rain and snow (and the wet sheen on a reflecting surface), and the
-// fog's way through the player's vehicle.
+// The lamps: the map's lamps and the vehicles' lights from the grid of cells round the
+// camera, and the vehicles' interior lamps on the meshes they light, read from two float
+// textures (the light list, four texels a light, and the grid's light indices).
+//
+// Not yet here (later phases): shadows and ambient occlusion (taken as 1), the tile light
+// maps (the splines' and the ground's lamps baked into the map), the detail noise, swaying
+// trees, rain and snow (and the wet sheen on a reflecting surface), and the fog's way
+// through the player's vehicle.
 
 // ---- vertex stage ----
 
@@ -32,6 +36,8 @@ float4 vs_cam_up : register(c10);
 // the material's specular colour (w its power, 0 = none) and its params (y unlit)
 float4 vs_specular : register(c11);
 float4 vs_params : register(c12);
+// x the lights in the light list
+float4 vs_lamps : register(c13);
 
 struct VsIn {
     float3 pos : POSITION;
@@ -57,6 +63,9 @@ struct VsOut {
     float3 spec_sun : TEXCOORD5;
     float3 spec_sky : TEXCOORD6;
     float2 env_uv : TEXCOORD7;
+    // the instance's interior lamps (`interior_lamps`): x the first in the list, y how many,
+    // z a plain brightness instead (-1: the lamps)
+    float3 lamps : TEXCOORD8;
 };
 
 // A normal of no length (a mesh saved with zero normals) is upright instead of NaN.
@@ -97,6 +106,12 @@ VsOut vs_main(VsIn i) {
     o.uv = i.uv + i.params.zw;
     o.params = i.params;
     o.params2 = i.params2;
+    // the interior lamp code, worked out once per vertex: the first of the instance's lamps
+    // times 64 plus how many (no more than the list holds), or below 1 a plain brightness
+    float code = floor(i.params2.z + 0.5);
+    float first = floor(code / 64.0);
+    float count = clamp(min(code - first * 64.0, vs_lamps.x - first), 0.0, 63.0);
+    o.lamps = i.params2.z < 1.0 ? float3(0.0, 0.0, saturate(i.params2.z)) : float3(first, count, -1.0);
     // Direct3D's specular term at the vertex: the sun (light A) and the light from straight
     // above (light B), each (N.H)^power with the local viewer's half vector where the light
     // falls on the face, times the material's specular colour, at most 1
@@ -144,6 +159,11 @@ sampler2D t_light : register(s3);  // a terrain's detail texture on a terrain ma
 sampler2D t_env : register(s4);
 sampler2D t_envmask : register(s5);
 sampler2D t_bump : register(s6);
+// the lights, four texels a row, and the grid's light indices (-1 none), point-sampled
+sampler2D t_lights : register(s7);
+sampler2D t_grid : register(s8);
+// x OR y of two bytes (x across, y down), point-sampled
+sampler2D t_or : register(s10);
 
 // the material's uniform
 float4 m_color : register(c0);
@@ -168,38 +188,37 @@ float4 sky_color : register(c16);
 float4 draw_flags : register(c17);
 // xy one texel of the bump map
 float4 bump_texel : register(c18);
-// The reflection's weight: rgb that of a material without a mask, w the light a mask is
-// multiplied by. Without the map lamps it is the same everywhere, so it is worked out once:
-// the factor x 255 x its light, truncated per channel and spilled into the next channel as
-// the packed colour Direct3D takes it (see `scene::env_factor`).
-float4 env_k : register(c19);
+// x 1 when the sphere map is there, y 1 when it has a mask, z 1 when a transmap is declared
+float4 env_on : register(c19);
+// the grid: cell = floor(world xy * x + yz) (`bind_lamps`), w the cells per side
+float4 light_grid : register(c20);
+// x 1 / the light texture's rows, y 1 / the grid texture's width, z 1 / its height, w the
+// places per cell (0: no grid)
+float4 lamp_tex : register(c21);
+// x the lights in the light texture
+float4 lamp_count : register(c22);
+// x the places per cell of the grid, as a loop count (0: no grid)
+int4 lamp_places : register(i0);
+// [matl_texadress_border]: the border colour (rgb, alpha), unpacked from the flags
+float4 border : register(c24);
 
 float3 srgb_encode(float3 c) {
     c = saturate(c);
-    float3 lo = c * 12.92;
-    float3 hi = 1.055 * pow(c, 1.0 / 2.4) - 0.055;
-    return float3(c.r <= 0.0031308 ? lo.r : hi.r,
-                  c.g <= 0.0031308 ? lo.g : hi.g,
-                  c.b <= 0.0031308 ? lo.b : hi.b);
+    float3 hi = 1.055 * exp2(log2(c) * (1.0 / 2.4)) - 0.055;
+    return c <= 0.0031308 ? c * 12.92 : hi;
 }
 
 float3 srgb_decode(float3 c) {
     c = saturate(c);
-    float3 lo = c / 12.92;
-    float3 hi = pow((c + 0.055) / 1.055, 2.4);
-    return float3(c.r <= 0.04045 ? lo.r : hi.r,
-                  c.g <= 0.04045 ? lo.g : hi.g,
-                  c.b <= 0.04045 ? lo.b : hi.b);
+    float3 hi = exp2(log2((c + 0.055) / 1.055) * 2.4);
+    return c <= 0.04045 ? c / 12.92 : hi;
 }
 
 // [matl_texadress_border]: outside 0..1 the material's border colour
 float4 diffuse_border(float4 tex, float2 uv) {
-    if (m_flags.y > 0.5 && m_flags.y < 1.5 && (any(uv < 0.0) || any(uv > 1.0))) {
-        float p = floor(m_flags.z + 0.5);
-        float r = floor(p / 65536.0);
-        float g = floor((p - r * 65536.0) / 256.0);
-        float b = p - r * 65536.0 - g * 256.0;
-        return float4(r / 255.0, g / 255.0, b / 255.0, m_flags.w);
+    float2 off = abs(uv - 0.5);
+    if (m_flags.y > 0.5 && m_flags.y < 1.5 && max(off.x, off.y) > 0.5) {
+        return border;
     }
     return tex;
 }
@@ -207,6 +226,103 @@ float4 diffuse_border(float4 tex, float2 uv) {
 // [matl_texadress_mirroronce]: mirrored once about 0
 float2 tex_address(float2 uv) {
     return m_flags.y > 1.5 ? abs(uv) : uv;
+}
+
+// Vector `k` of light `li`, as the device packs them (`scene::pack_light`): xyz the
+// position, w 1 for a point light that lights every surface; rgb the colour times the
+// intensity, w 1 / the radius; the spot's direction and the cosine of its outer cone (below
+// -1.5 a point light); the cosine of the inner cone, the core radius squared, the full-light
+// radius squared and the reach of an interior lamp squared.
+float4 light_vec(float li, float k) {
+    return tex2Dlod(t_lights, float4((k + 0.5) * 0.25, (li + 0.5) * lamp_tex.x, 0.0, 0.0));
+}
+
+// The lights the grid cell of `p` names. A light is named in every cell its range touches,
+// so the point's own cell holds every light that reaches it. Full within an eighth of the
+// range, then falling with the square of the distance to nothing at the range, three and
+// three quarters strong (the default renderer's lamp pools); `map_k` how much of the map's
+// lamps the surface takes, a vehicle's own point lights lighting every surface.
+float3 point_lights(float3 p, float3 n, float map_k) {
+    float3 sum = float3(0.0, 0.0, 0.0);
+    // the cell, which must be on the grid (no grid: none of side 0, see `bind_lamps`)
+    float2 c = floor(p.xy * light_grid.x + light_grid.yz);
+    float2 off = abs(c + 0.5 - 0.5 * light_grid.w);
+    if (max(off.x, off.y) > 0.5 * light_grid.w - 0.25) {
+        return sum;
+    }
+    float row = (c.y + 0.5) * lamp_tex.z;
+    float base = c.x * lamp_tex.w;
+    for (int j = 0; j < lamp_places.x; j++) {
+        float li = tex2Dlod(t_grid, float4((base + j + 0.5) * lamp_tex.y, row, 0.0, 0.0)).r;
+        if (li < 0.0) {
+            break;
+        }
+        float4 pos = light_vec(li, 0.0);
+        float4 color = light_vec(li, 1.0);
+        float4 dir = light_vec(li, 2.0);
+        float4 extra = light_vec(li, 3.0);
+        float3 d = pos.xyz - p;
+        float dist2 = dot(d, d);
+        float dist = sqrt(dist2);
+        // (nothing at the range and beyond: no test needed)
+        float att = min(1.0, extra.z / max(dist2, 0.01)) * saturate(1.0 - dist * color.w);
+        float3 to = d / max(dist, 0.01);
+        float ndl = max(dot(n, to), 0.15);
+        // a spot: full inside the inner cone, nothing outside the outer one
+        float spot = smoothstep(dir.w, max(extra.x, dir.w + 1e-3), dot(-to, dir.xyz));
+        float k = dir.w >= -1.5 ? spot : max(pos.w, map_k);
+        sum += color.rgb * (att * 3.75 * ndl * k);
+    }
+    return sum;
+}
+
+// [interiorlight]: a vehicle's saloon lamps on a mesh that names them (`lamps`, from the
+// instance's code: the first and how many, or a plain brightness, a passenger standing in a
+// lit bus). Each lamp is Direct3D's point light, 1 / (d / core)^2 within its reach, times
+// N.L, and the sum saturates as a vertex colour does.
+float3 interior_lamps(float3 p, float3 n, float3 lamps) {
+    if (lamps.z >= 0.0) {
+        return float3(1.0, 0.96, 0.84) * lamps.z;
+    }
+    float3 sum = float3(0.0, 0.0, 0.0);
+    // (the count comes interpolated: a hair over the integer must not light one more)
+    [loop] for (int i = 0; i < 63; i++) {
+        if (i + 0.5 > lamps.y) {
+            break;
+        }
+        float li = lamps.x + i;
+        float4 pos = light_vec(li, 0.0);
+        float4 color = light_vec(li, 1.0);
+        float4 extra = light_vec(li, 3.0);
+        float3 d = pos.xyz - p;
+        float dist2 = max(dot(d, d), 1e-4);
+        float reach = dist2 < extra.w ? 1.0 : 0.0;
+        sum += color.rgb * (extra.y / dist2 * max(dot(n, d * rsqrt(dist2)), 0.0) * reach);
+    }
+    return min(sum, 1.0);
+}
+
+// x OR y for whole numbers 0..255, from the table of them (`or_table`)
+float or_byte(float x, float y) {
+    return tex2Dlod(t_or, float4((x + 0.5) / 256.0, (y + 0.5) / 256.0, 0.0, 0.0)).r * 255.0;
+}
+
+// The reflection's weight of a material without a mask: the factor x 255 x its light (each
+// channel at most 1), truncated, put together as one packed colour without saturation, so
+// that a factor over 1 spills into the next channel (`scene::env_factor`).
+float3 texture_factor(float factor, float3 light) {
+    float3 m = floor(saturate(light) * max(factor, 0.0) * 255.0);
+    // each channel's bytes: the lowest, the next and (blue's) the third (all whole and not
+    // negative: the remainders need no fmod)
+    float3 above = floor(m / 256.0);
+    float3 low = m - above * 256.0;
+    float3 next = above - floor(above / 256.0) * 256.0;
+    float third = floor(above.b / 256.0);
+    third -= floor(third / 256.0) * 256.0;
+    // red takes green's second byte and blue's third, green blue's second (nothing to take
+    // when every channel is below 256)
+    float r = or_byte(or_byte(low.r, next.g), third);
+    return float3(r, or_byte(low.g, next.b), low.b) / 255.0;
 }
 
 float4 ps_main(VsOut i) : COLOR0 {
@@ -265,19 +381,28 @@ float4 ps_main(VsOut i) : COLOR0 {
     float from_above = 0.5 + 0.5 * n.z;
     float shadow = 1.0;
     float ao = 1.0;
+    // the map's lamps: not on a [nomaplighting] material (params.y 0.25), on a
+    // [LightMapMapping] one (0.35, lit by the tile light map alone) or on a tree's leaves
+    // (0.15)
+    float map_k = (m_params.y > 0.1 && m_params.y < 0.45) ? 0.0 : 1.0;
+    float3 lamp_light = point_lights(i.world, n, map_k);
     float3 light = sun_color.rgb * sun_dir.w * ndl * shadow
-        + (sky_color.rgb * from_above * (0.6 + 0.4 * shadow) + ambient.xyz) * ao;
+        + (sky_color.rgb * from_above * (0.6 + 0.4 * shadow) + ambient.xyz) * ao + lamp_light;
     // the material's diffuse colour takes the sun and the light from above, its ambient
     // colour the ambient light
     float3 ambient_light = ambient.xyz * ao;
     float3 mat_light = m_color.rgb * (light - ambient_light) + m_ambient.rgb * ambient_light;
     bool terrain_night = m_params.y < 0.5 && terrain && m_extra.w > 0.5 && m_extra.w < 1.5;
-    float3 encoded;
-    if (m_params.y > 0.5) {
-        // unlit: the texture times the material's colour and its emissive colour
-        encoded = srgb_encode(srgb_decode(tex.rgb) * (m_color.rgb + m_emissive.rgb));
-    } else {
-        float3 v = saturate(m_emissive.rgb + mat_light);
+    // what is drawn, as stored (`base`), and what goes on it in linear light: the unlit look
+    // takes its colours there, the specular highlight and the night map are added there
+    // (one decode and one encode for all of them)
+    bool unlit = m_params.y > 0.5;
+    float3 base = tex.rgb;
+    float3 scale = m_color.rgb + m_emissive.rgb;
+    float3 spec = float3(0.0, 0.0, 0.0);
+    if (!unlit) {
+        float3 v = saturate(m_emissive.rgb + mat_light
+            + m_color.rgb * interior_lamps(i.world, n, i.lamps));
         if (m_params2.x > 0.5 && !terrain) {
             // [matl_lightmap], as strong as the instance says, over what is lit
             v = v + lm.rgb * saturate(i.params2.x) * (1.0 - v);
@@ -285,30 +410,33 @@ float4 ps_main(VsOut i) : COLOR0 {
         if (terrain_night) {
             v = min(v + nm.rgb * sun_color.w * saturate(i.params2.y), 1.0);
         }
-        encoded = tex.rgb * v;
-        float3 spec = i.spec_sun * shadow + i.spec_sky;
-        if (any(spec > 0.0)) {
-            encoded = srgb_encode(srgb_decode(encoded) + spec);
-        }
+        base = tex.rgb * v;
+        scale = float3(1.0, 1.0, 1.0);
+        spec = i.spec_sun * shadow + i.spec_sky;
     }
-    if (m_extra.w > 0.5 && !terrain_night) {
-        // [matl_nightmap]: by night, or always for one something else switches
-        bool switched = m_extra.w > 1.5;
-        float night = switched ? 1.0 : sun_color.w;
-        float k = switched ? 1.0 : saturate(i.params2.y);
-        encoded = srgb_encode(srgb_decode(encoded) + srgb_decode(nm.rgb) * night * k);
+    // [matl_nightmap]: by night, or always for one something else switches
+    bool night_map = m_extra.w > 0.5 && !terrain_night;
+    bool switched = m_extra.w > 1.5;
+    float night = (switched ? 1.0 : sun_color.w * saturate(i.params2.y)) * (night_map ? 1.0 : 0.0);
+    float3 encoded = base;
+    if (unlit || any(spec > 0.0) || night > 0.0) {
+        float3 lin = saturate(srgb_decode(base) * scale + spec) + srgb_decode(nm.rgb) * night;
+        encoded = srgb_encode(lin);
     }
     if (m_params2.y > 0.0) {
         // [matl_envmap]: mixed in as stored, by the mask's alpha (or the diffuse alpha where
-        // a transmap is declared) times the light, else by the factor
-        float bits = floor(m_params2.w + 0.5);
-        bool has_mask = fmod(bits, 2.0) > 0.5;
-        bool declared = fmod(floor(bits / 2.0), 2.0) > 0.5;
-        float3 kk = env_k.rgb;
+        // a transmap is declared) times the light, else by the factor times the ambient
+        // light and that light; the light is the mean of the lamps' and the sun's, at most 1
+        bool has_mask = env_on.y > 0.5;
+        bool declared = env_on.z > 0.5;
+        float g = saturate(dot(lamp_light, 1.0 / 3.0) + dot(sun_color.rgb, 1.0 / 3.0));
+        float3 kk;
         if (has_mask || declared) {
-            kk = (has_mask ? mask.a : diffuse_a) * env_k.w;
+            kk = (has_mask ? mask.a : diffuse_a) * g;
+        } else {
+            kk = texture_factor(m_params2.y, ambient.rgb + g);
         }
-        encoded = lerp(encoded, env.rgb, kk);
+        encoded = lerp(encoded, env.rgb, kk * env_on.x);
     }
     float f = saturate(1.0 - exp(-distance(i.world, cam_pos.xyz) * fog.w));
     float3 rgb = lerp(encoded, fog.xyz, f);

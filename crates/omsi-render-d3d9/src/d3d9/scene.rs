@@ -6,8 +6,9 @@ use windows::Win32::Graphics::Direct3D9::*;
 
 use super::{make_mesh, map_err, shader, some, write_buffer, D3d9Device, Mesh};
 use crate::scene::{
-    mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneMaterial,
-    SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS, MATERIAL_VECTORS,
+    mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneLamps,
+    SceneMaterial, SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS,
+    MATERIAL_VECTORS,
 };
 use crate::{BackendError, Result};
 
@@ -15,6 +16,14 @@ const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
 
 /// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
 const SAMPLERS: u32 = 7;
+
+/// The samplers of the light list and of the lamp grid.
+const LIGHTS_STAGE: u32 = 7;
+const GRID_STAGE: u32 = 8;
+/// The table of byte ORs the reflection's spilling factor is put together with.
+const OR_STAGE: u32 = 10;
+/// The pixel shader's register of the material's border colour (unpacked from its flags).
+const BORDER_REGISTER: u32 = 24;
 
 /// What the scene layer may use beyond the floor, read when the device opens.
 #[derive(Debug, Clone, Copy, Default)]
@@ -26,6 +35,10 @@ pub(super) struct SceneCaps {
     /// The interface is blended in linear light: textures read as sRGB, the target written
     /// as sRGB and converted after the blend (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`).
     pub(super) linear_ui: bool,
+    /// The lamps can be read from float textures (32-bit RGBA and R, dynamic), at most this
+    /// wide and high.
+    pub(super) lamps: bool,
+    pub(super) max_texture: (u32, u32),
 }
 
 impl SceneCaps {
@@ -62,6 +75,11 @@ impl SceneCaps {
                 )
                 && check(srgb_write, D3DRTYPE_SURFACE, display)
                 && check(srgb_write, D3DRTYPE_SURFACE, D3DFMT_A8R8G8B8),
+            lamps: raw.Caps2 & D3DCAPS2_DYNAMICTEXTURES as u32 != 0
+                && [D3DFMT_A32B32G32R32F, D3DFMT_R32F]
+                    .into_iter()
+                    .all(|f| check(D3DUSAGE_DYNAMIC as u32, D3DRTYPE_TEXTURE, f)),
+            max_texture: (raw.MaxTextureWidth, raw.MaxTextureHeight),
         };
         log::info!("d3d9 scene: {caps:?}");
         caps
@@ -84,6 +102,19 @@ struct ScenePipeline {
     ps: IDirect3DPixelShader9,
     /// Bound for a night, light or sphere map that is not there: it adds nothing.
     black: IDirect3DTexture9,
+    /// x OR y of two bytes, at (x, y) of a 256 x 256 picture (`or_table`).
+    or_table: IDirect3DTexture9,
+}
+
+/// The byte ORs as RGBA pixels: x OR y in every channel at column x, row y.
+fn or_table() -> Vec<u8> {
+    let mut px = Vec::with_capacity(256 * 256 * 4);
+    for y in 0..256u32 {
+        for x in 0..256u32 {
+            px.extend_from_slice(&[(x | y) as u8; 4]);
+        }
+    }
+    px
 }
 
 /// The sampler states of an addressing.
@@ -107,6 +138,80 @@ pub(super) struct SceneStore {
     instances: Option<(IDirect3DVertexBuffer9, usize)>,
     /// What every mesh and texture was made from.
     pub(super) copies: SceneCopies,
+    lamps: Lamps,
+}
+
+/// The frame's lights and the grid naming them, as the textures the scene shader reads (made
+/// again after a loss with everything else: they are uploaded every frame).
+#[derive(Default)]
+struct Lamps {
+    /// The light list, four texels a row, and its rows.
+    lights: Option<(IDirect3DTexture9, u32)>,
+    /// The grid's texture, its width and height.
+    grid: Option<(IDirect3DTexture9, u32, u32)>,
+    /// What they hold, so that an unchanged list or grid is not uploaded again.
+    last_lights: Vec<[f32; 4]>,
+    last_grid: Vec<f32>,
+    texels: Vec<f32>,
+    /// The list as the shader reads it (`scene::pack_light`).
+    packed: Vec<[f32; 4]>,
+    warned: bool,
+}
+
+/// A dynamic float texture of `width` by `height`.
+fn float_texture(
+    device: &IDirect3DDevice9Ex,
+    width: u32,
+    height: u32,
+    format: D3DFORMAT,
+) -> Result<IDirect3DTexture9> {
+    let mut texture = None;
+    // SAFETY: the out-parameter is a live local.
+    unsafe {
+        device
+            .CreateTexture(
+                width,
+                height,
+                1,
+                D3DUSAGE_DYNAMIC as u32,
+                format,
+                D3DPOOL_DEFAULT,
+                &mut texture,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+    }
+    some(texture, "float texture")
+}
+
+/// Writes `data` into `texture` row by row, `row` floats a row, `rows` rows (zero past the
+/// data).
+fn fill_float_texture(
+    texture: &IDirect3DTexture9,
+    row: usize,
+    rows: usize,
+    data: &[f32],
+) -> Result<()> {
+    let mut locked = D3DLOCKED_RECT::default();
+    // SAFETY: the level is locked whole; each row is written within its pitch, and the
+    // texture has `rows` rows of at least `row` floats.
+    unsafe {
+        texture
+            .LockRect(0, &mut locked, std::ptr::null(), D3DLOCK_DISCARD as u32)
+            .map_err(map_err)?;
+        for y in 0..rows {
+            let dst = std::slice::from_raw_parts_mut(
+                (locked.pBits as *mut u8).add(y * locked.Pitch as usize) as *mut f32,
+                row,
+            );
+            let src = data.get(y * row..).unwrap_or(&[]);
+            let n = src.len().min(row);
+            dst[..n].copy_from_slice(&src[..n]);
+            dst[n..].fill(0.0);
+        }
+        texture.UnlockRect(0).map_err(map_err)?;
+    }
+    Ok(())
 }
 
 /// What the scene's meshes and textures were made from, kept in system memory as Direct3D
@@ -306,10 +411,21 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
             make_mips: false,
         },
     )?;
+    let or_table = make_texture(
+        device,
+        &SceneTexture {
+            width: 256,
+            height: 256,
+            format: TexFormat::Rgba8,
+            levels: &[or_table()],
+            make_mips: false,
+        },
+    )?;
     // SAFETY: the bytecode and element arrays outlive the calls.
     unsafe {
         Ok(ScenePipeline {
             black,
+            or_table,
             decl: device
                 .CreateVertexDeclaration(elements.as_ptr())
                 .map_err(map_err)?,
@@ -544,6 +660,139 @@ impl D3d9Device {
         self.set_frame_states()
     }
 
+    /// Uploads the frame's lights and grid where they changed and binds them; returns the
+    /// shader's constants c20..c22 for them.
+    fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 3]> {
+        // (no grid: one of no cells, which no point is on)
+        const NO_GRID: [f32; 4] = [0.0; 4];
+        let none = [NO_GRID, [0.0; 4], [0.0; 4]];
+        self.bind_lamp_counts(0, 0)?;
+        let (max_w, max_h) = self.scene_caps.max_texture;
+        if !self.scene_caps.lamps || lamps.count() == 0 {
+            if !self.scene_caps.lamps && lamps.count() > 0 && !self.scene.lamps.warned {
+                log::warn!("d3d9 scene: no float textures here; the lamps are not drawn");
+                self.scene.lamps.warned = true;
+            }
+            return Ok(none);
+        }
+        let device = self.device.clone();
+        let store = &mut self.scene.lamps;
+        // the light list: the first as many as the texture can have rows
+        let kept = lamps.count().min(max_h as usize);
+        if store.lights.as_ref().is_none_or(|l| (l.1 as usize) < kept) {
+            let rows = (kept.next_power_of_two().max(64) as u32).min(max_h);
+            store.lights = Some((float_texture(&device, 4, rows, D3DFMT_A32B32G32R32F)?, rows));
+            store.last_lights.clear();
+        }
+        let (lights, rows) = store.lights.clone().expect("made above");
+        let list = &lamps.lights[..kept * 4];
+        if store.last_lights != list {
+            store.packed.clear();
+            store
+                .packed
+                .extend(list.chunks_exact(4).flat_map(crate::scene::pack_light));
+            fill_float_texture(&lights, 16, rows as usize, store.packed.as_flattened())?;
+            store.last_lights.clear();
+            store.last_lights.extend_from_slice(list);
+        }
+        // the grid: one texel a place, a row of cells a row
+        let mut grid_info = [0.0; 4];
+        if let Some((side, places)) = lamps.grid_shape() {
+            let (w, h) = ((side * places) as u32, side as u32);
+            if w > max_w || h > max_h {
+                if !store.warned {
+                    log::warn!("d3d9 scene: a lamp grid of {w} x {h} is larger than textures here; the map's lamps are not drawn");
+                    store.warned = true;
+                }
+            } else {
+                if store.grid.as_ref().is_none_or(|g| (g.1, g.2) != (w, h)) {
+                    store.grid = Some((float_texture(&device, w, h, D3DFMT_R32F)?, w, h));
+                    store.last_grid.clear();
+                }
+                lamps.grid_texels(kept, &mut store.texels);
+                let grid = &store.grid.as_ref().expect("made above").0;
+                if store.last_grid != store.texels {
+                    fill_float_texture(grid, w as usize, h as usize, &store.texels)?;
+                    std::mem::swap(&mut store.last_grid, &mut store.texels);
+                }
+                grid_info = [0.0, 1.0 / w as f32, 1.0 / h as f32, places as f32];
+            }
+        }
+        grid_info[0] = 1.0 / rows as f32;
+        let grid = store
+            .grid
+            .as_ref()
+            .map(|g| &g.0)
+            .filter(|_| grid_info[3] > 0.0);
+        // SAFETY: plain calls on a live device; the textures belong to it.
+        unsafe {
+            device.SetTexture(LIGHTS_STAGE, &lights).map_err(map_err)?;
+            match grid {
+                Some(g) => device.SetTexture(GRID_STAGE, g),
+                None => device.SetTexture(GRID_STAGE, None::<&IDirect3DBaseTexture9>),
+            }
+            .map_err(map_err)?;
+            for stage in [LIGHTS_STAGE, GRID_STAGE] {
+                for (state, value) in [
+                    (D3DSAMP_MINFILTER, D3DTEXF_POINT.0 as u32),
+                    (D3DSAMP_MAGFILTER, D3DTEXF_POINT.0 as u32),
+                    (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                    (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                    (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+                ] {
+                    device
+                        .SetSamplerState(stage, state, value)
+                        .map_err(map_err)?;
+                }
+            }
+        }
+        let places = grid_info[3] as i32;
+        self.bind_lamp_counts(kept, places)?;
+        // the cell of a point is floor(xy / side - corner / side)
+        let [x, y, side, cells] = lamps.place;
+        let place = if places > 0 && side > 0.0 {
+            [1.0 / side, -x / side, -y / side, cells]
+        } else {
+            NO_GRID
+        };
+        Ok([place, grid_info, [kept as f32, 0.0, 0.0, 0.0]])
+    }
+
+    /// The table of byte ORs, read texel by texel.
+    fn bind_or_table(&self) -> Result<()> {
+        let table = &self.scene.pipeline.as_ref().expect("built before").or_table;
+        // SAFETY: plain calls on a live device; the texture belongs to it.
+        unsafe {
+            self.device.SetTexture(OR_STAGE, table).map_err(map_err)?;
+            for (state, value) in [
+                (D3DSAMP_MINFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MAGFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+            ] {
+                self.device
+                    .SetSamplerState(OR_STAGE, state, value)
+                    .map_err(map_err)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The loop counts of the lamps: the lights in the list (the vertex stage's, for the
+    /// interior lamps) and the places of a grid cell (the pixel stage's loop count).
+    fn bind_lamp_counts(&self, lights: usize, places: i32) -> Result<()> {
+        let vs = [lights as f32, 0.0, 0.0, 0.0];
+        let ps = [places.max(0), 0, 1, 0];
+        // SAFETY: plain calls on a live device; the arrays outlive them.
+        unsafe {
+            self.device
+                .SetVertexShaderConstantF(13, vs.as_ptr(), 1)
+                .and_then(|_| self.device.SetPixelShaderConstantI(0, ps.as_ptr(), 1))
+                .map_err(map_err)
+        }
+    }
+
     fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
@@ -551,6 +800,8 @@ impl D3d9Device {
         width: u32,
         height: u32,
     ) -> Result<()> {
+        let lamps = self.bind_lamps(&frame.lamps)?;
+        self.bind_or_table()?;
         self.scene.records.clear();
         frame.instance_records(&mut self.scene.records);
         let records = frame.list.len();
@@ -659,6 +910,8 @@ impl D3d9Device {
                 .map_err(map_err)?;
             d.SetPixelShaderConstantF(11, lights.as_ptr().cast(), lights.len() as u32)
                 .map_err(map_err)?;
+            d.SetPixelShaderConstantF(20, lamps.as_ptr().cast(), lamps.len() as u32)
+                .map_err(map_err)?;
             if let Some((vb, _)) = &self.scene.instances {
                 d.SetStreamSource(1, vb, 0, INSTANCE_STRIDE)
                     .map_err(map_err)?;
@@ -698,7 +951,7 @@ impl D3d9Device {
                     current.2 = Some(b.surface);
                 }
                 if current.3 != Some(b.material) {
-                    self.bind_material(&m, &frame.light)?;
+                    self.bind_material(&m)?;
                     current.3 = Some(b.material);
                 }
                 let n = b.instances.end - b.instances.start;
@@ -733,7 +986,7 @@ impl D3d9Device {
 
 impl D3d9Device {
     /// The material's uniform, maps, addressing and the constants worked out from them.
-    fn bind_material(&self, m: &SceneMaterial, light: &crate::scene::SceneLight) -> Result<()> {
+    fn bind_material(&self, m: &SceneMaterial) -> Result<()> {
         let d = &self.device;
         let pipeline = self.scene.pipeline.as_ref().expect("built before");
         let found = |id: Option<usize>| {
@@ -745,12 +998,11 @@ impl D3d9Device {
         let env = found(m.envmap);
         let bump = found(m.bump);
         let u = m.uniform;
-        // (a sphere map that is not there reflects nothing: its weight is 0)
-        let env_k = if env.is_some() {
-            crate::scene::env_weights(u[3][1], light)
-        } else {
-            [0.0; 4]
-        };
+        // (a sphere map that is not there reflects nothing; the bits and the border colour
+        // unpacked here, not per pixel)
+        let [has_mask, declared] = crate::scene::env_bits(u[3][3]);
+        let env_on = [env.is_some() as u32 as f32, has_mask, declared, 0.0];
+        let border = crate::scene::border_rgba(u[8]);
         let mut bump_texel = [0.0f32; 4];
         if let Some(t) = bump {
             let mut desc = D3DSURFACE_DESC::default();
@@ -781,13 +1033,15 @@ impl D3d9Device {
             (bump.unwrap_or(white), address),
         ];
         let vs = [u[5], u[1]];
-        let ps = [bump_texel, env_k];
+        let ps = [bump_texel, env_on];
         // SAFETY: plain calls on a live device; the constant arrays outlive them; the
         // textures belong to this device.
         unsafe {
             d.SetPixelShaderConstantF(0, u.as_ptr().cast(), MATERIAL_VECTORS as u32)
                 .map_err(map_err)?;
             d.SetPixelShaderConstantF(18, ps.as_ptr().cast(), ps.len() as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(BORDER_REGISTER, border.as_ptr(), 1)
                 .map_err(map_err)?;
             d.SetVertexShaderConstantF(11, vs.as_ptr().cast(), vs.len() as u32)
                 .map_err(map_err)?;

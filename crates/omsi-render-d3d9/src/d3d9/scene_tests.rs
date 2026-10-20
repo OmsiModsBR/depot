@@ -3,8 +3,8 @@
 use super::tests::device;
 use super::*;
 use crate::scene::{
-    DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexAddress,
-    TexFormat, MATERIAL_VECTORS,
+    env_factor, DrawKind, SceneBatch, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
+    SceneTexture, TexAddress, TexFormat, MATERIAL_VECTORS,
 };
 
 const W: u32 = 8;
@@ -114,6 +114,7 @@ fn draw(
         main: batches,
         cab: &[],
         surface_bias: -24,
+        lamps: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -262,6 +263,7 @@ fn depth_is_reversed_nearer_is_greater() {
         main: &batches,
         cab: &[],
         surface_bias: -24,
+        lamps: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -379,6 +381,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         main: std::slice::from_ref(&b),
         cab: &[],
         surface_bias: 0,
+        lamps: Default::default(),
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -523,6 +526,17 @@ fn draw_one(
     second: [f32; 4],
     light: SceneLight,
 ) -> Vec<u8> {
+    draw_lamps(dev, material, second, light, SceneLamps::default())
+}
+
+/// As [`draw_one`], under `lamps`.
+fn draw_lamps(
+    dev: &mut D3d9Device,
+    material: SceneMaterial,
+    second: [f32; 4],
+    light: SceneLight,
+    lamps: SceneLamps,
+) -> Vec<u8> {
     let (v, i) = quad(0.5);
     dev.set_scene_mesh(0, &v, &i).unwrap();
     dev.begin_frame(&FrameDesc {
@@ -540,6 +554,7 @@ fn draw_one(
         main: &[batch(DrawKind::Opaque, 0, 0, 0..1)],
         cab: &[],
         surface_bias: -24,
+        lamps,
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -705,6 +720,7 @@ fn texture_addressing_follows_the_material() {
             main: &[batch(DrawKind::Opaque, 0, 0, 0..1)],
             cab: &[],
             surface_bias: -24,
+            lamps: Default::default(),
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -730,4 +746,195 @@ fn texture_addressing_follows_the_material() {
     assert!(px[2] > px[0], "mirrored once: {:?}", &px[..4]);
     let px = draw(&mut dev, TexAddress::Clamp, &plain, -0.75);
     assert!(px[0] > px[2], "clamped below 0: {:?}", &px[..4]);
+}
+
+/// A light above the middle of the quad: `pos` xyz and radius, white, then `dir`, `extra`.
+fn lamp(pos: [f32; 4], dir: [f32; 4], extra: [f32; 4]) -> [[f32; 4]; 4] {
+    [pos, [1.0, 1.0, 1.0, 1.0], dir, extra]
+}
+
+const POINT: [f32; 4] = [0.0, 0.0, -1.0, -2.0];
+/// One cell round the quad, two places.
+const ONE_CELL: [f32; 4] = [-10.0, -10.0, 25.0, 1.0];
+
+fn white_lit(u: &[[f32; 4]; MATERIAL_VECTORS]) -> SceneMaterial<'_> {
+    SceneMaterial {
+        texture: Some(0),
+        uniform: u,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn the_maps_lamps_light_what_takes_them() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let lights = lamp([0.0, 0.0, 1.5, 100.0], POINT, [0.0; 4]);
+    let lamps = SceneLamps {
+        lights: &lights,
+        grid: &[0, u32::MAX],
+        place: ONE_CELL,
+    };
+    let u = uniform(0.0);
+    let px = draw_lamps(&mut dev, white_lit(&u), SECOND, dark(), lamps);
+    assert!(all(&px, [255, 255, 255, 255], 1), "lit: {:?}", &px[..4]);
+    // [nomaplighting]
+    let mut no_map = uniform(0.0);
+    no_map[1][1] = 0.25;
+    let px = draw_lamps(&mut dev, white_lit(&no_map), SECOND, dark(), lamps);
+    assert!(all(&px, [0, 0, 0, 255], 1), "nomaplighting: {:?}", &px[..4]);
+    // a vehicle's light lights it all the same
+    let headlight = lamp([0.0, 0.0, 1.5, 100.0], [1.0, 0.0, 0.0, -2.0], [0.0; 4]);
+    let px = draw_lamps(
+        &mut dev,
+        white_lit(&no_map),
+        SECOND,
+        dark(),
+        SceneLamps {
+            lights: &headlight,
+            ..lamps
+        },
+    );
+    assert!(all(&px, [255, 255, 255, 255], 1), "vehicle: {:?}", &px[..4]);
+    // the lamp out of the grid's cell: no light
+    let px = draw_lamps(
+        &mut dev,
+        white_lit(&u),
+        SECOND,
+        dark(),
+        SceneLamps {
+            grid: &[u32::MAX, u32::MAX],
+            ..lamps
+        },
+    );
+    assert!(
+        all(&px, [0, 0, 0, 255], 1),
+        "not in the cell: {:?}",
+        &px[..4]
+    );
+    // out of reach
+    let far = lamp([0.0, 0.0, 1.5, 0.5], POINT, [0.0; 4]);
+    let px = draw_lamps(
+        &mut dev,
+        white_lit(&u),
+        SECOND,
+        dark(),
+        SceneLamps {
+            lights: &far,
+            ..lamps
+        },
+    );
+    assert!(all(&px, [0, 0, 0, 255], 1), "out of reach: {:?}", &px[..4]);
+}
+
+#[test]
+fn spots_light_only_inside_their_cone() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let u = uniform(0.0);
+    for (down, lit) in [(true, true), (false, false)] {
+        let z = if down { -1.0 } else { 1.0 };
+        let lights = lamp(
+            [0.0, 0.0, 1.5, 100.0],
+            [0.0, 0.0, z, 0.5],
+            [0.9, 0.0, 0.0, 0.0],
+        );
+        let px = draw_lamps(
+            &mut dev,
+            white_lit(&u),
+            SECOND,
+            dark(),
+            SceneLamps {
+                lights: &lights,
+                grid: &[0, u32::MAX],
+                place: ONE_CELL,
+            },
+        );
+        // the middle of the quad, straight under the light
+        let at = ((2 * W + 4) * 4) as usize;
+        let want = if lit { 255 } else { 0 };
+        assert!(
+            px[at].abs_diff(want) <= 1,
+            "down {down}: {:?}",
+            &px[at..at + 4]
+        );
+    }
+}
+
+#[test]
+fn interior_lamps_light_the_meshes_that_name_them() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let u = uniform(0.0);
+    // one lamp, core 1 m, reaching 10 m, 0.7 m over the quad's middle: full light there
+    let lights = lamp([0.0, 0.0, 1.2, 0.0], POINT, [0.0, 1.0, 0.0, 10.0]);
+    let lamps = SceneLamps {
+        lights: &lights,
+        ..Default::default()
+    };
+    let px = draw_lamps(&mut dev, white_lit(&u), [0.0, 0.0, 1.0, 0.0], dark(), lamps);
+    let at = ((2 * W + 4) * 4) as usize;
+    assert!(px[at] >= 250, "middle: {:?}", &px[at..at + 4]);
+    // an instance that names none
+    let px = draw_lamps(&mut dev, white_lit(&u), SECOND, dark(), lamps);
+    assert!(all(&px, [0, 0, 0, 255], 1), "none: {:?}", &px[..4]);
+    // a plain brightness (below 1), no light needed
+    let px = draw_one(&mut dev, white_lit(&u), [0.0, 0.0, 0.5, 0.0], dark());
+    assert!(
+        all(&px, [128, 122, 107, 255], 2),
+        "brightness: {:?}",
+        &px[..4]
+    );
+}
+
+#[test]
+fn reflections_take_the_lamps_light_and_spill_their_factor() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 0, 0, 255]);
+    rgba(&mut dev, 1, [0, 0, 255, 255]);
+    rgba(&mut dev, 2, [0, 0, 0, 255]);
+    let mut masked = uniform(0.0);
+    masked[3][1] = 0.5;
+    masked[3][3] = 1.0;
+    let m = SceneMaterial {
+        texture: Some(0),
+        envmap: Some(1),
+        env_mask: Some(2),
+        uniform: &masked,
+        ..Default::default()
+    };
+    // without the sun the mask reflects by the lamps' light alone
+    let lights = lamp([0.0, 0.0, 1.5, 100.0], POINT, [0.0; 4]);
+    let px = draw_lamps(
+        &mut dev,
+        m,
+        SECOND,
+        light([0.0; 4]),
+        SceneLamps {
+            lights: &lights,
+            grid: &[0, u32::MAX],
+            place: ONE_CELL,
+        },
+    );
+    assert!(all(&px, [0, 0, 255, 255], 2), "lamp lit: {:?}", &px[..4]);
+    let px = draw_one(&mut dev, m, SECOND, light([0.0; 4]));
+    assert!(all(&px, [255, 0, 0, 255], 2), "dark: {:?}", &px[..4]);
+    // a factor of 10 spills into its neighbours as the packed colour does
+    let mut strong = uniform(0.0);
+    strong[3][1] = 10.0;
+    let k = env_factor(10.0, [1.0; 3]);
+    let want = [
+        ((1.0 - k[0]) * 255.0).round() as u8,
+        0,
+        (k[2] * 255.0).round() as u8,
+        255,
+    ];
+    let m = SceneMaterial {
+        texture: Some(0),
+        envmap: Some(1),
+        uniform: &strong,
+        ..Default::default()
+    };
+    let px = draw_one(&mut dev, m, SECOND, light([0.0; 4]));
+    assert!(all(&px, want, 2), "{want:?}: {:?}", &px[..4]);
 }

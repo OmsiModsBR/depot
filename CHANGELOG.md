@@ -13,6 +13,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - The game can draw its world with Direct3D 9Ex (`OMSI_BACKEND=d3d9`; Windows, not with VR): `omsi-render` keeps the books on wgpu's noop device and the Direct3D 9Ex device draws and presents the window. The UI, the sky and the OMSI material maps are not drawn in that mode yet. The default renderer is unchanged.
 - Under "DirectX9 (D3D9Ex)" the new interface (the Esc menu, the Alt bar, the loading screen) and the HUD's pictures are drawn over the scene, as `omsi-ui` draws them; `omsi-ui`'s `Gpu` can hand its draws to a second renderer (`Gpu::set_mirror`).
 - Under "DirectX9 (D3D9Ex)" the materials' maps are drawn: light maps (and the terrain's detail texture), night maps, the `[matl_envmap]` reflections with their masks and bump maps, the specular highlight and the materials' texture addressing. The lamps are not drawn yet.
+- Under "DirectX9 (D3D9Ex)" the lamps are drawn: the map's lamps and the vehicles' lights (point lights and spots), and the vehicles' interior lamps on the meshes they light. The tile light maps baked into the map are not drawn yet.
 - Settings → Graphics API offers "DirectX9 (D3D9Ex)" on Windows (off by default; "Automatic" never picks it). The launcher and the game both keep the choice in `settings.cfg` as `graphics_api=d3d9`.
 
 ### Changed
