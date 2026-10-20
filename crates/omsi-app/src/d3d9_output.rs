@@ -120,8 +120,10 @@ impl Inner {
                 rgba,
             ),
         };
-        if let Err(e) = done {
-            self.warn_once("an asset could not be put up", e);
+        match done {
+            // (kept by the device: the next frame finds it lost, and `recover` puts it up)
+            Ok(()) | Err(BackendError::DeviceLost) => {}
+            Err(e) => self.warn_once("an asset could not be put up", e),
         }
     }
 
