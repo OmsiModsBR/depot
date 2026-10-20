@@ -963,7 +963,9 @@ fn tile_light_maps_light_their_objects_by_night() {
         tile_map: [-1.0, -1.0, 2.0, 1.0],
         ..Default::default()
     };
-    let mapped = uniform(0.35);
+    // ([LightMapMapping]: params.y 0.35)
+    let mut mapped = uniform(0.0);
+    mapped[1][1] = 0.35;
     let check = |px: &[u8], what: &str| {
         let at = |x: u32, y: u32| ((y * W + x) * 4) as usize;
         assert!(

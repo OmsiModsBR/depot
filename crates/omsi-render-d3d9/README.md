@@ -94,6 +94,13 @@ default renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`,
 objects at night, as the ground's night map lights the ground; outside the loaded square
 they light nothing.
 
+The scene's pixel shader stays inside the 512 instruction slots every Shader Model 3.0 card
+gives (a test holds it to 460 by the compiler's own count): what does not depend on the
+pixel is worked out before it, the lights packed once (`scene::pack_light`), the border
+colour and the reflection's bits unpacked per material, the interior lamp code per vertex,
+the grid's places a loop count, and the spilling reflection factor put together from a
+table of byte ORs (sampler 10).
+
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
 the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
