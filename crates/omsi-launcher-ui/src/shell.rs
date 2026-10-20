@@ -1,5 +1,6 @@
 //! The launcher without a window: the sidebar, the page chosen and its body.
 
+use crate::kit;
 use crate::look::*;
 use crate::maps::MapsView;
 use crate::pages::Page;
@@ -96,6 +97,56 @@ impl Shell {
 /// The page's small letter-spaced name and its title, left at `x`, from `top` down (the page's
 /// body starts 100 points under `top`).
 pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
+    if let Some((place, title, line)) = page.heading() {
+        // (as the concept: "VEHICLES › PREVIEW" letter-spaced, the question large, a line)
+        let px = 13.0 * TEXT_SCALE;
+        let mut at = x;
+        at += kit::spaced(
+            ui,
+            &omsi_ui::tr(page.title()).to_uppercase(),
+            at,
+            top + 42.0,
+            px,
+            Weight::Bold,
+            ACCENT,
+        );
+        at += 12.0;
+        ui.text_in(
+            "\u{203a}",
+            Rect::new(at, top + 42.0 - px, px, px * 2.0),
+            px,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+        at += 14.0;
+        kit::spaced(
+            ui,
+            &omsi_ui::tr(place).to_uppercase(),
+            at,
+            top + 42.0,
+            px,
+            Weight::Medium,
+            MUTED,
+        );
+        ui.text(
+            title,
+            Vec2::new(x, top + 80.0),
+            38.0,
+            Weight::Bold,
+            FG,
+            Align::Left,
+        );
+        ui.text(
+            line,
+            Vec2::new(x, top + 112.0),
+            16.5 * TEXT_SCALE,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+        return;
+    }
     ui.text(
         &page.title().to_uppercase(),
         Vec2::new(x, top + 46.0),
