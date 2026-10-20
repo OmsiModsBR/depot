@@ -302,6 +302,10 @@ pub(crate) struct State {
     win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
+    /// The Alt bar's window open (reposition, date and time, weather...).
+    tool: Option<crate::new_ui_windows::ToolFrame>,
+    /// What clicks in it asked for, for the game to apply.
+    tool_events: Vec<omsi_ui::alt_windows::Event>,
     /// The loading screen, while the first area of the map loads.
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
@@ -355,11 +359,11 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, report, win_input, loading, mouse, arrived, gen) =
+        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen) =
             match self.shared.lock() {
                 Ok(mut s) => {
                     let arrived = std::mem::take(&mut s.slides);
-                    let input = if s.add.is_some() || s.report.is_some() {
+                    let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
                         s.win_input.pop_front()
                     } else {
                         s.win_input.clear();
@@ -370,6 +374,7 @@ impl Overlay {
                         s.page.clone(),
                         s.alt.clone(),
                         s.add.clone(),
+                        s.tool.clone(),
                         s.report.clone(),
                         input,
                         s.loading.clone(),
@@ -394,6 +399,7 @@ impl Overlay {
             && page.is_none()
             && alt.is_none()
             && add.is_none()
+            && tool.is_none()
             && report.is_none()
             && loading.is_none()
         {
@@ -431,7 +437,9 @@ impl Overlay {
             }
             Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
             Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
-            None if add.is_none() && report.is_none() => self.ui.input.down = false,
+            None if add.is_none() && tool.is_none() && report.is_none() => {
+                self.ui.input.down = false
+            }
             None => {}
         }
         self.ui.begin(size, scale, dt);
@@ -510,6 +518,13 @@ impl Overlay {
                     }
                 }
             }
+            if let Some(tool) = tool {
+                if let Some(e) = tool.draw(&mut self.ui, size) {
+                    if let Ok(mut s) = self.shared.lock() {
+                        s.tool_events.push(e);
+                    }
+                }
+            }
         }
         let (layers, verts, ranges) = self.ui.finish();
         let draws: Vec<Draw> = ranges
@@ -541,6 +556,8 @@ pub(crate) struct NewUi {
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
+    /// The Alt bar's other windows.
+    pub(crate) tool: crate::new_ui_windows::Tools,
     /// The end-of-trip report, while it is open.
     pub(crate) report: Option<crate::new_ui_report::Report>,
     /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
@@ -653,6 +670,7 @@ impl NewUi {
         menu: Option<MenuFrame>,
         alt: Option<crate::new_ui_alt::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
+        tool: Option<crate::new_ui_windows::ToolFrame>,
         report: Option<crate::new_ui_report::ReportFrame>,
         mouse: Vec2,
     ) {
@@ -661,6 +679,7 @@ impl NewUi {
             s.page = self.page.clone();
             s.alt = alt;
             s.add = add;
+            s.tool = tool;
             s.report = report;
             s.mouse = mouse;
         }
@@ -694,6 +713,24 @@ impl NewUi {
         match self.shared.lock() {
             Ok(mut s) => std::mem::take(&mut s.add_events),
             Err(_) => Vec::new(),
+        }
+    }
+
+    /// What clicks in the Alt bar's window asked for since the last call.
+    pub(crate) fn take_tool_events(&self) -> Vec<omsi_ui::alt_windows::Event> {
+        match self.shared.lock() {
+            Ok(mut s) => std::mem::take(&mut s.tool_events),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Close the Alt bar's window, forgetting what was still on its way to it.
+    pub(crate) fn close_tool(&mut self) {
+        self.tool.close();
+        if let Ok(mut s) = self.shared.lock() {
+            s.tool = None;
+            s.win_input.clear();
+            s.tool_events.clear();
         }
     }
 
@@ -754,20 +791,22 @@ impl App {
         if !self.new_pages_active() {
             self.new_ui.page = None;
         }
-        let alt = self.alt_bar_active().then(|| self.alt_frame());
         self.add_events();
+        self.tool_events();
         self.report_events();
+        let alt = self.alt_bar_active().then(|| self.alt_frame());
         let report = self.report_frame();
         // (the report stands over everything else of the game, and pauses it)
-        let (alt, add) = if report.is_some() {
-            (None, None)
+        let (alt, add, tool) = if report.is_some() {
+            (None, None, None)
         } else {
-            (alt, self.add_frame())
+            (alt, self.add_frame(), self.tool_frame())
         };
         self.new_ui.set(
             menu,
             alt,
             add,
+            tool,
             report,
             Vec2::new(self.cursor.0, self.cursor.1),
         );
