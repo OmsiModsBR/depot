@@ -786,7 +786,7 @@ impl D3d9Device {
     /// light maps; returns the shader's constants c20..c23 for them.
     fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 4]> {
         // (no grid: one of no cells, which no point is on)
-        const NO_GRID: [f32; 4] = [0.0, 0.0, 1.0, 0.0];
+        const NO_GRID: [f32; 4] = [0.0; 4];
         // the tile light maps: linear, clamped at the atlas's edge (no atlas: one far away,
         // which no point is in)
         let atlas = self.scene.tile_map.as_ref().map(|t| &t.texture);
@@ -893,8 +893,10 @@ impl D3d9Device {
         }
         let places = grid_info[3] as i32;
         self.bind_lamp_counts(kept, places)?;
-        let place = if places > 0 && lamps.place[2] > 0.0 {
-            lamps.place
+        // the cell of a point is floor(xy / side - corner / side)
+        let [x, y, side, cells] = lamps.place;
+        let place = if places > 0 && side > 0.0 {
+            [1.0 / side, -x / side, -y / side, cells]
         } else {
             NO_GRID
         };

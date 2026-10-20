@@ -194,7 +194,7 @@ float4 draw_flags : register(c17);
 float4 bump_texel : register(c18);
 // x 1 when the sphere map is there, y 1 when it has a mask, z 1 when a transmap is declared
 float4 env_on : register(c19);
-// the grid: x, y its south-west corner, z a cell's side, w the cells per side
+// the grid: cell = floor(world xy * x + yz) (`bind_lamps`), w the cells per side
 float4 light_grid : register(c20);
 // x 1 / the light texture's rows, y 1 / the grid texture's width, z 1 / its height, w the
 // places per cell (0: no grid)
@@ -222,7 +222,8 @@ float3 srgb_decode(float3 c) {
 
 // [matl_texadress_border]: outside 0..1 the material's border colour
 float4 diffuse_border(float4 tex, float2 uv) {
-    if (m_flags.y > 0.5 && m_flags.y < 1.5 && (any(uv < 0.0) || any(uv > 1.0))) {
+    float2 off = abs(uv - 0.5);
+    if (m_flags.y > 0.5 && m_flags.y < 1.5 && max(off.x, off.y) > 0.5) {
         return border;
     }
     return tex;
@@ -261,7 +262,7 @@ float4 light_vec(float li, float k) {
 float3 point_lights(float3 p, float3 n, float map_k) {
     float3 sum = float3(0.0, 0.0, 0.0);
     // the cell, which must be on the grid (no grid: none of side 0, see `bind_lamps`)
-    float2 c = floor((p.xy - light_grid.xy) / light_grid.z);
+    float2 c = floor(p.xy * light_grid.x + light_grid.yz);
     float2 off = abs(c + 0.5 - 0.5 * light_grid.w);
     if (max(off.x, off.y) > 0.5 * light_grid.w - 0.25) {
         return sum;
