@@ -135,9 +135,11 @@ fn log_card(l: &mut Launcher, r: Rect) {
     let log = core::data_dir().join("game.log");
     card(&mut l.ui, r, "The game's log", None);
     line(l, r, r.y + 72.0, "File", &log.to_string_lossy());
+    line(l, r, r.y + 100.0, "Launcher", &core::data_dir().join("launcher.log").to_string_lossy());
+    line(l, r, r.y + 128.0, "Preview helper", &super::preview::helper_log().to_string_lossy());
     l.ui.paragraph(
-        "Written again each time the game starts. A game started with RUST_LOG=debug writes more.",
-        Vec2::new(r.x + 19.0, r.y + 117.0),
+        "Each is written again when it starts (the game's with each game). A game started with RUST_LOG=debug writes more.",
+        Vec2::new(r.x + 19.0, r.y + 160.0),
         r.w - 38.0,
         12.5,
         Weight::Regular,
@@ -145,7 +147,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
     );
     let b = Rect::new(
         r.x + 19.0,
-        (r.y + 140.0).max(r.bottom() - 84.0),
+        (r.y + 190.0).max(r.bottom() - 84.0),
         r.w - 38.0,
         44.0,
     );
