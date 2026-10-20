@@ -377,6 +377,19 @@ pub fn helper_log() -> PathBuf {
     omsi_launcher_lib::data_dir().join("preview-helper.log")
 }
 
+/// The graphics interfaces the helper is tried on, in turn, as `OMSI_BACKEND` names them
+/// (None: the settings' own). On Windows Vulkan first: on an Intel UHD 630 the helper's
+/// DirectX 12 device overflowed its stack compiling the scene's shaders (the game's own did
+/// not), and on Vulkan it drew. A helper that ends before its first picture is started again
+/// on the next one. `OMSI_BACKEND` set for the launcher holds for the helper too.
+fn helper_backends() -> &'static [Option<&'static str>] {
+    if cfg!(windows) && !omsi_cfg::flags::BACKEND.is_set() {
+        &[Some("vulkan"), Some("dx12"), Some("gl")]
+    } else {
+        &[None]
+    }
+}
+
 /// The way to a running helper.
 struct Link {
     cmds: Sender<Cmd>,
@@ -386,7 +399,7 @@ struct Link {
 
 impl Link {
     /// The helper started: the game binary again on a computer, a thread on a phone.
-    fn start(root: &std::path::Path) -> Result<Link, String> {
+    fn start(root: &std::path::Path, backend: Option<&str>) -> Result<Link, String> {
         let root = root.to_path_buf();
         let (cmds, cmd_rx) = channel::<Cmd>();
         let (msg_tx, msgs) = channel::<Msg>();
@@ -413,6 +426,9 @@ impl Link {
         };
         let mut cmd = std::process::Command::new(&exe);
         cmd.arg("--preview-helper").arg("--root").arg(&root).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(stderr);
+        if let Some(b) = backend {
+            cmd.env(omsi_cfg::flags::BACKEND.name, b);
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -449,7 +465,7 @@ impl Link {
                 }
             }
         });
-        log::info!("launcher: preview helper started ({}), its log is {}", child.id(), log_file.display());
+        log::info!("launcher: preview helper started ({}{}), its log is {}", child.id(), backend.map(|b| format!(", on {b}")).unwrap_or_default(), log_file.display());
         Ok(Link { cmds, msgs, child: Some(child) })
     }
 }
@@ -519,6 +535,10 @@ pub struct Preview {
     /// The player turned or zoomed the picture of a page that shows one: the live view, asked
     /// for (until another bus is chosen).
     asked: bool,
+    /// Which of `helper_backends` the helper is started on, and whether the one running has
+    /// sent a picture yet.
+    backend: usize,
+    drew: bool,
 }
 
 impl Default for Preview {
@@ -549,6 +569,8 @@ impl Preview {
             picture_only: false,
             kept: None,
             asked: false,
+            backend: 0,
+            drew: false,
         }
     }
 
@@ -696,9 +718,10 @@ impl Preview {
         // (not while the kept picture is still being read: it may be all the page needs)
         let reading = self.picture_only && self.cache.is_some();
         if self.link.is_none() && self.broken.as_ref() != Some(&look) && shown.is_some() && !reading && !self.picture_done() {
-            match Link::start(&look.root) {
+            match Link::start(&look.root, helper_backends().get(self.backend).copied().flatten()) {
                 Ok(l) => {
                     self.link = Some(l);
+                    self.drew = false;
                     self.sent = (None, None, -1.0);
                     // (what an earlier helper said holds no more; this one says it anew)
                     self.busy = true;
@@ -731,6 +754,7 @@ impl Preview {
             match link.msgs.try_recv() {
                 // (a picture of the bus shown before, while the one wanted is read: passed over)
                 Ok(Msg::Frame(w, h, t, px)) if t == want => {
+                    self.drew = true;
                     self.aspect = w as f32 / h.max(1) as f32;
                     self.frame = Some((w, h, px));
                     self.showing = Some(t);
@@ -738,7 +762,7 @@ impl Preview {
                     self.live = true;
                     self.cache = None;
                 }
-                Ok(Msg::Frame(..)) => {}
+                Ok(Msg::Frame(..)) => self.drew = true,
                 Ok(Msg::Kept(t, shape)) => self.kept = Some((t, shape)),
                 Ok(Msg::Status { busy, error }) => {
                     self.busy = busy;
@@ -771,6 +795,13 @@ impl Preview {
             self.link = None;
             self.live = false;
             self.busy = false;
+            // (one that ended before its first picture is started on the next interface)
+            if !self.drew && self.backend + 1 < helper_backends().len() {
+                self.backend += 1;
+                log::warn!("launcher: the preview helper is started again on {}", helper_backends()[self.backend].unwrap_or("the settings' interface"));
+                self.error = None;
+                return;
+            }
             self.error.get_or_insert_with(|| "The 3D preview stopped".into());
             self.broken = Some(look);
             // (what stays is the kept picture, if there is one, not the helper's last)
@@ -865,6 +896,27 @@ mod tests {
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         assert!(!p.has_picture() && !p.live && p.error.is_some());
+    }
+
+    /// A helper that ends before its first picture is started again on the next graphics
+    /// interface (where there is one); one that had drawn is not.
+    #[test]
+    fn a_helper_gone_before_its_first_picture_is_tried_on_the_next_interface() {
+        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
+        let mut p = Preview::new();
+        let (cmds, _cmd_rx) = channel();
+        let (msg_tx, msgs) = channel::<Msg>();
+        p.link = Some(Link { cmds, msgs, child: None });
+        p.want(a.clone());
+        drop(msg_tx);
+        p.update(0.016, Some((2, 1)));
+        assert!(p.link.is_none());
+        if helper_backends().len() > 1 {
+            assert_eq!(p.backend, 1);
+            assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
+        } else {
+            assert!(p.broken.is_some() && p.error.is_some());
+        }
     }
 
     /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
