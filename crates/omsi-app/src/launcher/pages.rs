@@ -1287,7 +1287,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
-    let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
+    let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
     if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
         l.pages.controls_tab = tab;

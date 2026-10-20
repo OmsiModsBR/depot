@@ -123,14 +123,22 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
 pub const BODY_TOP: f32 = 137.0;
 
 /// A heading as the concept draws one: `name › place` small and letter-spaced, the title large
-/// and one line under it, left at `x`, from `top` down. The line is cut to `w` points.
-pub fn heading(
+/// and one line under it, left at `x`, from `top` down. The title and the line are cut to `w`
+/// points.
+pub fn heading(ui: &mut Ui, name: &str, parts: (&str, &str, &str), x: f32, top: f32, w: f32) {
+    heading_beside(ui, name, parts, x, top, w, w);
+}
+
+/// `heading` with its title cut to `title_w` points, the line to `w` (a page with tabs at the
+/// right of its title).
+pub fn heading_beside(
     ui: &mut Ui,
     name: &str,
     (place, title, line): (&str, &str, &str),
     x: f32,
     top: f32,
     w: f32,
+    title_w: f32,
 ) {
     // (as the concept: "VEHICLES › PREVIEW" letter-spaced, the question large, a line)
     let px = 13.0 * TEXT_SCALE;
@@ -163,8 +171,13 @@ pub fn heading(
         Weight::Medium,
         MUTED,
     );
+    let title = if title_w.is_finite() {
+        kit::fit_text(ui, &omsi_ui::tr(title), 38.0, title_w)
+    } else {
+        title.to_string()
+    };
     ui.text(
-        title,
+        &title,
         Vec2::new(x, top + 80.0),
         38.0,
         Weight::Bold,
