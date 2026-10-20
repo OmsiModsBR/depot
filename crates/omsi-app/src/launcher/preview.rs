@@ -390,8 +390,8 @@ pub fn helper_log() -> PathBuf {
 /// Vulkan first, whatever the player chose for the game, then the one chosen: on an Intel UHD
 /// 630 the helper's DirectX 12 device overflowed its stack compiling the scene's shaders (the
 /// game's own did not), and on Vulkan it drew. The helper only draws a picture of the bus, it
-/// need not draw it as the game does. A helper that ends, or sends no picture in
-/// `FIRST_PICTURE_LIMIT`, is started again on the next one. `OMSI_BACKEND` set for the
+/// need not draw it as the game does. A helper that ends, or goes `FIRST_PICTURE_LIMIT`
+/// without a word before its first picture, is started again on the next one. `OMSI_BACKEND` set for the
 /// launcher holds for the helper too.
 fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
     if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
@@ -407,17 +407,17 @@ fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
     std::iter::once("vulkan").chain(chosen).chain(rest).map(Some).collect()
 }
 
-/// How long a helper may take to send its first picture before it is taken for one that
-/// hung (stopped, and started on the next graphics interface): a helper that crashed may be
-/// held open by the system's error reporting, its output never closing.
-const FIRST_PICTURE_LIMIT: Duration = Duration::from_secs(90);
+/// How long a helper that has not sent its first picture may go without a word before it is
+/// taken for one that hung (stopped, and started on the next graphics interface): a backstop
+/// for a helper held open after a crash, its output never closing. Generous: opening the
+/// renderer alone took 70-80 s on a software driver.
+const FIRST_PICTURE_LIMIT: Duration = Duration::from_secs(240);
 
 /// The way to a running helper.
 struct Link {
     cmds: Sender<Cmd>,
     msgs: Receiver<Msg>,
     child: Option<std::process::Child>,
-    started: Instant,
 }
 
 impl Link {
@@ -436,7 +436,7 @@ impl Link {
                     }
                 })
                 .map_err(|e| e.to_string())?;
-            return Ok(Link { cmds, msgs, child: None, started: Instant::now() });
+            return Ok(Link { cmds, msgs, child: None });
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let log_file = helper_log();
@@ -491,7 +491,7 @@ impl Link {
             }
         });
         log::info!("launcher: preview helper started ({}{}), its log is {}", child.id(), backend.map(|b| format!(", on {b}")).unwrap_or_default(), log_file.display());
-        Ok(Link { cmds, msgs, child: Some(child), started: Instant::now() })
+        Ok(Link { cmds, msgs, child: Some(child) })
     }
 }
 
@@ -601,6 +601,8 @@ pub struct Preview {
     backend: usize,
     drew: bool,
     pinned: bool,
+    /// When the helper running started, or last sent something (`FIRST_PICTURE_LIMIT`).
+    heard: Instant,
 }
 
 impl Default for Preview {
@@ -611,6 +613,12 @@ impl Default for Preview {
 
 impl Preview {
     pub fn new() -> Preview {
+        // A mark of the bus a helper was reading, left by the last launcher, says nothing of
+        // the bus: its helpers are ended with it (`end_with_launcher`), in the middle of
+        // reading one as well. (Within a launcher's session a bus that stops a helper is still
+        // found: the next helper reads the mark.)
+        static CLEARED: std::sync::Once = std::sync::Once::new();
+        CLEARED.call_once(super::showroom::clear_placing_mark);
         Preview {
             wanted: None,
             link: None,
@@ -635,6 +643,7 @@ impl Preview {
             backend: 0,
             drew: false,
             pinned: false,
+            heard: Instant::now(),
         }
     }
 
@@ -785,6 +794,7 @@ impl Preview {
                 Ok(l) => {
                     self.link = Some(l);
                     self.drew = false;
+                    self.heard = Instant::now();
                     self.sent = (None, None, -1.0);
                     // (what an earlier helper said holds no more; this one says it anew)
                     self.busy = true;
@@ -814,7 +824,11 @@ impl Preview {
         let want = tag(&look);
         let mut ended = false;
         loop {
-            match link.msgs.try_recv() {
+            let msg = link.msgs.try_recv();
+            if msg.is_ok() {
+                self.heard = Instant::now();
+            }
+            match msg {
                 // (a picture of the bus shown before, while the one wanted is read: passed over)
                 Ok(Msg::Frame(w, h, t, px)) if t == want => {
                     (self.drew, self.pinned) = (true, true);
@@ -842,13 +856,16 @@ impl Preview {
                 }
             }
         }
-        // (a helper that sent no picture for so long is taken for one that hung: stopped, and
-        // so started on the next interface)
-        if !ended && !self.drew && link.started.elapsed() > FIRST_PICTURE_LIMIT {
-            log::warn!("launcher: the preview helper sent no picture in {} s, it is stopped", FIRST_PICTURE_LIMIT.as_secs());
+        // (a helper with no picture yet that said nothing for so long is taken for one that
+        // hung: stopped, and so started on the next interface; the mark of the bus it was
+        // reading is the launcher's to clear, as in `stop`)
+        if !ended && !self.drew && self.heard.elapsed() > FIRST_PICTURE_LIMIT {
+            log::warn!("launcher: the preview helper said nothing in {} s and sent no picture, it is stopped", FIRST_PICTURE_LIMIT.as_secs());
             if let Some(c) = self.link.as_mut().and_then(|l| l.child.as_mut()) {
                 let _ = c.kill();
+                let _ = c.wait();
             }
+            super::showroom::clear_placing_mark();
             ended = true;
         }
         if ended {
@@ -953,7 +970,7 @@ mod tests {
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         p.want(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
@@ -974,9 +991,9 @@ mod tests {
         assert!(!p.has_picture() && !p.live && p.error.is_some());
     }
 
-    /// A helper that sends no picture in `FIRST_PICTURE_LIMIT` (one that crashed and is held
-    /// open, its output never closing) is taken for one that ended: started again on the next
-    /// graphics interface. One still within the limit is waited for.
+    /// A helper with no picture that says nothing for `FIRST_PICTURE_LIMIT` (one that crashed
+    /// and is held open, its output never closing) is taken for one that ended: started again
+    /// on the next graphics interface. One still within the limit is waited for.
     #[test]
     fn a_helper_with_no_picture_for_too_long_is_tried_on_the_next_interface() {
         let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
@@ -984,12 +1001,11 @@ mod tests {
         p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (_msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         p.want(a.clone());
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_some() && p.backend == 0, "still waited for");
-        let Some(l) = p.link.as_mut() else { unreachable!() };
-        l.started = Instant::now() - FIRST_PICTURE_LIMIT - Duration::from_secs(1);
+        p.heard = Instant::now() - FIRST_PICTURE_LIMIT - Duration::from_secs(1);
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_none());
         assert_eq!(p.backend, 1);
@@ -1005,7 +1021,7 @@ mod tests {
         p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         p.want(a.clone());
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
@@ -1015,14 +1031,14 @@ mod tests {
         // one that drew pins its interface: a later helper gone early does not move it on
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         p.drew = false;
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
@@ -1055,7 +1071,7 @@ mod tests {
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.link = Some(Link { cmds, msgs, child: None });
         p.want_picture(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
