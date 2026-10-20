@@ -3093,6 +3093,7 @@ dependencies = [
  "omsi-content",
  "omsi-geometry",
  "omsi-launcher-core",
+ "omsi-launcher-ui",
  "omsi-map",
  "omsi-model",
  "omsi-net",
@@ -3247,7 +3248,6 @@ dependencies = [
  "omsi-ui",
  "pollster",
  "wgpu",
- "winit",
 ]
 
 [[package]]

@@ -3,21 +3,16 @@ name = "omsi-launcher-ui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The new launcher: a separate program with no 3D world in it, drawn with omsi-ui (a draft, not the default; the launcher inside the game binary stays the fallback)"
+description = "The launcher's look and pages (sidebar, Vehicles, Maps), drawn with omsi-ui; the game's launcher window hosts them"
 
 [lib]
 name = "omsi_launcher_ui"
 path = "src/lib.rs"
 
-[[bin]]
-name = "depot-launcher-next"
-path = "src/main.rs"
-
 [dependencies]
 omsi-ui = { path = "../omsi-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 wgpu.workspace = true
-winit.workspace = true
 glam.workspace = true
 pollster.workspace = true
 anyhow.workspace = true

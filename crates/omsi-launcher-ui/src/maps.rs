@@ -23,7 +23,13 @@ pub struct MapsView {
     catalog: Catalog,
     query: String,
     selected: usize,
-    entry: usize,
+    /// The start point picked in the map's list; `None` is automatic (the game's choice).
+    entry: Option<usize>,
+    /// A map (its file) and start point to show once the catalog is there (`select`).
+    pending: Option<(String, i32)>,
+    /// "Drive on this map" was clicked: the map's file and the start point's place in its
+    /// list, -1 for automatic (`take_use`).
+    used: Option<(String, i32)>,
 }
 
 impl Default for MapsView {
@@ -32,7 +38,9 @@ impl Default for MapsView {
             catalog: Catalog::NotStarted,
             query: String::new(),
             selected: 0,
-            entry: 0,
+            entry: None,
+            pending: None,
+            used: None,
         }
     }
 }
@@ -46,9 +54,73 @@ impl MapsView {
         }
     }
 
-    /// The map chosen in the library, and its start point.
-    pub fn chosen(&self) -> (usize, usize) {
+    /// The map chosen in the library, and its start point (`None`: automatic).
+    pub fn chosen(&self) -> (usize, Option<usize>) {
         (self.selected, self.entry)
+    }
+
+    /// Take `list` as the catalog (the host's, which it reads again after Setup or an
+    /// install). The map shown stays the one it was when it is still in the list.
+    pub fn set_catalog(&mut self, list: Vec<MapInfo>) {
+        let keep = match &self.catalog {
+            Catalog::Ready(old) => old.get(self.selected).map(|m| {
+                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
+                (m.file.clone(), entry)
+            }),
+            _ => None,
+        };
+        self.catalog = Catalog::Ready(Rc::new(list));
+        if let (Some(keep), None) = (keep, &self.pending) {
+            self.pending = Some(keep);
+        }
+        self.selected = 0;
+        self.entry = None;
+        self.apply_pending();
+    }
+
+    /// How many maps the catalog holds, once it is read.
+    pub fn catalog_len(&self) -> Option<usize> {
+        match &self.catalog {
+            Catalog::Ready(list) => Some(list.len()),
+            _ => None,
+        }
+    }
+
+    /// Read the catalog again on the next frame when reading it failed (the OMSI 2 folder
+    /// may have been chosen since).
+    pub fn retry_if_failed(&mut self) {
+        if matches!(self.catalog, Catalog::Failed(_)) {
+            self.catalog = Catalog::NotStarted;
+        }
+    }
+
+    /// Show the map whose file is `file` with the start point at `entry` in its list (-1:
+    /// automatic), when it is in the catalog; one not yet read is shown once it is.
+    pub fn select(&mut self, file: &str, entry: i32) {
+        self.pending = Some((file.to_string(), entry));
+        self.apply_pending();
+    }
+
+    fn apply_pending(&mut self) {
+        let Catalog::Ready(list) = &self.catalog else {
+            return;
+        };
+        let Some((file, entry)) = self.pending.take() else {
+            return;
+        };
+        if let Some(i) = list.iter().position(|m| m.file.eq_ignore_ascii_case(&file)) {
+            self.selected = i;
+            let known = usize::try_from(entry)
+                .ok()
+                .filter(|&e| e < list[i].entry_points.len());
+            self.entry = known;
+            self.query.clear();
+        }
+    }
+
+    /// The map (its file) and start point "Drive on this map" was clicked for, once.
+    pub fn take_use(&mut self) -> Option<(String, i32)> {
+        self.used.take()
     }
 
     fn load(&mut self) {
@@ -138,17 +210,18 @@ impl MapsView {
                 return;
             }
         };
+        self.apply_pending();
         let shown = self.shown(&list);
         if !shown.is_empty() && !shown.contains(&self.selected) {
             self.selected = shown[0];
-            self.entry = 0;
+            self.entry = None;
         }
         let top = body.y + 100.0;
         let rows_h = (body.h - 100.0 - 24.0).max(300.0);
         let upper_h = (rows_h * 0.6).floor();
         let lower_h = rows_h - upper_h - 16.0;
-        let lib = Rect::new(body.x, top, 335.0, upper_h);
-        let files_w = 392.0;
+        let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
+        let files_w = kit::fit(392.0, body.w);
         let files = Rect::new(body.right() - files_w, top, files_w, upper_h);
         let mid = Rect::new(
             lib.right() + 16.0,
@@ -161,7 +234,7 @@ impl MapsView {
         self.picture(ui, mid, chosen);
         self.files(ui, files, chosen);
         let y2 = top + upper_h + 16.0;
-        let launch_w = 426.0;
+        let launch_w = kit::fit(426.0, body.w);
         let launch = Rect::new(body.right() - launch_w, y2, launch_w, lower_h);
         let about_w = (launch.x - 16.0 - body.x) * 0.5 - 8.0;
         let about = Rect::new(body.x, y2, about_w, lower_h);
@@ -226,7 +299,7 @@ impl MapsView {
         });
         if let Some(i) = picked {
             self.selected = i;
-            self.entry = 0;
+            self.entry = None;
         }
     }
 
@@ -235,7 +308,7 @@ impl MapsView {
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
         ui.p().rect(inner, PANEL_2);
         ui.text_in(
-            "No map picture yet. The picture of the map comes in a later step.",
+            "No picture of this map here yet. The Drive page draws its roads and start points.",
             inner.inset(24.0),
             14.0 * TEXT_SCALE,
             Weight::Regular,
@@ -301,14 +374,20 @@ impl MapsView {
         let chosen = self.entry;
         ui.scroll_area("maps:starts", area, &mut |ui, view| {
             let mut y = view.y;
-            for (i, e) in m.entry_points.iter().enumerate() {
+            let rows = std::iter::once((None, "Automatic", "maps:start:auto".to_string())).chain(
+                m.entry_points
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| (Some(i), e.name.as_str(), format!("maps:start:{i}"))),
+            );
+            for (i, name, id) in rows {
                 let row = Rect::new(view.x, y, view.w - 8.0, 36.0);
-                if ui.row(&format!("maps:start:{i}"), row, i == chosen) {
+                if ui.row(&id, row, i == chosen) {
                     picked = Some(i);
                 }
                 clipped(
                     ui,
-                    &e.name,
+                    name,
                     row.x + 16.0,
                     row.y + 18.0,
                     row.w - 32.0,
@@ -328,10 +407,13 @@ impl MapsView {
     fn launch(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
         card(ui, r, "Launch preparation", None);
         let map = m.map(map_title).unwrap_or_default();
-        let start = m
-            .and_then(|m| m.entry_points.get(self.entry))
-            .map(|e| e.name.clone())
-            .unwrap_or_default();
+        let start = match self.entry {
+            Some(e) => m
+                .and_then(|m| m.entry_points.get(e))
+                .map(|e| e.name.clone())
+                .unwrap_or_default(),
+            None => "Automatic".to_string(),
+        };
         let mut y = r.y + 58.0;
         for (k, val) in [("Map", map), ("Start point", start)] {
             ui.p()
@@ -350,25 +432,19 @@ impl MapsView {
             y += 40.0;
         }
         let b = Rect::new(r.x + 19.0, r.bottom() - 100.0, r.w - 38.0, 48.0);
-        ui.p().rounded(b, 6.0, PANEL_2);
-        ui.text_in(
-            "START DRIVING",
-            b,
-            14.0 * TEXT_SCALE,
-            Weight::Bold,
-            MUTED,
-            Align::Center,
-        );
-        clipped(
+        if kit::action(
             ui,
-            "Starting a session comes with the Drive page.",
-            r.x + 19.0,
-            r.bottom() - 30.0,
-            r.w - 38.0,
-            12.0,
-            Weight::Regular,
-            MUTED,
-        );
+            "maps:use",
+            b,
+            "DRIVE ON THIS MAP",
+            "Takes this map and start point to the Drive page.",
+            m.is_some(),
+        ) {
+            if let Some(m) = m {
+                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
+                self.used = Some((m.file.clone(), entry));
+            }
+        }
     }
 }
 

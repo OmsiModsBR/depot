@@ -54,6 +54,95 @@ impl Shell {
     }
 
     fn sidebar(&mut self, ui: &mut Ui, h: f32) {
+        let bar = Sidebar {
+            page: self.page,
+            logo: self.logo,
+            badges: &[],
+            footer: ("Project Depot", "preview"),
+        };
+        if let Some(Nav::Page(p)) = bar.draw(ui, h) {
+            self.page = p;
+        }
+    }
+
+    fn body(&mut self, ui: &mut Ui, w: f32, h: f32) {
+        let x0 = SIDEBAR_W + 28.0;
+        page_heading(ui, self.page, x0, 0.0);
+        let area = Rect::new(x0, 0.0, w - x0 - 28.0, h);
+        match self.page {
+            Page::Vehicles => {
+                self.vehicles.draw(ui, area);
+                return;
+            }
+            Page::Maps => {
+                self.maps.draw(ui, area);
+                return;
+            }
+            _ => {}
+        }
+        let r = Rect::new(x0, 130.0, w - x0 - 28.0, (h - 130.0 - 60.0).max(120.0));
+        ui.panel(r);
+        ui.text_in(
+            "The game's launcher draws this page.",
+            Rect::new(r.x + 24.0, r.y, r.w - 48.0, 72.0),
+            15.0,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+    }
+}
+
+/// The page's small letter-spaced name and its title, left at `x`, from `top` down (the page's
+/// body starts 100 points under `top`).
+pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
+    ui.text(
+        &page.title().to_uppercase(),
+        Vec2::new(x, top + 46.0),
+        13.0 * TEXT_SCALE,
+        Weight::Medium,
+        ACCENT,
+        Align::Left,
+    );
+    ui.text(
+        page.title(),
+        Vec2::new(x, top + 82.0),
+        40.0,
+        Weight::Bold,
+        FG,
+        Align::Left,
+    );
+}
+
+/// What a click on the sidebar asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Nav {
+    Page(Page),
+    /// The line at the very foot (the driver, in the game's launcher).
+    Footer,
+}
+
+/// The sidebar: the logo, the pages' list, Settings and Setup at its foot and one line under
+/// them, on the left `SIDEBAR_W` points of a window `h` points high.
+pub struct Sidebar<'a> {
+    /// The page shown (lit).
+    pub page: Page,
+    /// The logo's texture and its height over its width.
+    pub logo: Option<(usize, f32)>,
+    /// A short count beside a page's name (games running, downloads) and its colour.
+    pub badges: &'a [(Page, String, omsi_ui::Color)],
+    /// The line at the foot: a name and, smaller, what it is.
+    pub footer: (&'a str, &'a str),
+}
+
+/// The id the foot line is clickable under.
+pub fn footer_id() -> u64 {
+    id_of("nav:footer")
+}
+
+impl Sidebar<'_> {
+    /// Draw it; what was clicked.
+    pub fn draw(&self, ui: &mut Ui, h: f32) -> Option<Nav> {
         let side = Rect::new(0.0, 0.0, SIDEBAR_W, h);
         ui.solid(side);
         ui.p().rect(side, SIDE);
@@ -62,31 +151,58 @@ impl Shell {
             let lw = SIDEBAR_W - 40.0;
             ui.image(Rect::new(20.0, 24.0, lw, lw * aspect), tex, 0.0);
         }
+        let mut nav = None;
         let row = nav_row(h);
         for (i, &page) in Page::listed().iter().enumerate() {
             let top = NAV_TOP + i as f32 * row;
-            self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, row));
+            if self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, row)) {
+                nav = Some(Nav::Page(page));
+            }
         }
         let foot = Page::foot();
         for (i, &page) in foot.iter().enumerate() {
             let top = h - 45.0 - (foot.len() - i) as f32 * FOOT_ROW;
-            self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, FOOT_ROW));
+            if self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, FOOT_ROW)) {
+                nav = Some(Nav::Page(page));
+            }
         }
         ui.p()
             .rect(Rect::new(0.0, h - 45.0, SIDEBAR_W - 1.0, 1.0), LINE);
-        ui.text(
-            "draft",
-            Vec2::new(28.0, h - 17.0),
+        let line = Rect::new(0.0, h - 44.0, SIDEBAR_W - 1.0, 44.0);
+        let (hover, _, clicked) = ui.interact_key(footer_id(), line);
+        if hover {
+            ui.p().rect(line, omsi_ui::Color::WHITE.alpha(0.05));
+        }
+        let (name, what) = self.footer;
+        let what_w = ui.width(what, 12.0, Weight::Regular);
+        crate::kit::clipped(
+            ui,
+            name,
+            28.0,
+            h - 22.0,
+            (SIDEBAR_W - 56.0 - what_w - 12.0).max(0.0),
             13.0 * TEXT_SCALE,
+            Weight::Medium,
+            NAV_TEXT,
+        );
+        crate::kit::right(
+            ui,
+            what,
+            SIDEBAR_W - 22.0,
+            h - 22.0,
+            12.0,
             Weight::Regular,
             MUTED,
-            Align::Left,
         );
+        if clicked {
+            nav = Some(Nav::Footer);
+        }
+        nav
     }
 
-    fn entry(&mut self, ui: &mut Ui, page: Page, r: Rect) {
+    fn entry(&self, ui: &mut Ui, page: Page, r: Rect) -> bool {
         let on = page == self.page;
-        let (hover, _, clicked) = ui.interact(nav_id(page), r);
+        let (hover, _, clicked) = ui.interact_key(nav_id(page), r);
         if on {
             ui.p().rect(r, ACCENT);
         } else if hover {
@@ -103,51 +219,17 @@ impl Shell {
             c,
             Align::Left,
         );
-        if clicked {
-            self.page = page;
+        if let Some((_, n, color)) = self.badges.iter().find(|b| b.0 == page) {
+            ui.text(
+                n,
+                Vec2::new(r.right() - 22.0, r.y + r.h * 0.5 + 5.0),
+                13.0,
+                Weight::Bold,
+                if on { ON_ACCENT } else { *color },
+                Align::Right,
+            );
         }
-    }
-
-    fn body(&mut self, ui: &mut Ui, w: f32, h: f32) {
-        let x0 = SIDEBAR_W + 28.0;
-        ui.text(
-            &self.page.title().to_uppercase(),
-            Vec2::new(x0, 46.0),
-            13.0 * TEXT_SCALE,
-            Weight::Medium,
-            ACCENT,
-            Align::Left,
-        );
-        ui.text(
-            self.page.title(),
-            Vec2::new(x0, 82.0),
-            40.0,
-            Weight::Bold,
-            FG,
-            Align::Left,
-        );
-        let area = Rect::new(x0, 0.0, w - x0 - 28.0, h);
-        match self.page {
-            Page::Vehicles => {
-                self.vehicles.draw(ui, area);
-                return;
-            }
-            Page::Maps => {
-                self.maps.draw(ui, area);
-                return;
-            }
-            _ => {}
-        }
-        let r = Rect::new(x0, 130.0, w - x0 - 28.0, (h - 130.0 - 60.0).max(120.0));
-        ui.panel(r);
-        ui.text_in(
-            "This page is built in a later step. The launcher in the game binary still has it.",
-            Rect::new(r.x + 24.0, r.y, r.w - 48.0, 72.0),
-            15.0,
-            Weight::Regular,
-            MUTED,
-            Align::Left,
-        );
+        clicked
     }
 }
 

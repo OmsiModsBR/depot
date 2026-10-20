@@ -236,6 +236,9 @@ impl App {
         self.keys.clear();
         // (the Alt bar's pending tap and keys: their releases will not come)
         self.new_ui.alt.reset_input();
+        // (the "Add vehicle" window closes: a press it took has no release coming, and
+        // the overlay would go on dragging what was under it)
+        self.new_ui.close_add();
         if let Some(p) = self.player.as_mut() {
             p.release();
         }
@@ -547,6 +550,18 @@ impl App {
         self.service_msg = Some((format!("Stop skipped: {name}"), 3.0));
     }
 
+    /// Read the vehicles that can be placed, once (the place list and the "Add vehicle" window).
+    pub(crate) fn load_vehicle_list(&mut self) {
+        if self.vehicle_list.is_empty() {
+            let menu = crate::menu::Menu::new(&self.args.root, &self.args.map);
+            self.vehicle_meta = menu.vehicles.iter().zip(menu.vehicle_meta).map(|(v, meta)| (v.1.clone(), meta)).collect();
+            self.vehicle_list = menu.vehicles;
+            // (alphabetical)
+            self.vehicle_list.sort_by_key(|v| v.0.to_lowercase());
+            crate::mt::protect(self.vehicle_list.iter().map(|v| v.0.as_str()));
+        }
+    }
+
     /// The actions of the vehicle and world pages (and of what the plugins and the input
     /// script ask of the menu by name). False when `id` is none of them.
     pub(crate) fn page_action(&mut self, id: &str) -> bool {
@@ -554,14 +569,7 @@ impl App {
             "swap" | "place" => {
                 // (a plain "Place a vehicle" puts one beside; "Swap" in the driven one's place)
                 self.swap_pending = id == "swap" && self.player.is_some();
-                if self.vehicle_list.is_empty() {
-                    let menu = crate::menu::Menu::new(&self.args.root, &self.args.map);
-                    self.vehicle_meta = menu.vehicles.iter().zip(menu.vehicle_meta).map(|(v, meta)| (v.1.clone(), meta)).collect();
-                    self.vehicle_list = menu.vehicles;
-                    // (alphabetical)
-                    self.vehicle_list.sort_by_key(|v| v.0.to_lowercase());
-                    crate::mt::protect(self.vehicle_list.iter().map(|v| v.0.as_str()));
-                }
+                self.load_vehicle_list();
                 if self.vehicle_list.is_empty() {
                     self.service_msg = Some(("No vehicles found".into(), 3.0));
                 } else if crate::lan::server_offers().is_some_and(|o| !self.vehicle_list.iter().any(|v| crate::lan::offers(&o, &v.1))) {
