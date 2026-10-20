@@ -124,6 +124,28 @@ impl SceneTexture<'_> {
     pub fn wants_mips(&self) -> bool {
         self.make_mips && self.format == TexFormat::Rgba8 && self.levels.len() == 1
     }
+
+    /// This texture brought within `max_size` texels a side, as its first level's size and
+    /// its levels: a mip chain leaves its top levels out, a single RGBA image is halved until
+    /// it fits. `None` when it fits already or cannot be made smaller (a compressed texture
+    /// without the levels below). The levels must be valid ([`SceneTexture::validate`]).
+    pub fn fitted(&self, max_size: u32) -> Option<(u32, u32, Vec<Vec<u8>>)> {
+        let fits = |(w, h): (u32, u32)| w.max(h) <= max_size;
+        if fits((self.width, self.height)) {
+            return None;
+        }
+        let first = (1..mip_count(self.width, self.height))
+            .find(|&i| fits(level_size(self.width, self.height, i)))?;
+        let (w, h) = level_size(self.width, self.height, first);
+        if first < self.levels.len() {
+            return Some((w, h, self.levels[first..].to_vec()));
+        }
+        if self.format != TexFormat::Rgba8 || self.levels.len() != 1 {
+            return None;
+        }
+        let mut chain = mip_chain(self.width, self.height, &self.levels[0]);
+        Some((w, h, vec![chain.swap_remove(first - 1)]))
+    }
 }
 
 /// The levels below a `w` x `h` RGBA image, each the 2 x 2 box average of the one above
@@ -323,6 +345,43 @@ pub fn surface_depth_bias(bias: i32) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_texture_too_large_is_brought_within_the_limit() {
+        // a chain leaves its top levels out
+        let chain: Vec<Vec<u8>> = (0..mip_count(8, 4))
+            .map(|i| {
+                let (w, h) = level_size(8, 4, i);
+                vec![i as u8; TexFormat::Bc1.level_bytes(w, h)]
+            })
+            .collect();
+        let mut t = SceneTexture {
+            width: 8,
+            height: 4,
+            format: TexFormat::Bc1,
+            levels: &chain,
+            make_mips: false,
+        };
+        assert!(t.fitted(8).is_none());
+        let (w, h, levels) = t.fitted(2).unwrap();
+        assert_eq!((w, h, levels.len()), (2, 1, 2));
+        assert_eq!(levels[0][0], 2);
+        // a single compressed level cannot be made smaller
+        t.levels = &chain[..1];
+        assert!(t.fitted(4).is_none());
+        // a single RGBA image is halved: white and black columns to grey
+        let image = vec![[[255, 255, 255, 255], [0, 0, 0, 255]].concat().repeat(2)];
+        let t = SceneTexture {
+            width: 2,
+            height: 2,
+            format: TexFormat::Rgba8,
+            levels: &image,
+            make_mips: true,
+        };
+        let (w, h, levels) = t.fitted(1).unwrap();
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(levels, vec![vec![128, 128, 128, 255]]);
+    }
 
     #[test]
     fn level_sizes_follow_the_format() {
