@@ -37,6 +37,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   and the trigger or frame block that called them), then goes on as before (#47). Nothing is
   caught or hidden.
 - Offscreen test of a tunnel mouth cut into a hillside, on synthetic content (#42): records that the `[terrainhole]` cutter takes the ground away on the tile's plan, up to the sky. Test-only.
+- With "DirectX9 (D3D9Ex)" selected, Graphics is Vanilla and fixed: the Vanilla/Vanilla+/Enhanced choice is not offered (Settings → Graphics in the launcher, the Graphics page in the game), since this mode draws the picture as OMSI 2 does. The saved choice stays in `settings.cfg` and is back when another graphics API is picked.
 
 ### Fixed
 - The launcher's bus preview starts on Vulkan on Windows even when the game's graphics setting names DirectX 12 (whose shader compiler overflowed the helper's stack on an Intel UHD 630), then on the interface chosen. A helper that crashes ends at once, with no "stopped working" window; one that goes four minutes without a word before its first picture is stopped and started on the next interface; and every helper ends with the launcher, however the launcher ends, so none is left running after it closes.
