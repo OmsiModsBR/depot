@@ -1,13 +1,13 @@
-//! Foundation of the legacy Direct3D 9 renderer.
+//! The Direct3D 9Ex renderer of the "DirectX9 (D3D9Ex)" render option.
 //!
-//! This crate is deliberately isolated: nothing depends on it, the game still renders through
-//! `omsi-render` (wgpu), and it declares no hardware as supported. It holds
+//! The game uses it only when that option is chosen (Windows, off by default); otherwise it
+//! renders through `omsi-render` (wgpu) as before. This crate declares no hardware as
+//! supported. It holds
 //!
-//! * [`backend`]: the crate's internal drawing layer (textures, meshes, batches, frames),
-//!   platform-agnostic, plus a recording [`backend::NullBackend`] that tests it without a GPU.
-//!   The game will not call it directly: the seam with the game is planned at the level of
-//!   the scene (the `Renderer` facade the game already uses), after the `omsi-render`
-//!   refactor; see README.md;
+//! * [`backend`]: the crate's own drawing layer (textures, meshes, batches, frames),
+//!   platform-agnostic, plus a recording [`backend::NullBackend`] that tests it without a GPU;
+//! * [`scene`]: the game's scene as this renderer takes it (assets under the game's ids, and
+//!   frames of batches), the seam with `omsi-render`'s frame plan;
 //! * [`d3d9`] (Windows only): the Direct3D 9Ex implementation, off-screen or in a window,
 //!   with HLSL Shader Model 3.0 shaders compiled at run time.
 

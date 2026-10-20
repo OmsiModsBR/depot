@@ -126,6 +126,10 @@ impl ApplicationHandler for App {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     s.resize(r, size.width, size.height);
                 }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.resize(size.width, size.height);
+                }
                 // (minimised, Windows makes the window 0 x 0)
                 let hidden = size.width == 0 || size.height == 0;
                 if hidden && !self.window_hidden {
@@ -404,6 +408,10 @@ impl ApplicationHandler for App {
                 if let (Some(surface), Some(renderer)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     surface.set_vsync(renderer, desktop_vsync);
                 }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.set_vsync(desktop_vsync);
+                }
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
@@ -538,8 +546,7 @@ impl ApplicationHandler for App {
                     ) {
                         hud.update(r, scene, &lines);
                         if let wgpu::CurrentSurfaceTexture::Success(frame)
-                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
-                            s.surface.get_current_texture()
+                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = s.acquire()
                         {
                             let view = frame.texture.create_view(&Default::default());
                             let cam = Camera {
@@ -567,6 +574,8 @@ impl ApplicationHandler for App {
                             frame.present();
                         }
                     }
+                    // (the old menu is not drawn under "DirectX9 (D3D9Ex)" yet)
+                    self.d3d9_clear([0.08, 0.10, 0.14]);
                     return;
                 }
                 if !self.drive_start(event_loop) {
@@ -2783,7 +2792,7 @@ impl ApplicationHandler for App {
                     let hidden_now = hide_test
                         .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
                         .unwrap_or(false);
-                    let acquired = match s.surface.get_current_texture() {
+                    let acquired = match s.acquire() {
                         wgpu::CurrentSurfaceTexture::Success(_)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(_)
                         if hidden_now =>
@@ -2795,8 +2804,10 @@ impl ApplicationHandler for App {
                     let (frame, stand_in) = match acquired {
                         wgpu::CurrentSurfaceTexture::Success(frame)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
+                        // ("DirectX9 (D3D9Ex)": the picture is drawn into a stand-in, and its
+                        // frame plan by the Direct3D 9Ex device into the window)
                         wgpu::CurrentSurfaceTexture::Occluded
-                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() =>
+                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() || s.is_shown_elsewhere() =>
                             {
                                 let (w, h) = (s.config.width, s.config.height);
                                 if self
