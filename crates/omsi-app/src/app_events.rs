@@ -126,6 +126,10 @@ impl ApplicationHandler for App {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     s.resize(r, size.width, size.height);
                 }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.resize(size.width, size.height);
+                }
                 // (minimised, Windows makes the window 0 x 0)
                 let hidden = size.width == 0 || size.height == 0;
                 if hidden && !self.window_hidden {
@@ -404,6 +408,10 @@ impl ApplicationHandler for App {
                 if let (Some(surface), Some(renderer)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     surface.set_vsync(renderer, desktop_vsync);
                 }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.set_vsync(desktop_vsync);
+                }
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
@@ -538,8 +546,7 @@ impl ApplicationHandler for App {
                     ) {
                         hud.update(r, scene, &lines);
                         if let wgpu::CurrentSurfaceTexture::Success(frame)
-                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
-                            s.surface.get_current_texture()
+                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = s.acquire()
                         {
                             let view = frame.texture.create_view(&Default::default());
                             let cam = Camera {
@@ -567,6 +574,8 @@ impl ApplicationHandler for App {
                             frame.present();
                         }
                     }
+                    // (the old menu is not drawn under "DirectX9 (D3D9Ex)" yet)
+                    self.d3d9_clear([0.08, 0.10, 0.14]);
                     return;
                 }
                 if !self.drive_start(event_loop) {
@@ -1605,6 +1614,7 @@ impl ApplicationHandler for App {
                 if !self.paused {
                     self.tick_service(dt);
                 }
+                let mut finished = None;
                 if let (Some(d), Some(p), Some(w), false) = (
                     self.duty.as_mut(),
                     self.player.as_mut(),
@@ -1624,6 +1634,12 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
+                    // (the trip at its last stop: its report once the doors open there, even
+                    // if the duty has moved on to the next trip by then)
+                    let done = d.trip_done().then(|| d.trip().stops.last().and_then(|s| s.position)).flatten();
+                    let candidate = done.map(|at| ((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index, at));
+                    let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36 && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
+                    finished = Some((candidate, p.vehicle.position, doors));
                     #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
@@ -1641,6 +1657,9 @@ impl ApplicationHandler for App {
                     ) {
                         log::warn!("driver timetable paper: {e:#}");
                     }
+                }
+                if let Some((candidate, bus, doors)) = finished {
+                    self.trip_watch(candidate, bus, doors);
                 }
                 if let Some(p) = self.player.as_mut() {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
@@ -2776,7 +2795,7 @@ impl ApplicationHandler for App {
                     let hidden_now = hide_test
                         .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
                         .unwrap_or(false);
-                    let acquired = match s.surface.get_current_texture() {
+                    let acquired = match s.acquire() {
                         wgpu::CurrentSurfaceTexture::Success(_)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(_)
                         if hidden_now =>
@@ -2788,8 +2807,10 @@ impl ApplicationHandler for App {
                     let (frame, stand_in) = match acquired {
                         wgpu::CurrentSurfaceTexture::Success(frame)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
+                        // ("DirectX9 (D3D9Ex)": the picture is drawn into a stand-in, and its
+                        // frame plan by the Direct3D 9Ex device into the window)
                         wgpu::CurrentSurfaceTexture::Occluded
-                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() =>
+                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() || s.is_shown_elsewhere() =>
                             {
                                 let (w, h) = (s.config.width, s.config.height);
                                 if self
@@ -3319,7 +3340,7 @@ impl App {
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
         // over the new interface's "Add vehicle" window the wheel scrolls its list
-        if self.add_wheel(amount) { return; }
+        if self.report_wheel(amount) || self.add_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3408,14 +3429,20 @@ impl App {
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
         if let Some(edit) = self.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
-        // a mirror panel is dragged with the left button (a release always ends a drag)
+        // a mirror panel is dragged with the left button (a release always ends a drag; no
+        // drag starts under the end-of-trip report, which takes the press)
         if let Some(size) = self
             .mirror_hud_size()
+            .filter(|_| !self.report_active())
             .or_else(|| (!pressed).then(|| self.hud_size()))
         {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
+        }
+        // the new interface's end-of-trip report takes every click while it shows
+        if self.report_click(pressed) {
+            return;
         }
         // the new interface's "Add vehicle" window takes the clicks on it
         if self.add_click(pressed) {

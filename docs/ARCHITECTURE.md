@@ -24,7 +24,7 @@ state.
 | `mc_Form_Main`, main loop              | `omsi-app`                    | offscreen + window, start menu, HUD, tile streaming; the original's dialogs are the launcher |
 | vehicle runtime                        | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
 | AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `physics` (wheels, collisions) |
-| Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game's own window (wgpu, `omsi-ui`): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
+| Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game binary without arguments, a process of its own (wgpu, `omsi-ui`, no game renderer; the bus preview is drawn by a `--preview-helper` process): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
 | - (no original counterpart)            | `omsi-net`, `omsi-app::lan`   | LAN play: UDP session, bit-packed vehicle states, chat |
 
 ## Threading

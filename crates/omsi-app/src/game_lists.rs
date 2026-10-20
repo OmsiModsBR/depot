@@ -1042,6 +1042,7 @@ pub(crate) fn button(name: &str, text: &str, desc: &str, id: &str) -> (String, S
 /// a paper sign with its line in the window, the IBIS's stop list (#1317).
 pub(crate) fn end_duty(app: &mut App) {
     app.duty = None;
+    app.duty_changed();
     if let Some(p) = app.player.as_mut() {
         clear_timetable(&mut p.vehicle);
     }
@@ -3015,6 +3016,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     }
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
+    app.duty_changed();
     app.duty = Some(d);
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
@@ -3039,6 +3041,7 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
             }
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
+            app.duty_changed();
             app.duty = Some(d);
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }

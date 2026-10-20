@@ -239,6 +239,12 @@ impl App {
         // (the "Add vehicle" window closes: a press it took has no release coming, and
         // the overlay would go on dragging what was under it)
         self.new_ui.close_add();
+        // (the report stays, but forgets a press whose release will not come)
+        if let Some(r) = self.new_ui.report.as_mut() {
+            r.forget_press();
+            self.new_ui.clear_win_input();
+            self.new_ui.push_input(crate::new_ui_add::WinInput::Lost);
+        }
         if let Some(p) = self.player.as_mut() {
             p.release();
         }

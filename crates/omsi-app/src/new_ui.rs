@@ -390,8 +390,12 @@ pub(crate) struct State {
     alt: Option<crate::new_ui_alt::AltFrame>,
     /// The "Add vehicle" window.
     add: Option<crate::new_ui_add::AddFrame>,
-    /// Clicks and the wheel over that window, not yet handed to it (one a frame).
-    add_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
+    /// The end-of-trip report.
+    report: Option<crate::new_ui_report::ReportFrame>,
+    /// "Continue" was clicked in the report.
+    report_done: bool,
+    /// Clicks and the wheel over the window showing, not yet handed to it (one a frame).
+    win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
     /// The loading screen, while the first area of the map loads.
@@ -449,14 +453,14 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, add_input, loading, mouse, arrived, gen, area) =
+        let (menu, page, alt, add, report, win_input, loading, mouse, arrived, gen, area) =
             match self.shared.lock() {
                 Ok(mut s) => {
                     let arrived = std::mem::take(&mut s.slides);
-                    let input = if s.add.is_some() {
-                        s.add_input.pop_front()
+                    let input = if s.add.is_some() || s.report.is_some() {
+                        s.win_input.pop_front()
                     } else {
-                        s.add_input.clear();
+                        s.win_input.clear();
                         None
                     };
                     (
@@ -464,6 +468,7 @@ impl Overlay {
                         s.page.clone(),
                         s.alt.clone(),
                         s.add.clone(),
+                        s.report.clone(),
                         input,
                         s.loading.clone(),
                         s.mouse,
@@ -484,7 +489,13 @@ impl Overlay {
             self.show = omsi_ui::loading::Slideshow::new(0);
         }
         self.gen = gen;
-        if menu.is_none() && page.is_none() && alt.is_none() && add.is_none() && loading.is_none() {
+        if menu.is_none()
+            && page.is_none()
+            && alt.is_none()
+            && add.is_none()
+            && report.is_none()
+            && loading.is_none()
+        {
             return;
         }
         let now = Instant::now();
@@ -511,7 +522,7 @@ impl Overlay {
         };
         let size = Vec2::new(aw as f32, ah as f32) / scale;
         // (the window's click or wheel of this frame, see `NewUi::push_input`)
-        match add_input {
+        match win_input {
             Some(crate::new_ui_add::WinInput::Press) => {
                 self.ui.input.pressed = true;
                 self.ui.input.down = true;
@@ -521,7 +532,8 @@ impl Overlay {
                 self.ui.input.down = false;
             }
             Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
-            None if add.is_none() => self.ui.input.down = false,
+            Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
+            None if add.is_none() && report.is_none() => self.ui.input.down = false,
             None => {}
         }
         self.ui.begin(size, scale, dt);
@@ -577,6 +589,17 @@ impl Overlay {
                 },
                 self.logo,
             );
+        } else if let Some(report) = report {
+            // (the simulation stands still behind the report, as behind the menu)
+            self.ui.p().rect(
+                omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
+                omsi_ui::Color::hex(0x000000).alpha(0.35),
+            );
+            if report.draw(&mut self.ui, size) {
+                if let Ok(mut s) = self.shared.lock() {
+                    s.report_done = true;
+                }
+            }
         } else {
             // (the world is not dimmed: the game goes on behind the bar and the window)
             if let Some(alt) = alt {
@@ -627,6 +650,13 @@ pub(crate) struct NewUi {
     headset: Option<(omsi_render::TextureId, u32, u32)>,
     #[cfg_attr(not(windows), allow(dead_code))]
     headset_dim: Option<omsi_render::TextureId>,
+    /// The end-of-trip report, while it is open.
+    pub(crate) report: Option<crate::new_ui_report::Report>,
+    /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
+    pub(crate) report_shown: Option<(String, String, usize)>,
+    /// A trip at its last stop whose report waits for the doors to open there: its key, its
+    /// place in the duty and where that stop is.
+    pub(crate) report_watch: Option<crate::new_ui_report::Watch>,
 }
 
 impl NewUi {
@@ -732,6 +762,7 @@ impl NewUi {
         menu: Option<MenuFrame>,
         alt: Option<crate::new_ui_alt::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
+        report: Option<crate::new_ui_report::ReportFrame>,
         mouse: Vec2,
         area: Option<Area>,
     ) {
@@ -740,6 +771,7 @@ impl NewUi {
             s.page = self.page.clone();
             s.alt = alt;
             s.add = add;
+            s.report = report;
             s.mouse = mouse;
             s.area = area;
         }
@@ -791,10 +823,26 @@ impl NewUi {
         Some(at..at + 2)
     }
 
-    /// Hand the "Add vehicle" window a click or a turn of the wheel over it.
+    /// Whether "Continue" was clicked in the report since the last call.
+    pub(crate) fn take_report_done(&self) -> bool {
+        match self.shared.lock() {
+            Ok(mut s) => std::mem::take(&mut s.report_done),
+            Err(_) => false,
+        }
+    }
+
+    /// Forget the clicks still on their way to a window that closed.
+    pub(crate) fn clear_win_input(&self) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.win_input.clear();
+            s.report_done = false;
+        }
+    }
+
+    /// Hand the window showing a click or a turn of the wheel over it.
     pub(crate) fn push_input(&self, input: crate::new_ui_add::WinInput) {
         if let Ok(mut s) = self.shared.lock() {
-            s.add_input.push_back(input);
+            s.win_input.push_back(input);
         }
     }
 
@@ -811,7 +859,7 @@ impl NewUi {
         self.add = None;
         if let Ok(mut s) = self.shared.lock() {
             s.add = None;
-            s.add_input.clear();
+            s.win_input.clear();
             s.add_events.clear();
         }
     }
@@ -878,12 +926,20 @@ impl App {
         }
         let alt = self.alt_bar_active().then(|| self.alt_frame());
         self.add_events();
-        let add = self.add_frame();
+        self.report_events();
+        let report = self.report_frame();
+        // (the report stands over everything else of the game, and pauses it)
+        let (alt, add) = if report.is_some() {
+            (None, None)
+        } else {
+            (alt, self.add_frame())
+        };
         let area = self.new_ui_area();
         self.new_ui.set(
             menu,
             alt,
             add,
+            report,
             Vec2::new(self.cursor.0, self.cursor.1),
             area,
         );
@@ -2201,13 +2257,13 @@ mod tests {
             }
             img
         };
-        ui.set(None, None, None, away, Some(area));
+        ui.set(None, None, None, None, away, Some(area));
         let world = shoot(&mut scene);
-        ui.set(Some(test_column(true)), None, None, away, Some(area));
+        ui.set(Some(test_column(true)), None, None, None, away, Some(area));
         let menu = shoot(&mut scene);
         save("triple-5760x1080-menu", &menu, size);
         ui.page = Some(page.clone());
-        ui.set(None, None, None, away, Some(area));
+        ui.set(None, None, None, None, away, Some(area));
         let shown = shoot(&mut scene);
         save("triple-5760x1080-page", &shown, size);
         ui.page = None;
@@ -2255,7 +2311,7 @@ mod tests {
             let mut range = 0..0;
             for _ in 0..3 {
                 scene.overlays.truncate(range.start);
-                ui.set(menu.clone(), None, None, away, Some(area));
+                ui.set(menu.clone(), None, None, None, away, Some(area));
                 range = ui
                     .headset_surface(r, scene, size)
                     .expect("the headset's picture");
@@ -2266,7 +2322,7 @@ mod tests {
             assert_eq!(scene.overlays[range.start + 1].1, plane);
             // (the window itself shows nothing of it: only the texture)
             let page = ui.page.take();
-            ui.set(None, None, None, away, Some(area));
+            ui.set(None, None, None, None, away, Some(area));
             let img = r
                 .render_to_image(scene, size.0, size.1, &camera, &lighting)
                 .unwrap();
@@ -2281,7 +2337,7 @@ mod tests {
         save("headset-1920x1080-page", &vr_page, size);
         // nothing open: no picture for the plane
         ui.page = None;
-        ui.set(None, None, None, away, Some(area));
+        ui.set(None, None, None, None, away, Some(area));
         assert!(ui.headset_surface(&mut r, &mut scene, size).is_none());
         let s = test_column(true).scale(size);
         let col = (pause_menu::COLUMN_W * s) as u32;
