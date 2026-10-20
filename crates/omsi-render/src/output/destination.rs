@@ -32,7 +32,8 @@ impl Output {
     }
 
     /// Whether this is the window's own finished picture (not a triple screen's panel, an eye
-    /// or a texture): the only one the overlay hook is called for.
+    /// or a texture): the only one whose frame calls the overlay hook (a triple screen calls
+    /// it once, after its panels are in the window).
     pub(crate) fn is_window(self) -> bool {
         matches!(self, Output::Window)
     }

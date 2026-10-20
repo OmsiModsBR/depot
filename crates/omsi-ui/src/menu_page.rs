@@ -10,23 +10,12 @@
 //! hit-tests the rectangles of the layout, the same ones `draw` used.
 
 use crate::paint::Align;
+use crate::theme::v5::{
+    ACCENT, CARD, FG, FIELD, KNOB, LINE, MUTED, ON_ACCENT, ROW_LINE, SELECTED, TRACK_OFF, TS,
+};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
-
-const CARD: Color = Color::hex(0x15171b);
-const LINE: Color = Color::hex(0x2b2f37);
-const ROW_LINE: Color = Color::hex(0x20242b);
-const FG: Color = Color::hex(0xe9eaec);
-const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
-const ON_ACCENT: Color = Color::hex(0x14120a);
-const FIELD: Color = Color::hex(0x1d2025);
-const SELECTED: Color = Color::hex(0x2a2316);
-const TRACK_OFF: Color = Color::hex(0x3a3e46);
-const KNOB: Color = Color::hex(0xf2f2f2);
-/// The text is drawn this much larger than its nominal size, as in the pause menu's column.
-const TS: f32 = 1.16;
 
 /// Space round the cards, and between them.
 pub const MARGIN: f32 = 24.0;

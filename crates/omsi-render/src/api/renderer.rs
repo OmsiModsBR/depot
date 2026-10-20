@@ -126,11 +126,24 @@ impl Renderer {
     /// Have `hook` draw over the window's picture each frame, after the HUD and before the
     /// picture is delivered (for an interface layer the renderer knows nothing about). It
     /// gets the device, the queue, the frame's command encoder, the picture (in `format()`)
-    /// and its size in pixels. `None` takes it away. Only the window's picture calls it, not
-    /// the mirrors', the headset's or the triple screen's panels (those are not covered yet). The
+    /// and its size in pixels. `None` takes it away. The window's picture calls it (a triple
+    /// screen's once its three panels are in the window, not each panel), not the mirrors' or
+    /// the headset's eyes: what the headset shows of it is drawn with `draw_overlay_into`. The
     /// hook runs on the render thread, inside the frame, and must not block.
     pub fn set_overlay_hook(&mut self, hook: Option<OverlayHook>) {
         self.overlay_hook = hook;
+    }
+
+    /// Have the overlay hook draw into the render texture `id` (`add_render_texture`),
+    /// emptied first, instead of over the window's picture: a picture the scene shows
+    /// elsewhere, such as the headset's menu plane. Its pixels hold premultiplied alpha.
+    /// Nothing happens without a hook or with no such texture.
+    pub fn draw_overlay_into(&mut self, scene: &Scene, id: TextureId) {
+        let Some(t) = scene.textures.get(id) else {
+            return;
+        };
+        let (view, size) = (t.view.clone(), t.size);
+        self.run_overlay_hook(&view, size, true);
     }
 
     /// The fraction of a window of this size the 3D picture is drawn at (`render_scale`).
@@ -225,7 +238,8 @@ impl Renderer {
     }
 
     /// Three independently culled and shaded physical panels, composited into a
-    /// spanning window. HUD and menu remain in window pixels and are drawn once.
+    /// spanning window. HUD and menu remain in window pixels and are drawn once, and the
+    /// overlay hook draws over the whole window after them.
     pub fn render_triple(
         &mut self,
         scene: &mut Scene,

@@ -40,6 +40,8 @@ pub(super) struct SceneCaps {
     /// wide and high.
     pub(super) lamps: bool,
     pub(super) max_texture: (u32, u32),
+    /// Instruction slots a Shader Model 3.0 pixel shader may take here.
+    pub(super) ps_slots: u32,
 }
 
 impl SceneCaps {
@@ -81,6 +83,9 @@ impl SceneCaps {
                     .into_iter()
                     .all(|f| check(D3DUSAGE_DYNAMIC as u32, D3DRTYPE_TEXTURE, f)),
             max_texture: (raw.MaxTextureWidth, raw.MaxTextureHeight),
+            // (a card that says fewer than every SM3 card gives, or none, is taken to give
+            // that many: refusing it on a wrong cap would be worse than trying)
+            ps_slots: crate::caps::ps30_slots(raw.MaxPixelShader30InstructionSlots),
         };
         log::info!("d3d9 scene: {caps:?}");
         caps
@@ -133,6 +138,8 @@ pub(super) struct SceneStore {
     meshes: Vec<Option<Mesh>>,
     textures: Vec<Option<IDirect3DTexture9>>,
     pipeline: Option<ScenePipeline>,
+    /// Why the pipeline cannot be made on this device (it is not tried again every frame).
+    unsupported: Option<String>,
     /// The per-frame instance records, and the dynamic buffer they go up in (with the
     /// records it holds).
     records: Vec<f32>,
@@ -420,7 +427,10 @@ pub(super) fn make_texture(
     }
 }
 
-fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
+/// The scene's pipeline, for a device whose pixel shaders may take `ps_slots` instruction
+/// slots: one whose pixel shader takes more is refused as unsupported, with what it takes
+/// and what the device allows.
+fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePipeline> {
     let vs_code = shader::compile(
         shader::SCENE,
         "scene.hlsl",
@@ -428,6 +438,17 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
         shader::Stage::Vertex,
     )?;
     let ps_code = shader::compile(shader::SCENE, "scene.hlsl", "ps_main", shader::Stage::Pixel)?;
+    let slots = crate::caps::instruction_slots(&ps_code);
+    log::info!("d3d9 scene: the pixel shader takes about {slots} instruction slots of {ps_slots}");
+    let too_many = || {
+        BackendError::Unsupported(format!(
+            "the scene's pixel shader takes about {slots} instruction slots and this graphics \
+             card allows {ps_slots}: the world cannot be drawn with DirectX9 (D3D9Ex) here"
+        ))
+    };
+    if slots > ps_slots {
+        return Err(too_many());
+    }
     let element = |stream: u16, offset: u16, ty: D3DDECLTYPE, usage: D3DDECLUSAGE, index: u8| {
         D3DVERTEXELEMENT9 {
             Stream: stream,
@@ -493,9 +514,13 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
             vs: device
                 .CreateVertexShader(vs_code.as_ptr())
                 .map_err(map_err)?,
-            ps: device
-                .CreatePixelShader(ps_code.as_ptr())
-                .map_err(map_err)?,
+            ps: device.CreatePixelShader(ps_code.as_ptr()).map_err(|e| {
+                // (the count is an estimate: near the limit, the device's own count decides)
+                match map_err(e) {
+                    BackendError::Backend(_) if slots + 64 > ps_slots => too_many(),
+                    e => e,
+                }
+            })?,
         })
     }
 }
@@ -779,8 +804,19 @@ impl D3d9Device {
             ));
         };
         frame.validate()?;
+        if let Some(why) = &self.scene.unsupported {
+            return Err(BackendError::Unsupported(why.clone()));
+        }
         if self.scene.pipeline.is_none() {
-            self.scene.pipeline = Some(build_pipeline(&self.device)?);
+            match build_pipeline(&self.device, self.scene_caps.ps_slots) {
+                Ok(p) => self.scene.pipeline = Some(p),
+                Err(BackendError::Unsupported(why)) => {
+                    log::error!("d3d9: {why}");
+                    self.scene.unsupported = Some(why.clone());
+                    return Err(BackendError::Unsupported(why));
+                }
+                Err(e) => return Err(e),
+            }
         }
         let drawn = self.draw_scene_inner(frame, &material, target.width, target.height);
         // Back to the backend's own states whatever happened, with depth as it expects it.

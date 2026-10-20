@@ -222,6 +222,13 @@ mod tests {
         let slots = reported_slots(&ps).unwrap();
         println!("scene pixel shader: {slots} instruction slots");
         assert!(slots <= 460, "the scene pixel shader takes {slots} slots");
+        // the device's guard counts the bytecode itself (`caps::instruction_slots`): it
+        // must not stray far from the compiler's count
+        let counted = crate::caps::instruction_slots(&ps);
+        assert!(
+            counted.abs_diff(slots) <= slots / 10,
+            "counted {counted}, the compiler {slots}"
+        );
     }
 
     #[test]
