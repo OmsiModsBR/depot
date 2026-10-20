@@ -1090,6 +1090,11 @@ impl Navigator {
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
+        // (drawn into the panel's texture, made in `frame` before: under D3D9Ex the device
+        // draws into its own copy of it, which a device opened again does not keep; the
+        // next redraw, a thirtieth of a second on, puts it back, and the city map is drawn
+        // again every frame it is open)
+        debug_assert!(self.target.is_some(), "the minimap draws without its texture");
         gpu.set_mirror_target(self.target.map(|t| t.0));
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
         queue.submit([enc.finish()]);
