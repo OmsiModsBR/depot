@@ -128,6 +128,47 @@ impl Renderer {
             width,
             height,
         );
+        // (the overlay hook draws over the whole window once the panels and the HUD are in
+        // it, as over a plain window's picture: it keeps to the centre screen itself)
+        self.run_overlay_hook(target, (width, height), false);
+    }
+
+    /// Call the overlay hook (when one is set) for `target`, a picture of `size` pixels, in
+    /// an encoder of its own; `clear` empties the picture first (a texture of its own).
+    pub(crate) fn run_overlay_hook(
+        &mut self,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        clear: bool,
+    ) {
+        let Some(hook) = self.overlay_hook.as_mut() else {
+            return;
+        };
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("overlay hook"),
+            });
+        if clear {
+            drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("overlay hook clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            }));
+        }
+        hook(&self.device, &self.queue, &mut encoder, target, size);
+        self.queue.submit(Some(encoder.finish()));
     }
 
     /// Swap in a triple screen panel's own culling history.

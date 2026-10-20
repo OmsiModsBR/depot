@@ -205,9 +205,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
     ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
     // the two sides read the same text differently
-    ("anisotropy", "game>launcher", "the game takes 0, the launcher saves it as 1"),
-    ("head_tracking_z_sens", "game>launcher", "as head_tracking_yaw_sens"),
-    ("head_tracking_z_sens", "launcher>game", "as head_tracking_yaw_sens"),
 ];
 
 /// A difference found: the case (`defaults`, or the key and the value tried), whether the

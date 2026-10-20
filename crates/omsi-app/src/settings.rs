@@ -630,7 +630,7 @@ impl Settings {
                 "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
                 "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
                 "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), _ => "auto".to_string() },
+                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9".to_string(), _ => "auto".to_string() },
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),
@@ -662,7 +662,7 @@ impl Settings {
                 "head_tracking_roll_sens" => s.head_tracking_roll_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_roll_sens),
                 "head_tracking_x_sens" => s.head_tracking_x_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_x_sens),
                 "head_tracking_y_sens" => s.head_tracking_y_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_y_sens),
-                "head_tracking_z_sens" => s.head_tracking_z_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_z_sens),
+                "head_tracking_z_sens" => s.head_tracking_z_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_z_sens),
                 "head_tracking_invert_yaw" => s.head_tracking_invert_yaw = b(v),
                 "head_tracking_invert_pitch" => s.head_tracking_invert_pitch = b(v),
                 "head_tracking_invert_roll" => s.head_tracking_invert_roll = b(v),
@@ -740,7 +740,7 @@ impl Settings {
         text.push_str(&format!("triple_screen={}\ntriple_span={}\ntriple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\ntriple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", self.triple.enabled as u8, self.triple_span as u8, self.triple.width_mm, self.triple.distance_mm, self.triple.bezel_mm, self.triple.left_angle_deg, self.triple.right_angle_deg, self.triple.eye_height_mm));
         text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8));
         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
-        text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", { let p = self.head_tracking_yaw_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_pitch_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_roll_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_x_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_y_sens; if p <= 2.0 { p / 100.0 } else { p } }, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
+        text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", { let p = self.head_tracking_yaw_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_pitch_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_roll_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_x_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_y_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_z_sens; if p <= 2.0 { p / 100.0 } else { p } }, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
         text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
         text.push_str(&format!("right_stick_look={}\n", self.right_stick_look as u8));
         text.push_str(&format!("pad_steer_smooth={}\n", self.pad_steer_smooth));
@@ -847,6 +847,18 @@ mod tests {
         assert!(!super::Settings::default().info_bar);
         assert!(super::Settings::from_text("info_bar=1\n").info_bar);
         assert!(!super::Settings::from_text("info_bar=0\n").info_bar);
+    }
+
+    /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    #[test]
+    fn d3d9_is_a_windows_graphics_api() {
+        let want = if cfg!(windows) { "d3d9" } else { "auto" };
+        for v in ["d3d9", "D3D9Ex", "dx9"] {
+            let s = super::Settings::from_text(&format!("graphics_api={v}\n"));
+            assert_eq!(s.graphics_api, want);
+            assert_eq!(super::Settings::from_text(&s.to_text()).graphics_api, want);
+        }
+        assert_eq!(super::Settings::default().graphics_api, "auto");
     }
 
     #[test]
