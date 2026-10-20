@@ -1,5 +1,6 @@
 //! The launcher without a window: the sidebar, the page chosen and its body.
 
+use crate::kit;
 use crate::look::*;
 use crate::maps::MapsView;
 use crate::pages::Page;
@@ -94,8 +95,12 @@ impl Shell {
 }
 
 /// The page's small letter-spaced name and its title, left at `x`, from `top` down (the page's
-/// body starts 100 points under `top`).
+/// body starts `BODY_TOP` points under `top`).
 pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
+    if let Some(h) = page.heading() {
+        heading(ui, page.title(), h, x, top, f32::INFINITY);
+        return;
+    }
     ui.text(
         &page.title().to_uppercase(),
         Vec2::new(x, top + 46.0),
@@ -110,6 +115,74 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
         40.0,
         Weight::Bold,
         FG,
+        Align::Left,
+    );
+}
+
+/// Where a page's body starts under the top of its heading.
+pub const BODY_TOP: f32 = 137.0;
+
+/// A heading as the concept draws one: `name › place` small and letter-spaced, the title large
+/// and one line under it, left at `x`, from `top` down. The line is cut to `w` points.
+pub fn heading(
+    ui: &mut Ui,
+    name: &str,
+    (place, title, line): (&str, &str, &str),
+    x: f32,
+    top: f32,
+    w: f32,
+) {
+    // (as the concept: "VEHICLES › PREVIEW" letter-spaced, the question large, a line)
+    let px = 13.0 * TEXT_SCALE;
+    let mut at = x;
+    at += kit::spaced(
+        ui,
+        &omsi_ui::tr(name).to_uppercase(),
+        at,
+        top + 42.0,
+        px,
+        Weight::Bold,
+        ACCENT,
+    );
+    at += 12.0;
+    ui.text_in(
+        "\u{203a}",
+        Rect::new(at, top + 42.0 - px, px, px * 2.0),
+        px,
+        Weight::Regular,
+        MUTED,
+        Align::Left,
+    );
+    at += 14.0;
+    kit::spaced(
+        ui,
+        &omsi_ui::tr(place).to_uppercase(),
+        at,
+        top + 42.0,
+        px,
+        Weight::Medium,
+        MUTED,
+    );
+    ui.text(
+        title,
+        Vec2::new(x, top + 80.0),
+        38.0,
+        Weight::Bold,
+        FG,
+        Align::Left,
+    );
+    let px = 16.5 * TEXT_SCALE;
+    let line = if w.is_finite() {
+        kit::fit_text(ui, &omsi_ui::tr(line), px, w)
+    } else {
+        line.to_string()
+    };
+    ui.text(
+        &line,
+        Vec2::new(x, top + 112.0),
+        px,
+        Weight::Regular,
+        MUTED,
         Align::Left,
     );
 }

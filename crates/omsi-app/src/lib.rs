@@ -60,6 +60,8 @@ mod new_ui;
 mod new_ui_add;
 mod new_ui_alt;
 mod new_ui_loading;
+mod new_ui_report;
+mod new_ui_windows;
 mod mirror_hud;
 mod map_surface;
 mod nav;
@@ -181,12 +183,29 @@ use startup::{
 
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
+    let _ = startup::PROCESS_START.set(std::time::Instant::now());
     omsi_cfg::migrate_legacy_data_dir();
     #[cfg(target_os = "macos")]
     startup::restart_with_allocator_settings();
     #[cfg(windows)]
-    startup::attach_parent_console();
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // (not the preview helper: its output is the launcher's pipe, and a console taken over
+    // from the launcher had no business with it)
+    if !std::env::args().any(|a| a == "--preview-helper") {
+        startup::attach_parent_console();
+    }
+    let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
+    // well: a session's go to its `game.log`, but the launcher's own window has no console on
+    // Windows, and what it said went nowhere.
+    let launcher_process = std::env::args().len() == 1 || std::env::args().any(|a| a == "--launcher");
+    if launcher_process {
+        let file = omsi_launcher_lib::data_dir().join("launcher.log");
+        let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
+        if let Ok(f) = std::fs::File::create(&file) {
+            logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+        }
+    }
+    logger.init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
     let default_hook = std::panic::take_hook();
@@ -214,11 +233,17 @@ pub fn run() -> Result<()> {
     // The launcher itself runs the game with a full command line (--no-menu, --map, ...).
     let bare = std::env::args().len() == 1;
     let Some((args, server_cfg)) = prepare(args, bare)? else { return Ok(()) };
+    if args.preview_helper {
+        return launcher::preview::helper_main();
+    }
     if args.launcher || (bare && !args.menu) {
         // the launcher window (the game started again by it with a full command line);
         // OMSI_LAUNCHER=<program> still opens another launcher instead
         if omsi_cfg::flags::LAUNCHER.is_set() && open_launcher()? {
             return Ok(());
+        }
+        if let Some(pid) = args.parent_pid {
+            startup::end_with(pid);
         }
         launcher_statics();
         return launcher::run(graphics_instance());
@@ -296,7 +321,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
         });
     omsi_script::set_session_seed(seed);
     log::info!("script random seed {seed} (OMSI_SEED={seed} repeats it)");
-    let launcher_mode = args.launcher || (bare && !args.menu);
+    let launcher_mode = args.launcher || args.preview_helper || (bare && !args.menu);
     if !is_omsi_root(&args.root) {
         match find_root() {
             Some(p) => {

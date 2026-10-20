@@ -30,6 +30,12 @@ pub struct MapsView {
     /// "Drive on this map" was clicked: the map's file and the start point's place in its
     /// list, -1 for automatic (`take_use`).
     used: Option<(String, i32)>,
+    /// The chosen map's file (for the host to find its picture by).
+    current: Option<String>,
+    /// The picture from the chosen map's folder, on the GPU: its texture and width over height.
+    map_picture: Option<(usize, f32)>,
+    /// That picture is still being looked for or read.
+    picture_reading: bool,
 }
 
 impl Default for MapsView {
@@ -41,6 +47,9 @@ impl Default for MapsView {
             entry: None,
             pending: None,
             used: None,
+            current: None,
+            map_picture: None,
+            picture_reading: false,
         }
     }
 }
@@ -52,6 +61,18 @@ impl MapsView {
             catalog: Catalog::Ready(Rc::new(list)),
             ..Default::default()
         }
+    }
+
+    /// The file of the map the page shows (after `draw`), for its picture.
+    pub fn current(&self) -> Option<&str> {
+        self.current.as_deref()
+    }
+
+    /// The picture from that map's folder (its texture and width over height), when it has one,
+    /// and whether it is still being read.
+    pub fn set_picture(&mut self, p: Option<(usize, f32)>, reading: bool) {
+        self.map_picture = p;
+        self.picture_reading = reading;
     }
 
     /// The map chosen in the library, and its start point (`None`: automatic).
@@ -170,7 +191,7 @@ impl MapsView {
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + 100.0, body.w, 120.0);
+                let r = Rect::new(body.x, body.y + 137.0, body.w, 120.0);
                 card(ui, r, "Maps could not be listed", None);
                 clipped(
                     ui,
@@ -195,7 +216,7 @@ impl MapsView {
                 return;
             }
             _ => {
-                let r = Rect::new(body.x, body.y + 100.0, body.w, 90.0);
+                let r = Rect::new(body.x, body.y + 137.0, body.w, 90.0);
                 card(ui, r, "Map library", None);
                 clipped(
                     ui,
@@ -216,8 +237,8 @@ impl MapsView {
             self.selected = shown[0];
             self.entry = None;
         }
-        let top = body.y + 100.0;
-        let rows_h = (body.h - 100.0 - 24.0).max(300.0);
+        let top = body.y + 137.0;
+        let rows_h = (body.h - 137.0 - 24.0).max(300.0);
         let upper_h = (rows_h * 0.6).floor();
         let lower_h = rows_h - upper_h - 16.0;
         let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
@@ -231,6 +252,7 @@ impl MapsView {
         );
         self.library(ui, lib, &list, &shown);
         let chosen = kit::chosen(&list, &shown, self.selected);
+        self.current = chosen.map(|m| m.file.clone());
         self.picture(ui, mid, chosen);
         self.files(ui, files, chosen);
         let y2 = top + upper_h + 16.0;
@@ -307,14 +329,36 @@ impl MapsView {
         card(ui, r, "Map", m.map(map_title).as_deref());
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
         ui.p().rect(inner, PANEL_2);
-        ui.text_in(
-            "No picture of this map here yet. The Drive page draws its roads and start points.",
-            inner.inset(24.0),
-            14.0 * TEXT_SCALE,
-            Weight::Regular,
-            MUTED,
-            Align::Center,
-        );
+        if m.is_none() {
+            return;
+        }
+        match self.map_picture {
+            Some((tex, aspect)) => {
+                ui.image_cover(inner, tex, aspect, 1.0);
+                // (as the concept: where the picture comes from, top left over it)
+                let t = "picture from the map's folder";
+                let px = 11.5 * TEXT_SCALE;
+                let w = ui.width(t, px, Weight::Regular) + 16.0;
+                let b = Rect::new(inner.x + 12.0, inner.y + 10.0, w, 22.0);
+                ui.p()
+                    .rounded(b, 4.0, omsi_ui::Color::rgba(10, 10, 12, 0.72));
+                ui.text_in(t, b, px, Weight::Regular, MUTED, Align::Center);
+            }
+            None => {
+                ui.text_in(
+                    if self.picture_reading {
+                        "Loading…"
+                    } else {
+                        "No picture found for this map."
+                    },
+                    inner.inset(24.0),
+                    14.0 * TEXT_SCALE,
+                    Weight::Regular,
+                    MUTED,
+                    Align::Center,
+                );
+            }
+        }
     }
 
     fn files(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
@@ -323,7 +367,10 @@ impl MapsView {
         let mut y = r.y + 58.0;
         for (label, status, note) in file_status(m) {
             dot(ui, r.x + 24.0, y, status);
-            text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            // (the note gives way to the label on a narrow card, never under it)
+            let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
+            let note = kit::fit_text(ui, &note, 12.0 * TEXT_SCALE, room);
             kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
             y += 30.0;
         }
