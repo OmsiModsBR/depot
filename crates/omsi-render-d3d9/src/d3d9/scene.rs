@@ -78,6 +78,57 @@ pub(super) struct SceneStore {
     /// records it holds).
     records: Vec<f32>,
     instances: Option<(IDirect3DVertexBuffer9, usize)>,
+    /// What every mesh and texture was made from.
+    pub(super) copies: SceneCopies,
+}
+
+/// What the scene's meshes and textures were made from, kept in system memory as Direct3D
+/// 9's managed pool keeps it (the default pool of a 9Ex device does not), so that a device
+/// opened again after a loss gets them all back ([`D3d9Device::restore_scene`]).
+#[derive(Default)]
+pub(super) struct SceneCopies {
+    meshes: Vec<Option<(Vec<f32>, Vec<u32>)>>,
+    textures: Vec<Option<TextureCopy>>,
+}
+
+struct TextureCopy {
+    width: u32,
+    height: u32,
+    format: TexFormat,
+    /// The levels as given (a texture whose mips are made here keeps its first one only).
+    levels: Vec<Vec<u8>>,
+    make_mips: bool,
+}
+
+impl TextureCopy {
+    fn of(t: &SceneTexture) -> Self {
+        let kept = if t.wants_mips() { 1 } else { t.levels.len() };
+        Self {
+            width: t.width,
+            height: t.height,
+            format: t.format,
+            levels: t.levels[..kept].to_vec(),
+            make_mips: t.make_mips,
+        }
+    }
+
+    fn texture(&self) -> SceneTexture<'_> {
+        SceneTexture {
+            width: self.width,
+            height: self.height,
+            format: self.format,
+            levels: &self.levels,
+            make_mips: self.make_mips,
+        }
+    }
+}
+
+fn shift<T>(list: &mut Vec<Option<T>>, from: usize, into: usize) {
+    if let Some(value) = take(list, from) {
+        put(list, into, value);
+    } else {
+        take(list, into);
+    }
 }
 
 fn put<T>(list: &mut Vec<Option<T>>, id: usize, value: T) {
@@ -264,9 +315,14 @@ impl D3d9Device {
     /// Puts mesh `id` of the game's scene up (8 floats per vertex: position, normal, uv),
     /// replacing what had that id.
     pub fn set_scene_mesh(&mut self, id: usize, vertices: &[f32], indices: &[u32]) -> Result<()> {
-        validate_mesh(vertices, indices, self.caps.index32)?;
-        let mesh = make_mesh(&self.device, vertices, indices)?;
+        self.put_scene_mesh(id, vertices.to_vec(), indices.to_vec())
+    }
+
+    fn put_scene_mesh(&mut self, id: usize, vertices: Vec<f32>, indices: Vec<u32>) -> Result<()> {
+        validate_mesh(&vertices, &indices, self.caps.index32)?;
+        let mesh = make_mesh(&self.device, &vertices, &indices)?;
         put(&mut self.scene.meshes, id, mesh);
+        put(&mut self.scene.copies.meshes, id, (vertices, indices));
         Ok(())
     }
 
@@ -285,20 +341,28 @@ impl D3d9Device {
             )));
         }
         // SAFETY: the buffer was made for exactly this many vertices.
-        unsafe { write_buffer(&mesh.vb, vertices) }
+        unsafe { write_buffer(&mesh.vb, vertices) }?;
+        if let Some((kept, _)) = self
+            .scene
+            .copies
+            .meshes
+            .get_mut(id)
+            .and_then(Option::as_mut)
+        {
+            kept.copy_from_slice(vertices);
+        }
+        Ok(())
     }
 
     pub fn free_scene_mesh(&mut self, id: usize) {
         take(&mut self.scene.meshes, id);
+        take(&mut self.scene.copies.meshes, id);
     }
 
     /// Mesh `from` is now mesh `into` (the game moved it to another slot).
     pub fn move_scene_mesh(&mut self, from: usize, into: usize) {
-        if let Some(mesh) = take(&mut self.scene.meshes, from) {
-            put(&mut self.scene.meshes, into, mesh);
-        } else {
-            take(&mut self.scene.meshes, into);
-        }
+        shift(&mut self.scene.meshes, from, into);
+        shift(&mut self.scene.copies.meshes, from, into);
     }
 
     /// Puts texture `id` of the game's scene up, replacing what had that id.
@@ -312,20 +376,23 @@ impl D3d9Device {
         }
         let t = make_texture(&self.device, texture)?;
         put(&mut self.scene.textures, id, t);
+        put(
+            &mut self.scene.copies.textures,
+            id,
+            TextureCopy::of(texture),
+        );
         Ok(())
     }
 
     pub fn free_scene_texture(&mut self, id: usize) {
         take(&mut self.scene.textures, id);
+        take(&mut self.scene.copies.textures, id);
     }
 
     /// Texture `from` is now texture `into`.
     pub fn move_scene_texture(&mut self, from: usize, into: usize) {
-        if let Some(t) = take(&mut self.scene.textures, from) {
-            put(&mut self.scene.textures, into, t);
-        } else {
-            take(&mut self.scene.textures, into);
-        }
+        shift(&mut self.scene.textures, from, into);
+        shift(&mut self.scene.copies.textures, from, into);
     }
 
     /// Lets every scene mesh and texture go (the game starts a new scene, whose ids begin
@@ -333,6 +400,24 @@ impl D3d9Device {
     pub fn clear_scene(&mut self) {
         self.scene.meshes.clear();
         self.scene.textures.clear();
+        self.scene.copies = SceneCopies::default();
+    }
+
+    /// Puts `copies` (a lost device's) up on this one under the same ids. One that cannot be
+    /// made is left out and the first such failure returned, after the others went up.
+    pub(super) fn restore_scene(&mut self, copies: SceneCopies) -> Result<()> {
+        let mut done = Ok(());
+        for (id, kept) in copies.meshes.into_iter().enumerate() {
+            if let Some((vertices, indices)) = kept {
+                done = done.and(self.put_scene_mesh(id, vertices, indices));
+            }
+        }
+        for (id, kept) in copies.textures.into_iter().enumerate() {
+            if let Some(kept) = kept {
+                done = done.and(self.set_scene_texture(id, &kept.texture()));
+            }
+        }
+        done
     }
 
     /// Whether mesh `id` and texture `id` are up (for the game's own checks and tests).

@@ -15,9 +15,9 @@ log.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D_Fxc",
     "Win32_Graphics_Direct3D9",
     "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

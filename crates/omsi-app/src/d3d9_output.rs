@@ -194,8 +194,8 @@ impl Inner {
     fn failed(&mut self, e: BackendError) {
         match e {
             BackendError::DeviceLost => {
-                // a removed device (driver reset): a new one starts empty, so what the scene
-                // holds is gone until the game puts it up again
+                // a removed device (driver reset): a new one is opened, and the scene's
+                // meshes and textures go up again from the copies the device keeps
                 log::error!("d3d9: the device was lost; opening it again");
                 if let Err(e) = self.device.recover() {
                     self.warn_once("the device could not be opened again", e);

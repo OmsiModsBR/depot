@@ -718,9 +718,14 @@ impl RenderBackend for D3d9Device {
         let (w, h) = self.window_size;
         let generation = self.generation.wrapping_add(1);
         let vsync = self.vsync;
-        *self = Self::open_with(self.target, w, h)?;
+        let fresh = Self::open_with(self.target, w, h)?;
+        // (the scene's meshes and textures go up again from their copies: the game does not
+        // send them twice)
+        let copies = std::mem::take(&mut self.scene.copies);
+        *self = fresh;
         self.generation = generation;
-        self.set_vsync(vsync)
+        let restored = self.restore_scene(copies);
+        self.set_vsync(vsync).and(restored)
     }
 }
 
