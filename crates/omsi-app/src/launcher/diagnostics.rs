@@ -11,14 +11,8 @@ use omsi_ui::{Rect, Weight};
 
 /// The page in `area` (the sidebar is outside it).
 pub fn draw(l: &mut Launcher, area: Rect) {
-    let top = area.y - 28.0;
-    omsi_launcher_ui::shell::page_heading(
-        &mut l.ui,
-        omsi_launcher_ui::Page::Diagnostics,
-        area.x,
-        top,
-    );
-    let y = top + omsi_launcher_ui::shell::BODY_TOP;
+    // (a phone keeps its compact heading, as the other pages)
+    let y = l.page_title(area, omsi_launcher_ui::Page::Diagnostics).y;
     let col = (area.w - 16.0) * 0.5;
     let left = Rect::new(area.x, y, col, 300.0);
     let right = Rect::new(area.x + col + 16.0, y, col, 300.0);
