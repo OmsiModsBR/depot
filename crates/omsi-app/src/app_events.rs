@@ -3315,6 +3315,8 @@ impl App {
     /// The mouse wheel (or a pinch of two fingers): `amount` notches, up positive.
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
+        // over the new interface's "Add vehicle" window the wheel scrolls its list
+        if self.add_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3411,6 +3413,10 @@ impl App {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
+        }
+        // the new interface's "Add vehicle" window takes the clicks on it
+        if self.add_click(pressed) {
+            return;
         }
         // the Alt bar of the new interface takes the clicks on it (never the game's)
         if self.alt_click(pressed) {
