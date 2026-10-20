@@ -3403,9 +3403,11 @@ impl App {
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
         if let Some(edit) = self.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
-        // a mirror panel is dragged with the left button (a release always ends a drag)
+        // a mirror panel is dragged with the left button (a release always ends a drag; no
+        // drag starts under the end-of-trip report, which takes the press)
         if let Some(size) = self
             .mirror_hud_size()
+            .filter(|_| !self.report_active())
             .or_else(|| (!pressed).then(|| self.hud_size()))
         {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {

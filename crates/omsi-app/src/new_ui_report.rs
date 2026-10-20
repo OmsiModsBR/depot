@@ -157,8 +157,13 @@ impl App {
             return;
         };
         let lan = self.in_lan_session();
-        // (the vehicle's keys are let go: their key-ups would come while the report has them)
+        // (the vehicle's keys and a switch held with the mouse are let go: their key-ups and
+        // the button's release would come while the report has them)
         self.release_vehicle_keys();
+        if let Some(p) = self.player.as_mut() {
+            p.release();
+        }
+        self.dragging = false;
         self.new_ui.close_add();
         self.new_ui.clear_win_input();
         self.new_ui.report = Some(Report {
