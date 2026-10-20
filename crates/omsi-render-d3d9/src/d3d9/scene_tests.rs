@@ -666,7 +666,7 @@ fn the_specular_highlight_is_added_to_the_lit_colour() {
 }
 
 #[test]
-fn clamped_textures_do_not_repeat() {
+fn texture_addressing_follows_the_material() {
     let Some(mut dev) = device() else { return };
     // left column red, right column blue
     let row = [[255, 0, 0, 255], [0, 0, 255, 255]].concat();
@@ -682,10 +682,12 @@ fn clamped_textures_do_not_repeat() {
         },
     )
     .unwrap();
-    let u = uniform(0.0);
-    // the texture moved by 3/4: u runs 0.75..1.75
-    let shifted = [1.0, 1.0, 0.75, 0.0];
-    let draw = |dev: &mut D3d9Device, address| {
+    let plain = uniform(0.0);
+    // [matl_texadress_mirroronce]: the uniform's flags say so as well (the shader mirrors)
+    let mut once = uniform(0.0);
+    once[8][1] = 2.0;
+    let draw = |dev: &mut D3d9Device, address, u: &[[f32; 4]; MATERIAL_VECTORS], shift: f32| {
+        let shifted = [1.0, 1.0, shift, 0.0];
         let (v, i) = quad(0.5);
         dev.set_scene_mesh(0, &v, &i).unwrap();
         dev.begin_frame(&FrameDesc {
@@ -708,17 +710,24 @@ fn clamped_textures_do_not_repeat() {
             Some(SceneMaterial {
                 texture: Some(0),
                 address,
-                uniform: &u,
+                uniform: u,
                 ..Default::default()
             })
         })
         .unwrap();
         dev.end_frame().unwrap()
     };
-    let px = draw(&mut dev, TexAddress::Clamp);
+    // the texture moved by 3/4: u runs 0.75..1.75
+    let px = draw(&mut dev, TexAddress::Clamp, &plain, 0.75);
     assert!(all(&px, [0, 0, 255, 255], 2), "clamped: {px:?}");
     // repeated, the middle of the quad reads the next repeat's left column
-    let px = draw(&mut dev, TexAddress::Wrap);
+    let px = draw(&mut dev, TexAddress::Wrap, &plain, 0.75);
     let at = (4 * 4) as usize;
     assert!(px[at] > px[at + 2], "wrapped: {:?}", &px[at..at + 4]);
+    // moved back by 3/4: u runs -0.75..0.25; the left edge reads the right column mirrored
+    // once, and clamped it reads the left one
+    let px = draw(&mut dev, TexAddress::MirrorOnce, &once, -0.75);
+    assert!(px[2] > px[0], "mirrored once: {:?}", &px[..4]);
+    let px = draw(&mut dev, TexAddress::Clamp, &plain, -0.75);
+    assert!(px[0] > px[2], "clamped below 0: {:?}", &px[..4]);
 }
