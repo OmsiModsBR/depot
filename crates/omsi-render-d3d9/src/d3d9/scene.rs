@@ -328,6 +328,13 @@ impl D3d9Device {
         }
     }
 
+    /// Lets every scene mesh and texture go (the game starts a new scene, whose ids begin
+    /// again).
+    pub fn clear_scene(&mut self) {
+        self.scene.meshes.clear();
+        self.scene.textures.clear();
+    }
+
     /// Whether mesh `id` and texture `id` are up (for the game's own checks and tests).
     pub fn has_scene_mesh(&self, id: usize) -> bool {
         self.scene.meshes.get(id).is_some_and(Option::is_some)

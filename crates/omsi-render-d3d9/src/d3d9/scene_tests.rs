@@ -352,6 +352,8 @@ fn compressed_textures_and_missing_meshes() {
     assert!(!dev.has_scene_mesh(0));
     dev.move_scene_texture(7, 8);
     assert!(dev.has_scene_texture(8) && !dev.has_scene_texture(7));
+    dev.clear_scene();
+    assert!(!dev.has_scene_texture(8));
 }
 
 #[test]

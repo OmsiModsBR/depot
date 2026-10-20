@@ -185,10 +185,7 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
     #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         // the dedicated server draws nothing: wgpu's no-op device takes every call
-        let mut descriptor = descriptor;
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        return wgpu::Instance::new(descriptor);
+        return noop_instance();
     }
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
     // Basic Render Driver" on a chip without a DirectX 12 driver - comes after the others)
@@ -209,6 +206,44 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
         }
     }
     software.or(last).unwrap_or_else(|| wgpu::Instance::new(descriptor))
+}
+
+/// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
+/// OMSI_BACKEND=d3d9): Windows only, and not with VR (OpenXR takes DirectX 12).
+pub(crate) fn d3d9_requested() -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    #[cfg(feature = "server")]
+    if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
+    let settings = crate::settings::Settings::load();
+    let wanted = omsi_cfg::flags::BACKEND.text().unwrap_or_else(|| settings.graphics_api.clone());
+    is_d3d9(&wanted) && !settings.vr_requested()
+}
+
+fn is_d3d9(name: &str) -> bool {
+    matches!(name.trim().to_ascii_lowercase().as_str(), "d3d9" | "d3d9ex" | "dx9")
+}
+
+/// wgpu's device that draws nothing (the dedicated server's, and the books of "DirectX9
+/// (D3D9Ex)", see `d3d9_output`).
+fn noop_instance() -> wgpu::Instance {
+    let mut descriptor = instance_descriptor(None);
+    descriptor.backends = wgpu::Backends::NOOP;
+    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+    wgpu::Instance::new(descriptor)
+}
+
+/// The game window's instance: [`graphics_instance`], or wgpu's noop device under "DirectX9
+/// (D3D9Ex)", where `omsi-render` only keeps the books.
+pub(crate) fn game_instance() -> wgpu::Instance {
+    if d3d9_requested() {
+        log::info!("graphics: DirectX9 (D3D9Ex) chosen; wgpu runs on its noop device for the scene's books");
+        return noop_instance();
+    }
+    graphics_instance()
 }
 
 /// The graphics interfaces in the order they are tried: Metal on a Mac; on Windows DirectX
@@ -254,6 +289,12 @@ fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
 
 fn backend_instance(b: wgpu::Backends) -> wgpu::Instance {
     wgpu::Instance::new(instance_descriptor(Some(b)))
+}
+
+/// The renderer of "DirectX9 (D3D9Ex)": on `instance` (wgpu's noop device, see
+/// [`game_instance`]), keeping the books of the scene for the Direct3D 9Ex device.
+pub(crate) fn books_renderer(instance: &wgpu::Instance, options: omsi_render::RenderOptions) -> Result<Renderer> {
+    pollster::block_on(Renderer::new_with(instance, None, Some(wgpu::TextureFormat::Bgra8UnormSrgb), options))
 }
 
 /// The renderer for a window: on `instance` if it can, else on the next graphics interface

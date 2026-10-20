@@ -15,6 +15,9 @@ pub struct SurfaceState<'w> {
     pub config: wgpu::SurfaceConfiguration,
     /// The renderer's `device_lost`.
     pub(crate) lost: Arc<std::sync::Mutex<Option<String>>>,
+    /// Another renderer shows the pictures (see [`SurfaceState::shown_elsewhere`]): the
+    /// surface is never configured and gives no frames.
+    pub(crate) elsewhere: bool,
 }
 
 impl Drop for SurfaceState<'_> {

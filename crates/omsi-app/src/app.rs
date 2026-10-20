@@ -43,6 +43,9 @@ pub(crate) struct App {
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) surface: Option<SurfaceState<'static>>,
     pub(crate) renderer: Option<Renderer>,
+    /// The "DirectX9 (D3D9Ex)" output of the window (see `d3d9_output`).
+    #[cfg(windows)]
+    pub(crate) d3d9: Option<crate::d3d9_output::D3d9Output>,
     #[cfg(windows)]
     pub(crate) vr: Option<crate::openxr::Vr>,
     pub(crate) scene: Option<Scene>,
@@ -418,6 +421,24 @@ impl App {
     #[cfg(not(windows))]
     pub(crate) fn vr_active(&self) -> bool { false }
 
+    /// Whether the window draws with "DirectX9 (D3D9Ex)".
+    #[cfg(windows)]
+    pub(crate) fn d3d9_active(&self) -> bool { self.d3d9.is_some() }
+
+    #[cfg(not(windows))]
+    pub(crate) fn d3d9_active(&self) -> bool { false }
+
+    /// Under "DirectX9 (D3D9Ex)", shows the window cleared to `rgb`: the screens it does not
+    /// draw yet (the loading screen, the menus) are not left as garbage.
+    pub(crate) fn d3d9_clear(&self, rgb: [f32; 3]) {
+        #[cfg(windows)]
+        if let Some(d) = self.d3d9.as_ref() {
+            d.present_clear(rgb);
+        }
+        #[cfg(not(windows))]
+        let _ = rgb;
+    }
+
     pub(crate) fn resumed_impl(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.window.clone() {
             // back from the background (a phone): the window's surface is made again
@@ -425,7 +446,11 @@ impl App {
                 if let Some(r) = self.renderer.as_ref() {
                     let size = window.inner_size();
                     let vsync = self.settings.vsync && !self.vr_active();
-                    self.surface = SurfaceState::new_with(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok();
+                    self.surface = if self.d3d9_active() {
+                        SurfaceState::shown_elsewhere(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok()
+                    } else {
+                        SurfaceState::new_with(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok()
+                    };
                     self.last = Instant::now();
                 }
             }
@@ -530,7 +555,18 @@ impl App {
                 }
             },
         };
-        let mut renderer = match window_renderer(&mut self.instance, &window, self.settings.render_options()) {
+        // "DirectX9 (D3D9Ex)": the renderer keeps the books on wgpu's noop device, the
+        // Direct3D 9Ex device draws the window (see `d3d9_output`)
+        #[cfg(windows)]
+        let d3d9 = crate::startup::d3d9_requested();
+        #[cfg(not(windows))]
+        let d3d9 = false;
+        let opened = if d3d9 {
+            crate::startup::books_renderer(&self.instance, self.settings.render_options())
+        } else {
+            window_renderer(&mut self.instance, &window, self.settings.render_options())
+        };
+        let mut renderer = match opened {
             Ok(r) => r,
             Err(e) => {
                 fatal_message(&format!("The game cannot draw on this computer: {e:#}"));
@@ -538,6 +574,17 @@ impl App {
                 return;
             }
         };
+        #[cfg(windows)]
+        if d3d9 {
+            match crate::d3d9_output::D3d9Output::attach(&mut renderer, &window, self.settings.vsync) {
+                Ok(out) => self.d3d9 = Some(out),
+                Err(e) => {
+                    fatal_message(&format!("The game cannot draw with DirectX9 (D3D9Ex) on this computer: {e:#}. Choose another graphics API in the options."));
+                    crate::platform::exit(event_loop);
+                    return;
+                }
+            }
+        }
         #[cfg(windows)]
         if self.settings.vr_requested() {
             match crate::openxr::Vr::new(&renderer, self.settings.vr_scale, self.settings.vr_desktop_mirror) {
@@ -554,14 +601,19 @@ impl App {
         crate::lights::load_smoke_texture(&mut renderer, &self.args.root);
         crate::lights::set_corona_root(&self.args.root);
         let size = window.inner_size();
-        let surface = match SurfaceState::new_with(
-            &self.instance,
-            window.clone(),
-            &renderer,
-            size.width,
-            size.height,
-            self.settings.vsync && !self.vr_active(),
-        ) {
+        let surface = if d3d9 {
+            SurfaceState::shown_elsewhere(&self.instance, window.clone(), &renderer, size.width, size.height, self.settings.vsync)
+        } else {
+            SurfaceState::new_with(
+                &self.instance,
+                window.clone(),
+                &renderer,
+                size.width,
+                size.height,
+                self.settings.vsync && !self.vr_active(),
+            )
+        };
+        let surface = match surface {
             Ok(s) => s,
             Err(e) => {
                 fatal_message(&format!("The game's window cannot be drawn into: {e:#}"));
@@ -600,6 +652,10 @@ impl App {
             lan::adopt_host_world(&mut self.args, l, &mut self.online.remotes);
         }
         let renderer = self.renderer.take().expect("renderer");
+        #[cfg(windows)]
+        if let Some(d) = self.d3d9.as_ref() {
+            d.new_scene();
+        }
         let mut scene = renderer.new_scene();
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
@@ -968,7 +1024,7 @@ impl App {
         let mut reconfigure = false;
         if let (Some(s), Some(win)) = (self.surface.as_ref(), self.window.as_ref()) {
             scene.overlays.clear();
-            let acquired = s.surface.get_current_texture();
+            let acquired = s.acquire();
             // a swapchain that no longer fits the window (Vulkan says so after the switch
             // to full screen, without a resize event) is made again, as the game's own
             // frames do: left as it was, every later frame of the loading screen failed
@@ -1006,6 +1062,7 @@ impl App {
                 self.renderer = Some(renderer);
             } else {
                 self.renderer = Some(renderer);
+                self.d3d9_clear([0.08, 0.10, 0.14]);
             }
             win.request_redraw();
         } else {

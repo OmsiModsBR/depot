@@ -3,13 +3,19 @@
 A **separate legacy Direct3D 9 renderer**, built step by step. It is meant to render with
 the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 
-## What this is not
+## How the game uses it
 
-* It is **not wired into the game**. No crate depends on it and the game still renders through
-  `omsi-render` (wgpu); the default renderer and the inherited backends are untouched.
-* It **declares no supported hardware**. Widening the hardware matrix is a product decision.
-* It does not yet draw everything the game shows: see "The scene layer" below for what the
-  scene shader covers so far.
+Only under the render option "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
+`OMSI_BACKEND=d3d9`), on Windows and without VR; the default renderer and the other
+backends are untouched. In that mode `omsi-render` runs on wgpu's noop device and keeps
+the books (scene, culling, level of detail, alpha order); its asset events and each window
+picture's frame plan come here (`omsi-app/src/d3d9_output.rs`), and this crate draws and
+presents the window. It **declares no supported hardware**: widening the hardware matrix
+is a product decision.
+
+What the frame plan does not carry yet is not drawn in that mode: the UI and the HUD, the
+loading screen and the menus (the window is cleared instead), the sky, triple screen,
+screenshots, and what "The scene layer" lists as not yet.
 
 ## What is in it
 
