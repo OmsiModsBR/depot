@@ -121,10 +121,11 @@ Built as stacked draft pull requests, merged in order only when the maintainer c
 | Diagnostics page | in the game's launcher: build, graphics adapter, OMSI 2 folder check, log path, games running |
 | Loading screen with the player's screenshots as a slow slideshow (#255) | draft |
 | Pause menu column with the city-map bar (#256) | draft; the caller supplies the items and the map |
+| Esc menu in the game (`omsi-app::new_ui`) | the game's Esc menu on a plain window: its top level, and every page behind its lines (settings windows, lists, drop-downs, the timetable beside Line and tour) drawn by `omsi_ui::menu_page` from the HUD's own list data; the HUD's input code hit-tests the page's rectangles. The triple screen and VR keep the HUD's menu and pages |
 | Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
 | Offscreen example drawing every screen with placeholder data (#250) | draft |
 
-Not started: the v5 look inside `omsi_ui::theme` (the new launcher keeps it in its own `look.rs` for now), the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The screens are not wired into the game's own menus yet.
+Not started: the v5 look inside `omsi_ui::theme` (the new launcher keeps it in its own `look.rs` for now), the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The Esc menu, the Alt bar, the "Add vehicle" window and the loading screen are wired into the game; the other in-game windows are not yet.
 
 ## Open decisions (maintainer)
 
