@@ -9,6 +9,7 @@
 use crate::paint::Align;
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
+use glam::Vec2;
 
 const PANEL: Color = Color::hex(0x171a1f);
 const LINE: Color = Color::hex(0x2b2f37);
@@ -25,7 +26,7 @@ const TS: f32 = 1.16;
 pub const TITLE_H: f32 = 40.0;
 pub const ROW_H: f32 = 34.0;
 
-fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
+pub(crate) fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
     let px = px * TS;
     let w = ui.width(s, px, weight);
     ui.text_in(
@@ -38,7 +39,7 @@ fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color
     );
 }
 
-fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
+pub(crate) fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
     let px = px * TS;
     let w = ui.width(s, px, weight);
     ui.text_in(
@@ -51,20 +52,36 @@ fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c:
     );
 }
 
+/// The space between the letters of a window's title, in points.
+const TRACKING: f32 = 1.6;
+
+/// `s` (already translated) one letter at a time from `at` (its left end, the line's middle),
+/// `track` points between the letters, in the title's weight and colour.
+fn spaced(ui: &mut Ui, s: &str, at: Vec2, px: f32, track: f32) {
+    let base = at.y + ui.fonts.cap_height(px, Weight::Bold) * 0.5;
+    let mut x = at.x;
+    let mut buf = [0u8; 4];
+    for c in s.chars() {
+        let g: &str = c.encode_utf8(&mut buf);
+        // (drawn as it is: one letter of a translated title is no text of its own)
+        let w = ui.fonts.width_as_is(g, px, Weight::Bold);
+        ui.text_as_is(g, Vec2::new(x, base), px, Weight::Bold, FG, Align::Left);
+        x += w + track;
+    }
+}
+
 /// A window: the panel, its title in capitals and a note at the right. Returns the area
 /// under the title bar.
 pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
     ui.solid(r);
     ui.p().rect(r, PANEL.alpha(PANEL_ALPHA));
     ui.p().rounded_border(r, 0.0, 1.0, LINE);
-    text(
+    spaced(
         ui,
-        &title.to_uppercase(),
-        r.x + 16.0,
-        r.y + 20.0,
-        13.0,
-        Weight::Bold,
-        FG,
+        &crate::tr(title).to_uppercase(),
+        Vec2::new(r.x + 16.0, r.y + 20.0),
+        13.0 * TS,
+        TRACKING,
     );
     text_right(
         ui,
@@ -175,39 +192,302 @@ pub fn key_values(ui: &mut Ui, area: Rect, rows: &[(&str, String, Option<Color>)
     rows.len() as f32 * ROW_H
 }
 
+/// How a button of a window is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonKind {
+    /// The window's main button: the accent colour.
+    Primary,
+    Normal,
+}
+
+/// The height of a window's button.
+pub const BUTTON_H: f32 = 39.0;
+
+/// The width a button with `label` takes in a row of [`buttons`].
+pub fn button_width(ui: &Ui, label: &str) -> f32 {
+    ui.width(label, 14.0 * TS, Weight::Medium) + 44.0
+}
+
+/// One button in `r`; a dim one (`enabled` false) is drawn but cannot be clicked. Returns
+/// whether it was clicked.
+pub fn button(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    label: &str,
+    kind: ButtonKind,
+    enabled: bool,
+) -> bool {
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    let primary = kind == ButtonKind::Primary;
+    let fill = match (primary, enabled) {
+        (true, true) => ACCENT,
+        (true, false) => ACCENT.alpha(0.22),
+        (false, _) => FIELD,
+    };
+    ui.p().rect(
+        r,
+        if hover && enabled {
+            fill.lighten(0.08)
+        } else {
+            fill
+        },
+    );
+    if !primary {
+        ui.p().rounded_border(r, 0.0, 1.0, LINE);
+    }
+    let fg = match (primary, enabled) {
+        (true, true) => ON_ACCENT,
+        (true, false) => FG.alpha(0.45),
+        (false, true) => FG,
+        (false, false) => FG.alpha(0.35),
+    };
+    ui.text_in(
+        label,
+        r,
+        14.0 * TS,
+        if primary {
+            Weight::Bold
+        } else {
+            Weight::Medium
+        },
+        fg,
+        Align::Center,
+    );
+    click && enabled
+}
+
 /// A row of buttons from `at`; the first is the accent one. Returns the index clicked.
 pub fn buttons(ui: &mut Ui, name: &str, at: glam::Vec2, labels: &[&str]) -> Option<usize> {
+    let row: Vec<(&str, bool)> = labels.iter().map(|l| (*l, true)).collect();
+    buttons_enabled(ui, name, at, &row)
+}
+
+/// [`buttons`] where some may be dim: (label, enabled). A dim one cannot be clicked.
+pub fn buttons_enabled(
+    ui: &mut Ui,
+    name: &str,
+    at: glam::Vec2,
+    labels: &[(&str, bool)],
+) -> Option<usize> {
     let mut x = at.x;
     let mut clicked = None;
-    for (i, label) in labels.iter().enumerate() {
-        let w = ui.width(label, 14.0 * TS, Weight::Medium) + 44.0;
-        let r = Rect::new(x, at.y, w, 39.0);
-        let (hover, _, click) = ui.interact(id_of(&format!("{name}:btn:{i}")), r);
-        let primary = i == 0;
-        let fill = if primary { ACCENT } else { FIELD };
-        ui.p()
-            .rect(r, if hover { fill.lighten(0.08) } else { fill });
-        if !primary {
-            ui.p().rounded_border(r, 0.0, 1.0, LINE);
-        }
-        ui.text_in(
-            label,
-            r,
-            14.0 * TS,
-            if primary {
-                Weight::Bold
-            } else {
-                Weight::Medium
-            },
-            if primary { ON_ACCENT } else { FG },
-            Align::Center,
-        );
-        if click {
+    for (i, (label, enabled)) in labels.iter().enumerate() {
+        let w = button_width(ui, label);
+        let r = Rect::new(x, at.y, w, BUTTON_H);
+        let kind = if i == 0 {
+            ButtonKind::Primary
+        } else {
+            ButtonKind::Normal
+        };
+        if button(ui, &format!("{name}:btn:{i}"), r, label, kind, *enabled) {
             clicked = Some(i);
         }
         x += w + 8.0;
     }
     clicked
+}
+
+/// The height of a window's foot: a hairline, its buttons and a hint.
+pub const FOOT_H: f32 = 64.0;
+
+/// A window's foot inside `r` (the window): the hairline over it, `labels` from the left (the
+/// first the accent one, see [`buttons_enabled`]) and `hint` at the right. Returns the button
+/// clicked.
+pub fn foot(
+    ui: &mut Ui,
+    name: &str,
+    r: Rect,
+    labels: &[(&str, bool)],
+    hint: &str,
+) -> Option<usize> {
+    ui.p().rect(
+        Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
+        LINE,
+    );
+    let at = Vec2::new(r.x + 16.0, r.bottom() - FOOT_H + 12.0);
+    let clicked = buttons_enabled(ui, name, at, labels);
+    let used: f32 = labels.iter().map(|(l, _)| button_width(ui, l) + 8.0).sum();
+    // (the hint keeps clear of the buttons: cut, never under them)
+    let room = (r.w - 32.0 - used - 16.0).max(0.0);
+    ui.text_in(
+        hint,
+        Rect::new(r.right() - 16.0 - room, r.bottom() - FOOT_H, room, FOOT_H),
+        12.0 * TS,
+        Weight::Regular,
+        MUTED,
+        Align::Right,
+    );
+    clicked
+}
+
+/// A small heading over a part of a window (muted, as a table's column heads are), its
+/// middle at `cy`.
+pub fn head(ui: &mut Ui, s: &str, x: f32, cy: f32) {
+    text(ui, s, x, cy, 12.0, Weight::Regular, MUTED);
+}
+
+/// A line of muted text cut to `r`, its middle at the middle of `r`.
+pub fn note(ui: &mut Ui, s: &str, r: Rect) {
+    ui.text_in(s, r, 13.0 * TS, Weight::Regular, MUTED, Align::Left);
+}
+
+/// The height of a row with a check box ([`check_row`]).
+pub const CHECK_H: f32 = 40.0;
+
+/// A row with a check box: `label` at the right of the box, ticked when `on`. A dim one
+/// (`disabled`: the reason, shown at the right) cannot be clicked. Returns whether it was
+/// clicked.
+pub fn check_row(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    label: &str,
+    on: bool,
+    disabled: Option<&str>,
+) -> bool {
+    let enabled = disabled.is_none();
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    if hover && enabled {
+        ui.p().rect(r, Color::WHITE.alpha(0.04));
+    }
+    let b = Rect::new(r.x + 16.0, (r.center().y - 9.0).round(), 18.0, 18.0);
+    let a = if enabled { 1.0 } else { 0.35 };
+    if on {
+        ui.p().rect(b, ACCENT.alpha(a));
+        ui.icon("check", b.center(), 16.0, ON_ACCENT);
+    } else {
+        ui.p().rect(b, FIELD);
+        let edge = if hover && enabled { MUTED } else { LINE };
+        ui.p().rounded_border(b, 0.0, 1.0, edge);
+    }
+    let lx = b.right() + 12.0;
+    let reason_w = disabled
+        .map(|d| (ui.width(d, 12.0 * TS, Weight::Regular) + 16.0).min(r.w * 0.55))
+        .unwrap_or(0.0);
+    ui.text_in(
+        label,
+        Rect::new(lx, r.y, (r.right() - 16.0 - reason_w - lx).max(0.0), r.h),
+        14.0 * TS,
+        Weight::Regular,
+        if enabled { FG } else { FG.alpha(0.4) },
+        Align::Left,
+    );
+    if let Some(why) = disabled {
+        ui.text_in(
+            why,
+            Rect::new(r.right() - 16.0 - reason_w, r.y, reason_w, r.h),
+            12.0 * TS,
+            Weight::Regular,
+            MUTED,
+            Align::Right,
+        );
+    }
+    click && enabled
+}
+
+/// The height of a [`stepper`].
+pub const STEPPER_H: f32 = 40.0;
+
+/// A value with a button on each side that steps it down or up (the wheel over it does the
+/// same). Returns -1 or 1 when it was stepped, else 0. A dim one does nothing.
+pub fn stepper(ui: &mut Ui, id: &str, r: Rect, value: &str, enabled: bool) -> i32 {
+    let base = id_of(id);
+    ui.p().rect(r, FIELD);
+    ui.p().rounded_border(r, 0.0, 1.0, LINE);
+    let side = 30.0f32.min(r.w / 3.0);
+    let down = Rect::new(r.x, r.y, side, r.h);
+    let up = Rect::new(r.right() - side, r.y, side, r.h);
+    let mut step = 0;
+    for (k, (part, icon, by)) in [(down, "chevron_left", -1), (up, "chevron_right", 1)]
+        .into_iter()
+        .enumerate()
+    {
+        let (hover, held, click) = ui.interact(base ^ (k as u64 + 1), part);
+        if hover && enabled {
+            let a = if held { 0.08 } else { 0.05 };
+            ui.p().rect(part.inset(1.0), Color::WHITE.alpha(a));
+        }
+        let c = match (enabled, hover) {
+            (false, _) => MUTED.alpha(0.3),
+            (true, true) => ACCENT,
+            (true, false) => MUTED,
+        };
+        ui.icon(icon, part.center(), 20.0, c);
+        if click && enabled {
+            step = by;
+        }
+    }
+    if enabled && ui.hover(r) && ui.input.wheel.y.abs() > 0.0 {
+        step = ui.input.wheel.y.signum() as i32;
+        ui.input.wheel.y = 0.0;
+    }
+    ui.text_in(
+        value,
+        Rect::new(down.right(), r.y, (up.x - down.right()).max(0.0), r.h),
+        15.0 * TS,
+        Weight::Medium,
+        if enabled { FG } else { FG.alpha(0.4) },
+        Align::Center,
+    );
+    step
+}
+
+/// The height of a [`text_field`].
+pub const FIELD_H: f32 = 40.0;
+
+/// A one-line text field showing `value`, with a caret at its end while `focused` (the
+/// typing itself is the caller's). `placeholder` shows while it is empty and not focused.
+/// Returns whether it was clicked.
+pub fn text_field(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    value: &str,
+    focused: bool,
+    placeholder: &str,
+) -> bool {
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    ui.p().rect(r, FIELD);
+    let edge = if focused {
+        ACCENT
+    } else if hover {
+        MUTED
+    } else {
+        LINE
+    };
+    ui.p().rounded_border(r, 0.0, 1.0, edge);
+    let px = 15.0 * TS;
+    let inner = Rect::new(r.x + 12.0, r.y, (r.w - 24.0).max(0.0), r.h);
+    if value.is_empty() && !focused {
+        let c = MUTED.alpha(0.7);
+        ui.text_in(
+            placeholder,
+            inner,
+            14.0 * TS,
+            Weight::Regular,
+            c,
+            Align::Left,
+        );
+        return click;
+    }
+    // (what is typed is the player's, not the interface's: drawn as it is; the end of a
+    // long one shows, where the caret is)
+    let mut shown: &str = value;
+    while !shown.is_empty() && ui.fonts.width_as_is(shown, px, Weight::Regular) > inner.w - 4.0 {
+        let mut cs = shown.chars();
+        cs.next();
+        shown = cs.as_str();
+    }
+    let base = r.center().y + ui.fonts.cap_height(px, Weight::Regular) * 0.5;
+    let at = Vec2::new(inner.x, base);
+    let w = ui.text_as_is(shown, at, px, Weight::Regular, FG, Align::Left);
+    if focused && (ui.time * 1.6).fract() < 0.6 {
+        let x = (inner.x + w + 1.0).min(inner.right());
+        ui.p()
+            .rect(Rect::new(x, r.center().y - 10.0, 1.5, 20.0), FG);
+    }
+    click
 }
 
 /// A list of `labels` in a scrolled column of `area`, the chosen one marked. Returns the one
@@ -219,6 +499,70 @@ pub fn list(
     labels: &[String],
     selected: Option<usize>,
 ) -> Option<usize> {
+    list_rows(ui, name, area, labels, selected, &ListLook::default())
+}
+
+/// How a list of [`list_rows`] looks.
+#[derive(Clone, Copy, Debug)]
+pub struct ListLook<'a> {
+    /// A short value before each label (a time), in a column this wide; none when empty.
+    pub leads: &'a [String],
+    pub lead_w: f32,
+    /// A dim list cannot be clicked.
+    pub enabled: bool,
+    /// The labels are the game's data (names of places, files), not the interface's own
+    /// words: drawn as they are, not translated.
+    pub as_is: bool,
+    /// Shown in the middle of the area while the list is empty.
+    pub empty: &'a str,
+}
+
+impl Default for ListLook<'_> {
+    fn default() -> Self {
+        ListLook {
+            leads: &[],
+            lead_w: 0.0,
+            enabled: true,
+            as_is: false,
+            empty: "",
+        }
+    }
+}
+
+/// [`list`] as `look` says. The first time a list of this `name` is drawn it scrolls to show
+/// the chosen row (a window opened on the setting in force).
+pub fn list_rows(
+    ui: &mut Ui,
+    name: &str,
+    area: Rect,
+    labels: &[String],
+    selected: Option<usize>,
+    look: &ListLook,
+) -> Option<usize> {
+    if labels.is_empty() && !look.empty.is_empty() {
+        let c = MUTED.alpha(0.8);
+        ui.text_in(
+            look.empty,
+            area.inset(12.0),
+            13.0 * TS,
+            Weight::Regular,
+            c,
+            Align::Center,
+        );
+        return None;
+    }
+    let shown = id_of(name) ^ 0x7e7;
+    if !ui.scroll.contains_key(&shown) {
+        if let Some(s) = selected {
+            let content = labels.len() as f32 * ROW_H;
+            let to =
+                (s as f32 * ROW_H - (area.h - ROW_H) * 0.5).clamp(0.0, (content - area.h).max(0.0));
+            ui.scroll.insert(id_of(name), to);
+            ui.scroll.insert(id_of(name) ^ 0xabc, to);
+        }
+        ui.scroll.insert(shown, 0.0);
+    }
+    let alpha = if look.enabled { 1.0 } else { 0.4 };
     let mut clicked = None;
     ui.scroll_area(name, area, &mut |ui, view| {
         for (i, label) in labels.iter().enumerate() {
@@ -228,30 +572,65 @@ pub fn list(
                 continue;
             }
             let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
-            if selected == Some(i) {
-                ui.p().rect(r, SELECTED);
-                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+            let chosen = selected == Some(i);
+            if chosen {
+                ui.p().rect(r, SELECTED.alpha(alpha));
+                ui.p()
+                    .rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT.alpha(alpha));
             } else {
-                if hover {
+                if hover && look.enabled {
                     ui.p().rect(r, Color::WHITE.alpha(0.04));
                 }
                 ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
             }
-            ui.text_in(
-                label,
-                Rect::new(r.x + 12.0, r.y, (r.w - 20.0).max(0.0), r.h),
-                14.0 * TS,
-                Weight::Regular,
-                if selected == Some(i) { FG } else { MUTED },
-                Align::Left,
-            );
-            if click && area.contains(ui.input.mouse) {
+            let fg = if chosen { FG } else { MUTED }.alpha(alpha);
+            let mut x = r.x + 12.0;
+            if let Some(lead) = look.leads.get(i) {
+                let lr = Rect::new(x, r.y, look.lead_w, r.h);
+                ui.text_in(lead, lr, 14.0 * TS, Weight::Medium, fg, Align::Left);
+            }
+            if !look.leads.is_empty() {
+                x += look.lead_w;
+            }
+            let lr = Rect::new(x, r.y, (r.right() - 8.0 - x).max(0.0), r.h);
+            if look.as_is {
+                let px = 14.0 * TS;
+                let fit = fit_as_is(ui, label, px, lr.w);
+                let base = r.center().y + ui.fonts.cap_height(px, Weight::Regular) * 0.5;
+                ui.text_as_is(
+                    &fit,
+                    Vec2::new(x, base),
+                    px,
+                    Weight::Regular,
+                    fg,
+                    Align::Left,
+                );
+            } else {
+                ui.text_in(label, lr, 14.0 * TS, Weight::Regular, fg, Align::Left);
+            }
+            if click && look.enabled && area.contains(ui.input.mouse) {
                 clicked = Some(i);
             }
         }
         labels.len() as f32 * ROW_H
     });
     clicked
+}
+
+/// `s` cut with an ellipsis to `max` points, not translated.
+fn fit_as_is(ui: &Ui, s: &str, px: f32, max: f32) -> String {
+    if ui.fonts.width_as_is(s, px, Weight::Regular) <= max {
+        return s.to_string();
+    }
+    let mut cut: Vec<char> = s.chars().collect();
+    while !cut.is_empty() {
+        cut.pop();
+        let t: String = cut.iter().collect::<String>().trim_end().to_string() + "…";
+        if ui.fonts.width_as_is(&t, px, Weight::Regular) <= max {
+            return t;
+        }
+    }
+    String::new()
 }
 
 /// The "Add vehicle" window: the vehicles, the chosen one's liveries and depot files, and
@@ -350,6 +729,178 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     event
 }
 
+const GOOD: Color = Color::hex(0x4fc27a);
+const BAD: Color = Color::hex(0xe8523f);
+const SOON: Color = Color::hex(0xe0a030);
+
+/// How a stop of the end-of-trip report went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StopState {
+    OnTime,
+    Late,
+    LeftEarly,
+    /// Arrived late and left before its time.
+    LateLeftEarly,
+    /// Passed without being served, with a later stop served.
+    Missed,
+    /// Not reached (the trip ended before it, or it is not known).
+    None,
+}
+
+/// One stop of the end-of-trip report, as the game words it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReportRow {
+    pub stop: String,
+    pub scheduled: String,
+    pub actual: String,
+    pub deviation: String,
+    pub state: StopState,
+}
+
+/// The end-of-trip report: the trip's title, its stops and the totals under them.
+pub struct TripReport<'a> {
+    pub title: &'a str,
+    pub note: &'a str,
+    pub rows: &'a [ReportRow],
+    pub totals: &'a [(&'a str, String)],
+}
+
+/// Where the end-of-trip report is in a picture of `size` points: in the middle.
+pub fn trip_report_rect(size: glam::Vec2) -> Rect {
+    let w = 900.0f32.min(size.x - 32.0);
+    let h = 620.0f32.min(size.y - 32.0);
+    Rect::new(
+        ((size.x - w) * 0.5).floor(),
+        ((size.y - h) * 0.5).floor(),
+        w,
+        h,
+    )
+}
+
+/// A trip's stops as the end-of-trip report shows them: the column heads at the top of
+/// `area` (a window's width) and under them a row per stop, scrolled by the wheel under the
+/// id `scroll`. Returns the area of the rows.
+pub fn stops_table(ui: &mut Ui, scroll: &str, area: Rect, rows: &[ReportRow]) -> Rect {
+    let columns = [
+        ("Stop", 16.0),
+        ("Scheduled", 0.44),
+        ("Actual", 0.58),
+        ("Deviation", 0.71),
+        ("Status", 0.84),
+    ];
+    let col_x = |c: f32| if c < 1.0 { (area.w * c).floor() } else { c };
+    for (title, c) in columns {
+        text(
+            ui,
+            title,
+            area.x + col_x(c),
+            area.y + 17.0,
+            12.0,
+            Weight::Regular,
+            MUTED,
+        );
+    }
+    let rows_area = Rect::new(
+        area.x + 1.0,
+        area.y + 34.0,
+        area.w - 2.0,
+        (area.h - 34.0).max(ROW_H),
+    );
+    ui.scroll_area(scroll, rows_area, &mut |ui, view| {
+        for (i, row) in rows.iter().enumerate() {
+            let rr = Rect::new(view.x, view.y + i as f32 * ROW_H, view.w - 8.0, ROW_H);
+            if rr.bottom() < rows_area.y || rr.y > rows_area.bottom() {
+                continue;
+            }
+            ui.p().rect(Rect::new(rr.x, rr.y, rr.w, 1.0), ROW_LINE);
+            let (status, color) = match row.state {
+                StopState::OnTime => ("OK", Some(GOOD)),
+                StopState::Late => ("late", Some(BAD)),
+                StopState::LeftEarly => ("left early", Some(SOON)),
+                StopState::LateLeftEarly => ("late, left early", Some(BAD)),
+                StopState::Missed => ("missed", Some(BAD)),
+                StopState::None => ("", None),
+            };
+            let cells = [
+                row.stop.as_str(),
+                row.scheduled.as_str(),
+                row.actual.as_str(),
+                row.deviation.as_str(),
+                status,
+            ];
+            for (c, cell) in cells.iter().enumerate() {
+                let x = col_x(columns[c].1) - 1.0;
+                let end = columns
+                    .get(c + 1)
+                    .map(|n| col_x(n.1) - 1.0)
+                    .unwrap_or(rr.w - 8.0);
+                let fg = if c >= 3 { color.unwrap_or(MUTED) } else { FG };
+                ui.text_in(
+                    cell,
+                    Rect::new(rr.x + x, rr.y, (end - x - 8.0).max(0.0), rr.h),
+                    14.0 * TS,
+                    Weight::Regular,
+                    fg,
+                    Align::Left,
+                );
+            }
+        }
+        rows.len() as f32 * ROW_H
+    });
+    rows_area
+}
+
+/// The end-of-trip report in a picture of `size` points. True when "Continue" was clicked.
+pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
+    let r = trip_report_rect(size);
+    let body = window(ui, r, "End of trip report", v.note);
+    text(
+        ui,
+        v.title,
+        body.x + 16.0,
+        body.y + 22.0,
+        14.0,
+        Weight::Medium,
+        FG,
+    );
+    let foot = 64.0;
+    let totals_h = v.totals.len() as f32 * ROW_H;
+    let head_y = body.y + 44.0;
+    let area = Rect::new(
+        body.x,
+        head_y,
+        body.w,
+        (r.bottom() - foot - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+    );
+    // (each trip's report starts at its first stop: the id is the trip's)
+    let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
+    let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
+    ui.p()
+        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
+    let rows: Vec<(&str, String, Option<Color>)> = v
+        .totals
+        .iter()
+        .map(|(k, val)| (*k, val.clone(), None))
+        .collect();
+    key_values(ui, totals, &rows);
+    ui.p().rect(
+        Rect::new(r.x + 1.0, r.bottom() - foot, r.w - 2.0, 1.0),
+        LINE,
+    );
+    let at = glam::Vec2::new(r.x + 16.0, r.bottom() - foot + 12.0);
+    let clicked = buttons(ui, "report", at, &["Continue"]).is_some();
+    text_right(
+        ui,
+        "Enter or Esc also continues",
+        r.right() - 16.0,
+        r.bottom() - foot * 0.5,
+        12.0,
+        Weight::Regular,
+        MUTED,
+    );
+    clicked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,5 +997,43 @@ mod tests {
             run(&mut ui, Some(2), Some(red)),
             Some(AddVehicleEvent::Livery(1))
         );
+    }
+
+    #[test]
+    fn the_trip_report_says_when_continue_is_clicked() {
+        let rows: Vec<ReportRow> = (0..30)
+            .map(|i| ReportRow {
+                stop: format!("Stop {i}"),
+                scheduled: "08:00".into(),
+                actual: "08:01".into(),
+                deviation: "+1:00".into(),
+                state: StopState::Late,
+            })
+            .collect();
+        let totals = [("Stops served", "30".to_string())];
+        let size = Vec2::new(1672.0, 941.0);
+        let view = TripReport {
+            title: "Line 1 to Terminus",
+            note: "paused",
+            rows: &rows,
+            totals: &totals,
+        };
+        let mut ui = Ui::new();
+        let frame = |ui: &mut Ui| {
+            ui.begin(size, 1.0, 0.016);
+            let c = trip_report(ui, size, &view);
+            ui.finish();
+            c
+        };
+        assert!(!frame(&mut ui));
+        let b = ui.drawn[&id_of("report:btn:0")].center();
+        assert!(trip_report_rect(size).contains(b));
+        ui.input.mouse = b;
+        ui.input.pressed = true;
+        ui.input.down = true;
+        frame(&mut ui);
+        ui.input.released = true;
+        ui.input.down = false;
+        assert!(frame(&mut ui));
     }
 }

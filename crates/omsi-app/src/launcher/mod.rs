@@ -1,14 +1,17 @@
 //! The launcher: where a duty is put together (bus, map, line and tour, time, weather),
 //! the driver's profile, the settings and key bindings, the running games and the mods.
 //!
-//! It is a window of the game binary itself, drawn with wgpu: the chosen bus stands in a
-//! picture drawn by the game's renderer (see `showroom`) whenever it changes, and the
+//! It is a program of its own (the game binary started without a session), drawn with wgpu
+//! on a plain device of its own (see `gfx`): none of the game's renderer is opened for it,
+//! so the window is there at once. The chosen bus stands in a picture kept from an earlier
+//! time and drawn live by a helper process while a page shows it (see `preview`), and the
 //! interface - flat and dark, every control custom - is drawn with `omsi-ui` straight
-//! onto the window. The data side (content
+//! onto the window. A session is a process of its own as well (see `state`). The data side (content
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
 mod diagnostics;
+mod gfx;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -16,6 +19,7 @@ pub mod phone;
 #[cfg(feature = "lan")]
 mod multiplayer;
 pub(crate) mod pages;
+pub(crate) mod preview;
 mod showroom;
 mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -28,7 +32,6 @@ mod dialogs;
 use glam::Vec2;
 use omsi_launcher_lib as core;
 use omsi_launcher_ui::Page as UiPage;
-use omsi_render::{Renderer, SurfaceState};
 use omsi_ui::paint::Align;
 use omsi_ui::{Draw, Rect, Weight};
 use std::sync::Arc;
@@ -132,12 +135,12 @@ static LAUNCHER_RECOVERIES: std::sync::atomic::AtomicU32 = std::sync::atomic::At
 pub struct Launcher {
     instance: wgpu::Instance,
     window: Option<Arc<Window>>,
-    surface: Option<SurfaceState<'static>>,
-    renderer: Option<Renderer>,
+    surface: Option<gfx::WinSurface>,
+    gfx: Option<gfx::Gfx>,
     gpu: Option<omsi_ui::Gpu>,
     ui: Ui,
     state: state::State,
-    showroom: showroom::Showroom,
+    preview: preview::Preview,
     page: Page,
     page_anim: f32,
     pub drive: drive::DriveView,
@@ -169,11 +172,12 @@ pub struct Launcher {
     /// t=6 wheel -3; t=7 move 900,400"`: the window worked by a script (logical pixels).
     script: Vec<(f32, String)>,
     release_next: bool,
-    /// Where the bus preview is this frame, its texture in the interface pipeline, and the
-    /// showroom picture it was bound to.
+    /// Where the bus preview is this frame, and its texture in the interface pipeline.
     preview_rect: Option<Rect>,
     preview_tex: Option<usize>,
-    preview_gen: u64,
+    /// The Maps page's picture of the chosen map (from its folder): the map file it is of, the
+    /// pixels not yet on the GPU or being read, and its texture with its width over height.
+    map_pic: MapPicture,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -200,6 +204,11 @@ pub struct Launcher {
     /// Background drop of the graphics device given up while a game runs (see `frame`).
     /// Joined before a new device is opened so the two do not meet on the card.
     gpu_rest_drop: Option<std::thread::JoinHandle<()>>,
+    /// The first picture is in the window (logged with how long it took).
+    shown_once: bool,
+    /// Whether the OMSI 2 folder chosen has what the game needs, for that folder (looked at
+    /// again when the window gets the focus back: the status bar asks for it every frame).
+    root_ok: Option<(String, bool)>,
 }
 
 /// Run the launcher window until it is closed.
@@ -218,11 +227,11 @@ impl Launcher {
         instance,
         window: None,
         surface: None,
-        renderer: None,
+        gfx: None,
         gpu: None,
         ui: Ui::new(),
         state: state::State::new(),
-        showroom: showroom::Showroom::new(),
+        preview: preview::Preview::new(),
         page: Page::Drive,
         page_anim: 1.0,
         drive: drive::DriveView::default(),
@@ -259,7 +268,7 @@ impl Launcher {
         release_next: false,
         preview_rect: None,
         preview_tex: None,
-        preview_gen: 0,
+        map_pic: MapPicture::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
@@ -274,6 +283,8 @@ impl Launcher {
         page_max: 0.0,
         ime: false,
         gpu_rest_drop: None,
+        shown_once: false,
+        root_ok: None,
     };
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
@@ -318,9 +329,9 @@ impl Launcher {
     fn drop_gpu(&mut self) {
         self.gpu = None;
         self.preview_tex = None;
-        self.showroom = showroom::Showroom::new();
-        self.preview_gen = 0;
+        self.preview = preview::Preview::new();
         self.map_tex = None;
+        self.map_pic = MapPicture::default();
         self.map_gen = 0;
         self.mapview.drop_gpu();
         self.icons.clear();
@@ -337,7 +348,7 @@ impl Launcher {
         if let Some(h) = self.gpu_rest_drop.take() {
             let _ = h.join();
         }
-        self.renderer = None;
+        self.gfx = None;
         self.ime = false;
         self.window.take()
     }
@@ -347,43 +358,42 @@ impl Launcher {
     pub fn adopt_window(&mut self, window: Arc<Window>) {
         self.window = Some(window);
         self.surface = None;
-        self.renderer = None;
+        self.gfx = None;
         self.state.poll_now();
         self.state.load_profile();
     }
 
     /// The surface for the window the launcher has (created again after the app was in the
     /// background: a phone takes the window's surface away meanwhile).
-    /// The interface's pipeline on `renderer`'s device, with the sidebar's logo in it.
-    fn new_gpu(&mut self, renderer: &Renderer) -> omsi_ui::Gpu {
-        let mut gpu = omsi_ui::Gpu::new(&renderer.device, renderer.format(), 4, self.ui.atlas.size);
-        self.logo = omsi_launcher_ui::offscreen::load_logo(&mut gpu, &renderer.device, &renderer.queue);
-        self.adapter = renderer.adapter_name.clone();
+    /// The interface's pipeline on the launcher's device, with the sidebar's logo in it.
+    fn new_gpu(&mut self, gfx: &gfx::Gfx) -> omsi_ui::Gpu {
+        let mut gpu = omsi_ui::Gpu::new(&gfx.device, gfx.format(), 4, self.ui.atlas.size);
+        self.logo = omsi_launcher_ui::offscreen::load_logo(&mut gpu, &gfx.device, &gfx.queue);
+        self.adapter = gfx.adapter_name.clone();
         gpu
     }
 
     fn make_surface(&mut self) {
         let Some(window) = self.window.clone() else { return };
-        if self.renderer.is_none() {
+        if self.gfx.is_none() {
             // Finish dropping the device given up for a game before opening another one.
             if let Some(h) = self.gpu_rest_drop.take() {
                 let _ = h.join();
             }
-            let settings = crate::settings::Settings::load();
-            let renderer = match crate::startup::window_renderer(&mut self.instance, &window, showroom_options(&settings)) {
-                Ok(r) => r,
+            let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
+                Ok(g) => g,
                 Err(e) => {
                     crate::startup::fatal_message(&format!("Project Depot cannot draw on this computer: {e:#}"));
                     std::process::exit(1);
                 }
             };
-            self.gpu = Some(self.new_gpu(&renderer));
+            self.gpu = Some(self.new_gpu(&g));
             self.ui.atlas = omsi_ui::Atlas::new(self.ui.atlas.size);
-            self.renderer = Some(renderer);
+            self.gfx = Some(g);
         }
-        let Some(renderer) = self.renderer.as_ref() else { return };
+        let Some(g) = self.gfx.as_ref() else { return };
         let size = window.inner_size();
-        self.surface = SurfaceState::new_with(&self.instance, window.clone(), renderer, size.width.max(1), size.height.max(1), true).ok();
+        self.surface = gfx::WinSurface::new(&self.instance, window.clone(), g, size.width, size.height).ok();
         self.last = Instant::now();
     }
 }
@@ -434,9 +444,8 @@ impl ApplicationHandler for Launcher {
                 return;
             }
         };
-        let settings = crate::settings::Settings::load();
-        let renderer = match crate::startup::window_renderer(&mut self.instance, &window, showroom_options(&settings)) {
-            Ok(r) => r,
+        let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
+            Ok(g) => g,
             Err(e) => {
                 crate::startup::fatal_message(&format!("Project Depot cannot draw on this computer: {e:#}"));
                 event_loop.exit();
@@ -444,7 +453,7 @@ impl ApplicationHandler for Launcher {
             }
         };
         let size = window.inner_size();
-        let surface = match SurfaceState::new_with(&self.instance, window.clone(), &renderer, size.width, size.height, true) {
+        let surface = match gfx::WinSurface::new(&self.instance, window.clone(), &g, size.width, size.height) {
             Ok(s) => s,
             Err(e) => {
                 crate::startup::fatal_message(&format!("Project Depot cannot draw into its window: {e:#}"));
@@ -452,11 +461,11 @@ impl ApplicationHandler for Launcher {
                 return;
             }
         };
-        log::info!("launcher window {}x{} (scale {:.2}), adapter {}", size.width, size.height, window.scale_factor(), renderer.adapter_name);
-        self.gpu = Some(self.new_gpu(&renderer));
+        log::info!("launcher window {}x{} (scale {:.2}), adapter {}, open {:.0} ms after the program started", size.width, size.height, window.scale_factor(), g.adapter_name, crate::startup::since_start_ms());
+        self.gpu = Some(self.new_gpu(&g));
         self.window = Some(window);
         self.surface = Some(surface);
-        self.renderer = Some(renderer);
+        self.gfx = Some(g);
         self.last = Instant::now();
     }
 
@@ -476,7 +485,7 @@ impl ApplicationHandler for Launcher {
                 self.occluded = o;
                 if o {
                     self.pages.pads.cancel_feedback_test();
-                } else if self.renderer.is_none() {
+                } else if self.gfx.is_none() {
                     // Back in view without a graphics device (a game just ended, or the
                     // window was covered while resting): draw again so the device is opened
                     // without waiting for the next slow occluded tick.
@@ -486,7 +495,7 @@ impl ApplicationHandler for Launcher {
                 }
             }
             WindowEvent::Resized(s) => {
-                if let (Some(sf), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
+                if let (Some(sf), Some(r)) = (self.surface.as_mut(), self.gfx.as_ref()) {
                     sf.resize(r, s.width, s.height);
                 }
             }
@@ -498,7 +507,7 @@ impl ApplicationHandler for Launcher {
                 let p = Vec2::new(position.x as f32, position.y as f32) / scale;
                 if let Some(last) = self.dragging {
                     let d = p - last;
-                    self.showroom.orbit(d.x, d.y);
+                    self.preview.orbit(d.x, d.y);
                     self.dragging = Some(p);
                 }
                 self.ui.input.mouse = p;
@@ -511,7 +520,7 @@ impl ApplicationHandler for Launcher {
                             self.ui.input.pressed = true;
                             // a drag on the preview turns the bus (the panels lie over it:
                             // what the mouse is over is theirs, not the bus's)
-                            if !self.ui.over_ui && self.preview_rect.map(|r| r.contains(self.ui.input.mouse)).unwrap_or(false) {
+                            if (!self.ui.over_ui || self.page == Page::Vehicles) && self.preview_rect.map(|r| r.contains(self.ui.input.mouse)).unwrap_or(false) {
                                 self.dragging = Some(self.ui.input.mouse);
                             }
                         } else {
@@ -614,12 +623,14 @@ impl ApplicationHandler for Launcher {
         // that gives the graphics device up again when the game is back in front: the
         // game's window hides the launcher's then, and drawn nothing, it kept the device)
         // (likewise the frame that opens it again for a window brought forward)
-        let resting = !mobile::mobile() && self.renderer.is_some() && self.state.in_game() && !self.awake();
-        let waking = !mobile::mobile() && self.renderer.is_none() && self.state.in_game() && self.awake();
+        let resting = !mobile::mobile() && self.gfx.is_some() && self.state.in_game() && !self.awake();
+        let waking = !mobile::mobile() && self.gfx.is_none() && self.state.in_game() && self.awake();
         // Device given up while a game runs: still need a redraw when the game ends so the
         // device is opened again (Occluded alone used to leave the resting picture forever).
-        let resume_needed = !mobile::mobile() && self.renderer.is_none() && !self.state.in_game();
-        let occluded = self.occluded && self.shot.is_none() && !resting && !waking && !resume_needed
+        let resume_needed = !mobile::mobile() && self.gfx.is_none() && !self.state.in_game();
+        // (a minimized window is hidden too, whether or not the system said it was covered)
+        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
+        let occluded = (self.occluded || minimized) && self.shot.is_none() && !resting && !waking && !resume_needed
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
             0.5
@@ -643,9 +654,11 @@ impl ApplicationHandler for Launcher {
             self.last = Instant::now();
             self.run_script();
             self.state.update(dt);
+            // (no page shows the preview while the window is hidden: its helper ends at once)
+            self.preview.stop();
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
-            if !mobile::mobile() && self.renderer.is_none() && !self.state.in_game() {
+            if !mobile::mobile() && self.gfx.is_none() && !self.state.in_game() {
                 if let Some(w) = self.window.as_ref() {
                     w.request_redraw();
                 }
@@ -683,9 +696,9 @@ impl Launcher {
     /// taken - DirectX 12 and Vulkan for each other, remembered in the settings for the game
     /// as well - and the window is drawn again on a new device. Twice at most.
     fn recover_device(&mut self) -> bool {
-        let Some(why) = self.renderer.as_ref().and_then(|r| r.device_lost()) else { return false };
+        let Some(why) = self.gfx.as_ref().and_then(|r| r.device_lost()) else { return false };
         let tries = LAUNCHER_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let name = self.renderer.as_ref().map(|r| r.adapter_name.clone()).unwrap_or_default();
+        let name = self.gfx.as_ref().map(|r| r.adapter_name.clone()).unwrap_or_default();
         let other = if name.contains("(Dx12)") { Some("vulkan") } else if name.contains("(Vulkan)") && cfg!(windows) { Some("dx12") } else if name.contains("(Vulkan)") { Some("gl") } else { None };
         log::error!("launcher: the graphics device was lost on {name} ({why}); {}", match (tries < 2, other) {
             (true, Some(o)) => format!("drawing on {o} from now on"),
@@ -706,8 +719,8 @@ impl Launcher {
             let _ = h.join();
         }
         // (the lost device let go of without a panic of wgpu's reaching the launcher)
-        if let Some(r) = self.renderer.take() {
-            r.close();
+        if let Some(g) = self.gfx.take() {
+            g.close();
         }
         self.make_surface();
         true
@@ -717,6 +730,9 @@ impl Launcher {
     /// launcher script).
     fn set_focus(&mut self, f: bool) {
         self.focused = f;
+        if f {
+            self.root_ok = None;
+        }
         if !f {
             self.pages.pads.cancel_feedback_test();
             self.modifiers.release_keys();
@@ -724,7 +740,7 @@ impl Launcher {
         }
         // (only once the game is on its way: the launcher has the focus while Start is
         // pressed, and gives the device up then as before)
-        self.awake_in_game = f && self.renderer.is_none() && self.state.in_game() && self.state.queued_launch.is_none();
+        self.awake_in_game = f && self.gfx.is_none() && self.state.in_game() && self.state.queued_launch.is_none();
     }
 
     /// Looked at while a game runs (see `awake_in_game`): drawn and answering as usual.
@@ -746,7 +762,7 @@ impl Launcher {
         let desktop = !mobile::mobile() && self.window.is_some();
         // (looked at while a game runs: drawn as usual, see `awake_in_game`)
         let awake = self.awake();
-        if desktop && self.renderer.is_none() {
+        if desktop && self.gfx.is_none() {
             if self.state.in_game() && !awake {
                 // nothing is drawn while a game runs; what is clicked or typed meanwhile is not
                 // done once the launcher is back (the first frame pressed Start again)
@@ -778,14 +794,14 @@ impl Launcher {
         // graphics device is given up until the game ends (with it open, a game on an NVIDIA
         // card without Resizable BAR uploaded at 20 MB/s)
         // (asked again: a script's `focus 0` comes in the frame just drawn)
-        if desktop && self.renderer.is_some() && self.state.in_game() && !self.awake() {
+        if desktop && self.gfx.is_some() && self.state.in_game() && !self.awake() {
             log::info!("launcher: a game starts or runs, the graphics device is given up until it ends");
             self.surface = None;
             self.drop_gpu();
             // Dropping a wgpu device can wait on the GPU for seconds (especially while the
             // game is opening the same card). Do it off the UI thread so Windows does not
             // mark the launcher "Not Responding" over the resting picture.
-            if let Some(r) = self.renderer.take() {
+            if let Some(r) = self.gfx.take() {
                 if let Some(prev) = self.gpu_rest_drop.take() {
                     let _ = prev.join();
                 }
@@ -822,14 +838,13 @@ impl Launcher {
         self.run_script();
         self.state.update(dt);
         // the preview shows the chosen bus in the chosen light
+        // (the Vehicles page shows the bus picked in its library instead, see `vehicles_page`)
         let c = &self.state.choice;
         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
         // (not while a game runs: the launcher looked at meanwhile loads no bus onto the card)
-        if !look.bus.is_empty() && !look.map.is_empty() && !self.state.in_game() {
-            self.showroom.want(look);
-        }
-        if let Some(r) = self.renderer.as_ref() {
-            self.showroom.update(r, dt);
+        // (the Vehicles page shows the bus picked in its library, live: see `vehicles_page`)
+        if !look.bus.is_empty() && !look.map.is_empty() && !self.state.in_game() && self.page != Page::Vehicles {
+            self.preview.want_picture(look);
         }
 
         // --- the interface
@@ -857,20 +872,20 @@ impl Launcher {
         }
         let (layers, verts, ranges) = self.ui.finish();
         self.touch_frame();
+        // the helper draws the bus while a page shows it (not while a game runs)
+        let shown = self.preview_rect.filter(|_| !self.state.in_game()).map(|r| (((r.w * scale) as u32).max(16), ((r.h * scale) as u32).max(16)));
+        self.preview.update(dt, shown);
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
-        let Some(renderer) = self.renderer.as_mut() else { return };
-        if let Some(r) = self.preview_rect {
-            let (w, h) = ((r.w * scale) as u32, (r.h * scale) as u32);
-            if let (Some(view), Some(gpu)) = (self.showroom.preview(renderer, w, h), self.gpu.as_mut()) {
-                if self.preview_gen != self.showroom.generation {
-                    self.preview_gen = self.showroom.generation;
-                    match self.preview_tex {
-                        Some(id) => gpu.set_view(&renderer.device, id, &view, (w, h)),
-                        None => self.preview_tex = Some(gpu.add_view(&renderer.device, &view, (w, h))),
-                    }
-                }
+        let Some(renderer) = self.gfx.as_mut() else { return };
+        if let (Some((w, h, px)), Some(gpu)) = (self.preview.take_frame(), self.gpu.as_mut()) {
+            match self.preview_tex {
+                Some(id) => gpu.update_image(&renderer.device, &renderer.queue, id, w, h, &px),
+                None => self.preview_tex = Some(gpu.add_image(&renderer.device, &renderer.queue, w, h, &px)),
             }
+        }
+        if let Some(gpu) = self.gpu.as_mut() {
+            self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
         }
         // the map picture, drawn again when what it shows, where it looks or the zoom's own
         // thinness changed
@@ -918,7 +933,7 @@ impl Launcher {
                 }
             }
         }
-        let Some(renderer) = self.renderer.as_mut() else { return };
+        let Some(renderer) = self.gfx.as_mut() else { return };
         let surface = self.surface.as_mut().unwrap();
         let frame = match surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -936,6 +951,10 @@ impl Launcher {
         }
         window.pre_present_notify();
         frame.present();
+        if !self.shown_once {
+            self.shown_once = true;
+            log::info!("launcher: first picture in the window {:.0} ms after the program started", crate::startup::since_start_ms());
+        }
         self.check_exit(event_loop);
     }
 
@@ -1010,7 +1029,7 @@ impl Launcher {
 
     /// The window's picture drawn again into a texture and read back (for OMSI_LAUNCHER_SHOT).
     fn shot_image(&mut self, w: u32, h: u32, layers: &[omsi_ui::Layer], draws: &[Draw], bg: wgpu::Color) -> Option<image::RgbaImage> {
-        let r = self.renderer.as_mut()?;
+        let r = self.gfx.as_mut()?;
         let gpu = self.gpu.as_mut()?;
         let tex = r.device.create_texture(&wgpu::TextureDescriptor { label: Some("launcher shot"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: r.format(), usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
         let view = tex.create_view(&Default::default());
@@ -1021,7 +1040,7 @@ impl Launcher {
         enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
         r.queue.submit([enc.finish()]);
         // (a device lost on the way: no picture, instead of wgpu's panic in reading it back)
-        let data = r.read_buffer(&buf).ok()?;
+        let data = r.read_buffer(&buf)?;
         let bgra = matches!(r.format(), wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm);
         let mut img = image::RgbaImage::new(w, h);
         for y in 0..h {
@@ -1060,7 +1079,7 @@ impl Launcher {
         });
         // a phone: the launcher made for it, not the desktop's pages
         if mobile {
-            if self.page == Page::Setup && !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.state.config.root)).is_empty() && self.phone.page.is_none() {
+            if self.page == Page::Setup && !self.root_ok() && self.phone.page.is_none() {
                 self.phone.tab = phone::Tab::More;
                 self.phone.page = Some(Page::Setup);
             }
@@ -1146,20 +1165,21 @@ impl Launcher {
         self.preview_rect = Some(r);
         self.ui.solid(r);
         self.ui.p().rounded(r, RADIUS, FIELD);
-        match (self.preview_tex, self.showroom.has_picture()) {
-            (Some(tex), true) => self.ui.image(r, tex, RADIUS),
+        match (self.preview_tex, self.preview.has_picture()) {
+            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
             _ => {
-                let t = if self.showroom.error.is_some() { "No preview" } else { "Loading…" };
+                let t = if self.preview.error.is_some() { "No preview" } else { "Loading…" };
                 self.ui.text_in(t, r, 13.0, Weight::Regular, TEXT_FAINT, Align::Center);
             }
         }
-        if self.showroom.busy && self.showroom.has_picture() {
+        if self.preview.busy && self.preview.has_picture() {
             let c = Vec2::new(r.right() - 16.0, r.y + 16.0);
             let a = self.ui.time * 5.0;
             self.ui.p().arc(c, 6.0, 8.0, a, a + 4.2, TEXT_SOFT);
         }
+        self.preview_badge(r);
         if self.ui.hover(r) && self.ui.input.wheel.y.abs() > 0.0 {
-            self.showroom.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
+            self.preview.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
         }
         if self.ui.hover(r) {
             self.ui.cursor = winit::window::CursorIcon::Grab;
@@ -1214,16 +1234,38 @@ impl Launcher {
     /// as a share of the window: the showroom frames the bus in what is left of it.
     pub fn preview_full(&mut self, r: Rect, focus: f32) {
         self.preview_rect = Some(r);
-        self.showroom.focus_x = focus.clamp(0.2, 0.95);
-        match (self.preview_tex, self.showroom.has_picture()) {
-            (Some(tex), true) => self.ui.image(r, tex, RADIUS),
+        self.preview.focus_x = focus.clamp(0.2, 0.95);
+        match (self.preview_tex, self.preview.has_picture()) {
+            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
             _ => {
                 self.ui.solid(r);
                 self.ui.p().rounded(r, RADIUS, FIELD);
-                let t = if self.showroom.error.is_some() { "No preview" } else { "Loading…" };
+                let t = if self.preview.error.is_some() { "No preview" } else { "Loading…" };
                 self.ui.text_in(t, Rect::new(r.x, r.y + r.h * 0.5 - 12.0, r.w, 24.0), 13.0, Weight::Regular, TEXT_FAINT, Align::Center);
             }
         }
+        // (left of the panels, which lie over the right part of the page)
+        let w = (r.w * self.preview.focus_x * 2.0 - r.w).clamp(r.w * 0.3, r.w);
+        self.preview_badge(Rect::new(r.x, r.y, w, r.h));
+    }
+
+    /// Where the preview's picture comes from, in the lower left of `r`: kept from an earlier
+    /// time (the helper draws the live one only while the page shows it) or drawn live.
+    fn preview_badge(&mut self, r: Rect) {
+        let t = if self.preview.live {
+            "Preview helper: running"
+        } else if self.preview.has_picture() && self.preview.picture_only() {
+            // (a page that shows the kept picture: the live view when the player turns it)
+            "Image from cache · drag it to see it live"
+        } else if self.preview.has_picture() && self.preview.from_cache {
+            "Image from cache · live view only on this page"
+        } else {
+            return;
+        };
+        let w = self.ui.width(t, 11.5, Weight::Regular) + 20.0;
+        let b = Rect::new(r.x + 14.0, r.y + r.h - 38.0, w, 24.0);
+        self.ui.p().rounded(b, 12.0, omsi_ui::Color::rgba(10, 10, 12, 0.72));
+        self.ui.text_in(t, b, 11.5, Weight::Regular, TEXT_DIM, Align::Center);
     }
 
     /// The wheel and the cursor over the showroom, once the panels have had the mouse.
@@ -1232,7 +1274,7 @@ impl Launcher {
             return;
         }
         if self.ui.input.wheel.y.abs() > 0.0 {
-            self.showroom.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
+            self.preview.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
         }
         self.ui.cursor = winit::window::CursorIcon::Grab;
     }
@@ -1318,7 +1360,34 @@ impl Launcher {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Vehicles, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        // the bus picked in the library, in the Drive page's light, in the preview (kept picture
+        // at once, live from the helper while the page is open)
+        let picture = omsi_launcher_ui::vehicles::Picture {
+            texture: self.preview_tex.filter(|_| self.preview.has_picture()).map(|t| (t, self.preview.aspect)),
+            from_cache: self.preview.from_cache,
+            live: self.preview.live,
+            busy: self.preview.busy,
+            error: self.preview.error.clone(),
+        };
+        let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
+        self.vehicles.set_picture(has_bus.then_some(picture));
         self.vehicles.draw(&mut self.ui, body);
+        if let (Some((bus, paint)), false) = (self.vehicles.current().cloned(), self.state.in_game()) {
+            let c = &self.state.choice;
+            if !c.map.is_empty() {
+                self.preview.want(showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus, paint, weather: c.weather.clone(), time: c.time, date: c.date.clone() });
+                self.preview.focus_x = 0.5;
+                self.preview_rect = self.vehicles.preview_area();
+                // (the picture lies in the page's card, not under it: the card does not take the
+                // mouse from it)
+                if self.preview_rect.is_some_and(|r| r.contains(self.ui.input.mouse)) {
+                    if self.ui.input.wheel.y.abs() > 0.0 {
+                        self.preview.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
+                    }
+                    self.ui.cursor = winit::window::CursorIcon::Grab;
+                }
+            }
+        }
         if let Some((file, paint)) = self.vehicles.take_use() {
             self.state.select_bus(&file);
             self.state.choice.paint = paint;
@@ -1335,6 +1404,11 @@ impl Launcher {
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         self.maps.draw(&mut self.ui, body);
+        // the chosen map's picture, read from its folder on a thread
+        if let Some(file) = self.maps.current().map(str::to_string) {
+            self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
+        }
+        self.maps.set_picture(self.map_pic.shown(), self.map_pic.reading.is_some() || self.map_pic.pending.is_some());
         if let Some((file, entry)) = self.maps.take_use() {
             self.state.select_map(&file);
             self.state.choice.entry = entry;
@@ -1344,7 +1418,51 @@ impl Launcher {
         }
     }
 
+    /// Whether the OMSI 2 folder chosen has what the game needs, kept per folder and looked at
+    /// again when the window has the focus back (a folder repaired outside the launcher).
+    fn root_ok(&mut self) -> bool {
+        let root = &self.state.config.root;
+        match &self.root_ok {
+            Some((r, ok)) if r == root => *ok,
+            _ => {
+                let ok = omsi_cfg::missing_original_essentials(std::path::Path::new(root)).is_empty();
+                self.root_ok = Some((root.clone(), ok));
+                ok
+            }
+        }
+    }
+
+    /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
+    /// look has them; returns where the message line can start.
+    fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
+        let games = self.state.instances.len();
+        let root_ok = self.root_ok();
+        let chips = [
+            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { format!("Games: {games} running") }, games > 0),
+            ((if root_ok { "OMSI 2 folder: read" } else { "OMSI 2 folder: not chosen" }).to_string(), false),
+            ((if self.preview.live { "Preview helper: running, stops when the page closes" } else { "Preview helper: stopped" }).to_string(), self.preview.live),
+        ];
+        let mut at = x;
+        for (t, lit) in chips {
+            // (a lit chip leads with its dot, the words after it)
+            let dot = if lit { 12.0 } else { 0.0 };
+            let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
+            let r = Rect::new(at, cy - 12.0, w, 24.0);
+            self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
+            if lit {
+                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);
+            }
+            let tx = Rect::new(r.x + dot, r.y, w - dot, 24.0);
+            self.ui.text_in(&t, tx, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
+            at += w + 10.0;
+        }
+        at + 6.0
+    }
+
     fn status_bar(&mut self) {
+        let size = self.ui.size;
+        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
+        let left = if mobile::mobile() { rail_w + 20.0 } else { self.status_chips(rail_w + 28.0, size.y - 22.0) };
         let (text, err, at) = self.state.status.clone();
         if text.is_empty() {
             return;
@@ -1353,10 +1471,8 @@ impl Launcher {
         if fade <= 0.0 {
             return;
         }
-        let size = self.ui.size;
         let first = text.lines().next().unwrap_or("").to_string();
-        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
-        let r = Rect::new(rail_w + 20.0, size.y - 30.0, size.x - rail_w - 40.0, 24.0);
+        let r = Rect::new(left, size.y - 34.0, (size.x - left - 20.0).max(0.0), 24.0);
         if mobile::mobile() {
             // (readable over a page scrolled under it)
             self.ui.p().rect(Rect::new(rail_w, size.y - 34.0, size.x - rail_w, 34.0), RAIL.alpha(0.92));
@@ -1366,21 +1482,72 @@ impl Launcher {
         self.ui.tooltip(r, &text);
     }
 
-    /// A page's title and what it is for.
-    pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
-        self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
-        if !sub.is_empty() {
-            // (a narrow window: the line stops short of the tabs some pages put top right,
-            // it ran under them on a phone)
-            let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-            self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+    /// A page's heading in the new look, as Vehicles and Maps draw theirs (see
+    /// `omsi_launcher_ui::shell::heading`): "PAGE › PLACE" small and letter-spaced, the title
+    /// large and a line on what the page is for (`UiPage::heading`). Returns the page's body
+    /// under it.
+    pub fn page_title(&mut self, r: Rect, page: UiPage) -> Rect {
+        let h = page.heading().unwrap_or((page.title(), page.title(), ""));
+        self.page_title_with(r, page.title(), h)
+    }
+
+    /// `page_title` with its parts given: the page's name, (where on it, the title, the line).
+    /// A phone keeps its compact heading: the name and the line.
+    pub fn page_title_with(&mut self, r: Rect, name: &str, parts: (&str, &str, &str)) -> Rect {
+        self.page_title_beside(r, name, parts, 0.0)
+    }
+
+    /// `page_title_with` for a page whose tabs, `tabs_w` wide, sit at the right of its title
+    /// (`title_tabs`): the title is cut short of them.
+    pub fn page_title_beside(&mut self, r: Rect, name: &str, (place, title, line): (&str, &str, &str), tabs_w: f32) -> Rect {
+        if mobile::mobile() {
+            self.ui.text(name, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
+            if !line.is_empty() {
+                // (a narrow window: the line stops short of the tabs some pages put top right,
+                // it ran under them on a phone)
+                let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
+                self.ui.text_in(line, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+            }
+            return Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0));
         }
-        Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0))
+        // (the heading starts at the window's top, as Vehicles' and Maps': the page's area
+        // leaves a margin above it)
+        let top = r.y - 28.0;
+        let title_w = if tabs_w > 0.0 { (r.w - tabs_w - 24.0).max(0.0) } else { r.w };
+        omsi_launcher_ui::shell::heading_beside(&mut self.ui, name, (place, title, line), r.x, top, r.w, title_w);
+        let y = top + omsi_launcher_ui::shell::BODY_TOP;
+        Rect::new(r.x, y, r.w, (r.bottom() - y).max(0.0))
+    }
+
+    /// Where a page puts its tabs, `w` wide, over its `body` (as `page_title` returned it): at
+    /// the right of the title on a computer, of the line on a phone.
+    pub fn title_tabs(&self, body: Rect, w: f32) -> Rect {
+        let y = if mobile::mobile() { body.y - 46.0 } else { body.y - omsi_launcher_ui::shell::BODY_TOP + 56.0 };
+        Rect::new(body.right() - w, y, w, 34.0)
+    }
+
+    /// A card's title (`omsi_launcher_ui::kit::heading`, letter-spaced) at the top of `r`, the
+    /// panel less its padding; returns the rest of `r` under it. A phone keeps the compact one.
+    pub fn card_title(ui: &mut Ui, r: Rect, title: &str) -> Rect {
+        if mobile::mobile() {
+            ui.heading(r, title, None)
+        } else {
+            omsi_launcher_ui::kit::heading(ui, r, title)
+        }
+    }
+
+    /// The title of a part further down a card, letter-spaced and quiet (a phone: as a card's).
+    pub fn part_title(ui: &mut Ui, r: Rect, title: &str) {
+        if mobile::mobile() {
+            ui.heading(r, title, None);
+        } else {
+            omsi_launcher_ui::kit::subheading(ui, r, title);
+        }
     }
 }
 
 
-/// The showroom's renderer: a bus on a floor needs none of the game's costly passes - no
+/// The preview helper's renderer (see `preview`): a bus on a floor needs none of the game's costly passes - no
 /// ambient occlusion, a small shadow map, 4x MSAA for the edges whatever the game uses.
 fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
     omsi_render::RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, render_scale: 1.0, ..settings.render_options() }
@@ -1401,5 +1568,94 @@ mod page_tests {
         }
         assert_eq!(Page::Multiplayer.shown(), None);
         assert_eq!(Page::named("nope"), None);
+    }
+}
+
+/// The picture in a map's folder (`picture.jpg` and the like, as a map ships it), for the
+/// Maps page: read and made smaller on a thread, then put on the GPU.
+#[derive(Default)]
+struct MapPicture {
+    /// The map file it is of.
+    file: String,
+    reading: Option<std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
+    pending: Option<image::RgbaImage>,
+    texture: Option<usize>,
+    /// Width over height, while the texture shows this map's picture.
+    aspect: Option<f32>,
+}
+
+impl MapPicture {
+    fn want(&mut self, root: &std::path::Path, file: &str) {
+        if self.file != file {
+            self.file = file.to_string();
+            self.aspect = None;
+            self.pending = None;
+            // (found through the content roots as the map list found it: a mod's map, or one
+            // read in place from an archive, has its own picture)
+            let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
+            let dir = global.parent().map(|d| d.to_path_buf());
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let img = dir.and_then(|d| Self::find(&d)).and_then(|f| Self::read(&f));
+                let _ = tx.send(img);
+            });
+            self.reading = Some(rx);
+        }
+        if let Some(rx) = self.reading.as_ref() {
+            match rx.try_recv() {
+                Ok(img) => {
+                    self.pending = img;
+                    self.reading = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.reading = None,
+            }
+        }
+    }
+
+    /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
+    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
+            .into_iter()
+            .filter(|(_, is_dir)| !is_dir)
+            .map(|(name, _)| dir.join(name))
+            .filter(|p| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("picture")) && p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["jpg", "jpeg", "png", "bmp"].contains(&x.to_ascii_lowercase().as_str())))
+            .collect();
+        files.sort();
+        files.into_iter().next()
+    }
+
+    /// The picture decoded within bounds (a map's file is anyone's: no more than 8192 pixels a
+    /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
+    /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
+    /// on any card).
+    fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+        if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
+            return None;
+        }
+        let bytes = omsi_cfg::vfs::read(file).ok()?;
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(8192);
+        limits.max_image_height = Some(8192);
+        limits.max_alloc = Some(256 << 20);
+        reader.limits(limits);
+        let img = reader.decode().ok()?;
+        let img = if img.width() > 1280 || img.height() > 1280 { img.resize(1280, 1280, image::imageops::FilterType::Triangle) } else { img };
+        Some(img.to_rgba8())
+    }
+
+    fn upload(&mut self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let Some(img) = self.pending.take() else { return };
+        let (w, h) = img.dimensions();
+        match self.texture {
+            Some(id) => gpu.update_image(device, queue, id, w, h, img.as_raw()),
+            None => self.texture = Some(gpu.add_image(device, queue, w, h, img.as_raw())),
+        }
+        self.aspect = Some(w as f32 / h.max(1) as f32);
+    }
+
+    fn shown(&self) -> Option<(usize, f32)> {
+        Some((self.texture?, self.aspect?))
     }
 }

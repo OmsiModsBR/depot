@@ -175,6 +175,19 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { is_synthetic, ref event, .. } if self.input_away || (is_synthetic && event.state == ElementState::Pressed) => {}
             WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } if self.input_away => {}
             WindowEvent::KeyboardInput { event, .. } => {
+                // what is typed while a field of the Alt bar's window has the keyboard is the
+                // field's (the key itself does not reach the game either)
+                if event.state == ElementState::Pressed {
+                    let code = match event.physical_key {
+                        PhysicalKey::Code(c) => Some(c),
+                        _ => None,
+                    };
+                    if let Some(text) = event.text.as_deref() {
+                        if self.tool_text(text, code) {
+                            return;
+                        }
+                    }
+                }
                 if event.state == ElementState::Pressed && self.menu_edit_icao {
                     if let Some(text)=event.text.as_deref(){ self.icao_edit_text(text); }
                 }
@@ -1630,6 +1643,7 @@ impl ApplicationHandler for App {
                 if !self.paused {
                     self.tick_service(dt);
                 }
+                let mut finished = None;
                 if let (Some(d), Some(p), Some(w), false) = (
                     self.duty.as_mut(),
                     self.player.as_mut(),
@@ -1649,6 +1663,12 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
+                    // (the trip at its last stop: its report once the doors open there, even
+                    // if the duty has moved on to the next trip by then)
+                    let done = d.trip_done().then(|| d.trip().stops.last().and_then(|s| s.position)).flatten();
+                    let candidate = done.map(|at| ((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index, at));
+                    let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36 && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
+                    finished = Some((candidate, p.vehicle.position, doors));
                     #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
@@ -1666,6 +1686,9 @@ impl ApplicationHandler for App {
                     ) {
                         log::warn!("driver timetable paper: {e:#}");
                     }
+                }
+                if let Some((candidate, bus, doors)) = finished {
+                    self.trip_watch(candidate, bus, doors);
                 }
                 if let Some(p) = self.player.as_mut() {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
@@ -2292,6 +2315,10 @@ impl ApplicationHandler for App {
                 // (the game menu's lines, for the interface below)
                 let new_menu = self.new_menu_active();
                 let menu_lines = if self.game_menu.is_some() && !new_menu { self.game_menu_items() } else { Vec::new() };
+                // (an open list is drawn by the new interface beside the Esc menu's column: made
+                // below from the HUD's frame, `new_ui_pages`)
+                let mut page_column = self.new_pages_active().then(|| self.new_menu_frame());
+                let mut new_page = None;
                 // (the mirror editor's keys and the panel under the cursor, while it is on)
                 let mirror_help = match (self.player.as_ref(), self.mirror_hud_size()) {
                     (Some(p), Some(size)) => self.mirror_hud.help_lines(p, self.hud_cursor(), size),
@@ -2627,7 +2654,7 @@ impl ApplicationHandler for App {
                         // (the game menu's greyed-out lines: the timetable needs an active route)
                         let menu_disabled: &[&str] = &[];
                         let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(self.list_kind.as_ref(), self.admin_list.as_deref(), chooser_sel, self.schedule.as_ref(), self.clock.time);
-                        let frame = ui::Frame {
+                        let mut frame = ui::Frame {
                             scale,
                             ui_scale: ui::size_factor(h, scale, self.settings.ui_scale, self.settings.ui_scale_window),
                             opacity: ui::backdrop(self.settings.ui_opacity),
@@ -2670,10 +2697,21 @@ impl ApplicationHandler for App {
                             notices: &self.notices,
                             notice_anchor: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
+                        // (the new interface draws the open list: the HUD draws none, and the
+                        // rectangles its mouse code hit-tests are the new page's)
+                        let page = page_column.take().and_then(|c| crate::new_ui_pages::page_frame(&frame, self.list_kind.as_ref(), c));
+                        if page.is_some() {
+                            frame.menu = None;
+                        }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
+                        if let Some(p) = page.as_ref() {
+                            p.write_hits(ui, (s.config.width, s.config.height));
+                        }
+                        new_page = page;
                     }
                     *self.profile.entry("hud").or_default() += __t.elapsed().as_secs_f64();
                 }
+                self.new_ui.page = new_page;
 
                 let mut lighting = match self.weather.as_ref() {
                     Some(w) => {
@@ -3316,7 +3354,7 @@ impl App {
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
         // over the new interface's "Add vehicle" window the wheel scrolls its list
-        if self.add_wheel(amount) { return; }
+        if self.report_wheel(amount) || self.add_wheel(amount) || self.tool_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3405,17 +3443,27 @@ impl App {
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
         if let Some(edit) = self.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
-        // a mirror panel is dragged with the left button (a release always ends a drag)
+        // a mirror panel is dragged with the left button (a release always ends a drag; no
+        // drag starts under the end-of-trip report, which takes the press)
         if let Some(size) = self
             .mirror_hud_size()
+            .filter(|_| !self.report_active())
             .or_else(|| (!pressed).then(|| self.hud_size()))
         {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
         }
+        // the new interface's end-of-trip report takes every click while it shows
+        if self.report_click(pressed) {
+            return;
+        }
         // the new interface's "Add vehicle" window takes the clicks on it
         if self.add_click(pressed) {
+            return;
+        }
+        // and so do the Alt bar's other windows
+        if self.tool_click(pressed) {
             return;
         }
         // the Alt bar of the new interface takes the clicks on it (never the game's)
