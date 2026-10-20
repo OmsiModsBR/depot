@@ -1067,6 +1067,8 @@ fn mirror_and_plan_describe_what_is_drawn() {
     assert_eq!(plans.len(), 1, "one window picture, one plan");
     let (plan, slots) = &plans[0];
     assert_eq!((plan.width, plan.height), (64, 64));
+    let sky = Lighting::default().sky_color;
+    assert_eq!(plan.clear, [sky.x, sky.y, sky.z, 1.0]);
     let b = plan
         .main
         .iter()
