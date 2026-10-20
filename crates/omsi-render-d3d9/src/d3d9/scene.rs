@@ -336,9 +336,13 @@ impl D3d9Device {
 
     fn put_scene_mesh(&mut self, id: usize, vertices: Vec<f32>, indices: Vec<u32>) -> Result<()> {
         validate_mesh(&vertices, &indices, self.caps.index32)?;
-        let mesh = make_mesh(&self.device, &vertices, &indices)?;
-        put(&mut self.scene.meshes, id, mesh);
+        let made = match make_mesh(&self.device, &vertices, &indices) {
+            Err(e) if !matches!(e, BackendError::DeviceLost) => return Err(e),
+            made => made,
+        };
+        // (the copy also when the device was lost meanwhile: `recover` puts it up on the next)
         put(&mut self.scene.copies.meshes, id, (vertices, indices));
+        put(&mut self.scene.meshes, id, made?);
         Ok(())
     }
 
@@ -357,7 +361,8 @@ impl D3d9Device {
             )));
         }
         // SAFETY: the buffer was made for exactly this many vertices.
-        unsafe { write_buffer(&mesh.vb, vertices) }?;
+        let written = unsafe { write_buffer(&mesh.vb, vertices) };
+        // (the copy whatever came of it: a device lost meanwhile gets them from `recover`)
         if let Some((kept, _)) = self
             .scene
             .copies
@@ -367,7 +372,7 @@ impl D3d9Device {
         {
             kept.copy_from_slice(vertices);
         }
-        Ok(())
+        written
     }
 
     pub fn free_scene_mesh(&mut self, id: usize) {
@@ -382,7 +387,20 @@ impl D3d9Device {
     }
 
     /// Puts texture `id` of the game's scene up, replacing what had that id.
+    /// One larger than the device takes goes up smaller ([`SceneTexture::fitted`]).
     pub fn set_scene_texture(&mut self, id: usize, texture: &SceneTexture) -> Result<()> {
+        texture.validate(u32::MAX, self.caps.non_pow2_textures)?;
+        if let Some((width, height, levels)) = texture.fitted(self.caps.max_texture_size) {
+            return self.set_scene_texture(
+                id,
+                &SceneTexture {
+                    width,
+                    height,
+                    levels: &levels,
+                    ..*texture
+                },
+            );
+        }
         texture.validate(self.caps.max_texture_size, self.caps.non_pow2_textures)?;
         if !self.scene_caps.allows(texture.format) {
             return Err(BackendError::Unsupported(format!(
@@ -390,13 +408,17 @@ impl D3d9Device {
                 texture.format
             )));
         }
-        let t = make_texture(&self.device, texture)?;
-        put(&mut self.scene.textures, id, t);
+        let made = match make_texture(&self.device, texture) {
+            Err(e) if !matches!(e, BackendError::DeviceLost) => return Err(e),
+            made => made,
+        };
+        // (the copy also when the device was lost meanwhile: `recover` puts it up on the next)
         put(
             &mut self.scene.copies.textures,
             id,
             TextureCopy::of(texture),
         );
+        put(&mut self.scene.textures, id, made?);
         Ok(())
     }
 
