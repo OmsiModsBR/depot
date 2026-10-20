@@ -103,7 +103,8 @@ fn folder_card(l: &mut Launcher, r: Rect) {
     } else {
         (Status::Missing, super::state::root_problem(&root))
     };
-    dot(&mut l.ui, r.x + 24.0, r.y + 112.0, status);
+    // (the dot at the middle of the paragraph's first line)
+    dot(&mut l.ui, r.x + 24.0, r.y + 129.0, status);
     l.ui.paragraph(
         &said,
         Vec2::new(r.x + 42.0, r.y + 117.0),

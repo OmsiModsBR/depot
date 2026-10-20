@@ -81,6 +81,14 @@ pub enum MirrorEvent<'a> {
         from: TextureId,
         into: TextureId,
     },
+    /// A tile's light map put into its place of the tile light map atlas
+    /// (`Renderer::set_light_map_tile`): `slot` column from the west, row from the north, of
+    /// [`crate::LM_ATLAS_TILES`] a side; `rgba` [`crate::LM_TILE_PX`] square, sRGB, black
+    /// where the tile has none.
+    LightMapTile {
+        slot: (u32, u32),
+        rgba: &'a [u8],
+    },
 }
 
 /// Receives the asset events; see [`MirrorEvent`].
@@ -161,6 +169,15 @@ pub struct FramePlan {
     pub ambient: [f32; 4],
     pub fog: [f32; 4],
     pub sky_color: [f32; 4],
+    /// The camera's right and up axes (xyz), which lay out the sphere maps of `[matl_envmap]`.
+    pub cam_right: [f32; 4],
+    pub cam_up: [f32; 4],
+    /// Where the lamps' grid lies: x, y its south-west corner (render-origin relative), z a
+    /// cell's side, w the cells per side (see [`crate::Scene::frame_lights`]).
+    pub light_grid: [f32; 4],
+    /// Where the tile light map atlas lies: x, y its south-west corner (render-origin
+    /// relative), z its side, w 1 when it is set.
+    pub light_map: [f32; 4],
     /// The sky's colour the picture is cleared to, as the lighting gives it (w 1).
     pub clear: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
@@ -183,6 +200,7 @@ pub type PlanSink = Box<dyn FnMut(&FramePlan, &crate::scene::Scene) + Send>;
 pub(crate) fn plan_of(
     f: &super::frame::FrameContext<'_>,
     lists: &super::frame::DrawLists,
+    light_map: [f32; 4],
 ) -> FramePlan {
     let cu = &f.cu;
     FramePlan {
@@ -196,6 +214,10 @@ pub(crate) fn plan_of(
         ambient: cu.ambient,
         fog: cu.fog,
         sky_color: cu.sky_color,
+        cam_right: cu.cam_right,
+        cam_up: cu.cam_up,
+        light_grid: cu.light_grid,
+        light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
@@ -213,7 +235,40 @@ pub(crate) fn plan_of(
     }
 }
 
+impl crate::scene::Scene {
+    /// The lights of the last frame as this renderer's shaders read them, four vectors each:
+    /// xyz the position (render-origin relative) and the radius (0: a light only the
+    /// enhanced path draws), rgb the colour and the intensity, the spot's direction and the
+    /// cosine of its outer cone (below -1.5 a point light), then the cosine of the inner cone,
+    /// the core radius, a headlamp's beam and the radius. The vehicles' interior lamps come
+    /// first, at the indices their instances name.
+    pub fn frame_lights(&self) -> std::borrow::Cow<'_, [[f32; 4]]> {
+        match bytemuck::try_cast_slice(&self.last_lights) {
+            Ok(v) => std::borrow::Cow::Borrowed(v),
+            Err(_) => std::borrow::Cow::Owned(bytemuck::pod_collect_to_vec(&self.last_lights)),
+        }
+    }
+
+    /// The last frame's lamp grid: per cell (row by row from the south-west, see
+    /// [`FramePlan::light_grid`]) a fixed number of light indices, `u32::MAX` for none.
+    pub fn frame_light_grid(&self) -> &[u32] {
+        &self.last_grid
+    }
+}
+
 impl super::Renderer {
+    /// Where the tile light map atlas lies relative to the render origin `ro` (x, y its
+    /// south-west corner, z its side, w 1 when it is set).
+    pub(crate) fn light_map_place(&self, ro: glam::DVec3) -> [f32; 4] {
+        let (lx, ly, side) = self.light_map.lm_place.get();
+        [
+            (lx - ro.x) as f32,
+            (ly - ro.y) as f32,
+            side as f32,
+            if side > 0.0 { 1.0 } else { 0.0 },
+        ]
+    }
+
     /// Hands `event` to the asset mirror, if there is one.
     pub(crate) fn mirror(&self, event: MirrorEvent<'_>) {
         if let Some(m) = self.asset_mirror.0.borrow_mut().as_mut() {

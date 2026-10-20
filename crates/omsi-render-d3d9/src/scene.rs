@@ -242,13 +242,41 @@ pub struct SceneBatch {
     pub instances: Range<u32>,
 }
 
-/// What a material is drawn with.
-#[derive(Debug, Clone, Copy)]
+/// How a material's textures are addressed (`[matl_texadress_*]`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TexAddress {
+    /// Repeating.
+    #[default]
+    Wrap,
+    /// Every other repeat mirrored.
+    Mirror,
+    /// Clamped at the edge (and `[matl_texadress_border]`, whose colour the shader puts
+    /// outside).
+    Clamp,
+    /// Mirrored once about 0, then clamped (the shader takes the absolute value).
+    MirrorOnce,
+}
+
+/// What a material is drawn with. A map the uniform says it has but that is not uploaded
+/// reads as nothing: black for the night and light maps and the sphere map, white for the
+/// diffuse texture, the transmap and the reflection mask, flat for the bump map.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct SceneMaterial<'a> {
-    /// The diffuse texture (white when none or not uploaded).
+    /// The diffuse texture.
     pub texture: Option<usize>,
     /// `[matl_transmap]` (its alpha replaces the diffuse alpha when the uniform says so).
     pub transmap: Option<usize>,
+    /// `[matl_nightmap]`: added at night (or always, for a switched one).
+    pub nightmap: Option<usize>,
+    /// `[matl_lightmap]` (the terrain's detail texture on a terrain material).
+    pub lightmap: Option<usize>,
+    /// `[matl_envmap]`: the sphere map reflected on it, by the factor in the uniform.
+    pub envmap: Option<usize>,
+    /// `[matl_envmap_mask]`: its alpha masks the reflection.
+    pub env_mask: Option<usize>,
+    /// `[matl_bumpmap]`: a height map (alpha) whose slope moves the sphere-map lookup.
+    pub bump: Option<usize>,
+    pub address: TexAddress,
     /// [`MATERIAL_VECTORS`] vectors.
     pub uniform: &'a [[f32; 4]],
 }
@@ -268,6 +296,134 @@ pub struct SceneLight {
     pub fog: [f32; 4],
     /// rgb the light from above, w 1 for the vanilla picture.
     pub sky_color: [f32; 4],
+    /// The camera's right and up axes (xyz), which lay the sphere maps out.
+    pub cam_right: [f32; 4],
+    pub cam_up: [f32; 4],
+}
+
+/// The `[matl_envmap]` factor x 255 x its light (each channel at most 1), truncated, and the
+/// three put together as one packed colour without saturation: a factor over 1 spills into
+/// the next channel as Direct3D's texture factor does (a factor of 10 at full light reads
+/// almost white). The scene shader works it out the same way per pixel (`texture_factor`),
+/// the light there taking the lamps in; this is its reference.
+pub fn env_factor(factor: f32, light: [f32; 3]) -> [f32; 3] {
+    let m = light.map(|l| (l.clamp(0.0, 1.0) * factor.max(0.0) * 255.0) as u32);
+    let packed = (0xffu32 << 24) | m[0].wrapping_shl(16) | m[1].wrapping_shl(8) | m[2];
+    [packed >> 16, packed >> 8, packed].map(|c| (c & 0xff) as f32 / 255.0)
+}
+
+/// The `[matl_texadress_border]` colour of a material's flags vector (uniform vector 8: y 1
+/// for a border, z the packed rgb, w the alpha), unpacked as the scene shader takes it;
+/// zero for a material without a border.
+pub fn border_rgba(flags: [f32; 4]) -> [f32; 4] {
+    if !(0.5..1.5).contains(&flags[1]) {
+        return [0.0; 4];
+    }
+    let p = (flags[2] + 0.5).floor().clamp(0.0, 16_777_215.0) as u32;
+    let [r, g, b] = [p >> 16, p >> 8, p].map(|c| (c & 0xff) as f32 / 255.0);
+    [r, g, b, flags[3]]
+}
+
+/// What the scene shader takes of a material's `[matl_envmap]` bits (uniform vector 3, w):
+/// x whether it has a mask, y whether a transmap is declared, as 1 or 0.
+pub fn env_bits(params2_w: f32) -> [f32; 2] {
+    let bits = (params2_w + 0.5).floor().max(0.0) as u32;
+    [(bits & 1) as f32, ((bits >> 1) & 1) as f32]
+}
+
+/// A light of [`SceneLamps::lights`] (its four vectors) as the scene shader of the D3D9
+/// device reads it, with what does not depend on the pixel worked out once:
+/// * xyz the position, w 1 for a point light that lights every surface (dir.x 1);
+/// * rgb the colour times the intensity, w 1 / the radius (0 for a light passed by);
+/// * the spot's direction and outer cone, as given;
+/// * the inner cone; the interior lamp's core radius squared (at least 1 cm); the radius
+///   of full light squared (an eighth of the range; 0 for a light passed by); the interior
+///   lamp's reach squared (0 when its intensity is not above 0, which lights nothing).
+pub fn pack_light(light: &[[f32; 4]]) -> [[f32; 4]; 4] {
+    let [pos, color, dir, extra] = [light[0], light[1], light[2], light[3]];
+    let radius = pos[3];
+    let every_surface = dir[3] < -1.5 && dir[0] > 0.5;
+    let w = color[3];
+    let (inv_radius, full) = if radius > 0.0 {
+        (1.0 / radius, (radius * 0.125).powi(2))
+    } else {
+        (0.0, 0.0)
+    };
+    let core = extra[1].max(0.01);
+    let reach = if w > 0.0 { extra[3] * extra[3] } else { 0.0 };
+    [
+        [pos[0], pos[1], pos[2], f32::from(u8::from(every_surface))],
+        [color[0] * w, color[1] * w, color[2] * w, inv_radius],
+        dir,
+        [extra[0], core * core, full, reach],
+    ]
+}
+
+/// The lamps of a picture, as the default renderer hands them to its shaders: the lights,
+/// and the grid of cells round the camera that names the lights reaching each cell.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SceneLamps<'a> {
+    /// Four vectors a light: xyz the position (render-origin relative), w the radius (0: a
+    /// light this picture passes by); rgb the colour, w the intensity; the spot's direction
+    /// and the cosine of its outer cone (below -1.5 a point light; x 1 on a point light that
+    /// lights every surface); the cosine of the inner cone, the core radius, the beam and the
+    /// radius the vehicles' interior lamps reach. The interior lamps come first, at the
+    /// indices the instances' lamp codes name.
+    pub lights: &'a [[f32; 4]],
+    /// Per cell, row by row from the south-west, the same number of light indices,
+    /// `u32::MAX` for an empty place (the rest of the cell's places are empty too).
+    pub grid: &'a [u32],
+    /// x, y the grid's south-west corner (render-origin relative), z a cell's side, w the
+    /// cells per side.
+    pub place: [f32; 4],
+    /// Where the tile light map atlas ([`crate::d3d9::D3d9Device::set_tile_light_map`]) lies:
+    /// x, y its south-west corner (render-origin relative), z its side, w 1 when it is set.
+    pub tile_map: [f32; 4],
+}
+
+impl SceneLamps<'_> {
+    /// The lights in `lights`.
+    pub fn count(&self) -> usize {
+        self.lights.len() / 4
+    }
+
+    /// The cells per side and the places per cell, when there is a grid.
+    pub fn grid_shape(&self) -> Option<(usize, usize)> {
+        let side = self.place[3].max(0.0) as usize;
+        let cells = side.checked_mul(side)?;
+        (cells > 0 && self.place[2] > 0.0 && !self.grid.is_empty())
+            .then(|| (side, self.grid.len() / cells))
+    }
+
+    /// The lights come four vectors each and the grid has as many places in every cell.
+    pub fn validate(&self) -> Result<()> {
+        if !self.lights.len().is_multiple_of(4) {
+            return Err(BackendError::InvalidArgument(format!(
+                "{} light vectors, not four a light",
+                self.lights.len()
+            )));
+        }
+        if let Some((side, places)) = self.grid_shape() {
+            if places == 0 || side * side * places != self.grid.len() {
+                return Err(BackendError::InvalidArgument(format!(
+                    "a grid of {} places for {side} x {side} cells",
+                    self.grid.len()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The grid as the shader reads it: each place's light index, -1 where it is empty or
+    /// names a light past the first `kept`.
+    pub fn grid_texels(&self, kept: usize, out: &mut Vec<f32>) {
+        out.clear();
+        out.extend(
+            self.grid
+                .iter()
+                .map(|&i| if (i as usize) < kept { i as f32 } else { -1.0 }),
+        );
+    }
 }
 
 /// One picture of the scene.
@@ -287,6 +443,7 @@ pub struct SceneFrame<'a> {
     pub cab: &'a [SceneBatch],
     /// The road surfaces' depth bias (the default renderer's, negative pulls towards the eye).
     pub surface_bias: i32,
+    pub lamps: SceneLamps<'a>,
 }
 
 impl SceneFrame<'_> {
@@ -314,7 +471,7 @@ impl SceneFrame<'_> {
                 "list entry {e} without its model or parameters"
             )));
         }
-        Ok(())
+        self.lamps.validate()
     }
 
     /// Appends one instance record ([`INSTANCE_FLOATS`]) per list entry, in list order: a
@@ -476,6 +633,19 @@ mod tests {
     }
 
     #[test]
+    fn the_reflection_factor_spills_as_a_packed_colour() {
+        let k = env_factor(0.5, [1.0, 0.5, 0.0]);
+        assert_eq!(k, [127.0 / 255.0, 63.0 / 255.0, 0.0]);
+        // a factor of 10 at full light: 2550 a channel, OR-ed into its neighbours
+        let k = env_factor(10.0, [1.0; 3]);
+        let p = (0xffu32 << 24) | (2550 << 16) | (2550 << 8) | 2550;
+        assert_eq!(
+            k,
+            [(p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff].map(|c| c as f32 / 255.0)
+        );
+    }
+
+    #[test]
     fn instance_records_follow_the_list() {
         let models = [[[1.0, 0.0, 0.0, 0.0]; 4], [[2.0, 0.0, 0.0, 0.0]; 4]];
         let params = [[10.0; 4], [11.0; 4], [20.0; 4], [21.0; 4]];
@@ -489,6 +659,7 @@ mod tests {
             main: &main,
             cab: &[],
             surface_bias: -24,
+            lamps: SceneLamps::default(),
         };
         frame.validate().unwrap();
         let mut out = Vec::new();
@@ -514,6 +685,88 @@ mod tests {
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn lights_are_packed_for_the_shader() {
+        let spot = [
+            [1.0, 2.0, 3.0, 16.0],
+            [1.0, 0.5, 0.25, 2.0],
+            [0.0, 0.0, -1.0, 0.7],
+            [0.9, 0.5, 0.0, 4.0],
+        ];
+        assert_eq!(
+            pack_light(&spot),
+            [
+                [1.0, 2.0, 3.0, 0.0],
+                [2.0, 1.0, 0.5, 1.0 / 16.0],
+                [0.0, 0.0, -1.0, 0.7],
+                [0.9, 0.25, 4.0, 16.0],
+            ]
+        );
+        // a vehicle's point light lights every surface; one passed by (radius 0) nothing,
+        // an interior lamp without intensity reaches nothing
+        let point = [
+            [0.0; 4],
+            [1.0, 1.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, -2.0],
+            [0.0, 0.0, 0.0, 3.0],
+        ];
+        let packed = pack_light(&point);
+        assert_eq!(packed[0][3], 1.0);
+        assert_eq!((packed[1][3], packed[3][2], packed[3][3]), (0.0, 0.0, 0.0));
+        assert!((packed[3][1] - 1e-4).abs() < 1e-9, "{}", packed[3][1]);
+    }
+
+    #[test]
+    fn borders_and_env_bits_are_unpacked_for_the_shader() {
+        assert_eq!(
+            border_rgba([0.0, 1.0, (0x40_80_ff) as f32, 0.5]),
+            [64.0 / 255.0, 128.0 / 255.0, 1.0, 0.5]
+        );
+        assert_eq!(border_rgba([0.0, 0.0, 12345.0, 1.0]), [0.0; 4]);
+        assert_eq!(border_rgba([0.0, 2.0, 12345.0, 1.0]), [0.0; 4]);
+        assert_eq!(env_bits(0.0), [0.0, 0.0]);
+        assert_eq!(env_bits(1.0), [1.0, 0.0]);
+        assert_eq!(env_bits(2.0), [0.0, 1.0]);
+        assert_eq!(env_bits(3.0), [1.0, 1.0]);
+    }
+
+    #[test]
+    fn lamp_grids_are_checked_and_read_as_indices() {
+        let lights = [[0.0; 4]; 8];
+        let grid = [0, 1, u32::MAX, 5, u32::MAX, u32::MAX, 1, 0];
+        let lamps = SceneLamps {
+            lights: &lights,
+            grid: &grid,
+            place: [0.0, 0.0, 25.0, 2.0],
+            ..Default::default()
+        };
+        lamps.validate().unwrap();
+        assert_eq!(lamps.count(), 2);
+        assert_eq!(lamps.grid_shape(), Some((2, 2)));
+        let mut out = Vec::new();
+        lamps.grid_texels(2, &mut out);
+        assert_eq!(out, [0.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 0.0]);
+        assert!(SceneLamps {
+            grid: &grid[..7],
+            ..lamps
+        }
+        .validate()
+        .is_err());
+        assert!(SceneLamps {
+            lights: &lights[..7],
+            ..lamps
+        }
+        .validate()
+        .is_err());
+        // no grid: no map lamps, the interior lamps still
+        let none = SceneLamps {
+            place: [0.0; 4],
+            ..lamps
+        };
+        assert_eq!(none.grid_shape(), None);
+        none.validate().unwrap();
     }
 
     #[test]

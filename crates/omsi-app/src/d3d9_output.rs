@@ -18,11 +18,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
-use omsi_render::{FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene};
+use omsi_render::{
+    FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene, TexAddressing,
+};
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLight,
-    SceneMaterial, SceneTexture, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLamps,
+    SceneLight, SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer,
+    UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -110,6 +113,12 @@ impl Inner {
                 self.device.move_scene_texture(from, into);
                 Ok(())
             }
+            MirrorEvent::LightMapTile { slot, rgba } => self.device.set_tile_light_map(
+                omsi_render::LM_ATLAS_TILES * omsi_render::LM_TILE_PX,
+                omsi_render::LM_TILE_PX,
+                slot,
+                rgba,
+            ),
         };
         match done {
             // (kept by the device: the next frame finds it lost, and `recover` puts it up)
@@ -153,6 +162,7 @@ impl Inner {
                 "only the vanilla look is drawn here; the chosen one is drawn vanilla",
             );
         }
+        let lights = scene.frame_lights();
         let frame = SceneFrame {
             view_proj: plan.view_proj,
             light: SceneLight {
@@ -162,6 +172,8 @@ impl Inner {
                 ambient: plan.ambient,
                 fog: plan.fog,
                 sky_color: plan.sky_color,
+                cam_right: plan.cam_right,
+                cam_up: plan.cam_up,
             },
             list: &plan.list,
             models: scene.slot_models(),
@@ -169,21 +181,39 @@ impl Inner {
             main: &self.main,
             cab: &self.cab,
             surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
+            lamps: SceneLamps {
+                lights: &lights,
+                grid: scene.frame_light_grid(),
+                place: plan.light_grid,
+                tile_map: plan.light_map,
+            },
         };
         let material = |id: usize| {
             scene.materials.get(id).map(|m| SceneMaterial {
                 texture: m.texture,
                 transmap: m.transmap.map(|t| t.0),
+                nightmap: m.nightmap,
+                lightmap: m.lightmap,
+                envmap: m.envmap.map(|e| e.0),
+                env_mask: m.env_mask,
+                bump: m.bump.map(|b| b.0),
+                address: match m.addressing() {
+                    TexAddressing::Wrap => TexAddress::Wrap,
+                    TexAddressing::Mirror => TexAddress::Mirror,
+                    TexAddressing::Clamp => TexAddress::Clamp,
+                    TexAddressing::MirrorOnce => TexAddress::MirrorOnce,
+                },
                 uniform: m.uniform_vectors(),
             })
         };
         self.overlays.clear();
-        self.overlays.extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
-            texture,
-            rect,
-            premultiplied: scene.premultiplied.contains(&texture),
-            transposed: scene.transposed.contains(&texture),
-        }));
+        self.overlays
+            .extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
+                texture,
+                rect,
+                premultiplied: scene.premultiplied.contains(&texture),
+                transposed: scene.transposed.contains(&texture),
+            }));
         let device = &mut self.device;
         let drawn = device
             .draw_scene(&frame, material)

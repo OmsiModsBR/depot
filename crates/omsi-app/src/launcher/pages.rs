@@ -117,7 +117,8 @@ pub fn profile(l: &mut Launcher, area: Rect) {
         l.state.touched();
     }
     let danger_armed = l.pages.confirm_delete.map(|t| t.elapsed().as_secs() < 4).unwrap_or(false);
-    if l.ui.button("profile-delete", Rect::new(inner.x + half + GAP, inner.y, half, ROW), if danger_armed { "Click again to delete" } else { "Delete this driver" }, Some("delete"), ButtonKind::Danger) {
+    // (no driver yet: nothing to delete)
+    if !names.is_empty() && l.ui.button("profile-delete", Rect::new(inner.x + half + GAP, inner.y, half, ROW), if danger_armed { "Click again to delete" } else { "Delete this driver" }, Some("delete"), ButtonKind::Danger) {
         if danger_armed {
             let name = l.state.config.profile.clone();
             match core::delete_profile(&name) {
@@ -135,7 +136,8 @@ pub fn profile(l: &mut Launcher, area: Rect) {
             l.pages.confirm_delete = Some(std::time::Instant::now());
         }
     }
-    let y = inner.y + ROW + 10.0;
+    // (with no driver yet the new one's line takes the first row)
+    let y = if names.is_empty() { inner.y } else { inner.y + ROW + 10.0 };
     l.ui.text_input("new-driver", Rect::new(inner.x, y, half, ROW), &mut l.pages.new_driver, "New driver's name", Some("person"));
     if l.ui.button("profile-create", Rect::new(inner.x + half + GAP, y, half, ROW), "Create", Some("add"), ButtonKind::Normal) {
         let name = l.pages.new_driver.trim().to_string();
@@ -1286,7 +1288,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
-    let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
+    let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
     if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
         l.pages.controls_tab = tab;

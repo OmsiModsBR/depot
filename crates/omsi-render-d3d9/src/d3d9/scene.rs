@@ -6,12 +6,25 @@ use windows::Win32::Graphics::Direct3D9::*;
 
 use super::{make_mesh, map_err, shader, some, write_buffer, D3d9Device, Mesh};
 use crate::scene::{
-    mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneMaterial,
-    SceneTexture, TexFormat, ALPHA_CUT, INSTANCE_FLOATS, MATERIAL_VECTORS,
+    mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneLamps,
+    SceneMaterial, SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS,
+    MATERIAL_VECTORS,
 };
 use crate::{BackendError, Result};
 
 const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
+
+/// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
+const SAMPLERS: u32 = 7;
+
+/// The samplers of the light list, of the lamp grid and of the tile light maps.
+const LIGHTS_STAGE: u32 = 7;
+const GRID_STAGE: u32 = 8;
+const TILE_MAP_STAGE: u32 = 9;
+/// The table of byte ORs the reflection's spilling factor is put together with.
+const OR_STAGE: u32 = 10;
+/// The pixel shader's register of the material's border colour (unpacked from its flags).
+const BORDER_REGISTER: u32 = 24;
 
 /// What the scene layer may use beyond the floor, read when the device opens.
 #[derive(Debug, Clone, Copy, Default)]
@@ -23,6 +36,10 @@ pub(super) struct SceneCaps {
     /// The interface is blended in linear light: textures read as sRGB, the target written
     /// as sRGB and converted after the blend (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`).
     pub(super) linear_ui: bool,
+    /// The lamps can be read from float textures (32-bit RGBA and R, dynamic), at most this
+    /// wide and high.
+    pub(super) lamps: bool,
+    pub(super) max_texture: (u32, u32),
 }
 
 impl SceneCaps {
@@ -59,6 +76,11 @@ impl SceneCaps {
                 )
                 && check(srgb_write, D3DRTYPE_SURFACE, display)
                 && check(srgb_write, D3DRTYPE_SURFACE, D3DFMT_A8R8G8B8),
+            lamps: raw.Caps2 & D3DCAPS2_DYNAMICTEXTURES as u32 != 0
+                && [D3DFMT_A32B32G32R32F, D3DFMT_R32F]
+                    .into_iter()
+                    .all(|f| check(D3DUSAGE_DYNAMIC as u32, D3DRTYPE_TEXTURE, f)),
+            max_texture: (raw.MaxTextureWidth, raw.MaxTextureHeight),
         };
         log::info!("d3d9 scene: {caps:?}");
         caps
@@ -79,6 +101,30 @@ struct ScenePipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
+    /// Bound for a night, light or sphere map that is not there: it adds nothing.
+    black: IDirect3DTexture9,
+    /// x OR y of two bytes, at (x, y) of a 256 x 256 picture (`or_table`).
+    or_table: IDirect3DTexture9,
+}
+
+/// The byte ORs as RGBA pixels: x OR y in every channel at column x, row y.
+fn or_table() -> Vec<u8> {
+    let mut px = Vec::with_capacity(256 * 256 * 4);
+    for y in 0..256u32 {
+        for x in 0..256u32 {
+            px.extend_from_slice(&[(x | y) as u8; 4]);
+        }
+    }
+    px
+}
+
+/// The sampler states of an addressing.
+fn address_mode(a: TexAddress) -> u32 {
+    match a {
+        TexAddress::Wrap => D3DTADDRESS_WRAP.0 as u32,
+        TexAddress::Mirror => D3DTADDRESS_MIRROR.0 as u32,
+        TexAddress::Clamp | TexAddress::MirrorOnce => D3DTADDRESS_CLAMP.0 as u32,
+    }
 }
 
 /// The scene's resources. Ids are the game's (slots it reuses), so they index sparse lists.
@@ -93,6 +139,138 @@ pub(super) struct SceneStore {
     instances: Option<(IDirect3DVertexBuffer9, usize)>,
     /// What every mesh and texture was made from.
     pub(super) copies: SceneCopies,
+    lamps: Lamps,
+    tile_map: Option<TileMap>,
+}
+
+/// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
+/// into the map), and the system-memory texture its tiles go up through.
+struct TileMap {
+    texture: IDirect3DTexture9,
+    staging: IDirect3DTexture9,
+    side: u32,
+}
+
+/// The frame's lights and the grid naming them, as the textures the scene shader reads (made
+/// again after a loss with everything else: they are uploaded every frame).
+#[derive(Default)]
+struct Lamps {
+    /// The light list, four texels a row, and its rows.
+    lights: Option<(IDirect3DTexture9, u32)>,
+    /// The grid's texture, its width and height.
+    grid: Option<(IDirect3DTexture9, u32, u32)>,
+    /// What they hold, so that an unchanged list or grid is not uploaded again.
+    last_lights: Vec<[f32; 4]>,
+    last_grid: Vec<f32>,
+    texels: Vec<f32>,
+    /// The list as the shader reads it (`scene::pack_light`).
+    packed: Vec<[f32; 4]>,
+    warned: bool,
+}
+
+/// Writes `rgba` (RGBA, `rect`'s w by h, black when None) into `rect` (x, y, w, h) of a
+/// system-memory A8R8G8B8 texture, which marks it dirty.
+fn fill_rect(texture: &IDirect3DTexture9, rect: [u32; 4], rgba: Option<&[u8]>) -> Result<()> {
+    let [x, y, w, h] = rect;
+    let area = windows::Win32::Foundation::RECT {
+        left: x as i32,
+        top: y as i32,
+        right: (x + w) as i32,
+        bottom: (y + h) as i32,
+    };
+    let mut locked = D3DLOCKED_RECT::default();
+    // SAFETY: the rect lies in the texture (checked by the caller); each of its rows is
+    // written within the pitch, w texels of four bytes.
+    unsafe {
+        texture
+            .LockRect(0, &mut locked, &area, 0)
+            .map_err(map_err)?;
+        for r in 0..h as usize {
+            let dst = std::slice::from_raw_parts_mut(
+                (locked.pBits as *mut u8).add(r * locked.Pitch as usize),
+                w as usize * 4,
+            );
+            match rgba {
+                // memory order B, G, R, A
+                Some(src) => {
+                    let src = &src[r * w as usize * 4..(r + 1) * w as usize * 4];
+                    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+                        d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+                    }
+                }
+                None => dst.fill(0),
+            }
+        }
+        texture.UnlockRect(0).map_err(map_err)?;
+    }
+    Ok(())
+}
+
+/// The shader's constant of the tile light maps' place (x, y its south-west corner, z its
+/// side): uv = world xy * xy + zw, north up. Without an atlas, uv lies outside it.
+fn tile_map_constant(atlas: bool, place: [f32; 4]) -> [f32; 4] {
+    let [x, y, side, set] = place;
+    if !atlas || side <= 0.0 || set < 0.5 {
+        return [0.0, 0.0, 5.0, 5.0];
+    }
+    let k = 1.0 / side;
+    [k, -k, -x * k, 1.0 + y * k]
+}
+
+/// A dynamic float texture of `width` by `height`.
+fn float_texture(
+    device: &IDirect3DDevice9Ex,
+    width: u32,
+    height: u32,
+    format: D3DFORMAT,
+) -> Result<IDirect3DTexture9> {
+    let mut texture = None;
+    // SAFETY: the out-parameter is a live local.
+    unsafe {
+        device
+            .CreateTexture(
+                width,
+                height,
+                1,
+                D3DUSAGE_DYNAMIC as u32,
+                format,
+                D3DPOOL_DEFAULT,
+                &mut texture,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+    }
+    some(texture, "float texture")
+}
+
+/// Writes `data` into `texture` row by row, `row` floats a row, `rows` rows (zero past the
+/// data).
+fn fill_float_texture(
+    texture: &IDirect3DTexture9,
+    row: usize,
+    rows: usize,
+    data: &[f32],
+) -> Result<()> {
+    let mut locked = D3DLOCKED_RECT::default();
+    // SAFETY: the level is locked whole; each row is written within its pitch, and the
+    // texture has `rows` rows of at least `row` floats.
+    unsafe {
+        texture
+            .LockRect(0, &mut locked, std::ptr::null(), D3DLOCK_DISCARD as u32)
+            .map_err(map_err)?;
+        for y in 0..rows {
+            let dst = std::slice::from_raw_parts_mut(
+                (locked.pBits as *mut u8).add(y * locked.Pitch as usize) as *mut f32,
+                row,
+            );
+            let src = data.get(y * row..).unwrap_or(&[]);
+            let n = src.len().min(row);
+            dst[..n].copy_from_slice(&src[..n]);
+            dst[n..].fill(0.0);
+        }
+        texture.UnlockRect(0).map_err(map_err)?;
+    }
+    Ok(())
 }
 
 /// What the scene's meshes and textures were made from, kept in system memory as Direct3D
@@ -102,6 +280,8 @@ pub(super) struct SceneStore {
 pub(super) struct SceneCopies {
     meshes: Vec<Option<(Vec<f32>, Vec<u32>)>>,
     textures: Vec<Option<TextureCopy>>,
+    /// The tile light map atlas: its side and its pixels (RGBA).
+    tile_map: Option<(u32, Vec<u8>)>,
 }
 
 struct TextureCopy {
@@ -282,9 +462,31 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
         Usage: 0,
         UsageIndex: 0,
     });
+    let black = make_texture(
+        device,
+        &SceneTexture {
+            width: 1,
+            height: 1,
+            format: TexFormat::Rgba8,
+            levels: &[vec![0, 0, 0, 0]],
+            make_mips: false,
+        },
+    )?;
+    let or_table = make_texture(
+        device,
+        &SceneTexture {
+            width: 256,
+            height: 256,
+            format: TexFormat::Rgba8,
+            levels: &[or_table()],
+            make_mips: false,
+        },
+    )?;
     // SAFETY: the bytecode and element arrays outlive the calls.
     unsafe {
         Ok(ScenePipeline {
+            black,
+            or_table,
             decl: device
                 .CreateVertexDeclaration(elements.as_ptr())
                 .map_err(map_err)?,
@@ -438,6 +640,7 @@ impl D3d9Device {
     pub fn clear_scene(&mut self) {
         self.scene.meshes.clear();
         self.scene.textures.clear();
+        self.scene.tile_map = None;
         self.scene.copies = SceneCopies::default();
     }
 
@@ -455,7 +658,89 @@ impl D3d9Device {
                 done = done.and(self.set_scene_texture(id, &kept.texture()));
             }
         }
+        if let Some((side, rgba)) = copies.tile_map {
+            done = done.and(self.set_tile_light_map(side, side, (0, 0), &rgba));
+        }
         done
+    }
+
+    /// Puts a tile's light map into its place of the tile light map atlas: the atlas is
+    /// `side` pixels square, the tile `tile` (RGBA, sRGB as stored, `tile` square) at column
+    /// `slot.0` from the west and row `slot.1` from the north. The whole atlas at once is a
+    /// tile as large as the atlas at (0, 0).
+    pub fn set_tile_light_map(
+        &mut self,
+        side: u32,
+        tile: u32,
+        slot: (u32, u32),
+        rgba: &[u8],
+    ) -> Result<()> {
+        let (x, y) = (slot.0.saturating_mul(tile), slot.1.saturating_mul(tile));
+        let fits = tile > 0
+            && x.checked_add(tile).is_some_and(|e| e <= side)
+            && y.checked_add(tile).is_some_and(|e| e <= side)
+            && rgba.len() == (tile as usize).pow(2) * 4;
+        if !fits
+            || side
+                > self
+                    .scene_caps
+                    .max_texture
+                    .0
+                    .min(self.scene_caps.max_texture.1)
+        {
+            return Err(BackendError::InvalidArgument(format!(
+                "a tile light map of {tile} px at {slot:?} of {} bytes in an atlas of {side} px",
+                rgba.len()
+            )));
+        }
+        if self.scene.tile_map.as_ref().is_none_or(|t| t.side != side) {
+            let make = |pool| {
+                let mut texture = None;
+                // SAFETY: the out-parameter is a live local.
+                unsafe {
+                    self.device
+                        .CreateTexture(
+                            side,
+                            side,
+                            1,
+                            0,
+                            D3DFMT_A8R8G8B8,
+                            pool,
+                            &mut texture,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                }
+                some(texture, "tile light map")
+            };
+            let tm = TileMap {
+                texture: make(D3DPOOL_DEFAULT)?,
+                staging: make(D3DPOOL_SYSTEMMEM)?,
+                side,
+            };
+            // (a new atlas starts black: no lamps where no tile is up)
+            fill_rect(&tm.staging, [0, 0, side, side], None)?;
+            self.scene.tile_map = Some(tm);
+            self.scene.copies.tile_map = Some((side, vec![0; (side as usize).pow(2) * 4]));
+        }
+        let tm = self.scene.tile_map.as_ref().expect("made above");
+        fill_rect(&tm.staging, [x, y, tile, tile], Some(rgba))?;
+        // SAFETY: both textures belong to this device; the staging one's dirty rect is the
+        // tile just written.
+        unsafe { self.device.UpdateTexture(&tm.staging, &tm.texture) }.map_err(map_err)?;
+        if let Some((_, copy)) = self.scene.copies.tile_map.as_mut() {
+            let row = tile as usize * 4;
+            for r in 0..tile as usize {
+                let at = ((y as usize + r) * side as usize + x as usize) * 4;
+                copy[at..at + row].copy_from_slice(&rgba[r * row..(r + 1) * row]);
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the tile light map atlas is up (for tests).
+    pub fn has_tile_light_map(&self) -> bool {
+        self.scene.tile_map.is_some()
     }
 
     /// Whether mesh `id` and texture `id` are up (for the game's own checks and tests).
@@ -519,6 +804,162 @@ impl D3d9Device {
         self.set_frame_states()
     }
 
+    /// Uploads the frame's lights and grid where they changed and binds them with the tile
+    /// light maps; returns the shader's constants c20..c23 for them.
+    fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 4]> {
+        // (no grid: one of no cells, which no point is on)
+        const NO_GRID: [f32; 4] = [0.0; 4];
+        // the tile light maps: linear, clamped at the atlas's edge (no atlas: one far away,
+        // which no point is in)
+        let atlas = self.scene.tile_map.as_ref().map(|t| &t.texture);
+        let tile_map = tile_map_constant(atlas.is_some(), lamps.tile_map);
+        // SAFETY: plain calls on a live device; the texture belongs to it.
+        unsafe {
+            let d = &self.device;
+            match atlas {
+                Some(t) => d.SetTexture(TILE_MAP_STAGE, t),
+                None => d.SetTexture(TILE_MAP_STAGE, None::<&IDirect3DBaseTexture9>),
+            }
+            .map_err(map_err)?;
+            for (state, value) in [
+                (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
+                (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
+                (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+            ] {
+                d.SetSamplerState(TILE_MAP_STAGE, state, value)
+                    .map_err(map_err)?;
+            }
+        }
+        let none = [NO_GRID, [0.0; 4], [0.0; 4], tile_map];
+        self.bind_lamp_counts(0, 0)?;
+        let (max_w, max_h) = self.scene_caps.max_texture;
+        if !self.scene_caps.lamps || lamps.count() == 0 {
+            if !self.scene_caps.lamps && lamps.count() > 0 && !self.scene.lamps.warned {
+                log::warn!("d3d9 scene: no float textures here; the lamps are not drawn");
+                self.scene.lamps.warned = true;
+            }
+            return Ok(none);
+        }
+        let device = self.device.clone();
+        let store = &mut self.scene.lamps;
+        // the light list: the first as many as the texture can have rows
+        let kept = lamps.count().min(max_h as usize);
+        if store.lights.as_ref().is_none_or(|l| (l.1 as usize) < kept) {
+            let rows = (kept.next_power_of_two().max(64) as u32).min(max_h);
+            store.lights = Some((float_texture(&device, 4, rows, D3DFMT_A32B32G32R32F)?, rows));
+            store.last_lights.clear();
+        }
+        let (lights, rows) = store.lights.clone().expect("made above");
+        let list = &lamps.lights[..kept * 4];
+        if store.last_lights != list {
+            store.packed.clear();
+            store
+                .packed
+                .extend(list.chunks_exact(4).flat_map(crate::scene::pack_light));
+            fill_float_texture(&lights, 16, rows as usize, store.packed.as_flattened())?;
+            store.last_lights.clear();
+            store.last_lights.extend_from_slice(list);
+        }
+        // the grid: one texel a place, a row of cells a row
+        let mut grid_info = [0.0; 4];
+        if let Some((side, places)) = lamps.grid_shape() {
+            let (w, h) = ((side * places) as u32, side as u32);
+            if w > max_w || h > max_h {
+                if !store.warned {
+                    log::warn!("d3d9 scene: a lamp grid of {w} x {h} is larger than textures here; the map's lamps are not drawn");
+                    store.warned = true;
+                }
+            } else {
+                if store.grid.as_ref().is_none_or(|g| (g.1, g.2) != (w, h)) {
+                    store.grid = Some((float_texture(&device, w, h, D3DFMT_R32F)?, w, h));
+                    store.last_grid.clear();
+                }
+                lamps.grid_texels(kept, &mut store.texels);
+                let grid = &store.grid.as_ref().expect("made above").0;
+                if store.last_grid != store.texels {
+                    fill_float_texture(grid, w as usize, h as usize, &store.texels)?;
+                    std::mem::swap(&mut store.last_grid, &mut store.texels);
+                }
+                grid_info = [0.0, 1.0 / w as f32, 1.0 / h as f32, places as f32];
+            }
+        }
+        grid_info[0] = 1.0 / rows as f32;
+        let grid = store
+            .grid
+            .as_ref()
+            .map(|g| &g.0)
+            .filter(|_| grid_info[3] > 0.0);
+        // SAFETY: plain calls on a live device; the textures belong to it.
+        unsafe {
+            device.SetTexture(LIGHTS_STAGE, &lights).map_err(map_err)?;
+            match grid {
+                Some(g) => device.SetTexture(GRID_STAGE, g),
+                None => device.SetTexture(GRID_STAGE, None::<&IDirect3DBaseTexture9>),
+            }
+            .map_err(map_err)?;
+            for stage in [LIGHTS_STAGE, GRID_STAGE] {
+                for (state, value) in [
+                    (D3DSAMP_MINFILTER, D3DTEXF_POINT.0 as u32),
+                    (D3DSAMP_MAGFILTER, D3DTEXF_POINT.0 as u32),
+                    (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                    (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                    (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+                ] {
+                    device
+                        .SetSamplerState(stage, state, value)
+                        .map_err(map_err)?;
+                }
+            }
+        }
+        let places = grid_info[3] as i32;
+        self.bind_lamp_counts(kept, places)?;
+        // the cell of a point is floor(xy / side - corner / side)
+        let [x, y, side, cells] = lamps.place;
+        let place = if places > 0 && side > 0.0 {
+            [1.0 / side, -x / side, -y / side, cells]
+        } else {
+            NO_GRID
+        };
+        Ok([place, grid_info, [kept as f32, 0.0, 0.0, 0.0], tile_map])
+    }
+
+    /// The table of byte ORs, read texel by texel.
+    fn bind_or_table(&self) -> Result<()> {
+        let table = &self.scene.pipeline.as_ref().expect("built before").or_table;
+        // SAFETY: plain calls on a live device; the texture belongs to it.
+        unsafe {
+            self.device.SetTexture(OR_STAGE, table).map_err(map_err)?;
+            for (state, value) in [
+                (D3DSAMP_MINFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MAGFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+            ] {
+                self.device
+                    .SetSamplerState(OR_STAGE, state, value)
+                    .map_err(map_err)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The loop counts of the lamps: the lights in the list (the vertex stage's, for the
+    /// interior lamps) and the places of a grid cell (the pixel stage's loop count).
+    fn bind_lamp_counts(&self, lights: usize, places: i32) -> Result<()> {
+        let vs = [lights as f32, 0.0, 0.0, 0.0];
+        let ps = [places.max(0), 0, 1, 0];
+        // SAFETY: plain calls on a live device; the arrays outlive them.
+        unsafe {
+            self.device
+                .SetVertexShaderConstantF(13, vs.as_ptr(), 1)
+                .and_then(|_| self.device.SetPixelShaderConstantI(0, ps.as_ptr(), 1))
+                .map_err(map_err)
+        }
+    }
+
     fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
@@ -526,6 +967,8 @@ impl D3d9Device {
         width: u32,
         height: u32,
     ) -> Result<()> {
+        let lamps = self.bind_lamps(&frame.lamps)?;
+        self.bind_or_table()?;
         self.scene.records.clear();
         frame.instance_records(&mut self.scene.records);
         let records = frame.list.len();
@@ -608,17 +1051,24 @@ impl D3d9Device {
             d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
             d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
             d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
-            for stage in 0..2 {
+            for stage in 0..SAMPLERS {
                 for (state, value) in [
                     (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP.0 as u32),
-                    (D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP.0 as u32),
                 ] {
                     d.SetSamplerState(stage, state, value).map_err(map_err)?;
                 }
             }
+            let vs_light = [
+                light.sun_dir,
+                light.sun_color,
+                light.sky_color,
+                light.cam_right,
+                light.cam_up,
+            ];
+            d.SetVertexShaderConstantF(6, vs_light.as_ptr().cast(), vs_light.len() as u32)
+                .map_err(map_err)?;
             d.SetVertexShaderConstantF(0, frame.view_proj.as_ptr().cast(), 4)
                 .map_err(map_err)?;
             d.SetVertexShaderConstantF(4, light.cam_pos.as_ptr(), 1)
@@ -626,6 +1076,8 @@ impl D3d9Device {
             d.SetVertexShaderConstantF(5, pixel.as_ptr(), 1)
                 .map_err(map_err)?;
             d.SetPixelShaderConstantF(11, lights.as_ptr().cast(), lights.len() as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(20, lamps.as_ptr().cast(), lamps.len() as u32)
                 .map_err(map_err)?;
             if let Some((vb, _)) = &self.scene.instances {
                 d.SetStreamSource(1, vb, 0, INSTANCE_STRIDE)
@@ -666,19 +1118,7 @@ impl D3d9Device {
                     current.2 = Some(b.surface);
                 }
                 if current.3 != Some(b.material) {
-                    let texture = |id: Option<usize>| {
-                        id.and_then(|i| self.scene.textures.get(i))
-                            .and_then(Option::as_ref)
-                            .unwrap_or(&self.pipeline.white)
-                    };
-                    d.SetPixelShaderConstantF(
-                        0,
-                        m.uniform.as_ptr().cast(),
-                        MATERIAL_VECTORS as u32,
-                    )
-                    .map_err(map_err)?;
-                    d.SetTexture(0, texture(m.texture)).map_err(map_err)?;
-                    d.SetTexture(1, texture(m.transmap)).map_err(map_err)?;
+                    self.bind_material(&m)?;
                     current.3 = Some(b.material);
                 }
                 let n = b.instances.end - b.instances.start;
@@ -706,6 +1146,80 @@ impl D3d9Device {
         }
         if skipped > 0 {
             log::debug!("d3d9 scene: {skipped} batches without their mesh or material");
+        }
+        Ok(())
+    }
+}
+
+impl D3d9Device {
+    /// The material's uniform, maps, addressing and the constants worked out from them.
+    fn bind_material(&self, m: &SceneMaterial) -> Result<()> {
+        let d = &self.device;
+        let pipeline = self.scene.pipeline.as_ref().expect("built before");
+        let found = |id: Option<usize>| {
+            id.and_then(|i| self.scene.textures.get(i))
+                .and_then(Option::as_ref)
+        };
+        let white = &self.pipeline.white;
+        let black = &pipeline.black;
+        let env = found(m.envmap);
+        let bump = found(m.bump);
+        let u = m.uniform;
+        // (a sphere map that is not there reflects nothing; the bits and the border colour
+        // unpacked here, not per pixel)
+        let [has_mask, declared] = crate::scene::env_bits(u[3][3]);
+        let env_on = [env.is_some() as u32 as f32, has_mask, declared, 0.0];
+        let border = crate::scene::border_rgba(u[8]);
+        let mut bump_texel = [0.0f32; 4];
+        if let Some(t) = bump {
+            let mut desc = D3DSURFACE_DESC::default();
+            // SAFETY: the out-parameter is a live local; level 0 exists.
+            unsafe { t.GetLevelDesc(0, &mut desc) }.map_err(map_err)?;
+            bump_texel = [
+                1.0 / desc.Width.max(1) as f32,
+                1.0 / desc.Height.max(1) as f32,
+                0.0,
+                0.0,
+            ];
+        }
+        let terrain = u[2][0] > 0.5;
+        let address = address_mode(m.address);
+        // a terrain's transmap and night map cover one tile: clamped at its edge
+        let tile = if terrain {
+            D3DTADDRESS_CLAMP.0 as u32
+        } else {
+            address
+        };
+        let maps = [
+            (found(m.texture).unwrap_or(white), address),
+            (found(m.transmap).unwrap_or(white), tile),
+            (found(m.nightmap).unwrap_or(black), tile),
+            (found(m.lightmap).unwrap_or(black), address),
+            (env.unwrap_or(black), address),
+            (found(m.env_mask).unwrap_or(white), address),
+            (bump.unwrap_or(white), address),
+        ];
+        let vs = [u[5], u[1]];
+        let ps = [bump_texel, env_on];
+        // SAFETY: plain calls on a live device; the constant arrays outlive them; the
+        // textures belong to this device.
+        unsafe {
+            d.SetPixelShaderConstantF(0, u.as_ptr().cast(), MATERIAL_VECTORS as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(18, ps.as_ptr().cast(), ps.len() as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(BORDER_REGISTER, border.as_ptr(), 1)
+                .map_err(map_err)?;
+            d.SetVertexShaderConstantF(11, vs.as_ptr().cast(), vs.len() as u32)
+                .map_err(map_err)?;
+            for (stage, (texture, address)) in maps.iter().enumerate() {
+                let stage = stage as u32;
+                d.SetTexture(stage, *texture).map_err(map_err)?;
+                d.SetSamplerState(stage, D3DSAMP_ADDRESSU, *address)
+                    .map_err(map_err)?;
+                d.SetSamplerState(stage, D3DSAMP_ADDRESSV, *address)
+                    .map_err(map_err)?;
+            }
         }
         Ok(())
     }

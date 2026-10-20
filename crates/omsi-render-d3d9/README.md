@@ -71,11 +71,38 @@ depth write, depth-only, painted ground), back-face culling, the road surfaces' 
 towards the eye and their depth bias, invisible instances, and Direct3D 9's half-pixel
 offset. Depth is reversed as in the default renderer (cleared to 0, nearer is greater).
 
-Not yet (later phases): shadows and ambient occlusion, the map's and the vehicles' lamps,
-the specular highlight, night, light and environment maps, bump maps, detail texturing,
-swaying trees, weather, the sky, coronas and smoke, the fog's way through the player's
-vehicle, mirrors and render-to-texture, and texture addressing other than wrap in the
-sampler. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
+The material's maps: the light map (as strong as the instance says; a terrain's detail
+texture), the night map (by night, as strong as the instance says, or always when something
+switches it; a terrain's night map), the sphere map of `[matl_envmap]` mixed in by its
+factor (truncated and spilled as Direct3D's packed texture factor, `scene::env_factor`) or
+by its mask's alpha, the bump map moving the sphere-map lookup, the material's specular
+highlight lit at the vertex from the sun and the light above, and the material's texture
+addressing (wrap, mirror, clamp, mirror once) in the samplers. A map that is not uploaded
+reads as nothing.
+
+The lamps: the map's lamps and the vehicles' lights from the default renderer's grid of
+cells round the camera (`omsi-render`'s `Scene::frame_lights` and `frame_light_grid`), point
+lights and spots, not on a `[nomaplighting]` material, a `[LightMapMapping]` one or a tree's
+leaves; and the vehicles' interior lamps on the meshes their instances name. They are read
+from two float textures (the light list, four texels a light, and the grid's indices); a
+device without dynamic 32-bit float textures draws no lamps and says so in the log. The
+reflection's light takes the lamps in, per pixel.
+
+The tile light maps: the lamps baked into the map, one picture a tile, put up into the
+default renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`, placed by
+`FramePlan::light_map`). They light the roads, the plates and the `[LightMapMapping]`
+objects at night, as the ground's night map lights the ground; outside the loaded square
+they light nothing.
+
+The scene's pixel shader stays inside the 512 instruction slots every Shader Model 3.0 card
+gives (a test holds it to 460 by the compiler's own count): what does not depend on the
+pixel is worked out before it, the lights packed once (`scene::pack_light`), the border
+colour and the reflection's bits unpacked per material, the interior lamp code per vertex,
+the grid's places a loop count, and the spilling reflection factor put together from a
+table of byte ORs (sampler 10).
+
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
+the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
 Known differences from the default renderer, each for a later PR:
@@ -154,7 +181,7 @@ frame plan and asset events to this crate. In order:
 2. The option in the launcher's render options, off by default, Windows only.
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface and the
    HUD's pictures).
-4. The OMSI material features (night, light and environment maps, bump maps), then
-   shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
+4. The OMSI material features (done: night, light and environment maps, bump maps, the
+   specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.
