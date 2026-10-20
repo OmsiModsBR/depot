@@ -774,6 +774,7 @@ fn the_maps_lamps_light_what_takes_them() {
         lights: &lights,
         grid: &[0, u32::MAX],
         place: ONE_CELL,
+        ..Default::default()
     };
     let u = uniform(0.0);
     let px = draw_lamps(&mut dev, white_lit(&u), SECOND, dark(), lamps);
@@ -848,6 +849,7 @@ fn spots_light_only_inside_their_cone() {
                 lights: &lights,
                 grid: &[0, u32::MAX],
                 place: ONE_CELL,
+                ..Default::default()
             },
         );
         // the middle of the quad, straight under the light
@@ -914,6 +916,7 @@ fn reflections_take_the_lamps_light_and_spill_their_factor() {
             lights: &lights,
             grid: &[0, u32::MAX],
             place: ONE_CELL,
+            ..Default::default()
         },
     );
     assert!(all(&px, [0, 0, 255, 255], 2), "lamp lit: {:?}", &px[..4]);
@@ -937,4 +940,67 @@ fn reflections_take_the_lamps_light_and_spill_their_factor() {
     };
     let px = draw_one(&mut dev, m, SECOND, light([0.0; 4]));
     assert!(all(&px, want, 2), "{want:?}: {:?}", &px[..4]);
+}
+
+#[test]
+fn tile_light_maps_light_their_objects_by_night() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    // an atlas of 2 by 2 tiles of one pixel: the top left one white, the top right red
+    assert!(!dev.has_tile_light_map());
+    dev.set_tile_light_map(2, 1, (0, 0), &[255, 255, 255, 255])
+        .unwrap();
+    dev.set_tile_light_map(2, 1, (1, 0), &[255, 0, 0, 255])
+        .unwrap();
+    assert!(dev.has_tile_light_map());
+    // (outside the atlas, or not one tile of pixels: refused)
+    assert!(dev.set_tile_light_map(2, 1, (2, 0), &[0; 4]).is_err());
+    assert!(dev.set_tile_light_map(2, 1, (0, 1), &[0; 8]).is_err());
+    let mut night = dark();
+    night.sun_color[3] = 1.0;
+    // the atlas lies over the quad, 2 m a side
+    let over = SceneLamps {
+        tile_map: [-1.0, -1.0, 2.0, 1.0],
+        ..Default::default()
+    };
+    // ([LightMapMapping]: params.y 0.35)
+    let mut mapped = uniform(0.0);
+    mapped[1][1] = 0.35;
+    let check = |px: &[u8], what: &str| {
+        let at = |x: u32, y: u32| ((y * W + x) * 4) as usize;
+        assert!(
+            px[at(0, 0)..at(0, 0) + 3].iter().all(|&c| c >= 253),
+            "{what} top left: {:?}",
+            &px[at(0, 0)..at(0, 0) + 4]
+        );
+        let r = &px[at(W - 1, 0)..at(W - 1, 0) + 4];
+        assert!(
+            r[0] >= 253 && r[1] <= 2 && r[2] <= 2,
+            "{what} top right: {r:?}"
+        );
+        let b = &px[at(0, H - 1)..at(0, H - 1) + 4];
+        assert!(b[..3].iter().all(|&c| c <= 2), "{what} bottom: {b:?}");
+    };
+    let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, night, over);
+    check(&px, "night");
+    // by day, on what does not take it, and away from the loaded square: nothing
+    let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, dark(), over);
+    assert!(all(&px, [0, 0, 0, 255], 1), "day: {:?}", &px[..4]);
+    let plain = uniform(0.0);
+    let px = draw_lamps(&mut dev, white_lit(&plain), SECOND, night, over);
+    assert!(all(&px, [0, 0, 0, 255], 1), "plain: {:?}", &px[..4]);
+    let away = SceneLamps {
+        tile_map: [5.0, 5.0, 2.0, 1.0],
+        ..Default::default()
+    };
+    let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, night, away);
+    assert!(all(&px, [0, 0, 0, 255], 1), "away: {:?}", &px[..4]);
+    // a device opened again gets the atlas back; a new scene drops it
+    dev.recover().unwrap();
+    let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, night, over);
+    check(&px, "recovered");
+    dev.clear_scene();
+    assert!(!dev.has_tile_light_map());
+    let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, night, over);
+    assert!(all(&px, [0, 0, 0, 255], 1), "cleared: {:?}", &px[..4]);
 }

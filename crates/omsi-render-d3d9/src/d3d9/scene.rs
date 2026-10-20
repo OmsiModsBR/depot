@@ -17,9 +17,10 @@ const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
 /// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
 const SAMPLERS: u32 = 7;
 
-/// The samplers of the light list and of the lamp grid.
+/// The samplers of the light list, of the lamp grid and of the tile light maps.
 const LIGHTS_STAGE: u32 = 7;
 const GRID_STAGE: u32 = 8;
+const TILE_MAP_STAGE: u32 = 9;
 /// The table of byte ORs the reflection's spilling factor is put together with.
 const OR_STAGE: u32 = 10;
 /// The pixel shader's register of the material's border colour (unpacked from its flags).
@@ -139,6 +140,15 @@ pub(super) struct SceneStore {
     /// What every mesh and texture was made from.
     pub(super) copies: SceneCopies,
     lamps: Lamps,
+    tile_map: Option<TileMap>,
+}
+
+/// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
+/// into the map), and the system-memory texture its tiles go up through.
+struct TileMap {
+    texture: IDirect3DTexture9,
+    staging: IDirect3DTexture9,
+    side: u32,
 }
 
 /// The frame's lights and the grid naming them, as the textures the scene shader reads (made
@@ -156,6 +166,55 @@ struct Lamps {
     /// The list as the shader reads it (`scene::pack_light`).
     packed: Vec<[f32; 4]>,
     warned: bool,
+}
+
+/// Writes `rgba` (RGBA, `rect`'s w by h, black when None) into `rect` (x, y, w, h) of a
+/// system-memory A8R8G8B8 texture, which marks it dirty.
+fn fill_rect(texture: &IDirect3DTexture9, rect: [u32; 4], rgba: Option<&[u8]>) -> Result<()> {
+    let [x, y, w, h] = rect;
+    let area = windows::Win32::Foundation::RECT {
+        left: x as i32,
+        top: y as i32,
+        right: (x + w) as i32,
+        bottom: (y + h) as i32,
+    };
+    let mut locked = D3DLOCKED_RECT::default();
+    // SAFETY: the rect lies in the texture (checked by the caller); each of its rows is
+    // written within the pitch, w texels of four bytes.
+    unsafe {
+        texture
+            .LockRect(0, &mut locked, &area, 0)
+            .map_err(map_err)?;
+        for r in 0..h as usize {
+            let dst = std::slice::from_raw_parts_mut(
+                (locked.pBits as *mut u8).add(r * locked.Pitch as usize),
+                w as usize * 4,
+            );
+            match rgba {
+                // memory order B, G, R, A
+                Some(src) => {
+                    let src = &src[r * w as usize * 4..(r + 1) * w as usize * 4];
+                    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+                        d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+                    }
+                }
+                None => dst.fill(0),
+            }
+        }
+        texture.UnlockRect(0).map_err(map_err)?;
+    }
+    Ok(())
+}
+
+/// The shader's constant of the tile light maps' place (x, y its south-west corner, z its
+/// side): uv = world xy * xy + zw, north up. Without an atlas, uv lies outside it.
+fn tile_map_constant(atlas: bool, place: [f32; 4]) -> [f32; 4] {
+    let [x, y, side, set] = place;
+    if !atlas || side <= 0.0 || set < 0.5 {
+        return [0.0, 0.0, 5.0, 5.0];
+    }
+    let k = 1.0 / side;
+    [k, -k, -x * k, 1.0 + y * k]
 }
 
 /// A dynamic float texture of `width` by `height`.
@@ -221,6 +280,8 @@ fn fill_float_texture(
 pub(super) struct SceneCopies {
     meshes: Vec<Option<(Vec<f32>, Vec<u32>)>>,
     textures: Vec<Option<TextureCopy>>,
+    /// The tile light map atlas: its side and its pixels (RGBA).
+    tile_map: Option<(u32, Vec<u8>)>,
 }
 
 struct TextureCopy {
@@ -579,6 +640,7 @@ impl D3d9Device {
     pub fn clear_scene(&mut self) {
         self.scene.meshes.clear();
         self.scene.textures.clear();
+        self.scene.tile_map = None;
         self.scene.copies = SceneCopies::default();
     }
 
@@ -596,7 +658,89 @@ impl D3d9Device {
                 done = done.and(self.set_scene_texture(id, &kept.texture()));
             }
         }
+        if let Some((side, rgba)) = copies.tile_map {
+            done = done.and(self.set_tile_light_map(side, side, (0, 0), &rgba));
+        }
         done
+    }
+
+    /// Puts a tile's light map into its place of the tile light map atlas: the atlas is
+    /// `side` pixels square, the tile `tile` (RGBA, sRGB as stored, `tile` square) at column
+    /// `slot.0` from the west and row `slot.1` from the north. The whole atlas at once is a
+    /// tile as large as the atlas at (0, 0).
+    pub fn set_tile_light_map(
+        &mut self,
+        side: u32,
+        tile: u32,
+        slot: (u32, u32),
+        rgba: &[u8],
+    ) -> Result<()> {
+        let (x, y) = (slot.0.saturating_mul(tile), slot.1.saturating_mul(tile));
+        let fits = tile > 0
+            && x.checked_add(tile).is_some_and(|e| e <= side)
+            && y.checked_add(tile).is_some_and(|e| e <= side)
+            && rgba.len() == (tile as usize).pow(2) * 4;
+        if !fits
+            || side
+                > self
+                    .scene_caps
+                    .max_texture
+                    .0
+                    .min(self.scene_caps.max_texture.1)
+        {
+            return Err(BackendError::InvalidArgument(format!(
+                "a tile light map of {tile} px at {slot:?} of {} bytes in an atlas of {side} px",
+                rgba.len()
+            )));
+        }
+        if self.scene.tile_map.as_ref().is_none_or(|t| t.side != side) {
+            let make = |pool| {
+                let mut texture = None;
+                // SAFETY: the out-parameter is a live local.
+                unsafe {
+                    self.device
+                        .CreateTexture(
+                            side,
+                            side,
+                            1,
+                            0,
+                            D3DFMT_A8R8G8B8,
+                            pool,
+                            &mut texture,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                }
+                some(texture, "tile light map")
+            };
+            let tm = TileMap {
+                texture: make(D3DPOOL_DEFAULT)?,
+                staging: make(D3DPOOL_SYSTEMMEM)?,
+                side,
+            };
+            // (a new atlas starts black: no lamps where no tile is up)
+            fill_rect(&tm.staging, [0, 0, side, side], None)?;
+            self.scene.tile_map = Some(tm);
+            self.scene.copies.tile_map = Some((side, vec![0; (side as usize).pow(2) * 4]));
+        }
+        let tm = self.scene.tile_map.as_ref().expect("made above");
+        fill_rect(&tm.staging, [x, y, tile, tile], Some(rgba))?;
+        // SAFETY: both textures belong to this device; the staging one's dirty rect is the
+        // tile just written.
+        unsafe { self.device.UpdateTexture(&tm.staging, &tm.texture) }.map_err(map_err)?;
+        if let Some((_, copy)) = self.scene.copies.tile_map.as_mut() {
+            let row = tile as usize * 4;
+            for r in 0..tile as usize {
+                let at = ((y as usize + r) * side as usize + x as usize) * 4;
+                copy[at..at + row].copy_from_slice(&rgba[r * row..(r + 1) * row]);
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the tile light map atlas is up (for tests).
+    pub fn has_tile_light_map(&self) -> bool {
+        self.scene.tile_map.is_some()
     }
 
     /// Whether mesh `id` and texture `id` are up (for the game's own checks and tests).
@@ -660,12 +804,35 @@ impl D3d9Device {
         self.set_frame_states()
     }
 
-    /// Uploads the frame's lights and grid where they changed and binds them; returns the
-    /// shader's constants c20..c22 for them.
-    fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 3]> {
+    /// Uploads the frame's lights and grid where they changed and binds them with the tile
+    /// light maps; returns the shader's constants c20..c23 for them.
+    fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 4]> {
         // (no grid: one of no cells, which no point is on)
         const NO_GRID: [f32; 4] = [0.0; 4];
-        let none = [NO_GRID, [0.0; 4], [0.0; 4]];
+        // the tile light maps: linear, clamped at the atlas's edge (no atlas: one far away,
+        // which no point is in)
+        let atlas = self.scene.tile_map.as_ref().map(|t| &t.texture);
+        let tile_map = tile_map_constant(atlas.is_some(), lamps.tile_map);
+        // SAFETY: plain calls on a live device; the texture belongs to it.
+        unsafe {
+            let d = &self.device;
+            match atlas {
+                Some(t) => d.SetTexture(TILE_MAP_STAGE, t),
+                None => d.SetTexture(TILE_MAP_STAGE, None::<&IDirect3DBaseTexture9>),
+            }
+            .map_err(map_err)?;
+            for (state, value) in [
+                (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
+                (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
+                (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+            ] {
+                d.SetSamplerState(TILE_MAP_STAGE, state, value)
+                    .map_err(map_err)?;
+            }
+        }
+        let none = [NO_GRID, [0.0; 4], [0.0; 4], tile_map];
         self.bind_lamp_counts(0, 0)?;
         let (max_w, max_h) = self.scene_caps.max_texture;
         if !self.scene_caps.lamps || lamps.count() == 0 {
@@ -755,7 +922,7 @@ impl D3d9Device {
         } else {
             NO_GRID
         };
-        Ok([place, grid_info, [kept as f32, 0.0, 0.0, 0.0]])
+        Ok([place, grid_info, [kept as f32, 0.0, 0.0, 0.0], tile_map])
     }
 
     /// The table of byte ORs, read texel by texel.

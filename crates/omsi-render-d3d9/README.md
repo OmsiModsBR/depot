@@ -88,6 +88,12 @@ from two float textures (the light list, four texels a light, and the grid's ind
 device without dynamic 32-bit float textures draws no lamps and says so in the log. The
 reflection's light takes the lamps in, per pixel.
 
+The tile light maps: the lamps baked into the map, one picture a tile, put up into the
+default renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`, placed by
+`FramePlan::light_map`). They light the roads, the plates and the `[LightMapMapping]`
+objects at night, as the ground's night map lights the ground; outside the loaded square
+they light nothing.
+
 The scene's pixel shader stays inside the 512 instruction slots every Shader Model 3.0 card
 gives (a test holds it to 460 by the compiler's own count): what does not depend on the
 pixel is worked out before it, the lights packed once (`scene::pack_light`), the border
@@ -95,8 +101,7 @@ colour and the reflection's bits unpacked per material, the interior lamp code p
 the grid's places a loop count, and the spilling reflection factor put together from a
 table of byte ORs (sampler 10).
 
-Not yet (later phases): shadows and ambient occlusion, the tile light maps (the lamps baked
-into the map, which light the roads and the ground at night), the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
 the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
@@ -177,6 +182,6 @@ frame plan and asset events to this crate. In order:
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface and the
    HUD's pictures).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
-   specular highlight and the lamps; the tile light maps next), then shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
+   specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.

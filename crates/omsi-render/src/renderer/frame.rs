@@ -143,9 +143,10 @@ impl Renderer {
             return;
         };
         let lists = self.draw_lists(scene, &f, &mut clock);
-        if f.window_picture {
+        if f.window_picture && self.plan_sink.is_some() {
+            let light_map = self.light_map_place(f.ro);
             if let Some(sink) = self.plan_sink.as_mut() {
-                sink(&super::mirror::plan_of(&f, &lists), scene);
+                sink(&super::mirror::plan_of(&f, &lists, light_map), scene);
             }
         }
         let encoders = self.encode_frame(scene, &f, &mut clock, &lists);
@@ -438,13 +439,7 @@ impl Renderer {
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
         // where the tile light maps lie, relative to the render origin
         {
-            let (lx, ly, side) = self.light_map.lm_place.get();
-            let v: [f32; 4] = [
-                (lx - ro.x) as f32,
-                (ly - ro.y) as f32,
-                side as f32,
-                if side > 0.0 { 1.0 } else { 0.0 },
-            ];
+            let v = self.light_map_place(ro);
             self.queue
                 .write_buffer(&self.light_map.lm_uniform, 0, bytemuck::cast_slice(&v));
         }
