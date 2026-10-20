@@ -1349,7 +1349,7 @@ mod tests {
             });
             let view = tex.create_view(&Default::default());
             let shared: Shared = Default::default();
-            let mut overlay = Overlay::new(shared.clone(), format);
+            let mut overlay = Overlay::new(shared.clone(), format, None);
             {
                 let mut s = shared.lock().unwrap();
                 s.page = Some(page.clone());
