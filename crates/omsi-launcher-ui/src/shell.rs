@@ -171,12 +171,14 @@ pub fn heading_beside(
         Weight::Medium,
         MUTED,
     );
+    // (translated once, cut at the weight it is drawn in, drawn as it is)
+    let title = omsi_ui::tr(title);
     let title = if title_w.is_finite() {
-        kit::fit_text(ui, &omsi_ui::tr(title), 38.0, title_w)
+        kit::fit_text_as_is(ui, &title, 38.0, Weight::Bold, title_w)
     } else {
         title.to_string()
     };
-    ui.text(
+    ui.text_as_is(
         &title,
         Vec2::new(x, top + 80.0),
         38.0,
@@ -185,12 +187,13 @@ pub fn heading_beside(
         Align::Left,
     );
     let px = 16.5 * TEXT_SCALE;
+    let line = omsi_ui::tr(line);
     let line = if w.is_finite() {
-        kit::fit_text(ui, &omsi_ui::tr(line), px, w)
+        kit::fit_text_as_is(ui, &line, px, Weight::Regular, w)
     } else {
         line.to_string()
     };
-    ui.text(
+    ui.text_as_is(
         &line,
         Vec2::new(x, top + 112.0),
         px,
