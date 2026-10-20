@@ -8,6 +8,11 @@
 //! pauses as it did. What is behind a line ("Options...", "Controls...", the lists) is drawn
 //! here too, beside the column: see `new_ui_pages`.
 //!
+//! Every picture has them: on a triple screen they stand on the centre screen (the hook is
+//! called once the three panels are in the window, and draws in that screen's [`Area`]), and
+//! in the headset they are drawn into a texture of the window's size that the menu plane
+//! shows where the HUD's menu was (`NewUi::headset_surface`).
+//!
 //! The overlay runs inside the renderer with no access to the game, so the game hands it the
 //! frame to draw through [`Shared`] before each render.
 
@@ -47,6 +52,97 @@ pub(crate) fn scale_for(w: u32, h: u32) -> f32 {
     (w as f32 / DESIGN.0)
         .min(h as f32 / DESIGN.1)
         .max(MIN_SCALE)
+}
+
+/// Where the new interface is drawn in the window, in pixels: the whole window, or the
+/// centre screen of a triple screen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Area {
+    /// Its top-left corner in the window.
+    pub(crate) origin: Vec2,
+    pub(crate) size: (u32, u32),
+}
+
+impl Area {
+    /// The whole of a window of `size` pixels.
+    pub(crate) fn whole(size: (u32, u32)) -> Area {
+        Area {
+            origin: Vec2::ZERO,
+            size,
+        }
+    }
+
+    /// Window pixels `at` as pixels of the area.
+    pub(crate) fn local(&self, at: Vec2) -> Vec2 {
+        at - self.origin
+    }
+
+    /// The area where it lies inside a picture of `size` pixels; else (another picture) the
+    /// whole of it.
+    fn within(self, size: (u32, u32)) -> Area {
+        let fits = self.size.0 > 0
+            && self.size.1 > 0
+            && self.origin.x >= 0.0
+            && self.origin.y >= 0.0
+            && self.origin.x + self.size.0 as f32 <= size.0 as f32
+            && self.origin.y + self.size.1 as f32 <= size.1 as f32;
+        if fits {
+            self
+        } else {
+            Area::whole(size)
+        }
+    }
+}
+
+/// Where the menus are drawn in a window of `size` pixels: on a triple screen (`triple`, not
+/// in the headset: `vr`) the centre screen, as the renderer lays the panels out
+/// (`omsi_render::panel_width`) - the menus are made for one screen's shape, so they stand
+/// there whether or not the rest of the HUD spans the three; else the whole window (the
+/// headset's menu plane shows the whole window's picture).
+pub(crate) fn menu_area(triple: bool, vr: bool, size: (u32, u32)) -> Area {
+    if triple && !vr && size.0 >= 3 {
+        let w = omsi_render::panel_width(size.0);
+        Area {
+            origin: Vec2::new(w as f32, 0.0),
+            size: (w, size.1),
+        }
+    } else {
+        Area::whole(size)
+    }
+}
+
+/// Move the layers of a frame laid out in `area` (at `scale` pixels per point) to where the
+/// area is in a picture of `target` pixels: a point `p` is drawn at `origin + p * scale`, and
+/// the clips go with it. (A layer maps its viewport onto the whole picture: see `ui.wgsl`.)
+fn place_layers(layers: &mut [omsi_ui::Layer], area: Area, scale: f32, target: (u32, u32)) {
+    if area == Area::whole(target) {
+        return;
+    }
+    let o = area.origin;
+    for l in layers {
+        l.viewport = [
+            -o.x / scale,
+            -o.y / scale,
+            target.0 as f32 / scale,
+            target.1 as f32 / scale,
+        ];
+        l.clip = [
+            l.clip[0] + o.x,
+            l.clip[1] + o.y,
+            l.clip[2] + o.x,
+            l.clip[3] + o.y,
+        ];
+    }
+}
+
+/// Where the headset's menu plane takes its two pictures from, as the HUD's menu had them
+/// (`omsi_render`'s `render_xr_ui`): the first, over the whole window, dims the view; the
+/// second (the new interface's texture) covers the plane, which shows the whole window in
+/// window pixels - so a cursor at a window pixel is on the same pixel of the texture.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn headset_rects(size: (u32, u32)) -> [[f32; 4]; 2] {
+    let all = [0.0, 0.0, size.0 as f32, size.1 as f32];
+    [all, all]
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -317,6 +413,8 @@ pub(crate) struct State {
     loading_gen: u64,
     /// The cursor, in window pixels.
     mouse: Vec2,
+    /// Where in the window the interface is drawn (none: the whole picture).
+    area: Option<Area>,
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -363,7 +461,7 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen) =
+        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen, area) =
             match self.shared.lock() {
                 Ok(mut s) => {
                     let arrived = std::mem::take(&mut s.slides);
@@ -385,6 +483,7 @@ impl Overlay {
                         s.mouse,
                         arrived,
                         s.loading_gen,
+                        s.area,
                     )
                 }
                 Err(_) => return,
@@ -426,12 +525,15 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
+        // (laid out in the area: the centre screen of a triple screen, else the picture)
+        let area = area.map_or(Area::whole((w, h)), |a| a.within((w, h)));
+        let (aw, ah) = area.size;
         let scale = match (menu.as_ref(), page.as_ref()) {
-            (_, Some(p)) => p.scale((w, h)),
-            (Some(m), None) => m.scale((w, h)),
-            (None, None) => scale_for(w, h),
+            (_, Some(p)) => p.scale(area.size),
+            (Some(m), None) => m.scale(area.size),
+            (None, None) => scale_for(aw, ah),
         };
-        let size = Vec2::new(w as f32, h as f32) / scale;
+        let size = Vec2::new(aw as f32, ah as f32) / scale;
         // (the window's click or wheel of this frame, see `NewUi::push_input`)
         match win_input {
             Some(crate::new_ui_add::WinInput::Press) => {
@@ -450,7 +552,7 @@ impl Overlay {
             None => {}
         }
         self.ui.begin(size, scale, dt);
-        self.ui.input.mouse = mouse / scale;
+        self.ui.input.mouse = area.local(mouse) / scale;
         if let Some(l) = loading {
             for d in arrived.into_iter().take(crate::new_ui_loading::MAX_SLIDES) {
                 if self.slide_tex.len() >= crate::new_ui_loading::MAX_SLIDES {
@@ -533,7 +635,8 @@ impl Overlay {
                 }
             }
         }
-        let (layers, verts, ranges) = self.ui.finish();
+        let (mut layers, verts, ranges) = self.ui.finish();
+        place_layers(&mut layers, area, scale, (w, h));
         let draws: Vec<Draw> = ranges
             .iter()
             .enumerate()
@@ -563,6 +666,12 @@ pub(crate) struct NewUi {
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
+    /// The headset's picture of the menu and the page (a render texture of the window's size,
+    /// and its size), and the plate that dims the view behind them.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    headset: Option<(omsi_render::TextureId, u32, u32)>,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    headset_dim: Option<omsi_render::TextureId>,
     /// The Alt bar's other windows.
     pub(crate) tool: crate::new_ui_windows::Tools,
     /// The end-of-trip report, while it is open.
@@ -688,6 +797,7 @@ impl NewUi {
         tool: Option<crate::new_ui_windows::ToolFrame>,
         report: Option<crate::new_ui_report::ReportFrame>,
         mouse: Vec2,
+        area: Option<Area>,
     ) {
         if let Ok(mut s) = self.shared.lock() {
             s.menu = menu;
@@ -697,7 +807,54 @@ impl NewUi {
             s.tool = tool;
             s.report = report;
             s.mouse = mouse;
+            s.area = area;
         }
+    }
+
+    /// The headset's picture of the Esc menu or the page open behind it: the overlay drawn
+    /// into a texture of the window's `size`, laid in `scene`'s overlays after a plate that
+    /// dims the view, for the menu plane (see [`headset_rects`]). The cursor works it as it
+    /// works the window: the menu's and the page's rectangles are the window's. Returns where
+    /// the two are in `scene.overlays`, for the menu plane; none while neither is open.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn headset_surface(
+        &mut self,
+        r: &mut omsi_render::Renderer,
+        scene: &mut omsi_render::Scene,
+        size: (u32, u32),
+    ) -> Option<std::ops::Range<usize>> {
+        let open = self
+            .shared
+            .lock()
+            .is_ok_and(|s| s.menu.is_some() || s.page.is_some());
+        if !open || size.0 == 0 || size.1 == 0 {
+            return None;
+        }
+        if self.headset.is_none_or(|t| (t.1, t.2) != size) {
+            if let Some((t, _, _)) = self.headset.take() {
+                r.free_texture(scene, t);
+                scene.premultiplied.remove(&t);
+            }
+            let t = r.add_render_texture(scene, size.0, size.1);
+            scene.premultiplied.insert(t);
+            self.headset = Some((t, size.0, size.1));
+        }
+        let dim = *self.headset_dim.get_or_insert_with(|| {
+            let black = omsi_texture::Image {
+                width: 1,
+                height: 1,
+                rgba: vec![0, 0, 0, 90],
+                has_alpha: true,
+            };
+            r.add_texture(scene, &black, false)
+        });
+        let (t, w, h) = self.headset?;
+        r.draw_overlay_into(scene, t);
+        let [back, plane] = headset_rects((w, h));
+        let at = scene.overlays.len();
+        scene.overlays.push((dim, back));
+        scene.overlays.push((t, plane));
+        Some(at..at + 2)
     }
 
     /// Whether "Continue" was clicked in the report since the last call.
@@ -762,15 +919,28 @@ impl NewUi {
 
 impl App {
     /// Whether the new Esc menu is the one showing: the game menu is open at its top level (no
-    /// list opened from it), and the picture is the plain window's (the triple screen and the
-    /// headset keep the HUD's menu, their own layouts).
+    /// list opened from it).
     pub(crate) fn new_menu_active(&self) -> bool {
-        crate::new_ui_pages::showing(
-            self.game_menu.is_some(),
-            self.chooser.is_some(),
-            self.list_kind.is_some(),
-            self.vr_active() || self.settings.triple.enabled,
-        ) == crate::new_ui_pages::Showing::Top
+        crate::new_ui_pages::showing(self.game_menu.is_some(), self.chooser.is_some())
+            == crate::new_ui_pages::Showing::Top
+    }
+
+    /// Where the menus are drawn in the window now (see [`menu_area`]); none before the
+    /// window has its surface.
+    pub(crate) fn new_ui_area(&self) -> Option<Area> {
+        let s = self.surface.as_ref()?;
+        Some(menu_area(
+            self.settings.triple.enabled,
+            self.settings.vr_requested(),
+            (s.config.width, s.config.height),
+        ))
+    }
+
+    /// The id of the Esc menu's line under the cursor, where the column is drawn.
+    pub(crate) fn new_menu_hit(&self) -> Option<String> {
+        let area = self.new_ui_area()?;
+        let at = area.local(Vec2::new(self.cursor.0, self.cursor.1));
+        self.new_menu_frame().hit(at, area.size)
     }
 
     /// The menu as it is drawn now.
@@ -818,6 +988,7 @@ impl App {
         } else {
             (alt, self.add_frame(), self.tool_frame())
         };
+        let area = self.new_ui_area();
         self.new_ui.set(
             menu,
             alt,
@@ -825,6 +996,7 @@ impl App {
             tool,
             report,
             Vec2::new(self.cursor.0, self.cursor.1),
+            area,
         );
     }
 
@@ -837,12 +1009,7 @@ impl App {
         // does; the rest of the window is the page's, hit-tested by the HUD's code as before
         // (and an open drop-down closes on a click outside it, the column too)
         if self.new_pages_active() && self.game_menu.is_some() && self.dropdown.is_none() {
-            let Some(s) = self.surface.as_ref() else {
-                return false;
-            };
-            let size = (s.config.width, s.config.height);
-            let at = Vec2::new(self.cursor.0, self.cursor.1);
-            let Some(id) = self.new_menu_frame().hit(at, size) else {
+            let Some(id) = self.new_menu_hit() else {
                 return false;
             };
             if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == id) {
@@ -853,15 +1020,10 @@ impl App {
             }
             return true;
         }
-        if !self.new_menu_active() {
+        if !self.new_menu_active() || self.surface.is_none() {
             return false;
         }
-        let Some(s) = self.surface.as_ref() else {
-            return false;
-        };
-        let size = (s.config.width, s.config.height);
-        let frame = self.new_menu_frame();
-        if let Some(id) = frame.hit(Vec2::new(self.cursor.0, self.cursor.1), size) {
+        if let Some(id) = self.new_menu_hit() {
             if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == id) {
                 self.menu_kbd = false;
                 self.game_menu = Some(k);
@@ -924,6 +1086,121 @@ mod tests {
 
     fn items() -> Vec<(&'static str, &'static str)> {
         crate::input::menus::GAME_MENU.to_vec()
+    }
+
+    #[test]
+    fn on_a_triple_screen_the_menus_stand_on_the_centre_screen() {
+        // three 1920x1080 screens: the centre one
+        let a = menu_area(true, false, (5760, 1080));
+        assert_eq!(a.origin, Vec2::new(1920.0, 0.0));
+        assert_eq!(a.size, (1920, 1080));
+        assert_eq!(a.local(Vec2::new(2000.0, 50.0)), Vec2::new(80.0, 50.0));
+        // a width that does not divide by three: as the renderer lays the panels out
+        let a = menu_area(true, false, (5761, 1080));
+        assert_eq!(a.origin.x, omsi_render::panel_width(5761) as f32);
+        assert_eq!(a.size, (omsi_render::panel_width(5761), 1080));
+        // one screen, and the headset (its menu plane shows the whole window): all of it
+        assert_eq!(
+            menu_area(false, false, (1920, 1080)),
+            Area::whole((1920, 1080))
+        );
+        assert_eq!(
+            menu_area(true, true, (1920, 1080)),
+            Area::whole((1920, 1080))
+        );
+        assert_eq!(
+            menu_area(false, true, (1920, 1080)),
+            Area::whole((1920, 1080))
+        );
+        // drawn into a picture it is not in (a texture of another size): the whole picture
+        let a = menu_area(true, false, (5760, 1080));
+        assert_eq!(a.within((5760, 1080)), a);
+        assert_eq!(a.within((1920, 1080)), Area::whole((1920, 1080)));
+    }
+
+    #[test]
+    fn the_layers_of_the_centre_screen_are_drawn_on_it() {
+        let target = (5760u32, 1080u32);
+        let area = menu_area(true, false, target);
+        let scale = 1.25;
+        let mut layers = vec![omsi_ui::Layer {
+            viewport: [0.0, 0.0, 1920.0 / scale, 1080.0 / scale],
+            ..omsi_ui::Layer::flat([10.0, 20.0, 300.0, 400.0], 0.0, 1.0)
+        }];
+        place_layers(&mut layers, area, scale, target);
+        let l = &layers[0];
+        // the shader's mapping (`ui.wgsl`): a point p lands on the picture's pixel
+        // (p - viewport.xy) / viewport.zw * target
+        let pixel = |p: Vec2| {
+            Vec2::new(
+                (p.x - l.viewport[0]) / l.viewport[2] * target.0 as f32,
+                (p.y - l.viewport[1]) / l.viewport[3] * target.1 as f32,
+            )
+        };
+        for p in [Vec2::ZERO, Vec2::new(100.0, 50.0), Vec2::new(1536.0, 864.0)] {
+            let at = pixel(p);
+            let want = area.origin + p * scale;
+            assert!((at - want).length() < 1e-2, "{p:?}: {at:?} not {want:?}");
+        }
+        assert_eq!(l.clip, [1930.0, 20.0, 2220.0, 400.0]);
+        // the whole picture: left as laid out
+        let mut whole = vec![omsi_ui::Layer {
+            viewport: [0.0, 0.0, 100.0, 100.0],
+            ..omsi_ui::Layer::flat([1.0, 2.0, 3.0, 4.0], 0.0, 1.0)
+        }];
+        place_layers(&mut whole, Area::whole(target), scale, target);
+        assert_eq!(whole[0].viewport, [0.0, 0.0, 100.0, 100.0]);
+        assert_eq!(whole[0].clip, [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn on_a_triple_screen_the_menu_is_clicked_where_the_centre_screen_shows_it() {
+        let f = menu_frame(&items(), None, &|_| false, String::new(), true);
+        let one = (1920u32, 1080u32);
+        let s = f.scale(one);
+        let pts = Vec2::new(one.0 as f32, one.1 as f32) / s;
+        let lines: Vec<_> = f.with_view(
+            |v| pause_menu::rows(v, pts).iter().map(|r| r.rect).collect(),
+            None,
+        );
+        let area = menu_area(true, false, (5760, 1080));
+        let mut found = 0;
+        for r in &lines {
+            let at = Vec2::new(r.x + r.w * 0.5, r.y + r.h * 0.5) * s;
+            let id = f.hit(at, one);
+            found += id.is_some() as usize;
+            // the same line on the centre screen; the left screen has no menu
+            assert_eq!(f.hit(area.local(at + area.origin), area.size), id);
+            assert_eq!(
+                f.hit(area.local(at), area.size),
+                None,
+                "{at:?} on the left screen"
+            );
+        }
+        assert!(found > 3, "{found} lines");
+    }
+
+    #[test]
+    fn the_headset_s_plane_shows_the_window_s_picture_pixel_for_pixel() {
+        let size = (1920u32, 1080u32);
+        let [back, plane] = headset_rects(size);
+        // (the first, over the whole window, is the one the headset draws over its view)
+        assert_eq!(back, [0.0, 0.0, 1920.0, 1080.0]);
+        // the plane maps the window onto the texture: the cursor at a window pixel is on the
+        // same pixel of the texture, where the menu's rectangles put the line under it
+        for at in [
+            Vec2::ZERO,
+            Vec2::new(300.5, 200.25),
+            Vec2::new(1919.0, 1079.0),
+        ] {
+            let u = (at.x - plane[0]) / (plane[2] - plane[0]) * size.0 as f32;
+            let v = (at.y - plane[1]) / (plane[3] - plane[1]) * size.1 as f32;
+            assert_eq!(Vec2::new(u, v), at);
+        }
+        let area = menu_area(false, true, size);
+        let f = menu_frame(&items(), None, &|_| false, String::new(), true);
+        let at = Vec2::new(100.0, 300.0);
+        assert_eq!(f.hit(area.local(at), area.size), f.hit(at, size));
     }
 
     #[test]
@@ -1426,7 +1703,7 @@ mod tests {
             // the page's card is where the HUD is told its rows are: dark, over the world
             // (all but one row: the keyboard's or the mouse's line is lit lighter)
             let mut ui = crate::ui::Ui::new().unwrap();
-            page.write_hits(&mut ui, (w, h));
+            page.write_hits(&mut ui, Area::whole((w, h)));
             let rows: Vec<[u8; 3]> = ui
                 .menu_rects
                 .iter()
@@ -1980,5 +2257,230 @@ mod tests {
             page_frame(&f, Some(&ListKind::PlaceMaker), test_column(true)).unwrap(),
             away,
         );
+    }
+
+    /// The Esc menu and a page on the centre screen of a triple screen (the renderer's own
+    /// three panels, the overlay drawn once they are in the window), and drawn into the
+    /// headset's picture of them (`NewUi::headset_surface`, the texture laid over the window
+    /// here as the menu plane shows it), into PNGs (`DEPOT_PAGES_PNG`: the folder; else they
+    /// are only drawn). Also checks they are where the clicks are taken.
+    #[test]
+    #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+    fn the_menus_draw_on_the_centre_screen_and_into_the_headset_s_picture() {
+        use crate::game_lists::{row, ListKind};
+        use crate::new_ui_pages::{page_frame, test_column, test_frame};
+        use crate::ui::MenuKind;
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let options = omsi_render::RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        };
+        let Ok(mut r) = pollster::block_on(omsi_render::Renderer::new_with(
+            &instance,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            options,
+        )) else {
+            eprintln!("no graphics adapter: skipped");
+            return;
+        };
+        let mut scene = r.new_scene();
+        let camera = omsi_render::Camera {
+            position: glam::DVec3::new(0.0, 0.0, 2.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+            fov_deg: 60.0,
+            near: 0.1,
+            far: 2000.0,
+        };
+        let lighting = omsi_render::Lighting {
+            shadows: false,
+            ..Default::default()
+        };
+        let rig = omsi_render::TripleScreen {
+            enabled: true,
+            ..Default::default()
+        };
+        let out = std::env::var("DEPOT_PAGES_PNG").ok();
+        let save = |name: &str, img: &[u8], (w, h): (u32, u32)| {
+            if let Some(dir) = out.as_ref() {
+                std::fs::create_dir_all(dir).unwrap();
+                let path = format!("{dir}/{name}.png");
+                image::save_buffer(path, img, w, h, image::ExtendedColorType::Rgba8).unwrap();
+            }
+        };
+        // how far two pictures of width `w` are apart between columns x0 and x1
+        let apart = |a: &[u8], b: &[u8], w: u32, x0: u32, x1: u32| -> u64 {
+            let rows = a.len() as u32 / (w * 4);
+            (0..rows)
+                .flat_map(|y| (x0..x1).map(move |x| ((y * w + x) * 4) as usize))
+                .map(|i| {
+                    (0..3)
+                        .map(|c| a[i + c].abs_diff(b[i + c]) as u64)
+                        .sum::<u64>()
+                })
+                .sum()
+        };
+        let away = Vec2::new(-100.0, -100.0);
+        let options_rows: Vec<(String, String)> = [
+            (
+                "Navigator",
+                's',
+                "on",
+                "Enables/Disables the Minimap",
+                "navigator",
+            ),
+            (
+                "Interface size",
+                'v',
+                "100 %",
+                "How large the menus are",
+                "ui_scale",
+            ),
+            (
+                "Language",
+                'o',
+                "English",
+                "The interface's language",
+                "sel language",
+            ),
+            (
+                "Information bar",
+                's',
+                "off",
+                "Time and speed at the top",
+                "info_bar",
+            ),
+        ]
+        .iter()
+        .map(|(l, k, v, d, id)| {
+            let slider = (*k == 'v').then_some(0.4);
+            (id.to_string(), row(l, *k, v, d, slider))
+        })
+        .collect();
+        let items: Vec<(&str, &str)> = options_rows
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_tabs = Some((vec!["General".into(), "Graphics".into()], 0));
+        let page = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
+        let mut ui = NewUi::default();
+        ui.install(&mut r, None);
+
+        // three 1920x1080 screens: the world alone, then the menu, then the page
+        let size = (5760u32, 1080u32);
+        let area = menu_area(true, false, size);
+        let mut shoot = |scene: &mut omsi_render::Scene| {
+            let mut img = Vec::new();
+            for _ in 0..3 {
+                img = r
+                    .render_triple_to_image(scene, size.0, size.1, &camera, &lighting, &rig)
+                    .unwrap();
+            }
+            img
+        };
+        ui.set(None, None, None, None, None, away, Some(area));
+        let world = shoot(&mut scene);
+        ui.set(Some(test_column(true)), None, None, None, None, away, Some(area));
+        let menu = shoot(&mut scene);
+        save("triple-5760x1080-menu", &menu, size);
+        ui.page = Some(page.clone());
+        ui.set(None, None, None, None, None, away, Some(area));
+        let shown = shoot(&mut scene);
+        save("triple-5760x1080-page", &shown, size);
+        ui.page = None;
+        // the end-of-trip report, on the centre screen too
+        let report = crate::new_ui_report::ReportFrame::for_test();
+        ui.set(None, None, None, None, Some(report), away, Some(area));
+        let reported = shoot(&mut scene);
+        save("triple-5760x1080-report", &reported, size);
+        ui.set(None, None, None, None, None, away, Some(area));
+        // on the centre screen only: the side screens are the world's as they were
+        for (name, img) in [("menu", &menu), ("page", &shown), ("report", &reported)] {
+            assert_eq!(
+                apart(img, &world, size.0, 0, 1920),
+                0,
+                "{name}: the left screen"
+            );
+            assert_eq!(
+                apart(img, &world, size.0, 3840, 5760),
+                0,
+                "{name}: the right one"
+            );
+            assert!(
+                apart(img, &world, size.0, 1920, 3840) > 0,
+                "{name}: the centre one"
+            );
+        }
+        // the column at the centre screen's left edge, the page's rows right of it, where
+        // the clicks are taken
+        let s = test_column(true).scale(area.size);
+        let col = (1920.0 + pause_menu::COLUMN_W * s) as u32;
+        assert!(apart(&menu, &world, size.0, 1920, col) > 0);
+        let mut hud = crate::ui::Ui::new().unwrap();
+        page.write_hits(&mut hud, area);
+        for rect in hud.menu_rects.iter().filter(|r| r[0] > 0.0) {
+            assert!(rect[0] >= col as f32 - 1.0 && rect[2] <= 3840.0, "{rect:?}");
+            let (x0, x1) = (rect[0] as u32, rect[2] as u32);
+            assert!(apart(&shown, &world, size.0, x0, x1) > 0, "{rect:?}");
+        }
+
+        // the headset: the menu and the page drawn into a texture of the window's size,
+        // laid over the window behind the dimming plate as the menu plane shows it
+        let size = (1920u32, 1080u32);
+        let area = menu_area(false, true, size);
+        let plain = r
+            .render_to_image(&mut scene, size.0, size.1, &camera, &lighting)
+            .unwrap();
+        let headset = |ui: &mut NewUi,
+                       r: &mut omsi_render::Renderer,
+                       scene: &mut omsi_render::Scene,
+                       menu: Option<MenuFrame>| {
+            let mut range = 0..0;
+            for _ in 0..3 {
+                scene.overlays.truncate(range.start);
+                ui.set(menu.clone(), None, None, None, None, away, Some(area));
+                range = ui
+                    .headset_surface(r, scene, size)
+                    .expect("the headset's picture");
+            }
+            assert_eq!(range.len(), 2);
+            let [back, plane] = headset_rects(size);
+            assert_eq!(scene.overlays[range.start].1, back);
+            assert_eq!(scene.overlays[range.start + 1].1, plane);
+            // (the window itself shows nothing of it: only the texture)
+            let page = ui.page.take();
+            ui.set(None, None, None, None, None, away, Some(area));
+            let img = r
+                .render_to_image(scene, size.0, size.1, &camera, &lighting)
+                .unwrap();
+            ui.page = page;
+            scene.overlays.truncate(range.start);
+            img
+        };
+        let vr_menu = headset(&mut ui, &mut r, &mut scene, Some(test_column(true)));
+        save("headset-1920x1080-menu", &vr_menu, size);
+        ui.page = Some(page.clone());
+        let vr_page = headset(&mut ui, &mut r, &mut scene, None);
+        save("headset-1920x1080-page", &vr_page, size);
+        // nothing open: no picture for the plane
+        ui.page = None;
+        ui.set(None, None, None, None, None, away, Some(area));
+        assert!(ui.headset_surface(&mut r, &mut scene, size).is_none());
+        let s = test_column(true).scale(size);
+        let col = (pause_menu::COLUMN_W * s) as u32;
+        assert!(apart(&vr_menu, &plain, size.0, 0, col) > 0);
+        let mut hud = crate::ui::Ui::new().unwrap();
+        page.write_hits(&mut hud, area);
+        for rect in hud.menu_rects.iter().filter(|r| r[0] > 0.0) {
+            let (x0, x1) = (rect[0] as u32, rect[2] as u32);
+            assert!(apart(&vr_page, &plain, size.0, x0, x1) > 0, "{rect:?}");
+        }
     }
 }

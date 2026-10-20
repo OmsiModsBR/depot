@@ -2,11 +2,12 @@ use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
 use hashbrown::HashMap;
 use omsi_render::{Renderer, Scene};
 use omsi_sim::traffic::Network;
-use omsi_ui::{tr, Color, Draw, Layer, Painter, Rect, Vertex, Weight};
+use omsi_ui::{tr, Atlas, Color, Draw, Fonts, Layer, Painter, Rect, Vertex, Weight};
 use omsi_ui::paint::Align;
+use omsi_ui::theme::{v5, RADIUS};
 use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS};
 use super::{DOT, LINE_TEXT, LinesHit, LinesView, NavFrame, Navigator, PLAYER, ROUTE, words};
-use super::draw::{DRIVEN, STREET, TEXT, TEXT_DIM, arrow, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect, traffic_kind, vehicle_icon};
+use super::draw::{DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM, arrow, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect, traffic_kind, vehicle_icon};
 use super::geometry::{road_colors, road_geometry, simplify};
 use super::lines::{decimal_comma, GROUP_BRT_TAB, GROUP_EXPRESS_TAB, GROUP_FEEDER_TAB, LinesText, line_color, lines_text};
 use super::route::{RouteStyle, build_route, lane_from_right};
@@ -285,7 +286,7 @@ impl Navigator {
         let top = head_h + 12.0 * s;
         let focus = self.city.lines.focus.filter(|&i| i < lines.len());
         let card_h = if focus.is_some() { 178.0 * s } else { 84.0 * s };
-        let ink = Color::rgba(22, 26, 33, 0.95);
+        let ink = v5::PANEL.alpha(0.95);
         let pad = 14.0 * s;
         let mut hits: Vec<(Rect, LinesHit)> = Vec::new();
         let num = |v: f32, dec: usize| {
@@ -299,10 +300,11 @@ impl Navigator {
 
         // --- the data card
         let card = Rect::new(x0, top, pw, card_h);
-        ui.rounded(card, 8.0 * s, ink);
-        ui.text(&mut self.atlas, &self.fonts, lt.line_data, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        ui.rounded(card, 4.0 * s, ink);
+        ui.rounded_border(card, 4.0 * s, 1.0, v5::LINE);
+        ui.text(&mut self.atlas, &self.fonts, lt.line_data, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 20.0 * s), Align::Left, v5::MUTED);
         if focus.is_none() {
-            ui.icon(&mut self.atlas, "touch_app", Vec2::new(x0 + pad + 14.0 * s, top + 54.0 * s), 26.0 * s, Color::hex(0x6f9bd6));
+            ui.icon(&mut self.atlas, "touch_app", Vec2::new(x0 + pad + 14.0 * s, top + 54.0 * s), 26.0 * s, v5::ACCENT);
             for (k, t) in lt.hint.iter().enumerate() {
                 ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(t, 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, pw - 2.0 * pad - 40.0 * s), 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, Vec2::new(x0 + pad + 36.0 * s, top + (50.0 + 18.0 * k as f32) * s), Align::Left, if k == 0 { TEXT } else { TEXT_DIM });
             }
@@ -314,7 +316,7 @@ impl Navigator {
             if sf.times_read(self.date).is_none_or(|t| t.line(&l.number).is_some()) {
                 let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
-                ui.rounded(rr, 4.0 * s, if self.city.lines.sheet { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                chip(ui, rr, 4.0 * s, self.city.lines.sheet);
                 ui.icon(&mut self.atlas, "schedule", Vec2::new(rr.x + 15.0 * s, rr.center().y), 14.0 * s, TEXT);
                 ui.text_in(&mut self.atlas, &self.fonts, lt.timetable, 11.5 * s, Weight::Bold, Rect::new(rr.x + 24.0 * s, rr.y, rr.w - 26.0 * s, rr.h), Align::Center, TEXT);
                 hits.push((rr, LinesHit::Sheet));
@@ -341,14 +343,14 @@ impl Navigator {
             let meta = self.fonts.fit(&meta, 11.0 * s, Weight::Medium, pw - 2.0 * pad - 4.0 * s);
             ui.text(&mut self.atlas, &self.fonts, &meta, 11.0 * s, Weight::Medium, Vec2::new(x0 + pad + 4.0 * s, top + 138.0 * s), Align::Left, TEXT_DIM);
             let n = on_line.get(&i).copied().unwrap_or(0);
-            ui.text(&mut self.atlas, &self.fonts, &format!("{}: {}", tr(lt.vehicles), n), 12.0 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 162.0 * s), Align::Left, if n > 0 { Color::hex(0x7bd88f) } else { TEXT_DIM });
+            ui.text(&mut self.atlas, &self.fonts, &format!("{}: {}", tr(lt.vehicles), n), 12.0 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 162.0 * s), Align::Left, if n > 0 { v5::OK } else { TEXT_DIM });
             if l.routes.len() > 1 {
                 let mut tx = x0 + pw - pad;
                 for k in (0..l.routes.len()).rev() {
                     let label = format!("{} {}", tr(lt.route), k + 1);
                     let tw = self.fonts.width(&label, 11.5 * s, Weight::Bold) + 16.0 * s;
                     let rr = Rect::new(tx - tw, top + 148.0 * s, tw, 22.0 * s);
-                    ui.rounded(rr, 4.0 * s, if k == ri { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                    chip(ui, rr, 4.0 * s, k == ri);
                     ui.text_in(&mut self.atlas, &self.fonts, &label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
                     hits.push((rr, LinesHit::RoutePick(k)));
                     tx -= tw + 6.0 * s;
@@ -360,7 +362,8 @@ impl Navigator {
         let ly = top + card_h + 10.0 * s;
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
-        ui.rounded(list_panel, 8.0 * s, ink);
+        ui.rounded(list_panel, 4.0 * s, ink);
+        ui.rounded_border(list_panel, 4.0 * s, 1.0, v5::LINE);
         if let Some(i) = focus.filter(|_| self.city.lines.sheet) {
             // the timetable is read only now that it is asked for
             let Some(timetable) = sf.times(&self.chrono, self.date) else {
@@ -381,7 +384,7 @@ impl Navigator {
             return;
             }
         }
-        ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        ui.text(&mut self.atlas, &self.fonts, lt.map_lines, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad, ly + 20.0 * s), Align::Left, v5::MUTED);
         let dated: Vec<usize> = (0..lines.len()).filter(|&i| sf.line_on(i, self.date)).collect();
         let mut present = [false; 4];
         for &i in &dated {
@@ -396,7 +399,7 @@ impl Navigator {
         let label = if all_on { lt.tick_none } else { lt.tick_all };
         let bw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 20.0 * s;
         let br = Rect::new(x0 + pw - pad - bw, ly + 6.0 * s, bw, 22.0 * s);
-        ui.rounded(br, 4.0 * s, if all_on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+        chip(ui, br, 4.0 * s, all_on);
         ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, br, Align::Center, TEXT);
         hits.push((br, LinesHit::All));
         let mut ty = ly + 30.0 * s;
@@ -407,7 +410,7 @@ impl Navigator {
                 let label = lt.modals[k as usize];
                 let tw = self.fonts.width(label, 12.0 * s, Weight::Bold) + 20.0 * s;
                 let rr = Rect::new(tx, ty, tw, 24.0 * s);
-                ui.rounded(rr, 4.0 * s, if self.city.lines.modal == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                chip(ui, rr, 4.0 * s, self.city.lines.modal == k);
                 ui.text_in(&mut self.atlas, &self.fonts, label, 12.0 * s, Weight::Bold, rr, Align::Center, TEXT);
                 hits.push((rr, LinesHit::Modal(k)));
                 tx += tw + 6.0 * s;
@@ -420,7 +423,7 @@ impl Navigator {
             for (k, label) in [(0u8, lt.all), (GROUP_BRT_TAB, lt.brt), (GROUP_EXPRESS_TAB, lt.express), (GROUP_FEEDER_TAB, lt.feeders)] {
                 let tw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 16.0 * s;
                 let rr = Rect::new(tx, ty, tw, 22.0 * s);
-                ui.rounded(rr, 4.0 * s, if self.city.lines.filter == k { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) });
+                chip(ui, rr, 4.0 * s, self.city.lines.filter == k);
                 ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Bold, rr, Align::Center, TEXT);
                 hits.push((rr, LinesHit::Filter(k)));
                 tx += tw + 6.0 * s;
@@ -507,14 +510,13 @@ impl Navigator {
         use crate::line_times::clock;
         let sheet = timetable.line(&sf.lines()[i].number).expect("the caller checked");
         let (x0, y0, pw, pad) = (area.x, area.y, area.w, 14.0 * s);
-        let tab = |on: bool| if on { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(40, 46, 56, 1.0) };
         let (day, dir) = (self.sheet_day(), self.sheet_dir(sheet, i, sf));
         let deps = sheet.departures(dir, day);
         let pick = self.city.lines.dep.and_then(|k| deps.iter().copied().find(|d| d.is(&k)));
-        ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", tr(lt.timetable), tr(lt.towards)).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, Color::hex(0x6f9bd6));
+        ui.text(&mut self.atlas, &self.fonts, &format!("{}  ·  {}", tr(lt.timetable), tr(lt.towards)).to_uppercase(), 11.5 * s, Weight::Bold, Vec2::new(x0 + pad, y0 + 20.0 * s), Align::Left, v5::MUTED);
         if pick.is_some() {
             let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
-            ui.rounded(rr, 4.0 * s, tab(false));
+            chip(ui, rr, 4.0 * s, false);
             ui.icon(&mut self.atlas, "arrow_back", rr.center(), 16.0 * s, TEXT);
             hits.push((rr, LinesHit::Back));
         }
@@ -526,7 +528,7 @@ impl Navigator {
         for (label, d) in lt.days.iter().zip([0usize, 5, 6]) {
             let cw = self.fonts.width(label, 13.0 * s, Weight::Bold) + 20.0 * s;
             let rr = Rect::new(cx, y0 + 60.0 * s, cw, 26.0 * s);
-            ui.rounded(rr, 4.0 * s, tab(d == day));
+            chip(ui, rr, 4.0 * s, d == day);
             ui.text_in(&mut self.atlas, &self.fonts, label, 13.0 * s, Weight::Bold, rr, Align::Center, TEXT);
             hits.push((rr, LinesHit::Day(d)));
             cx += cw + 6.0 * s;
@@ -586,7 +588,7 @@ impl Navigator {
                 }
                 for (k, d) in v.iter().enumerate() {
                     let rr = Rect::new(x0 + pad + 42.0 * s + k as f32 * 43.0 * s, ry + 3.0 * s, 39.0 * s, row_h - 6.0 * s);
-                    ui.rounded(rr, 4.0 * s, tab(Some(d.t as u32) == next));
+                    chip(ui, rr, 4.0 * s, Some(d.t as u32) == next);
                     ui.text_in(&mut self.atlas, &self.fonts, &format!("{:02}", (d.t / 60.0).round() as i64 % 60), 14.5 * s, Weight::Bold, rr, Align::Center, TEXT);
                     hits.push((rr, LinesHit::Dep(d.key())));
                 }
@@ -824,7 +826,7 @@ impl Navigator {
                         hi = hi.max(q);
                     }
                     if lo.x <= hi.x {
-                        let (free_w, free_h) = (((w - 332.0 * s) - 60.0 * s).max(300.0) as f64, (h - 44.0 * s - 60.0 * s).max(200.0) as f64);
+                        let (free_w, free_h) = (((w - 332.0 * s) - 60.0 * s).max(300.0) as f64, (h - HEAD_H * s - 60.0 * s).max(200.0) as f64);
                         let mpp = (((hi.x - lo.x) / free_w).max((hi.y - lo.y) / free_h) * 1.12).clamp(0.25, self.max_mpp());
                         self.city.mpp = mpp;
                         // (the panel takes the right side: the way is centred in what is left)
@@ -891,7 +893,7 @@ impl Navigator {
         self.city.phi = phi;
         let proj = Mat4::orthographic_rh(-hw as f32, hw as f32, -hh as f32, hh as f32, -1000.0, 1000.0) * Mat4::from_rotation_z(phi as f32) * Mat4::from_translation(Vec3::new(-c.x as f32, -c.y as f32, 0.0));
         let vp = [0.0, 0.0, w, h];
-        let world = Layer { view_proj: proj, viewport: vp, clip: [0.0, 0.0, w, h], radius: 10.0 * s, opacity: 1.0, px_scale: self.city.mpp as f32 };
+        let world = Layer { view_proj: proj, viewport: vp, clip: [0.0, 0.0, w, h], radius: RADIUS * s, opacity: 1.0, px_scale: self.city.mpp as f32 };
         let to_screen = |q: DVec3| -> Vec2 {
             let d = rot(q.truncate() - self.city.center, phi);
             Vec2::new((w as f64 * 0.5 + d.x / self.city.mpp) as f32, (h as f64 * 0.5 - d.y / self.city.mpp) as f32)
@@ -901,9 +903,9 @@ impl Navigator {
         // (the opacity setting the map's ground too; the roads, names and header stay solid)
         let ground = match (self.show_surface, self.surface.as_ref()) {
             (true, Some(sf)) => sf.palette(self.light).land.alpha(crate::ui::backdrop(self.opacity).min(1.0)),
-            _ => Color::rgba(15, 15, 15, crate::ui::backdrop(self.opacity).min(1.0)),
+            _ => v5::BAR.alpha(crate::ui::backdrop(self.opacity).min(1.0)),
         };
-        bg.rounded(win, 10.0 * s, ground);
+        bg.rounded(win, RADIUS * s, ground);
         let n_bg = bg.len();
         // traffic: blue dots, the public transport in its colours with its line (as on the
         // small map)
@@ -943,21 +945,39 @@ impl Navigator {
         // stops with their names, the bus, the frame and the header
         let mut ui = Painter::new();
         let n_stops = f.stops.len();
+        let lt = lines_text();
+        let (head_h, pad) = (HEAD_H * s, 16.0 * s);
+        let have_lines = self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty());
+        let lines_open = have_lines && self.city.lines.open;
+        // the cards over the map: where the bus is (top left), the trip (top right, where the
+        // lines panel is not) and what the colours mean (bottom right)
+        let card_w = (260.0 * s).min(w * 0.3);
+        let here = self.here_rows(&lt);
+        let here_card = (!here.is_empty()).then(|| Rect::new(pad, head_h + 12.0 * s, card_w, card_h(here.len(), s)));
+        let trip = if lines_open { Vec::new() } else { self.trip_rows(f, &lt) };
+        let trip_card = (!trip.is_empty()).then(|| Rect::new(w - pad - card_w, head_h + 12.0 * s, card_w, card_h(trip.len(), s)));
+        let you = match self.surface.as_ref().filter(|_| self.show_surface).and_then(|sf| sf.player_style(f.line.as_deref())) {
+            Some((fill, _)) => fill,
+            None => TEXT,
+        };
+        let legend = (!lines_open).then(|| self.legend_layout(&lt, you, w, h, s));
         // street names along their roads, where there is room (stops' names go first)
         let markers = spaced_markers(f.stops.iter().enumerate().map(|(k, st)| (k, to_screen(st.position))).filter(|(_, p)| win.contains(*p) && p.y > 50.0 * s), 20.0 * s);
         let mut taken: Vec<Rect> = markers.iter().map(|(_, p)| Rect::new(p.x - 9.0 * s, p.y - 9.0 * s, 18.0 * s, 18.0 * s)).collect();
-        taken.push(Rect::new(0.0, 0.0, w, 50.0 * s));
+        taken.push(Rect::new(0.0, 0.0, w, head_h + 6.0 * s));
+        taken.extend(here_card.iter().chain(&trip_card).chain(legend.iter().map(|l| &l.0)).map(|r| r.pad(-6.0 * s, -6.0 * s)));
         let mut stop_labels = Vec::new();
         for &(k, p) in &markers {
             if self.city.mpp >= 4.0 && k != 0 && k + 1 != n_stops { continue; }
             let st = &f.stops[k];
             let weight = if k == 0 { Weight::Bold } else { Weight::Medium };
-            let name = format!("{}  {:02}:{:02}", st.name.trim(), (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32);
-            let name = self.fonts.fit(&name, 12.5 * s, weight, (300.0 * s).min(w * 0.3));
-            let lw = self.fonts.width(&name, 12.5 * s, weight) + 14.0 * s;
+            let time = clock_of(st.arrival);
+            let tw = self.fonts.width(&time, 11.5 * s, Weight::Medium);
+            let name = self.fonts.fit(st.name.trim(), 12.5 * s, weight, (300.0 * s).min(w * 0.3) - tw);
+            let lw = self.fonts.width(&name, 12.5 * s, weight) + tw + 26.0 * s;
             if let Some(r) = stop_label_rect(p, lw, s, win, &taken) {
                 taken.push(r);
-                stop_labels.push((k, name, r));
+                stop_labels.push((k, name, time, r));
             }
         }
         // the public transport's line tags, above their dots, where there is room
@@ -1044,24 +1064,27 @@ impl Navigator {
             }
             // the data's attribution (the map's licence asks for it)
             if let Some(sf) = self.surface.as_ref().filter(|s| !s.credit.is_empty()) {
-                ui.text(&mut self.atlas, &self.fonts, &sf.credit, 10.5 * s, Weight::Medium, Vec2::new(w - 12.0 * s, h - 8.0 * s), Align::Right, if self.light { Color::hex(0x5b564c).alpha(0.8) } else { TEXT_DIM.alpha(0.7) });
+                ui.text(&mut self.atlas, &self.fonts, &sf.credit, 10.5 * s, Weight::Medium, Vec2::new(16.0 * s, h - 38.0 * s), Align::Left, if self.light { Color::hex(0x5b564c).alpha(0.8) } else { TEXT_DIM.alpha(0.7) });
             }
         }
         // the compass: where real north lies on the screen; a click changes how the map is turned
         {
             let r = 24.0 * s;
-            let c = Vec2::new(w - 36.0 * s - r, h - 62.0 * s - r);
-            let red = Color::rgba(226, 70, 62, 1.0);
+            let c = match legend.as_ref() {
+                Some((l, _)) => Vec2::new(l.right() - 12.0 * s - r, l.y - 30.0 * s - r),
+                None => Vec2::new(w - 36.0 * s - r, h - 62.0 * s - r),
+            };
+            let red = v5::DANGER;
             let grey = Color::rgba(190, 196, 204, 1.0);
-            ui.rounded(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, Color::rgba(10, 12, 16, 0.78));
-            ui.rounded_border(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, 1.0, Color::WHITE.alpha(0.25));
+            ui.rounded(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, v5::CARD.alpha(0.94));
+            ui.rounded_border(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, 1.0, v5::LINE);
             let ang = (north.to_radians() - phi) as f32; // clockwise from the screen's up
             let dir = Vec2::new(ang.sin(), -ang.cos());
             let side = Vec2::new(-dir.y, dir.x);
             ui.tri(c + dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), red, red, red);
             ui.tri(c - dir * (0.78 * r), c + side * (0.26 * r), c - side * (0.26 * r), grey, grey, grey);
             ui.text(&mut self.atlas, &self.fonts, "N", 10.5 * s, Weight::Bold, c + dir * (1.18 * r) + Vec2::new(0.0, 4.0 * s), Align::Center, TEXT);
-            ui.text(&mut self.atlas, &self.fonts, lines_text().orient[self.orient.min(2) as usize], 10.5 * s, Weight::Medium, Vec2::new(c.x, c.y + r + 13.0 * s), Align::Center, TEXT_DIM);
+            ui.text(&mut self.atlas, &self.fonts, lines_text().orient[self.orient.min(2) as usize], 10.5 * s, Weight::Medium, Vec2::new(c.x, c.y + r + 13.0 * s), Align::Center, v5::MUTED);
             // (listed with the buttons on the next frame, after they are cleared)
             self.city.compass = Some(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r + 16.0 * s));
         }
@@ -1092,7 +1115,7 @@ impl Navigator {
                     continue;
                 }
                 taken.push(bb);
-                let (halo, ink) = if self.light { (Color::hex(0xf4f1ea).alpha(0.9), Color::hex(0x4a463f)) } else { (Color::rgba(15, 15, 15, 0.9), STREET) };
+                let (halo, ink) = if self.light { (Color::hex(0xf4f1ea).alpha(0.9), Color::hex(0x4a463f)) } else { (v5::BAR.alpha(0.9), STREET) };
                 for o in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
                     ui.text_rotated(&mut self.atlas, &self.fonts, name, px, Weight::Medium, c + o * s, ang, halo);
                 }
@@ -1104,22 +1127,26 @@ impl Navigator {
             if self.city.mpp < 4.0 || next || k + 1 == n_stops {
                 let badge = if next { 7.0 } else { 5.5 } * s;
                 ui.circle(p, badge + 1.5 * s, Color::rgba(8, 8, 8, 0.95));
-                let fill = if next { Color::rgba(45, 116, 205, 1.0) } else if k + 1 == n_stops { ROUTE } else { Color::rgba(76, 91, 112, 0.98) };
+                let (fill, ink) = if next { (v5::ACCENT, v5::ON_ACCENT) } else if k + 1 == n_stops { (ROUTE, TEXT) } else { (v5::LINE, v5::FG) };
                 ui.circle(p, badge, fill);
-                ui.icon(&mut self.atlas, "directions_bus", p, if next { 11.5 } else { 9.5 } * s, TEXT);
+                ui.icon(&mut self.atlas, "directions_bus", p, if next { 11.5 } else { 9.5 } * s, ink);
             } else {
                 ui.circle(p, 5.0 * s, Color::rgba(12, 12, 12, 0.95));
                 ui.circle(p, 3.2 * s, TEXT_DIM);
             }
         }
-        for (k, name, r) in stop_labels {
-            ui.rounded(r, 4.0 * s, Color::rgba(12, 12, 12, 0.85));
-            ui.text_in(&mut self.atlas, &self.fonts, &name, 12.5 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, r.pad(6.0 * s, 0.0), Align::Left, if k == 0 { TEXT } else { TEXT_DIM });
+        // (pills: the name, and the time in a quieter ink)
+        for (k, name, time, r) in stop_labels {
+            ui.rounded(r, r.h * 0.5, v5::CARD.alpha(0.94));
+            ui.rounded_border(r, r.h * 0.5, 1.0, if k == 0 { v5::ACCENT } else { v5::LINE });
+            let inner = r.pad(10.0 * s, 0.0);
+            ui.text_in(&mut self.atlas, &self.fonts, &name, 12.5 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, inner, Align::Left, v5::FG);
+            ui.text_in(&mut self.atlas, &self.fonts, &time, 11.5 * s, Weight::Medium, inner, Align::Right, v5::MUTED);
         }
         // the other players: an arrow the way they face and their name (as on the small map)
         for pl in &f.players {
             let p = to_screen(pl.position);
-            if !win.contains(p) || p.y < 44.0 * s {
+            if !win.contains(p) || p.y < head_h {
                 continue;
             }
             arrow(&mut ui, p, (pl.heading.to_radians() - phi) as f32, 8.5 * s, 1.3, Color::rgba(10, 10, 10, 0.9), PLAYER);
@@ -1150,95 +1177,92 @@ impl Navigator {
                 }
             }
         }
-        // header: the line and where it goes, the next stop; buttons on the right
+        // header: what this is, the line and where it goes, the next stop; buttons on the right
         // (opaque: the route and the stops showed through behind its text)
-        let head = Rect::new(0.0, 0.0, w, 44.0 * s);
-        ui.rect(head, Color::rgba(18, 18, 18, 0.96));
-        let pad = 16.0 * s;
+        let head = Rect::new(0.0, 0.0, w, head_h);
+        ui.rect(head, v5::BAR);
+        ui.rect(Rect::new(0.0, head.bottom() - 1.0, w, 1.0), v5::LINE);
+        self.city.buttons.clear();
+        if let Some(r) = self.city.compass.take() {
+            self.city.buttons.push((r, 6));
+        }
+        let bs = 32.0 * s;
+        let by = head.y + (head.h - bs) * 0.5;
+        let mut bx = w - pad - bs;
+        for (icon, id) in [("close", 3u8), ("remove", 2), ("add", 1)] {
+            let r = Rect::new(bx, by, bs, bs);
+            let ink = outlined(&mut ui, r, s, false);
+            ui.icon(&mut self.atlas, icon, r.center(), 18.0 * s, ink);
+            self.city.buttons.push((r, id));
+            bx -= bs + 8.0 * s;
+        }
+        // following the bus, the lines (only where the map's package has bus lines) and the
+        // terrain view (only where it carries contour lines): lit in the accent while on
+        let has_contours = self.surface.as_ref().is_some_and(|sf| sf.has_contours());
+        for (id, label, on) in [(0u8, lt.follow, self.city.follow), (4, lt.lines, self.city.lines.open), (5, lt.terrain, self.show_contours)] {
+            if (id == 4 && !have_lines) || (id == 5 && !has_contours) {
+                continue;
+            }
+            let bw = self.fonts.width(label, 13.0 * s, Weight::Bold) + 44.0 * s;
+            let r = Rect::new(bx + bs - bw, by, bw, bs);
+            let ink = outlined(&mut ui, r, s, on);
+            let (cx, cy) = (r.x + 17.0 * s, r.center().y);
+            if id == 5 {
+                // (a mountain pictogram)
+                let cy = cy + 6.0 * s;
+                ui.tri(Vec2::new(cx - 10.0 * s, cy), Vec2::new(cx - 1.0 * s, cy - 12.0 * s), Vec2::new(cx + 6.0 * s, cy), ink, ink, ink);
+                let back = ink.alpha(0.6);
+                ui.tri(Vec2::new(cx - 2.0 * s, cy), Vec2::new(cx + 6.0 * s, cy - 8.0 * s), Vec2::new(cx + 13.0 * s, cy), back, back, back);
+            } else {
+                ui.icon(&mut self.atlas, if id == 0 { "my_location" } else { "route" }, Vec2::new(cx, cy), 16.0 * s, ink);
+            }
+            ui.text_in(&mut self.atlas, &self.fonts, label, 13.0 * s, Weight::Bold, Rect::new(r.x + 30.0 * s, r.y, r.w - 38.0 * s, r.h), Align::Center, ink);
+            self.city.buttons.push((r, id));
+            bx = r.x - 8.0 * s - bs;
+        }
+        // (the texts keep clear of the buttons)
+        let right = bx + bs - 16.0 * s;
+        let mut tx = pad;
+        tx += spaced(&mut ui, &mut self.atlas, &self.fonts, &tr(lt.city_map).to_uppercase(), 10.5 * s, tx, head.center().y, v5::ACCENT, 1.8 * s) + 22.0 * s;
         let wd = words(f.language);
         let title = match (&f.line, &f.terminus) {
             (Some(l), Some(t)) => format!("{}  ›  {}", l.trim(), t.trim()),
             _ => wd.no_duty.to_string(),
         };
-        let title_w = ui.text_in(&mut self.atlas, &self.fonts, &title, 15.0 * s, Weight::Bold, Rect::new(pad, head.y, w * 0.4, head.h), Align::Left, TEXT);
-        if let Some(st) = f.stops.first() {
-            let d = self.next_dist.map(|d| if d >= 1000.0 { format!("{:.1} km", d / 1000.0) } else { format!("{:.0} m", d) }).unwrap_or_default();
-            let t = format!("{}  ·  {}  ·  {:02}:{:02}", st.name.trim(), d, (st.arrival / 3600.0) as i32 % 24, ((st.arrival % 3600.0) / 60.0) as i32);
-            ui.text_in(&mut self.atlas, &self.fonts, &t, 13.5 * s, Weight::Medium, Rect::new(pad + title_w + 24.0 * s, head.y, w * 0.45, head.h), Align::Left, TEXT_DIM);
-        }
-        self.city.buttons.clear();
-        if let Some(r) = self.city.compass.take() {
-            self.city.buttons.push((r, 6));
-        }
-        let bs = 30.0 * s;
-        let mut bx = w - pad - bs;
-        for (icon, id) in [("close", 3u8), ("zoom_out", 2), ("zoom_in", 1), ("my_location", 0)] {
-            let r = Rect::new(bx, head.y + (head.h - bs) * 0.5, bs, bs);
-            ui.rounded(r, 5.0 * s, if id == 0 && self.city.follow { Color::rgba(60, 60, 60, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
-            ui.icon(&mut self.atlas, icon, r.center(), 18.0 * s, TEXT);
-            self.city.buttons.push((r, id));
-            bx -= bs + 8.0 * s;
-        }
-        // the lines button (only where the map's package has bus lines) and the lines panel
-        let have_lines = self.surface.as_ref().is_some_and(|sf| !sf.lines().is_empty());
-        let lt = lines_text();
-        if have_lines {
-            let bw = (self.fonts.width(lt.lines, 13.5 * s, Weight::Bold) + 40.0 * s).max(92.0 * s);
-            let r = Rect::new(bx + bs - bw, head.y + (head.h - bs) * 0.5, bw, bs);
-            ui.rounded(r, 5.0 * s, if self.city.lines.open { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
-            ui.icon(&mut self.atlas, "route", Vec2::new(r.x + 17.0 * s, r.center().y), 17.0 * s, TEXT);
-            ui.text_in(&mut self.atlas, &self.fonts, lt.lines, 13.5 * s, Weight::Bold, Rect::new(r.x + 30.0 * s, r.y, r.w - 32.0 * s, r.h), Align::Center, TEXT);
-            self.city.buttons.push((r, 4));
-            bx = r.x - bs - 8.0 * s;
-        }
-        // the terrain view: a toggle (only where the package carries contour lines), a mountain pictogram and a label
-        if self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
-            let bw = (self.fonts.width(lt.terrain, 13.5 * s, Weight::Bold) + 44.0 * s).max(92.0 * s);
-            let r = Rect::new(bx + bs - bw, head.y + (head.h - bs) * 0.5, bw, bs);
-            ui.rounded(r, 5.0 * s, if self.show_contours { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
-            let (cx, cy) = (r.x + 18.0 * s, r.center().y + 6.0 * s);
-            ui.tri(Vec2::new(cx - 12.0 * s, cy), Vec2::new(cx - 2.0 * s, cy - 13.0 * s), Vec2::new(cx + 6.0 * s, cy), TEXT, TEXT, TEXT);
-            ui.tri(Vec2::new(cx - 3.0 * s, cy), Vec2::new(cx + 6.0 * s, cy - 9.0 * s), Vec2::new(cx + 14.0 * s, cy), TEXT_DIM, TEXT_DIM, TEXT_DIM);
-            ui.text_in(&mut self.atlas, &self.fonts, lt.terrain, 13.5 * s, Weight::Bold, Rect::new(r.x + 32.0 * s, r.y, r.w - 34.0 * s, r.h), Align::Center, TEXT);
-            self.city.buttons.push((r, 5));
+        tx += ui.text_in(&mut self.atlas, &self.fonts, &title, 17.0 * s, Weight::Bold, Rect::new(tx, head.y, (right - tx).max(0.0), head.h), Align::Left, v5::FG) + 22.0 * s;
+        if let (Some(st), true) = (f.stops.first(), right - tx > 80.0 * s) {
+            let parts = [format!("{}: {}", tr(lt.next_stop), st.name.trim()), self.next_dist.map(distance_text).unwrap_or_default(), clock_of(st.arrival)];
+            let t = parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" · ");
+            ui.text_in(&mut self.atlas, &self.fonts, &t, 13.5 * s, Weight::Medium, Rect::new(tx, head.y, right - tx, head.h), Align::Left, v5::MUTED);
         }
         // where the bus is: the municipality and the street, from the package
-        if self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location()) {
-            let mut y = head.bottom() + 10.0 * s;
-            if let Some(c) = self.loc_city.clone() {
-                let c = c.to_uppercase();
-                let tw = self.fonts.width(&c, 12.5 * s, Weight::Bold) + 20.0 * s;
-                let r = Rect::new(pad, y, tw, 24.0 * s);
-                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.88));
-                ui.text_in(&mut self.atlas, &self.fonts, &c, 12.5 * s, Weight::Bold, r, Align::Center, TEXT);
-                y += 28.0 * s;
-            }
-            if let Some(st) = self.loc_street.clone() {
-                let alt = self.loc_alt.map_or(String::new(), |a| format!("  ·  {} {:.0} m", tr(lt.elev), a));
-                let t = self.fonts.fit(&format!("{}: {}{}", tr(lt.you_are_on), st, alt), 12.0 * s, Weight::Medium, w * 0.45);
-                let tw = self.fonts.width(&t, 12.0 * s, Weight::Medium) + 20.0 * s;
-                let r = Rect::new(pad, y, tw, 22.0 * s);
-                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
-                ui.text_in(&mut self.atlas, &self.fonts, &t, 12.0 * s, Weight::Medium, r, Align::Center, TEXT);
-                // its limit as a road sign (and the heavy vehicles', smaller, when it is another)
-                let (limit, heavy) = self.loc_limit;
-                let mut sx = pad + tw + 8.0 * s;
+        if let Some(card) = here_card {
+            self.map_card(&mut ui, card, s, lt.you_are_here, &here);
+            // the street's limit as a road sign (and the heavy vehicles', smaller, when it is
+            // another), beside its row
+            let (limit, heavy) = self.loc_limit;
+            let row = here.iter().position(|r| r.0 == lt.street).filter(|_| self.loc_street.is_some());
+            if let Some(k) = row {
+                let cy = card.y + (CARD_HEAD + CARD_ROW * (k as f32 + 0.5)) * s;
+                let mut sx = card.right() + 8.0 * s;
                 for (v, rad) in [(limit, 17.0 * s), (heavy, 12.5 * s)] {
                     if v == 0 {
                         continue;
                     }
-                    let c = Vec2::new(sx + rad, r.center().y);
+                    let c = Vec2::new(sx + rad, cy);
                     ui.rounded(Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), rad, Color::rgba(205, 30, 36, 1.0));
                     ui.rounded(Rect::new(c.x - rad * 0.74, c.y - rad * 0.74, 1.48 * rad, 1.48 * rad), rad * 0.74, Color::WHITE);
                     ui.text_in(&mut self.atlas, &self.fonts, &v.to_string(), rad * 0.95, Weight::Bold, Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), Align::Center, Color::rgba(15, 15, 15, 1.0));
                     sx += 2.0 * rad + 6.0 * s;
                     if rad < 14.0 * s {
-                        ui.text(&mut self.atlas, &self.fonts, lt.heavy, 10.5 * s, Weight::Medium, Vec2::new(sx, c.y + 4.0 * s), Align::Left, TEXT_DIM);
+                        ui.text(&mut self.atlas, &self.fonts, lt.heavy, 10.5 * s, Weight::Medium, Vec2::new(sx, c.y + 4.0 * s), Align::Left, v5::MUTED);
                     }
                 }
-                y += if limit > 0 { 38.0 * s } else { 26.0 * s };
             }
-            // the street under the pointer, with its limits (smaller)
+        }
+        // the street under the pointer, with its limits (smaller), under the card
+        if self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_location()) {
+            let y = here_card.map_or(head.bottom() + 12.0 * s, |c| c.bottom() + 8.0 * s);
             if let Some((st, alt)) = self.hover_street() {
                 let mut parts: Vec<String> = Vec::new();
                 if let Some(st) = &st {
@@ -1256,13 +1280,39 @@ impl Navigator {
                 let text = parts.join("  ·  ");
                 let t = self.fonts.fit(&text, 11.5 * s, Weight::Bold, w * 0.42);
                 let tw = self.fonts.width(&t, 11.5 * s, Weight::Bold) + 20.0 * s;
-                let r = Rect::new(pad, y, tw, 21.0 * s);
-                ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
-                ui.rounded_border(r, 3.0 * s, 1.0, Color::hex(0x6f9bd6).alpha(0.7));
-                ui.text_in(&mut self.atlas, &self.fonts, &t, 11.5 * s, Weight::Bold, r, Align::Center, TEXT);
+                let r = Rect::new(pad, y, tw, 24.0 * s);
+                ui.rounded(r, 4.0 * s, v5::CARD.alpha(0.94));
+                ui.rounded_border(r, 4.0 * s, 1.0, v5::ACCENT.alpha(0.8));
+                ui.text_in(&mut self.atlas, &self.fonts, &t, 11.5 * s, Weight::Bold, r, Align::Center, v5::FG);
             }
         }
-        if have_lines && self.city.lines.open {
+        // the trip: the next stop, how far and when, the stops still to come
+        if let Some(card) = trip_card {
+            self.map_card(&mut ui, card, s, lt.trip_card, &trip);
+        }
+        // what the colours mean, and how the map is moved
+        if let Some((r, items)) = &legend {
+            ui.rounded(*r, 4.0 * s, v5::CARD.alpha(0.94));
+            ui.rounded_border(*r, 4.0 * s, 1.0, v5::LINE);
+            let row = Rect::new(r.x + 12.0 * s, r.y + 6.0 * s, r.w - 24.0 * s, 20.0 * s);
+            let mut x = row.x;
+            for (label, c, bar) in items {
+                let cy = row.center().y;
+                if *bar {
+                    ui.rounded(Rect::new(x, cy - 1.5 * s, 10.0 * s, 3.0 * s), 1.5 * s, *c);
+                    x += 15.0 * s;
+                } else {
+                    ui.circle(Vec2::new(x + 3.0 * s, cy), 3.0 * s, *c);
+                    x += 10.0 * s;
+                }
+                // (the driven part's grey is too dark to read: its name is muted)
+                let ink = if *c == DRIVEN { v5::MUTED } else { *c };
+                x += ui.text_in(&mut self.atlas, &self.fonts, label, 11.5 * s, Weight::Medium, Rect::new(x, row.y, row.right() - x, row.h), Align::Left, ink) + 12.0 * s;
+            }
+            let hint = Rect::new(row.x, row.bottom() + 2.0 * s, row.w, 20.0 * s);
+            ui.text_in(&mut self.atlas, &self.fonts, lt.keys, 11.5 * s, Weight::Medium, hint, Align::Left, v5::MUTED);
+        }
+        if lines_open {
             if let (true, Some(sf), Some(i)) = (self.city.lines.sheet, self.surface.clone(), self.city.lines.focus) {
                 let (cc, cm) = (self.city.center, self.city.mpp);
                 let at = move |q: DVec3| {
@@ -1278,9 +1328,9 @@ impl Navigator {
         let metres = nice.iter().copied().find(|m| m / self.city.mpp > 70.0 * s as f64).unwrap_or(5000.0);
         let len = (metres / self.city.mpp) as f32;
         let by = h - 22.0 * s;
-        ui.rect(Rect::new(pad, by, len, 2.0 * s), TEXT_DIM);
-        ui.text(&mut self.atlas, &self.fonts, &if metres >= 1000.0 { format!("{:.0} km", metres / 1000.0) } else { format!("{metres:.0} m") }, 12.0 * s, Weight::Medium, Vec2::new(pad + len + 8.0 * s, by + 4.0 * s), Align::Left, TEXT_DIM);
-        ui.rounded_border(win, 10.0 * s, 1.0, Color::WHITE.alpha(0.08));
+        ui.rect(Rect::new(pad, by, len, 2.0 * s), v5::MUTED);
+        ui.text(&mut self.atlas, &self.fonts, &if metres >= 1000.0 { format!("{:.0} km", metres / 1000.0) } else { format!("{metres:.0} m") }, 12.0 * s, Weight::Medium, Vec2::new(pad + len + 8.0 * s, by + 4.0 * s), Align::Left, v5::MUTED);
+        ui.rounded_border(win, RADIUS * s, 1.0, v5::LINE);
 
         // --- to the GPU
         let (tex, _, _) = self.city.target.unwrap();
@@ -1311,7 +1361,7 @@ impl Navigator {
         gpu.upload(device, queue, 9, &icon_verts);
         let (icon_n, icon_tex) = (icon_verts.len() as u32, self.icon_tex.unwrap_or(0));
         gpu.upload_atlas(queue, &mut self.atlas);
-        let flat = Layer::flat([0.0, 0.0, w, h], 10.0 * s, 1.0);
+        let flat = Layer::flat([0.0, 0.0, w, h], RADIUS * s, 1.0);
         let layers = [flat, world];
         let roads_n = self.city.roads.map(|r| r.1).unwrap_or(0);
         let draws = [
@@ -1330,5 +1380,137 @@ impl Navigator {
         queue.submit([enc.finish()]);
         let _ = n_dots;
         scene.overlays.push((tex, [x0, y0, x0 + w, y0 + h]));
+    }
+}
+
+/// The city map's header, in points.
+const HEAD_H: f32 = 52.0;
+/// A card's eyebrow and each of its rows, in points.
+const CARD_HEAD: f32 = 30.0;
+const CARD_ROW: f32 = 32.0;
+
+/// The height of a card of `rows` rows.
+fn card_h(rows: usize, s: f32) -> f32 {
+    (CARD_HEAD + CARD_ROW * rows as f32) * s
+}
+
+/// A time of day (seconds) as the map writes it.
+fn clock_of(t: f64) -> String {
+    format!("{:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32)
+}
+
+/// A distance (metres) as the map writes it.
+fn distance_text(d: f64) -> String {
+    if d >= 1000.0 {
+        format!("{:.1} km", d / 1000.0)
+    } else {
+        format!("{:.0} m", d)
+    }
+}
+
+/// A button of the map in the new look: dark and outlined, or (`on`) outlined in the accent
+/// on its faint shade. Returns the ink for what is written on it.
+fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
+    ui.rounded(r, 4.0 * s, if on { v5::SELECTED } else { v5::CARD });
+    ui.rounded_border(r, 4.0 * s, 1.0, if on { v5::ACCENT } else { v5::LINE });
+    if on {
+        v5::ACCENT
+    } else {
+        v5::FG
+    }
+}
+
+/// A tab or a toggle of the lines panel: the field's grey, or (`on`) the accent's shade
+/// outlined in the accent.
+fn chip(ui: &mut Painter, r: Rect, radius: f32, on: bool) {
+    ui.rounded(r, radius, if on { v5::SELECTED } else { v5::FIELD });
+    if on {
+        ui.rounded_border(r, radius, 1.0, v5::ACCENT);
+    }
+}
+
+/// Small letter-spaced capitals (an eyebrow) from `x`, centred on `cy`, written as `text` is
+/// (the caller translates it). Returns their width.
+#[allow(clippy::too_many_arguments)]
+fn spaced(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, text: &str, px: f32, x: f32, cy: f32, c: Color, tracking: f32) -> f32 {
+    let base = cy + fonts.cap_height(px, Weight::Bold) * 0.5;
+    let mut at = x;
+    for (k, ch) in text.chars().enumerate() {
+        if k > 0 {
+            at += tracking;
+        }
+        let one = ch.to_string();
+        if !ch.is_whitespace() {
+            ui.text_as_is(atlas, fonts, &one, px, Weight::Bold, Vec2::new(at, base), Align::Left, c);
+        }
+        at += fonts.width_as_is(&one, px, Weight::Bold);
+    }
+    at - x
+}
+
+impl Navigator {
+    /// The rows of the card that says where the bus is (from the map's package): the
+    /// municipality and the street with its height; none where the package does not say.
+    fn here_rows(&self, lt: &LinesText) -> Vec<(&'static str, String)> {
+        let mut rows = Vec::new();
+        if !self.show_surface || !self.surface.as_ref().is_some_and(|sf| sf.has_location()) {
+            return rows;
+        }
+        if let Some(c) = self.loc_city.clone() {
+            rows.push((lt.city, c));
+        }
+        if let Some(st) = self.loc_street.clone() {
+            let alt = self.loc_alt.map_or(String::new(), |a| format!("  ·  {} {:.0} m", tr(lt.elev), a));
+            rows.push((lt.street, format!("{st}{alt}")));
+        }
+        rows
+    }
+
+    /// The rows of the trip's card: the next stop, how far it is and when the bus is due
+    /// there, and how many stops are still to come; none without a trip.
+    fn trip_rows(&self, f: &NavFrame, lt: &LinesText) -> Vec<(&'static str, String)> {
+        let Some(st) = f.stops.first() else { return Vec::new() };
+        let mut rows = vec![(lt.next_stop, st.name.trim().to_string())];
+        if let Some(d) = self.next_dist {
+            rows.push((lt.distance, distance_text(d)));
+        }
+        rows.push((lt.arrival, clock_of(st.arrival)));
+        rows.push((lt.stops_left, f.stops.len().to_string()));
+        rows
+    }
+
+    /// Where the legend goes (the bottom right of a map of `w` x `h`) and what it lists:
+    /// each colour's name, its colour, and whether it is a band (else a dot). `you` is the
+    /// colour the bus is drawn in.
+    fn legend_layout(&self, lt: &LinesText, you: Color, w: f32, h: f32, s: f32) -> (Rect, Vec<(&'static str, Color, bool)>) {
+        let mut items = vec![(lt.route, LEVEL[0], true), (lt.driven, DRIVEN, true)];
+        if self.show_ai {
+            items.push((lt.traffic, super::DOT, false));
+        }
+        items.push((lt.you, you, false));
+        let px = 11.5 * s;
+        let row: f32 = items.iter().map(|(l, _, bar)| self.fonts.width(l, px, Weight::Medium) + if *bar { 15.0 } else { 10.0 } * s + 12.0 * s).sum::<f32>() - 12.0 * s;
+        let hint = self.fonts.width(lt.keys, px, Weight::Medium);
+        // (and a little room: each name is fitted into what is left of the row)
+        let lw = row.max(hint) + 24.0 * s + 8.0 * s;
+        let lh = 54.0 * s;
+        (Rect::new(w - 16.0 * s - lw, h - 12.0 * s - lh, lw, lh), items)
+    }
+
+    /// A card over the map in the new look: an eyebrow (`title`) over rows of a label (muted,
+    /// on the left) and its value (bold, on the right), parted by faint lines.
+    fn map_card(&mut self, ui: &mut Painter, r: Rect, s: f32, title: &str, rows: &[(&'static str, String)]) {
+        ui.rounded(r, 4.0 * s, v5::CARD.alpha(0.94));
+        ui.rounded_border(r, 4.0 * s, 1.0, v5::LINE);
+        let pad = 14.0 * s;
+        spaced(ui, &mut self.atlas, &self.fonts, &tr(title).to_uppercase(), 10.0 * s, r.x + pad, r.y + CARD_HEAD * s * 0.5 + 1.0 * s, v5::MUTED, 1.6 * s);
+        for (k, (label, value)) in rows.iter().enumerate() {
+            let y = r.y + (CARD_HEAD + CARD_ROW * k as f32) * s;
+            ui.rect(Rect::new(r.x + 1.0, y, r.w - 2.0, 1.0), v5::ROW_LINE);
+            let row = Rect::new(r.x + pad, y, r.w - 2.0 * pad, CARD_ROW * s);
+            let lw = ui.text_in(&mut self.atlas, &self.fonts, label, 12.5 * s, Weight::Medium, row, Align::Left, v5::MUTED);
+            let value = self.fonts.fit(value, 12.5 * s, Weight::Bold, (row.w - lw - 12.0 * s).max(0.0));
+            ui.text_in(&mut self.atlas, &self.fonts, &value, 12.5 * s, Weight::Bold, row, Align::Right, v5::FG);
+        }
     }
 }
