@@ -1003,6 +1003,7 @@ fn mirror_and_plan_describe_what_is_drawn() {
             MirrorEvent::MeshVertices { id, .. } => format!("pose {id}"),
             MirrorEvent::MoveMesh { from, into } => format!("move mesh {from} {into}"),
             MirrorEvent::MoveTexture { from, into } => format!("move texture {from} {into}"),
+            MirrorEvent::LightMapTile { slot, .. } => format!("light map {slot:?}"),
         });
     })));
     let plans: Arc<Mutex<Vec<(FramePlan, usize)>>> = Arc::default();

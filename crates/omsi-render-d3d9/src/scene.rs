@@ -307,6 +307,9 @@ pub struct SceneLamps<'a> {
     /// x, y the grid's south-west corner (render-origin relative), z a cell's side, w the
     /// cells per side.
     pub place: [f32; 4],
+    /// Where the tile light map atlas ([`crate::d3d9::D3d9Device::set_tile_light_map`]) lies:
+    /// x, y its south-west corner (render-origin relative), z its side, w 1 when it is set.
+    pub tile_map: [f32; 4],
 }
 
 impl SceneLamps<'_> {
@@ -586,6 +589,7 @@ mod tests {
             lights: &lights,
             grid: &grid,
             place: [0.0, 0.0, 25.0, 2.0],
+            ..Default::default()
         };
         lamps.validate().unwrap();
         assert_eq!(lamps.count(), 2);

@@ -16,8 +16,10 @@
 // camera, and the vehicles' interior lamps on the meshes they light, read from two float
 // textures (the light list, four texels a light, and the grid's light indices).
 //
-// Not yet here (later phases): shadows and ambient occlusion (taken as 1), the tile light
-// maps (the splines' and the ground's lamps baked into the map), the detail noise, swaying
+// The tile light maps (the lamps baked into the map) light the roads, the plates and the
+// [LightMapMapping] objects at night.
+//
+// Not yet here (later phases): shadows and ambient occlusion (taken as 1), the detail noise, swaying
 // trees, rain and snow (and the wet sheen on a reflecting surface), and the fog's way
 // through the player's vehicle.
 
@@ -151,6 +153,8 @@ sampler2D t_bump : register(s6);
 // the lights, four texels a row, and the grid's light indices (-1 none), point-sampled
 sampler2D t_lights : register(s7);
 sampler2D t_grid : register(s8);
+// the tile light maps of the tiles round the camera, north up
+sampler2D t_lmap : register(s9);
 
 // the material's uniform
 float4 m_color : register(c0);
@@ -184,6 +188,8 @@ float4 light_grid : register(c20);
 float4 lamp_tex : register(c21);
 // x the lights in the light texture
 float4 lamp_count : register(c22);
+// where the tile light maps lie: x, y the south-west corner, z the side, w 1 when set
+float4 lmap : register(c23);
 
 float3 srgb_encode(float3 c) {
     c = saturate(c);
@@ -218,6 +224,18 @@ float4 diffuse_border(float4 tex, float2 uv) {
 // [matl_texadress_mirroronce]: mirrored once about 0
 float2 tex_address(float2 uv) {
     return m_flags.y > 1.5 ? abs(uv) : uv;
+}
+
+// The tile light map's light at a world point (black outside the loaded square), as stored.
+float3 tile_light_at(float3 p) {
+    if (lmap.w < 0.5) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    float2 uv = float2((p.x - lmap.x) / lmap.z, 1.0 - (p.y - lmap.y) / lmap.z);
+    if (any(uv < 0.0) || any(uv > 1.0)) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    return tex2Dlod(t_lmap, float4(uv, 0.0, 0.0)).rgb;
 }
 
 // Vector `k` of light `li`.
@@ -412,6 +430,11 @@ float4 ps_main(VsOut i) : COLOR0 {
         }
         if (terrain_night) {
             v = min(v + nm.rgb * sun_color.w * saturate(i.params2.y), 1.0);
+        }
+        if (m_params.y > 0.3 && m_params.y < 0.45) {
+            // a road, a plate or a [LightMapMapping] object: lit at night by the tile light
+            // map alone, the same way as the ground's night map lights the ground
+            v = min(v + tile_light_at(i.world) * sun_color.w, 1.0);
         }
         encoded = tex.rgb * v;
         float3 spec = i.spec_sun * shadow + i.spec_sky;

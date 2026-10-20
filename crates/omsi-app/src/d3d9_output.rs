@@ -23,8 +23,9 @@ use omsi_render::{
 };
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLamps, SceneLight,
-    SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLamps,
+    SceneLight, SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer,
+    UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -112,6 +113,12 @@ impl Inner {
                 self.device.move_scene_texture(from, into);
                 Ok(())
             }
+            MirrorEvent::LightMapTile { slot, rgba } => self.device.set_tile_light_map(
+                omsi_render::LM_ATLAS_TILES * omsi_render::LM_TILE_PX,
+                omsi_render::LM_TILE_PX,
+                slot,
+                rgba,
+            ),
         };
         if let Err(e) = done {
             self.warn_once("an asset could not be put up", e);
@@ -176,6 +183,7 @@ impl Inner {
                 lights: &lights,
                 grid: scene.frame_light_grid(),
                 place: plan.light_grid,
+                tile_map: plan.light_map,
             },
         };
         let material = |id: usize| {
@@ -197,12 +205,13 @@ impl Inner {
             })
         };
         self.overlays.clear();
-        self.overlays.extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
-            texture,
-            rect,
-            premultiplied: scene.premultiplied.contains(&texture),
-            transposed: scene.transposed.contains(&texture),
-        }));
+        self.overlays
+            .extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
+                texture,
+                rect,
+                premultiplied: scene.premultiplied.contains(&texture),
+                transposed: scene.transposed.contains(&texture),
+            }));
         let device = &mut self.device;
         let drawn = device
             .draw_scene(&frame, material)
