@@ -1418,9 +1418,8 @@ impl Launcher {
         }
     }
 
-    /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
-    /// look has them; returns where the message line can start.
-    /// Whether the OMSI 2 folder chosen has what the game needs (see `root_ok`).
+    /// Whether the OMSI 2 folder chosen has what the game needs, kept per folder and looked at
+    /// again when the window has the focus back (a folder repaired outside the launcher).
     fn root_ok(&mut self) -> bool {
         let root = &self.state.config.root;
         match &self.root_ok {
@@ -1433,6 +1432,8 @@ impl Launcher {
         }
     }
 
+    /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
+    /// look has them; returns where the message line can start.
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
         let games = self.state.instances.len();
         let root_ok = self.root_ok();
@@ -1481,9 +1482,7 @@ impl Launcher {
         self.ui.tooltip(r, &text);
     }
 
-    /// A page's heading in the new look (as Vehicles and Maps draw theirs, see
-    /// `omsi_launcher_ui::shell::page_heading`): its name small and letter-spaced in the accent,
-    /// the title large, and what the page is for under it.
+    /// A page's title and what it is for.
     pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
         self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
         if !sub.is_empty() {
@@ -1576,9 +1575,13 @@ impl MapPicture {
     }
 
     /// The picture decoded within bounds (a map's file is anyone's: no more than 8192 pixels a
-    /// side and 256 MB decoded), then made to fit 1280 x 1280 (the page shows it a few hundred
-    /// points wide; a texture of that size goes on any card).
+    /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
+    /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
+    /// on any card).
     fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+        if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
+            return None;
+        }
         let bytes = omsi_cfg::vfs::read(file).ok()?;
         let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
         let mut limits = image::Limits::default();

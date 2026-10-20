@@ -388,7 +388,13 @@ fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
         return vec![None];
     }
     let all = ["vulkan", "dx12", "gl"];
-    let first = all.iter().copied().find(|b| *b == chosen.trim().to_ascii_lowercase());
+    // (the names the game's own start reads, see `startup::backend_order`)
+    let first = match chosen.trim().to_ascii_lowercase().as_str() {
+        "vulkan" => Some("vulkan"),
+        "dx12" | "directx" | "d3d12" => Some("dx12"),
+        "gl" | "opengl" | "gles" => Some("gl"),
+        _ => None,
+    };
     first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).map(Some).collect()
 }
 
@@ -950,6 +956,8 @@ mod tests {
         assert_eq!(helper_backends("auto"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
         assert_eq!(helper_backends("dx12"), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
         assert_eq!(helper_backends("gl"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
+        assert_eq!(helper_backends(" D3D12 "), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
+        assert_eq!(helper_backends("OpenGL"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
     }
 
     /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
