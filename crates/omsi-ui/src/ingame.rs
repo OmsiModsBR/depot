@@ -350,6 +350,165 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     event
 }
 
+const GOOD: Color = Color::hex(0x4fc27a);
+const BAD: Color = Color::hex(0xe8523f);
+const SOON: Color = Color::hex(0xe0a030);
+
+/// How a stop of the end-of-trip report went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StopState {
+    OnTime,
+    Late,
+    LeftEarly,
+    /// Arrived late and left before its time.
+    LateLeftEarly,
+    /// Passed without being served, with a later stop served.
+    Missed,
+    /// Not reached (the trip ended before it, or it is not known).
+    None,
+}
+
+/// One stop of the end-of-trip report, as the game words it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReportRow {
+    pub stop: String,
+    pub scheduled: String,
+    pub actual: String,
+    pub deviation: String,
+    pub state: StopState,
+}
+
+/// The end-of-trip report: the trip's title, its stops and the totals under them.
+pub struct TripReport<'a> {
+    pub title: &'a str,
+    pub note: &'a str,
+    pub rows: &'a [ReportRow],
+    pub totals: &'a [(&'a str, String)],
+}
+
+/// Where the end-of-trip report is in a picture of `size` points: in the middle.
+pub fn trip_report_rect(size: glam::Vec2) -> Rect {
+    let w = 900.0f32.min(size.x - 32.0);
+    let h = 620.0f32.min(size.y - 32.0);
+    Rect::new(
+        ((size.x - w) * 0.5).floor(),
+        ((size.y - h) * 0.5).floor(),
+        w,
+        h,
+    )
+}
+
+/// The end-of-trip report in a picture of `size` points. True when "Continue" was clicked.
+pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
+    let r = trip_report_rect(size);
+    let body = window(ui, r, "End of trip report", v.note);
+    text(
+        ui,
+        v.title,
+        body.x + 16.0,
+        body.y + 22.0,
+        14.0,
+        Weight::Medium,
+        FG,
+    );
+    let columns = [
+        ("Stop", 16.0),
+        ("Scheduled", 0.44),
+        ("Actual", 0.58),
+        ("Deviation", 0.71),
+        ("Status", 0.84),
+    ];
+    let col_x = |c: f32| if c < 1.0 { (body.w * c).floor() } else { c };
+    let head_y = body.y + 44.0;
+    for (title, c) in columns {
+        text(
+            ui,
+            title,
+            body.x + col_x(c),
+            head_y + 17.0,
+            12.0,
+            Weight::Regular,
+            MUTED,
+        );
+    }
+    let foot = 64.0;
+    let totals_h = v.totals.len() as f32 * ROW_H;
+    let rows_area = Rect::new(
+        body.x + 1.0,
+        head_y + 34.0,
+        body.w - 2.0,
+        (r.bottom() - foot - totals_h - 8.0 - (head_y + 34.0)).max(ROW_H),
+    );
+    // (each trip's report starts at its first stop: the id is the trip's)
+    let scroll = format!("report:rows:{}", v.title);
+    ui.scroll_area(&scroll, rows_area, &mut |ui, view| {
+        for (i, row) in v.rows.iter().enumerate() {
+            let rr = Rect::new(view.x, view.y + i as f32 * ROW_H, view.w - 8.0, ROW_H);
+            if rr.bottom() < rows_area.y || rr.y > rows_area.bottom() {
+                continue;
+            }
+            ui.p().rect(Rect::new(rr.x, rr.y, rr.w, 1.0), ROW_LINE);
+            let (status, color) = match row.state {
+                StopState::OnTime => ("OK", Some(GOOD)),
+                StopState::Late => ("late", Some(BAD)),
+                StopState::LeftEarly => ("left early", Some(SOON)),
+                StopState::LateLeftEarly => ("late, left early", Some(BAD)),
+                StopState::Missed => ("missed", Some(BAD)),
+                StopState::None => ("", None),
+            };
+            let cells = [
+                row.stop.as_str(),
+                row.scheduled.as_str(),
+                row.actual.as_str(),
+                row.deviation.as_str(),
+                status,
+            ];
+            for (c, cell) in cells.iter().enumerate() {
+                let x = col_x(columns[c].1) - 1.0;
+                let end = columns
+                    .get(c + 1)
+                    .map(|n| col_x(n.1) - 1.0)
+                    .unwrap_or(rr.w - 8.0);
+                let fg = if c >= 3 { color.unwrap_or(MUTED) } else { FG };
+                ui.text_in(
+                    cell,
+                    Rect::new(rr.x + x, rr.y, (end - x - 8.0).max(0.0), rr.h),
+                    14.0 * TS,
+                    Weight::Regular,
+                    fg,
+                    Align::Left,
+                );
+            }
+        }
+        v.rows.len() as f32 * ROW_H
+    });
+    let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
+    ui.p()
+        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
+    let rows: Vec<(&str, String, Option<Color>)> = v
+        .totals
+        .iter()
+        .map(|(k, val)| (*k, val.clone(), None))
+        .collect();
+    key_values(ui, totals, &rows);
+    ui.p().rect(
+        Rect::new(r.x + 1.0, r.bottom() - foot, r.w - 2.0, 1.0),
+        LINE,
+    );
+    let at = glam::Vec2::new(r.x + 16.0, r.bottom() - foot + 12.0);
+    let clicked = buttons(ui, "report", at, &["Continue"]).is_some();
+    text_right(
+        ui,
+        "Enter or Esc also continues",
+        r.right() - 16.0,
+        r.bottom() - foot * 0.5,
+        12.0,
+        Weight::Regular,
+        MUTED,
+    );
+    clicked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,5 +605,43 @@ mod tests {
             run(&mut ui, Some(2), Some(red)),
             Some(AddVehicleEvent::Livery(1))
         );
+    }
+
+    #[test]
+    fn the_trip_report_says_when_continue_is_clicked() {
+        let rows: Vec<ReportRow> = (0..30)
+            .map(|i| ReportRow {
+                stop: format!("Stop {i}"),
+                scheduled: "08:00".into(),
+                actual: "08:01".into(),
+                deviation: "+1:00".into(),
+                state: StopState::Late,
+            })
+            .collect();
+        let totals = [("Stops served", "30".to_string())];
+        let size = Vec2::new(1672.0, 941.0);
+        let view = TripReport {
+            title: "Line 1 to Terminus",
+            note: "paused",
+            rows: &rows,
+            totals: &totals,
+        };
+        let mut ui = Ui::new();
+        let frame = |ui: &mut Ui| {
+            ui.begin(size, 1.0, 0.016);
+            let c = trip_report(ui, size, &view);
+            ui.finish();
+            c
+        };
+        assert!(!frame(&mut ui));
+        let b = ui.drawn[&id_of("report:btn:0")].center();
+        assert!(trip_report_rect(size).contains(b));
+        ui.input.mouse = b;
+        ui.input.pressed = true;
+        ui.input.down = true;
+        frame(&mut ui);
+        ui.input.released = true;
+        ui.input.down = false;
+        assert!(frame(&mut ui));
     }
 }
