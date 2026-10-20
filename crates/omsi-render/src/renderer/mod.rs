@@ -8,6 +8,7 @@ mod encode;
 mod frame;
 mod lights;
 mod lists;
+mod mirror;
 mod open;
 mod options;
 mod output;
@@ -19,7 +20,11 @@ mod state;
 mod targets;
 mod upload;
 
+pub use mirror::{
+    AssetMirror, FramePlan, MirrorEvent, MirrorTexture, PlanBatch, PlanKind, PlanSink,
+};
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
 pub use state::{OverlayHook, Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};
 
+pub(crate) use mirror::MirrorSlot;
 pub(crate) use options::scene_scale_for;
