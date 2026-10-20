@@ -184,7 +184,19 @@ pub fn run() -> Result<()> {
     startup::restart_with_allocator_settings();
     #[cfg(windows)]
     startup::attach_parent_console();
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
+    // well: a session's go to its `game.log`, but the launcher's own window has no console on
+    // Windows, and what it said went nowhere.
+    let launcher_process = std::env::args().len() == 1 || std::env::args().any(|a| a == "--launcher");
+    if launcher_process {
+        let file = omsi_launcher_lib::data_dir().join("launcher.log");
+        let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
+        if let Ok(f) = std::fs::File::create(&file) {
+            logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+        }
+    }
+    logger.init();
     // a panic goes into the log (which the launcher keeps per session) with where it
     // happened and a backtrace, not only to a terminal that may not be there
     let default_hook = std::panic::take_hook();

@@ -89,8 +89,23 @@ impl Gfx {
 
 /// The window's surface on the launcher's device.
 pub struct WinSurface {
-    pub surface: wgpu::Surface<'static>,
+    /// (let go of in `drop`, unless the device was lost - see there)
+    pub surface: std::mem::ManuallyDrop<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
+    lost: Arc<Mutex<Option<String>>>,
+}
+
+impl Drop for WinSurface {
+    fn drop(&mut self) {
+        // As the game's own window surface (`omsi_render::SurfaceState`): after a lost device
+        // the frame it was drawing never finishes, and letting the surface go tears the
+        // swapchain down under it (a Vulkan validation panic, and the launcher gone instead of
+        // drawing again on a new device, #274). The window keeps it until the process ends.
+        if !std::thread::panicking() && self.lost.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+            // SAFETY: dropped only here, once
+            unsafe { std::mem::ManuallyDrop::drop(&mut self.surface) };
+        }
+    }
 }
 
 impl WinSurface {
@@ -107,7 +122,7 @@ impl WinSurface {
             view_formats: vec![],
         };
         surface.configure(&gfx.device, &config);
-        Ok(WinSurface { surface, config })
+        Ok(WinSurface { surface: std::mem::ManuallyDrop::new(surface), config, lost: gfx.lost.clone() })
     }
 
     pub fn resize(&mut self, gfx: &Gfx, width: u32, height: u32) {

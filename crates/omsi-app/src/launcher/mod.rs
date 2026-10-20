@@ -643,6 +643,8 @@ impl ApplicationHandler for Launcher {
             self.last = Instant::now();
             self.run_script();
             self.state.update(dt);
+            // (no page shows the preview while the window is hidden: its helper ends)
+            self.preview.update(dt, None);
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.gfx.is_none() && !self.state.in_game() {
@@ -1145,7 +1147,7 @@ impl Launcher {
         self.ui.solid(r);
         self.ui.p().rounded(r, RADIUS, FIELD);
         match (self.preview_tex, self.preview.has_picture()) {
-            (Some(tex), true) => self.ui.image(r, tex, RADIUS),
+            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
             _ => {
                 let t = if self.preview.error.is_some() { "No preview" } else { "Loading…" };
                 self.ui.text_in(t, r, 13.0, Weight::Regular, TEXT_FAINT, Align::Center);
@@ -1215,7 +1217,7 @@ impl Launcher {
         self.preview_rect = Some(r);
         self.preview.focus_x = focus.clamp(0.2, 0.95);
         match (self.preview_tex, self.preview.has_picture()) {
-            (Some(tex), true) => self.ui.image(r, tex, RADIUS),
+            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
             _ => {
                 self.ui.solid(r);
                 self.ui.p().rounded(r, RADIUS, FIELD);

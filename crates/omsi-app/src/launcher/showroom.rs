@@ -93,6 +93,12 @@ fn placing_mark() -> PathBuf {
     omsi_launcher_lib::data_dir().join("showroom-placing.txt")
 }
 
+/// The mark taken away (the helper reading the bus was ended by the launcher, see
+/// `preview::Link`).
+pub fn clear_placing_mark() {
+    let _ = std::fs::remove_file(placing_mark());
+}
+
 fn args_for(look: &Look) -> Args {
     let mut v = vec!["omsi".to_string(), "--root".into(), look.root.to_string_lossy().to_string()];
     if !look.map.is_empty() {
@@ -468,6 +474,11 @@ impl Showroom {
     }
 
     /// A bus is there to show.
+    /// What the picture shows now (the bus a moment ago while the next one is read).
+    pub fn shown_look(&self) -> Option<&Look> {
+        self.shown.as_ref().map(|s| &s.look)
+    }
+
     pub fn has_picture(&self) -> bool {
         self.shown.as_ref().map(|s| s.vehicle.is_some()).unwrap_or(false) && self.target.is_some()
     }

@@ -27,7 +27,22 @@ pub(crate) fn shift_held_now(keys: &hashbrown::HashSet<KeyCode>) -> bool {
     keys.contains(&KeyCode::ShiftLeft) || keys.contains(&KeyCode::ShiftRight)
 }
 
-/// Does this folder look like an OMSI 2 installation?
+/// Log lines to the error output and to a file.
+pub(crate) struct Tee(pub std::fs::File);
+
+impl std::io::Write for Tee {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        self.0.write_all(buf)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _ = std::io::stderr().flush();
+        self.0.flush()
+    }
+}
+
 /// When the program started (set first thing in `run`), for saying how long a window took.
 pub(crate) static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 
@@ -36,6 +51,7 @@ pub(crate) fn since_start_ms() -> f64 {
     PROCESS_START.get().map(|t| t.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
 }
 
+/// Does this folder look like an OMSI 2 installation?
 pub(crate) fn is_omsi_root(p: &Path) -> bool {
     // a complete installation of the original game (openOMSI's own content folder has the
     // same layout, but it is a mod overlay, not the game)
