@@ -170,6 +170,8 @@ impl App {
             return;
         }
         self.new_ui.close_add();
+        // (one of the bar's windows at a time)
+        self.new_ui.close_tool();
         self.new_ui.add = Some(AddWindow::new(vehicles));
     }
 

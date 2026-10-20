@@ -175,6 +175,19 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { is_synthetic, ref event, .. } if self.input_away || (is_synthetic && event.state == ElementState::Pressed) => {}
             WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } if self.input_away => {}
             WindowEvent::KeyboardInput { event, .. } => {
+                // what is typed while a field of the Alt bar's window has the keyboard is the
+                // field's (the key itself does not reach the game either)
+                if event.state == ElementState::Pressed {
+                    let code = match event.physical_key {
+                        PhysicalKey::Code(c) => Some(c),
+                        _ => None,
+                    };
+                    if let Some(text) = event.text.as_deref() {
+                        if self.tool_text(text, code) {
+                            return;
+                        }
+                    }
+                }
                 if event.state == ElementState::Pressed && self.menu_edit_icao {
                     if let Some(text)=event.text.as_deref(){ self.icao_edit_text(text); }
                 }
@@ -545,10 +558,25 @@ impl ApplicationHandler for App {
                         self.window.as_ref(),
                     ) {
                         hud.update(r, scene, &lines);
-                        if let wgpu::CurrentSurfaceTexture::Success(frame)
-                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = s.acquire()
-                        {
-                            let view = frame.texture.create_view(&Default::default());
+                        let (frame, view) = match s.acquire() {
+                            wgpu::CurrentSurfaceTexture::Success(frame)
+                            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                                let view = frame.texture.create_view(&Default::default());
+                                (Some(frame), Some(view))
+                            }
+                            // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
+                            wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
+                                None,
+                                Some(crate::app::stand_in_view(
+                                    &mut self.stand_in,
+                                    r,
+                                    s.config.width,
+                                    s.config.height,
+                                )),
+                            ),
+                            _ => (None, None),
+                        };
+                        if let Some(view) = view {
                             let cam = Camera {
                                 position: DVec3::ZERO,
                                 yaw: 0.0,
@@ -570,12 +598,13 @@ impl ApplicationHandler for App {
                                 &cam,
                                 &lighting,
                             );
-                            win.pre_present_notify();
-                            frame.present();
+                            if let Some(frame) = frame {
+                                win.pre_present_notify();
+                                frame.present();
+                            }
                         }
                     }
-                    // (the old menu is not drawn under "DirectX9 (D3D9Ex)" yet)
-                    self.d3d9_clear([0.08, 0.10, 0.14]);
+                    self.d3d9_present();
                     return;
                 }
                 if !self.drive_start(event_loop) {
@@ -2812,34 +2841,14 @@ impl ApplicationHandler for App {
                         wgpu::CurrentSurfaceTexture::Occluded
                         if omsi_cfg::flags::RENDER_OCCLUDED.is_set() || s.is_shown_elsewhere() =>
                             {
-                                let (w, h) = (s.config.width, s.config.height);
-                                if self
-                                    .stand_in
-                                    .as_ref()
-                                    .map(|t| (t.width(), t.height()) != (w, h))
-                                    .unwrap_or(true)
-                                {
-                                    self.stand_in =
-                                        Some(r.device.create_texture(&wgpu::TextureDescriptor {
-                                            label: Some("hidden window"),
-                                            size: wgpu::Extent3d {
-                                                width: w,
-                                                height: h,
-                                                depth_or_array_layers: 1,
-                                            },
-                                            mip_level_count: 1,
-                                            sample_count: 1,
-                                            dimension: wgpu::TextureDimension::D2,
-                                            format: r.format(),
-                                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                                            view_formats: &[],
-                                        }));
-                                }
                                 (
                                     None,
-                                    self.stand_in
-                                        .as_ref()
-                                        .map(|t| t.create_view(&Default::default())),
+                                    Some(crate::app::stand_in_view(
+                                        &mut self.stand_in,
+                                        r,
+                                        s.config.width,
+                                        s.config.height,
+                                    )),
                                 )
                             }
                         wgpu::CurrentSurfaceTexture::Outdated
@@ -2850,7 +2859,7 @@ impl ApplicationHandler for App {
                         _ => (None, None),
                     };
                     *self.profile.entry("acquire").or_default() += __t.elapsed().as_secs_f64();
-                    if frame.is_none() {
+                    if frame.is_none() && !s.is_shown_elsewhere() {
                         self.hidden_frames += 1;
                     }
                     let shown_nothing = frame.is_none() && stand_in.is_none();
@@ -3076,6 +3085,11 @@ impl ApplicationHandler for App {
                                 // session in order, #48 - now it only marks the loss)
                                 let _ = r.wait_gpu(None);
                             }
+                        }
+                        // ("DirectX9 (D3D9Ex)": its device shows the picture)
+                        #[cfg(windows)]
+                        if let Some(d) = self.d3d9.as_ref() {
+                            d.present();
                         }
                         *self.profile.entry("present").or_default() += __t.elapsed().as_secs_f64();
                     } else {
@@ -3340,7 +3354,7 @@ impl App {
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
         // over the new interface's "Add vehicle" window the wheel scrolls its list
-        if self.report_wheel(amount) || self.add_wheel(amount) { return; }
+        if self.report_wheel(amount) || self.add_wheel(amount) || self.tool_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3446,6 +3460,10 @@ impl App {
         }
         // the new interface's "Add vehicle" window takes the clicks on it
         if self.add_click(pressed) {
+            return;
+        }
+        // and so do the Alt bar's other windows
+        if self.tool_click(pressed) {
             return;
         }
         // the Alt bar of the new interface takes the clicks on it (never the game's)

@@ -31,9 +31,13 @@ pub struct MultiplayerView {
 }
 
 pub fn draw(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Multiplayer", "Switched off in this version.");
+    let body = l.page_title_with(area, "Multiplayer", ("Driving together", "Drive with friends", "Switched off in this version."));
     if true {
-        l.ui.paragraph("Multiplayer is disabled while its structure is redone. Single-player is unaffected.", Vec2::new(body.x, body.y), body.w.min(520.0), 14.0, Weight::Regular, TEXT_DIM);
+        // (a card, as Sessions says it has none)
+        let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
+        l.ui.panel(r);
+        l.ui.icon("wifi_tethering", Vec2::new(r.x + 40.0, r.center().y), 36.0, TEXT_FAINT);
+        l.ui.paragraph("Multiplayer is disabled while its structure is redone. Single-player is unaffected.", Vec2::new(r.x + 76.0, r.y + 52.0), r.w - 100.0, 13.5, Weight::Regular, TEXT_DIM);
         return;
     }
     let tabs = Rect::new(body.x, body.y, 360.0, 36.0);
@@ -55,7 +59,7 @@ fn by_code(l: &mut Launcher, r: Rect) {
     let host = Rect::new(r.x, r.y, col, 300.0);
     l.ui.panel(host);
     let mut y = host.y + 18.0;
-    l.ui.heading(Rect::new(host.x + 18.0, y, host.w - 36.0, 28.0), "Host a game", Some("wifi_tethering"));
+    Launcher::card_title(&mut l.ui, Rect::new(host.x + 18.0, y, host.w - 36.0, 28.0), "Host a game");
     y += 36.0;
     let hosting = l.state.choice.lan_mode == "host";
     let h = l.ui.paragraph("Your next duty opens a session. Give the code to your friends: it works at home and over the internet.", Vec2::new(host.x + 18.0, y), host.w - 36.0, 12.5, Weight::Regular, TEXT_DIM);
@@ -107,7 +111,7 @@ fn by_code(l: &mut Launcher, r: Rect) {
     let join = Rect::new(r.x + col + 24.0, r.y, col, 300.0);
     l.ui.panel(join);
     let mut y = join.y + 18.0;
-    l.ui.heading(Rect::new(join.x + 18.0, y, join.w - 36.0, 28.0), "Connect by Code", Some("link"));
+    Launcher::card_title(&mut l.ui, Rect::new(join.x + 18.0, y, join.w - 36.0, 28.0), "Connect by Code");
     y += 36.0;
     let h = l.ui.paragraph("Paste the code your friend's game shows. The map, time and weather are the host's; you choose your bus.", Vec2::new(join.x + 18.0, y), join.w - 36.0, 12.5, Weight::Regular, TEXT_DIM);
     y += h + 12.0;

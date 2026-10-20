@@ -1482,16 +1482,60 @@ impl Launcher {
         self.ui.tooltip(r, &text);
     }
 
-    /// A page's title and what it is for.
-    pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
-        self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
-        if !sub.is_empty() {
-            // (a narrow window: the line stops short of the tabs some pages put top right,
-            // it ran under them on a phone)
-            let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-            self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+    /// A page's heading in the new look, as Vehicles and Maps draw theirs (see
+    /// `omsi_launcher_ui::shell::heading`): "PAGE › PLACE" small and letter-spaced, the title
+    /// large and a line on what the page is for (`UiPage::heading`). Returns the page's body
+    /// under it.
+    pub fn page_title(&mut self, r: Rect, page: UiPage) -> Rect {
+        let h = page.heading().unwrap_or((page.title(), page.title(), ""));
+        self.page_title_with(r, page.title(), h)
+    }
+
+    /// `page_title` with its parts given: the page's name, (where on it, the title, the line).
+    /// A phone keeps its compact heading: the name and the line.
+    pub fn page_title_with(&mut self, r: Rect, name: &str, (place, title, line): (&str, &str, &str)) -> Rect {
+        if mobile::mobile() {
+            self.ui.text(name, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
+            if !line.is_empty() {
+                // (a narrow window: the line stops short of the tabs some pages put top right,
+                // it ran under them on a phone)
+                let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
+                self.ui.text_in(line, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+            }
+            return Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0));
         }
-        Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0))
+        // (the heading starts at the window's top, as Vehicles' and Maps': the page's area
+        // leaves a margin above it)
+        let top = r.y - 28.0;
+        omsi_launcher_ui::shell::heading(&mut self.ui, name, (place, title, line), r.x, top, r.w);
+        let y = top + omsi_launcher_ui::shell::BODY_TOP;
+        Rect::new(r.x, y, r.w, (r.bottom() - y).max(0.0))
+    }
+
+    /// Where a page puts its tabs, `w` wide, over its `body` (as `page_title` returned it): at
+    /// the right of the title on a computer, of the line on a phone.
+    pub fn title_tabs(&self, body: Rect, w: f32) -> Rect {
+        let y = if mobile::mobile() { body.y - 46.0 } else { body.y - omsi_launcher_ui::shell::BODY_TOP + 56.0 };
+        Rect::new(body.right() - w, y, w, 34.0)
+    }
+
+    /// A card's title (`omsi_launcher_ui::kit::heading`, letter-spaced) at the top of `r`, the
+    /// panel less its padding; returns the rest of `r` under it. A phone keeps the compact one.
+    pub fn card_title(ui: &mut Ui, r: Rect, title: &str) -> Rect {
+        if mobile::mobile() {
+            ui.heading(r, title, None)
+        } else {
+            omsi_launcher_ui::kit::heading(ui, r, title)
+        }
+    }
+
+    /// The title of a part further down a card, letter-spaced and quiet (a phone: as a card's).
+    pub fn part_title(ui: &mut Ui, r: Rect, title: &str) {
+        if mobile::mobile() {
+            ui.heading(r, title, None);
+        } else {
+            omsi_launcher_ui::kit::subheading(ui, r, title);
+        }
     }
 }
 

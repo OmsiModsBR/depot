@@ -398,6 +398,10 @@ pub(crate) struct State {
     win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
+    /// The Alt bar's window open (reposition, date and time, weather...).
+    tool: Option<crate::new_ui_windows::ToolFrame>,
+    /// What clicks in it asked for, for the game to apply.
+    tool_events: Vec<omsi_ui::alt_windows::Event>,
     /// The loading screen, while the first area of the map loads.
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
@@ -421,6 +425,9 @@ struct Overlay {
     format: wgpu::TextureFormat,
     ui: Ui,
     gpu: Option<Gpu>,
+    /// Handed to the Gpu when it is made: a second renderer draws the same ("DirectX9
+    /// (D3D9Ex)").
+    mirror: Option<omsi_ui::UiMirror>,
     logo: Option<(usize, f32)>,
     last: Instant,
     /// The loading screen's pictures in the GPU, and how far its slideshow is.
@@ -431,12 +438,13 @@ struct Overlay {
 }
 
 impl Overlay {
-    fn new(shared: Shared, format: wgpu::TextureFormat) -> Overlay {
+    fn new(shared: Shared, format: wgpu::TextureFormat, mirror: Option<omsi_ui::UiMirror>) -> Overlay {
         Overlay {
             shared,
             format,
             ui: Ui::new(),
             gpu: None,
+            mirror,
             logo: None,
             last: Instant::now(),
             slide_tex: Vec::new(),
@@ -453,11 +461,11 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, report, win_input, loading, mouse, arrived, gen, area) =
+        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen, area) =
             match self.shared.lock() {
                 Ok(mut s) => {
                     let arrived = std::mem::take(&mut s.slides);
-                    let input = if s.add.is_some() || s.report.is_some() {
+                    let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
                         s.win_input.pop_front()
                     } else {
                         s.win_input.clear();
@@ -468,6 +476,7 @@ impl Overlay {
                         s.page.clone(),
                         s.alt.clone(),
                         s.add.clone(),
+                        s.tool.clone(),
                         s.report.clone(),
                         input,
                         s.loading.clone(),
@@ -493,6 +502,7 @@ impl Overlay {
             && page.is_none()
             && alt.is_none()
             && add.is_none()
+            && tool.is_none()
             && report.is_none()
             && loading.is_none()
         {
@@ -503,9 +513,12 @@ impl Overlay {
         self.last = now;
         let format = self.format;
         let atlas = self.ui.atlas.size;
-        let gpu = self
-            .gpu
-            .get_or_insert_with(|| Gpu::new(device, format, 1, atlas));
+        let mirror = &mut self.mirror;
+        let gpu = self.gpu.get_or_insert_with(|| {
+            let mut gpu = Gpu::new(device, format, 1, atlas);
+            gpu.set_mirror(mirror.take());
+            gpu
+        });
         if self.logo.is_none() {
             if let Some(img) = logo_rgba() {
                 let tex = gpu.add_image(device, queue, img.width(), img.height(), img.as_raw());
@@ -533,7 +546,9 @@ impl Overlay {
             }
             Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
             Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
-            None if add.is_none() && report.is_none() => self.ui.input.down = false,
+            None if add.is_none() && tool.is_none() && report.is_none() => {
+                self.ui.input.down = false
+            }
             None => {}
         }
         self.ui.begin(size, scale, dt);
@@ -612,6 +627,13 @@ impl Overlay {
                     }
                 }
             }
+            if let Some(tool) = tool {
+                if let Some(e) = tool.draw(&mut self.ui, size) {
+                    if let Ok(mut s) = self.shared.lock() {
+                        s.tool_events.push(e);
+                    }
+                }
+            }
         }
         let (mut layers, verts, ranges) = self.ui.finish();
         place_layers(&mut layers, area, scale, (w, h));
@@ -650,6 +672,8 @@ pub(crate) struct NewUi {
     headset: Option<(omsi_render::TextureId, u32, u32)>,
     #[cfg_attr(not(windows), allow(dead_code))]
     headset_dim: Option<omsi_render::TextureId>,
+    /// The Alt bar's other windows.
+    pub(crate) tool: crate::new_ui_windows::Tools,
     /// The end-of-trip report, while it is open.
     pub(crate) report: Option<crate::new_ui_report::Report>,
     /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
@@ -660,12 +684,20 @@ pub(crate) struct NewUi {
 }
 
 impl NewUi {
-    /// Hand the renderer the overlay (once).
-    pub(crate) fn install(&mut self, renderer: &mut omsi_render::Renderer) {
+    pub(crate) fn installed(&self) -> bool {
+        self.installed
+    }
+
+    /// Hand the renderer the overlay (once), with the mirror its draws also go to.
+    pub(crate) fn install(
+        &mut self,
+        renderer: &mut omsi_render::Renderer,
+        mirror: Option<omsi_ui::UiMirror>,
+    ) {
         if self.installed {
             return;
         }
-        let mut overlay = Overlay::new(self.shared.clone(), renderer.format());
+        let mut overlay = Overlay::new(self.shared.clone(), renderer.format(), mirror);
         renderer.set_overlay_hook(Some(Box::new(move |device, queue, encoder, view, size| {
             overlay.draw(device, queue, encoder, view, size)
         })));
@@ -762,6 +794,7 @@ impl NewUi {
         menu: Option<MenuFrame>,
         alt: Option<crate::new_ui_alt::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
+        tool: Option<crate::new_ui_windows::ToolFrame>,
         report: Option<crate::new_ui_report::ReportFrame>,
         mouse: Vec2,
         area: Option<Area>,
@@ -771,6 +804,7 @@ impl NewUi {
             s.page = self.page.clone();
             s.alt = alt;
             s.add = add;
+            s.tool = tool;
             s.report = report;
             s.mouse = mouse;
             s.area = area;
@@ -854,6 +888,24 @@ impl NewUi {
         }
     }
 
+    /// What clicks in the Alt bar's window asked for since the last call.
+    pub(crate) fn take_tool_events(&self) -> Vec<omsi_ui::alt_windows::Event> {
+        match self.shared.lock() {
+            Ok(mut s) => std::mem::take(&mut s.tool_events),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Close the Alt bar's window, forgetting what was still on its way to it.
+    pub(crate) fn close_tool(&mut self) {
+        self.tool.close();
+        if let Ok(mut s) = self.shared.lock() {
+            s.tool = None;
+            s.win_input.clear();
+            s.tool_events.clear();
+        }
+    }
+
     /// Close the "Add vehicle" window, forgetting what was still on its way to it.
     pub(crate) fn close_add(&mut self) {
         self.add = None;
@@ -912,8 +964,9 @@ impl App {
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
+        let mirror = (!self.new_ui.installed()).then(|| self.d3d9_ui_mirror()).flatten();
         if let Some(r) = self.renderer.as_mut() {
-            self.new_ui.install(r);
+            self.new_ui.install(r, mirror);
         }
         let menu = self.new_menu_active().then(|| self.new_menu_frame());
         // (the Esc menu hides the bar and takes the keys back)
@@ -924,21 +977,23 @@ impl App {
         if !self.new_pages_active() {
             self.new_ui.page = None;
         }
-        let alt = self.alt_bar_active().then(|| self.alt_frame());
         self.add_events();
+        self.tool_events();
         self.report_events();
+        let alt = self.alt_bar_active().then(|| self.alt_frame());
         let report = self.report_frame();
         // (the report stands over everything else of the game, and pauses it)
-        let (alt, add) = if report.is_some() {
-            (None, None)
+        let (alt, add, tool) = if report.is_some() {
+            (None, None, None)
         } else {
-            (alt, self.add_frame())
+            (alt, self.add_frame(), self.tool_frame())
         };
         let area = self.new_ui_area();
         self.new_ui.set(
             menu,
             alt,
             add,
+            tool,
             report,
             Vec2::new(self.cursor.0, self.cursor.1),
             area,
@@ -1292,6 +1347,79 @@ mod tests {
         }
     }
 
+    /// Under "DirectX9 (D3D9Ex)" the overlay's draws go to the mirror too: the whole atlas
+    /// first, then the vertices and the draw, and nothing while no screen is shown.
+    #[test]
+    fn the_overlay_hands_its_draws_to_the_mirror() {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: 640,
+                height: 360,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = target.create_view(&Default::default());
+        let seen: Arc<Mutex<Vec<String>>> = Default::default();
+        let log = seen.clone();
+        let mirror: omsi_ui::UiMirror = Box::new(move |e| {
+            let what = match e {
+                omsi_ui::UiEvent::Image { .. } => "image".to_string(),
+                omsi_ui::UiEvent::Free(_) => "free".to_string(),
+                omsi_ui::UiEvent::Atlas { size, region, .. } => {
+                    format!("atlas {}", region == [0, 0, size, size])
+                }
+                omsi_ui::UiEvent::Vertices { vertices, .. } => {
+                    format!("vertices {}", !vertices.is_empty())
+                }
+                omsi_ui::UiEvent::Render { size, draws, .. } => {
+                    format!("render {size:?} {}", !draws.is_empty())
+                }
+                omsi_ui::UiEvent::Gone => "gone".to_string(),
+            };
+            log.lock().unwrap().push(what);
+        });
+        let shared: Shared = Default::default();
+        let mut overlay = Overlay::new(shared.clone(), format, Some(mirror));
+        let draw = |overlay: &mut Overlay| {
+            let mut enc = device.create_command_encoder(&Default::default());
+            overlay.draw(&device, &queue, &mut enc, &view, (640, 360));
+            queue.submit([enc.finish()]);
+        };
+        draw(&mut overlay);
+        assert!(seen.lock().unwrap().is_empty(), "no screen, nothing drawn");
+        shared.lock().unwrap().loading = Some(crate::new_ui_loading::LoadingFrame {
+            heading: "Example map".into(),
+            progress: 0.5,
+            ..Default::default()
+        });
+        draw(&mut overlay);
+        let events = seen.lock().unwrap().clone();
+        let at = |what: &str| events.iter().position(|e| e == what);
+        let (atlas, vertices, render) = (
+            at("atlas true").expect("the whole atlas"),
+            at("vertices true").expect("the vertices"),
+            at("render (640, 360) true").expect("the draw"),
+        );
+        assert!(atlas < render && vertices < render, "{events:?}");
+        drop(overlay);
+        assert_eq!(seen.lock().unwrap().last().map(String::as_str), Some("gone"));
+    }
+
     /// The overlay itself, on a real adapter: the column is drawn over a picture and nothing
     /// is drawn while no menu is open.
     #[test]
@@ -1322,7 +1450,7 @@ mod tests {
         });
         let view = tex.create_view(&Default::default());
         let shared: Shared = Default::default();
-        let mut overlay = Overlay::new(shared.clone(), format);
+        let mut overlay = Overlay::new(shared.clone(), format, None);
         let clear = |enc: &mut wgpu::CommandEncoder| {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1498,7 +1626,7 @@ mod tests {
             });
             let view = tex.create_view(&Default::default());
             let shared: Shared = Default::default();
-            let mut overlay = Overlay::new(shared.clone(), format);
+            let mut overlay = Overlay::new(shared.clone(), format, None);
             {
                 let mut s = shared.lock().unwrap();
                 s.page = Some(page.clone());

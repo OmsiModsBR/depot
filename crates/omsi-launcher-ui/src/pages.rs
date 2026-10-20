@@ -63,9 +63,10 @@ impl Page {
     }
 
     /// The heading the concept gives the page: where it is (after the page's name), what it
-    /// asks of the player, and a line on it (only the pages the concept drew).
+    /// asks of the player, and a line on it (every page but Drive, which has its steps).
     pub fn heading(self) -> Option<(&'static str, &'static str, &'static str)> {
         match self {
+            Page::Drive => None,
             Page::Vehicles => Some((
                 "Preview",
                 "Choose and check your bus",
@@ -76,7 +77,51 @@ impl Page {
                 "Choose your map and duty",
                 "Check the map and its description, then pick where to start and which line to drive.",
             )),
-            _ => None,
+            Page::Mods => Some((
+                "Install & content",
+                "Add buses, maps and scenery",
+                "A folder or a .zip, read in place from Archives. The original OMSI 2 folder is never written to.",
+            )),
+            Page::Timetable => Some((
+                "Lines & tours",
+                "Plan a map's lines and tours",
+                "When each trip leaves, saved as the line's .ttl in the content folder. OMSI 2's own files stay as they are.",
+            )),
+            Page::Sessions => Some((
+                "Running games",
+                "Your games and who drives with you",
+                "The games you started from here: how long they run, their log, and stopping them.",
+            )),
+            Page::Profile => Some((
+                "Personnel file",
+                "Your driver and their record",
+                "The driver whose personnel file the game writes: hours, kilometres, punctuality, tickets.",
+            )),
+            Page::Controls => Some((
+                "Keyboard",
+                "Set your keys and controllers",
+                "Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is.",
+            )),
+            Page::Tutorials => Some((
+                "Lessons",
+                "Learn to drive the bus",
+                "OMSI 2's own lessons: each opens its situation, with its pages beside the picture (Enter turns the page).",
+            )),
+            Page::Diagnostics => Some((
+                "Build & log",
+                "Check what goes wrong",
+                "This build, the OMSI 2 folder, the game's log and the games running: to look at, or send along.",
+            )),
+            Page::Settings => Some((
+                "Graphics, sound & driving",
+                "Set up the game",
+                "Every change is saved at once; the game reads them when it starts.",
+            )),
+            Page::Setup => Some((
+                "Folders",
+                "Find the original game",
+                "Where the original OMSI 2 is, and the program of this game.",
+            )),
         }
     }
 
@@ -118,6 +163,22 @@ mod tests {
             assert!(omsi_ui::icons::svg(p.icon()).is_some(), "{p:?}");
         }
         assert_eq!(Page::named("nope"), None);
+    }
+
+    /// Every page but Drive has the concept's heading, and where it is never just repeats the
+    /// page's name or its title.
+    #[test]
+    fn every_page_but_drive_has_a_heading() {
+        for p in Page::ALL {
+            match p.heading() {
+                None => assert_eq!(p, Page::Drive),
+                Some((place, title, line)) => {
+                    assert!(!place.eq_ignore_ascii_case(p.title()), "{p:?}");
+                    assert!(!title.eq_ignore_ascii_case(p.title()), "{p:?}");
+                    assert!(!place.is_empty() && !title.is_empty() && !line.is_empty());
+                }
+            }
+        }
     }
 
     #[test]

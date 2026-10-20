@@ -3,7 +3,7 @@
 //! says where the bus is. The caller supplies the buttons; what they do is the game's.
 
 use crate::paint::Align;
-use crate::theme::v5::{ACCENT, BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, TS};
+use crate::theme::v5::{ACCENT, BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, SELECTED, TS};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -31,6 +31,8 @@ pub struct Button<'a> {
     pub title: &'a str,
     /// Why it cannot be used now (drawn dim, the reason shows instead of the title).
     pub disabled: Option<&'a str>,
+    /// What it switches is on now (a tour is running): drawn pressed.
+    pub on: bool,
 }
 
 /// The state the game keeps between frames: which button was chosen last.
@@ -106,20 +108,26 @@ pub fn draw<'a>(
         let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
         let enabled = b.disabled.is_none();
         let chosen = state.chosen.as_deref() == Some(b.id);
+        let fill = if b.on { SELECTED } else { CELL };
         ui.p().rect(
             r,
             if hover && enabled {
-                CELL.lighten(0.08)
+                fill.lighten(0.08)
             } else {
-                CELL
+                fill
             },
         );
         ui.p()
-            .rounded_border(r, 0.0, 1.0, if chosen { ACCENT } else { LINE });
+            .rounded_border(r, 0.0, 1.0, if chosen || b.on { ACCENT } else { LINE });
         if state.focus.as_deref() == Some(b.id) {
             ui.p().rounded_border(r, 0.0, 2.0, FG);
         }
-        let c = if enabled { ACCENT } else { ACCENT.alpha(0.3) };
+        // a pressed button stays lit even while it waits for its own window
+        let c = if enabled || b.on {
+            ACCENT
+        } else {
+            ACCENT.alpha(0.3)
+        };
         match b.glyph {
             Glyph::Icon(name) => ui.icon(name, r.center(), 20.0, c),
             Glyph::Text(t) => {
@@ -246,6 +254,7 @@ mod tests {
             glyph: Glyph::Icon(icon),
             title: id,
             disabled,
+            on: false,
         };
         vec![
             b("add", "add", None),
