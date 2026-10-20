@@ -22,6 +22,22 @@ use winit::event_loop::ActiveEventLoop;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
+/// The logo is shrunk to this width before it goes to the GPU (twice what the screens draw
+/// it at, so it stays sharp at 150% and is not thinned out from 2000 pixels at once).
+const LOGO_WIDTH: u32 = 640;
+
+/// The wordmark ready for the GPU: shrunk, and its black field made see-through, so that over
+/// the loading screen's photos and the dimmed world it stands with no black box round it.
+fn logo_rgba() -> Option<image::RgbaImage> {
+    let img = image::load_from_memory(LOGO).ok()?;
+    let h = (img.height() as u64 * LOGO_WIDTH as u64 / img.width().max(1) as u64).max(1) as u32;
+    let mut img = img
+        .resize_exact(LOGO_WIDTH, h, image::imageops::FilterType::Lanczos3)
+        .to_rgba8();
+    omsi_ui::loading::unmatte_black(&mut img);
+    Some(img)
+}
+
 /// The design the menu is made for, in points (the same as the launcher's).
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
@@ -198,7 +214,11 @@ impl MenuFrame {
     /// (the first of `lines` the menu has), no line lit by the keyboard, and the bar saying
     /// what the page is.
     pub(crate) fn for_page(mut self, lines: &[&str], title: String, subtitle: String) -> MenuFrame {
-        let have = |id: &str| self.sections.iter().any(|s| s.items.iter().any(|i| i.id == id));
+        let have = |id: &str| {
+            self.sections
+                .iter()
+                .any(|s| s.items.iter().any(|i| i.id == id))
+        };
         if let Some(id) = lines.iter().copied().find(|id| have(id)) {
             for item in self.sections.iter_mut().flat_map(|s| s.items.iter_mut()) {
                 if item.id == id {
@@ -282,6 +302,11 @@ pub(crate) struct State {
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
     slides: Vec<crate::new_ui_loading::Decoded>,
+    /// The bus's block of the loading card, once its file has been read.
+    bus_card: Option<crate::new_ui_loading::CardText>,
+    /// Which loading the screenshots and the bus card being read belong to (one more each
+    /// time a loading is over).
+    loading_gen: u64,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -299,6 +324,8 @@ struct Overlay {
     /// The loading screen's pictures in the GPU, and how far its slideshow is.
     slide_tex: Vec<omsi_ui::loading::Slide>,
     show: omsi_ui::loading::Slideshow,
+    /// The loading those pictures belong to (`State::loading_gen`).
+    gen: u64,
 }
 
 impl Overlay {
@@ -312,6 +339,7 @@ impl Overlay {
             last: Instant::now(),
             slide_tex: Vec::new(),
             show: omsi_ui::loading::Slideshow::new(0),
+            gen: 0,
         }
     }
 
@@ -323,30 +351,32 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, add_input, loading, mouse, arrived) = match self.shared.lock() {
-            Ok(mut s) => {
-                let arrived = std::mem::take(&mut s.slides);
-                let input = if s.add.is_some() {
-                    s.add_input.pop_front()
-                } else {
-                    s.add_input.clear();
-                    None
-                };
-                (
-                    s.menu.clone(),
-                    s.page.clone(),
-                    s.alt.clone(),
-                    s.add.clone(),
-                    input,
-                    s.loading.clone(),
-                    s.mouse,
-                    arrived,
-                )
-            }
-            Err(_) => return,
-        };
-        if loading.is_none() && !self.slide_tex.is_empty() {
-            // (the loading screen is over: its pictures leave the GPU)
+        let (menu, page, alt, add, add_input, loading, mouse, arrived, gen) =
+            match self.shared.lock() {
+                Ok(mut s) => {
+                    let arrived = std::mem::take(&mut s.slides);
+                    let input = if s.add.is_some() {
+                        s.add_input.pop_front()
+                    } else {
+                        s.add_input.clear();
+                        None
+                    };
+                    (
+                        s.menu.clone(),
+                        s.page.clone(),
+                        s.alt.clone(),
+                        s.add.clone(),
+                        input,
+                        s.loading.clone(),
+                        s.mouse,
+                        arrived,
+                        s.loading_gen,
+                    )
+                }
+                Err(_) => return,
+            };
+        if (loading.is_none() || gen != self.gen) && !self.slide_tex.is_empty() {
+            // (the loading screen is over, or another one began: its pictures leave the GPU)
             if let Some(gpu) = self.gpu.as_mut() {
                 for s in self.slide_tex.drain(..) {
                     gpu.free(s.tex);
@@ -354,6 +384,7 @@ impl Overlay {
             }
             self.show = omsi_ui::loading::Slideshow::new(0);
         }
+        self.gen = gen;
         if menu.is_none() && page.is_none() && alt.is_none() && add.is_none() && loading.is_none() {
             return;
         }
@@ -366,8 +397,7 @@ impl Overlay {
             .gpu
             .get_or_insert_with(|| Gpu::new(device, format, 1, atlas));
         if self.logo.is_none() {
-            if let Ok(img) = image::load_from_memory(LOGO) {
-                let img = img.to_rgba8();
+            if let Some(img) = logo_rgba() {
                 let tex = gpu.add_image(device, queue, img.width(), img.height(), img.as_raw());
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
@@ -407,23 +437,26 @@ impl Overlay {
             }
             self.show.set_count(self.slide_tex.len());
             self.show.update(dt);
-            fn card(
-                c: &Option<crate::new_ui_loading::CardText>,
-            ) -> Option<omsi_ui::loading::Card<'_>> {
+            fn card<'a>(
+                c: &'a Option<crate::new_ui_loading::CardText>,
+                icon: &'a str,
+            ) -> Option<omsi_ui::loading::Card<'a>> {
                 c.as_ref().map(|c| omsi_ui::loading::Card {
                     title: &c.title,
                     sub: &c.sub,
                     description: &c.description,
+                    icon,
                 })
             }
             let view = omsi_ui::loading::View {
                 version: &l.version,
                 heading: &l.heading,
                 stage: &l.stage,
+                activity: &l.activity,
                 progress: l.progress,
                 logo: self.logo,
-                bus: card(&l.bus),
-                map: card(&l.map),
+                bus: card(&l.bus, "directions_bus"),
+                map: card(&l.map, "map"),
                 slides: &self.slide_tex,
             };
             omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
@@ -479,6 +512,7 @@ pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
     slides_started: bool,
+    bus_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
@@ -506,7 +540,26 @@ impl NewUi {
         }
     }
 
-    /// Once per session: list the map's screenshots and decode the latest on a thread of
+    /// The loading screen is over, or a new drive's is about to start: it is taken down, and
+    /// the next one lists its own map's screenshots and reads its own bus. What a thread of
+    /// the last one still hands over is dropped (it belongs to another loading).
+    pub(crate) fn reset_loading(&mut self) {
+        self.slides_started = false;
+        self.bus_started = false;
+        if let Ok(mut s) = self.shared.lock() {
+            s.loading = None;
+            s.slides.clear();
+            s.bus_card = None;
+            s.loading_gen = s.loading_gen.wrapping_add(1);
+        }
+    }
+
+    /// The loading the threads started now belong to.
+    fn loading_gen(&self) -> u64 {
+        self.shared.lock().map(|s| s.loading_gen).unwrap_or(0)
+    }
+
+    /// Once per loading: list the map's screenshots and decode the latest on a thread of
     /// their own, handing them to the overlay one by one.
     pub(crate) fn start_slides(&mut self, map_folder: &str) {
         if self.slides_started {
@@ -514,6 +567,7 @@ impl NewUi {
         }
         self.slides_started = true;
         let shared = self.shared.clone();
+        let gen = self.loading_gen();
         let map = map_folder.to_string();
         let _ = std::thread::Builder::new()
             .name("loading-slides".into())
@@ -525,12 +579,43 @@ impl NewUi {
                 for p in paths {
                     if let Some(d) = crate::new_ui_loading::decode(&p) {
                         match shared.lock() {
-                            Ok(mut s) => s.slides.push(d),
-                            Err(_) => return,
+                            Ok(mut s) if s.loading_gen == gen => s.slides.push(d),
+                            _ => return,
                         }
                     }
                 }
             });
+    }
+
+    /// Once per loading: read the bus's file (`bus`, under `root`) on a thread of its own for
+    /// the loading card's name, maker, paint and description.
+    pub(crate) fn start_bus(&mut self, root: &std::path::Path, bus: &str, paint: Option<&str>) {
+        if self.bus_started {
+            return;
+        }
+        self.bus_started = true;
+        let shared = self.shared.clone();
+        let gen = self.loading_gen();
+        let path = omsi_cfg::resolve_path(root, bus);
+        let folder = crate::screenshot_name::folder_of(bus).unwrap_or_default();
+        let paint = paint.map(str::to_string);
+        let _ = std::thread::Builder::new()
+            .name("loading-bus".into())
+            .spawn(move || {
+                let Ok(v) = omsi_vehicle::Vehicle::load(&path) else {
+                    return;
+                };
+                let card = crate::new_ui_loading::bus_card(&v, &folder, paint.as_deref());
+                match shared.lock() {
+                    Ok(mut s) if s.loading_gen == gen => s.bus_card = Some(card),
+                    _ => {}
+                }
+            });
+    }
+
+    /// The bus's block of the loading card, when its file has been read.
+    pub(crate) fn bus_card(&self) -> Option<crate::new_ui_loading::CardText> {
+        self.shared.lock().ok().and_then(|s| s.bus_card.clone())
     }
 
     fn set(
@@ -675,6 +760,52 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_loading_reads_its_own_bus_and_screenshots_again() {
+        let mut ui = NewUi::default();
+        let card = crate::new_ui_loading::CardText {
+            title: "First bus".into(),
+            ..Default::default()
+        };
+        // a first drive's loading: started, its bus read, a screenshot waiting
+        ui.slides_started = true;
+        ui.bus_started = true;
+        {
+            let mut s = ui.shared.lock().unwrap();
+            s.bus_card = Some(card.clone());
+            s.slides.push(crate::new_ui_loading::Decoded {
+                w: 1,
+                h: 1,
+                rgba: vec![0; 4],
+            });
+            s.loading = Some(Default::default());
+        }
+        let gen = ui.loading_gen();
+        assert_eq!(ui.bus_card(), Some(card));
+        // it is over (or the next drive starts): nothing of it is left, and the next
+        // loading starts its threads again
+        ui.reset_loading();
+        assert!(!ui.slides_started && !ui.bus_started);
+        assert_eq!(ui.bus_card(), None);
+        let s = ui.shared.lock().unwrap();
+        assert!(s.slides.is_empty() && s.loading.is_none());
+        // what a thread of the first loading still hands over is told apart and dropped
+        assert_ne!(s.loading_gen, gen);
+    }
+
+    #[test]
+    fn the_logo_is_shrunk_and_has_no_black_box_round_it() {
+        let img = logo_rgba().expect("the wordmark");
+        assert_eq!(img.width(), LOGO_WIDTH);
+        // the corner (the black field) is clear, the letters are whole
+        assert_eq!(img.get_pixel(0, 0)[3], 0);
+        let opaque = img.pixels().filter(|p| p[3] == 255).count();
+        assert!(
+            opaque > (img.width() * img.height()) as usize / 10,
+            "{opaque}"
+        );
+    }
 
     fn items() -> Vec<(&'static str, &'static str)> {
         crate::input::menus::GAME_MENU.to_vec()
@@ -1119,7 +1250,10 @@ mod tests {
                 .collect();
             assert!(!rows.is_empty(), "{name}: a row");
             let light: Vec<_> = rows.iter().filter(|p| p[2] >= 60).collect();
-            assert!(light.len() <= 1, "{name}: the card under its rows: {light:?} of {rows:?}");
+            assert!(
+                light.len() <= 1,
+                "{name}: the card under its rows: {light:?} of {rows:?}"
+            );
         };
         let size = (1672, 941);
         let away = Vec2::new(-100.0, -100.0);
@@ -1146,15 +1280,31 @@ mod tests {
             (row("Information bar (Shift+Y)", 's', "off", "Displays information such as the time, speed, and other details at the top of the screen", None), k("info_bar")),
             (row("Passengers pay the exact fare", 's', "on", "No change is given at the cash desk", None), k("exact_fare")),
         ]);
-        let tabs = vec![k("General"), k("Graphics"), k("Display"), k("Sound"), k("Camera"), k("Driving"), k("Advanced")];
-        let items: Vec<(&str, &str)> = general.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let tabs = vec![
+            k("General"),
+            k("Graphics"),
+            k("Display"),
+            k("Sound"),
+            k("Camera"),
+            k("Driving"),
+            k("Advanced"),
+        ];
+        let items: Vec<(&str, &str)> = general
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu = Some((4, &items));
         f.menu_tabs = Some((tabs.clone(), 0));
         let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
         shoot("options-general", size, p.clone(), away);
         shoot("options-general-1280x720", (1280, 720), p.clone(), away);
-        shoot("options-general-1920x1080-hover", (1920, 1080), p, Vec2::new(900.0, 330.0));
+        shoot(
+            "options-general-1920x1080-hover",
+            (1920, 1080),
+            p,
+            Vec2::new(900.0, 330.0),
+        );
 
         // Graphics: sliders, a stepper, a select with its drop-down open
         let graphics = refs(&[
@@ -1166,7 +1316,10 @@ mod tests {
             (row("Clouds", 's', "on", "Needs a restart", None), k("clouds")),
             (row("Windy trees", 's', "off", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still", None), k("windy_trees")),
         ]);
-        let items: Vec<(&str, &str)> = graphics.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = graphics
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu_tabs = Some((tabs.clone(), 1));
         let names = ["Vanilla", "Vanilla+", "Enhanced", "Ultra", "Custom"];
@@ -1186,81 +1339,312 @@ mod tests {
 
         // Controls, and the keyboard's bindings (one being changed)
         let controls = refs(&[
-            (row("Keyboard", 'o', "", "Change driving, vehicle, game and camera key bindings", None), k("keyboard")),
-            (row("Game controllers", 'o', "", "Configure wheels, pedals, gamepads and force feedback", None), k("controllers")),
+            (
+                row(
+                    "Keyboard",
+                    'o',
+                    "",
+                    "Change driving, vehicle, game and camera key bindings",
+                    None,
+                ),
+                k("keyboard"),
+            ),
+            (
+                row(
+                    "Game controllers",
+                    'o',
+                    "",
+                    "Configure wheels, pedals, gamepads and force feedback",
+                    None,
+                ),
+                k("controllers"),
+            ),
         ]);
-        let items: Vec<(&str, &str)> = controls.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = controls
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu_head = Some((k("Controls"), String::new()));
         f.menu_tabs = Some((vec![k("Controls")], 0));
-        shoot("controls", size, page_frame(&f, Some(&ListKind::Controls), test_column(true)).unwrap(), away);
+        shoot(
+            "controls",
+            size,
+            page_frame(&f, Some(&ListKind::Controls), test_column(true)).unwrap(),
+            away,
+        );
         let keys = refs(&[
-            (row("Add a vehicle event…", 'o', "", "Choose a control supplied by the bus or its mods", None), k("key_events")),
-            (row("Accelerate", 'a', "W", "Enter to change; Delete clears; Esc cancels", None), k("keybind v 0")),
-            (row("Brake", 'a', "S", "Enter to change; Delete clears; Esc cancels", None), k("keybind v 1")),
-            (row("Doors front", 'a', "press a key…", "Enter to change; Delete clears; Esc cancels", None), k("keybind v 2")),
-            (row("Horn", 'a', "Shift+H", "Enter to change; Delete clears; Esc cancels", None), k("keybind v 3")),
-            (row("Kneeling", 'a', "(unbound)", "Enter to change; Delete clears; Esc cancels", None), k("keybind v 4")),
+            (
+                row(
+                    "Add a vehicle event…",
+                    'o',
+                    "",
+                    "Choose a control supplied by the bus or its mods",
+                    None,
+                ),
+                k("key_events"),
+            ),
+            (
+                row(
+                    "Accelerate",
+                    'a',
+                    "W",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 0"),
+            ),
+            (
+                row(
+                    "Brake",
+                    'a',
+                    "S",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 1"),
+            ),
+            (
+                row(
+                    "Doors front",
+                    'a',
+                    "press a key…",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 2"),
+            ),
+            (
+                row(
+                    "Horn",
+                    'a',
+                    "Shift+H",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 3"),
+            ),
+            (
+                row(
+                    "Kneeling",
+                    'a',
+                    "(unbound)",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 4"),
+            ),
         ]);
         let items: Vec<(&str, &str)> = keys.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu = Some((3, &items));
         f.menu_head = Some((k("Keyboard"), String::new()));
         f.menu_tabs = Some((vec![k("Driving and bus"), k("Game and camera")], 0));
-        shoot("controls-keyboard", size, page_frame(&f, Some(&ListKind::Keyboard(0)), test_column(true)).unwrap(), away);
+        shoot(
+            "controls-keyboard",
+            size,
+            page_frame(&f, Some(&ListKind::Keyboard(0)), test_column(true)).unwrap(),
+            away,
+        );
 
         // a game controller: headings, information, switches, sliders
         let pad = refs(&[
             (k("Connected devices"), k(HEADING)),
-            (row("Logitech G29", 'o', "Wheel", "Axes, buttons and force feedback", None), k("device 0")),
+            (
+                row(
+                    "Logitech G29",
+                    'o',
+                    "Wheel",
+                    "Axes, buttons and force feedback",
+                    None,
+                ),
+                k("device 0"),
+            ),
             (k("Steering"), k(HEADING)),
-            (row("Dead zone", 'v', "4 %", "Ignore movement around the centre or at pedal rest", Some(0.04)), k("ctrl_deadzone")),
-            (row("Wheel rotation", 'v', "900°", "Your wheel's rotation from lock to lock", Some(0.75)), k("wheel_range")),
+            (
+                row(
+                    "Dead zone",
+                    'v',
+                    "4 %",
+                    "Ignore movement around the centre or at pedal rest",
+                    Some(0.04),
+                ),
+                k("ctrl_deadzone"),
+            ),
+            (
+                row(
+                    "Wheel rotation",
+                    'v',
+                    "900°",
+                    "Your wheel's rotation from lock to lock",
+                    Some(0.75),
+                ),
+                k("wheel_range"),
+            ),
             (k("Pedals"), k(HEADING)),
-            (row("Connection", 'i', "Connected", "Successful changes are saved and applied immediately", None), k("noop")),
-            (row("Force feedback and vibration", 's', "on", "Enable steering forces and gamepad rumble", None), k("ff")),
+            (
+                row(
+                    "Connection",
+                    'i',
+                    "Connected",
+                    "Successful changes are saved and applied immediately",
+                    None,
+                ),
+                k("noop"),
+            ),
+            (
+                row(
+                    "Force feedback and vibration",
+                    's',
+                    "on",
+                    "Enable steering forces and gamepad rumble",
+                    None,
+                ),
+                k("ff"),
+            ),
         ]);
         let items: Vec<(&str, &str)> = pad.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu = Some((1, &items));
         f.menu_head = Some((k("Game controllers"), String::new()));
-        f.menu_tabs = Some((vec![k("Devices"), k("Steering and pedals"), k("Force feedback")], 0));
-        shoot("controls-controllers", size, page_frame(&f, Some(&ListKind::ControllerDevices(0)), test_column(true)).unwrap(), away);
+        f.menu_tabs = Some((
+            vec![k("Devices"), k("Steering and pedals"), k("Force feedback")],
+            0,
+        ));
+        shoot(
+            "controls-controllers",
+            size,
+            page_frame(&f, Some(&ListKind::ControllerDevices(0)), test_column(true)).unwrap(),
+            away,
+        );
 
         // Vehicle options, World options (a time being typed)
         let vehicle = refs(&[
-            (row("Destination display", 'o', "", "Change the current destination", None), k("dest")),
-            (row("Depot file (HOF)", 'o', "", "Change the current depot file (used for the timetable)", None), k("hof")),
-            (row("Fleet number", 'o', "", "Change the fleet number and the registration", None), k("number")),
-            (row("Driver", 'o', "", "Change the current driver profile", None), k("driver")),
-            (row("Repair", 'a', "Repair now", "Repairs every damage of the vehicle", None), k("repair")),
+            (
+                row(
+                    "Destination display",
+                    'o',
+                    "",
+                    "Change the current destination",
+                    None,
+                ),
+                k("dest"),
+            ),
+            (
+                row(
+                    "Depot file (HOF)",
+                    'o',
+                    "",
+                    "Change the current depot file (used for the timetable)",
+                    None,
+                ),
+                k("hof"),
+            ),
+            (
+                row(
+                    "Fleet number",
+                    'o',
+                    "",
+                    "Change the fleet number and the registration",
+                    None,
+                ),
+                k("number"),
+            ),
+            (
+                row("Driver", 'o', "", "Change the current driver profile", None),
+                k("driver"),
+            ),
+            (
+                row(
+                    "Repair",
+                    'a',
+                    "Repair now",
+                    "Repairs every damage of the vehicle",
+                    None,
+                ),
+                k("repair"),
+            ),
         ]);
-        let items: Vec<(&str, &str)> = vehicle.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = vehicle
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu_head = Some((k("Vehicle options"), String::new()));
         f.menu_tabs = Some((vec![k("Display"), k("Fleet"), k("Service")], 0));
-        shoot("vehicle-options", size, page_frame(&f, Some(&ListKind::Vehicle(0)), test_column(true)).unwrap(), away);
+        shoot(
+            "vehicle-options",
+            size,
+            page_frame(&f, Some(&ListKind::Vehicle(0)), test_column(true)).unwrap(),
+            away,
+        );
         let world = refs(&[
-            (row("Exact time", 'E', "0842", "Press Enter to change, Esc to cancel", None), k("time_edit")),
-            (row("Time speed", 'v', "x1", "How fast the clock runs", Some(0.1)), k("time_speed")),
-            (row("Real-time sync", 's', "off", "The clock follows the computer's", None), k("time_sync")),
+            (
+                row(
+                    "Exact time",
+                    'E',
+                    "0842",
+                    "Press Enter to change, Esc to cancel",
+                    None,
+                ),
+                k("time_edit"),
+            ),
+            (
+                row(
+                    "Time speed",
+                    'v',
+                    "x1",
+                    "How fast the clock runs",
+                    Some(0.1),
+                ),
+                k("time_speed"),
+            ),
+            (
+                row(
+                    "Real-time sync",
+                    's',
+                    "off",
+                    "The clock follows the computer's",
+                    None,
+                ),
+                k("time_sync"),
+            ),
             (row("Date", 'i', "14.10.2026", "", None), k("noop")),
-            (row("Season", 'c', "Autumn", "Leaves and snow", None), k("season")),
+            (
+                row("Season", 'c', "Autumn", "Leaves and snow", None),
+                k("season"),
+            ),
         ]);
-        let items: Vec<(&str, &str)> = world.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = world
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu_head = Some((k("World options"), String::new()));
         f.menu_tabs = Some((vec![k("Time"), k("Weather"), k("Traffic"), k("Tools")], 0));
-        shoot("world-options", size, page_frame(&f, Some(&ListKind::World(0)), test_column(true)).unwrap(), away);
+        shoot(
+            "world-options",
+            size,
+            page_frame(&f, Some(&ListKind::World(0)), test_column(true)).unwrap(),
+            away,
+        );
 
         // Line and tour: the lines with the tours of the chosen one beside them
         let lines: Vec<(String, String)> = ["50", "51", "N30", "107", "M49"]
             .iter()
             .enumerate()
-            .map(|(i, n)| (format!("line {n}"), format!("Line {n}  ({} tours)", 3 + i * 2)))
+            .map(|(i, n)| {
+                (
+                    format!("line {n}"),
+                    format!("Line {n}  ({} tours)", 3 + i * 2),
+                )
+            })
             .chain([(k("back"), k("Back"))])
             .collect();
-        let items: Vec<(&str, &str)> = lines.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Lines);
         f.menu_head = Some((k("Line and tour"), String::new()));
         f.menu_preview = Some(Preview {
@@ -1275,20 +1659,44 @@ mod tests {
             button: None,
             time: None,
         });
-        shoot("line-and-tour", size, page_frame(&f, Some(&ListKind::Lines), test_column(true)).unwrap(), away);
+        shoot(
+            "line-and-tour",
+            size,
+            page_frame(&f, Some(&ListKind::Lines), test_column(true)).unwrap(),
+            away,
+        );
         // a line's tours, the stops of the chosen one to start from
         let tours: Vec<(String, String)> = (1..=6)
             .map(|t| (format!("tour 50\u{1}{t}"), format!("Tour {t}")))
             .chain([(k("back"), k("Back"))])
             .collect();
-        let items: Vec<(&str, &str)> = tours.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = tours
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::Tours);
         f.menu = Some((1, &items));
         f.menu_head = Some((k("Line and tour"), k("Line 50")));
         let stops = [
-            "Depot", "Market", "Main Street", "Central Station", "Hospital", "University",
-            "Airport road", "Old town", "Harbour", "Stadium", "Park", "Library", "Bus station",
-            "Cemetery", "Terminus", "Industrial estate", "Riverside", "North gate", "Ring road",
+            "Depot",
+            "Market",
+            "Main Street",
+            "Central Station",
+            "Hospital",
+            "University",
+            "Airport road",
+            "Old town",
+            "Harbour",
+            "Stadium",
+            "Park",
+            "Library",
+            "Bus station",
+            "Cemetery",
+            "Terminus",
+            "Industrial estate",
+            "Riverside",
+            "North gate",
+            "Ring road",
             "Last stop",
         ];
         f.menu_preview = Some(Preview {
@@ -1297,25 +1705,51 @@ mod tests {
             rows: stops
                 .iter()
                 .enumerate()
-                .map(|(i, s)| (k(s), format!("{:02}:{:02}", 9 + (2 + i * 3) / 60, (2 + i * 3) % 60)))
+                .map(|(i, s)| {
+                    (
+                        k(s),
+                        format!("{:02}:{:02}", 9 + (2 + i * 3) / 60, (2 + i * 3) % 60),
+                    )
+                })
                 .collect(),
             chosen: Some(2),
             button: Some(k("Start trip")),
             time: Some(k("09:02")),
         });
-        shoot("line-and-tour-tours", size, page_frame(&f, Some(&ListKind::Tours(k("50"), None)), test_column(true)).unwrap(), away);
+        shoot(
+            "line-and-tour-tours",
+            size,
+            page_frame(&f, Some(&ListKind::Tours(k("50"), None)), test_column(true)).unwrap(),
+            away,
+        );
 
         // a long list of codes and names (the destinations), scrolled, the way back under it
-        let names = ["Central Station", "Market", "Depot", "Not in service", "Hospital via Main Street"];
+        let names = [
+            "Central Station",
+            "Market",
+            "Depot",
+            "Not in service",
+            "Hospital via Main Street",
+        ];
         let dest: Vec<(String, String)> = std::iter::once((k("routes"), k("Route number: 50...")))
-            .chain((0..40).map(|i| (format!("dest {i}"), format!("{:>3}  {}", 100 + i * 7, names[i % 5]))))
+            .chain((0..40).map(|i| {
+                (
+                    format!("dest {i}"),
+                    format!("{:>3}  {}", 100 + i * 7, names[i % 5]),
+                )
+            }))
             .chain([(k("back"), k("Back"))])
             .collect();
         let items: Vec<(&str, &str)> = dest.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
         let mut f = test_frame(&items, MenuKind::List);
         f.menu = Some((22, &items));
         f.menu_head = Some((k("Destination display"), String::new()));
-        shoot("vehicle-destinations", size, page_frame(&f, Some(&ListKind::Destinations), test_column(true)).unwrap(), away);
+        shoot(
+            "vehicle-destinations",
+            size,
+            page_frame(&f, Some(&ListKind::Destinations), test_column(true)).unwrap(),
+            away,
+        );
         // a short list (the drivers, the mouse on one), and placing a vehicle (manufacturers)
         let drivers: Vec<(String, String)> = vec![
             (k("driver Ana"), k("Ana  (now)")),
@@ -1323,21 +1757,40 @@ mod tests {
             (k("driver Carla"), k("Carla")),
             (k("back"), k("Back")),
         ];
-        let items: Vec<(&str, &str)> = drivers.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = drivers
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::List);
         f.menu_kbd = false;
         f.menu_head = Some((k("Driver"), String::new()));
-        shoot("vehicle-drivers-hover", size, page_frame(&f, Some(&ListKind::Drivers), test_column(true)).unwrap(), Vec2::new(700.0, 172.0));
+        shoot(
+            "vehicle-drivers-hover",
+            size,
+            page_frame(&f, Some(&ListKind::Drivers), test_column(true)).unwrap(),
+            Vec2::new(700.0, 172.0),
+        );
         let makers: Vec<(String, String)> = vec![
             (k("maker man"), k("MAN  (4 models)")),
             (k("maker mb"), k("Mercedes-Benz  (7 models)")),
-            (k("bus Vehicles/Volvo/7900.bus"), k("Volvo  ·  7900 Electric")),
+            (
+                k("bus Vehicles/Volvo/7900.bus"),
+                k("Volvo  ·  7900 Electric"),
+            ),
             (k("maker x"), k("Unknown manufacturer  (2 models)")),
             (k("back"), k("Back")),
         ];
-        let items: Vec<(&str, &str)> = makers.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let items: Vec<(&str, &str)> = makers
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         let mut f = test_frame(&items, MenuKind::List);
         f.menu_head = Some((k("Place a vehicle"), String::new()));
-        shoot("vehicle-place", size, page_frame(&f, Some(&ListKind::PlaceMaker), test_column(true)).unwrap(), away);
+        shoot(
+            "vehicle-place",
+            size,
+            page_frame(&f, Some(&ListKind::PlaceMaker), test_column(true)).unwrap(),
+            away,
+        );
     }
 }

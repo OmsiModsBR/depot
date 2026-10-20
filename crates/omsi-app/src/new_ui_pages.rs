@@ -168,7 +168,10 @@ pub(crate) fn row_of(id: &str, label: &str, kind: MenuKind) -> PageRow {
         }
         _ => {}
     }
-    match label.strip_suffix("...").or_else(|| label.strip_suffix('…')) {
+    match label
+        .strip_suffix("...")
+        .or_else(|| label.strip_suffix('…'))
+    {
         Some(t) => {
             row.label = t.trim_end().to_string();
             row.ctl = Ctl::Opens(String::new());
@@ -218,11 +221,18 @@ fn column_lines(kind: Option<&ListKind>, tab: Option<&str>) -> &'static [&'stati
 
 /// The page for the HUD's frame `f` while a list of `kind` is open (`None` when no list is),
 /// beside the Esc menu's `column`.
-pub(crate) fn page_frame(f: &Frame, kind: Option<&ListKind>, column: MenuFrame) -> Option<PageFrame> {
+pub(crate) fn page_frame(
+    f: &Frame,
+    kind: Option<&ListKind>,
+    column: MenuFrame,
+) -> Option<PageFrame> {
     let (sel, items) = f.menu?;
     let back_txt = omsi_ui::tr("Back").into_owned();
     let fields = f.menu_kind == MenuKind::Options;
-    let list = matches!(f.menu_kind, MenuKind::Lines | MenuKind::Tours | MenuKind::List);
+    let list = matches!(
+        f.menu_kind,
+        MenuKind::Lines | MenuKind::Tours | MenuKind::List
+    );
     // ("Back" of the lists stands alone under them, as on the HUD's card)
     let footer = list
         && items
@@ -277,7 +287,11 @@ pub(crate) fn page_frame(f: &Frame, kind: Option<&ListKind>, column: MenuFrame) 
         top: d.top,
         current: d.current,
     });
-    let column = column.for_page(column_lines(kind, tab_title.as_deref()), head.clone(), subtitle);
+    let column = column.for_page(
+        column_lines(kind, tab_title.as_deref()),
+        head.clone(),
+        subtitle,
+    );
     Some(PageFrame {
         column,
         note: if fields { String::new() } else { sub },
@@ -416,7 +430,10 @@ impl PageFrame {
         ui.menu_pane = l.pane_rows.iter().map(|r| px(*r, s)).collect();
         ui.menu_pane_start = l.pane_first;
         ui.menu_pane_go = l.pane_go.map(|r| px(r, s));
-        ui.menu_pane_box = l.pane_card.filter(|_| l.pane_go.is_some()).map(|r| px(r, s));
+        ui.menu_pane_box = l
+            .pane_card
+            .filter(|_| l.pane_go.is_some())
+            .map(|r| px(r, s));
         ui.menu_pane_scroll = l
             .pane_scroll
             .map(|(t, g, n, fit)| (px(t, s), px(g, s), n, fit));
@@ -549,21 +566,57 @@ mod tests {
     #[test]
     fn every_kind_of_settings_row_maps_to_its_control() {
         let o = MenuKind::Options;
-        let r = row_of("fullscreen", &row("Fullscreen", 's', "on", "Window or screen", None), o);
-        assert_eq!((r.label.as_str(), r.desc.as_str()), ("Fullscreen", "Window or screen"));
+        let r = row_of(
+            "fullscreen",
+            &row("Fullscreen", 's', "on", "Window or screen", None),
+            o,
+        );
+        assert_eq!(
+            (r.label.as_str(), r.desc.as_str()),
+            ("Fullscreen", "Window or screen")
+        );
         assert_eq!(r.ctl, Ctl::Switch(true));
-        assert_eq!(row_of("x", &row("A", 's', "off", "", None), o).ctl, Ctl::Switch(false));
+        assert_eq!(
+            row_of("x", &row("A", 's', "off", "", None), o).ctl,
+            Ctl::Switch(false)
+        );
         assert_eq!(
             row_of("volume", &row("Volume", 'v', "60 %", "", Some(0.6)), o).ctl,
             Ctl::Slider(0.6, "60 %".into())
         );
-        assert_eq!(row_of("x", &row("A", 'c', "Medium", "", None), o).ctl, Ctl::Stepper("Medium".into()));
-        assert_eq!(row_of("preset", &row("Preset", 'o', "High", "", None), o).ctl, Ctl::Opens("High".into()));
-        assert_eq!(row_of("keyboard", &row("Keyboard", 'o', "", "", None), o).ctl, Ctl::Opens(String::new()));
-        assert_eq!(row_of("noop", &row("Connection", 'i', "Connected", "", None), o).ctl, Ctl::Info("Connected".into()));
-        assert_eq!(row_of("time_edit", &row("Exact time", 'E', "0842", "", None), o).ctl, Ctl::Editing("0842".into()));
-        assert_eq!(row_of("time_edit", &row("Exact time", 'e', "08:42:00", "", None), o).ctl, Ctl::Button("08:42:00".into()));
-        assert_eq!(row_of("keybind v 0", &row("Horn", 'a', "H", "", None), o).ctl, Ctl::Button("H".into()));
+        assert_eq!(
+            row_of("x", &row("A", 'c', "Medium", "", None), o).ctl,
+            Ctl::Stepper("Medium".into())
+        );
+        assert_eq!(
+            row_of("preset", &row("Preset", 'o', "High", "", None), o).ctl,
+            Ctl::Opens("High".into())
+        );
+        assert_eq!(
+            row_of("keyboard", &row("Keyboard", 'o', "", "", None), o).ctl,
+            Ctl::Opens(String::new())
+        );
+        assert_eq!(
+            row_of("noop", &row("Connection", 'i', "Connected", "", None), o).ctl,
+            Ctl::Info("Connected".into())
+        );
+        assert_eq!(
+            row_of("time_edit", &row("Exact time", 'E', "0842", "", None), o).ctl,
+            Ctl::Editing("0842".into())
+        );
+        assert_eq!(
+            row_of(
+                "time_edit",
+                &row("Exact time", 'e', "08:42:00", "", None),
+                o
+            )
+            .ctl,
+            Ctl::Button("08:42:00".into())
+        );
+        assert_eq!(
+            row_of("keybind v 0", &row("Horn", 'a', "H", "", None), o).ctl,
+            Ctl::Button("H".into())
+        );
         // a heading: never chosen, its label alone
         let h = row_of(crate::game_lists::HEADING, "Steering", o);
         assert!(h.heading);
@@ -586,7 +639,10 @@ mod tests {
         assert_eq!(m.label, "Route number: 50");
         assert_eq!(m.ctl, Ctl::Opens(String::new()));
         let p = row_of("driver Ana", "Ana  (now)", MenuKind::List);
-        assert_eq!((p.label.as_str(), &p.ctl, &p.lead), ("Ana  (now)", &Ctl::None, &Before::None));
+        assert_eq!(
+            (p.label.as_str(), &p.ctl, &p.lead),
+            ("Ana  (now)", &Ctl::None, &Before::None)
+        );
     }
 
     #[test]
@@ -596,7 +652,10 @@ mod tests {
         let items = [("fullscreen", a.as_str()), ("volume", b.as_str())];
         let mut f = test_frame(&items, MenuKind::Options);
         f.menu = Some((1, &items));
-        f.menu_tabs = Some((vec!["General".into(), "Graphics".into(), "Camera".into()], 2));
+        f.menu_tabs = Some((
+            vec!["General".into(), "Graphics".into(), "Camera".into()],
+            2,
+        ));
         let p = page_frame(&f, Some(&ListKind::Options(2)), test_column(true)).unwrap();
         assert!(p.fields);
         assert_eq!(p.rows.len(), 2);
@@ -634,12 +693,20 @@ mod tests {
         f.menu_preview = Some(Preview {
             title: "Tour 2".into(),
             meta: "Line 50".into(),
-            rows: vec![("Depot".into(), "08:00".into()), ("Market".into(), "08:10".into())],
+            rows: vec![
+                ("Depot".into(), "08:00".into()),
+                ("Market".into(), "08:10".into()),
+            ],
             chosen: Some(1),
             button: Some("Start trip".into()),
             time: Some("08:00".into()),
         });
-        let p = page_frame(&f, Some(&ListKind::Tours("50".into(), None)), test_column(true)).unwrap();
+        let p = page_frame(
+            &f,
+            Some(&ListKind::Tours("50".into(), None)),
+            test_column(true),
+        )
+        .unwrap();
         assert_eq!(p.back, Back::Footer);
         assert_eq!(p.active, Some(1));
         assert_eq!(p.note, "Line 50");
@@ -654,7 +721,12 @@ mod tests {
         assert!(ui.menu_side.is_empty());
         // the way back chosen is not a tour marked
         f.menu = Some((2, &items));
-        let p = page_frame(&f, Some(&ListKind::Tours("50".into(), None)), test_column(true)).unwrap();
+        let p = page_frame(
+            &f,
+            Some(&ListKind::Tours("50".into(), None)),
+            test_column(true),
+        )
+        .unwrap();
         assert_eq!(p.active, None);
     }
 
@@ -681,8 +753,18 @@ mod tests {
             assert_eq!(ui.dd_rects.len(), 3, "{size:?}");
             assert_eq!(ui.dd_rows, 3);
             // (all inside the window, right of the column)
-            for r in ui.menu_rects.iter().chain(&ui.menu_side).chain(&ui.dd_rects) {
-                assert!(r[0] >= pause_menu::COLUMN_W * s && r[2] <= size.0 as f32 && r[3] <= size.1 as f32, "{size:?}: {r:?}");
+            for r in ui
+                .menu_rects
+                .iter()
+                .chain(&ui.menu_side)
+                .chain(&ui.dd_rects)
+            {
+                assert!(
+                    r[0] >= pause_menu::COLUMN_W * s
+                        && r[2] <= size.0 as f32
+                        && r[3] <= size.1 as f32,
+                    "{size:?}: {r:?}"
+                );
             }
         }
     }
