@@ -69,6 +69,11 @@ impl App {
             }
             return;
         }
+        // Esc closes the new interface's "Add vehicle" window before anything else (the city
+        // map, the mirror editor)
+        if self.add_key(code, pressed) {
+            return;
+        }
         // The mirror panels (see mirror_hud.rs): Ctrl+M shows or hides them, Ctrl+Shift+M
         // starts and ends their editor; in the editor Insert, Delete, C and Esc are its keys.
         if self.in_cab && self.game_menu.is_none() && self.player.is_some() {
