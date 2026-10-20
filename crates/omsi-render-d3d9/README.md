@@ -88,6 +88,13 @@ from two float textures (the light list, four texels a light, and the grid's ind
 device without dynamic 32-bit float textures draws no lamps and says so in the log. The
 reflection's light takes the lamps in, per pixel.
 
+The scene's pixel shader stays inside the 512 instruction slots every Shader Model 3.0 card
+gives (a test holds it to 460 by the compiler's own count): what does not depend on the
+pixel is worked out before it, the lights packed once (`scene::pack_light`), the border
+colour and the reflection's bits unpacked per material, the interior lamp code per vertex,
+the grid's places a loop count, and the spilling reflection factor put together from a
+table of byte ORs (sampler 10).
+
 Not yet (later phases): shadows and ambient occlusion, the tile light maps (the lamps baked
 into the map, which light the roads and the ground at night), the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
 the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the

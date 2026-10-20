@@ -20,6 +20,10 @@ const SAMPLERS: u32 = 7;
 /// The samplers of the light list and of the lamp grid.
 const LIGHTS_STAGE: u32 = 7;
 const GRID_STAGE: u32 = 8;
+/// The table of byte ORs the reflection's spilling factor is put together with.
+const OR_STAGE: u32 = 10;
+/// The pixel shader's register of the material's border colour (unpacked from its flags).
+const BORDER_REGISTER: u32 = 24;
 
 /// What the scene layer may use beyond the floor, read when the device opens.
 #[derive(Debug, Clone, Copy, Default)]
@@ -98,6 +102,19 @@ struct ScenePipeline {
     ps: IDirect3DPixelShader9,
     /// Bound for a night, light or sphere map that is not there: it adds nothing.
     black: IDirect3DTexture9,
+    /// x OR y of two bytes, at (x, y) of a 256 x 256 picture (`or_table`).
+    or_table: IDirect3DTexture9,
+}
+
+/// The byte ORs as RGBA pixels: x OR y in every channel at column x, row y.
+fn or_table() -> Vec<u8> {
+    let mut px = Vec::with_capacity(256 * 256 * 4);
+    for y in 0..256u32 {
+        for x in 0..256u32 {
+            px.extend_from_slice(&[(x | y) as u8; 4]);
+        }
+    }
+    px
 }
 
 /// The sampler states of an addressing.
@@ -136,6 +153,8 @@ struct Lamps {
     last_lights: Vec<[f32; 4]>,
     last_grid: Vec<f32>,
     texels: Vec<f32>,
+    /// The list as the shader reads it (`scene::pack_light`).
+    packed: Vec<[f32; 4]>,
     warned: bool,
 }
 
@@ -392,10 +411,21 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<ScenePipeline> {
             make_mips: false,
         },
     )?;
+    let or_table = make_texture(
+        device,
+        &SceneTexture {
+            width: 256,
+            height: 256,
+            format: TexFormat::Rgba8,
+            levels: &[or_table()],
+            make_mips: false,
+        },
+    )?;
     // SAFETY: the bytecode and element arrays outlive the calls.
     unsafe {
         Ok(ScenePipeline {
             black,
+            or_table,
             decl: device
                 .CreateVertexDeclaration(elements.as_ptr())
                 .map_err(map_err)?,
@@ -611,7 +641,10 @@ impl D3d9Device {
     /// Uploads the frame's lights and grid where they changed and binds them; returns the
     /// shader's constants c20..c22 for them.
     fn bind_lamps(&mut self, lamps: &SceneLamps) -> Result<[[f32; 4]; 3]> {
-        let none = [lamps.place, [0.0; 4], [0.0; 4]];
+        // (no grid: one of no cells, which no point is on)
+        const NO_GRID: [f32; 4] = [0.0, 0.0, 1.0, 0.0];
+        let none = [NO_GRID, [0.0; 4], [0.0; 4]];
+        self.bind_lamp_counts(0, 0)?;
         let (max_w, max_h) = self.scene_caps.max_texture;
         if !self.scene_caps.lamps || lamps.count() == 0 {
             if !self.scene_caps.lamps && lamps.count() > 0 && !self.scene.lamps.warned {
@@ -632,7 +665,11 @@ impl D3d9Device {
         let (lights, rows) = store.lights.clone().expect("made above");
         let list = &lamps.lights[..kept * 4];
         if store.last_lights != list {
-            fill_float_texture(&lights, 16, rows as usize, list.as_flattened())?;
+            store.packed.clear();
+            store
+                .packed
+                .extend(list.chunks_exact(4).flat_map(crate::scene::pack_light));
+            fill_float_texture(&lights, 16, rows as usize, store.packed.as_flattened())?;
             store.last_lights.clear();
             store.last_lights.extend_from_slice(list);
         }
@@ -687,7 +724,49 @@ impl D3d9Device {
                 }
             }
         }
-        Ok([lamps.place, grid_info, [kept as f32, 0.0, 0.0, 0.0]])
+        let places = grid_info[3] as i32;
+        self.bind_lamp_counts(kept, places)?;
+        let place = if places > 0 && lamps.place[2] > 0.0 {
+            lamps.place
+        } else {
+            NO_GRID
+        };
+        Ok([place, grid_info, [kept as f32, 0.0, 0.0, 0.0]])
+    }
+
+    /// The table of byte ORs, read texel by texel.
+    fn bind_or_table(&self) -> Result<()> {
+        let table = &self.scene.pipeline.as_ref().expect("built before").or_table;
+        // SAFETY: plain calls on a live device; the texture belongs to it.
+        unsafe {
+            self.device.SetTexture(OR_STAGE, table).map_err(map_err)?;
+            for (state, value) in [
+                (D3DSAMP_MINFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MAGFILTER, D3DTEXF_POINT.0 as u32),
+                (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
+                (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+            ] {
+                self.device
+                    .SetSamplerState(OR_STAGE, state, value)
+                    .map_err(map_err)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The loop counts of the lamps: the lights in the list (the vertex stage's, for the
+    /// interior lamps) and the places of a grid cell (the pixel stage's loop count).
+    fn bind_lamp_counts(&self, lights: usize, places: i32) -> Result<()> {
+        let vs = [lights as f32, 0.0, 0.0, 0.0];
+        let ps = [places.max(0), 0, 1, 0];
+        // SAFETY: plain calls on a live device; the arrays outlive them.
+        unsafe {
+            self.device
+                .SetVertexShaderConstantF(13, vs.as_ptr(), 1)
+                .and_then(|_| self.device.SetPixelShaderConstantI(0, ps.as_ptr(), 1))
+                .map_err(map_err)
+        }
     }
 
     fn draw_scene_inner<'m>(
@@ -698,6 +777,7 @@ impl D3d9Device {
         height: u32,
     ) -> Result<()> {
         let lamps = self.bind_lamps(&frame.lamps)?;
+        self.bind_or_table()?;
         self.scene.records.clear();
         frame.instance_records(&mut self.scene.records);
         let records = frame.list.len();
@@ -894,8 +974,11 @@ impl D3d9Device {
         let env = found(m.envmap);
         let bump = found(m.bump);
         let u = m.uniform;
-        // (a sphere map that is not there reflects nothing)
-        let env_on = [env.is_some() as u32 as f32, 0.0, 0.0, 0.0];
+        // (a sphere map that is not there reflects nothing; the bits and the border colour
+        // unpacked here, not per pixel)
+        let [has_mask, declared] = crate::scene::env_bits(u[3][3]);
+        let env_on = [env.is_some() as u32 as f32, has_mask, declared, 0.0];
+        let border = crate::scene::border_rgba(u[8]);
         let mut bump_texel = [0.0f32; 4];
         if let Some(t) = bump {
             let mut desc = D3DSURFACE_DESC::default();
@@ -933,6 +1016,8 @@ impl D3d9Device {
             d.SetPixelShaderConstantF(0, u.as_ptr().cast(), MATERIAL_VECTORS as u32)
                 .map_err(map_err)?;
             d.SetPixelShaderConstantF(18, ps.as_ptr().cast(), ps.len() as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(BORDER_REGISTER, border.as_ptr(), 1)
                 .map_err(map_err)?;
             d.SetVertexShaderConstantF(11, vs.as_ptr().cast(), vs.len() as u32)
                 .map_err(map_err)?;

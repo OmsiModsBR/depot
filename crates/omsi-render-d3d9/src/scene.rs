@@ -290,6 +290,53 @@ pub fn env_factor(factor: f32, light: [f32; 3]) -> [f32; 3] {
     [packed >> 16, packed >> 8, packed].map(|c| (c & 0xff) as f32 / 255.0)
 }
 
+/// The `[matl_texadress_border]` colour of a material's flags vector (uniform vector 8: y 1
+/// for a border, z the packed rgb, w the alpha), unpacked as the scene shader takes it;
+/// zero for a material without a border.
+pub fn border_rgba(flags: [f32; 4]) -> [f32; 4] {
+    if !(0.5..1.5).contains(&flags[1]) {
+        return [0.0; 4];
+    }
+    let p = (flags[2] + 0.5).floor().clamp(0.0, 16_777_215.0) as u32;
+    let [r, g, b] = [p >> 16, p >> 8, p].map(|c| (c & 0xff) as f32 / 255.0);
+    [r, g, b, flags[3]]
+}
+
+/// What the scene shader takes of a material's `[matl_envmap]` bits (uniform vector 3, w):
+/// x whether it has a mask, y whether a transmap is declared, as 1 or 0.
+pub fn env_bits(params2_w: f32) -> [f32; 2] {
+    let bits = (params2_w + 0.5).floor().max(0.0) as u32;
+    [(bits & 1) as f32, ((bits >> 1) & 1) as f32]
+}
+
+/// A light of [`SceneLamps::lights`] (its four vectors) as the scene shader of the D3D9
+/// device reads it, with what does not depend on the pixel worked out once:
+/// * xyz the position, w 1 for a point light that lights every surface (dir.x 1);
+/// * rgb the colour times the intensity, w 1 / the radius (0 for a light passed by);
+/// * the spot's direction and outer cone, as given;
+/// * the inner cone; the interior lamp's core radius squared (at least 1 cm); the radius
+///   of full light squared (an eighth of the range; 0 for a light passed by); the interior
+///   lamp's reach squared (0 when its intensity is not above 0, which lights nothing).
+pub fn pack_light(light: &[[f32; 4]]) -> [[f32; 4]; 4] {
+    let [pos, color, dir, extra] = [light[0], light[1], light[2], light[3]];
+    let radius = pos[3];
+    let every_surface = dir[3] < -1.5 && dir[0] > 0.5;
+    let w = color[3];
+    let (inv_radius, full) = if radius > 0.0 {
+        (1.0 / radius, (radius * 0.125).powi(2))
+    } else {
+        (0.0, 0.0)
+    };
+    let core = extra[1].max(0.01);
+    let reach = if w > 0.0 { extra[3] * extra[3] } else { 0.0 };
+    [
+        [pos[0], pos[1], pos[2], f32::from(u8::from(every_surface))],
+        [color[0] * w, color[1] * w, color[2] * w, inv_radius],
+        dir,
+        [extra[0], core * core, full, reach],
+    ]
+}
+
 /// The lamps of a picture, as the default renderer hands them to its shaders: the lights,
 /// and the grid of cells round the camera that names the lights reaching each cell.
 #[derive(Debug, Clone, Copy, Default)]
@@ -576,6 +623,51 @@ mod tests {
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn lights_are_packed_for_the_shader() {
+        let spot = [
+            [1.0, 2.0, 3.0, 16.0],
+            [1.0, 0.5, 0.25, 2.0],
+            [0.0, 0.0, -1.0, 0.7],
+            [0.9, 0.5, 0.0, 4.0],
+        ];
+        assert_eq!(
+            pack_light(&spot),
+            [
+                [1.0, 2.0, 3.0, 0.0],
+                [2.0, 1.0, 0.5, 1.0 / 16.0],
+                [0.0, 0.0, -1.0, 0.7],
+                [0.9, 0.25, 4.0, 16.0],
+            ]
+        );
+        // a vehicle's point light lights every surface; one passed by (radius 0) nothing,
+        // an interior lamp without intensity reaches nothing
+        let point = [
+            [0.0; 4],
+            [1.0, 1.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, -2.0],
+            [0.0, 0.0, 0.0, 3.0],
+        ];
+        let packed = pack_light(&point);
+        assert_eq!(packed[0][3], 1.0);
+        assert_eq!((packed[1][3], packed[3][2], packed[3][3]), (0.0, 0.0, 0.0));
+        assert!((packed[3][1] - 1e-4).abs() < 1e-9, "{}", packed[3][1]);
+    }
+
+    #[test]
+    fn borders_and_env_bits_are_unpacked_for_the_shader() {
+        assert_eq!(
+            border_rgba([0.0, 1.0, (0x40_80_ff) as f32, 0.5]),
+            [64.0 / 255.0, 128.0 / 255.0, 1.0, 0.5]
+        );
+        assert_eq!(border_rgba([0.0, 0.0, 12345.0, 1.0]), [0.0; 4]);
+        assert_eq!(border_rgba([0.0, 2.0, 12345.0, 1.0]), [0.0; 4]);
+        assert_eq!(env_bits(0.0), [0.0, 0.0]);
+        assert_eq!(env_bits(1.0), [1.0, 0.0]);
+        assert_eq!(env_bits(2.0), [0.0, 1.0]);
+        assert_eq!(env_bits(3.0), [1.0, 1.0]);
     }
 
     #[test]
