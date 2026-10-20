@@ -55,8 +55,8 @@ pub const PS30_MIN_SLOTS: u32 = 512;
 pub fn instruction_slots(code: &[u32]) -> u32 {
     const END: u32 = 0x0000_FFFF;
     const COMMENT: u32 = 0xFFFE;
-    // dcl, def, defi, defb, nop
-    const FREE: [u32; 5] = [0x1F, 0x51, 0x30, 0x2F, 0x00];
+    // dcl, def, defi, defb, label
+    const FREE: [u32; 5] = [0x1F, 0x51, 0x30, 0x2F, 0x1E];
     let mut slots = 0;
     // (the first token is the version)
     let mut i = 1;
@@ -87,8 +87,8 @@ fn slots_of(opcode: u32) -> u32 {
         0x14 | 0x16 => 4,
         // pow, nrm, lit, m4x3, m3x3
         0x20 | 0x24 | 0x10 | 0x15 | 0x17 => 3,
-        // lrp, crs, dsx, dsy, m3x2
-        0x12 | 0x21 | 0x5B | 0x5C | 0x18 => 2,
+        // lrp, crs, dsx, dsy, m3x2, texkill
+        0x12 | 0x21 | 0x5B | 0x5C | 0x18 | 0x41 => 2,
         // flow control: loop, rep, if, if_comp, break_comp, breakp, callnz; texldd
         0x1B | 0x26 | 0x28 | 0x29 | 0x2D | 0x60 | 0x1A | 0x5D => 3,
         // endloop, endrep, call; texldl
@@ -150,6 +150,17 @@ mod tests {
             0x0000_FFFF,
         ];
         assert_eq!(instruction_slots(&macros), 11);
+        // texkill r0 (2 slots), nop (1), label l0 (none)
+        let others = [
+            0xFFFF_0300,
+            0x0100_0041,
+            0x800F_0000,
+            0x0000_0000,
+            0x0100_001E,
+            0xA0E0_0000,
+            0x0000_FFFF,
+        ];
+        assert_eq!(instruction_slots(&others), 3);
     }
 
     #[test]
