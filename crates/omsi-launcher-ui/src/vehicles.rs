@@ -573,7 +573,7 @@ impl VehiclesView {
             let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
             // (the note gives way to the label on a narrow card, never under it)
             let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
-            let note = fit(ui, &note, 12.0 * TEXT_SCALE, room);
+            let note = kit::fit_text(ui, &note, 12.0 * TEXT_SCALE, room);
             kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
             y += 30.0;
         }
@@ -620,17 +620,6 @@ impl VehiclesView {
             }
         }
     }
-}
-
-/// `s` cut with an ellipsis to fit `room` pixels at `px`.
-fn fit(ui: &mut Ui, s: &str, px: f32, room: f32) -> String {
-    let mut n = s.chars().count();
-    let mut out = s.to_string();
-    while n > 1 && ui.width(&out, px, Weight::Regular) > room {
-        n -= 1;
-        out = shorten(s, n);
-    }
-    out
 }
 
 /// The name of a bus's own livery (no repaint), as the Drive page names it.
@@ -696,11 +685,7 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
             shorten(&v.missing_packs.join(", "), 24),
         )
     });
-    rows.push((
-        "Scripts, textures, sound",
-        Status::Unverified,
-        "not checked".into(),
-    ));
+    rows.push(("Other files", Status::Unverified, "not checked yet".into()));
     rows
 }
 

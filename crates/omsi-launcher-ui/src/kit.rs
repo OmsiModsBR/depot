@@ -192,6 +192,17 @@ pub fn fit(w: f32, body_w: f32) -> f32 {
     w * (body_w / BODY_W).clamp(0.6, 1.0)
 }
 
+/// `s` cut with an ellipsis to fit `room` pixels at `px`.
+pub fn fit_text(ui: &mut Ui, s: &str, px: f32, room: f32) -> String {
+    let mut n = s.chars().count();
+    let mut out = s.to_string();
+    while n > 1 && ui.width(&out, px, Weight::Regular) > room {
+        n -= 1;
+        out = shorten(s, n);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::shorten;

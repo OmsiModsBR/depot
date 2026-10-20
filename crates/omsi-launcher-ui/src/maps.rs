@@ -34,6 +34,8 @@ pub struct MapsView {
     current: Option<String>,
     /// The picture from the chosen map's folder, on the GPU: its texture and width over height.
     map_picture: Option<(usize, f32)>,
+    /// That picture is still being looked for or read.
+    picture_reading: bool,
 }
 
 impl Default for MapsView {
@@ -47,6 +49,7 @@ impl Default for MapsView {
             used: None,
             current: None,
             map_picture: None,
+            picture_reading: false,
         }
     }
 }
@@ -65,9 +68,11 @@ impl MapsView {
         self.current.as_deref()
     }
 
-    /// The picture from that map's folder (its texture and width over height), when it has one.
-    pub fn set_picture(&mut self, p: Option<(usize, f32)>) {
+    /// The picture from that map's folder (its texture and width over height), when it has one,
+    /// and whether it is still being read.
+    pub fn set_picture(&mut self, p: Option<(usize, f32)>, reading: bool) {
         self.map_picture = p;
+        self.picture_reading = reading;
     }
 
     /// The map chosen in the library, and its start point (`None`: automatic).
@@ -341,7 +346,11 @@ impl MapsView {
             }
             None => {
                 ui.text_in(
-                    "This map has no picture in its folder.",
+                    if self.picture_reading {
+                        "Loading…"
+                    } else {
+                        "No picture found for this map."
+                    },
                     inner.inset(24.0),
                     14.0 * TEXT_SCALE,
                     Weight::Regular,
@@ -358,7 +367,10 @@ impl MapsView {
         let mut y = r.y + 58.0;
         for (label, status, note) in file_status(m) {
             dot(ui, r.x + 24.0, y, status);
-            text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            // (the note gives way to the label on a narrow card, never under it)
+            let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
+            let note = kit::fit_text(ui, &note, 12.0 * TEXT_SCALE, room);
             kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
             y += 30.0;
         }

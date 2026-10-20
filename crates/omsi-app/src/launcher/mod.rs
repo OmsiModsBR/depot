@@ -206,6 +206,9 @@ pub struct Launcher {
     gpu_rest_drop: Option<std::thread::JoinHandle<()>>,
     /// The first picture is in the window (logged with how long it took).
     shown_once: bool,
+    /// Whether the OMSI 2 folder chosen has what the game needs, for that folder (looked at
+    /// again when the window gets the focus back: the status bar asks for it every frame).
+    root_ok: Option<(String, bool)>,
 }
 
 /// Run the launcher window until it is closed.
@@ -281,6 +284,7 @@ impl Launcher {
         ime: false,
         gpu_rest_drop: None,
         shown_once: false,
+        root_ok: None,
     };
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
@@ -726,6 +730,9 @@ impl Launcher {
     /// launcher script).
     fn set_focus(&mut self, f: bool) {
         self.focused = f;
+        if f {
+            self.root_ok = None;
+        }
         if !f {
             self.pages.pads.cancel_feedback_test();
             self.modifiers.release_keys();
@@ -1072,7 +1079,7 @@ impl Launcher {
         });
         // a phone: the launcher made for it, not the desktop's pages
         if mobile {
-            if self.page == Page::Setup && !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.state.config.root)).is_empty() && self.phone.page.is_none() {
+            if self.page == Page::Setup && !self.root_ok() && self.phone.page.is_none() {
                 self.phone.tab = phone::Tab::More;
                 self.phone.page = Some(Page::Setup);
             }
@@ -1373,7 +1380,7 @@ impl Launcher {
                 self.preview_rect = self.vehicles.preview_area();
                 // (the picture lies in the page's card, not under it: the card does not take the
                 // mouse from it)
-                if let Some(r) = self.preview_rect.filter(|r| r.contains(self.ui.input.mouse)) {
+                if self.preview_rect.is_some_and(|r| r.contains(self.ui.input.mouse)) {
                     if self.ui.input.wheel.y.abs() > 0.0 {
                         self.preview.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
                     }
@@ -1401,7 +1408,7 @@ impl Launcher {
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
         }
-        self.maps.set_picture(self.map_pic.shown());
+        self.maps.set_picture(self.map_pic.shown(), self.map_pic.reading.is_some() || self.map_pic.pending.is_some());
         if let Some((file, entry)) = self.maps.take_use() {
             self.state.select_map(&file);
             self.state.choice.entry = entry;
@@ -1413,9 +1420,22 @@ impl Launcher {
 
     /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
     /// look has them; returns where the message line can start.
+    /// Whether the OMSI 2 folder chosen has what the game needs (see `root_ok`).
+    fn root_ok(&mut self) -> bool {
+        let root = &self.state.config.root;
+        match &self.root_ok {
+            Some((r, ok)) if r == root => *ok,
+            _ => {
+                let ok = omsi_cfg::missing_original_essentials(std::path::Path::new(root)).is_empty();
+                self.root_ok = Some((root.clone(), ok));
+                ok
+            }
+        }
+    }
+
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
         let games = self.state.instances.len();
-        let root_ok = omsi_cfg::missing_original_essentials(std::path::Path::new(&self.state.config.root)).is_empty();
+        let root_ok = self.root_ok();
         let chips = [
             (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { format!("Games: {games} running") }, games > 0),
             ((if root_ok { "OMSI 2 folder: read" } else { "OMSI 2 folder: not chosen" }).to_string(), false),
@@ -1465,24 +1485,14 @@ impl Launcher {
     /// `omsi_launcher_ui::shell::page_heading`): its name small and letter-spaced in the accent,
     /// the title large, and what the page is for under it.
     pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
-        if mobile::mobile() {
-            // (a phone has no room for the large heading: the title and the line as before)
-            self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
-            if !sub.is_empty() {
-                let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-                self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
-            }
-            return Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0));
-        }
-        let eyebrow = omsi_ui::tr(title).to_uppercase();
-        self.ui.text(&eyebrow, Vec2::new(r.x, r.y + 18.0), 13.0 * omsi_launcher_ui::look::TEXT_SCALE, Weight::Medium, ACCENT, Align::Left);
-        self.ui.text(title, Vec2::new(r.x, r.y + 54.0), 36.0, Weight::Bold, TEXT, Align::Left);
+        self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
         if !sub.is_empty() {
-            // (a narrow window: the line stops short of the tabs some pages put top right)
+            // (a narrow window: the line stops short of the tabs some pages put top right,
+            // it ran under them on a phone)
             let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-            self.ui.text_in(sub, Rect::new(r.x, r.y + 74.0, w, 22.0), 15.0, Weight::Regular, TEXT_DIM, Align::Left);
+            self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
         }
-        Rect::new(r.x, r.y + 108.0, r.w, (r.h - 108.0).max(0.0))
+        Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0))
     }
 }
 
@@ -1530,14 +1540,14 @@ impl MapPicture {
             self.file = file.to_string();
             self.aspect = None;
             self.pending = None;
-            let dir = root.join(file).parent().map(|d| d.to_path_buf());
+            // (found through the content roots as the map list found it: a mod's map, or one
+            // read in place from an archive, has its own picture)
+            let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
+            let dir = global.parent().map(|d| d.to_path_buf());
             let (tx, rx) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
-                let img = dir.and_then(|d| Self::find(&d)).and_then(|f| image::open(f).ok()).map(|i| {
-                    // (the page shows it a few hundred points wide)
-                    if i.width() > 1280 { i.resize(1280, 1280 * i.height() / i.width().max(1), image::imageops::FilterType::Triangle) } else { i }
-                });
-                let _ = tx.send(img.map(|i| i.to_rgba8()));
+                let img = dir.and_then(|d| Self::find(&d)).and_then(|f| Self::read(&f));
+                let _ = tx.send(img);
             });
             self.reading = Some(rx);
         }
@@ -1555,9 +1565,30 @@ impl MapPicture {
 
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
     fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
-        let mut files: Vec<_> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("picture")) && p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["jpg", "jpeg", "png", "bmp"].contains(&x.to_ascii_lowercase().as_str()))).collect();
+        let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
+            .into_iter()
+            .filter(|(_, is_dir)| !is_dir)
+            .map(|(name, _)| dir.join(name))
+            .filter(|p| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("picture")) && p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["jpg", "jpeg", "png", "bmp"].contains(&x.to_ascii_lowercase().as_str())))
+            .collect();
         files.sort();
         files.into_iter().next()
+    }
+
+    /// The picture decoded within bounds (a map's file is anyone's: no more than 8192 pixels a
+    /// side and 256 MB decoded), then made to fit 1280 x 1280 (the page shows it a few hundred
+    /// points wide; a texture of that size goes on any card).
+    fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+        let bytes = omsi_cfg::vfs::read(file).ok()?;
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(8192);
+        limits.max_image_height = Some(8192);
+        limits.max_alloc = Some(256 << 20);
+        reader.limits(limits);
+        let img = reader.decode().ok()?;
+        let img = if img.width() > 1280 || img.height() > 1280 { img.resize(1280, 1280, image::imageops::FilterType::Triangle) } else { img };
+        Some(img.to_rgba8())
     }
 
     fn upload(&mut self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue) {
