@@ -151,7 +151,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
 /// (`SetLineTo`), else its IBIS's line number.
-fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
+pub(crate) fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
     [v.str_var("Matrix_Nr"), v.str_var("SetLineTo")]
         .into_iter()
         .map(|s| s.trim().to_string())
@@ -232,6 +232,67 @@ fn place_vehicles(app: &App, unknown: &str) -> Vec<(String, String, String, Stri
             (maker.to_lowercase(), shown, ty, path.clone())
         })
         .collect()
+}
+
+/// Types as (name, path), sorted, as the place list shows them: a type name used twice gets
+/// its pack's folder, then its file.
+fn place_types(mut types: Vec<(String, String)>) -> Vec<(String, String)> {
+    types.sort_by(|a, b| bus_cmp(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
+    let same = |t: &[(String, String)], n: &str| t.iter().filter(|x| x.0.to_lowercase() == n.to_lowercase()).count();
+    let counts: Vec<usize> = types.iter().map(|t| same(&types, &t.0)).collect();
+    types
+        .iter()
+        .zip(counts)
+        .map(|(t, n)| {
+            let mut label = t.0.clone();
+            if n > 1 {
+                let parts: Vec<&str> = t.1.split('/').collect();
+                let folder = parts.get(1).copied().unwrap_or_default();
+                let file = parts.last().copied().unwrap_or_default().rsplit_once('.').map(|x| x.0).unwrap_or_default();
+                label = format!("{label}  ·  {}  ·  {}", bus_label(folder), bus_label(file));
+            }
+            (label, t.1.clone())
+        })
+        .collect()
+}
+
+/// Every vehicle of the place list as (manufacturer · type, path), by manufacturer and then
+/// type: the new interface's "Add vehicle" window lists them in one column.
+pub(crate) fn place_choices(app: &App) -> Vec<(String, String)> {
+    let all = place_vehicles(app, "Unknown manufacturer");
+    let mut makers: Vec<(String, String)> = Vec::new();
+    for v in &all {
+        if !makers.iter().any(|m| m.0 == v.0) {
+            makers.push((v.0.clone(), v.1.clone()));
+        }
+    }
+    makers.sort_by(|a, b| bus_cmp(&a.1, &b.1).then_with(|| a.0.cmp(&b.0)));
+    let mut out = Vec::new();
+    for (key, name) in makers {
+        let types = all.iter().filter(|v| v.0 == key).map(|v| (v.2.clone(), v.3.clone())).collect();
+        out.extend(place_types(types).into_iter().map(|(t, path)| (format!("{name}  ·  {t}"), path)));
+    }
+    out
+}
+
+/// A vehicle's liveries by name, alphabetical (the place list puts "Random livery" first).
+pub(crate) fn place_liveries(app: &App, bus: &str) -> Vec<String> {
+    let mut names = bus_def(app, bus).map(|d| liveries(&d)).unwrap_or_default();
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup();
+    names
+}
+
+/// A vehicle's depot files as (label, file name), alphabetical (the place list puts the
+/// map's depot file first).
+pub(crate) fn place_depots(app: &App, bus: &str) -> Vec<(String, String)> {
+    let Some(d) = bus_def(app, bus) else { return Vec::new() };
+    let mut files: Vec<(String, String)> = omsi_vehicle::hof::depot_files(d.dir())
+        .into_iter()
+        .map(|f| (hof_label(&f), f.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default()))
+        .collect();
+    files.sort_by_key(|(label, _)| label.to_lowercase());
+    files
 }
 
 /// The paint schemes of a vehicle file, by name (without loading its meshes).
@@ -544,44 +605,21 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::PlaceType(key) => {
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
-            let mut types: Vec<(String, String)> = all.iter().filter(|v| v.0 == *key).map(|v| (v.2.clone(), v.3.clone())).collect();
-            types.sort_by(|a, b| bus_cmp(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
-            // (a type name used twice: with its pack's folder, then with its file)
-            let same = |t: &[(String, String)], n: &str| t.iter().filter(|x| x.0.to_lowercase() == n.to_lowercase()).count();
-            let counts: Vec<usize> = types.iter().map(|t| same(&types, &t.0)).collect();
-            for (t, n) in types.iter().zip(counts) {
-                let mut label = t.0.clone();
-                if n > 1 {
-                    let parts: Vec<&str> = t.1.split('/').collect();
-                    let folder = parts.get(1).copied().unwrap_or_default();
-                    let file = parts.last().copied().unwrap_or_default().rsplit_once('.').map(|x| x.0).unwrap_or_default();
-                    label = format!("{label}  ·  {}  ·  {}", bus_label(folder), bus_label(file));
-                }
-                out.push((label, format!("bus {}", t.1)));
+            let types: Vec<(String, String)> = all.iter().filter(|v| v.0 == *key).map(|v| (v.2.clone(), v.3.clone())).collect();
+            for (label, path) in place_types(types) {
+                out.push((label, format!("bus {path}")));
             }
         }
         ListKind::PlaceLivery(bus) => {
             out.push((tr("Random livery"), "livery ".into()));
-            let mut names = bus_def(app, bus).map(|d| liveries(&d)).unwrap_or_default();
-            // (alphabetical)
-            names.sort_by_key(|n| n.to_lowercase());
-            names.dedup();
-            for n in names {
+            for n in place_liveries(app, bus) {
                 out.push((n.clone(), format!("livery {n}")));
             }
         }
         ListKind::PlaceHof(bus, _) => {
             out.push((tr("The map's depot file"), "placehof ".into()));
-            if let Some(d) = bus_def(app, bus) {
-                let mut files: Vec<(String, String)> = omsi_vehicle::hof::depot_files(d.dir())
-                    .into_iter()
-                    .map(|f| (hof_label(&f), f.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default()))
-                    .collect();
-                // (alphabetical)
-                files.sort_by_key(|(label, _)| label.to_lowercase());
-                for (label, name) in files {
-                    out.push((label, format!("placehof {name}")));
-                }
+            for (label, name) in place_depots(app, bus) {
+                out.push((label, format!("placehof {name}")));
             }
         }
         ListKind::Numbers => {
@@ -600,6 +638,26 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     }
     out.push((tr("Back"), "back".into()));
     out
+}
+
+/// A tour of line `line` as the line's preview shows it: "Tour 3  ›  Terminus" (where the
+/// trip it has from the game's time `now` on goes) and the time that trip leaves.
+pub(crate) fn tour_preview(sch: &crate::schedule::Schedule, line: &str, t: &omsi_timetable::Tour, now: f64) -> (String, String) {
+    let tr = |t: &str| omsi_ui::tr(t).into_owned();
+    let hm = |m: f32| format!("{:02}:{:02}", (m / 60.0) as i32 % 24, (m % 60.0) as i32);
+    let terminus = |name: &str| sch.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)).map(|x| x.terminus.trim().to_string()).unwrap_or_default();
+    // (the trip and the time the tour has from the game's time on)
+    let next = sch.tour_stops_from(line, &t.number, now).first().cloned();
+    let end = match next.as_ref() {
+        Some(n) => tour_trip_name(sch, t, n.0).map(|name| terminus(&name)).unwrap_or_default(),
+        None => t.trips.first().map(|tt| terminus(&tt.trip)).unwrap_or_default(),
+    };
+    let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
+    let when = match next {
+        Some(n) => hm((n.3 / 60.0) as f32),
+        None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
+    };
+    (what, when)
 }
 
 /// What the open list tells the interface besides its lines: the layout it wants, its title
@@ -645,24 +703,8 @@ pub(crate) fn menu_extras(
         ListKind::Lines => {
             let preview = action.strip_prefix("line ").and_then(|name| {
                 let line = schedule?.data.lines.iter().find(|l| l.name == name)?;
-                let rows = sorted_tours(line)
-                    .into_iter()
-                    .filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now)))
-                    .map(|t| {
-                        // (the trip and the time the tour has from the game's time on)
-                        let next = schedule.and_then(|s| s.tour_stops_from(&line.name, &t.number, now).first().cloned());
-                        let end = match (schedule, next.as_ref()) {
-                            (Some(s), Some(n)) => tour_trip_name(s, t, n.0).map(|name| trip_of(&name).1).unwrap_or_default(),
-                            _ => t.trips.first().map(|tt| trip_of(&tt.trip).1).unwrap_or_default(),
-                        };
-                        let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
-                        let when = match next {
-                            Some(n) => hm((n.3 / 60.0) as f32),
-                            None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
-                        };
-                        (what, when)
-                    })
-                    .collect();
+                let sch = schedule?;
+                let rows = sorted_tours(line).into_iter().filter(|t| tour_listed(sch, &line.name, t, now)).map(|t| tour_preview(sch, &line.name, t, now)).collect();
                 Some(Preview { title: format!("{} {}", tr("Line"), line.name), meta: format!("{} {}", line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count(), tr("tours")), rows, chosen: None, button: None, time: None })
             });
             (MenuKind::Lines, head("Line and tour..."), preview)
@@ -1004,6 +1046,7 @@ pub(crate) fn button(name: &str, text: &str, desc: &str, id: &str) -> (String, S
 /// a paper sign with its line in the window, the IBIS's stop list (#1317).
 pub(crate) fn end_duty(app: &mut App) {
     app.duty = None;
+    app.duty_changed();
     if let Some(p) = app.player.as_mut() {
         clear_timetable(&mut p.vehicle);
     }
@@ -1962,7 +2005,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
 
 /// The name of the weather in force (the file's name without its ending).
 /// The weather files (`Weather/*.owt`) of every content root, by name.
-fn weather_files() -> Vec<String> {
+pub(crate) fn weather_files() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
         .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("owt")).unwrap_or(false))
@@ -2129,7 +2172,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
     }
 }
 
-fn weather_name(app: &App) -> String {
+pub(crate) fn weather_name(app: &App) -> String {
     if app.weather.as_ref().is_some_and(|w| w.name == CUSTOM_WEATHER) {
         return CUSTOM_WEATHER.to_string();
     }
@@ -2872,7 +2915,7 @@ fn apply_pending(v: &mut serde_json::Value, pending: &[(String, String)]) {
 }
 
 /// The personnel files there are (content folder and OMSI 2's `Drivers`), by name.
-fn driver_names(app: &App) -> Vec<String> {
+pub(crate) fn driver_names(app: &App) -> Vec<String> {
     let mut names: Vec<String> = omsi_cfg::read_dir_merged("Drivers")
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("odr")))
@@ -2886,7 +2929,7 @@ fn driver_names(app: &App) -> Vec<String> {
 
 /// Go on with another driver: this run so far into the old personnel file, the rest into
 /// the new one.
-fn switch_driver(app: &mut App, name: &str) {
+pub(crate) fn switch_driver(app: &mut App, name: &str) {
     if app.career.path.is_some() {
         if let Err(e) = app.career.save() {
             log::warn!("writing the personnel file: {e}");
@@ -2977,6 +3020,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     }
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
+    app.duty_changed();
     app.duty = Some(d);
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
@@ -3001,6 +3045,7 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
             }
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
+            app.duty_changed();
             app.duty = Some(d);
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }

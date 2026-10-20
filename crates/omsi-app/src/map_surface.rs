@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use glam::{DVec2, Vec2, Vec3};
-use omsi_ui::{Color, Painter, Vertex};
+use omsi_ui::{Color, Painter, Rect, Vertex};
 
 const FOLDER: &str = "openomsi-realmap";
 const MAGIC: &[u8; 4] = b"OMSF";
@@ -75,13 +75,16 @@ fn height_marks(pts: &[DVec2], height: i32, index: bool) -> Vec<ContourMark> {
 
 /// The marks to write at `mpp` metres a pixel: all of them close up (under 6), only the index lines' up to 40, and
 /// none over another (at least 64 px apart close up, 120 px otherwise, times the interface scale `ui`); only those
-/// `inside` the window. Returns each with its place on the screen.
+/// `inside` the window and whose text box (`label_box`, from its place and mark) is clear of the screen boxes
+/// already `taken` by other labels. Returns each with its place on the screen.
 pub fn marks_to_write<'a>(
     marks: &'a [ContourMark],
     mpp: f64,
     ui: f32,
     to_screen: impl Fn(DVec2) -> Vec2,
     inside: impl Fn(Vec2) -> bool,
+    taken: &[Rect],
+    label_box: impl Fn(Vec2, &ContourMark) -> Rect,
 ) -> Vec<(Vec2, &'a ContourMark)> {
     let near = mpp < 6.0;
     if mpp >= 40.0 {
@@ -91,7 +94,11 @@ pub fn marks_to_write<'a>(
     let mut shown: Vec<(Vec2, &ContourMark)> = Vec::new();
     for m in marks.iter().filter(|m| near || m.index) {
         let p = to_screen(m.at);
-        if inside(p) && !shown.iter().any(|(q, _)| (*q - p).length() < apart) {
+        if !inside(p) || shown.iter().any(|(q, _)| (*q - p).length() < apart) {
+            continue;
+        }
+        let b = label_box(p, m);
+        if !taken.iter().any(|t| t.x < b.right() && b.x < t.right() && t.y < b.bottom() && b.y < t.bottom()) {
             shown.push((p, m));
         }
     }
@@ -335,8 +342,11 @@ pub struct MapSurface {
     north: f32,
     /// Added to the heights of the contour lines when the manifest says so (some maps' heights are relative).
     terrain_offset: f32,
-    /// Where the index contours are written (a point and a height about every 700 m of them), made on first use.
+    /// Where the heights of the contour lines are written (a point and a height along each line), made by a worker
+    /// thread once the city map asks for them; empty until it is done.
     contour_marks: std::sync::OnceLock<Vec<ContourMark>>,
+    /// The worker for `contour_marks` was started (once: a worker that fails is not started again).
+    contour_job: std::sync::atomic::AtomicBool,
     /// What the map says its rail vehicles are: (a part of the vehicle file's path, MODAL_*), from the manifest's
     /// `tram_vehicles`, `metro_vehicles` and `rail_vehicles`. A rail vehicle named by none is drawn as a tram.
     rail_kinds: Vec<(String, u8)>,
@@ -602,6 +612,7 @@ impl MapSurface {
             north: 0.0,
             terrain_offset: 0.0,
             contour_marks: std::sync::OnceLock::new(),
+            contour_job: std::sync::atomic::AtomicBool::new(false),
             map_dir: Default::default(),
             rail_kinds: Vec::new(),
             times: std::sync::OnceLock::new(),
@@ -696,25 +707,68 @@ impl MapSurface {
         Some(h + self.terrain_offset)
     }
 
-    /// Where the heights of the contour lines are written on the city map (made on first use).
-    pub fn contour_marks(&self) -> &[ContourMark] {
-        self.contour_marks.get_or_init(|| {
-            let mut out = Vec::new();
-            for e in &self.index {
-                let Some(body) = self.data.get(e.at..e.at + e.len) else { continue };
-                let _ = self.walk(
-                    body,
-                    |_, _| {},
-                    |(class, w), pts| {
-                        if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
-                            out.extend(height_marks(&pts, (w + self.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
-                        }
-                    },
-                    |_| {},
-                );
+    /// Where the heights of the contour lines are written on the city map; None until the worker started by
+    /// [`MapSurface::request_contour_marks`] is done (and for good if it failed). Never waits.
+    pub fn contour_marks(&self) -> Option<&[ContourMark]> {
+        self.contour_marks.get().map(|m| m.as_slice())
+    }
+
+    /// Starts the worker that makes the contour heights, once (a later call, or one after a failure, does nothing).
+    pub fn request_contour_marks(self: &std::sync::Arc<Self>) {
+        self.request_contour_marks_with(|s| s.skim_contour_marks());
+    }
+
+    fn request_contour_marks_with(self: &std::sync::Arc<Self>, work: impl FnOnce(&MapSurface) -> Vec<ContourMark> + Send + 'static) {
+        if !self.has_contours || self.contour_job.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            return;
+        }
+        let this = self.clone();
+        // (a worker that cannot start or panics leaves the marks unset: the heights stay off)
+        let _ = std::thread::Builder::new().name("contour-heights".into()).spawn(move || {
+            let marks = work(&this);
+            let _ = this.contour_marks.set(marks);
+        });
+    }
+
+    /// The marks of every chunk, reading only the contour lines' records (fills and other lines are skipped).
+    fn skim_contour_marks(&self) -> Vec<ContourMark> {
+        let mut out = Vec::new();
+        for e in &self.index {
+            if let Some(body) = self.data.get(e.at..e.at + e.len) {
+                let _ = self.skim_contours(body, &mut out);
             }
-            out
-        })
+        }
+        out
+    }
+
+    /// One chunk's contour marks, as [`MapSurface::walk`] would give them (None on a chunk that ends early).
+    fn skim_contours(&self, body: &[u8], out: &mut Vec<ContourMark>) -> Option<()> {
+        let mut r = Rd { b: body, i: 0 };
+        for _ in 0..r.u32()? {
+            r.u8()?;
+            let n = r.u32()? as usize;
+            r.take(n.checked_mul(24)?)?;
+        }
+        for _ in 0..r.u32()? {
+            let class = r.u8()?;
+            r.u8()?;
+            let w = r.f32()?;
+            r.u32()?;
+            let n = r.u32()? as usize;
+            if class != LINE_CONTOUR && class != LINE_CONTOUR_INDEX {
+                r.take(n.checked_mul(8)?)?;
+                continue;
+            }
+            if n.checked_mul(8)? > r.left() {
+                return None;
+            }
+            let mut pts = Vec::with_capacity(n);
+            for _ in 0..n {
+                pts.push(self.to_world(r.f32()?, r.f32()?));
+            }
+            out.extend(height_marks(&pts, (w + self.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
+        }
+        Some(())
     }
 
     /// What kind of rail vehicle a vehicle file is, by what the map says (MODAL_TRAM, METRO or RAIL); None when
@@ -1421,6 +1475,11 @@ mod tests {
         body.extend(0u32.to_le_bytes());
         body.extend(5.0f32.to_le_bytes());
         body.extend(5.0f32.to_le_bytes());
+        wrap(body)
+    }
+
+    /// A file with `body` as its one chunk.
+    fn wrap(body: Vec<u8>) -> Vec<u8> {
         let mut f = Vec::new();
         f.extend(MAGIC);
         f.extend(VERSION.to_le_bytes());
@@ -1709,15 +1768,124 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
         // close up all of them, far away only the index ones, none nearer than the minimum
         let all: Vec<ContourMark> = plain.iter().chain(&idx).copied().collect();
         let scale = |p: DVec2| Vec2::new(p.x as f32 / 4.0, 0.0); // 4 m a pixel
-        let close = marks_to_write(&all, 4.0, 1.0, scale, |_| true);
+        let label_at = |p: Vec2, _: &ContourMark| Rect::new(p.x - 20.0, p.y - 6.0, 40.0, 12.0);
+        let close = marks_to_write(&all, 4.0, 1.0, scale, |_| true, &[], label_at);
         assert!(close.iter().any(|(_, m)| !m.index), "close up the plain lines are marked too");
         for (i, (a, _)) in close.iter().enumerate() {
             assert!(close.iter().skip(i + 1).all(|(b, _)| (*a - *b).length() >= 64.0));
         }
-        let far = marks_to_write(&all, 20.0, 1.0, |p| Vec2::new(p.x as f32 / 20.0, 0.0), |_| true);
+        let far = marks_to_write(&all, 20.0, 1.0, |p| Vec2::new(p.x as f32 / 20.0, 0.0), |_| true, &[], label_at);
         assert!(!far.is_empty() && far.iter().all(|(_, m)| m.index));
-        assert!(marks_to_write(&all, 40.0, 1.0, scale, |_| true).is_empty());
-        assert!(marks_to_write(&all, 4.0, 1.0, scale, |_| false).is_empty(), "outside the window");
+        assert!(marks_to_write(&all, 40.0, 1.0, scale, |_| true, &[], label_at).is_empty());
+        assert!(marks_to_write(&all, 4.0, 1.0, scale, |_| false, &[], label_at).is_empty(), "outside the window");
+        // a label over a box already taken is left out; the others stay
+        let first = close[0].0;
+        let taken = [Rect::new(first.x - 5.0, first.y - 5.0, 10.0, 10.0)];
+        let free = marks_to_write(&all, 4.0, 1.0, scale, |_| true, &taken, label_at);
+        assert!(free.iter().all(|(p, _)| *p != first));
+    }
+
+    /// A chunk with a fill, a river and a street besides two contour lines (one index) long enough to be marked.
+    fn relief_chunk() -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend(1u32.to_le_bytes());
+        b.push(FILL_WATER);
+        b.extend(1u32.to_le_bytes());
+        for v in [0.0f32, 0.0, 10.0, 0.0, 0.0, 10.0] {
+            b.extend(v.to_le_bytes());
+        }
+        b.extend(4u32.to_le_bytes());
+        for (class, h, y) in [(LINE_RIVER, 3.0f32, 5.0f32), (LINE_CONTOUR, 100.0, 0.0), (LINE_STREET, 0.0, 9.0), (LINE_CONTOUR_INDEX, 120.0, 100.0)] {
+            b.extend([class, 0]);
+            b.extend(h.to_le_bytes());
+            b.extend(u32::MAX.to_le_bytes());
+            b.extend(21u32.to_le_bytes());
+            for i in 0..21 {
+                b.extend((i as f32 * 100.0).to_le_bytes());
+                b.extend(y.to_le_bytes());
+            }
+        }
+        b.extend(0u32.to_le_bytes());
+        b
+    }
+
+    fn full_walk_marks(s: &MapSurface, body: &[u8]) -> Vec<ContourMark> {
+        let mut out = Vec::new();
+        let _ = s.walk(body, |_, _| {}, |(class, w), pts| {
+            if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
+                out.extend(height_marks(&pts, (w + s.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
+            }
+        }, |_| {});
+        out
+    }
+
+    #[test]
+    fn skimmed_contour_marks_equal_the_full_walks_even_on_a_cut_chunk() {
+        let mut s = open(wrap(relief_chunk())).unwrap();
+        s.terrain_offset = 2.0;
+        let body = relief_chunk();
+        let mut skim = Vec::new();
+        assert!(s.skim_contours(&body, &mut skim).is_some());
+        assert!(!skim.is_empty());
+        assert_eq!(skim, full_walk_marks(&s, &body));
+        // a chunk that ends anywhere gives what the walk gives, and never panics
+        for cut in 0..body.len() {
+            let mut a = Vec::new();
+            let _ = s.skim_contours(&body[..cut], &mut a);
+            assert_eq!(a, full_walk_marks(&s, &body[..cut]), "cut at {cut}");
+        }
+    }
+
+    fn with_contours(body: Vec<u8>) -> std::sync::Arc<MapSurface> {
+        let mut s = open(wrap(body)).unwrap();
+        s.has_contours = true;
+        std::sync::Arc::new(s)
+    }
+
+    fn wait_for(s: &MapSurface) -> bool {
+        (0..500).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            s.contour_marks().is_some()
+        })
+    }
+
+    #[test]
+    fn no_worker_starts_until_the_marks_are_requested() {
+        let s = with_contours(relief_chunk());
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert!(s.contour_marks().is_none());
+        assert!(!s.contour_job.load(std::sync::atomic::Ordering::Acquire));
+        s.request_contour_marks();
+        assert!(wait_for(&s));
+        let mut want = Vec::new();
+        s.skim_contours(&relief_chunk(), &mut want).unwrap();
+        assert_eq!(s.contour_marks().unwrap(), want.as_slice());
+    }
+
+    #[test]
+    fn asking_for_the_marks_never_waits_for_the_worker() {
+        let s = with_contours(relief_chunk());
+        let (go, wait) = std::sync::mpsc::channel::<()>();
+        s.request_contour_marks_with(move |s| {
+            let _ = wait.recv();
+            s.skim_contour_marks()
+        });
+        let t = std::time::Instant::now();
+        assert!(s.contour_marks().is_none());
+        assert!(t.elapsed() < std::time::Duration::from_millis(500));
+        go.send(()).unwrap();
+        assert!(wait_for(&s));
+    }
+
+    #[test]
+    fn a_failed_worker_leaves_the_heights_off_and_is_not_started_again() {
+        let s = with_contours(relief_chunk());
+        s.request_contour_marks_with(|_| panic!("worker failed"));
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(s.contour_marks().is_none());
+        s.request_contour_marks();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(s.contour_marks().is_none(), "no retry");
     }
 
     #[test]

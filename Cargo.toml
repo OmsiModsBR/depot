@@ -13,6 +13,7 @@ members = [
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
+    "crates/omsi-render-d3d9",
     "crates/omsi-html",
     "crates/omsi-sim",
     "crates/omsi-audio",
@@ -21,6 +22,7 @@ members = [
     "crates/omsi-plugin/demo",
     "crates/omsi-ui",
     "crates/omsi-launcher-core",
+    "crates/omsi-launcher-ui",
     "crates/omsi-app",
     "tools/omsi-check",
 ]
