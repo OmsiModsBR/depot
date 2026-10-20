@@ -13,6 +13,54 @@ use crate::{BackendError, Result};
 
 const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
 
+/// What the scene layer may use beyond the floor, read when the device opens.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct SceneCaps {
+    /// DXT1, DXT3 and DXT5 textures.
+    pub(super) dxt: [bool; 3],
+    /// Alpha blended with its own factors (`SEPARATEALPHABLENDENABLE`).
+    pub(super) separate_alpha: bool,
+}
+
+impl SceneCaps {
+    pub(super) fn read(d3d: &IDirect3D9Ex, raw: &D3DCAPS9) -> Self {
+        let mut mode = D3DDISPLAYMODE::default();
+        // SAFETY: the out-parameter is a live local.
+        let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
+            .map(|_| mode.Format)
+            .unwrap_or(D3DFMT_X8R8G8B8);
+        let supported = |format: D3DFORMAT| {
+            // SAFETY: plain query on a live interface.
+            unsafe {
+                d3d.CheckDeviceFormat(
+                    D3DADAPTER_DEFAULT,
+                    D3DDEVTYPE_HAL,
+                    display,
+                    0,
+                    D3DRTYPE_TEXTURE,
+                    format,
+                )
+            }
+            .is_ok()
+        };
+        let caps = Self {
+            dxt: [D3DFMT_DXT1, D3DFMT_DXT3, D3DFMT_DXT5].map(supported),
+            separate_alpha: raw.PrimitiveMiscCaps & D3DPMISCCAPS_SEPARATEALPHABLEND as u32 != 0,
+        };
+        log::info!("d3d9 scene: {caps:?}");
+        caps
+    }
+
+    fn allows(&self, format: TexFormat) -> bool {
+        match format {
+            TexFormat::Rgba8 => true,
+            TexFormat::Bc1 => self.dxt[0],
+            TexFormat::Bc2 => self.dxt[1],
+            TexFormat::Bc3 => self.dxt[2],
+        }
+    }
+}
+
 /// Shaders and the vertex layout of the scene, made at the first scene frame.
 struct ScenePipeline {
     decl: IDirect3DVertexDeclaration9,
@@ -256,6 +304,12 @@ impl D3d9Device {
     /// Puts texture `id` of the game's scene up, replacing what had that id.
     pub fn set_scene_texture(&mut self, id: usize, texture: &SceneTexture) -> Result<()> {
         texture.validate(self.caps.max_texture_size, self.caps.non_pow2_textures)?;
+        if !self.scene_caps.allows(texture.format) {
+            return Err(BackendError::Unsupported(format!(
+                "{:?} textures on this device",
+                texture.format
+            )));
+        }
         let t = make_texture(&self.device, texture)?;
         put(&mut self.scene.textures, id, t);
         Ok(())
@@ -314,6 +368,10 @@ impl D3d9Device {
                         .SetStreamSource(1, None::<&IDirect3DVertexBuffer9>, 0, 0)
                 })
                 .and_then(|_| self.device.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF))
+                .and_then(|_| {
+                    self.device
+                        .SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, 0)
+                })
                 .and_then(|_| self.device.SetRenderState(D3DRS_DEPTHBIAS, 0))
                 .and_then(|_| self.device.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0))
                 .and_then(|_| {
@@ -337,14 +395,23 @@ impl D3d9Device {
         self.scene.records.clear();
         frame.instance_records(&mut self.scene.records);
         let records = frame.list.len();
+        let too_many = || BackendError::InvalidArgument(format!("{records} instances"));
+        let bytes = u32::try_from(records)
+            .ok()
+            .and_then(|n| n.checked_mul(INSTANCE_STRIDE))
+            .ok_or_else(too_many)?;
         if records > 0 && self.scene.instances.as_ref().is_none_or(|i| i.1 < records) {
             let capacity = records.next_power_of_two().max(1024);
+            let capacity_bytes = u32::try_from(capacity)
+                .ok()
+                .and_then(|n| n.checked_mul(INSTANCE_STRIDE))
+                .ok_or_else(too_many)?;
             let mut vb = None;
             // SAFETY: out-parameter is a live local.
             unsafe {
                 self.device
                     .CreateVertexBuffer(
-                        capacity as u32 * INSTANCE_STRIDE,
+                        capacity_bytes,
                         (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) as u32,
                         0,
                         D3DPOOL_DEFAULT,
@@ -372,14 +439,13 @@ impl D3d9Device {
         // instance buffer holds `records` records, locked with DISCARD and written whole.
         unsafe {
             if let (Some((vb, _)), true) = (&self.scene.instances, records > 0) {
-                let bytes = records * INSTANCE_STRIDE as usize;
                 let mut p = std::ptr::null_mut();
-                vb.Lock(0, bytes as u32, &mut p, D3DLOCK_DISCARD as u32)
+                vb.Lock(0, bytes, &mut p, D3DLOCK_DISCARD as u32)
                     .map_err(map_err)?;
                 std::ptr::copy_nonoverlapping(
                     self.scene.records.as_ptr() as *const u8,
                     p as *mut u8,
-                    bytes,
+                    bytes as usize,
                 );
                 vb.Unlock().map_err(map_err)?;
             }
@@ -392,6 +458,19 @@ impl D3d9Device {
                 .map_err(map_err)?;
             d.SetRenderState(D3DRS_ALPHATESTENABLE, 0)
                 .map_err(map_err)?;
+            // the picture's alpha as the default renderer blends it: one, over what is there
+            d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            if self.scene_caps.separate_alpha {
+                d.SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, 1)
+                    .map_err(map_err)?;
+                d.SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE.0 as u32)
+                    .map_err(map_err)?;
+                d.SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA.0 as u32)
+                    .map_err(map_err)?;
+            }
             d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
             d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
             d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
@@ -473,6 +552,7 @@ impl D3d9Device {
                 d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
                     .map_err(map_err)?;
                 if let Some((vb, _)) = &self.scene.instances {
+                    // (no overflow: the run lies in the list, whose bytes were checked above)
                     d.SetStreamSource(1, vb, b.instances.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
                         .map_err(map_err)?;
                 }

@@ -392,3 +392,97 @@ fn a_frame_pointing_outside_its_data_is_refused() {
     // the frame is still usable afterwards
     dev.end_frame().unwrap();
 }
+
+#[test]
+fn unlit_materials_take_the_texture_times_their_colour_in_linear_light() {
+    let Some(mut dev) = device() else { return };
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(0, &v, &i).unwrap();
+    rgba(&mut dev, 0, [200, 200, 200, 255]);
+    let mut u = uniform(0.0);
+    u[0] = [0.5, 0.5, 0.5, 1.0];
+    u[1][1] = 1.0; // unlit
+    let mut dark = light([0.0; 4]);
+    dark.ambient = [0.0; 4];
+    let px = draw(
+        &mut dev,
+        &[batch(DrawKind::Opaque, 0, 0, 0..1)],
+        &[IDENTITY],
+        &[VISIBLE, SECOND],
+        &[0],
+        dark,
+        &[u],
+        Some(0),
+    );
+    let decode = |c: f32| {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let encode = |c: f32| {
+        if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    };
+    let want = (encode(decode(200.0 / 255.0) * 0.5) * 255.0).round() as u8;
+    assert!(
+        all(&px, [want, want, want, 255], 2),
+        "{want}: {:?}",
+        &px[..4]
+    );
+}
+
+#[test]
+fn culling_drops_the_triangles_counter_clockwise_on_screen() {
+    let Some(mut dev) = device() else { return };
+    let (v, ccw) = quad(0.5);
+    // the quad's indices run counter-clockwise as seen; reversed they run clockwise
+    let cw: Vec<u32> = ccw.chunks(3).flat_map(|t| [t[0], t[2], t[1]]).collect();
+    dev.set_scene_mesh(0, &v, &ccw).unwrap();
+    dev.set_scene_mesh(1, &v, &cw).unwrap();
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    for (mesh, shown) in [(0, false), (1, true)] {
+        let mut b = batch(DrawKind::Opaque, mesh, 0, 0..1);
+        b.cull = true;
+        let px = draw(
+            &mut dev,
+            &[b],
+            &[IDENTITY],
+            &[VISIBLE, SECOND],
+            &[0],
+            light([0.0; 4]),
+            &[uniform(0.0)],
+            Some(0),
+        );
+        let want = if shown { [255; 4] } else { [0, 0, 0, 255] };
+        assert!(all(&px, want, 1), "mesh {mesh}: {:?}", &px[..4]);
+    }
+}
+
+#[test]
+fn depth_only_draws_hide_what_is_behind_without_colour() {
+    let Some(mut dev) = device() else { return };
+    let (near_v, i) = quad(0.8);
+    let (far_v, _) = quad(0.2);
+    dev.set_scene_mesh(0, &near_v, &i).unwrap();
+    dev.set_scene_mesh(1, &far_v, &i).unwrap();
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let px = draw(
+        &mut dev,
+        &[
+            batch(DrawKind::SurfaceDepth, 0, 0, 0..1),
+            batch(DrawKind::Opaque, 1, 0, 0..1),
+        ],
+        &[IDENTITY],
+        &[VISIBLE, SECOND],
+        &[0],
+        light([0.0; 4]),
+        &[uniform(0.0)],
+        Some(0),
+    );
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+}

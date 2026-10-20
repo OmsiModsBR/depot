@@ -99,6 +99,8 @@ pub struct D3d9Device {
     frame: Option<FrameDesc>,
     /// The game's scene ([`crate::scene`]), under the game's ids.
     scene: scene::SceneStore,
+    /// What the scene layer may use beyond the floor.
+    scene_caps: scene::SceneCaps,
 }
 
 fn present_params(target: Target, width: u32, height: u32) -> D3DPRESENT_PARAMETERS {
@@ -278,6 +280,7 @@ impl D3d9Device {
             .map_err(map_err)?;
             let device = some(device, "device")?;
             let pipeline = Self::build_pipeline(&device)?;
+            let scene_caps = scene::SceneCaps::read(&d3d, &raw);
             Ok(Self {
                 _d3d: d3d,
                 device,
@@ -291,6 +294,7 @@ impl D3d9Device {
                 offscreen: None,
                 frame: None,
                 scene: scene::SceneStore::default(),
+                scene_caps,
             })
         }
     }
