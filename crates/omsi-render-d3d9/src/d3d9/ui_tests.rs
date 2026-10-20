@@ -269,3 +269,100 @@ fn a_device_opened_again_gets_the_interface_back() {
         px(&p, 2, 2)
     );
 }
+
+#[test]
+fn the_interface_draws_into_scene_textures_shown_as_overlays() {
+    let Some(mut dev) = device() else { return };
+    white_atlas(&mut dev, 1);
+    // green over the left half of a 4 by 4 target, the rest left transparent
+    dev.ui_vertices(1, 0, &rect(0., 0., 2., 4., [0.0, 1.0, 0.0, 1.0]))
+        .unwrap();
+    let into = |dev: &mut D3d9Device, size: u32| {
+        dev.draw_ui_into(
+            1,
+            5,
+            &UiFrame {
+                size: (size, size),
+                clear: Some([0.0; 4]),
+                layers: &[UiLayer::flat(
+                    [0.0, 0.0, size as f32, size as f32],
+                    0.0,
+                    1.0,
+                )],
+                draws: &one_draw(0),
+            },
+        )
+    };
+    let shown = |dev: &mut D3d9Device, draw_inside: bool| {
+        dev.begin_frame(&FrameDesc {
+            width: W,
+            height: H,
+            clear_rgba: [1.0, 0.0, 0.0, 1.0],
+        })
+        .unwrap();
+        if draw_inside {
+            into(dev, 4).unwrap();
+        }
+        dev.draw_overlays(&[UiOverlay {
+            texture: 5,
+            rect: [0.0, 0.0, W as f32, H as f32],
+            premultiplied: true,
+            transposed: false,
+        }])
+        .unwrap();
+        dev.end_frame().unwrap()
+    };
+    // drawn outside a frame (as the minimap is, before the scene), then shown
+    into(&mut dev, 4).unwrap();
+    assert!(dev.has_scene_texture(5));
+    let p = shown(&mut dev, false);
+    assert!(
+        near(px(&p, 1, 1), [0, 255, 0, 255], 2),
+        "{:?}",
+        px(&p, 1, 1)
+    );
+    assert!(
+        near(px(&p, 6, 2), [255, 0, 0, 255], 2),
+        "{:?}",
+        px(&p, 6, 2)
+    );
+    // drawn inside one: the frame goes on into the window's picture
+    let p = shown(&mut dev, true);
+    assert!(
+        near(px(&p, 1, 1), [0, 255, 0, 255], 2),
+        "{:?}",
+        px(&p, 1, 1)
+    );
+    assert!(
+        near(px(&p, 6, 2), [255, 0, 0, 255], 2),
+        "{:?}",
+        px(&p, 6, 2)
+    );
+    // a new size makes it again; none at all is refused
+    into(&mut dev, 2).unwrap();
+    let p = shown(&mut dev, false);
+    assert!(
+        near(px(&p, 1, 1), [0, 255, 0, 255], 2),
+        "{:?}",
+        px(&p, 1, 1)
+    );
+    assert!(into(&mut dev, 0).is_err());
+    // freed with the renderer's texture; a device opened again has it once drawn again
+    dev.free_scene_texture(5);
+    let p = shown(&mut dev, false);
+    assert!(
+        near(px(&p, 1, 1), [255, 0, 0, 255], 2),
+        "{:?}",
+        px(&p, 1, 1)
+    );
+    into(&mut dev, 4).unwrap();
+    dev.recover().unwrap();
+    assert!(!dev.has_scene_texture(5));
+    into(&mut dev, 4).unwrap();
+    let p = shown(&mut dev, false);
+    assert!(
+        near(px(&p, 1, 1), [0, 255, 0, 255], 2),
+        "{:?}",
+        px(&p, 1, 1)
+    );
+}

@@ -840,7 +840,10 @@ impl App {
                     self.settings.ui_opacity,
                     &self.settings.navigator_corner,
                 ));
+                // (under D3D9Ex the maps are drawn on that device too)
+                let ui_mirror = self.d3d9_ui_mirror();
                 if let Some(n) = self.navigator.as_mut() {
+                    n.ui_mirror = ui_mirror;
                     n.arrows = self.settings.nav_arrows;
                     n.show_ai = self.settings.nav_ai;
                     n.show_surface = self.settings.nav_surface;

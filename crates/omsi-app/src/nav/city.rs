@@ -2,11 +2,11 @@ use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
 use hashbrown::HashMap;
 use omsi_render::{Renderer, Scene};
 use omsi_sim::traffic::Network;
-use omsi_ui::{tr, Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weight};
+use omsi_ui::{tr, Atlas, Color, Draw, Fonts, Layer, Painter, Rect, Vertex, Weight};
 use omsi_ui::paint::Align;
 use omsi_ui::theme::{v5, RADIUS};
 use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS};
-use super::{DOT, LINE_TEXT, LinesHit, LinesView, NavFrame, Navigator, PLAYER, ROUTE, map_samples, words};
+use super::{DOT, LINE_TEXT, LinesHit, LinesView, NavFrame, Navigator, PLAYER, ROUTE, words};
 use super::draw::{DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM, arrow, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect, traffic_kind, vehicle_icon};
 use super::geometry::{road_colors, road_geometry, simplify};
 use super::lines::{decimal_comma, GROUP_BRT_TAB, GROUP_EXPRESS_TAB, GROUP_FEEDER_TAB, LinesText, line_color, lines_text};
@@ -741,7 +741,7 @@ impl Navigator {
         self.city.rect = [x0, y0, x0 + w, y0 + h];
         let (tw, th) = (w as u32, h as u32);
         if self.gpu.is_none() {
-            self.gpu = Some(Gpu::new(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
+            self.gpu = Some(self.new_gpu(renderer));
         }
         if self.city.target.map(|t| (t.1, t.2) != (tw, th)).unwrap_or(true) {
             if let Some((t, _, _)) = self.city.target.take() {
@@ -1375,6 +1375,7 @@ impl Navigator {
             Draw { buffer: 5, range: n_ui..all.len() as u32, layer: 0, texture: 0 },
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("city map") });
+        gpu.set_mirror_target(Some(tex));
         gpu.render(device, queue, &mut enc, &view, (tw, th), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
         queue.submit([enc.finish()]);
         let _ = n_dots;
