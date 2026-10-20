@@ -53,11 +53,17 @@ impl Offscreen {
 
     /// Draw `body` into the picture (twice: the first frame fills the glyph atlas) and write
     /// it to `out`.
-    pub fn shot(&mut self, out: &str, mut body: impl FnMut(&mut Ui)) {
+    #[allow(dead_code)]
+    pub fn shot(&mut self, out: &str, body: impl FnMut(&mut Ui)) {
+        self.shot_at(out, 1.0, body)
+    }
+
+    /// `shot` at `scale` pixels per design unit (the design is the picture's size over it).
+    pub fn shot_at(&mut self, out: &str, scale: f32, mut body: impl FnMut(&mut Ui)) {
         let (w, h) = self.size;
         for _ in 0..2 {
             self.ui
-                .begin(Vec2::new(w as f32, h as f32), 1.0, 1.0 / 60.0);
+                .begin(Vec2::new(w as f32, h as f32) / scale, scale, 1.0 / 60.0);
             body(&mut self.ui);
             let (layers, verts, ranges) = self.ui.finish();
             let draws: Vec<Draw> = ranges

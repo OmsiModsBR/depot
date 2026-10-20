@@ -4,6 +4,7 @@
 
 mod assets;
 mod lights;
+mod mirror;
 mod renderer;
 mod scene;
 mod surface;
