@@ -18,11 +18,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
-use omsi_render::{FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene};
+use omsi_render::{
+    FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene, TexAddressing,
+};
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
     BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLight,
-    SceneMaterial, SceneTexture, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -162,6 +164,8 @@ impl Inner {
                 ambient: plan.ambient,
                 fog: plan.fog,
                 sky_color: plan.sky_color,
+                cam_right: plan.cam_right,
+                cam_up: plan.cam_up,
             },
             list: &plan.list,
             models: scene.slot_models(),
@@ -174,6 +178,17 @@ impl Inner {
             scene.materials.get(id).map(|m| SceneMaterial {
                 texture: m.texture,
                 transmap: m.transmap.map(|t| t.0),
+                nightmap: m.nightmap,
+                lightmap: m.lightmap,
+                envmap: m.envmap.map(|e| e.0),
+                env_mask: m.env_mask,
+                bump: m.bump.map(|b| b.0),
+                address: match m.addressing() {
+                    TexAddressing::Wrap => TexAddress::Wrap,
+                    TexAddressing::Mirror => TexAddress::Mirror,
+                    TexAddressing::Clamp => TexAddress::Clamp,
+                    TexAddressing::MirrorOnce => TexAddress::MirrorOnce,
+                },
                 uniform: m.uniform_vectors(),
             })
         };

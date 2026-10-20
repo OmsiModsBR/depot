@@ -116,6 +116,11 @@ pub struct Material {
 }
 
 impl Material {
+    /// How its textures are addressed (`[matl_texadress_*]`).
+    pub fn addressing(&self) -> TexAddressing {
+        self.address
+    }
+
     /// The material uniform this renderer's shaders read, as 11 vectors in order: color,
     /// params, extra, params2, emissive, specular, bump, pbr, flags, ambient, sway.
     pub fn uniform_vectors(&self) -> &[[f32; 4]] {
