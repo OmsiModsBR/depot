@@ -36,38 +36,56 @@ fn main() {
         glyph: Glyph::Icon(icon),
         title,
         disabled: None,
+        on: false,
     };
+    let off = |id, glyph, title, why| Button {
+        id,
+        glyph,
+        title,
+        disabled: Some(why),
+        on: false,
+    };
+    // (the game's bar: the original's order where the game has the function, then its own)
     let bar = [
         ic("add", "add", "Add vehicle"),
-        ic("swap", "sync_alt", "Swap vehicle"),
+        ic("swap", "sync_alt", "Switch vehicle"),
         ic("remove", "close", "Remove vehicle"),
-        ic("reposition", "download", "Reposition at entry point"),
+        ic("reposition", "download", "Reposition at an entry point"),
+        off(
+            "ai",
+            Glyph::Text("AI"),
+            "AI drives my vehicle",
+            "Not in the game yet",
+        ),
         Button {
-            id: "ai",
-            glyph: Glyph::Text("AI"),
-            title: "AI vehicles",
-            disabled: None,
+            on: true,
+            ..ic("tour", "route", "End the tour")
         },
-        ic("fleet", "grid_view", "Vehicles in session"),
-        ic("list", "view_list", "Timetable"),
+        ic("destination", "departure_board", "Line and destination"),
+        off(
+            "accident",
+            Glyph::Icon("warning"),
+            "Clear the accident",
+            "Not in the game yet",
+        ),
+        ic("repair", "construction", "Repair"),
+        ic("wash", "water_drop", "Wash"),
         Button {
-            id: "warn",
-            glyph: Glyph::Icon("warning"),
-            title: "Warnings",
-            disabled: Some("No warnings now"),
+            glyph: Glyph::Text("Fuel"),
+            ..ic("refuel", "", "Refuel")
         },
-        ic("tools", "construction", "Repair"),
-        Button {
-            id: "power",
-            glyph: Glyph::Icon("bolt"),
-            title: "Power",
-            disabled: Some("Not available for this vehicle"),
-        },
-        ic("help", "help", "Help"),
-        ic("clock", "schedule", "Time"),
+        off(
+            "help",
+            Glyph::Icon("help"),
+            "Help marker",
+            "Not in the game yet",
+        ),
+        ic("time", "schedule", "Date and time"),
         ic("weather", "cloud", "Weather"),
-        ic("locate", "my_location", "Locate"),
-        ic("menu", "menu", "Menu"),
+        ic("controls", "keyboard", "Controls"),
+        ic("driver", "badge", "Timetable evaluation and driver profile"),
+        ic("skip", "turn_slight_right", "Skip the next stop"),
+        ic("shot", "photo_camera", "Screenshot"),
     ];
     let mut state = State {
         chosen: Some("reposition".into()),
@@ -281,4 +299,204 @@ fn main() {
             },
         );
     });
+    // the Alt bar's windows, each over the scene with the bar waiting under it
+    use omsi_ui::alt_windows::{self as aw, View};
+    // the bar while the window of button `open` is open over it
+    let waiting = |open: &str| -> Vec<Button> {
+        bar.iter()
+            .map(|b| Button {
+                disabled: Some(if b.id == open {
+                    "Open: Esc or Cancel closes it"
+                } else {
+                    "Close the open window first"
+                }),
+                on: b.id == open,
+                ..*b
+            })
+            .collect()
+    };
+    let views = [
+        (
+            "alt-time",
+            View::Time(aw::Time {
+                hour: 8,
+                minute: 42,
+                day: 20,
+                month: 10,
+                year: 2026,
+                weekday: "Tuesday".into(),
+                quick: vec![
+                    ("Dawn".into(), "07:21".into()),
+                    ("Day".into(), "12:00".into()),
+                    ("Dusk".into(), "17:54".into()),
+                    ("Night".into(), "23:00".into()),
+                ],
+                real: false,
+            }),
+        ),
+        (
+            "alt-weather",
+            View::Weather(aw::Weather {
+                real: false,
+                real_label: "Real weather (METAR)  \u{b7}  EDDB".into(),
+                presets: s(&[
+                    "Clear",
+                    "Cloudy",
+                    "Fog",
+                    "Light rain",
+                    "Overcast",
+                    "Rain",
+                    "Snow",
+                    "Storm",
+                    "Sunny",
+                    "Winter morning",
+                ]),
+                selected: Some(4),
+            }),
+        ),
+        (
+            "alt-reposition",
+            View::Pick(aw::Pick {
+                title: "Reposition at an entry point".into(),
+                head: "Entry point".into(),
+                rows: s(&[
+                    "Depot",
+                    "Central Station",
+                    "Market",
+                    "Town Hall",
+                    "Ring road north",
+                ]),
+                selected: Some(1),
+                ok: "Reposition".into(),
+                hint: "The bus is put at the entry point".into(),
+                empty: "This map has no entry points".into(),
+            }),
+        ),
+        (
+            "alt-controls",
+            View::Menu(aw::Menu {
+                title: "Controls".into(),
+                entries: vec![
+                    aw::Entry {
+                        label: "Game controller".into(),
+                        checked: Some(false),
+                        disabled: Some("No game controller found".into()),
+                    },
+                    aw::Entry {
+                        label: "Mouse steering".into(),
+                        checked: Some(false),
+                        disabled: None,
+                    },
+                    aw::Entry {
+                        label: "Keyboard only".into(),
+                        checked: Some(true),
+                        disabled: None,
+                    },
+                    aw::Entry {
+                        label: "Head tracking".into(),
+                        checked: Some(true),
+                        disabled: None,
+                    },
+                ],
+                hint: "Each choice applies at once".into(),
+            }),
+        ),
+        (
+            "alt-driver",
+            View::Menu(aw::Menu {
+                title: "Timetable and driver".into(),
+                entries: vec![
+                    aw::Entry {
+                        label: "Timetable evaluation".into(),
+                        checked: None,
+                        disabled: Some("Not in the game yet".into()),
+                    },
+                    aw::Entry {
+                        label: "Driver profile".into(),
+                        checked: None,
+                        disabled: None,
+                    },
+                ],
+                hint: "Each trip's report opens at its last stop".into(),
+            }),
+        ),
+        (
+            "alt-tour",
+            View::Tour(aw::Tour {
+                lines: s(&[
+                    "Line 50  (12 tours)",
+                    "Line 51  (4 tours)",
+                    "Line N5  (2 tours)",
+                ]),
+                line: Some(0),
+                tours: s(&[
+                    "Tour 1  \u{203a}  Central Station",
+                    "Tour 2  \u{203a}  Depot",
+                    "Tour 3  \u{203a}  Central Station",
+                ]),
+                tour_times: s(&["08:12", "08:27", "08:42"]),
+                tour: Some(1),
+                stops: s(&[
+                    "Depot",
+                    "Main Street",
+                    "Market",
+                    "Town Hall",
+                    "Central Station",
+                ]),
+                stop_times: s(&["08:27", "08:31", "08:36", "08:40", "08:47"]),
+                stop: Some(0),
+                trip: "Trip 2 / 6".into(),
+                trip_steps: (true, true),
+            }),
+        ),
+        (
+            "alt-end-tour",
+            View::Confirm(aw::Confirm {
+                title: "End the tour".into(),
+                text: "End the tour you are driving? The bus drives on without a timetable.".into(),
+                ok: "End the tour".into(),
+                cancel: "Keep driving it".into(),
+            }),
+        ),
+        (
+            "alt-destination",
+            View::Destination(aw::Destination {
+                line: "50".into(),
+                focused: true,
+                codes: s(&["1", "2", "12", "50", "99"]),
+                destinations: s(&[
+                    "Central Station",
+                    "Depot",
+                    "Market",
+                    "Ring road",
+                    "Not in service",
+                ]),
+                selected: Some(0),
+                empty: String::new(),
+            }),
+        ),
+    ];
+    for (name, view) in &views {
+        let open = match name.trim_start_matches("alt-") {
+            "end-tour" => "tour",
+            other => other,
+        };
+        let waiting = waiting(open);
+        o.shot(&format!("{dir}/{name}.png"), |ui| {
+            scene(ui);
+            let size = alt_bar::panel_size(waiting.len());
+            let mut st = State {
+                chosen: Some(open.into()),
+                ..State::default()
+            };
+            alt_bar::draw(
+                ui,
+                Vec2::new(ui.size.x - size.x - 20.0, ui.size.y - size.y - 20.0),
+                &waiting,
+                &mut st,
+            );
+            let sz = ui.size;
+            view.draw(ui, sz, 0);
+        });
+    }
 }

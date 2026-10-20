@@ -7,4 +7,5 @@ pub(crate) mod menus;
 mod mouse;
 
 pub(crate) use menus::*;
+pub(crate) use keyboard::ROUTE_NUMBER_MAX;
 pub(crate) use mouse::*;

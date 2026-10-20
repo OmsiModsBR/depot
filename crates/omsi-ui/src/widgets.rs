@@ -577,6 +577,30 @@ impl Ui {
             .text(atlas, fonts, text, px, weight, at, align, c)
     }
 
+    /// [`Ui::text`] of a text that is not the interface's own: drawn as it is, not looked up
+    /// in the translations.
+    pub fn text_as_is(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+    ) -> f32 {
+        let Ui {
+            atlas,
+            fonts,
+            layers,
+            ..
+        } = self;
+        layers
+            .last_mut()
+            .unwrap()
+            .1
+            .text_as_is(atlas, fonts, text, px, weight, at, align, c)
+    }
+
     /// Text vertically centred in `r`, cut to fit.
     pub fn text_in(
         &mut self,

@@ -121,7 +121,7 @@ Built as stacked draft pull requests, merged in order only when the maintainer c
 | Diagnostics page | in the game's launcher: build, graphics adapter, OMSI 2 folder check, log path, games running |
 | Loading screen with the player's screenshots as a slow slideshow (#255) | draft |
 | Pause menu column with the city-map bar (#256) | draft; the caller supplies the items and the map |
-| Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
+| Alt icon bar and the in-game windows' building blocks (#257) | in the game; every button works from the bar (reposition, line and tour, line and destination, date and time, weather, controls and the timetable and driver menu open small windows of their own); the bar and its windows never pause the simulation. AI drives, clear accident, help marker and the timetable evaluation are dim until the game has them |
 | Offscreen example drawing every screen with placeholder data (#250) | draft |
 
 Not started: the v5 look inside `omsi_ui::theme` (the new launcher keeps it in its own `look.rs` for now), the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the launcher/game contract, the preview helper and its cache, and the layer-priority tests. The screens are not wired into the game's own menus yet.

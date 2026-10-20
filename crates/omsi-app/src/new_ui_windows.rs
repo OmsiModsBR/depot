@@ -1,0 +1,1228 @@
+//! The small windows the Alt bar opens, drawn by the new interface: put the bus at an entry
+//! point, the date and time, the weather, the controls, the line and tour (and ending it), the
+//! line and destination, and the driver profile.
+//!
+//! Each does what the game already does for the same thing (the Esc menu's lists and
+//! settings pages): only the window that asks for it is new. None of them pauses the game,
+//! and none points at the Esc menu. While one is open the bar's other buttons wait, the game
+//! goes on behind it and the driving keys still reach the bus, except while the route
+//! number's field has the keyboard. Esc closes it; Cancel discards what was changed in it.
+//!
+//! As with the "Add vehicle" window, the overlay draws the window inside the renderer: the
+//! clicks and the wheel over it are handed to the overlay ([`WinInput`]) and what they asked
+//! for comes back as [`Event`]s the game applies before the next frame.
+
+use crate::app::App;
+use crate::game_lists::{self, ListKind, Move};
+use crate::new_ui::scale_for;
+use crate::new_ui_add::WinInput;
+use glam::Vec2;
+use omsi_sim::SimClock;
+use omsi_ui::alt_windows::{self as aw, Event, View};
+use omsi_ui::widgets::Ui;
+use winit::keyboard::KeyCode;
+
+/// What the overlay draws of the window open, owned so that it can cross to the renderer.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ToolFrame {
+    view: View,
+    /// Which opening of a window this is (see `aw::View::draw`).
+    key: u32,
+}
+
+impl ToolFrame {
+    pub(crate) fn draw(&self, ui: &mut Ui, size: Vec2) -> Option<Event> {
+        self.view.draw(ui, size, self.key)
+    }
+
+    pub(crate) fn rect(&self, size: Vec2) -> omsi_ui::Rect {
+        self.view.rect(size)
+    }
+}
+
+/// The date and time as the window has them, not yet applied.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TimeForm {
+    pub hour: u32,
+    pub minute: u32,
+    pub day: u32,
+    pub month: u32,
+    pub year: i32,
+    /// "Use the computer's date and time" ticked.
+    pub real: bool,
+    /// The quick choices: their names and the minute of the day they set.
+    pub quick: Vec<(&'static str, u32)>,
+}
+
+/// The years the date can be set to.
+const YEARS: (i32, i32) = (1900, 2100);
+
+const WEEKDAYS: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+impl TimeForm {
+    pub(crate) fn new(clock: &SimClock, real: bool) -> TimeForm {
+        let (day, month) = clock.day_month();
+        let t = clock.time.max(0.0) as u32;
+        TimeForm {
+            hour: (t / 3600) % 24,
+            minute: (t / 60) % 60,
+            day: day as u32,
+            month: month as u32,
+            year: clock.year,
+            real,
+            quick: Vec::new(),
+        }
+    }
+
+    fn days_in_month(&self) -> u32 {
+        omsi_ui::widgets::days_in_month(self.year, self.month)
+    }
+
+    /// Value `which` (hour, minute, day, month, year) one step down or up: the hour, the
+    /// minute, the day and the month go round, the day stays in its month.
+    pub(crate) fn step(&mut self, which: usize, by: i32) {
+        let wrap = |v: u32, lo: u32, hi: u32| -> u32 {
+            let n = (hi - lo + 1) as i32;
+            ((v as i32 - lo as i32 + by).rem_euclid(n)) as u32 + lo
+        };
+        match which {
+            0 => self.hour = wrap(self.hour, 0, 23),
+            1 => self.minute = wrap(self.minute, 0, 59),
+            2 => self.day = wrap(self.day, 1, self.days_in_month()),
+            3 => self.month = wrap(self.month, 1, 12),
+            4 => self.year = (self.year + by).clamp(YEARS.0, YEARS.1),
+            _ => {}
+        }
+        self.day = self.day.clamp(1, self.days_in_month());
+    }
+
+    pub(crate) fn choose_quick(&mut self, i: usize) {
+        if let Some(&(_, m)) = self.quick.get(i) {
+            self.hour = m / 60 % 24;
+            self.minute = m % 60;
+        }
+    }
+
+    /// `base` with the form's date and time.
+    pub(crate) fn clock(&self, base: &SimClock) -> SimClock {
+        let mut c = base.clone();
+        c.set_date(self.year, self.month as i32, self.day as i32);
+        c.time = (self.hour * 3600 + self.minute * 60) as f64;
+        c
+    }
+
+    pub(crate) fn weekday(&self) -> &'static str {
+        let c = self.clock(&SimClock::default());
+        WEEKDAYS[c.weekday().clamp(0, 6) as usize]
+    }
+
+    fn view(&self) -> aw::Time {
+        aw::Time {
+            hour: self.hour,
+            minute: self.minute,
+            day: self.day,
+            month: self.month,
+            year: self.year,
+            weekday: self.weekday().to_string(),
+            quick: self
+                .quick
+                .iter()
+                .map(|(n, m)| (n.to_string(), format!("{:02}:{:02}", m / 60, m % 60)))
+                .collect(),
+            real: self.real,
+        }
+    }
+}
+
+/// The quick choices of the date and time for the day `date`: dawn and dusk when the sun
+/// rises and sets there (the map's place, as the sky has it), else at six and seven.
+fn quick_times(date: &SimClock) -> Vec<(&'static str, u32)> {
+    let place = omsi_sim::daylight::place();
+    let mut c = date.clone();
+    let (mut rise, mut set) = (None, None);
+    let mut before: Option<f64> = None;
+    for m in (0..1440).step_by(2) {
+        c.time = m as f64 * 60.0;
+        let (alt, _) = omsi_sim::daylight::sun_position(&c, &place);
+        if let Some(b) = before {
+            if b < 0.0 && alt >= 0.0 && rise.is_none() {
+                rise = Some(m);
+            }
+            if b >= 0.0 && alt < 0.0 {
+                set = Some(m);
+            }
+        }
+        before = Some(alt);
+    }
+    vec![
+        ("Dawn", rise.unwrap_or(6 * 60)),
+        ("Day", 12 * 60),
+        ("Dusk", set.unwrap_or(19 * 60)),
+        ("Night", 23 * 60),
+    ]
+}
+
+/// The line, tour, trip and stop as the window has them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TourForm {
+    /// (label, the line's name)
+    pub lines: Vec<(String, String)>,
+    pub line: Option<usize>,
+    /// (label, the time it leaves next, the tour's number)
+    pub tours: Vec<(String, String, String)>,
+    pub tour: Option<usize>,
+    /// The trip chosen (in order of the time they leave) and how many there are.
+    pub trip: usize,
+    pub trips: usize,
+    /// (stop, time)
+    pub stops: Vec<(String, String)>,
+    pub stop: Option<usize>,
+}
+
+impl TourForm {
+    fn view(&self) -> aw::Tour {
+        aw::Tour {
+            lines: self.lines.iter().map(|l| l.0.clone()).collect(),
+            line: self.line,
+            tours: self.tours.iter().map(|t| t.0.clone()).collect(),
+            tour_times: self.tours.iter().map(|t| t.1.clone()).collect(),
+            tour: self.tour,
+            stops: self.stops.iter().map(|s| s.0.clone()).collect(),
+            stop_times: self.stops.iter().map(|s| s.1.clone()).collect(),
+            stop: self.stop,
+            trip: if self.trips > 0 {
+                format!("{} {} / {}", omsi_ui::tr("Trip"), self.trip + 1, self.trips)
+            } else {
+                String::new()
+            },
+            trip_steps: (self.trip > 0, self.trip + 1 < self.trips),
+        }
+    }
+
+    /// The line and tour chosen: (line, tour number).
+    fn chosen(&self) -> Option<(String, String)> {
+        let line = self.lines.get(self.line?)?.1.clone();
+        let tour = self.tours.get(self.tour?)?.2.clone();
+        Some((line, tour))
+    }
+}
+
+/// The route number and the destination as the window has them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DestForm {
+    pub line: String,
+    /// The route number shown when the window opened (changed only when typed over).
+    pub line_before: String,
+    pub focused: bool,
+    /// (code, name, row of the depot file)
+    pub destinations: Vec<(String, String, usize)>,
+    pub selected: Option<usize>,
+    pub selected_before: Option<usize>,
+    pub empty: String,
+}
+
+/// The longest route number the field takes.
+const ROUTE_MAX: usize = crate::input::ROUTE_NUMBER_MAX;
+
+impl DestForm {
+    /// Text typed into the field.
+    pub(crate) fn type_text(&mut self, text: &str) {
+        for c in text.chars().filter(|c| !c.is_control()) {
+            if self.line.chars().count() >= ROUTE_MAX {
+                break;
+            }
+            self.line.push(c);
+        }
+    }
+
+    /// What OK changes: the route number when it was typed over, the destination when another
+    /// was chosen (its row of the depot file).
+    pub(crate) fn changes(&self) -> (Option<String>, Option<usize>) {
+        let line = self.line.trim();
+        let line = (line != self.line_before.trim() && !line.is_empty()).then(|| line.to_string());
+        let dest = self
+            .selected
+            .filter(|_| self.selected != self.selected_before)
+            .and_then(|i| self.destinations.get(i))
+            .map(|d| d.2);
+        (line, dest)
+    }
+}
+
+/// One of the bar's windows, with what it holds until OK.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ToolWindow {
+    /// The map's entry points.
+    Reposition {
+        names: Vec<String>,
+        selected: Option<usize>,
+    },
+    Time(TimeForm),
+    Weather {
+        /// (name, file) of the weather files.
+        files: Vec<(String, String)>,
+        selected: Option<usize>,
+        real: bool,
+        real_label: String,
+    },
+    /// Game controller, mouse, keyboard only, head tracking: each applies at once.
+    Controls,
+    Tour(TourForm),
+    /// The tour running: end it?
+    EndTour,
+    Destination(DestForm),
+    /// The timetable evaluation and the driver profile.
+    DriverMenu,
+    Driver {
+        names: Vec<String>,
+        selected: Option<usize>,
+    },
+}
+
+impl ToolWindow {
+    /// The bar's button that opens this window.
+    pub(crate) fn button(&self) -> &'static str {
+        match self {
+            ToolWindow::Reposition { .. } => "reposition",
+            ToolWindow::Time(_) => "time",
+            ToolWindow::Weather { .. } => "weather",
+            ToolWindow::Controls => "controls",
+            ToolWindow::Tour(_) | ToolWindow::EndTour => "tour",
+            ToolWindow::Destination(_) => "destination",
+            ToolWindow::DriverMenu | ToolWindow::Driver { .. } => "driver",
+        }
+    }
+
+    /// A text field of the window has the keyboard.
+    pub(crate) fn typing(&self) -> bool {
+        matches!(self, ToolWindow::Destination(d) if d.focused)
+    }
+}
+
+/// The bar's windows on the game's side.
+#[derive(Debug, Default)]
+pub(crate) struct Tools {
+    pub window: Option<ToolWindow>,
+    /// How many windows were opened (each opening's lists start afresh).
+    pub opened: u32,
+    /// A press over the window was taken: its release goes to the window too.
+    pressed: bool,
+    /// Keys whose press the window took (its text field had the keyboard): their releases
+    /// are the window's too.
+    taken: std::collections::HashSet<KeyCode>,
+}
+
+impl Tools {
+    /// Open `w` in place of the window open, if one was.
+    pub(crate) fn open(&mut self, w: ToolWindow) {
+        self.window = Some(w);
+        self.opened = self.opened.wrapping_add(1);
+        self.pressed = false;
+    }
+
+    pub(crate) fn close(&mut self) {
+        self.window = None;
+        self.pressed = false;
+    }
+
+    /// The window lost the mouse and the keys: no press or key of it is pending any more.
+    pub(crate) fn forget_input(&mut self) {
+        self.pressed = false;
+        self.taken.clear();
+        if let Some(ToolWindow::Destination(d)) = self.window.as_mut() {
+            d.focused = false;
+        }
+    }
+
+    /// A key while the window shows: true when it takes it. Esc closes the window (the Esc
+    /// menu does not open then); while a text field has the keyboard every key but the
+    /// modifiers is the field's (Enter is OK). Any other key is the game's.
+    fn key(&mut self, code: KeyCode, pressed: bool) -> KeyAnswer {
+        if !pressed {
+            return if self.taken.remove(&code) {
+                KeyAnswer::Taken
+            } else {
+                KeyAnswer::Game
+            };
+        }
+        let typing = self.window.as_ref().is_some_and(ToolWindow::typing);
+        let answer = match code {
+            KeyCode::Escape => KeyAnswer::Close,
+            _ if !typing => return KeyAnswer::Game,
+            KeyCode::ShiftLeft
+            | KeyCode::ShiftRight
+            | KeyCode::ControlLeft
+            | KeyCode::ControlRight
+            | KeyCode::AltLeft
+            | KeyCode::AltRight => return KeyAnswer::Game,
+            KeyCode::Enter | KeyCode::NumpadEnter => KeyAnswer::Ok,
+            KeyCode::Backspace | KeyCode::Delete => {
+                if let Some(ToolWindow::Destination(d)) = self.window.as_mut() {
+                    d.line.pop();
+                }
+                KeyAnswer::Taken
+            }
+            _ => KeyAnswer::Taken,
+        };
+        self.taken.insert(code);
+        answer
+    }
+}
+
+/// What a key was to the window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum KeyAnswer {
+    /// Not the window's: the game has it.
+    Game,
+    Taken,
+    Close,
+    Ok,
+}
+
+/// Seconds of the day as "hh:mm".
+fn hm(secs: f64) -> String {
+    let m = (secs.max(0.0) / 60.0) as i64;
+    format!("{:02}:{:02}", (m / 60) % 24, m % 60)
+}
+
+/// The rows of one of the game's lists that do something of `verb` (the others are its
+/// "Back" and its notes), as (label, the rest of the action).
+fn rows_of(app: &App, kind: &ListKind, verb: &str) -> Vec<(String, String)> {
+    let prefix = format!("{verb} ");
+    game_lists::items(app, kind)
+        .into_iter()
+        .filter_map(|(label, action)| {
+            action
+                .strip_prefix(&prefix)
+                .map(|rest| (label, rest.to_string()))
+        })
+        .collect()
+}
+
+impl App {
+    /// Whether one of the bar's windows is showing: it is open and neither the Esc menu nor
+    /// the end-of-trip report nor a layout of its own (triple screen, headset) is in the way.
+    pub(crate) fn tool_window_active(&self) -> bool {
+        self.new_ui.tool.window.is_some()
+            && self.new_ui.report.is_none()
+            && self.game_menu.is_none()
+            && self.menu.is_none()
+            && !self.vr_active()
+            && !self.settings.triple.enabled
+    }
+
+    /// Open the window of the bar's button `id`. Opening a window never pauses the game.
+    pub(crate) fn open_tool(&mut self, id: &str) {
+        let w = match id {
+            "reposition" => ToolWindow::Reposition {
+                names: rows_of(self, &ListKind::Spots, "spot")
+                    .into_iter()
+                    .map(|r| r.0)
+                    .collect(),
+                selected: None,
+            },
+            "time" => {
+                let mut f = TimeForm::new(&self.clock, self.settings.time_sync);
+                f.quick = quick_times(&self.clock);
+                ToolWindow::Time(f)
+            }
+            "weather" => {
+                let now = game_lists::weather_name(self);
+                let files: Vec<(String, String)> = game_lists::weather_files()
+                    .into_iter()
+                    .map(|f| {
+                        let file = f.rsplit('/').next().unwrap_or(&f);
+                        let stem = file.rsplit_once('.').map(|x| x.0).unwrap_or(file);
+                        (stem.trim_start_matches('#').to_string(), f.clone())
+                    })
+                    .collect();
+                let selected = files.iter().position(|f| f.0.eq_ignore_ascii_case(&now));
+                let real_label = format!(
+                    "{}  \u{b7}  {}",
+                    omsi_ui::tr("Real weather (METAR)"),
+                    self.metar_station()
+                );
+                ToolWindow::Weather {
+                    files,
+                    selected,
+                    real: self.settings.metar_sync,
+                    real_label,
+                }
+            }
+            "controls" => ToolWindow::Controls,
+            "tour" if self.duty.is_some() => ToolWindow::EndTour,
+            "tour" => ToolWindow::Tour(TourForm {
+                lines: rows_of(self, &ListKind::Lines, "line"),
+                ..Default::default()
+            }),
+            "destination" => ToolWindow::Destination(self.destination_form()),
+            "driver" => ToolWindow::DriverMenu,
+            _ => return,
+        };
+        self.new_ui.close_add();
+        self.new_ui.close_tool();
+        self.new_ui.tool.open(w);
+    }
+
+    fn destination_form(&self) -> DestForm {
+        let line = self
+            .player
+            .as_ref()
+            .and_then(|p| game_lists::line_shown(&p.vehicle))
+            .unwrap_or_default();
+        let destinations: Vec<(String, String, usize)> =
+            rows_of(self, &ListKind::Destinations, "dest")
+                .into_iter()
+                .filter_map(|(label, i)| {
+                    let i: usize = i.trim().parse().ok()?;
+                    // (the list's label: the code, right-aligned, and the name)
+                    let label = label.trim_start();
+                    let (code, name) = label.split_once("  ").unwrap_or(("", label));
+                    Some((code.trim().to_string(), name.trim().to_string(), i))
+                })
+                .collect();
+        let shown = self.player.as_ref().and_then(|p| {
+            let hof = p.vehicle.host.hof.as_deref()?;
+            crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())
+        });
+        let selected = shown.and_then(|ti| destinations.iter().position(|d| d.2 == ti));
+        DestForm {
+            line_before: line.clone(),
+            line,
+            focused: false,
+            destinations,
+            selected,
+            selected_before: selected,
+            empty: "This bus has no depot file (.hof) with destinations".into(),
+        }
+    }
+
+    /// The window as it is drawn now.
+    pub(crate) fn tool_frame(&self) -> Option<ToolFrame> {
+        if !self.tool_window_active() {
+            return None;
+        }
+        let w = self.new_ui.tool.window.as_ref()?;
+        let view = match w {
+            ToolWindow::Reposition { names, selected } => View::Pick(aw::Pick {
+                title: "Reposition at an entry point".into(),
+                head: "Entry point".into(),
+                rows: names.clone(),
+                selected: *selected,
+                ok: "Reposition".into(),
+                hint: "The bus is put at the entry point".into(),
+                empty: "This map has no entry points".into(),
+            }),
+            ToolWindow::Time(f) => View::Time(f.view()),
+            ToolWindow::Weather {
+                files,
+                selected,
+                real,
+                real_label,
+            } => View::Weather(aw::Weather {
+                real: *real,
+                real_label: real_label.clone(),
+                presets: files.iter().map(|f| f.0.clone()).collect(),
+                selected: *selected,
+            }),
+            ToolWindow::Controls => View::Menu(self.controls_menu()),
+            ToolWindow::Tour(f) => View::Tour(f.view()),
+            ToolWindow::EndTour => View::Confirm(aw::Confirm {
+                title: "End the tour".into(),
+                text: "End the tour you are driving? The bus drives on without a timetable.".into(),
+                ok: "End the tour".into(),
+                cancel: "Keep driving it".into(),
+            }),
+            ToolWindow::Destination(d) => View::Destination(aw::Destination {
+                line: d.line.clone(),
+                focused: d.focused,
+                codes: d.destinations.iter().map(|x| x.0.clone()).collect(),
+                destinations: d.destinations.iter().map(|x| x.1.clone()).collect(),
+                selected: d.selected,
+                empty: d.empty.clone(),
+            }),
+            ToolWindow::DriverMenu => View::Menu(aw::Menu {
+                title: "Timetable and driver".into(),
+                entries: vec![
+                    aw::Entry {
+                        label: "Timetable evaluation".into(),
+                        checked: None,
+                        disabled: Some("Not in the game yet".into()),
+                    },
+                    aw::Entry {
+                        label: "Driver profile".into(),
+                        checked: None,
+                        disabled: crate::input::on_server(&self.args)
+                            .then(|| "Not on a server".to_string()),
+                    },
+                ],
+                hint: "Each trip's report opens at its last stop".into(),
+            }),
+            ToolWindow::Driver { names, selected } => View::Pick(aw::Pick {
+                title: "Driver profile".into(),
+                head: "Driver".into(),
+                rows: names.clone(),
+                selected: *selected,
+                ok: "Choose".into(),
+                hint: "The run goes on in the chosen driver's file".into(),
+                empty: "No driver profiles found".into(),
+            }),
+        };
+        Some(ToolFrame {
+            view,
+            key: self.new_ui.tool.opened,
+        })
+    }
+
+    /// The controls' entries as they are now: on, off, or dim with the reason.
+    fn controls_menu(&self) -> aw::Menu {
+        let found = self.controllers.as_ref().is_some_and(|c| c.any());
+        let controller = found && self.controllers.as_ref().is_some_and(|c| c.enabled);
+        let mouse = self.mouse_drive;
+        let entry = |label: &str, on: bool, off: Option<&str>| aw::Entry {
+            label: label.to_string(),
+            checked: Some(on),
+            disabled: off.map(String::from),
+        };
+        aw::Menu {
+            title: "Controls".into(),
+            entries: vec![
+                entry(
+                    "Game controller",
+                    controller,
+                    (!found).then_some("No game controller found"),
+                ),
+                entry("Mouse steering", mouse, None),
+                entry("Keyboard only", !controller && !mouse, None),
+                entry(
+                    "Head tracking",
+                    self.settings.head_tracking,
+                    self.vr_active().then_some("The headset tracks the head"),
+                ),
+            ],
+            hint: "Each choice applies at once".into(),
+        }
+    }
+
+    /// Whether the cursor is over the window.
+    fn over_tool_window(&self) -> bool {
+        let (Some(s), Some(frame)) = (self.surface.as_ref(), self.tool_frame()) else {
+            return false;
+        };
+        let (w, h) = (s.config.width, s.config.height);
+        let scale = scale_for(w, h);
+        let rect = frame.rect(Vec2::new(w as f32, h as f32) / scale);
+        rect.contains(Vec2::new(self.cursor.0, self.cursor.1) / scale)
+    }
+
+    /// A press or release of the left button. True when the window takes it: a press over the
+    /// window, and the release of a press it took. The game does not see it then.
+    pub(crate) fn tool_click(&mut self, pressed: bool) -> bool {
+        if !self.tool_window_active() {
+            self.new_ui.tool.pressed = false;
+            return false;
+        }
+        let over = self.over_tool_window();
+        let tool = &mut self.new_ui.tool;
+        if pressed {
+            tool.pressed = over;
+            if !over {
+                // (a click in the world: the route number's field lets go of the keyboard)
+                if let Some(ToolWindow::Destination(d)) = tool.window.as_mut() {
+                    d.focused = false;
+                }
+                return false;
+            }
+            self.new_ui.push_input(WinInput::Press);
+            true
+        } else if std::mem::take(&mut tool.pressed) {
+            self.new_ui.push_input(WinInput::Release);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The wheel over the window scrolls its list or steps its value.
+    pub(crate) fn tool_wheel(&mut self, amount: f32) -> bool {
+        if !self.tool_window_active() || !self.over_tool_window() {
+            return false;
+        }
+        self.new_ui.push_input(WinInput::Wheel(amount));
+        true
+    }
+
+    /// A key, before the game sees it. True when the window takes it.
+    pub(crate) fn tool_key(&mut self, code: KeyCode, pressed: bool) -> bool {
+        if pressed && !self.tool_window_active() {
+            return false;
+        }
+        match self.new_ui.tool.key(code, pressed) {
+            KeyAnswer::Game => false,
+            KeyAnswer::Taken => true,
+            KeyAnswer::Close => {
+                self.new_ui.close_tool();
+                true
+            }
+            KeyAnswer::Ok => {
+                self.tool_event(Event::Ok);
+                true
+            }
+        }
+    }
+
+    /// Text typed while the window's field has the keyboard. True when it took it.
+    pub(crate) fn tool_text(&mut self, text: &str, code: Option<KeyCode>) -> bool {
+        if !self.tool_window_active() || !text.chars().any(|c| !c.is_control()) {
+            return false;
+        }
+        let tool = &mut self.new_ui.tool;
+        let Some(ToolWindow::Destination(d)) = tool.window.as_mut().filter(|w| w.typing()) else {
+            return false;
+        };
+        d.type_text(text);
+        if let Some(code) = code {
+            tool.taken.insert(code);
+        }
+        true
+    }
+
+    /// Apply what the clicks in the window asked for (before each frame).
+    pub(crate) fn tool_events(&mut self) {
+        for e in self.new_ui.take_tool_events() {
+            if self.new_ui.tool.window.is_none() {
+                return;
+            }
+            self.tool_event(e);
+        }
+    }
+
+    fn tool_event(&mut self, e: Event) {
+        let Some(w) = self.new_ui.tool.window.as_mut() else {
+            return;
+        };
+        if e == Event::Cancel {
+            self.new_ui.close_tool();
+            return;
+        }
+        match w {
+            ToolWindow::Reposition { selected, .. } => match e {
+                Event::Row(_, i) => *selected = Some(i),
+                Event::Ok => {
+                    let Some(i) = *selected else { return };
+                    self.new_ui.close_tool();
+                    let spot = rows_of(self, &ListKind::Spots, "spot")
+                        .get(i)
+                        .map(|r| r.1.clone());
+                    if let Some(spot) = spot {
+                        game_lists::run(self, &ListKind::Spots, &format!("spot {spot}"));
+                    }
+                }
+                _ => {}
+            },
+            ToolWindow::Time(f) => match e {
+                Event::Step(k, by) => {
+                    f.step(k, by);
+                    // (dawn and dusk are the chosen day's)
+                    if k >= 2 {
+                        f.quick = quick_times(&f.clock(&self.clock));
+                    }
+                }
+                Event::Quick(i) => f.choose_quick(i),
+                Event::Check(_) => f.real = !f.real,
+                Event::Ok => {
+                    let f = f.clone();
+                    self.new_ui.close_tool();
+                    self.apply_time(&f);
+                }
+                _ => {}
+            },
+            ToolWindow::Weather {
+                files,
+                selected,
+                real,
+                ..
+            } => match e {
+                Event::Row(_, i) => *selected = Some(i),
+                Event::Check(_) => *real = !*real,
+                Event::Ok => {
+                    let (real, file) = (
+                        *real,
+                        selected.and_then(|i| files.get(i)).map(|f| f.1.clone()),
+                    );
+                    self.new_ui.close_tool();
+                    self.apply_weather(real, file);
+                }
+                _ => {}
+            },
+            ToolWindow::Controls => {
+                if let Event::Check(i) = e {
+                    self.toggle_control(i);
+                }
+            }
+            ToolWindow::Tour(_) => self.tour_event(e),
+            ToolWindow::EndTour => {
+                if e == Event::Ok {
+                    self.new_ui.close_tool();
+                    game_lists::end_duty(self);
+                }
+            }
+            ToolWindow::Destination(d) => {
+                d.focused = e == Event::Field(0);
+                match e {
+                    Event::Row(_, i) => d.selected = Some(i),
+                    Event::Ok => {
+                        let (line, dest) = d.changes();
+                        self.new_ui.close_tool();
+                        if let Some(ti) = dest {
+                            game_lists::run(self, &ListKind::Destinations, &format!("dest {ti}"));
+                        }
+                        if let Some(line) = line {
+                            game_lists::set_route_by_hand(self, &line);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ToolWindow::DriverMenu => {
+                if e == Event::Check(1) {
+                    let names = game_lists::driver_names(self);
+                    let now = self
+                        .career
+                        .path
+                        .as_ref()
+                        .and_then(|p| p.file_stem())
+                        .map(|s| s.to_string_lossy().to_string());
+                    let selected =
+                        now.and_then(|n| names.iter().position(|x| x.eq_ignore_ascii_case(&n)));
+                    self.new_ui
+                        .tool
+                        .open(ToolWindow::Driver { names, selected });
+                }
+            }
+            ToolWindow::Driver { names, selected } => match e {
+                Event::Row(_, i) => *selected = Some(i),
+                Event::Ok => {
+                    let name = selected.and_then(|i| names.get(i)).cloned();
+                    self.new_ui.close_tool();
+                    if let Some(name) = name {
+                        game_lists::switch_driver(self, &name);
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+
+    /// A click in the line and tour window.
+    fn tour_event(&mut self, e: Event) {
+        let Some(ToolWindow::Tour(f)) = self.new_ui.tool.window.as_mut() else {
+            return;
+        };
+        let mut f = std::mem::take(f);
+        match e {
+            Event::Row(0, i) if i < f.lines.len() => {
+                f.line = Some(i);
+                f.tour = None;
+                f.stops.clear();
+                f.stop = None;
+                f.trips = 0;
+                f.tours = self.tours_of(&f.lines[i].1);
+            }
+            Event::Row(1, i) if i < f.tours.len() => {
+                f.tour = Some(i);
+                if let Some((line, tour)) = f.chosen() {
+                    let now = self.clock.time;
+                    let sch = self.schedule.as_ref();
+                    f.trips = sch.map_or(0, |s| s.tour_trip_count(&line, &tour));
+                    f.trip = sch.map_or(0, |s| s.tour_trip_now(&line, &tour, now));
+                    f.trip = f.trip.min(f.trips.saturating_sub(1));
+                    self.fill_stops(&mut f);
+                }
+            }
+            Event::Row(2, i) if i < f.stops.len() => f.stop = Some(i),
+            Event::Step(_, by) if f.trips > 0 => {
+                let to = (f.trip as i64 + by as i64).clamp(0, f.trips as i64 - 1) as usize;
+                if to != f.trip {
+                    f.trip = to;
+                    self.fill_stops(&mut f);
+                }
+            }
+            Event::Ok => {
+                if let (Some((line, tour)), Some(stop)) = (f.chosen(), f.stop) {
+                    self.new_ui.close_tool();
+                    game_lists::start_duty_at(self, &line, &tour, f.trip, stop);
+                    return;
+                }
+            }
+            _ => {}
+        }
+        if let Some(ToolWindow::Tour(slot)) = self.new_ui.tool.window.as_mut() {
+            *slot = f;
+        }
+    }
+
+    /// The tours of line `line` running now, as the game menu's list of tours has them, with
+    /// the time each leaves next and where it goes.
+    fn tours_of(&self, line: &str) -> Vec<(String, String, String)> {
+        let lines = game_lists::items(self, &ListKind::Lines);
+        let sel = lines.iter().position(|l| l.1 == format!("line {line}"));
+        // (the line's preview in the game menu: "Tour 3  ›  Terminus" and the time, in the
+        // order of its list of tours)
+        let preview = game_lists::menu_extras(
+            Some(&ListKind::Lines),
+            Some(&lines),
+            sel,
+            self.schedule.as_ref(),
+            self.clock.time,
+        )
+        .2
+        .map(|p| p.rows)
+        .unwrap_or_default();
+        rows_of(self, &ListKind::Tours(line.to_string(), None), "tour")
+            .into_iter()
+            .enumerate()
+            .filter_map(|(k, (label, rest))| {
+                let (_, number) = rest.split_once('\u{1}')?;
+                let (what, when) = preview.get(k).cloned().unwrap_or((label, String::new()));
+                Some((what, when, number.to_string()))
+            })
+            .collect()
+    }
+
+    /// The stops of the trip chosen in the line and tour window; the first is chosen.
+    fn fill_stops(&self, f: &mut TourForm) {
+        let Some((line, tour)) = f.chosen() else {
+            return;
+        };
+        f.stops = self
+            .schedule
+            .as_ref()
+            .map(|s| s.tour_trip_stops(&line, &tour, f.trip))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, _, name, at)| (name.trim().to_string(), hm(at)))
+            .collect();
+        f.stop = (!f.stops.is_empty()).then_some(0);
+    }
+
+    /// Entry `i` of the controls: the game controller, the mouse steering, the keyboard only
+    /// (both off) or the head tracking, switched as their keys and settings do.
+    fn toggle_control(&mut self, i: usize) {
+        match i {
+            0 => {
+                self.game_action("toggel_ctrler");
+            }
+            1 => {
+                self.game_action("toggel_mouse_ctrl");
+            }
+            2 => {
+                if let Some(c) = self.controllers.as_mut() {
+                    c.enabled = false;
+                }
+                if self.mouse_drive {
+                    self.set_mouse_drive(false);
+                }
+                self.service_msg = Some(("Keyboard only".into(), 3.0));
+            }
+            3 if !self.vr_active() => {
+                game_lists::option_do(self, "headtrack", "", Move::Next);
+                let msg = if self.settings.head_tracking {
+                    "Head tracking on"
+                } else {
+                    "Head tracking off"
+                };
+                self.service_msg = Some((msg.into(), 3.0));
+            }
+            _ => {}
+        }
+    }
+
+    /// OK in the date and time window: the real-time sync as ticked, else the clock set to the
+    /// date and time chosen.
+    fn apply_time(&mut self, f: &TimeForm) {
+        if self.is_lan_client() {
+            self.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+            return;
+        }
+        if f.real != self.settings.time_sync {
+            let to = if f.real { Move::Inc } else { Move::Dec };
+            game_lists::option_do(self, "time_sync", "", to);
+        }
+        if !f.real {
+            self.set_date_time(f.clock(&self.clock));
+        }
+    }
+
+    /// Set the clock to `to` (date and time), the traffic's clock with it, as moving it does
+    /// (`App::shift_clock`).
+    fn set_date_time(&mut self, to: SimClock) {
+        let gap = crate::real_time::gap(&self.clock, &to);
+        if gap.abs() < 1.0 || self.real_time_locked() {
+            return;
+        }
+        self.clock.year = to.year;
+        self.clock.day_of_year = to.day_of_year;
+        self.clock.time = to.time;
+        if let Some(t) = self.traffic.as_mut() {
+            t.day_time += gap;
+        }
+        if let Some(p) = self.player.as_mut() {
+            p.vehicle.host.clock = self.clock.clone();
+        }
+        let (d, m) = self.clock.day_month();
+        self.service_msg = Some((
+            format!(
+                "Clock: {:04}-{m:02}-{d:02} {}",
+                self.clock.year,
+                hm(self.clock.time)
+            ),
+            3.0,
+        ));
+        self.clock_jump += gap;
+        if self.clock_hold == 0.0 {
+            self.timetable_after_clock_jump();
+        }
+    }
+
+    /// OK in the weather window: the real weather as ticked, else the weather file chosen.
+    fn apply_weather(&mut self, real: bool, file: Option<String>) {
+        if self.is_lan_client() {
+            self.service_msg = Some(("In a LAN session the host sets the weather".into(), 3.0));
+            return;
+        }
+        if real != self.settings.metar_sync {
+            let to = if real { Move::Inc } else { Move::Dec };
+            game_lists::option_do(self, "metar_sync", "", to);
+        }
+        if real {
+            return;
+        }
+        let now = game_lists::weather_name(self);
+        if let Some(file) = file {
+            let stem = file.rsplit('/').next().unwrap_or(&file);
+            let stem = stem.rsplit_once('.').map(|x| x.0).unwrap_or(stem);
+            if !stem.trim_start_matches('#').eq_ignore_ascii_case(&now) {
+                game_lists::dropdown_apply(self, &format!("wx {file}"));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clock(y: i32, m: i32, d: i32, secs: f64) -> SimClock {
+        let mut c = SimClock::default();
+        c.set_date(y, m, d);
+        c.time = secs;
+        c
+    }
+
+    #[test]
+    fn the_time_form_goes_round_and_keeps_the_day_in_its_month() {
+        let mut f = TimeForm::new(&clock(2024, 1, 31, 23.0 * 3600.0 + 59.0 * 60.0), false);
+        assert_eq!(
+            (f.hour, f.minute, f.day, f.month, f.year),
+            (23, 59, 31, 1, 2024)
+        );
+        f.step(0, 1);
+        f.step(1, 1);
+        assert_eq!((f.hour, f.minute), (0, 0));
+        f.step(1, -1);
+        assert_eq!(f.minute, 59);
+        // the 31st of January a month on is the 29th of February (2024 is a leap year)
+        f.step(3, 1);
+        assert_eq!((f.day, f.month), (29, 2));
+        f.step(2, 1);
+        assert_eq!(f.day, 1);
+        f.step(3, -2);
+        assert_eq!(f.month, 12);
+        f.step(4, 500);
+        assert_eq!(f.year, YEARS.1);
+        // the clock it sets
+        let mut f = TimeForm::new(&clock(2026, 10, 20, 8.0 * 3600.0), false);
+        f.quick = vec![("Dawn", 6 * 60 + 12), ("Night", 23 * 60)];
+        f.choose_quick(1);
+        let c = f.clock(&SimClock::default());
+        assert_eq!(
+            (c.year, c.day_month(), c.time),
+            (2026, (20, 10), 23.0 * 3600.0)
+        );
+        assert_eq!(f.weekday(), "Tuesday");
+        // a choice that is not there changes nothing
+        f.choose_quick(7);
+        assert_eq!(f.hour, 23);
+        assert_eq!(f.view().quick[0].1, "06:12");
+    }
+
+    #[test]
+    fn the_destination_form_changes_only_what_was_changed() {
+        let mut d = DestForm {
+            line: "50".into(),
+            line_before: "50".into(),
+            destinations: vec![
+                ("1".into(), "Central Station".into(), 4),
+                ("2".into(), "Depot".into(), 7),
+            ],
+            selected: Some(0),
+            selected_before: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(d.changes(), (None, None));
+        d.selected = Some(1);
+        assert_eq!(d.changes(), (None, Some(7)));
+        d.line.clear();
+        d.type_text("-10\r");
+        assert_eq!(d.line, "-10");
+        assert_eq!(d.changes(), (Some("-10".into()), Some(7)));
+        // an emptied field leaves the route number as it is
+        d.line.clear();
+        assert_eq!(d.changes().0, None);
+        d.type_text(&"x".repeat(ROUTE_MAX + 10));
+        assert_eq!(d.line.chars().count(), ROUTE_MAX);
+    }
+
+    #[test]
+    fn a_window_opens_over_the_last_one_and_esc_closes_it() {
+        let mut t = Tools::default();
+        t.open(ToolWindow::Controls);
+        assert_eq!(t.opened, 1);
+        assert_eq!(t.window.as_ref().map(|w| w.button()), Some("controls"));
+        t.open(ToolWindow::EndTour);
+        assert_eq!(t.opened, 2);
+        assert_eq!(t.window.as_ref().map(|w| w.button()), Some("tour"));
+        // a driving key is the game's; Esc closes the window
+        assert_eq!(t.key(KeyCode::KeyW, true), KeyAnswer::Game);
+        assert_eq!(t.key(KeyCode::KeyW, false), KeyAnswer::Game);
+        assert_eq!(t.key(KeyCode::Escape, true), KeyAnswer::Close);
+        // (its release is the window's too, not the game's)
+        assert_eq!(t.key(KeyCode::Escape, false), KeyAnswer::Taken);
+        t.close();
+        assert!(t.window.is_none());
+    }
+
+    #[test]
+    fn the_keys_are_the_fields_only_while_it_has_the_keyboard() {
+        let mut t = Tools::default();
+        t.open(ToolWindow::Destination(DestForm {
+            line: "50".into(),
+            ..Default::default()
+        }));
+        assert_eq!(t.key(KeyCode::KeyW, true), KeyAnswer::Game);
+        assert_eq!(t.key(KeyCode::KeyW, false), KeyAnswer::Game);
+        if let Some(ToolWindow::Destination(d)) = t.window.as_mut() {
+            d.focused = true;
+        }
+        assert!(t.window.as_ref().is_some_and(ToolWindow::typing));
+        assert_eq!(t.key(KeyCode::KeyW, true), KeyAnswer::Taken);
+        assert_eq!(t.key(KeyCode::Backspace, true), KeyAnswer::Taken);
+        // (the modifiers stay the game's: Alt still shows and hides the bar)
+        assert_eq!(t.key(KeyCode::ShiftLeft, true), KeyAnswer::Game);
+        assert_eq!(t.key(KeyCode::Enter, true), KeyAnswer::Ok);
+        assert_eq!(t.key(KeyCode::KeyW, false), KeyAnswer::Taken);
+        if let Some(ToolWindow::Destination(d)) = t.window.as_ref() {
+            assert_eq!(d.line, "5");
+        }
+        // the window lost the keys: what it held is forgotten and the field lets go
+        t.forget_input();
+        assert!(!t.window.as_ref().is_some_and(ToolWindow::typing));
+        assert_eq!(t.key(KeyCode::Backspace, false), KeyAnswer::Game);
+    }
+
+    #[test]
+    fn the_tour_form_offers_its_trips_in_their_bounds() {
+        let f = TourForm {
+            lines: vec![("Line 1".into(), "1".into())],
+            line: Some(0),
+            tours: vec![("Tour 1".into(), "08:00".into(), "1".into())],
+            tour: Some(0),
+            trip: 0,
+            trips: 3,
+            stops: vec![("Depot".into(), "08:00".into())],
+            stop: Some(0),
+        };
+        let v = f.view();
+        assert_eq!(v.trip_steps, (false, true));
+        assert!(v.trip.ends_with("1 / 3"));
+        assert_eq!(f.chosen(), Some(("1".into(), "1".into())));
+        let last = TourForm {
+            trip: 2,
+            ..f.clone()
+        };
+        assert_eq!(last.view().trip_steps, (true, false));
+        let none = TourForm { tour: None, ..f };
+        assert_eq!(none.chosen(), None);
+    }
+
+    #[test]
+    fn the_bars_windows_never_touch_the_games_pause() {
+        // (only the Esc menu and the end-of-trip report pause the game: nothing of the bar,
+        // its windows or the "Add vehicle" window writes the pause)
+        for (name, src) in [
+            ("new_ui_alt.rs", include_str!("new_ui_alt.rs")),
+            ("new_ui_windows.rs", include_str!("new_ui_windows.rs")),
+            ("new_ui_add.rs", include_str!("new_ui_add.rs")),
+        ] {
+            let code = src.split("#[cfg(test)]").next().unwrap_or(src);
+            for bad in ["paused =", "toggle_pause", "open_game_menu"] {
+                assert!(!code.contains(bad), "{name} has {bad:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_window_says_which_button_opened_it() {
+        let ids = [
+            (
+                ToolWindow::Reposition {
+                    names: vec![],
+                    selected: None,
+                },
+                "reposition",
+            ),
+            (
+                ToolWindow::Time(TimeForm::new(&SimClock::default(), false)),
+                "time",
+            ),
+            (
+                ToolWindow::Weather {
+                    files: vec![],
+                    selected: None,
+                    real: false,
+                    real_label: String::new(),
+                },
+                "weather",
+            ),
+            (ToolWindow::Controls, "controls"),
+            (ToolWindow::Tour(TourForm::default()), "tour"),
+            (ToolWindow::EndTour, "tour"),
+            (ToolWindow::Destination(DestForm::default()), "destination"),
+            (ToolWindow::DriverMenu, "driver"),
+            (
+                ToolWindow::Driver {
+                    names: vec![],
+                    selected: None,
+                },
+                "driver",
+            ),
+        ];
+        let bar: Vec<&str> = crate::new_ui_alt::buttons(&Default::default())
+            .iter()
+            .map(|b| b.id)
+            .collect();
+        for (w, id) in ids {
+            assert_eq!(w.button(), id);
+            assert!(bar.contains(&id), "{id} is not on the bar");
+        }
+    }
+}

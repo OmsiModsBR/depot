@@ -171,6 +171,19 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { is_synthetic, ref event, .. } if self.input_away || (is_synthetic && event.state == ElementState::Pressed) => {}
             WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } if self.input_away => {}
             WindowEvent::KeyboardInput { event, .. } => {
+                // what is typed while a field of the Alt bar's window has the keyboard is the
+                // field's (the key itself does not reach the game either)
+                if event.state == ElementState::Pressed {
+                    let code = match event.physical_key {
+                        PhysicalKey::Code(c) => Some(c),
+                        _ => None,
+                    };
+                    if let Some(text) = event.text.as_deref() {
+                        if self.tool_text(text, code) {
+                            return;
+                        }
+                    }
+                }
                 if event.state == ElementState::Pressed && self.menu_edit_icao {
                     if let Some(text)=event.text.as_deref(){ self.icao_edit_text(text); }
                 }
@@ -3314,7 +3327,7 @@ impl App {
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
         // over the new interface's "Add vehicle" window the wheel scrolls its list
-        if self.report_wheel(amount) || self.add_wheel(amount) { return; }
+        if self.report_wheel(amount) || self.add_wheel(amount) || self.tool_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3418,6 +3431,10 @@ impl App {
         }
         // the new interface's "Add vehicle" window takes the clicks on it
         if self.add_click(pressed) {
+            return;
+        }
+        // and so do the Alt bar's other windows
+        if self.tool_click(pressed) {
             return;
         }
         // the Alt bar of the new interface takes the clicks on it (never the game's)

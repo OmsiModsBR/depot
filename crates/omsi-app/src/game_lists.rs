@@ -151,7 +151,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
 /// (`SetLineTo`), else its IBIS's line number.
-fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
+pub(crate) fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
     [v.str_var("Matrix_Nr"), v.str_var("SetLineTo")]
         .into_iter()
         .map(|s| s.trim().to_string())
@@ -2001,7 +2001,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
 
 /// The name of the weather in force (the file's name without its ending).
 /// The weather files (`Weather/*.owt`) of every content root, by name.
-fn weather_files() -> Vec<String> {
+pub(crate) fn weather_files() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
         .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("owt")).unwrap_or(false))
@@ -2168,7 +2168,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
     }
 }
 
-fn weather_name(app: &App) -> String {
+pub(crate) fn weather_name(app: &App) -> String {
     if app.weather.as_ref().is_some_and(|w| w.name == CUSTOM_WEATHER) {
         return CUSTOM_WEATHER.to_string();
     }
@@ -2911,7 +2911,7 @@ fn apply_pending(v: &mut serde_json::Value, pending: &[(String, String)]) {
 }
 
 /// The personnel files there are (content folder and OMSI 2's `Drivers`), by name.
-fn driver_names(app: &App) -> Vec<String> {
+pub(crate) fn driver_names(app: &App) -> Vec<String> {
     let mut names: Vec<String> = omsi_cfg::read_dir_merged("Drivers")
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("odr")))
@@ -2925,7 +2925,7 @@ fn driver_names(app: &App) -> Vec<String> {
 
 /// Go on with another driver: this run so far into the old personnel file, the rest into
 /// the new one.
-fn switch_driver(app: &mut App, name: &str) {
+pub(crate) fn switch_driver(app: &mut App, name: &str) {
     if app.career.path.is_some() {
         if let Err(e) = app.career.save() {
             log::warn!("writing the personnel file: {e}");
