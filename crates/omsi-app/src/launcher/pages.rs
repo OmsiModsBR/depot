@@ -2878,6 +2878,8 @@ mod settings_tests {
         assert!(ui.drawn.contains_key(&id_of("s-graphics")));
         assert!(ui.drawn.contains_key(&id_of("s-shadow")));
 
+        // (`all_rows` has VR on, which takes DirectX 12 instead)
+        s["vr"] = json!(false);
         s["graphics_api"] = json!("d3d9");
         let ui = drawn(&mut s);
         assert_eq!(ui.drawn.contains_key(&id_of("s-graphics")), !cfg!(windows));
