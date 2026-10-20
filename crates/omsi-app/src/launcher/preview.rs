@@ -323,6 +323,14 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
 
 /// `depot --preview-helper`: the helper on its standard input and output.
 pub fn helper_main() -> anyhow::Result<()> {
+    // A helper that crashes ends at once, with no "stopped working" window for the player
+    // and not held open by the error reporting meanwhile: the launcher sees it end, and
+    // starts the next one on another graphics interface.
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Diagnostics::Debug::{SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX};
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    }
     let (tx, rx) = channel();
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
@@ -378,31 +386,38 @@ pub fn helper_log() -> PathBuf {
 }
 
 /// The graphics interfaces the helper is tried on, in turn, as `OMSI_BACKEND` names them
-/// (None: the settings' own), for the settings' graphics interface `chosen`. On Windows the
-/// one the player chose first, else Vulkan: on an Intel UHD 630 the helper's DirectX 12
-/// device overflowed its stack compiling the scene's shaders (the game's own did not), and on
-/// Vulkan it drew. A helper that ends before its first picture is started again on the next
-/// one. `OMSI_BACKEND` set for the launcher holds for the helper too.
+/// (None: the settings' own), for the settings' graphics interface `chosen`. On Windows
+/// Vulkan first, whatever the player chose for the game, then the one chosen: on an Intel UHD
+/// 630 the helper's DirectX 12 device overflowed its stack compiling the scene's shaders (the
+/// game's own did not), and on Vulkan it drew. The helper only draws a picture of the bus, it
+/// need not draw it as the game does. A helper that ends, or sends no picture in
+/// `FIRST_PICTURE_LIMIT`, is started again on the next one. `OMSI_BACKEND` set for the
+/// launcher holds for the helper too.
 fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
     if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
         return vec![None];
     }
-    let all = ["vulkan", "dx12", "gl"];
     // (the names the game's own start reads, see `startup::backend_order`)
-    let first = match chosen.trim().to_ascii_lowercase().as_str() {
-        "vulkan" => Some("vulkan"),
+    let chosen = match chosen.trim().to_ascii_lowercase().as_str() {
         "dx12" | "directx" | "d3d12" => Some("dx12"),
         "gl" | "opengl" | "gles" => Some("gl"),
         _ => None,
     };
-    first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).map(Some).collect()
+    let rest = ["dx12", "gl"].into_iter().filter(|b| Some(*b) != chosen);
+    std::iter::once("vulkan").chain(chosen).chain(rest).map(Some).collect()
 }
+
+/// How long a helper may take to send its first picture before it is taken for one that
+/// hung (stopped, and started on the next graphics interface): a helper that crashed may be
+/// held open by the system's error reporting, its output never closing.
+const FIRST_PICTURE_LIMIT: Duration = Duration::from_secs(90);
 
 /// The way to a running helper.
 struct Link {
     cmds: Sender<Cmd>,
     msgs: Receiver<Msg>,
     child: Option<std::process::Child>,
+    started: Instant,
 }
 
 impl Link {
@@ -421,7 +436,7 @@ impl Link {
                     }
                 })
                 .map_err(|e| e.to_string())?;
-            return Ok(Link { cmds, msgs, child: None });
+            return Ok(Link { cmds, msgs, child: None, started: Instant::now() });
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let log_file = helper_log();
@@ -445,6 +460,8 @@ impl Link {
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = cmd.spawn().map_err(|e| format!("{}: {e}", exe.display()))?;
+        #[cfg(windows)]
+        end_with_launcher(&child);
         let mut stdin = child.stdin.take().ok_or("no input to the helper")?;
         let mut stdout = child.stdout.take().ok_or("no output from the helper")?;
         std::thread::spawn(move || {
@@ -474,7 +491,40 @@ impl Link {
             }
         });
         log::info!("launcher: preview helper started ({}{}), its log is {}", child.id(), backend.map(|b| format!(", on {b}")).unwrap_or_default(), log_file.display());
-        Ok(Link { cmds, msgs, child: Some(child) })
+        Ok(Link { cmds, msgs, child: Some(child), started: Instant::now() })
+    }
+}
+
+/// The helper ends with the launcher, however the launcher ends: it is put in a job of the
+/// launcher's that the system closes, and its processes with it, when the launcher's process
+/// is gone (a helper that crashed and is held open by the error reporting included, which
+/// would not see its input close).
+#[cfg(windows)]
+fn end_with_launcher(child: &std::process::Child) {
+    use std::os::windows::io::AsRawHandle;
+    use std::sync::OnceLock;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE};
+    // (one job for every helper, its handle kept open until the launcher ends: 0 if none)
+    static JOB: OnceLock<isize> = OnceLock::new();
+    let job = *JOB.get_or_init(|| unsafe {
+        let Ok(job) = CreateJobObjectW(None, windows::core::PCWSTR::null()) else { return 0 };
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
+        match SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info as *const _ as *const _, size) {
+            Ok(()) => job.0 as isize,
+            Err(e) => {
+                log::warn!("launcher: no job for the preview helper: {e}");
+                0
+            }
+        }
+    });
+    if job == 0 {
+        return;
+    }
+    if let Err(e) = unsafe { AssignProcessToJobObject(HANDLE(job as *mut _), HANDLE(child.as_raw_handle())) } {
+        log::warn!("launcher: the preview helper is not in the launcher's job: {e}");
     }
 }
 
@@ -792,6 +842,15 @@ impl Preview {
                 }
             }
         }
+        // (a helper that sent no picture for so long is taken for one that hung: stopped, and
+        // so started on the next interface)
+        if !ended && !self.drew && link.started.elapsed() > FIRST_PICTURE_LIMIT {
+            log::warn!("launcher: the preview helper sent no picture in {} s, it is stopped", FIRST_PICTURE_LIMIT.as_secs());
+            if let Some(c) = self.link.as_mut().and_then(|l| l.child.as_mut()) {
+                let _ = c.kill();
+            }
+            ended = true;
+        }
         if ended {
             // (how it ended: the code it gave, if it has given one yet)
             let code = self.link.as_mut().and_then(|l| l.child.as_mut()).and_then(|c| {
@@ -890,7 +949,7 @@ mod tests {
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
         p.want(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
@@ -911,6 +970,28 @@ mod tests {
         assert!(!p.has_picture() && !p.live && p.error.is_some());
     }
 
+    /// A helper that sends no picture in `FIRST_PICTURE_LIMIT` (one that crashed and is held
+    /// open, its output never closing) is taken for one that ended: started again on the next
+    /// graphics interface. One still within the limit is waited for.
+    #[test]
+    fn a_helper_with_no_picture_for_too_long_is_tried_on_the_next_interface() {
+        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
+        let mut p = Preview::new();
+        p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
+        let (cmds, _cmd_rx) = channel();
+        let (_msg_tx, msgs) = channel::<Msg>();
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
+        p.want(a.clone());
+        p.update(0.016, Some((2, 1)));
+        assert!(p.link.is_some() && p.backend == 0, "still waited for");
+        let Some(l) = p.link.as_mut() else { unreachable!() };
+        l.started = Instant::now() - FIRST_PICTURE_LIMIT - Duration::from_secs(1);
+        p.update(0.016, Some((2, 1)));
+        assert!(p.link.is_none());
+        assert_eq!(p.backend, 1);
+        assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
+    }
+
     /// A helper that ends before its first picture is started again on the next graphics
     /// interface (where there is one); one that had drawn is not.
     #[test]
@@ -920,7 +1001,7 @@ mod tests {
         p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
         p.want(a.clone());
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
@@ -930,14 +1011,14 @@ mod tests {
         // one that drew pins its interface: a later helper gone early does not move it on
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
         p.drew = false;
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
@@ -953,11 +1034,13 @@ mod tests {
             assert_eq!(helper_backends("dx12"), vec![None]);
             return;
         }
+        // (Vulkan first even when the game's setting names DirectX 12 or OpenGL)
         assert_eq!(helper_backends("auto"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
-        assert_eq!(helper_backends("dx12"), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
-        assert_eq!(helper_backends("gl"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
-        assert_eq!(helper_backends(" D3D12 "), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
-        assert_eq!(helper_backends("OpenGL"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
+        assert_eq!(helper_backends("vulkan"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
+        assert_eq!(helper_backends("dx12"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
+        assert_eq!(helper_backends("gl"), vec![Some("vulkan"), Some("gl"), Some("dx12")]);
+        assert_eq!(helper_backends(" D3D12 "), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
+        assert_eq!(helper_backends("OpenGL"), vec![Some("vulkan"), Some("gl"), Some("dx12")]);
     }
 
     /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
@@ -968,7 +1051,7 @@ mod tests {
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link { cmds, msgs, child: None, started: Instant::now() });
         p.want_picture(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
