@@ -6,6 +6,9 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Added
+- `omsi-render-d3d9`, the isolated foundation of a future legacy Direct3D 9 renderer: a small backend interface with a GPU-less test implementation, and (Windows only) device bring-up with capability reading, off-screen clear/read-back and device-loss handling. Nothing depends on it, the game renders as before, and no new hardware is declared supported.
+
 ### Changed
 - The game's launcher wears the new look's sidebar (logo, the pages, Settings and Setup at its foot, the driver under them) and gains three pages: Vehicles and Maps (the library, details, paints or start points and the files found; "Drive this bus" and "Drive on this map" take the choice to the Drive page) and Diagnostics (this build and the graphics adapter, the OMSI 2 folder's check, the game's log and the games running). Every other page is the one it was. The separate `depot-launcher-next` program is gone; `launcher_shot` (an example of `omsi-launcher-ui`) still draws the pages into a picture.
 - New Esc menu: the game menu's top level is drawn by `omsi-ui` over the paused picture (the renderer's overlay hook) instead of the HUD's lines. The lines, their keys and what they do are the game menu's own; the lists behind "Options...", "Controls..." and the like are still the HUD's. It is the only Esc menu on a plain window; the triple screen and VR keep the HUD's menu.

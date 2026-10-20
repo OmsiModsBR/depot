@@ -1,0 +1,19 @@
+[package]
+name = "omsi-render-d3d9"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Legacy Direct3D 9 renderer foundation: backend interface and device bring-up (not wired into the game)"
+
+# Nothing depends on this crate: the game keeps using `omsi-render` (wgpu) and no build of
+# the game links this one. See README.md for the scope and the open decisions.
+[dependencies]
+thiserror.workspace = true
+log.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D9",
+    "Win32_UI_WindowsAndMessaging",
+] }
