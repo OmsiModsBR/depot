@@ -53,10 +53,19 @@ type D3DCompileFn = unsafe extern "system" fn(
     errors: *mut *mut c_void,
 ) -> HRESULT;
 
-/// The compiler's entry point, looked up once (the DLL then stays loaded).
-fn d3d_compile() -> Result<D3DCompileFn> {
-    static COMPILE: OnceLock<std::result::Result<usize, String>> = OnceLock::new();
-    let found = COMPILE.get_or_init(|| {
+/// `D3DDisassemble` of `d3dcompiler.h` (no comment string is passed here).
+type D3DDisassembleFn = unsafe extern "system" fn(
+    src: *const c_void,
+    src_size: usize,
+    flags: u32,
+    comments: PCSTR,
+    disassembly: *mut *mut c_void,
+) -> HRESULT;
+
+/// The compiler's DLL, loaded once from System32 (it then stays loaded).
+fn compiler_dll() -> std::result::Result<usize, String> {
+    static DLL: OnceLock<std::result::Result<usize, String>> = OnceLock::new();
+    DLL.get_or_init(|| {
         // SAFETY: a NUL-terminated wide literal; System32 only, so no DLL from the game's
         // folder or the current one is picked up.
         let dll = unsafe {
@@ -67,6 +76,16 @@ fn d3d_compile() -> Result<D3DCompileFn> {
             )
         }
         .map_err(|e| format!("d3dcompiler_47.dll could not be loaded: {e}"))?;
+        Ok(dll.0 as usize)
+    })
+    .clone()
+}
+
+/// The compiler's entry point, looked up once.
+fn d3d_compile() -> Result<D3DCompileFn> {
+    static COMPILE: OnceLock<std::result::Result<usize, String>> = OnceLock::new();
+    let found = COMPILE.get_or_init(|| {
+        let dll = windows::Win32::Foundation::HMODULE(compiler_dll()? as *mut c_void);
         // SAFETY: a live module and a NUL-terminated name.
         unsafe { GetProcAddress(dll, windows::core::s!("D3DCompile")) }
             .map(|f| f as usize)
@@ -77,6 +96,44 @@ fn d3d_compile() -> Result<D3DCompileFn> {
         Ok(f) => Ok(unsafe { std::mem::transmute::<usize, D3DCompileFn>(*f) }),
         Err(e) => Err(BackendError::Unsupported(e.clone())),
     }
+}
+
+/// The instruction slots the compiler itself counts for `code` (its disassembly's
+/// "approximately N instruction slots used"), the figure a device's limit is held to.
+pub fn reported_slots(code: &[u32]) -> Result<u32> {
+    let dll = windows::Win32::Foundation::HMODULE(
+        compiler_dll().map_err(BackendError::Unsupported)? as *mut c_void,
+    );
+    // SAFETY: a live module and a NUL-terminated name.
+    let f = unsafe { GetProcAddress(dll, windows::core::s!("D3DDisassemble")) }
+        .map(|f| f as usize)
+        .ok_or_else(|| BackendError::Unsupported("no D3DDisassemble".into()))?;
+    // SAFETY: the address is `D3DDisassemble`'s, whose signature `D3DDisassembleFn` is.
+    let disassemble = unsafe { std::mem::transmute::<usize, D3DDisassembleFn>(f) };
+    let mut out: *mut c_void = std::ptr::null_mut();
+    // SAFETY: the code outlives the call; the blob it returns is owned here.
+    let text = unsafe {
+        disassemble(
+            code.as_ptr().cast(),
+            code.len() * 4,
+            0,
+            PCSTR::null(),
+            &mut out,
+        )
+        .ok()
+        .map_err(|e| BackendError::Backend(e.to_string()))?;
+        if out.is_null() {
+            return Err(BackendError::Backend("no disassembly".into()));
+        }
+        let blob = ID3DBlob::from_raw(out);
+        String::from_utf8_lossy(blob_bytes(&blob)).into_owned()
+    };
+    text.lines()
+        .find_map(|l| {
+            let rest = l.split("approximately ").nth(1)?;
+            rest.split_whitespace().next()?.parse().ok()
+        })
+        .ok_or_else(|| BackendError::Backend("no slot count in the disassembly".into()))
 }
 
 fn blob_bytes(blob: &ID3DBlob) -> &[u8] {
@@ -158,15 +215,19 @@ mod tests {
 
     #[test]
     fn the_scene_pixel_shader_fits_every_sm3_card() {
-        // (every Shader Model 3.0 card gives a pixel shader this many slots; above it, the
-        // smaller ones would draw no world)
+        // (512 slots is what every Shader Model 3.0 card gives a pixel shader; the shader
+        // keeps a tenth of it free, for the compiler's count being approximate and for what
+        // is added next)
         let ps = compile(SCENE, "scene.hlsl", "ps_main", Stage::Pixel).unwrap();
-        let slots = crate::caps::instruction_slots(&ps);
-        println!("scene pixel shader: about {slots} instruction slots");
-        assert!(slots > 50, "{slots}: the count reads nothing");
+        let slots = reported_slots(&ps).unwrap();
+        println!("scene pixel shader: {slots} instruction slots");
+        assert!(slots <= 460, "the scene pixel shader takes {slots} slots");
+        // the device's guard counts the bytecode itself (`caps::instruction_slots`): it
+        // must not stray far from the compiler's count
+        let counted = crate::caps::instruction_slots(&ps);
         assert!(
-            slots <= crate::caps::PS30_MIN_SLOTS,
-            "the scene pixel shader takes about {slots} slots"
+            counted.abs_diff(slots) <= slots / 10,
+            "counted {counted}, the compiler {slots}"
         );
     }
 

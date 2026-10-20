@@ -94,11 +94,18 @@ default renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`,
 objects at night, as the ground's night map lights the ground; outside the loaded square
 they light nothing.
 
+The scene's pixel shader stays inside the 512 instruction slots every Shader Model 3.0 card
+gives (a test holds it to 460 by the compiler's own count): what does not depend on the
+pixel is worked out before it, the lights packed once (`scene::pack_light`), the border
+colour and the reflection's bits unpacked per material, the interior lamp code per vertex,
+the grid's places a loop count, and the spilling reflection factor put together from a
+table of byte ORs (sampler 10).
+
 The scene's pixel shader is checked against the device: the log says about how many
 instruction slots it takes and how many the card allows
 (`MaxPixelShader30InstructionSlots`; one below 512, or none, is taken for a wrong cap and read as 512), and a card that allows fewer gets one clear error in
-the log instead of a black world; the scene is then not tried again every frame. A test
-holds the shader to the 512 slots every SM3 card gives.
+the log instead of a black world; the scene is then not tried again every frame. That count
+(`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
 
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
 the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the

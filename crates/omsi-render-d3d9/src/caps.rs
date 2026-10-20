@@ -47,9 +47,11 @@ impl Caps {
 /// (`D3DCAPS9::MaxPixelShader30InstructionSlots`, which goes up to 32768).
 pub const PS30_MIN_SLOTS: u32 = 512;
 
-/// How many instruction slots compiled Shader Model 2 or 3 bytecode takes: declarations,
-/// constant definitions and comments take none, the macro instructions as many as the
-/// Shader Model 3.0 pixel shader tables give them (`slots_of`), every other one one.
+/// About how many instruction slots compiled Shader Model 2 or 3 bytecode takes:
+/// declarations, constant definitions and comments take none, the macro instructions, the
+/// flow control and the explicit-level samples as many as a ps_3_0 shader gives them
+/// (`slots_of`), every other one one. A test holds it within a tenth of the compiler's own
+/// count.
 pub fn instruction_slots(code: &[u32]) -> u32 {
     const END: u32 = 0x0000_FFFF;
     const COMMENT: u32 = 0xFFFE;
@@ -87,6 +89,10 @@ fn slots_of(opcode: u32) -> u32 {
         0x20 | 0x24 | 0x10 | 0x15 | 0x17 => 3,
         // lrp, crs, dsx, dsy, m3x2
         0x12 | 0x21 | 0x5B | 0x5C | 0x18 => 2,
+        // flow control: loop, rep, if, if_comp, break_comp, breakp, callnz; texldd
+        0x1B | 0x26 | 0x28 | 0x29 | 0x2D | 0x60 | 0x1A | 0x5D => 3,
+        // endloop, endrep, call; texldl
+        0x1D | 0x27 | 0x19 | 0x5F => 2,
         _ => 1,
     }
 }
