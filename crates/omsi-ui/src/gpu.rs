@@ -103,8 +103,11 @@ pub enum UiEvent<'a> {
         buffer: usize,
         vertices: &'a [Vertex],
     },
-    /// Draw into the target (`size` pixels), cleared to `clear` first when given.
+    /// Draw into the target (`size` pixels), cleared to `clear` first when given. `target`
+    /// is the scene texture drawn into (see [`Gpu::set_mirror_target`]); None is the
+    /// window's picture.
     Render {
+        target: Option<usize>,
         size: (u32, u32),
         clear: Option<[f32; 4]>,
         layers: &'a [Layer],
@@ -141,6 +144,8 @@ pub struct Gpu {
     mirror: Option<UiMirror>,
     /// The mirror has had the whole atlas.
     mirror_has_atlas: bool,
+    /// The scene texture the renders draw into, for the mirror (None: the window's picture).
+    mirror_target: Option<usize>,
 }
 
 impl Gpu {
@@ -286,6 +291,7 @@ impl Gpu {
             device: device.clone(),
             mirror: None,
             mirror_has_atlas: false,
+            mirror_target: None,
         };
         let atlas = vec![0u8; (atlas_size * atlas_size * 4) as usize];
         g.add_texture_internal(device, None, atlas_size, atlas_size, &atlas);
@@ -377,11 +383,20 @@ impl Gpu {
     /// Hands every picture, vertex list and draw from now on to `mirror` as well (None
     /// stops): a second renderer then draws the same interface into the window. Set it
     /// before the first picture is added: pictures added before are not sent (the atlas is,
-    /// whole, at its next upload). Meant for a Gpu that draws into the window's picture;
-    /// pictures drawn elsewhere (`add_view`) are not sent.
+    /// whole, at its next upload). Meant for a Gpu that draws into the window's picture (or,
+    /// see [`Gpu::set_mirror_target`], into scene textures); pictures drawn elsewhere
+    /// (`add_view`) are not sent.
     pub fn set_mirror(&mut self, mirror: Option<UiMirror>) {
         self.mirror = mirror;
         self.mirror_has_atlas = false;
+    }
+
+    /// The renders from now on draw into the renderer's scene texture `target` (a render
+    /// texture shown as an overlay or on a screen), not into the window's picture: the
+    /// mirror is told so with each [`UiEvent::Render`] and draws into its own copy of it.
+    /// None goes back to the window's picture.
+    pub fn set_mirror_target(&mut self, target: Option<usize>) {
+        self.mirror_target = target;
     }
 
     fn mirror(&mut self, event: UiEvent<'_>) {
@@ -615,6 +630,7 @@ impl Gpu {
     ) {
         let (w, h) = (size.0.max(1), size.1.max(1));
         self.mirror(UiEvent::Render {
+            target: self.mirror_target,
             size: (w, h),
             clear: clear.map(|c| [c.r as f32, c.g as f32, c.b as f32, c.a as f32]),
             layers,

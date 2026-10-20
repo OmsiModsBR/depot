@@ -127,6 +127,12 @@ differs only where alpha is partial (edges, fades). The HUD's pictures are drawn
 same shader as quads in pixels. Pictures, atlas and vertex lists keep their pixels, so a
 device opened again after a loss gets them back.
 
+A Gpu can also draw into one of the renderer's render textures (the minimap and the city
+map do): `omsi-ui`'s `Gpu::set_mirror_target` names the texture, and `draw_ui_into` draws
+into a render target of this device under the same scene texture id, inside a frame or
+outside one, which the HUD's overlays and the materials then show. A device opened again
+has it back at the owner's next draw.
+
 Known differences: no MSAA on the interface (`omsi-ui` draws the in-game overlay without it
 too), and a picture `omsi-ui` takes from a render target (`add_view`) draws nothing.
 
@@ -149,7 +155,8 @@ workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader 
   pointing outside its data refused, and the scene coming back after `recover`; and the
   interface layer: colours over the frame, a layer's clip and opacity, pictures drawn and
   missing ones not, draws outside their buffer or a frame refused, the HUD's pictures
-  straight and premultiplied, and the interface coming back after `recover`. They skip themselves only when there is
+  straight and premultiplied, the interface drawn into a scene texture and shown, and the
+  interface coming back after `recover`. They skip themselves only when there is
   no Direct3D 9Ex driver or the device is below the floor; any other failure to open fails
   them. The log says which adapter ran them.
 
@@ -172,8 +179,8 @@ frame plan and asset events to this crate. In order:
 
 1. The game opens with this renderer: the window, the frame loop and the asset events.
 2. The option in the launcher's render options, off by default, Windows only.
-3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface and the
-   HUD's pictures).
+3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface, the
+   HUD's pictures, the minimap and the city map).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
    specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
 5. The alpha-test cut and the other parity items from the maintainer's observation of the

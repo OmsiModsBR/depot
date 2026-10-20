@@ -106,6 +106,15 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<UiPipeline> {
 }
 
 /// An sRGB-encoded value of linear `c` (a clear colour, which wgpu takes linear).
+/// Whether `t` is a render target of `w` by `h`.
+fn is_target_of(t: &IDirect3DTexture9, w: u32, h: u32) -> bool {
+    let mut desc = D3DSURFACE_DESC::default();
+    // SAFETY: the out-parameter is a live local.
+    unsafe { t.GetLevelDesc(0, &mut desc) }.is_ok()
+        && desc.Usage & D3DUSAGE_RENDERTARGET as u32 != 0
+        && (desc.Width, desc.Height) == (w, h)
+}
+
 fn to_srgb(c: f32) -> f32 {
     let c = c.clamp(0.0, 1.0);
     if c <= 0.003_130_8 {
@@ -535,6 +544,84 @@ impl D3d9Device {
     /// refused.
     pub fn draw_ui(&mut self, owner: usize, frame: &UiFrame) -> Result<()> {
         let target = self.ui_target("interface")?;
+        self.ui_frame(owner, frame, target)
+    }
+
+    /// Draws `frame` of `owner`'s interface into scene texture `target` instead of over the
+    /// frame: a render target of the frame's size (transparent where nothing is drawn), made
+    /// here, or made again at a new size, and then drawn like any scene texture (the HUD's
+    /// overlays, a material). It is drawn now, inside a frame or outside one. A device
+    /// opened again does not keep it: the owner draws it again.
+    pub fn draw_ui_into(&mut self, owner: usize, target: usize, frame: &UiFrame) -> Result<()> {
+        let (w, h) = frame.size;
+        if w == 0 || h == 0 || w.max(h) > self.caps.max_texture_size {
+            return Err(BackendError::InvalidArgument(format!(
+                "an interface target of {w}x{h}"
+            )));
+        }
+        if self.ui.pipeline.is_none() {
+            self.ui.pipeline = Some(build_pipeline(&self.device)?);
+        }
+        let texture = match self.scene_texture(target).filter(|t| is_target_of(t, w, h)) {
+            Some(t) => t.clone(),
+            None => {
+                let mut texture = None;
+                // SAFETY: the out-parameter is a live local.
+                unsafe {
+                    self.device
+                        .CreateTexture(
+                            w,
+                            h,
+                            1,
+                            D3DUSAGE_RENDERTARGET as u32,
+                            D3DFMT_A8R8G8B8,
+                            D3DPOOL_DEFAULT,
+                            &mut texture,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                }
+                let texture = some(texture, "interface target")?;
+                self.put_scene_target(target, texture.clone());
+                texture
+            }
+        };
+        // SAFETY: plain calls on a live device; the surfaces belong to it. What was bound is
+        // bound again whatever happened.
+        unsafe {
+            let surface = texture.GetSurfaceLevel(0).map_err(map_err)?;
+            let color = self.device.GetRenderTarget(0).map_err(map_err)?;
+            // (none bound: GetDepthStencilSurface fails, and none is bound again)
+            let depth = self.device.GetDepthStencilSurface().ok();
+            self.device.SetRenderTarget(0, &surface).map_err(map_err)?;
+            let drawn = self
+                .device
+                .SetDepthStencilSurface(None::<&IDirect3DSurface9>)
+                .map_err(map_err)
+                .and_then(|_| {
+                    let own_scene = self.frame.is_none();
+                    if own_scene {
+                        self.device.BeginScene().map_err(map_err)?;
+                    }
+                    let drawn = self.ui_frame(owner, frame, (w, h));
+                    if own_scene {
+                        let ended = self.device.EndScene().map_err(map_err);
+                        return drawn.and(ended);
+                    }
+                    drawn
+                });
+            // (setting the colour target again sets the whole viewport again too)
+            let restored = self
+                .device
+                .SetRenderTarget(0, &color)
+                .and_then(|_| self.device.SetDepthStencilSurface(depth.as_ref()))
+                .map_err(map_err);
+            drawn.and(restored)
+        }
+    }
+
+    /// Draws `frame` of `owner`'s interface into the bound target, `target` pixels.
+    fn ui_frame(&mut self, owner: usize, frame: &UiFrame, target: (u32, u32)) -> Result<()> {
         let Some(o) = self.ui.owners.get(&owner) else {
             return Ok(());
         };
