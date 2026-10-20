@@ -521,6 +521,8 @@ impl Renderer {
             blend_by_origin: false,
             stats: Default::default(),
             overlay_hook: None,
+            asset_mirror: Default::default(),
+            plan_sink: None,
             counts: Default::default(),
             rt,
         }

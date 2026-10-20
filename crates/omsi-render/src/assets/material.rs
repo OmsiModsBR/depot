@@ -116,6 +116,12 @@ pub struct Material {
 }
 
 impl Material {
+    /// The material uniform this renderer's shaders read, as 11 vectors in order: color,
+    /// params, extra, params2, emissive, specular, bump, pbr, flags, ambient, sway.
+    pub fn uniform_vectors(&self) -> &[[f32; 4]] {
+        bytemuck::cast_slice(std::slice::from_ref(&self.uniform))
+    }
+
     /// Whether the material samples texture `id`.
     pub fn uses_texture(&self, id: TextureId) -> bool {
         self.texture == Some(id)

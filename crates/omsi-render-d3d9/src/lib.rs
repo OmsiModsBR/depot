@@ -3,15 +3,17 @@
 //! This crate is deliberately isolated: nothing depends on it, the game still renders through
 //! `omsi-render` (wgpu), and it declares no hardware as supported. It holds
 //!
-//! * [`backend`]: the small, platform-agnostic interface a renderer must satisfy, plus a
-//!   recording [`backend::NullBackend`] used to test the interface without a GPU;
-//! * [`d3d9`] (Windows only): opening a Direct3D 9 device, reading its capabilities, clearing
-//!   an off-screen target and reading it back, and device-lost detection and reset.
-//!
-//! Drawing meshes, the OMSI alpha modes and the HLSL shaders are later steps; see README.md.
+//! * [`backend`]: the crate's internal drawing layer (textures, meshes, batches, frames),
+//!   platform-agnostic, plus a recording [`backend::NullBackend`] that tests it without a GPU.
+//!   The game will not call it directly: the seam with the game is planned at the level of
+//!   the scene (the `Renderer` facade the game already uses), after the `omsi-render`
+//!   refactor; see README.md;
+//! * [`d3d9`] (Windows only): the Direct3D 9Ex implementation, off-screen or in a window,
+//!   with HLSL Shader Model 3.0 shaders compiled at run time.
 
 pub mod backend;
 pub mod caps;
+pub mod scene;
 
 #[cfg(windows)]
 pub mod d3d9;
@@ -21,6 +23,9 @@ pub use backend::{
     TextureHandle,
 };
 pub use caps::{Caps, ShaderModel};
+pub use scene::{
+    DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexFormat,
+};
 
 /// Errors a legacy backend reports. `DeviceLost` is recoverable through
 /// [`RenderBackend::recover`]; the others are not.
