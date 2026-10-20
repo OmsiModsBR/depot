@@ -234,6 +234,10 @@ impl MenuFrame {
 pub(crate) struct State {
     menu: Option<MenuFrame>,
     alt: Option<crate::new_ui_alt::AltFrame>,
+    /// The loading screen, while the first area of the map loads.
+    loading: Option<crate::new_ui_loading::LoadingFrame>,
+    /// Screenshots decoded on their thread and not yet in the GPU.
+    slides: Vec<crate::new_ui_loading::Decoded>,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -248,9 +252,25 @@ struct Overlay {
     gpu: Option<Gpu>,
     logo: Option<(usize, f32)>,
     last: Instant,
+    /// The loading screen's pictures in the GPU, and how far its slideshow is.
+    slide_tex: Vec<omsi_ui::loading::Slide>,
+    show: omsi_ui::loading::Slideshow,
 }
 
 impl Overlay {
+    fn new(shared: Shared, format: wgpu::TextureFormat) -> Overlay {
+        Overlay {
+            shared,
+            format,
+            ui: Ui::new(),
+            gpu: None,
+            logo: None,
+            last: Instant::now(),
+            slide_tex: Vec::new(),
+            show: omsi_ui::loading::Slideshow::new(0),
+        }
+    }
+
     fn draw(
         &mut self,
         device: &wgpu::Device,
@@ -259,11 +279,29 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, alt, mouse) = match self.shared.lock() {
-            Ok(s) => (s.menu.clone(), s.alt.clone(), s.mouse),
+        let (menu, alt, loading, mouse, arrived) = match self.shared.lock() {
+            Ok(mut s) => {
+                let arrived = std::mem::take(&mut s.slides);
+                (
+                    s.menu.clone(),
+                    s.alt.clone(),
+                    s.loading.clone(),
+                    s.mouse,
+                    arrived,
+                )
+            }
             Err(_) => return,
         };
-        if menu.is_none() && alt.is_none() {
+        if loading.is_none() && !self.slide_tex.is_empty() {
+            // (the loading screen is over: its pictures leave the GPU)
+            if let Some(gpu) = self.gpu.as_mut() {
+                for s in self.slide_tex.drain(..) {
+                    gpu.free(s.tex);
+                }
+            }
+            self.show = omsi_ui::loading::Slideshow::new(0);
+        }
+        if menu.is_none() && alt.is_none() && loading.is_none() {
             return;
         }
         let now = Instant::now();
@@ -287,7 +325,40 @@ impl Overlay {
         let size = Vec2::new(w as f32, h as f32) / scale;
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
-        if let Some(menu) = menu {
+        if let Some(l) = loading {
+            for d in arrived.into_iter().take(crate::new_ui_loading::MAX_SLIDES) {
+                if self.slide_tex.len() >= crate::new_ui_loading::MAX_SLIDES {
+                    break;
+                }
+                let tex = gpu.add_image(device, queue, d.w, d.h, &d.rgba);
+                self.slide_tex.push(omsi_ui::loading::Slide {
+                    tex,
+                    aspect: d.w as f32 / d.h as f32,
+                });
+            }
+            self.show.set_count(self.slide_tex.len());
+            self.show.update(dt);
+            fn card(
+                c: &Option<crate::new_ui_loading::CardText>,
+            ) -> Option<omsi_ui::loading::Card<'_>> {
+                c.as_ref().map(|c| omsi_ui::loading::Card {
+                    title: &c.title,
+                    sub: &c.sub,
+                    description: &c.description,
+                })
+            }
+            let view = omsi_ui::loading::View {
+                version: &l.version,
+                heading: &l.heading,
+                stage: &l.stage,
+                progress: l.progress,
+                logo: self.logo,
+                bus: card(&l.bus),
+                map: card(&l.map),
+                slides: &self.slide_tex,
+            };
+            omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
+        } else if let Some(menu) = menu {
             // (the world behind the menu is dimmed, the column and the bar drawn over it)
             self.ui.p().rect(
                 omsi_ui::Rect::new(0.0, 0.0, size.x, size.y),
@@ -326,27 +397,55 @@ impl Overlay {
 pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
+    slides_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
 }
 
 impl NewUi {
     /// Hand the renderer the overlay (once).
-    fn install(&mut self, renderer: &mut omsi_render::Renderer) {
+    pub(crate) fn install(&mut self, renderer: &mut omsi_render::Renderer) {
         if self.installed {
             return;
         }
-        let mut overlay = Overlay {
-            shared: self.shared.clone(),
-            format: renderer.format(),
-            ui: Ui::new(),
-            gpu: None,
-            logo: None,
-            last: Instant::now(),
-        };
+        let mut overlay = Overlay::new(self.shared.clone(), renderer.format());
         renderer.set_overlay_hook(Some(Box::new(move |device, queue, encoder, view, size| {
             overlay.draw(device, queue, encoder, view, size)
         })));
         self.installed = true;
+    }
+
+    /// What the loading screen says now (`None`: it is over).
+    pub(crate) fn set_loading(&self, frame: Option<crate::new_ui_loading::LoadingFrame>) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.loading = frame;
+        }
+    }
+
+    /// Once per session: list the map's screenshots and decode the latest on a thread of
+    /// their own, handing them to the overlay one by one.
+    pub(crate) fn start_slides(&mut self, map_folder: &str) {
+        if self.slides_started {
+            return;
+        }
+        self.slides_started = true;
+        let shared = self.shared.clone();
+        let map = map_folder.to_string();
+        let _ = std::thread::Builder::new()
+            .name("loading-slides".into())
+            .spawn(move || {
+                let paths = crate::new_ui_loading::recent(
+                    omsi_launcher_lib::screenshots::for_map(&map),
+                    crate::new_ui_loading::MAX_SLIDES,
+                );
+                for p in paths {
+                    if let Some(d) = crate::new_ui_loading::decode(&p) {
+                        match shared.lock() {
+                            Ok(mut s) => s.slides.push(d),
+                            Err(_) => return,
+                        }
+                    }
+                }
+            });
     }
 
     fn set(&self, menu: Option<MenuFrame>, alt: Option<crate::new_ui_alt::AltFrame>, mouse: Vec2) {
@@ -584,7 +683,7 @@ mod tests {
     /// is drawn while no menu is open.
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
-    fn the_overlay_draws_the_column_over_the_picture_and_nothing_without_a_menu() {
+    fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
             eprintln!("no graphics adapter: skipped");
@@ -610,14 +709,7 @@ mod tests {
         });
         let view = tex.create_view(&Default::default());
         let shared: Shared = Default::default();
-        let mut overlay = Overlay {
-            shared: shared.clone(),
-            format,
-            ui: Ui::new(),
-            gpu: None,
-            logo: None,
-            last: Instant::now(),
-        };
+        let mut overlay = Overlay::new(shared.clone(), format);
         let clear = |enc: &mut wgpu::CommandEncoder| {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -718,5 +810,42 @@ mod tests {
             resume[0] > 200 && resume[2] < 60,
             "Resume is the accent row: {resume:?}"
         );
+        // the loading screen: with no screenshot yet the default background covers the picture
+        {
+            let mut s = shared.lock().unwrap();
+            s.menu = None;
+            s.loading = Some(crate::new_ui_loading::LoadingFrame {
+                heading: "Example map".into(),
+                progress: 0.5,
+                ..Default::default()
+            });
+        }
+        let empty = read(&mut overlay);
+        let corner = px(&empty, 1600, 60);
+        assert!(
+            corner[1] < 100,
+            "the default background, not the picture: {corner:?}"
+        );
+        // a screenshot arrives (all red): it is the background now
+        shared
+            .lock()
+            .unwrap()
+            .slides
+            .push(crate::new_ui_loading::Decoded {
+                w: 16,
+                h: 9,
+                rgba: [255, 0, 0, 255].repeat(16 * 9),
+            });
+        let shown = read(&mut overlay);
+        let corner = px(&shown, 1600, 60);
+        assert!(
+            corner[0] > corner[1] + 40 && corner[0] > corner[2] + 40,
+            "the screenshot shows: {corner:?}"
+        );
+        // the map is there: the screen is gone and the picture is the game's again
+        shared.lock().unwrap().loading = None;
+        let after = read(&mut overlay);
+        assert_eq!(px(&after, 1600, 60), px(&plain, 1600, 60));
+        assert!(overlay.slide_tex.is_empty());
     }
 }

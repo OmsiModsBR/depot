@@ -51,6 +51,17 @@ impl Slideshow {
         self.count
     }
 
+    /// More pictures arrived (or fewer are kept): the show goes on from where it is.
+    pub fn set_count(&mut self, count: usize) {
+        self.count = count;
+        let round = count as f32 * (HOLD_SECONDS + FADE_SECONDS);
+        if round > 0.0 {
+            self.t %= round;
+        } else {
+            self.t = 0.0;
+        }
+    }
+
     /// Move on by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
         if self.count > 1 {
@@ -281,6 +292,18 @@ fn fit_lines(ui: &Ui, text: &str, width: f32, px: f32, lines: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pictures_arriving_keep_the_show_going() {
+        let mut show = Slideshow::new(1);
+        show.update(100.0);
+        assert_eq!(show.frame().unwrap().current, 0);
+        show.set_count(3);
+        show.update(HOLD_SECONDS + FADE_SECONDS + 1.0);
+        assert_eq!(show.frame().unwrap().current, 1);
+        show.set_count(0);
+        assert!(show.frame().is_none());
+    }
+
     use super::*;
 
     fn at(count: usize, t: f32) -> Option<Frame> {
