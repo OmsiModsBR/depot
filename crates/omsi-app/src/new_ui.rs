@@ -2371,7 +2371,7 @@ mod tests {
         f.menu_tabs = Some((vec!["General".into(), "Graphics".into()], 0));
         let page = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
         let mut ui = NewUi::default();
-        ui.install(&mut r);
+        ui.install(&mut r, None);
 
         // three 1920x1080 screens: the world alone, then the menu, then the page
         let size = (5760u32, 1080u32);
@@ -2385,22 +2385,22 @@ mod tests {
             }
             img
         };
-        ui.set(None, None, None, None, away, Some(area));
+        ui.set(None, None, None, None, None, away, Some(area));
         let world = shoot(&mut scene);
-        ui.set(Some(test_column(true)), None, None, None, away, Some(area));
+        ui.set(Some(test_column(true)), None, None, None, None, away, Some(area));
         let menu = shoot(&mut scene);
         save("triple-5760x1080-menu", &menu, size);
         ui.page = Some(page.clone());
-        ui.set(None, None, None, None, away, Some(area));
+        ui.set(None, None, None, None, None, away, Some(area));
         let shown = shoot(&mut scene);
         save("triple-5760x1080-page", &shown, size);
         ui.page = None;
         // the end-of-trip report, on the centre screen too
         let report = crate::new_ui_report::ReportFrame::for_test();
-        ui.set(None, None, None, Some(report), away, Some(area));
+        ui.set(None, None, None, None, Some(report), away, Some(area));
         let reported = shoot(&mut scene);
         save("triple-5760x1080-report", &reported, size);
-        ui.set(None, None, None, None, away, Some(area));
+        ui.set(None, None, None, None, None, away, Some(area));
         // on the centre screen only: the side screens are the world's as they were
         for (name, img) in [("menu", &menu), ("page", &shown), ("report", &reported)] {
             assert_eq!(
@@ -2445,7 +2445,7 @@ mod tests {
             let mut range = 0..0;
             for _ in 0..3 {
                 scene.overlays.truncate(range.start);
-                ui.set(menu.clone(), None, None, None, away, Some(area));
+                ui.set(menu.clone(), None, None, None, None, away, Some(area));
                 range = ui
                     .headset_surface(r, scene, size)
                     .expect("the headset's picture");
@@ -2456,7 +2456,7 @@ mod tests {
             assert_eq!(scene.overlays[range.start + 1].1, plane);
             // (the window itself shows nothing of it: only the texture)
             let page = ui.page.take();
-            ui.set(None, None, None, None, away, Some(area));
+            ui.set(None, None, None, None, None, away, Some(area));
             let img = r
                 .render_to_image(scene, size.0, size.1, &camera, &lighting)
                 .unwrap();
@@ -2471,7 +2471,7 @@ mod tests {
         save("headset-1920x1080-page", &vr_page, size);
         // nothing open: no picture for the plane
         ui.page = None;
-        ui.set(None, None, None, None, away, Some(area));
+        ui.set(None, None, None, None, None, away, Some(area));
         assert!(ui.headset_surface(&mut r, &mut scene, size).is_none());
         let s = test_column(true).scale(size);
         let col = (pause_menu::COLUMN_W * s) as u32;
