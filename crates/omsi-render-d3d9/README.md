@@ -3,13 +3,19 @@
 A **separate legacy Direct3D 9 renderer**, built step by step. It is meant to render with
 the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 
-## What this is not
+## How the game uses it
 
-* It is **not wired into the game**. No crate depends on it and the game still renders through
-  `omsi-render` (wgpu); the default renderer and the inherited backends are untouched.
-* It **declares no supported hardware**. Widening the hardware matrix is a product decision.
-* It does not yet draw everything the game shows: see "The scene layer" below for what the
-  scene shader covers so far.
+Only under the render option "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
+`OMSI_BACKEND=d3d9`), on Windows and without VR; the default renderer and the other
+backends are untouched. In that mode `omsi-render` runs on wgpu's noop device and keeps
+the books (scene, culling, level of detail, alpha order); its asset events and each window
+picture's frame plan come here (`omsi-app/src/d3d9_output.rs`), and this crate draws and
+presents the window. It **declares no supported hardware**: widening the hardware matrix
+is a product decision.
+
+What the frame plan does not carry yet is not drawn in that mode: the UI and the HUD, the
+loading screen and the menus (the window is cleared instead), the sky, triple screen,
+screenshots, and what "The scene layer" lists as not yet.
 
 ## What is in it
 
@@ -37,9 +43,9 @@ the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 * Culling is off until the meshes' winding is settled with the content loader.
 * Shaders are compiled when the device opens (two small shaders, milliseconds). A cache on disk
   can come when there are more of them; nothing generated is committed.
-* `d3dcompiler_47.dll` is bound at load time through the normal DLL search order. Before this
-  crate is wired into the game it must be loaded explicitly from the system directory, so the
-  game does not pick up a copy planted next to it.
+* `d3dcompiler_47.dll` is loaded from the system directory (`LOAD_LIBRARY_SEARCH_SYSTEM32`)
+  the first time a shader is compiled, not bound at load time: a game that never opens this
+  renderer starts without it, and a copy planted next to the game is not picked up.
 * The backend's own textures and meshes (`RenderBackend`) are never freed; the scene's are,
   under the game's ids.
 
@@ -79,13 +85,16 @@ Known differences from the default renderer, each for a later PR:
   device has separate alpha blending (`SEPARATEALPHABLENDENABLE`); elsewhere with the
   colour's factors. Compressed textures are refused where the device lacks the format.
 
-A device that is rebuilt after a removal (`recover`) starts with an empty scene; the game
-uploads its assets again.
+The device keeps a system-memory copy of what each scene mesh and texture was made from, as
+Direct3D 9's managed pool would (a 9Ex device has none; its default pool is used): a device
+rebuilt after a removal (`recover`) puts them all up again under the same ids, so the game
+sends nothing twice. The copies follow every change, move and free; `clear_scene` drops
+them. The cost is the scene's asset memory once more in system RAM.
 
 ## Dependencies and provenance
 
 Only the `windows` crate (Microsoft, MIT OR Apache-2.0), already used by `omsi-render`, at the
-workspace version, with the Direct3D 9, Direct3D (blob), FXC (compiler) and GDI features;
+workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader features;
 `winit` (workspace version) only for the example. All code is original to this repository.
 
 ## Testing
@@ -97,8 +106,8 @@ workspace version, with the Direct3D 9, Direct3D (blob), FXC (compiler) and GDI 
   times tint, untextured batches, alpha test at the reference, blend, depth order and the
   matrix layout, and `recover` rejecting old handles; and the scene layer: the texture under
   the ambient light, an unlit and a missing texture, fog, the alpha cut at 128, reversed
-  depth, instances and invisible ones, a DXT1 texture, a missing mesh skipped, and a frame
-  pointing outside its data refused. They skip themselves only when there is
+  depth, instances and invisible ones, a DXT1 texture, a missing mesh skipped, a frame
+  pointing outside its data refused, and the scene coming back after `recover`. They skip themselves only when there is
   no Direct3D 9Ex driver or the device is below the floor; any other failure to open fails
   them. The log says which adapter ran them.
 
@@ -107,7 +116,8 @@ compile tests and the off-screen device tests; the window example opened. **Not 
 any test:** `resize`, the window swap chain and present, `status` on a lost or occluded
 device, and `recover` after a real device removal (it cannot be forced portably). The
 scene layer's shader and device tests ran on the same PC at its first head (35/35); the
-tests added since (unlit, culling, depth-only) have not run there yet. Not covered: the
+tests added since (unlit, culling, depth-only) ran there at 98da9fdd (38/38); the scene
+coming back after `recover` has not run there yet. Not covered: the
 road surfaces' pull and depth bias, border and mirror-once addressing, transmaps, and the
 painted-ground kind.
 
