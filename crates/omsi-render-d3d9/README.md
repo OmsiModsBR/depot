@@ -67,6 +67,18 @@ vehicle, mirrors and render-to-texture, and texture addressing other than wrap i
 sampler. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
+Known differences from the default renderer, each for a later PR:
+
+* Only the vanilla ("classic") path is ported: the camera uniform's flag for the other
+  looks (`sky_color.w`) is not read, so a frame asking for another look is drawn vanilla.
+* The mip chains made here are box-filtered on the stored (gamma-encoded) values, and the
+  samplers have no anisotropic filtering yet.
+* The depth-only pass of the transmaps' fully opaque parts is missing, and the depth-only
+  surface draws use the scaled terrain uv.
+* The picture's own alpha is blended with one over what is there, as there, only where the
+  device has separate alpha blending (`SEPARATEALPHABLENDENABLE`); elsewhere with the
+  colour's factors. Compressed textures are refused where the device lacks the format.
+
 A device that is rebuilt after a removal (`recover`) starts with an empty scene; the game
 uploads its assets again.
 
@@ -94,7 +106,10 @@ Verified on the maintainer's PC (Intel UHD 630, 16/16 at the first phase-1 head)
 compile tests and the off-screen device tests; the window example opened. **Not covered by
 any test:** `resize`, the window swap chain and present, `status` on a lost or occluded
 device, and `recover` after a real device removal (it cannot be forced portably). The
-scene layer's shader and device tests have not run on a Windows machine yet.
+scene layer's shader and device tests ran on the same PC at its first head (35/35); the
+tests added since (unlit, culling, depth-only) have not run there yet. Not covered: the
+road surfaces' pull and depth bias, border and mirror-once addressing, transmaps, and the
+painted-ground kind.
 
 ## Next steps
 
