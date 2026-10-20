@@ -161,6 +161,8 @@ pub struct FramePlan {
     pub ambient: [f32; 4],
     pub fog: [f32; 4],
     pub sky_color: [f32; 4],
+    /// The sky's colour the picture is cleared to, as the lighting gives it (w 1).
+    pub clear: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -194,6 +196,7 @@ pub(crate) fn plan_of(
         ambient: cu.ambient,
         fog: cu.fog,
         sky_color: cu.sky_color,
+        clear: f.lighting.sky_color.extend(1.0).to_array(),
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists
