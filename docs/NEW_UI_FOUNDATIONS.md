@@ -126,7 +126,7 @@ Built as stacked draft pull requests, merged in order only when the maintainer c
 | Alt icon bar and the in-game windows' building blocks (#257) | draft; the Alt bar never pauses the simulation |
 | Offscreen example drawing every screen with placeholder data (#250) | draft |
 
-Not started: the v5 look inside `omsi_ui::theme` (the new launcher keeps it in its own `look.rs` for now), the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the versioned launcher/game contract (the helper is the same binary as the launcher, so its version always matches), and the layer-priority tests. The screens are not wired into the game's own menus yet.
+The v5 colours are `omsi_ui::theme`'s (the launcher's `look.rs` names them as the concept does). Not started: the rest of the tokens (spacing, type scale, elevation), virtualized lists and grids, tabs, modal dialogs and toasts, the versioned launcher/game contract (the helper is the same binary as the launcher, so its version always matches), and the layer-priority tests. The screens are not wired into the game's own menus yet.
 
 ## Open decisions (maintainer)
 
