@@ -47,10 +47,9 @@ impl Caps {
 /// (`D3DCAPS9::MaxPixelShader30InstructionSlots`, which goes up to 32768).
 pub const PS30_MIN_SLOTS: u32 = 512;
 
-/// About how many instruction slots compiled Shader Model 2 or 3 bytecode takes: one for
-/// each instruction, declarations, constant definitions and comments left out. The
-/// compiler has unrolled what it could; an instruction that takes more than one slot
-/// (`sincos`, a matrix macro) is counted as one, so the count can fall a little short.
+/// How many instruction slots compiled Shader Model 2 or 3 bytecode takes: declarations,
+/// constant definitions and comments take none, the macro instructions as many as the
+/// Shader Model 3.0 pixel shader tables give them (`slots_of`), every other one one.
 pub fn instruction_slots(code: &[u32]) -> u32 {
     const END: u32 = 0x0000_FFFF;
     const COMMENT: u32 = 0xFFFE;
@@ -68,13 +67,34 @@ pub fn instruction_slots(code: &[u32]) -> u32 {
             (token >> 16) & 0x7FFF
         } else {
             if !FREE.contains(&opcode) {
-                slots += 1;
+                slots += slots_of(opcode);
             }
             (token >> 24) & 0x0F
         };
         i += 1 + length as usize;
     }
     slots
+}
+
+/// The slots of an instruction that takes more than one in a ps_3_0 shader.
+fn slots_of(opcode: u32) -> u32 {
+    match opcode {
+        // sincos
+        0x25 => 8,
+        // m4x4, m3x4
+        0x14 | 0x16 => 4,
+        // pow, nrm, lit, m4x3, m3x3
+        0x20 | 0x24 | 0x10 | 0x15 | 0x17 => 3,
+        // lrp, crs, dsx, dsy, m3x2
+        0x12 | 0x21 | 0x5B | 0x5C | 0x18 => 2,
+        _ => 1,
+    }
+}
+
+/// What a device says its pixel shaders may take, as far as it can be trusted: below the
+/// floor every SM3 card gives (or none at all) is taken for a wrong cap, and the floor used.
+pub fn ps30_slots(reported: u32) -> u32 {
+    reported.max(PS30_MIN_SLOTS)
 }
 
 #[cfg(test)]
@@ -111,6 +131,26 @@ mod tests {
         assert_eq!(instruction_slots(&[0xFFFF_0300]), 0);
         // (cut short: counted as far as it goes)
         assert_eq!(instruction_slots(&code[..15]), 1);
+        // pow r0, r1.x, c0.x and sincos r0.xy, r1.x: 3 and 8 slots
+        let macros = [
+            0xFFFF_0300,
+            0x0300_0020,
+            0x800F_0000,
+            0x8000_0001,
+            0xA000_0000,
+            0x0200_0025,
+            0x8003_0000,
+            0x8000_0001,
+            0x0000_FFFF,
+        ];
+        assert_eq!(instruction_slots(&macros), 11);
+    }
+
+    #[test]
+    fn a_reported_slot_count_below_the_floor_is_not_trusted() {
+        assert_eq!(ps30_slots(0), 512);
+        assert_eq!(ps30_slots(96), 512);
+        assert_eq!(ps30_slots(4096), 4096);
     }
 
     fn caps(sm: ShaderModel, tex: u32) -> Caps {

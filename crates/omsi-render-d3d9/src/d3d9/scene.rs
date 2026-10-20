@@ -79,7 +79,9 @@ impl SceneCaps {
                     .into_iter()
                     .all(|f| check(D3DUSAGE_DYNAMIC as u32, D3DRTYPE_TEXTURE, f)),
             max_texture: (raw.MaxTextureWidth, raw.MaxTextureHeight),
-            ps_slots: raw.MaxPixelShader30InstructionSlots,
+            // (a card that says fewer than every SM3 card gives, or none, is taken to give
+            // that many: refusing it on a wrong cap would be worse than trying)
+            ps_slots: crate::caps::ps30_slots(raw.MaxPixelShader30InstructionSlots),
         };
         log::info!("d3d9 scene: {caps:?}");
         caps

@@ -25,7 +25,7 @@ not yet.
 | Part | Platforms | Content |
 | --- | --- | --- |
 | `backend` | all | The crate's drawing layer `RenderBackend` (create texture/mesh, begin frame, draw a batch, end frame, recover) with the validation every implementation shares, and `NullBackend`, a GPU-less implementation |
-| `caps` | all | `Caps` / `ShaderModel`, and the floor: **Shader Model 3.0** in both stages and textures of 2048 or more (maintainers' decision, 2026-10-19); `instruction_slots`, about how many instruction slots compiled bytecode takes, against `PS30_MIN_SLOTS` (512, what every SM3 card gives a pixel shader) |
+| `caps` | all | `Caps` / `ShaderModel`, and the floor: **Shader Model 3.0** in both stages and textures of 2048 or more (maintainers' decision, 2026-10-19); `instruction_slots`, how many instruction slots compiled bytecode takes (the macro instructions weighted as ps_3_0 counts them), against `PS30_MIN_SLOTS` (512, what every SM3 card gives a pixel shader) |
 | `d3d9` | Windows | The Direct3D 9Ex implementation: off-screen targets with read-back or a window swap chain, textures (one level), meshes (16- or 32-bit indices), depth test, and the alpha modes opaque, test and blend |
 | `scene` | all | The game's scene as this renderer takes it: textures (RGBA or DXT1/3/5, with their levels, or a mip chain made here), meshes under the game's ids, and frames of batches over a per-draw list, with the camera and the light; checks shared by every implementation |
 | `d3d9` scene layer | Windows | `set_scene_mesh`/`set_scene_texture` (and their update, move and free), and `draw_scene`, one instanced draw per batch with the scene shader |
@@ -96,7 +96,7 @@ they light nothing.
 
 The scene's pixel shader is checked against the device: the log says about how many
 instruction slots it takes and how many the card allows
-(`MaxPixelShader30InstructionSlots`), and a card that allows fewer gets one clear error in
+(`MaxPixelShader30InstructionSlots`; one below 512, or none, is taken for a wrong cap and read as 512), and a card that allows fewer gets one clear error in
 the log instead of a black world; the scene is then not tried again every frame. A test
 holds the shader to the 512 slots every SM3 card gives.
 
