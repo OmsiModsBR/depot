@@ -904,6 +904,11 @@ mod tests {
             let other = Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
             assert_eq!(other.graphics, g);
         }
+        // --enhanced / --enhanced-plus (and their variables) do not apply to DirectX9 (D3D9Ex)
+        let d3d9 = Settings::from_text("graphics_api=d3d9\n");
+        assert_eq!(crate::startup::enhanced_wanted(&d3d9, true, true), if cfg!(windows) { (false, false) } else { (true, true) });
+        let vulkan = Settings::from_text("graphics_api=vulkan\n");
+        assert_eq!(crate::startup::enhanced_wanted(&vulkan, true, true), (true, true));
         let mut s = Settings::from_text("graphics=enhanced_plus\n");
         s.lock_vanilla();
         assert!(s.classic() && !s.enhanced && !s.ray_tracing());

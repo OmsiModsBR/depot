@@ -543,6 +543,20 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
+/// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
+/// is the "as OMSI 2" renderer: it ignores all of them.
+pub(crate) fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool, flag_plus: bool) -> (bool, bool) {
+    let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
+    let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
+    if settings.d3d9_selected() {
+        if enhanced || plus {
+            log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
+        }
+        return (false, false);
+    }
+    (enhanced, plus)
+}
+
 /// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).
 pub(crate) static ENHANCED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Enhanced+ (ray tracing) asked for by `--enhanced-plus` or OMSI_ENHANCED_PLUS=1 whatever

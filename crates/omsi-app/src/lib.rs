@@ -279,7 +279,7 @@ pub(crate) fn close_app<T>(app: T) -> bool {
 /// The showroom is drawn the way the game will be.
 pub(crate) fn launcher_statics() {
     let s = settings::Settings::load();
-    ENHANCED.store(s.enhanced || omsi_cfg::flags::ENHANCED.is_set(), std::sync::atomic::Ordering::Relaxed);
+    ENHANCED.store(startup::enhanced_wanted(&s, false, false).0, std::sync::atomic::Ordering::Relaxed);
     CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
 }
@@ -428,12 +428,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     {
         args.drive_keys = settings.drive_keys.clone();
     }
-    let plus = args.enhanced_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
+    let (enhanced, plus) = startup::enhanced_wanted(&settings, args.enhanced, args.enhanced_plus);
     ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
-    ENHANCED.store(
-        settings.enhanced || args.enhanced || plus || omsi_cfg::flags::ENHANCED.is_set(),
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
     SOUND_AI.store(settings.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
     SOUND_SCENERY.store(settings.vol_scenery.to_bits(), std::sync::atomic::Ordering::Relaxed);
