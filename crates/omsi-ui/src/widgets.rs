@@ -686,15 +686,16 @@ impl Ui {
         p.rounded_border(r, RADIUS, 1.0, EDGE);
     }
 
-    /// A section heading inside a panel: an accent tick and the title in capitals.
+    /// A section heading inside a panel: the title in capitals, as the new look's cards
+    /// name themselves.
     pub fn heading(&mut self, r: Rect, title: &str, icon: Option<&str>) -> Rect {
         let _ = icon;
         self.text(
             &crate::tr(title).to_uppercase(),
             Vec2::new(r.x, r.y + 14.0),
-            11.0,
+            12.5,
             Weight::Bold,
-            TEXT_DIM,
+            TEXT_SOFT,
             Align::Left,
         );
         Rect::new(r.x, r.y + 26.0, r.w, (r.h - 26.0).max(0.0))

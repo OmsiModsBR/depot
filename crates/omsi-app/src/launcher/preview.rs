@@ -554,7 +554,6 @@ impl Preview {
 
     /// Show this live (a bus, its paint, the time and weather to light it with): the page
     /// whose preview this is (Vehicles), the helper drawing it while the page is open.
-    #[allow(dead_code)] // (the Vehicles page in the new look comes in its own change)
     pub fn want(&mut self, look: Look) {
         self.picture_only = false;
         self.set(look);

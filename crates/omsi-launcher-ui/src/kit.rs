@@ -34,12 +34,12 @@ pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     ui.solid(r);
     ui.p().rounded(r, 8.0, PANEL);
     ui.p().rounded_border(r, 8.0, 1.0, LINE);
-    text(
+    spaced(
         ui,
-        &title.to_uppercase(),
+        &omsi_ui::tr(title).to_uppercase(),
         r.x + 19.0,
         r.y + 23.0,
-        13.0,
+        13.0 * TEXT_SCALE,
         Weight::Bold,
         FG,
     );
@@ -69,6 +69,28 @@ pub fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: C
         Align::Left,
     );
     w
+}
+
+/// Text letter-spaced (as the concept's card titles and headings), left-aligned at `x` and
+/// centred on the line `cy`, `px` already scaled; returns its width.
+pub fn spaced(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) -> f32 {
+    let gap = px * 0.14;
+    let mut at = x;
+    let mut buf = [0u8; 4];
+    for ch in s.chars() {
+        let g = ch.encode_utf8(&mut buf);
+        let w = ui.width(g, px, weight);
+        ui.text_in(
+            g,
+            Rect::new(at, cy - px, w + 2.0, px * 2.0),
+            px,
+            weight,
+            c,
+            Align::Left,
+        );
+        at += w + gap;
+    }
+    (at - x - gap).max(0.0)
 }
 
 /// Text ending at `x`.

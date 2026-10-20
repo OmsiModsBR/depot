@@ -175,6 +175,9 @@ pub struct Launcher {
     /// Where the bus preview is this frame, and its texture in the interface pipeline.
     preview_rect: Option<Rect>,
     preview_tex: Option<usize>,
+    /// The Maps page's picture of the chosen map (from its folder): the map file it is of, the
+    /// pixels not yet on the GPU or being read, and its texture with its width over height.
+    map_pic: MapPicture,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -262,6 +265,7 @@ impl Launcher {
         release_next: false,
         preview_rect: None,
         preview_tex: None,
+        map_pic: MapPicture::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
@@ -323,6 +327,7 @@ impl Launcher {
         self.preview_tex = None;
         self.preview = preview::Preview::new();
         self.map_tex = None;
+        self.map_pic = MapPicture::default();
         self.map_gen = 0;
         self.mapview.drop_gpu();
         self.icons.clear();
@@ -511,7 +516,7 @@ impl ApplicationHandler for Launcher {
                             self.ui.input.pressed = true;
                             // a drag on the preview turns the bus (the panels lie over it:
                             // what the mouse is over is theirs, not the bus's)
-                            if !self.ui.over_ui && self.preview_rect.map(|r| r.contains(self.ui.input.mouse)).unwrap_or(false) {
+                            if (!self.ui.over_ui || self.page == Page::Vehicles) && self.preview_rect.map(|r| r.contains(self.ui.input.mouse)).unwrap_or(false) {
                                 self.dragging = Some(self.ui.input.mouse);
                             }
                         } else {
@@ -826,10 +831,12 @@ impl Launcher {
         self.run_script();
         self.state.update(dt);
         // the preview shows the chosen bus in the chosen light
+        // (the Vehicles page shows the bus picked in its library instead, see `vehicles_page`)
         let c = &self.state.choice;
         let look = showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus: c.bus.clone(), paint: c.paint.clone(), weather: c.weather.clone(), time: c.time, date: c.date.clone() };
         // (not while a game runs: the launcher looked at meanwhile loads no bus onto the card)
-        if !look.bus.is_empty() && !look.map.is_empty() && !self.state.in_game() {
+        // (the Vehicles page shows the bus picked in its library, live: see `vehicles_page`)
+        if !look.bus.is_empty() && !look.map.is_empty() && !self.state.in_game() && self.page != Page::Vehicles {
             self.preview.want_picture(look);
         }
 
@@ -869,6 +876,9 @@ impl Launcher {
                 Some(id) => gpu.update_image(&renderer.device, &renderer.queue, id, w, h, &px),
                 None => self.preview_tex = Some(gpu.add_image(&renderer.device, &renderer.queue, w, h, &px)),
             }
+        }
+        if let Some(gpu) = self.gpu.as_mut() {
+            self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
         }
         // the map picture, drawn again when what it shows, where it looks or the zoom's own
         // thinness changed
@@ -1343,7 +1353,34 @@ impl Launcher {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Vehicles, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        // the bus picked in the library, in the Drive page's light, in the preview (kept picture
+        // at once, live from the helper while the page is open)
+        let picture = omsi_launcher_ui::vehicles::Picture {
+            texture: self.preview_tex.filter(|_| self.preview.has_picture()).map(|t| (t, self.preview.aspect)),
+            from_cache: self.preview.from_cache,
+            live: self.preview.live,
+            busy: self.preview.busy,
+            error: self.preview.error.clone(),
+        };
+        let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
+        self.vehicles.set_picture(has_bus.then_some(picture));
         self.vehicles.draw(&mut self.ui, body);
+        if let (Some((bus, paint)), false) = (self.vehicles.current().cloned(), self.state.in_game()) {
+            let c = &self.state.choice;
+            if !c.map.is_empty() {
+                self.preview.want(showroom::Look { root: std::path::PathBuf::from(&self.state.config.root), map: c.map.clone(), bus, paint, weather: c.weather.clone(), time: c.time, date: c.date.clone() });
+                self.preview.focus_x = 0.5;
+                self.preview_rect = self.vehicles.preview_area();
+                // (the picture lies in the page's card, not under it: the card does not take the
+                // mouse from it)
+                if let Some(r) = self.preview_rect.filter(|r| r.contains(self.ui.input.mouse)) {
+                    if self.ui.input.wheel.y.abs() > 0.0 {
+                        self.preview.zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
+                    }
+                    self.ui.cursor = winit::window::CursorIcon::Grab;
+                }
+            }
+        }
         if let Some((file, paint)) = self.vehicles.take_use() {
             self.state.select_bus(&file);
             self.state.choice.paint = paint;
@@ -1360,6 +1397,11 @@ impl Launcher {
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         self.maps.draw(&mut self.ui, body);
+        // the chosen map's picture, read from its folder on a thread
+        if let Some(file) = self.maps.current().map(str::to_string) {
+            self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
+        }
+        self.maps.set_picture(self.map_pic.shown());
         if let Some((file, entry)) = self.maps.take_use() {
             self.state.select_map(&file);
             self.state.choice.entry = entry;
@@ -1369,7 +1411,37 @@ impl Launcher {
         }
     }
 
+    /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
+    /// look has them; returns where the message line can start.
+    fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
+        let games = self.state.instances.len();
+        let root_ok = omsi_cfg::missing_original_essentials(std::path::Path::new(&self.state.config.root)).is_empty();
+        let chips = [
+            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { format!("Games: {games} running") }, games > 0),
+            ((if root_ok { "OMSI 2 folder: read" } else { "OMSI 2 folder: not chosen" }).to_string(), false),
+            ((if self.preview.live { "Preview helper: running, stops when the page closes" } else { "Preview helper: stopped" }).to_string(), self.preview.live),
+        ];
+        let mut at = x;
+        for (t, lit) in chips {
+            // (a lit chip leads with its dot, the words after it)
+            let dot = if lit { 12.0 } else { 0.0 };
+            let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
+            let r = Rect::new(at, cy - 12.0, w, 24.0);
+            self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
+            if lit {
+                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);
+            }
+            let tx = Rect::new(r.x + dot, r.y, w - dot, 24.0);
+            self.ui.text_in(&t, tx, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
+            at += w + 10.0;
+        }
+        at + 6.0
+    }
+
     fn status_bar(&mut self) {
+        let size = self.ui.size;
+        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
+        let left = if mobile::mobile() { rail_w + 20.0 } else { self.status_chips(rail_w + 28.0, size.y - 22.0) };
         let (text, err, at) = self.state.status.clone();
         if text.is_empty() {
             return;
@@ -1378,10 +1450,8 @@ impl Launcher {
         if fade <= 0.0 {
             return;
         }
-        let size = self.ui.size;
         let first = text.lines().next().unwrap_or("").to_string();
-        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
-        let r = Rect::new(rail_w + 20.0, size.y - 30.0, size.x - rail_w - 40.0, 24.0);
+        let r = Rect::new(left, size.y - 34.0, (size.x - left - 20.0).max(0.0), 24.0);
         if mobile::mobile() {
             // (readable over a page scrolled under it)
             self.ui.p().rect(Rect::new(rail_w, size.y - 34.0, size.x - rail_w, 34.0), RAIL.alpha(0.92));
@@ -1391,16 +1461,28 @@ impl Launcher {
         self.ui.tooltip(r, &text);
     }
 
-    /// A page's title and what it is for.
+    /// A page's heading in the new look (as Vehicles and Maps draw theirs, see
+    /// `omsi_launcher_ui::shell::page_heading`): its name small and letter-spaced in the accent,
+    /// the title large, and what the page is for under it.
     pub fn page_title(&mut self, r: Rect, title: &str, sub: &str) -> Rect {
-        self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
-        if !sub.is_empty() {
-            // (a narrow window: the line stops short of the tabs some pages put top right,
-            // it ran under them on a phone)
-            let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
-            self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+        if mobile::mobile() {
+            // (a phone has no room for the large heading: the title and the line as before)
+            self.ui.text(title, Vec2::new(r.x, r.y + 22.0), 22.0, Weight::Bold, TEXT, Align::Left);
+            if !sub.is_empty() {
+                let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
+                self.ui.text_in(sub, Rect::new(r.x, r.y + 34.0, w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+            }
+            return Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0));
         }
-        Rect::new(r.x, r.y + 64.0, r.w, (r.h - 64.0).max(0.0))
+        let eyebrow = omsi_ui::tr(title).to_uppercase();
+        self.ui.text(&eyebrow, Vec2::new(r.x, r.y + 18.0), 13.0 * omsi_launcher_ui::look::TEXT_SCALE, Weight::Medium, ACCENT, Align::Left);
+        self.ui.text(title, Vec2::new(r.x, r.y + 54.0), 36.0, Weight::Bold, TEXT, Align::Left);
+        if !sub.is_empty() {
+            // (a narrow window: the line stops short of the tabs some pages put top right)
+            let w = if r.w < 1100.0 { r.w - 340.0 } else { r.w };
+            self.ui.text_in(sub, Rect::new(r.x, r.y + 74.0, w, 22.0), 15.0, Weight::Regular, TEXT_DIM, Align::Left);
+        }
+        Rect::new(r.x, r.y + 108.0, r.w, (r.h - 108.0).max(0.0))
     }
 }
 
@@ -1426,5 +1508,69 @@ mod page_tests {
         }
         assert_eq!(Page::Multiplayer.shown(), None);
         assert_eq!(Page::named("nope"), None);
+    }
+}
+
+/// The picture in a map's folder (`picture.jpg` and the like, as a map ships it), for the
+/// Maps page: read and made smaller on a thread, then put on the GPU.
+#[derive(Default)]
+struct MapPicture {
+    /// The map file it is of.
+    file: String,
+    reading: Option<std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
+    pending: Option<image::RgbaImage>,
+    texture: Option<usize>,
+    /// Width over height, while the texture shows this map's picture.
+    aspect: Option<f32>,
+}
+
+impl MapPicture {
+    fn want(&mut self, root: &std::path::Path, file: &str) {
+        if self.file != file {
+            self.file = file.to_string();
+            self.aspect = None;
+            self.pending = None;
+            let dir = root.join(file).parent().map(|d| d.to_path_buf());
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let img = dir.and_then(|d| Self::find(&d)).and_then(|f| image::open(f).ok()).map(|i| {
+                    // (the page shows it a few hundred points wide)
+                    if i.width() > 1280 { i.resize(1280, 1280 * i.height() / i.width().max(1), image::imageops::FilterType::Triangle) } else { i }
+                });
+                let _ = tx.send(img.map(|i| i.to_rgba8()));
+            });
+            self.reading = Some(rx);
+        }
+        if let Some(rx) = self.reading.as_ref() {
+            match rx.try_recv() {
+                Ok(img) => {
+                    self.pending = img;
+                    self.reading = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.reading = None,
+            }
+        }
+    }
+
+    /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
+    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let mut files: Vec<_> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("picture")) && p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["jpg", "jpeg", "png", "bmp"].contains(&x.to_ascii_lowercase().as_str()))).collect();
+        files.sort();
+        files.into_iter().next()
+    }
+
+    fn upload(&mut self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let Some(img) = self.pending.take() else { return };
+        let (w, h) = img.dimensions();
+        match self.texture {
+            Some(id) => gpu.update_image(device, queue, id, w, h, img.as_raw()),
+            None => self.texture = Some(gpu.add_image(device, queue, w, h, img.as_raw())),
+        }
+        self.aspect = Some(w as f32 / h.max(1) as f32);
+    }
+
+    fn shown(&self) -> Option<(usize, f32)> {
+        Some((self.texture?, self.aspect?))
     }
 }

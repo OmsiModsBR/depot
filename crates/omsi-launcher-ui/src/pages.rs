@@ -62,6 +62,24 @@ impl Page {
         }
     }
 
+    /// The heading the concept gives the page: where it is (after the page's name), what it
+    /// asks of the player, and a line on it (only the pages the concept drew).
+    pub fn heading(self) -> Option<(&'static str, &'static str, &'static str)> {
+        match self {
+            Page::Vehicles => Some((
+                "Preview",
+                "Choose and check your bus",
+                "Inspect the bus with its paint and the author's description before starting the map.",
+            )),
+            Page::Maps => Some((
+                "Map & duty",
+                "Choose your map and duty",
+                "Check the map and its description, then pick where to start and which line to drive.",
+            )),
+            _ => None,
+        }
+    }
+
     /// The icon, by its name in `omsi-ui`.
     pub fn icon(self) -> &'static str {
         match self {

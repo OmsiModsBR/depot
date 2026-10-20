@@ -31,6 +31,25 @@ pub struct VehiclesView {
     pending: Option<(String, String)>,
     /// "Drive this bus" was clicked: the bus's file and the paint (`take_use`).
     used: Option<(String, String)>,
+    /// The bus and paint the page shows (its file and the paint's name), for the host to draw.
+    current: Option<(String, String)>,
+    /// What the host drew of that bus for the preview (`set_picture`), and where the preview
+    /// was this frame.
+    picture: Option<Picture>,
+    preview_area: Option<Rect>,
+}
+
+/// The bus's picture in the preview, as the host has it: drawn by a helper process (live) or
+/// kept from an earlier time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Picture {
+    /// The texture and its width over its height; None while there is none.
+    pub texture: Option<(usize, f32)>,
+    pub from_cache: bool,
+    pub live: bool,
+    pub busy: bool,
+    /// Why there is none (shown instead of the picture).
+    pub error: Option<String>,
 }
 
 impl Default for VehiclesView {
@@ -42,6 +61,9 @@ impl Default for VehiclesView {
             paint: None,
             pending: None,
             used: None,
+            current: None,
+            picture: None,
+            preview_area: None,
         }
     }
 }
@@ -53,6 +75,21 @@ impl VehiclesView {
             catalog: Catalog::Ready(Rc::new(list)),
             ..Default::default()
         }
+    }
+
+    /// The bus and paint shown (file, paint name), once the catalog is read.
+    pub fn current(&self) -> Option<&(String, String)> {
+        self.current.as_ref()
+    }
+
+    /// Where the preview's picture goes this frame (in interface points), once drawn.
+    pub fn preview_area(&self) -> Option<Rect> {
+        self.preview_area
+    }
+
+    /// What the host has to show of `current` (None: the page says the Drive page shows it).
+    pub fn set_picture(&mut self, p: Option<Picture>) {
+        self.picture = p;
     }
 
     /// The vehicle chosen in the library, and its paint (`None`: the default livery).
@@ -181,7 +218,7 @@ impl VehiclesView {
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + 100.0, body.w, 120.0);
+                let r = Rect::new(body.x, body.y + 137.0, body.w, 120.0);
                 card(ui, r, "Vehicles could not be listed", None);
                 clipped(
                     ui,
@@ -206,7 +243,7 @@ impl VehiclesView {
                 return;
             }
             _ => {
-                let r = Rect::new(body.x, body.y + 100.0, body.w, 90.0);
+                let r = Rect::new(body.x, body.y + 137.0, body.w, 90.0);
                 card(ui, r, "Vehicle library", None);
                 clipped(
                     ui,
@@ -227,8 +264,8 @@ impl VehiclesView {
             self.selected = shown[0];
             self.paint = None;
         }
-        let top = body.y + 100.0;
-        let rows_h = (body.h - 100.0 - 24.0).max(300.0);
+        let top = body.y + 137.0;
+        let rows_h = (body.h - 137.0 - 24.0).max(300.0);
         let upper_h = (rows_h * 0.6).floor();
         let lower_h = rows_h - upper_h - 16.0;
         let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
@@ -242,6 +279,7 @@ impl VehiclesView {
         );
         self.library(ui, lib, &list, &shown);
         let chosen = kit::chosen(&list, &shown, self.selected);
+        self.current = chosen.map(|v| (v.file.clone(), self.paint_name(v)));
         self.preview(ui, preview);
         self.details(ui, details, chosen);
         let y2 = top + upper_h + 16.0;
@@ -327,17 +365,59 @@ impl VehiclesView {
     }
 
     fn preview(&mut self, ui: &mut Ui, r: Rect) {
-        card(ui, r, "Preview", None);
+        let pic = self.picture.clone();
+        let note = pic
+            .as_ref()
+            .filter(|p| p.texture.is_some() && p.from_cache)
+            .map(|_| "image from cache \u{b7} live view only on this page");
+        card(ui, r, "Preview", note);
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
+        self.preview_area = Some(inner);
         ui.p().rect(inner, PANEL_2);
-        ui.text_in(
-            "No picture of this bus here yet. The Drive page shows it in 3D.",
-            inner.inset(24.0),
-            14.0 * TEXT_SCALE,
-            Weight::Regular,
-            MUTED,
-            Align::Center,
-        );
+        let Some(pic) = pic else {
+            ui.text_in(
+                "Choose a map on the Drive page: the bus is shown in its light.",
+                inner.inset(24.0),
+                14.0 * TEXT_SCALE,
+                Weight::Regular,
+                MUTED,
+                Align::Center,
+            );
+            return;
+        };
+        match pic.texture {
+            Some((tex, aspect)) => ui.image_cover(inner, tex, aspect, 1.0),
+            None => {
+                let t = if pic.error.is_some() {
+                    "No preview"
+                } else {
+                    "Loading\u{2026}"
+                };
+                ui.text_in(
+                    t,
+                    inner.inset(24.0),
+                    14.0 * TEXT_SCALE,
+                    Weight::Regular,
+                    MUTED,
+                    Align::Center,
+                );
+            }
+        }
+        if pic.live {
+            // (as the concept: a green dot and the words, top right over the picture)
+            let t = "preview helper: running";
+            let w = ui.width(t, 12.0 * TEXT_SCALE, Weight::Regular);
+            let x = inner.right() - 14.0 - w;
+            ui.p()
+                .circle(glam::Vec2::new(x - 9.0, inner.y + 18.0), 4.0, OK);
+            // (`text` scales the size itself)
+            text(ui, t, x, inner.y + 18.0, 12.0, Weight::Regular, OK);
+        }
+        if pic.busy && pic.texture.is_some() {
+            let c = glam::Vec2::new(inner.x + 18.0, inner.y + 18.0);
+            let a = ui.time * 5.0;
+            ui.p().arc(c, 6.0, 8.0, a, a + 4.2, MUTED);
+        }
     }
 
     fn details(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
@@ -379,7 +459,8 @@ impl VehiclesView {
         let rows = [
             ("Type", v.type_name.clone()),
             ("Folder", v.folder.clone()),
-            ("Paints", v.paints.len().to_string()),
+            // (the bus's own livery and its repaints, as the Paints card counts them)
+            ("Paints", (v.paints.len() + 1).to_string()),
             ("Depot files", v.hofs.len().to_string()),
             ("Fleet numbers", v.numbers.len().to_string()),
         ];
@@ -489,7 +570,10 @@ impl VehiclesView {
         let mut y = r.y + 58.0;
         for (label, status, note) in rows {
             dot(ui, r.x + 24.0, y, status);
-            text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
+            // (the note gives way to the label on a narrow card, never under it)
+            let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
+            let note = fit(ui, &note, 12.0 * TEXT_SCALE, room);
             kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
             y += 30.0;
         }
@@ -538,6 +622,17 @@ impl VehiclesView {
     }
 }
 
+/// `s` cut with an ellipsis to fit `room` pixels at `px`.
+fn fit(ui: &mut Ui, s: &str, px: f32, room: f32) -> String {
+    let mut n = s.chars().count();
+    let mut out = s.to_string();
+    while n > 1 && ui.width(&out, px, Weight::Regular) > room {
+        n -= 1;
+        out = shorten(s, n);
+    }
+    out
+}
+
 /// The name of a bus's own livery (no repaint), as the Drive page names it.
 fn default_livery(v: &VehicleInfo) -> &str {
     match v.default_paint.trim() {
@@ -569,10 +664,15 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
         },
         v.file.rsplit('/').next().unwrap_or("").to_string(),
     )];
+    // (a bus without repaints still has its own livery: nothing is missing then)
     rows.push(if v.paints.is_empty() {
-        ("Paints", Status::Warning, "none listed".into())
+        ("Repaints", Status::Found, "none".into())
     } else {
-        ("Paints", Status::Found, format!("{} found", v.paints.len()))
+        (
+            "Repaints",
+            Status::Found,
+            format!("{} found", v.paints.len()),
+        )
     });
     rows.push(if v.hofs.is_empty() {
         (
@@ -599,7 +699,7 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
     rows.push((
         "Scripts, textures, sound",
         Status::Unverified,
-        "not checked yet".into(),
+        "not checked".into(),
     ));
     rows
 }
