@@ -622,6 +622,16 @@ impl Preview {
     /// The window was minimized or covered: the helper ends now, without the moment it is
     /// given after the player leaves a page (nothing on the screen shows the preview then).
     pub fn stop(&mut self) {
+        // (stopped at once: the picture it may be writing goes to its place whole or not at
+        // all, and the mark of the bus it was reading is the launcher's to clear)
+        if let Some(mut c) = self.link.as_mut().and_then(|l| l.child.take()) {
+            log::info!("launcher: the window is hidden, the preview helper is stopped");
+            let _ = c.kill();
+            std::thread::spawn(move || {
+                let _ = c.wait();
+                super::showroom::clear_placing_mark();
+            });
+        }
         self.unused = self.unused.max(LINGER + 1.0);
         self.update(0.0, None);
     }
@@ -731,7 +741,18 @@ impl Preview {
             }
         }
         if ended {
-            log::warn!("launcher: the preview helper stopped (its log: {})", helper_log().display());
+            // (how it ended: the code it gave, if it has given one yet)
+            let code = self.link.as_mut().and_then(|l| l.child.as_mut()).and_then(|c| {
+                let until = Instant::now() + Duration::from_millis(300);
+                loop {
+                    match c.try_wait() {
+                        Ok(Some(s)) => return Some(s.to_string()),
+                        Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+                        _ => return None,
+                    }
+                }
+            });
+            log::warn!("launcher: the preview helper stopped ({}; its log: {})", code.as_deref().unwrap_or("still ending"), helper_log().display());
             self.link = None;
             self.live = false;
             self.busy = false;

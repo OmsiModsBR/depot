@@ -183,7 +183,11 @@ pub fn run() -> Result<()> {
     #[cfg(target_os = "macos")]
     startup::restart_with_allocator_settings();
     #[cfg(windows)]
-    startup::attach_parent_console();
+    // (not the preview helper: its output is the launcher's pipe, and a console taken over
+    // from the launcher had no business with it)
+    if !std::env::args().any(|a| a == "--preview-helper") {
+        startup::attach_parent_console();
+    }
     let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
     // well: a session's go to its `game.log`, but the launcher's own window has no console on
