@@ -285,8 +285,9 @@ float3 interior_lamps(float3 p, float3 n, float3 lamps) {
         return float3(1.0, 0.96, 0.84) * lamps.z;
     }
     float3 sum = float3(0.0, 0.0, 0.0);
+    // (the count comes interpolated: a hair over the integer must not light one more)
     [loop] for (int i = 0; i < 63; i++) {
-        if (i >= lamps.y) {
+        if (i + 0.5 > lamps.y) {
             break;
         }
         float li = lamps.x + i;
