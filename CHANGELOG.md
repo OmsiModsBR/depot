@@ -9,6 +9,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Added
 - `omsi-render-d3d9`, the isolated foundation of a future legacy Direct3D 9 renderer: a small backend interface with a GPU-less test implementation, and (Windows only) device bring-up with capability reading, off-screen clear/read-back and device-loss handling. Nothing depends on it, the game renders as before, and no new hardware is declared supported.
 - `omsi-render-d3d9` draws: Direct3D 9Ex off-screen or in a window, textures, meshes, depth test and the opaque, test and blend alpha modes, with Shader Model 3.0 shaders compiled at run time. Still not used by the game.
+- `omsi-render-d3d9` draws the game's scene: meshes and textures (RGBA with mip chains, DXT1/3/5) under the game's ids, and frames of instanced batches with the vanilla shading (sun, light from above, ambient, the material's colours, fog), transmaps, the alpha kinds, back-face culling, the road surfaces' depth bias and reversed depth. Still not used by the game.
 
 ### Changed
 - New Esc menu: the game menu's top level is drawn by `omsi-ui` over the paused picture (the renderer's overlay hook) instead of the HUD's lines. The lines, their keys and what they do are the game menu's own; the lists behind "Options...", "Controls..." and the like are still the HUD's. It is the only Esc menu on a plain window; the triple screen and VR keep the HUD's menu.

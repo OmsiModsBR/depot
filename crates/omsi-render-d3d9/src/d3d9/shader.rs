@@ -9,6 +9,7 @@ use crate::{BackendError, Result};
 
 /// The sources of the renderer's shaders, built into the binary.
 pub(crate) const BASIC: &str = include_str!("shaders/basic.hlsl");
+pub(crate) const SCENE: &str = include_str!("shaders/scene.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -87,6 +88,14 @@ mod tests {
         let vs = compile(BASIC, "basic.hlsl", "vs_main", Stage::Vertex).unwrap();
         let ps = compile(BASIC, "basic.hlsl", "ps_main", Stage::Pixel).unwrap();
         // The first token of SM3 bytecode is the version: 0xFFFE0300 (vs), 0xFFFF0300 (ps).
+        assert_eq!(vs[0], 0xFFFE_0300);
+        assert_eq!(ps[0], 0xFFFF_0300);
+    }
+
+    #[test]
+    fn scene_shaders_compile_for_sm3() {
+        let vs = compile(SCENE, "scene.hlsl", "vs_main", Stage::Vertex).unwrap();
+        let ps = compile(SCENE, "scene.hlsl", "ps_main", Stage::Pixel).unwrap();
         assert_eq!(vs[0], 0xFFFE_0300);
         assert_eq!(ps[0], 0xFFFF_0300);
     }

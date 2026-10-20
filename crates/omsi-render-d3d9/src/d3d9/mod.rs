@@ -4,9 +4,12 @@
 //! (the minimum of Rust's Windows targets), where 9Ex is always present, and with it resources survive the device being occluded or the
 //! display mode changing. Only a removed device (driver reset) has to be rebuilt.
 //!
-//! Scope of phase 1: an off-screen or window target, textures (one level), meshes, and the
-//! three alpha modes, behind [`RenderBackend`]. Shader Model 3.0 is the floor.
+//! Two layers: [`RenderBackend`] (an off-screen or window target, textures of one level,
+//! meshes and the three alpha modes), and the game's scene on top of it
+//! (`D3d9Device::set_scene_mesh`, `set_scene_texture`, `draw_scene`, see [`crate::scene`]).
+//! Shader Model 3.0 is the floor.
 
+mod scene;
 pub mod shader;
 
 use windows::Win32::Foundation::HWND;
@@ -94,6 +97,8 @@ pub struct D3d9Device {
     generation: u32,
     offscreen: Option<Offscreen>,
     frame: Option<FrameDesc>,
+    /// The game's scene ([`crate::scene`]), under the game's ids.
+    scene: scene::SceneStore,
 }
 
 fn present_params(target: Target, width: u32, height: u32) -> D3DPRESENT_PARAMETERS {
@@ -149,6 +154,76 @@ fn read_caps(d3d: &IDirect3D9Ex) -> Result<(Caps, D3DCAPS9)> {
 fn rgba_to_argb(c: [f32; 4]) -> u32 {
     let to8 = |c: f32| (c.clamp(0.0, 1.0) * 255.0 + 0.5) as u32;
     (to8(c[3]) << 24) | (to8(c[0]) << 16) | (to8(c[1]) << 8) | to8(c[2])
+}
+
+/// Uploads a mesh's vertices (8 floats each) and indices (16-bit when they fit) into
+/// write-only default-pool buffers. The data must have been validated.
+fn make_mesh(device: &IDirect3DDevice9Ex, vertices: &[f32], indices: &[u32]) -> Result<Mesh> {
+    let count = (vertices.len() / crate::backend::VERTEX_FLOATS) as u32;
+    let wide = count > 0x1_0000;
+    let vb_len = std::mem::size_of_val(vertices);
+    let ib_len = indices.len() * if wide { 4 } else { 2 };
+    // SAFETY: out-parameters are live locals; locked ranges are exactly the lengths the
+    // buffers were created with.
+    unsafe {
+        let mut vb = None;
+        device
+            .CreateVertexBuffer(
+                vb_len as u32,
+                D3DUSAGE_WRITEONLY as u32,
+                0,
+                D3DPOOL_DEFAULT,
+                &mut vb,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+        let vb = some(vb, "vertex buffer")?;
+        write_buffer(&vb, vertices)?;
+
+        let format = if wide { D3DFMT_INDEX32 } else { D3DFMT_INDEX16 };
+        let mut ib = None;
+        device
+            .CreateIndexBuffer(
+                ib_len as u32,
+                D3DUSAGE_WRITEONLY as u32,
+                format,
+                D3DPOOL_DEFAULT,
+                &mut ib,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+        let ib = some(ib, "index buffer")?;
+        let mut p = std::ptr::null_mut();
+        ib.Lock(0, 0, &mut p, 0).map_err(map_err)?;
+        if wide {
+            std::ptr::copy_nonoverlapping(indices.as_ptr() as *const u8, p as *mut u8, ib_len);
+        } else {
+            let narrow: Vec<u16> = indices.iter().map(|&i| i as u16).collect();
+            std::ptr::copy_nonoverlapping(narrow.as_ptr() as *const u8, p as *mut u8, ib_len);
+        }
+        ib.Unlock().map_err(map_err)?;
+        Ok(Mesh {
+            vb,
+            ib,
+            vertices: count,
+            triangles: indices.len() as u32 / 3,
+        })
+    }
+}
+
+/// Overwrites the start of `vb` with `data`.
+///
+/// # Safety
+/// `vb` must hold at least `size_of_val(data)` bytes.
+unsafe fn write_buffer(vb: &IDirect3DVertexBuffer9, data: &[f32]) -> Result<()> {
+    let len = std::mem::size_of_val(data);
+    let mut p = std::ptr::null_mut();
+    // SAFETY: the caller guarantees the buffer's size; the lock covers `len` bytes.
+    unsafe {
+        vb.Lock(0, len as u32, &mut p, 0).map_err(map_err)?;
+        std::ptr::copy_nonoverlapping(data.as_ptr() as *const u8, p as *mut u8, len);
+        vb.Unlock().map_err(map_err)
+    }
 }
 
 impl D3d9Device {
@@ -215,6 +290,7 @@ impl D3d9Device {
                 generation: 0,
                 offscreen: None,
                 frame: None,
+                scene: scene::SceneStore::default(),
             })
         }
     }
@@ -496,67 +572,8 @@ impl RenderBackend for D3d9Device {
 
     fn create_mesh(&mut self, desc: &MeshDesc) -> Result<MeshHandle> {
         desc.validate(&self.caps)?;
-        let vertices = desc.vertex_count();
-        let wide = vertices > 0x1_0000;
-        let vb_len = std::mem::size_of_val(desc.vertices.as_slice());
-        let ib_len = desc.indices.len() * if wide { 4 } else { 2 };
-        // SAFETY: out-parameters are live locals; locked ranges are exactly the lengths
-        // the buffers were created with.
-        unsafe {
-            let mut vb = None;
-            self.device
-                .CreateVertexBuffer(
-                    vb_len as u32,
-                    D3DUSAGE_WRITEONLY as u32,
-                    0,
-                    D3DPOOL_DEFAULT,
-                    &mut vb,
-                    std::ptr::null_mut(),
-                )
-                .map_err(map_err)?;
-            let vb = some(vb, "vertex buffer")?;
-            let mut p = std::ptr::null_mut();
-            vb.Lock(0, 0, &mut p, 0).map_err(map_err)?;
-            std::ptr::copy_nonoverlapping(
-                desc.vertices.as_ptr() as *const u8,
-                p as *mut u8,
-                vb_len,
-            );
-            vb.Unlock().map_err(map_err)?;
-
-            let format = if wide { D3DFMT_INDEX32 } else { D3DFMT_INDEX16 };
-            let mut ib = None;
-            self.device
-                .CreateIndexBuffer(
-                    ib_len as u32,
-                    D3DUSAGE_WRITEONLY as u32,
-                    format,
-                    D3DPOOL_DEFAULT,
-                    &mut ib,
-                    std::ptr::null_mut(),
-                )
-                .map_err(map_err)?;
-            let ib = some(ib, "index buffer")?;
-            let mut p = std::ptr::null_mut();
-            ib.Lock(0, 0, &mut p, 0).map_err(map_err)?;
-            if wide {
-                std::ptr::copy_nonoverlapping(
-                    desc.indices.as_ptr() as *const u8,
-                    p as *mut u8,
-                    ib_len,
-                );
-            } else {
-                let narrow: Vec<u16> = desc.indices.iter().map(|&i| i as u16).collect();
-                std::ptr::copy_nonoverlapping(narrow.as_ptr() as *const u8, p as *mut u8, ib_len);
-            }
-            ib.Unlock().map_err(map_err)?;
-            self.meshes.push(Mesh {
-                vb,
-                ib,
-                vertices,
-                triangles: desc.indices.len() as u32 / 3,
-            });
-        }
+        let mesh = make_mesh(&self.device, &desc.vertices, &desc.indices)?;
+        self.meshes.push(mesh);
         Ok(MeshHandle {
             index: self.meshes.len() as u32 - 1,
             generation: self.generation,
@@ -685,5 +702,7 @@ impl RenderBackend for D3d9Device {
     }
 }
 
+#[cfg(test)]
+mod scene_tests;
 #[cfg(test)]
 mod tests;
