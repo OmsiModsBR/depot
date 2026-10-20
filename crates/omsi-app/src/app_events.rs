@@ -2264,12 +2264,11 @@ impl ApplicationHandler for App {
                     );
                 }
                 *self.profile.entry("scripted").or_default() += __t.elapsed().as_secs_f64();
-                // (the game menu's lines, for the interface below)
-                let new_menu = self.new_menu_active();
-                let menu_lines = if self.game_menu.is_some() && !new_menu { self.game_menu_items() } else { Vec::new() };
                 // (an open list is drawn by the new interface beside the Esc menu's column: made
-                // below from the HUD's frame, `new_ui_pages`)
+                // below from the HUD's frame, `new_ui_pages`; the menu's top level is the new
+                // interface's own)
                 let mut page_column = self.new_pages_active().then(|| self.new_menu_frame());
+                let menu_area = self.new_ui_area();
                 let mut new_page = None;
                 // (the mirror editor's keys and the panel under the cursor, while it is on)
                 let mirror_help = match (self.player.as_ref(), self.mirror_hud_size()) {
@@ -2603,8 +2602,6 @@ impl ApplicationHandler for App {
                             }
                             None => (Vec::new(), None),
                         };
-                        // (the game menu's greyed-out lines: the timetable needs an active route)
-                        let menu_disabled: &[&str] = &[];
                         let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(self.list_kind.as_ref(), self.admin_list.as_deref(), chooser_sel, self.schedule.as_ref(), self.clock.time);
                         let mut frame = ui::Frame {
                             scale,
@@ -2623,12 +2620,8 @@ impl ApplicationHandler for App {
                             notes: if self.settings.notes && !map_open && self.game_menu.is_none() { &notes } else { &[] },
                             fps: self.settings.show_fps.then_some(self.fps),
                             paused: self.paused,
-                            menu: match chooser_sel {
-                                Some(k) => Some((k, &chooser_items[..])),
-                                // (the new menu draws the top level itself)
-                                None => self.game_menu.filter(|_| !new_menu).map(|k| (k, &menu_lines[..])),
-                            },
-                            menu_disabled,
+                            // (an open list; the new menu draws the top level itself)
+                            menu: chooser_sel.map(|k| (k, &chooser_items[..])),
                             menu_kind,
                             menu_head,
                             menu_preview,
@@ -2656,8 +2649,8 @@ impl ApplicationHandler for App {
                             frame.menu = None;
                         }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
-                        if let Some(p) = page.as_ref() {
-                            p.write_hits(ui, (s.config.width, s.config.height));
+                        if let (Some(p), Some(area)) = (page.as_ref(), menu_area) {
+                            p.write_hits(ui, area);
                         }
                         new_page = page;
                     }
@@ -2956,7 +2949,10 @@ impl ApplicationHandler for App {
                         let mirrored = false;
                         #[cfg(windows)]
                         if let Some(vr) = self.vr.as_mut() {
-                            let menu_range = self.ui.as_ref().map(|u| u.menu_overlay_range.clone()).unwrap_or(0..0);
+                            // (the new Esc menu and its pages on the menu plane, where the HUD's
+                            // menu was; a list opened with no Esc menu is still the HUD's)
+                            let headset_menu = self.new_ui.headset_surface(r, scene, (s.config.width, s.config.height));
+                            let menu_range = headset_menu.clone().or_else(|| self.ui.as_ref().map(|u| u.menu_overlay_range.clone())).unwrap_or(0..0);
                             let cursor_overlay = self.ui.as_ref().and_then(|u| u.vr_cursor_overlay).filter(|_| self.vr_nav_edit.is_none());
                             let tooltip_overlay = self.ui.as_ref().and_then(|u| u.vr_tooltip_overlay).filter(|_| self.vr_nav_edit.is_none());
                             match vr.render(
@@ -2984,6 +2980,10 @@ impl ApplicationHandler for App {
                                     log::error!("OpenXR rendering stopped: {e:#}");
                                     self.vr = None;
                                 }
+                            }
+                            // (the window, when it is drawn, has the menu from the overlay hook)
+                            if let Some(range) = headset_menu {
+                                scene.overlays.truncate(range.start);
                             }
                         }
                         if self.in_cab {

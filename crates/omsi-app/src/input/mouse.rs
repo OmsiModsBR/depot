@@ -1211,18 +1211,11 @@ impl App {
         }
         if self.new_menu_active() {
             // (the new menu is drawn by the renderer: its lines are not the HUD's rectangles)
-            let Some(s) = self.surface.as_ref() else { return 0 };
-            let at = glam::Vec2::new(self.cursor.0, self.cursor.1);
-            return u8::from(self.new_menu_frame().hit(at, (s.config.width, s.config.height)).is_some());
+            return u8::from(self.new_menu_hit().is_some());
         }
         // (a page open: the Esc menu's column is drawn beside it, and its lines can be clicked)
-        if self.new_pages_active() && self.game_menu.is_some() && self.dropdown.is_none() {
-            if let Some(s) = self.surface.as_ref() {
-                let at = glam::Vec2::new(self.cursor.0, self.cursor.1);
-                if self.new_menu_frame().hit(at, (s.config.width, s.config.height)).is_some() {
-                    return 1;
-                }
-            }
+        if self.new_pages_active() && self.game_menu.is_some() && self.dropdown.is_none() && self.new_menu_hit().is_some() {
+            return 1;
         }
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.cursor;

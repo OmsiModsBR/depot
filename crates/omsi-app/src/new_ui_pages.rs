@@ -9,10 +9,12 @@
 //! column (still drawn, its line of the page marked), and hands the HUD the rectangles the
 //! page was drawn in: the HUD's mouse code hit-tests those as it did its own (`ui::Ui`'s
 //! `menu_rects`, `menu_ctl`, `menu_side`, `dd_rects` ...), so nothing of how the pages work
-//! changes. The triple screen and the headset keep the HUD's pages.
+//! changes. On a triple screen the page stands on the centre screen with the column, and the
+//! rectangles are where it is drawn there; the headset shows the window's picture of it (see
+//! `new_ui`).
 
 use crate::game_lists::ListKind;
-use crate::new_ui::MenuFrame;
+use crate::new_ui::{Area, MenuFrame};
 use crate::ui::{Frame, MenuKind};
 use glam::Vec2;
 use omsi_ui::menu_page::{self, Back, Control, Dropdown, Layout, Lead, Page, Pane, Row};
@@ -272,7 +274,7 @@ pub(crate) fn page_frame(
     };
     let back_row = footer.then(|| items.len() - 1);
     let active = (f.menu_kind == MenuKind::Tours && back_row != Some(sel)).then_some(sel);
-    let pane = f.menu_preview.as_ref().filter(|_| !f.vr).map(|p| PagePane {
+    let pane = f.menu_preview.as_ref().map(|p| PagePane {
         title: p.title.clone(),
         meta: p.meta.clone(),
         rows: p.rows.clone(),
@@ -325,9 +327,15 @@ fn control(c: &Ctl) -> Control<'_> {
     }
 }
 
-/// `r` (points) as the HUD's rectangles are: `[x0, y0, x1, y1]` in window pixels.
-fn px(r: Rect, s: f32) -> [f32; 4] {
-    [r.x * s, r.y * s, r.right() * s, r.bottom() * s]
+/// `r` (points, at `s` pixels each, in an area whose corner is at `o`) as the HUD's
+/// rectangles are: `[x0, y0, x1, y1]` in window pixels.
+fn px(r: Rect, s: f32, o: Vec2) -> [f32; 4] {
+    [
+        o.x + r.x * s,
+        o.y + r.y * s,
+        o.x + r.right() * s,
+        o.y + r.bottom() * s,
+    ]
 }
 
 impl PageFrame {
@@ -415,35 +423,33 @@ impl PageFrame {
 
     /// Hand the HUD the rectangles the page is drawn in, as its own list would have set them,
     /// for its mouse code (a row, a slider's track, a page, the way back, a drop-down's entry,
-    /// the timetable's stops, its arrows and its button, the scroll bars).
-    pub(crate) fn write_hits(&self, ui: &mut crate::ui::Ui, size: (u32, u32)) {
-        let (s, l) = self.layout(size);
-        ui.menu_rects = l.rows.iter().map(|r| px(*r, s)).collect();
-        ui.menu_ctl = l.controls.iter().map(|c| c.map(|c| px(c, s))).collect();
+    /// the timetable's stops, its arrows and its button, the scroll bars): in window pixels,
+    /// the page laid out in `area` (the centre screen of a triple screen, else the window).
+    pub(crate) fn write_hits(&self, ui: &mut crate::ui::Ui, area: Area) {
+        let (s, l) = self.layout(area.size);
+        let o = area.origin;
+        let px = |r: Rect| px(r, s, o);
+        ui.menu_rects = l.rows.iter().map(|r| px(*r)).collect();
+        ui.menu_ctl = l.controls.iter().map(|c| c.map(px)).collect();
         ui.menu_arrows.clear();
-        ui.menu_side = l.tabs.iter().map(|r| px(*r, s)).collect();
+        ui.menu_side = l.tabs.iter().map(|r| px(*r)).collect();
         ui.menu_start = l.start;
         ui.menu_rows = l.shown;
         ui.menu_row_h = l.row_h * s;
-        ui.menu_scroll_track = l.scroll.map(|(t, _)| px(t, s));
-        ui.menu_scroll_thumb = l.scroll.map(|(_, g)| px(g, s));
-        ui.menu_pane = l.pane_rows.iter().map(|r| px(*r, s)).collect();
+        ui.menu_scroll_track = l.scroll.map(|(t, _)| px(t));
+        ui.menu_scroll_thumb = l.scroll.map(|(_, g)| px(g));
+        ui.menu_pane = l.pane_rows.iter().map(|r| px(*r)).collect();
         ui.menu_pane_start = l.pane_first;
-        ui.menu_pane_go = l.pane_go.map(|r| px(r, s));
-        ui.menu_pane_box = l
-            .pane_card
-            .filter(|_| l.pane_go.is_some())
-            .map(|r| px(r, s));
-        ui.menu_pane_scroll = l
-            .pane_scroll
-            .map(|(t, g, n, fit)| (px(t, s), px(g, s), n, fit));
-        ui.menu_time = l.time.iter().map(|r| px(*r, s)).collect();
-        ui.dd_rects = l.dd.iter().map(|r| px(*r, s)).collect();
+        ui.menu_pane_go = l.pane_go.map(px);
+        ui.menu_pane_box = l.pane_card.filter(|_| l.pane_go.is_some()).map(px);
+        ui.menu_pane_scroll = l.pane_scroll.map(|(t, g, n, fit)| (px(t), px(g), n, fit));
+        ui.menu_time = l.time.iter().map(|r| px(*r)).collect();
+        ui.dd_rects = l.dd.iter().map(|r| px(*r)).collect();
         ui.dd_top = l.dd_top;
         if l.dd_panel.is_some() {
             ui.dd_rows = l.dd_rows;
         }
-        ui.dd_scroll = l.dd_scroll.map(|(t, g)| (px(t, s), px(g, s)));
+        ui.dd_scroll = l.dd_scroll.map(|(t, g)| (px(t), px(g)));
     }
 
     /// Draw the page over a window of `size` points: the world dimmed, the column and its bar,
@@ -470,22 +476,16 @@ impl PageFrame {
 
 impl crate::app::App {
     /// Whether the new interface draws the open list (a page behind the Esc menu): a list is
-    /// open, and the picture is the plain window's (the triple screen and the headset keep the
-    /// HUD's pages, their own layouts).
+    /// open from the Esc menu.
     pub(crate) fn new_pages_active(&self) -> bool {
-        showing(
-            self.game_menu.is_some(),
-            self.chooser.is_some(),
-            self.list_kind.is_some(),
-            self.vr_active() || self.settings.triple.enabled,
-        ) == Showing::Page
+        showing(self.game_menu.is_some(), self.chooser.is_some()) == Showing::Page
     }
 }
 
 /// What the new interface draws of the game menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Showing {
-    /// Nothing: no menu, or the HUD draws it (triple screen, headset).
+    /// Nothing: no menu (or a list opened with no menu, the HUD's).
     None,
     /// The Esc menu's top level.
     Top,
@@ -493,18 +493,14 @@ pub(crate) enum Showing {
     Page,
 }
 
-/// What shows with the game menu open or not (`menu`), a list open (`chooser`, of a kind:
-/// `list`), and a layout of its own (`hud`: the triple screen or the headset). A list opened
-/// with no Esc menu (a plugin's command) stays the HUD's: the page's clicks are the menu's.
-pub(crate) fn showing(menu: bool, chooser: bool, list: bool, hud: bool) -> Showing {
-    if hud {
-        Showing::None
-    } else if chooser && menu {
-        Showing::Page
-    } else if menu && !list {
-        Showing::Top
-    } else {
-        Showing::None
+/// What shows with the game menu open or not (`menu`) and a list open or not (`chooser`), in
+/// the window, on a triple screen and in the headset alike. A list opened with no Esc menu (a
+/// plugin's command) stays the HUD's: the page's clicks are the menu's.
+pub(crate) fn showing(menu: bool, chooser: bool) -> Showing {
+    match (menu, chooser) {
+        (true, true) => Showing::Page,
+        (true, false) => Showing::Top,
+        (false, _) => Showing::None,
     }
 }
 
@@ -539,7 +535,6 @@ pub(crate) fn test_frame<'a>(items: &'a [(&'a str, &'a str)], kind: MenuKind) ->
         paused: true,
         menu: Some((0, items)),
         menu_top: None,
-        menu_disabled: &[],
         timetable: None,
         info: None,
         info_room: None,
@@ -712,7 +707,7 @@ mod tests {
         assert_eq!(p.note, "Line 50");
         assert_eq!(p.column.current(), Some("duty"));
         let mut ui = crate::ui::Ui::new().unwrap();
-        p.write_hits(&mut ui, (1672, 941));
+        p.write_hits(&mut ui, Area::whole((1672, 941)));
         // the way back at its row's index, the stops, their button and the arrows of the time
         assert_eq!(ui.menu_rects.len(), 3);
         assert_eq!(ui.menu_pane.len(), 2);
@@ -747,9 +742,9 @@ mod tests {
         let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
         for size in [(1672u32, 941u32), (1920, 1080), (3840, 2160)] {
             let mut ui = crate::ui::Ui::new().unwrap();
-            p.write_hits(&mut ui, size);
+            p.write_hits(&mut ui, Area::whole(size));
             let (s, l) = p.layout(size);
-            assert_eq!(ui.menu_rects[0], px(l.rows[0], s), "{size:?}");
+            assert_eq!(ui.menu_rects[0], px(l.rows[0], s, Vec2::ZERO), "{size:?}");
             assert_eq!(ui.dd_rects.len(), 3, "{size:?}");
             assert_eq!(ui.dd_rows, 3);
             // (all inside the window, right of the column)
@@ -770,11 +765,54 @@ mod tests {
     }
 
     #[test]
+    fn on_a_triple_screen_the_page_is_clicked_where_the_centre_screen_shows_it() {
+        let items = [("a", "One"), ("b", "Two"), ("back", "Back")];
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_tabs = Some((vec!["General".into(), "Graphics".into()], 0));
+        let names = ["Low", "Medium", "High"];
+        f.dropdown = Some(DropdownView {
+            row: 0,
+            items: names.to_vec(),
+            sel: 1,
+            top: 0,
+            current: Some(1),
+        });
+        let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
+        // the page of one 1920x1080 screen, and the same on the centre one of three
+        let mut one = crate::ui::Ui::new().unwrap();
+        p.write_hits(&mut one, Area::whole((1920, 1080)));
+        let mut three = crate::ui::Ui::new().unwrap();
+        let area = crate::new_ui::menu_area(true, false, (5760, 1080));
+        p.write_hits(&mut three, area);
+        let moved = |r: &[f32; 4]| [r[0] + 1920.0, r[1], r[2] + 1920.0, r[3]];
+        for (a, b) in [
+            (&one.menu_rects, &three.menu_rects),
+            (&one.menu_side, &three.menu_side),
+            (&one.dd_rects, &three.dd_rects),
+        ] {
+            assert!(!a.is_empty());
+            let a: Vec<_> = a.iter().map(moved).collect();
+            assert_eq!(&a, b);
+            // (inside the centre screen, right of its column)
+            for r in b {
+                assert!(
+                    r[0] >= 1920.0 + pause_menu::COLUMN_W && r[2] <= 3840.0,
+                    "{r:?}"
+                );
+            }
+        }
+        // in the headset the window's picture is the menu plane's: the window's rectangles
+        let mut vr = crate::ui::Ui::new().unwrap();
+        p.write_hits(&mut vr, crate::new_ui::menu_area(true, true, (1920, 1080)));
+        assert_eq!(vr.menu_rects, one.menu_rects);
+    }
+
+    #[test]
     fn opening_a_page_keeps_the_game_paused_and_closing_it_returns_to_the_top_level() {
         // the Esc menu open: its top level
-        assert_eq!(showing(true, false, false, false), Showing::Top);
+        assert_eq!(showing(true, false), Showing::Top);
         // a line opens a list: the page, the column still beside it saying the game is paused
-        assert_eq!(showing(true, true, true, false), Showing::Page);
+        assert_eq!(showing(true, true), Showing::Page);
         let items = [("driver Ana", "Ana"), ("back", "Back")];
         let mut f = test_frame(&items, MenuKind::List);
         f.menu_head = Some(("Driver".into(), String::new()));
@@ -782,13 +820,10 @@ mod tests {
         assert_eq!(p.column.bar().2, "paused");
         assert_eq!(p.column.current(), Some("vehicle"));
         // closed (Esc, "Back"): the top level again; the menu closed: nothing
-        assert_eq!(showing(true, false, false, false), Showing::Top);
-        assert_eq!(showing(false, false, false, false), Showing::None);
-        // the triple screen and the headset keep the HUD's menu and pages
-        assert_eq!(showing(true, true, true, true), Showing::None);
-        assert_eq!(showing(true, false, false, true), Showing::None);
+        assert_eq!(showing(true, false), Showing::Top);
+        assert_eq!(showing(false, false), Showing::None);
         // a list a plugin opened with no Esc menu: the HUD's, whose clicks it has
-        assert_eq!(showing(false, true, true, false), Showing::None);
+        assert_eq!(showing(false, true), Showing::None);
         // no list open in the HUD's frame: no page
         let mut f = test_frame(&items, MenuKind::List);
         f.menu = None;
