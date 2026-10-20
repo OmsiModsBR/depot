@@ -8,12 +8,15 @@
 //!   platform-agnostic, plus a recording [`backend::NullBackend`] that tests it without a GPU;
 //! * [`scene`]: the game's scene as this renderer takes it (assets under the game's ids, and
 //!   frames of batches), the seam with `omsi-render`'s frame plan;
+//! * [`ui`]: the game's interface as it takes it (`omsi-ui`'s vertex lists, layers and draws,
+//!   and the HUD's pictures over the scene);
 //! * [`d3d9`] (Windows only): the Direct3D 9Ex implementation, off-screen or in a window,
 //!   with HLSL Shader Model 3.0 shaders compiled at run time.
 
 pub mod backend;
 pub mod caps;
 pub mod scene;
+pub mod ui;
 
 #[cfg(windows)]
 pub mod d3d9;
@@ -26,6 +29,7 @@ pub use caps::{Caps, ShaderModel};
 pub use scene::{
     DrawKind, SceneBatch, SceneFrame, SceneLight, SceneMaterial, SceneTexture, TexFormat,
 };
+pub use ui::{UiDraw, UiFrame, UiLayer, UiOverlay, UI_VERTEX_FLOATS};
 
 /// Errors a legacy backend reports. `DeviceLost` is recoverable through
 /// [`RenderBackend::recover`]; the others are not.

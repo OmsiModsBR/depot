@@ -13,9 +13,12 @@ picture's frame plan come here (`omsi-app/src/d3d9_output.rs`), and this crate d
 presents the window. It **declares no supported hardware**: widening the hardware matrix
 is a product decision.
 
-What the frame plan does not carry yet is not drawn in that mode: the UI and the HUD, the
-loading screen and the menus (the window is cleared instead), the sky, triple screen,
-screenshots, and what "The scene layer" lists as not yet.
+A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
+pictures and leaves the frame open, the new interface (the Esc menu, the Alt bar, the
+loading screen, drawn by `omsi-ui`) is mirrored into it, and the game presents it when its
+frame is done. Not drawn in that mode yet: the sky, triple screen, screenshots, pictures the
+GPU draws into textures (the navigator's maps, mirrors), and what "The scene layer" lists as
+not yet.
 
 ## What is in it
 
@@ -26,6 +29,8 @@ screenshots, and what "The scene layer" lists as not yet.
 | `d3d9` | Windows | The Direct3D 9Ex implementation: off-screen targets with read-back or a window swap chain, textures (one level), meshes (16- or 32-bit indices), depth test, and the alpha modes opaque, test and blend |
 | `scene` | all | The game's scene as this renderer takes it: textures (RGBA or DXT1/3/5, with their levels, or a mip chain made here), meshes under the game's ids, and frames of batches over a per-draw list, with the camera and the light; checks shared by every implementation |
 | `d3d9` scene layer | Windows | `set_scene_mesh`/`set_scene_texture` (and their update, move and free), and `draw_scene`, one instanced draw per batch with the scene shader |
+| `ui` | all | The interface as this renderer takes it: `omsi-ui`'s layers, draws and vertices, and the HUD's pictures; the layout, viewport and scissor rules shared with `omsi-ui` |
+| `d3d9` interface layer | Windows | Each `omsi-ui` Gpu's pictures, atlas and vertex lists (`ui_image`, `ui_atlas`, `ui_vertices`), `draw_ui` and `draw_overlays`, with the interface shader (`shaders/ui.hlsl`, a port of `omsi-ui`'s) |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -91,6 +96,20 @@ rebuilt after a removal (`recover`) puts them all up again under the same ids, s
 sends nothing twice. The copies follow every change, move and free; `clear_scene` drops
 them. The cost is the scene's asset memory once more in system RAM.
 
+## The interface layer
+
+The new interface draws as `omsi-ui` draws it: each draw with its layer's camera, layout
+box, viewport, scissor, rounded clip and opacity, premultiplied alpha. Where the device
+converts to sRGB after blending (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`, with sRGB reads and
+writes for the formats used), the pictures are read as sRGB and the blend is in linear
+light, as in the default renderer. Elsewhere it is all done on the stored values, which
+differs only where alpha is partial (edges, fades). The HUD's pictures are drawn with the
+same shader as quads in pixels. Pictures, atlas and vertex lists keep their pixels, so a
+device opened again after a loss gets them back.
+
+Known differences: no MSAA on the interface (`omsi-ui` draws the in-game overlay without it
+too), and a picture `omsi-ui` takes from a render target (`add_view`) draws nothing.
+
 ## Dependencies and provenance
 
 Only the `windows` crate (Microsoft, MIT OR Apache-2.0), already used by `omsi-render`, at the
@@ -107,7 +126,10 @@ workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader 
   matrix layout, and `recover` rejecting old handles; and the scene layer: the texture under
   the ambient light, an unlit and a missing texture, fog, the alpha cut at 128, reversed
   depth, instances and invisible ones, a DXT1 texture, a missing mesh skipped, a frame
-  pointing outside its data refused, and the scene coming back after `recover`. They skip themselves only when there is
+  pointing outside its data refused, and the scene coming back after `recover`; and the
+  interface layer: colours over the frame, a layer's clip and opacity, pictures drawn and
+  missing ones not, draws outside their buffer or a frame refused, the HUD's pictures
+  straight and premultiplied, and the interface coming back after `recover`. They skip themselves only when there is
   no Direct3D 9Ex driver or the device is below the floor; any other failure to open fails
   them. The log says which adapter ran them.
 
@@ -130,7 +152,8 @@ frame plan and asset events to this crate. In order:
 
 1. The game opens with this renderer: the window, the frame loop and the asset events.
 2. The option in the launcher's render options, off by default, Windows only.
-3. The UI (menus, the Alt bar, the HUD) on this renderer.
+3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface and the
+   HUD's pictures).
 4. The OMSI material features (night, light and environment maps, bump maps), then
    shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
