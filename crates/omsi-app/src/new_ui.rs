@@ -234,6 +234,12 @@ impl MenuFrame {
 pub(crate) struct State {
     menu: Option<MenuFrame>,
     alt: Option<crate::new_ui_alt::AltFrame>,
+    /// The "Add vehicle" window.
+    add: Option<crate::new_ui_add::AddFrame>,
+    /// Clicks and the wheel over that window, not yet handed to it (one a frame).
+    add_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
+    /// What clicks in that window chose, for the game to apply.
+    add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
     /// The loading screen, while the first area of the map loads.
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
@@ -279,12 +285,20 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, alt, loading, mouse, arrived) = match self.shared.lock() {
+        let (menu, alt, add, add_input, loading, mouse, arrived) = match self.shared.lock() {
             Ok(mut s) => {
                 let arrived = std::mem::take(&mut s.slides);
+                let input = if s.add.is_some() {
+                    s.add_input.pop_front()
+                } else {
+                    s.add_input.clear();
+                    None
+                };
                 (
                     s.menu.clone(),
                     s.alt.clone(),
+                    s.add.clone(),
+                    input,
                     s.loading.clone(),
                     s.mouse,
                     arrived,
@@ -301,7 +315,7 @@ impl Overlay {
             }
             self.show = omsi_ui::loading::Slideshow::new(0);
         }
-        if menu.is_none() && alt.is_none() && loading.is_none() {
+        if menu.is_none() && alt.is_none() && add.is_none() && loading.is_none() {
             return;
         }
         let now = Instant::now();
@@ -323,6 +337,20 @@ impl Overlay {
             .as_ref()
             .map_or_else(|| scale_for(w, h), |m| m.scale((w, h)));
         let size = Vec2::new(w as f32, h as f32) / scale;
+        // (the window's click or wheel of this frame, see `NewUi::push_input`)
+        match add_input {
+            Some(crate::new_ui_add::WinInput::Press) => {
+                self.ui.input.pressed = true;
+                self.ui.input.down = true;
+            }
+            Some(crate::new_ui_add::WinInput::Release) => {
+                self.ui.input.released = true;
+                self.ui.input.down = false;
+            }
+            Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
+            None if add.is_none() => self.ui.input.down = false,
+            None => {}
+        }
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = mouse / scale;
         if let Some(l) = loading {
@@ -370,9 +398,18 @@ impl Overlay {
                 },
                 self.logo,
             );
-        } else if let Some(alt) = alt {
-            // (the world is not dimmed: the game goes on behind the bar)
-            alt.draw(&mut self.ui);
+        } else {
+            // (the world is not dimmed: the game goes on behind the bar and the window)
+            if let Some(alt) = alt {
+                alt.draw(&mut self.ui);
+            }
+            if let Some(add) = add {
+                if let Some(e) = add.draw(&mut self.ui, size) {
+                    if let Ok(mut s) = self.shared.lock() {
+                        s.add_events.push(e);
+                    }
+                }
+            }
         }
         let (layers, verts, ranges) = self.ui.finish();
         let draws: Vec<Draw> = ranges
@@ -399,6 +436,8 @@ pub(crate) struct NewUi {
     installed: bool,
     slides_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
+    /// The "Add vehicle" window, while it is open.
+    pub(crate) add: Option<crate::new_ui_add::AddWindow>,
 }
 
 impl NewUi {
@@ -448,11 +487,43 @@ impl NewUi {
             });
     }
 
-    fn set(&self, menu: Option<MenuFrame>, alt: Option<crate::new_ui_alt::AltFrame>, mouse: Vec2) {
+    fn set(
+        &self,
+        menu: Option<MenuFrame>,
+        alt: Option<crate::new_ui_alt::AltFrame>,
+        add: Option<crate::new_ui_add::AddFrame>,
+        mouse: Vec2,
+    ) {
         if let Ok(mut s) = self.shared.lock() {
             s.menu = menu;
             s.alt = alt;
+            s.add = add;
             s.mouse = mouse;
+        }
+    }
+
+    /// Hand the "Add vehicle" window a click or a turn of the wheel over it.
+    pub(crate) fn push_input(&self, input: crate::new_ui_add::WinInput) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.add_input.push_back(input);
+        }
+    }
+
+    /// What clicks in the "Add vehicle" window chose since the last call.
+    pub(crate) fn take_add_events(&self) -> Vec<omsi_ui::ingame::AddVehicleEvent> {
+        match self.shared.lock() {
+            Ok(mut s) => std::mem::take(&mut s.add_events),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Close the "Add vehicle" window, forgetting what was still on its way to it.
+    pub(crate) fn close_add(&mut self) {
+        self.add = None;
+        if let Ok(mut s) = self.shared.lock() {
+            s.add = None;
+            s.add_input.clear();
+            s.add_events.clear();
         }
     }
 }
@@ -499,8 +570,10 @@ impl App {
             self.new_ui.alt.focus = None;
         }
         let alt = self.alt_bar_active().then(|| self.alt_frame());
+        self.add_events();
+        let add = self.add_frame();
         self.new_ui
-            .set(menu, alt, Vec2::new(self.cursor.0, self.cursor.1));
+            .set(menu, alt, add, Vec2::new(self.cursor.0, self.cursor.1));
     }
 
     /// A left click while the game menu is open: when the new menu is showing, a click on one of

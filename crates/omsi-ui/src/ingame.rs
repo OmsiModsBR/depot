@@ -210,6 +210,146 @@ pub fn buttons(ui: &mut Ui, name: &str, at: glam::Vec2, labels: &[&str]) -> Opti
     clicked
 }
 
+/// A list of `labels` in a scrolled column of `area`, the chosen one marked. Returns the one
+/// clicked, if one was.
+pub fn list(
+    ui: &mut Ui,
+    name: &str,
+    area: Rect,
+    labels: &[String],
+    selected: Option<usize>,
+) -> Option<usize> {
+    let mut clicked = None;
+    ui.scroll_area(name, area, &mut |ui, view| {
+        for (i, label) in labels.iter().enumerate() {
+            let r = Rect::new(view.x, view.y + i as f32 * ROW_H, view.w - 8.0, ROW_H);
+            // (rows scrolled out of the area are neither drawn nor clickable)
+            if r.bottom() < area.y || r.y > area.bottom() {
+                continue;
+            }
+            let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
+            if selected == Some(i) {
+                ui.p().rect(r, SELECTED);
+                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+            } else {
+                if hover {
+                    ui.p().rect(r, Color::WHITE.alpha(0.04));
+                }
+                ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
+            }
+            ui.text_in(
+                label,
+                Rect::new(r.x + 12.0, r.y, (r.w - 20.0).max(0.0), r.h),
+                14.0 * TS,
+                Weight::Regular,
+                if selected == Some(i) { FG } else { MUTED },
+                Align::Left,
+            );
+            if click && area.contains(ui.input.mouse) {
+                clicked = Some(i);
+            }
+        }
+        labels.len() as f32 * ROW_H
+    });
+    clicked
+}
+
+/// The "Add vehicle" window: the vehicles, the chosen one's liveries and depot files, and
+/// the buttons. Every list is the game's own; this only shows them.
+pub struct AddVehicle<'a> {
+    pub vehicles: &'a [String],
+    pub vehicle: Option<usize>,
+    pub liveries: &'a [String],
+    pub livery: usize,
+    pub depots: &'a [String],
+    pub depot: usize,
+}
+
+/// What a click in the "Add vehicle" window asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddVehicleEvent {
+    Vehicle(usize),
+    Livery(usize),
+    Depot(usize),
+    Place,
+    Cancel,
+}
+
+/// Where the "Add vehicle" window is in a picture of `size` points: in the middle.
+pub fn add_vehicle_rect(size: glam::Vec2) -> Rect {
+    let w = 860.0f32.min(size.x - 32.0);
+    let h = 560.0f32.min(size.y - 32.0);
+    Rect::new(
+        ((size.x - w) * 0.5).floor(),
+        ((size.y - h) * 0.5).floor(),
+        w,
+        h,
+    )
+}
+
+/// The "Add vehicle" window in a picture of `size` points. It never pauses anything: the
+/// game goes on behind it.
+pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddVehicleEvent> {
+    let r = add_vehicle_rect(size);
+    let body = window(ui, r, "Add vehicle", "the game keeps running");
+    let mut event = None;
+    let foot = 64.0;
+    let lists_h = (body.h - foot - 36.0).max(ROW_H);
+    let left_w = (body.w * 0.5).floor();
+    let right_x = body.x + left_w + 1.0;
+    let right_w = body.right() - right_x;
+    let head = |ui: &mut Ui, s: &str, x: f32, y: f32| {
+        text(ui, s, x + 16.0, y + 17.0, 12.0, Weight::Regular, MUTED)
+    };
+    // the vehicles at the left, the livery and the depot file at the right
+    head(ui, "Vehicle", body.x, body.y);
+    let vehicles = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, lists_h);
+    if let Some(i) = list(ui, "add:vehicles", vehicles, v.vehicles, v.vehicle) {
+        event = Some(AddVehicleEvent::Vehicle(i));
+    }
+    ui.p().rect(
+        Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot - 8.0),
+        LINE,
+    );
+    let half = ((lists_h - 34.0) * 0.5).floor();
+    head(ui, "Livery", right_x, body.y);
+    let liveries = Rect::new(right_x + 4.0, body.y + 34.0, right_w - 8.0, half);
+    if let Some(i) = list(ui, "add:liveries", liveries, v.liveries, Some(v.livery)) {
+        event = Some(AddVehicleEvent::Livery(i));
+    }
+    let y2 = liveries.bottom() + 4.0;
+    head(ui, "Depot file", right_x, y2);
+    let depots = Rect::new(right_x + 4.0, y2 + 34.0, right_w - 8.0, half);
+    if let Some(i) = list(ui, "add:depots", depots, v.depots, Some(v.depot)) {
+        event = Some(AddVehicleEvent::Depot(i));
+    }
+    ui.p().rect(
+        Rect::new(r.x + 1.0, r.bottom() - foot, r.w - 2.0, 1.0),
+        LINE,
+    );
+    let labels: &[&str] = if v.vehicle.is_some() {
+        &["Place", "Cancel"]
+    } else {
+        &["Cancel"]
+    };
+    let at = glam::Vec2::new(r.x + 16.0, r.bottom() - foot + 12.0);
+    match buttons(ui, "add", at, labels) {
+        Some(0) if v.vehicle.is_some() => event = Some(AddVehicleEvent::Place),
+        Some(_) => event = Some(AddVehicleEvent::Cancel),
+        None => {}
+    }
+    text_right(
+        ui,
+        "The vehicle follows the mouse until a click puts it down",
+        r.right() - 16.0,
+        r.bottom() - foot * 0.5,
+        12.0,
+        Weight::Regular,
+        MUTED,
+    );
+    event
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,5 +389,62 @@ mod tests {
         assert_eq!(run(&mut ui, Some(cancel)).1, Some(1));
         // a click on nothing reports nothing
         assert_eq!(run(&mut ui, Some(Vec2::new(700.0, 500.0))), (None, None));
+    }
+
+    #[test]
+    fn the_add_vehicle_window_reports_its_clicks() {
+        let vehicles: Vec<String> = (0..40).map(|i| format!("Bus {i}")).collect();
+        let liveries = vec!["Random livery".to_string(), "Red".to_string()];
+        let depots = vec!["The map's depot file".to_string()];
+        let size = Vec2::new(1672.0, 941.0);
+        let mut ui = Ui::new();
+        let run = |ui: &mut Ui, chosen: Option<usize>, click: Option<Vec2>| {
+            let view = AddVehicle {
+                vehicles: &vehicles,
+                vehicle: chosen,
+                liveries: &liveries,
+                livery: 0,
+                depots: &depots,
+                depot: 0,
+            };
+            let frame = |ui: &mut Ui| {
+                ui.begin(size, 1.0, 0.016);
+                let e = add_vehicle(ui, size, &view);
+                ui.finish();
+                e
+            };
+            if let Some(p) = click {
+                ui.input.mouse = p;
+                ui.input.pressed = true;
+                ui.input.down = true;
+                frame(ui);
+                ui.input.released = true;
+                ui.input.down = false;
+            }
+            frame(ui)
+        };
+        run(&mut ui, None, None);
+        let row = ui.drawn[&id_of("add:vehicles:row:2")].center();
+        assert_eq!(
+            run(&mut ui, None, Some(row)),
+            Some(AddVehicleEvent::Vehicle(2))
+        );
+        // without a vehicle chosen the only button is Cancel
+        let first = ui.drawn[&id_of("add:btn:0")].center();
+        assert_eq!(
+            run(&mut ui, None, Some(first)),
+            Some(AddVehicleEvent::Cancel)
+        );
+        run(&mut ui, Some(2), None);
+        let place = ui.drawn[&id_of("add:btn:0")].center();
+        assert_eq!(
+            run(&mut ui, Some(2), Some(place)),
+            Some(AddVehicleEvent::Place)
+        );
+        let red = ui.drawn[&id_of("add:liveries:row:1")].center();
+        assert_eq!(
+            run(&mut ui, Some(2), Some(red)),
+            Some(AddVehicleEvent::Livery(1))
+        );
     }
 }
