@@ -56,6 +56,45 @@ pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     }
 }
 
+/// A card's title, letter-spaced as `card` draws it, at the top of `r` (the panel less its
+/// padding, as `omsi_ui`'s `Ui::heading` takes it); returns the rest of `r` under it.
+pub fn heading(ui: &mut Ui, r: Rect, title: &str) -> Rect {
+    let px = 13.0 * TEXT_SCALE;
+    let s = fit_spaced(ui, title, px, r.w - 1.0);
+    spaced(ui, &s, r.x + 1.0, r.y + 9.0, px, Weight::Bold, FG);
+    Rect::new(r.x, r.y + 26.0, r.w, (r.h - 26.0).max(0.0))
+}
+
+/// The title of a part further down a card (as the concept's "AUTHOR'S DESCRIPTION"):
+/// smaller, quieter, letter-spaced, at the top of `r`.
+pub fn subheading(ui: &mut Ui, r: Rect, title: &str) {
+    let px = 12.0 * TEXT_SCALE;
+    let s = fit_spaced(ui, title, px, r.w - 1.0);
+    spaced(ui, &s, r.x + 1.0, r.y + 12.0, px, Weight::Bold, MUTED);
+}
+
+/// `title` translated, in capitals and cut with an ellipsis so that `spaced` draws it in `room`
+/// points at `px` (a card's title may be a name: a device's, a line's).
+fn fit_spaced(ui: &mut Ui, title: &str, px: f32, room: f32) -> String {
+    let full = omsi_ui::tr(title).to_uppercase();
+    let width = |ui: &mut Ui, s: &str| {
+        let gap = px * 0.14;
+        let mut buf = [0u8; 4];
+        let w: f32 = s
+            .chars()
+            .map(|ch| ui.width(ch.encode_utf8(&mut buf), px, Weight::Bold) + gap)
+            .sum();
+        (w - gap).max(0.0)
+    };
+    let mut n = full.chars().count();
+    let mut out = full.clone();
+    while n > 1 && width(ui, &out) > room {
+        n -= 1;
+        out = shorten(&full, n);
+    }
+    out
+}
+
 /// Text left-aligned at `x`, centred on the line `cy`; returns its width.
 pub fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) -> f32 {
     let px = px * TEXT_SCALE;

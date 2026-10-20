@@ -18,7 +18,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         area.x,
         top,
     );
-    let y = top + 100.0;
+    let y = top + omsi_launcher_ui::shell::BODY_TOP;
     let col = (area.w - 16.0) * 0.5;
     let left = Rect::new(area.x, y, col, 300.0);
     let right = Rect::new(area.x + col + 16.0, y, col, 300.0);
@@ -135,11 +135,11 @@ fn log_card(l: &mut Launcher, r: Rect) {
     let log = core::data_dir().join("game.log");
     card(&mut l.ui, r, "The game's log", None);
     line(l, r, r.y + 72.0, "File", &log.to_string_lossy());
-    line(l, r, r.y + 100.0, "Launcher", &core::data_dir().join("launcher.log").to_string_lossy());
-    line(l, r, r.y + 128.0, "Preview helper", &super::preview::helper_log().to_string_lossy());
+    line(l, r, r.y + 108.0, "Launcher", &core::data_dir().join("launcher.log").to_string_lossy());
+    line(l, r, r.y + 144.0, "Preview helper", &super::preview::helper_log().to_string_lossy());
     l.ui.paragraph(
         "Each is written again when it starts (the game's with each game). A game started with RUST_LOG=debug writes more.",
-        Vec2::new(r.x + 19.0, r.y + 160.0),
+        Vec2::new(r.x + 19.0, r.y + 172.0),
         r.w - 38.0,
         12.5,
         Weight::Regular,
@@ -147,7 +147,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
     );
     let b = Rect::new(
         r.x + 19.0,
-        (r.y + 190.0).max(r.bottom() - 84.0),
+        (r.y + 206.0).max(r.bottom() - 84.0),
         r.w - 38.0,
         44.0,
     );
