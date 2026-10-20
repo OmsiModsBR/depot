@@ -242,6 +242,18 @@ pub fn fit_text(ui: &mut Ui, s: &str, px: f32, room: f32) -> String {
     out
 }
 
+/// [`fit_text`] of a text already translated, measured at the `weight` it is drawn in, to
+/// draw with [`Ui::text_as_is`].
+pub fn fit_text_as_is(ui: &mut Ui, s: &str, px: f32, weight: Weight, room: f32) -> String {
+    let mut n = s.chars().count();
+    let mut out = s.to_string();
+    while n > 1 && ui.fonts.width_as_is(&out, px, weight) > room {
+        n -= 1;
+        out = shorten(s, n);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::shorten;
