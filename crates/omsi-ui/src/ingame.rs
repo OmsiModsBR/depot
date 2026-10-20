@@ -777,19 +777,10 @@ pub fn trip_report_rect(size: glam::Vec2) -> Rect {
     )
 }
 
-/// The end-of-trip report in a picture of `size` points. True when "Continue" was clicked.
-pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
-    let r = trip_report_rect(size);
-    let body = window(ui, r, "End of trip report", v.note);
-    text(
-        ui,
-        v.title,
-        body.x + 16.0,
-        body.y + 22.0,
-        14.0,
-        Weight::Medium,
-        FG,
-    );
+/// A trip's stops as the end-of-trip report shows them: the column heads at the top of
+/// `area` (a window's width) and under them a row per stop, scrolled by the wheel under the
+/// id `scroll`. Returns the area of the rows.
+pub fn stops_table(ui: &mut Ui, scroll: &str, area: Rect, rows: &[ReportRow]) -> Rect {
     let columns = [
         ("Stop", 16.0),
         ("Scheduled", 0.44),
@@ -797,31 +788,26 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         ("Deviation", 0.71),
         ("Status", 0.84),
     ];
-    let col_x = |c: f32| if c < 1.0 { (body.w * c).floor() } else { c };
-    let head_y = body.y + 44.0;
+    let col_x = |c: f32| if c < 1.0 { (area.w * c).floor() } else { c };
     for (title, c) in columns {
         text(
             ui,
             title,
-            body.x + col_x(c),
-            head_y + 17.0,
+            area.x + col_x(c),
+            area.y + 17.0,
             12.0,
             Weight::Regular,
             MUTED,
         );
     }
-    let foot = 64.0;
-    let totals_h = v.totals.len() as f32 * ROW_H;
     let rows_area = Rect::new(
-        body.x + 1.0,
-        head_y + 34.0,
-        body.w - 2.0,
-        (r.bottom() - foot - totals_h - 8.0 - (head_y + 34.0)).max(ROW_H),
+        area.x + 1.0,
+        area.y + 34.0,
+        area.w - 2.0,
+        (area.h - 34.0).max(ROW_H),
     );
-    // (each trip's report starts at its first stop: the id is the trip's)
-    let scroll = format!("report:rows:{}", v.title);
-    ui.scroll_area(&scroll, rows_area, &mut |ui, view| {
-        for (i, row) in v.rows.iter().enumerate() {
+    ui.scroll_area(scroll, rows_area, &mut |ui, view| {
+        for (i, row) in rows.iter().enumerate() {
             let rr = Rect::new(view.x, view.y + i as f32 * ROW_H, view.w - 8.0, ROW_H);
             if rr.bottom() < rows_area.y || rr.y > rows_area.bottom() {
                 continue;
@@ -859,8 +845,35 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
                 );
             }
         }
-        v.rows.len() as f32 * ROW_H
+        rows.len() as f32 * ROW_H
     });
+    rows_area
+}
+
+/// The end-of-trip report in a picture of `size` points. True when "Continue" was clicked.
+pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
+    let r = trip_report_rect(size);
+    let body = window(ui, r, "End of trip report", v.note);
+    text(
+        ui,
+        v.title,
+        body.x + 16.0,
+        body.y + 22.0,
+        14.0,
+        Weight::Medium,
+        FG,
+    );
+    let foot = 64.0;
+    let totals_h = v.totals.len() as f32 * ROW_H;
+    let head_y = body.y + 44.0;
+    let area = Rect::new(
+        body.x,
+        head_y,
+        body.w,
+        (r.bottom() - foot - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+    );
+    // (each trip's report starts at its first stop: the id is the trip's)
+    let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
     let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
     ui.p()
         .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);

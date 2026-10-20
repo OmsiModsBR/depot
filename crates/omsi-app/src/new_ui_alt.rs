@@ -1,11 +1,13 @@
 //! The Alt bar in the running game, drawn by the new interface.
 //!
 //! A tap of Alt (pressed and let go with no other key or button between) shows or hides the
-//! bar; a click on a button does it. The bar never pauses the game and never opens the Esc
-//! menu: every button runs an action the game already has, directly, or opens a small window
-//! of its own for it (`new_ui_windows`), and a button for something the game does not have
-//! yet is drawn dim with the reason. While one of its windows is open the other buttons wait.
-//! While the Esc menu is open the bar is hidden.
+//! bar; a click on a button does it. The bar has the original's fifteen buttons, in its
+//! order, five by three. It never pauses the game and never opens the Esc menu: every button
+//! runs an action the game already has, directly, or opens a small window of its own for it
+//! (`new_ui_windows`), and a button for something the game does not have yet is drawn dim
+//! with the reason. While one of its windows is open the other buttons wait, except for the
+//! wash and refuel menu, which leaves the bar free as the original's does. While the Esc
+//! menu is open the bar is hidden.
 //!
 //! Keys: Alt+Down puts the keyboard on the bar (unless the keyboard file binds that chord);
 //! then the arrows move between the buttons, Enter or Space press one, and Esc or Alt+Down
@@ -33,7 +35,7 @@ pub(crate) struct OwnedButton {
     pub glyph: OwnedGlyph,
     pub title: String,
     pub disabled: Option<String>,
-    /// What it switches is on (a tour is running, the pump runs): drawn pressed.
+    /// What it switches is on (a tour is running, the pump or the wash runs): drawn pressed.
     pub on: bool,
 }
 
@@ -42,7 +44,9 @@ pub(crate) struct OwnedButton {
 pub(crate) struct AltCtx {
     pub player: bool,
     pub other_vehicle: bool,
-    pub stop_to_skip: bool,
+    /// The bus stands at a petrol station or in the depot's wash yard (where the pump and the
+    /// wash work).
+    pub at_station: bool,
     /// A vehicle follows the mouse, not yet put down.
     pub placing: bool,
     /// A player of a LAN session or a server: the host sets the clock and the weather and
@@ -70,8 +74,13 @@ pub(crate) const WAIT: &str = "Close the open window first";
 /// What the button of the window open says.
 const OPEN: &str = "Open: Esc or Cancel closes it";
 
-/// The buttons, in the order of the bar (rows of five): the order of the original's bar
-/// where the game has the function, then the bar's own (skip a stop, the screenshot).
+/// Why the wash and refuel button is dim away from a petrol station.
+pub(crate) const NO_STATION: &str = "Only at a petrol station or in the depot's wash yard";
+
+/// The bar's button whose menu leaves the other buttons free (the original's is not modal).
+pub(crate) const FREE: &str = "service";
+
+/// The buttons, in the order of the bar (rows of five): the original's fifteen, in its order.
 pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     use OwnedGlyph::{Icon, Text};
     // (English: the widgets translate what they draw, a second time would garble it)
@@ -84,14 +93,6 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     };
     let need = |ok: bool, why: &'static str| (!ok).then_some(why);
     let first = |checks: &[(bool, &'static str)]| checks.iter().find(|c| !c.0).map(|c| c.1);
-    let pump = |id: &'static str, glyph, title: &str, stop: &str| {
-        let on = ctx.pumping == Some(id);
-        OwnedButton {
-            title: if on { stop } else { title }.to_string(),
-            on,
-            ..b(id, glyph, title, need(ctx.player, "No vehicle to service"))
-        }
-    };
     vec![
         b(
             "add",
@@ -159,8 +160,20 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             "Repair",
             need(ctx.player, "No vehicle to repair"),
         ),
-        pump("wash", Icon("water_drop"), "Wash", "Stop washing"),
-        pump("refuel", Text("Fuel"), "Refuel", "Stop refuelling"),
+        // (a menu of two switches, as the original's: the pump and the wash run until they
+        // are done or the bus drives off)
+        OwnedButton {
+            on: ctx.pumping.is_some(),
+            ..b(
+                "service",
+                Icon("local_gas_station"),
+                "Wash and refuel",
+                first(&[
+                    (ctx.player, "No vehicle to service"),
+                    (ctx.at_station || ctx.pumping.is_some(), NO_STATION),
+                ]),
+            )
+        },
         b("help", Icon("help"), "Help marker", Some(NOT_YET)),
         b(
             "time",
@@ -190,19 +203,19 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             "Timetable evaluation and driver profile",
             None,
         ),
-        b(
-            "skip",
-            Icon("turn_slight_right"),
-            "Skip the next stop",
-            need(ctx.stop_to_skip, "No stop to skip"),
-        ),
-        b("shot", Icon("photo_camera"), "Screenshot", None),
     ]
 }
 
 /// The bar while the window of button `open` is open: that button is drawn pressed and the
-/// others wait (the window is modal over the bar).
+/// others wait (the window is modal over the bar), except while the wash and refuel menu is
+/// open: it holds nothing up, as the original's does not.
 pub(crate) fn wait_for(buttons: &mut [OwnedButton], open: &str) {
+    if open == FREE {
+        for b in buttons.iter_mut().filter(|b| b.id == open) {
+            b.on = true;
+        }
+        return;
+    }
     for b in buttons {
         let why = if b.id == open {
             b.on = true;
@@ -327,6 +340,13 @@ pub(crate) fn step_focus(bs: &[OwnedButton], from: Option<usize>, nav: Nav) -> O
     }
 }
 
+/// The button Enter or Space presses with the keyboard on button `focus`: none when that one
+/// is dim.
+pub(crate) fn pressable(bs: &[OwnedButton], focus: Option<usize>) -> Option<&'static str> {
+    let b = bs.get(focus?)?;
+    b.disabled.is_none().then_some(b.id)
+}
+
 /// The bar's state between frames.
 #[derive(Debug, Default)]
 pub(crate) struct AltState {
@@ -398,7 +418,7 @@ impl App {
         AltCtx {
             player: self.player.is_some(),
             other_vehicle: !self.placed.is_empty(),
-            stop_to_skip: self.duty.as_ref().is_some_and(|d| d.stop_to_skip()),
+            at_station: self.at_service_station(),
             placing: self.placing.is_some(),
             lan_client: self.is_lan_client(),
             server: crate::input::on_server(&self.args),
@@ -416,6 +436,14 @@ impl App {
                 "keyboard"
             },
             pumping: self.pumping.map(|p| p.0),
+        }
+    }
+
+    /// Whether the bus driven stands where the pump and the wash work.
+    pub(crate) fn at_service_station(&self) -> bool {
+        match (self.world.as_ref(), self.player.as_ref()) {
+            (Some(w), Some(p)) => crate::services::on_petrol_station(w, &p.vehicle),
+            _ => false,
         }
     }
 
@@ -450,21 +478,8 @@ impl App {
             "add" => self.open_add_vehicle(),
             "swap" => self.switch_vehicle(),
             "remove" => self.remove_driven_vehicle(),
-            "skip" => self.skip_next_stop(),
-            // (the pump and the wash run until the bus drives off, or the button is pressed
-            // again)
-            "wash" | "refuel" if self.pumping.is_some_and(|p| p.0 == id) => {
-                self.pumping = None;
-                let msg = if id == "refuel" {
-                    "Refuelling stopped"
-                } else {
-                    "Washing stopped"
-                };
-                self.service_msg = Some((msg.into(), 3.0));
-            }
-            "repair" | "wash" | "refuel" => self.run_service(id),
-            "shot" => self.take_screenshot(),
-            "reposition" | "tour" | "destination" | "time" | "weather" | "controls"
+            "repair" => self.run_service(id),
+            "reposition" | "tour" | "destination" | "service" | "time" | "weather" | "controls"
             | "driver" => self.open_tool(id),
             _ => {}
         }
@@ -581,9 +596,11 @@ impl App {
             let from = self.new_ui.alt.focus;
             self.new_ui.alt.focus = step_focus(&frame.buttons, from, nav);
         } else if press {
+            // (a dim button does nothing, as with a click: the one of the window open would
+            // open it again, and drop what was changed in it)
             if !repeat {
-                if let Some(b) = self.new_ui.alt.focus.and_then(|i| frame.buttons.get(i)) {
-                    self.alt_do(b.id);
+                if let Some(id) = pressable(&frame.buttons, self.new_ui.alt.focus) {
+                    self.alt_do(id);
                 }
             }
         } else {
@@ -601,7 +618,7 @@ mod tests {
         AltCtx {
             player: true,
             other_vehicle: true,
-            stop_to_skip: true,
+            at_station: true,
             placing: false,
             lan_client: false,
             server: false,
@@ -633,8 +650,7 @@ mod tests {
                 assert!(!why.is_empty());
             }
         }
-        // the original's order where the game has the function, then the bar's own, in rows
-        // of five
+        // the original's fifteen, in its order: five by three
         let ids: Vec<&str> = bs.iter().map(|b| b.id).collect();
         assert_eq!(
             ids,
@@ -648,18 +664,15 @@ mod tests {
                 "destination",
                 "accident",
                 "repair",
-                "wash",
-                "refuel",
+                "service",
                 "help",
                 "time",
                 "weather",
                 "controls",
                 "driver",
-                "skip",
-                "shot"
             ]
         );
-        assert_eq!(bs.len().div_ceil(COLUMNS), 4);
+        assert_eq!(bs.len(), COLUMNS * 3);
     }
 
     #[test]
@@ -673,7 +686,7 @@ mod tests {
         };
         assert_eq!(
             enabled_ids(&AltCtx::default()),
-            vec!["add", "time", "weather", "controls", "driver", "shot"]
+            vec!["add", "time", "weather", "controls", "driver"]
         );
         assert_eq!(
             enabled_ids(&all_on()),
@@ -685,14 +698,11 @@ mod tests {
                 "tour",
                 "destination",
                 "repair",
-                "wash",
-                "refuel",
+                "service",
                 "time",
                 "weather",
                 "controls",
                 "driver",
-                "skip",
-                "shot"
             ]
         );
         // one vehicle on the mouse at a time
@@ -781,13 +791,13 @@ mod tests {
             ..on
         });
         assert!(anyway.disabled.is_none());
-        // the pump and the wash show pressed while they run
+        // the wash and refuel button shows pressed while the pump or the wash runs
         let bs = buttons(&AltCtx {
             pumping: Some("refuel"),
             ..all_on()
         });
-        assert!(by_id(&bs, "refuel").on && !by_id(&bs, "wash").on);
-        assert_eq!(by_id(&bs, "refuel").title, "Stop refuelling");
+        assert!(by_id(&bs, "service").on);
+        assert!(!by_id(&buttons(&all_on()), "service").on);
         // the controls button shows what drives the vehicle
         let pad = buttons(&AltCtx {
             controls: "sports_esports",
@@ -797,6 +807,37 @@ mod tests {
             by_id(&pad, "controls").glyph,
             OwnedGlyph::Icon("sports_esports")
         );
+    }
+
+    #[test]
+    fn wash_and_refuel_works_at_a_petrol_station_only_and_holds_nothing_up() {
+        let service = |ctx: &AltCtx| by_id(&buttons(ctx), "service").clone();
+        assert!(service(&all_on()).disabled.is_none());
+        let away = AltCtx {
+            at_station: false,
+            ..all_on()
+        };
+        assert_eq!(service(&away).disabled.as_deref(), Some(NO_STATION));
+        // (running, it can be stopped wherever the bus is: driving off stops it anyway)
+        let running = AltCtx {
+            pumping: Some("wash"),
+            ..away
+        };
+        assert!(service(&running).disabled.is_none());
+        assert_eq!(
+            service(&AltCtx::default()).disabled.as_deref(),
+            Some("No vehicle to service")
+        );
+        // its menu open: the button shows pressed and the others stay usable
+        let mut bs = buttons(&all_on());
+        wait_for(&mut bs, FREE);
+        assert!(by_id(&bs, FREE).on);
+        assert_eq!(bs, {
+            let mut plain = buttons(&all_on());
+            plain.iter_mut().find(|b| b.id == FREE).unwrap().on = true;
+            plain
+        });
+        assert_eq!(step_focus(&bs, None, Nav::Right), Some(0));
     }
 
     #[test]
@@ -877,27 +918,32 @@ mod tests {
         let next = step_focus(&bs, first, Nav::Right);
         assert_eq!(id(next), "swap");
         // Left from the first goes round to the last
-        assert_eq!(id(step_focus(&bs, first, Nav::Left)), "shot");
-        // Down goes along the column to the next usable one, round the bar if need be (the
-        // last row is not full)
-        assert_eq!(id(step_focus(&bs, at("refuel"), Nav::Down)), "driver");
-        assert_eq!(id(step_focus(&bs, at("shot"), Nav::Up)), "time");
-        assert_eq!(id(step_focus(&bs, at("shot"), Nav::Down)), "remove");
-        assert_eq!(id(step_focus(&bs, at("controls"), Nav::Down)), "wash");
+        assert_eq!(id(step_focus(&bs, first, Nav::Left)), "driver");
+        // Down goes along the column to the next usable one, round the bar if need be
+        assert_eq!(id(step_focus(&bs, at("service"), Nav::Down)), "driver");
+        assert_eq!(id(step_focus(&bs, at("driver"), Nav::Up)), "service");
+        assert_eq!(id(step_focus(&bs, at("repair"), Nav::Down)), "controls");
+        assert_eq!(id(step_focus(&bs, at("controls"), Nav::Down)), "reposition");
+        // (over the dim "Help marker" below it, to the line and tour)
+        assert_eq!(id(step_focus(&bs, first, Nav::Up)), "tour");
         // a few usable: Right goes round them, Down stays where its column has none
         let few = buttons(&AltCtx {
             lan_client: true,
             ..Default::default()
         });
         let at = |id: &str| few.iter().position(|b| b.id == id);
-        assert_eq!(step_focus(&few, at("shot"), Nav::Right), at("add"));
+        assert_eq!(step_focus(&few, at("driver"), Nav::Right), at("add"));
         assert_eq!(step_focus(&few, at("add"), Nav::Right), at("controls"));
         assert_eq!(step_focus(&few, at("controls"), Nav::Down), at("controls"));
         assert_eq!(step_focus(&few, None, Nav::Right), at("add"));
-        // a window open: nothing on the bar takes the keyboard
+        // a window open: nothing on the bar takes the keyboard, and Enter on the button the
+        // keyboard was left on does not open its window again
         let mut waiting = buttons(&all_on());
+        assert_eq!(pressable(&waiting, at("time")), Some("time"));
         wait_for(&mut waiting, "time");
         assert_eq!(step_focus(&waiting, None, Nav::Right), None);
+        assert_eq!(pressable(&waiting, at("time")), None);
+        assert_eq!(pressable(&waiting, None), None);
     }
 
     #[test]

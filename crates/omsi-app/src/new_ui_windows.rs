@@ -1,12 +1,14 @@
 //! The small windows the Alt bar opens, drawn by the new interface: put the bus at an entry
 //! point, the date and time, the weather, the controls, the line and tour (and ending it), the
-//! line and destination, and the driver profile.
+//! line and destination, the wash and the pump, the timetable evaluation and the driver
+//! profile.
 //!
 //! Each does what the game already does for the same thing (the Esc menu's lists and
-//! settings pages): only the window that asks for it is new. None of them pauses the game,
-//! and none points at the Esc menu. While one is open the bar's other buttons wait, the game
-//! goes on behind it and the driving keys still reach the bus, except while the route
-//! number's field has the keyboard. Esc closes it; Cancel discards what was changed in it.
+//! settings pages, the journey log): only the window that asks for it is new. None of them
+//! pauses the game, and none points at the Esc menu. While one is open the bar's other
+//! buttons wait (not for the wash and refuel menu), the game goes on behind it and the
+//! driving keys still reach the bus, except while the route number's field has the keyboard.
+//! Esc closes it; Cancel discards what was changed in it.
 //!
 //! As with the "Add vehicle" window, the overlay draws the window inside the renderer: the
 //! clicks and the wheel over it are handed to the overlay ([`WinInput`]) and what they asked
@@ -279,8 +281,14 @@ pub(crate) enum ToolWindow {
     /// The tour running: end it?
     EndTour,
     Destination(DestForm),
+    /// The wash and the pump: two switches, each on while it runs.
+    Service,
     /// The timetable evaluation and the driver profile.
     DriverMenu,
+    /// The timetable evaluation of the tour being driven, at trip `trip` of the duty.
+    Evaluation {
+        trip: usize,
+    },
     Driver {
         names: Vec<String>,
         selected: Option<usize>,
@@ -297,7 +305,10 @@ impl ToolWindow {
             ToolWindow::Controls => "controls",
             ToolWindow::Tour(_) | ToolWindow::EndTour => "tour",
             ToolWindow::Destination(_) => "destination",
-            ToolWindow::DriverMenu | ToolWindow::Driver { .. } => "driver",
+            ToolWindow::Service => "service",
+            ToolWindow::DriverMenu | ToolWindow::Evaluation { .. } | ToolWindow::Driver { .. } => {
+                "driver"
+            }
         }
     }
 
@@ -344,7 +355,9 @@ impl Tools {
 
     /// A key while the window shows: true when it takes it. Esc closes the window (the Esc
     /// menu does not open then); while a text field has the keyboard every key but the
-    /// modifiers is the field's (Enter is OK). Any other key is the game's.
+    /// modifiers is the field's (Enter is OK). Any other key is the game's. (What a key
+    /// types comes as text first, `App::tool_text`; a press that brought none, as some
+    /// systems send, types what its key stands for, as the game menu's route number does.)
     fn key(&mut self, code: KeyCode, pressed: bool) -> KeyAnswer {
         if !pressed {
             return if self.taken.remove(&code) {
@@ -370,7 +383,14 @@ impl Tools {
                 }
                 KeyAnswer::Taken
             }
-            _ => KeyAnswer::Taken,
+            _ => {
+                if let (Some(c), Some(ToolWindow::Destination(d))) =
+                    (crate::input::route_char(code), self.window.as_mut())
+                {
+                    d.type_text(c.encode_utf8(&mut [0; 4]));
+                }
+                KeyAnswer::Taken
+            }
         };
         self.taken.insert(code);
         answer
@@ -386,6 +406,9 @@ enum KeyAnswer {
     Close,
     Ok,
 }
+
+/// Why the timetable evaluation cannot be opened.
+const NO_TOUR: &str = "No tour running";
 
 /// Seconds of the day as "hh:mm".
 fn hm(secs: f64) -> String {
@@ -464,6 +487,7 @@ impl App {
                 ..Default::default()
             }),
             "destination" => ToolWindow::Destination(self.destination_form()),
+            "service" => ToolWindow::Service,
             "driver" => ToolWindow::DriverMenu,
             _ => return,
         };
@@ -549,13 +573,15 @@ impl App {
                 selected: d.selected,
                 empty: d.empty.clone(),
             }),
+            ToolWindow::Service => View::Menu(self.service_menu()),
+            ToolWindow::Evaluation { trip } => View::Evaluation(self.evaluation(*trip)),
             ToolWindow::DriverMenu => View::Menu(aw::Menu {
                 title: "Timetable and driver".into(),
                 entries: vec![
                     aw::Entry {
                         label: "Timetable evaluation".into(),
                         checked: None,
-                        disabled: Some("Not in the game yet".into()),
+                        disabled: self.duty.is_none().then(|| NO_TOUR.to_string()),
                     },
                     aw::Entry {
                         label: "Driver profile".into(),
@@ -580,6 +606,73 @@ impl App {
             view,
             key: self.new_ui.tool.opened,
         })
+    }
+
+    /// The wash and the pump as they are now: each ticked while it runs, dim away from a
+    /// petrol station (one running can always be stopped).
+    fn service_menu(&self) -> aw::Menu {
+        let at = self.player.is_some() && self.at_service_station();
+        let entry = |id: &str, label: &str| {
+            let on = self.pumping.is_some_and(|p| p.0 == id);
+            let off = if self.player.is_none() {
+                Some("No vehicle to service")
+            } else if !at && !on {
+                Some(crate::new_ui_alt::NO_STATION)
+            } else {
+                None
+            };
+            aw::Entry {
+                label: label.to_string(),
+                checked: Some(on),
+                disabled: off.map(String::from),
+            }
+        };
+        aw::Menu {
+            title: "Wash and refuel".into(),
+            entries: vec![entry("wash", "Wash"), entry("refuel", "Refuel")],
+            hint: "Each runs until it is done or the bus drives off".into(),
+        }
+    }
+
+    /// The timetable evaluation of trip `trip` of the duty: its stops with their planned and
+    /// actual times as the journey log has them so far (the end-of-trip report's rows).
+    fn evaluation(&self, trip: usize) -> aw::Evaluation {
+        let Some(d) = self.duty.as_ref() else {
+            return aw::Evaluation::default();
+        };
+        let last = d.trip_index.min(d.trips.len().saturating_sub(1));
+        let trip = trip.min(last);
+        let (title, rows, totals) = self
+            .journey
+            .as_ref()
+            .and_then(|j| j.report(trip))
+            .unwrap_or_default();
+        // (how far off the bus was at the last stop it has been at)
+        let now = rows
+            .iter()
+            .rev()
+            .find(|r| r.state != omsi_ui::ingame::StopState::None && !r.deviation.is_empty())
+            .map(|r| r.deviation.clone())
+            .unwrap_or_else(|| "\u{2013}".to_string());
+        let mut totals: Vec<(String, String)> = totals
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        totals.insert(0, ("Deviation at the last stop reached".into(), now));
+        aw::Evaluation {
+            title,
+            // (counted as the trips' titles are: in the tour)
+            trip: format!(
+                "{} {} / {}",
+                omsi_ui::tr("Trip"),
+                d.first_trip + trip + 1,
+                d.first_trip + d.trips.len()
+            ),
+            trip_steps: (trip > 0, trip < last),
+            rows,
+            totals,
+            hint: "Updated at every stop  \u{b7}  the journey log is in Journeys".into(),
+        }
     }
 
     /// The controls' entries as they are now: on, off, or dim with the reason.
@@ -697,6 +790,12 @@ impl App {
 
     /// Apply what the clicks in the window asked for (before each frame).
     pub(crate) fn tool_events(&mut self) {
+        // (the timetable evaluation is the running tour's: it closes with the tour)
+        if self.duty.is_none()
+            && matches!(self.new_ui.tool.window, Some(ToolWindow::Evaluation { .. }))
+        {
+            self.new_ui.close_tool();
+        }
         for e in self.new_ui.take_tool_events() {
             if self.new_ui.tool.window.is_none() {
                 return;
@@ -792,8 +891,25 @@ impl App {
                     _ => {}
                 }
             }
+            ToolWindow::Service => {
+                if let Event::Check(i) = e {
+                    let id = if i == 0 { "wash" } else { "refuel" };
+                    self.toggle_service(id);
+                }
+            }
+            ToolWindow::Evaluation { trip } => {
+                if let Event::Step(_, by) = e {
+                    let last = self.duty.as_ref().map_or(0, |d| d.trip_index);
+                    *trip = (*trip as i64 + by as i64).clamp(0, last as i64) as usize;
+                }
+            }
             ToolWindow::DriverMenu => {
-                if e == Event::Check(1) {
+                if e == Event::Check(0) {
+                    if let Some(d) = self.duty.as_ref() {
+                        let trip = d.trip_index;
+                        self.new_ui.tool.open(ToolWindow::Evaluation { trip });
+                    }
+                } else if e == Event::Check(1) {
                     let names = game_lists::driver_names(self);
                     let now = self
                         .career
@@ -871,28 +987,20 @@ impl App {
     }
 
     /// The tours of line `line` running now, as the game menu's list of tours has them, with
-    /// the time each leaves next and where it goes.
+    /// the time each leaves next and where it goes (as the line's preview shows them, matched
+    /// by the tour's number).
     fn tours_of(&self, line: &str) -> Vec<(String, String, String)> {
-        let lines = game_lists::items(self, &ListKind::Lines);
-        let sel = lines.iter().position(|l| l.1 == format!("line {line}"));
-        // (the line's preview in the game menu: "Tour 3  ›  Terminus" and the time, in the
-        // order of its list of tours)
-        let preview = game_lists::menu_extras(
-            Some(&ListKind::Lines),
-            Some(&lines),
-            sel,
-            self.schedule.as_ref(),
-            self.clock.time,
-        )
-        .2
-        .map(|p| p.rows)
-        .unwrap_or_default();
+        let sch = self.schedule.as_ref();
+        let found = sch.and_then(|s| s.data.lines.iter().find(|l| l.name == line));
         rows_of(self, &ListKind::Tours(line.to_string(), None), "tour")
             .into_iter()
-            .enumerate()
-            .filter_map(|(k, (label, rest))| {
+            .filter_map(|(label, rest)| {
                 let (_, number) = rest.split_once('\u{1}')?;
-                let (what, when) = preview.get(k).cloned().unwrap_or((label, String::new()));
+                let tour = found.and_then(|l| l.tours.iter().find(|t| t.number == number));
+                let (what, when) = match (sch, tour) {
+                    (Some(s), Some(t)) => game_lists::tour_preview(s, line, t, self.clock.time),
+                    _ => (label, String::new()),
+                };
                 Some((what, when, number.to_string()))
             })
             .collect()
@@ -912,6 +1020,24 @@ impl App {
             .map(|(_, _, name, at)| (name.trim().to_string(), hm(at)))
             .collect();
         f.stop = (!f.stops.is_empty()).then_some(0);
+    }
+
+    /// A switch of the wash and refuel menu: the wash or the pump starts (in place of the
+    /// other, if that was running), or stops if it was running. It stops by itself once done,
+    /// and when the bus drives off (`App::tick_service`).
+    fn toggle_service(&mut self, id: &str) {
+        if self.pumping.is_some_and(|p| p.0 == id) {
+            self.pumping = None;
+            let msg = if id == "refuel" {
+                "Refuelling stopped"
+            } else {
+                "Washing stopped"
+            };
+            self.service_msg = Some((msg.into(), 3.0));
+        } else if self.at_service_station() {
+            self.pumping = None;
+            self.run_service(id);
+        }
     }
 
     /// Entry `i` of the controls: the game controller, the mouse steering, the keyboard only
@@ -1124,8 +1250,15 @@ mod tests {
             d.focused = true;
         }
         assert!(t.window.as_ref().is_some_and(ToolWindow::typing));
+        // (a press that brought no text types what its key stands for)
         assert_eq!(t.key(KeyCode::KeyW, true), KeyAnswer::Taken);
-        assert_eq!(t.key(KeyCode::Backspace, true), KeyAnswer::Taken);
+        assert_eq!(t.key(KeyCode::Minus, true), KeyAnswer::Taken);
+        if let Some(ToolWindow::Destination(d)) = t.window.as_ref() {
+            assert_eq!(d.line, "50W-");
+        }
+        for _ in 0..3 {
+            assert_eq!(t.key(KeyCode::Backspace, true), KeyAnswer::Taken);
+        }
         // (the modifiers stay the game's: Alt still shows and hides the bar)
         assert_eq!(t.key(KeyCode::ShiftLeft, true), KeyAnswer::Game);
         assert_eq!(t.key(KeyCode::Enter, true), KeyAnswer::Ok);
@@ -1207,7 +1340,9 @@ mod tests {
             (ToolWindow::Tour(TourForm::default()), "tour"),
             (ToolWindow::EndTour, "tour"),
             (ToolWindow::Destination(DestForm::default()), "destination"),
+            (ToolWindow::Service, "service"),
             (ToolWindow::DriverMenu, "driver"),
+            (ToolWindow::Evaluation { trip: 0 }, "driver"),
             (
                 ToolWindow::Driver {
                     names: vec![],

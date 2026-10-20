@@ -45,7 +45,7 @@ fn main() {
         disabled: Some(why),
         on: false,
     };
-    // (the game's bar: the original's order where the game has the function, then its own)
+    // (the game's bar: the original's fifteen, in its order, five by three)
     let bar = [
         ic("add", "add", "Add vehicle"),
         ic("swap", "sync_alt", "Switch vehicle"),
@@ -69,11 +69,7 @@ fn main() {
             "Not in the game yet",
         ),
         ic("repair", "construction", "Repair"),
-        ic("wash", "water_drop", "Wash"),
-        Button {
-            glyph: Glyph::Text("Fuel"),
-            ..ic("refuel", "", "Refuel")
-        },
+        ic("service", "local_gas_station", "Wash and refuel"),
         off(
             "help",
             Glyph::Icon("help"),
@@ -84,8 +80,6 @@ fn main() {
         ic("weather", "cloud", "Weather"),
         ic("controls", "keyboard", "Controls"),
         ic("driver", "badge", "Timetable evaluation and driver profile"),
-        ic("skip", "turn_slight_right", "Skip the next stop"),
-        ic("shot", "photo_camera", "Screenshot"),
     ];
     let mut state = State {
         chosen: Some("reposition".into()),
@@ -303,6 +297,16 @@ fn main() {
     use omsi_ui::alt_windows::{self as aw, View};
     // the bar while the window of button `open` is open over it
     let waiting = |open: &str| -> Vec<Button> {
+        // (the wash and refuel menu holds nothing up)
+        if open == "service" {
+            return bar
+                .iter()
+                .map(|b| Button {
+                    on: b.id == open,
+                    ..*b
+                })
+                .collect();
+        }
         bar.iter()
             .map(|b| Button {
                 disabled: Some(if b.id == open {
@@ -409,7 +413,7 @@ fn main() {
                     aw::Entry {
                         label: "Timetable evaluation".into(),
                         checked: None,
-                        disabled: Some("Not in the game yet".into()),
+                        disabled: None,
                     },
                     aw::Entry {
                         label: "Driver profile".into(),
@@ -418,6 +422,97 @@ fn main() {
                     },
                 ],
                 hint: "Each trip's report opens at its last stop".into(),
+            }),
+        ),
+        (
+            "alt-driver-no-tour",
+            View::Menu(aw::Menu {
+                title: "Timetable and driver".into(),
+                entries: vec![
+                    aw::Entry {
+                        label: "Timetable evaluation".into(),
+                        checked: None,
+                        disabled: Some("No tour running".into()),
+                    },
+                    aw::Entry {
+                        label: "Driver profile".into(),
+                        checked: None,
+                        disabled: None,
+                    },
+                ],
+                hint: "Each trip's report opens at its last stop".into(),
+            }),
+        ),
+        (
+            "alt-evaluation",
+            View::Evaluation(aw::Evaluation {
+                title: "Trip 3  \u{b7}  50 to Central Station  \u{b7}  08:00:00".into(),
+                trip: "Trip 3 / 6".into(),
+                trip_steps: (true, false),
+                rows: {
+                    use omsi_ui::ingame::{ReportRow, StopState};
+                    let row = |stop: &str, plan: &str, real: &str, diff: &str, state| ReportRow {
+                        stop: stop.into(),
+                        scheduled: plan.into(),
+                        actual: real.into(),
+                        deviation: diff.into(),
+                        state,
+                    };
+                    vec![
+                        row(
+                            "Depot",
+                            "08:00:00",
+                            "08:00:20",
+                            "+00:00:20",
+                            StopState::OnTime,
+                        ),
+                        row(
+                            "Main Street",
+                            "08:12:00",
+                            "08:15:05",
+                            "+00:03:05",
+                            StopState::Late,
+                        ),
+                        row(
+                            "Market",
+                            "08:25:00",
+                            "08:26:40",
+                            "+00:01:40",
+                            StopState::OnTime,
+                        ),
+                        row("Town Hall", "08:31:00", "", "", StopState::None),
+                        row("Central Station", "08:42:00", "", "", StopState::None),
+                    ]
+                },
+                totals: vec![
+                    (
+                        "Deviation at the last stop reached".into(),
+                        "+00:01:40".into(),
+                    ),
+                    ("Stops served".into(), "3 of 5".into()),
+                    ("Late arrivals".into(), "1".into()),
+                    ("Early departures".into(), "0".into()),
+                ],
+                hint: "Updated at every stop  \u{b7}  the journey log is in Journeys".into(),
+            }),
+        ),
+        (
+            "alt-service",
+            View::Menu(aw::Menu {
+                title: "Wash and refuel".into(),
+                entries: vec![
+                    aw::Entry {
+                        label: "Wash".into(),
+                        checked: Some(false),
+                        disabled: None,
+                    },
+                    aw::Entry {
+                        label: "Refuel".into(),
+                        checked: Some(true),
+                        disabled: None,
+                    },
+                ],
+                hint: "Each runs until it is done or the bus drives off".into(),
             }),
         ),
         (
@@ -479,6 +574,7 @@ fn main() {
     for (name, view) in &views {
         let open = match name.trim_start_matches("alt-") {
             "end-tour" => "tour",
+            "driver-no-tour" | "evaluation" => "driver",
             other => other,
         };
         let waiting = waiting(open);

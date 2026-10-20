@@ -1,6 +1,6 @@
 //! The small windows the Alt bar opens: put the bus at an entry point, the date and time, the
-//! weather, the controls, the line and tour, the line and destination, and the driver
-//! profile. They are made of the in-game windows' building blocks ([`crate::ingame`]) and
+//! weather, the controls, the line and tour, the line and destination, the timetable
+//! evaluation and the driver profile. They are made of the in-game windows' building blocks ([`crate::ingame`]) and
 //! look like the "Add vehicle" window: in the middle of the picture, the title in capitals,
 //! the buttons at the foot.
 //!
@@ -10,7 +10,7 @@
 
 use crate::ingame::{
     self, button, check_row, foot, head, list_rows, stepper, text_field, ButtonKind, ListLook,
-    BUTTON_H, CHECK_H, FIELD_H, FOOT_H, TITLE_H,
+    ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, ROW_H, TITLE_H,
 };
 use crate::widgets::Ui;
 use crate::{Color, Rect, Weight};
@@ -143,6 +143,21 @@ pub struct Destination {
     pub empty: String,
 }
 
+/// The timetable evaluation of the tour being driven: a trip's stops with their planned and
+/// actual times, as the end-of-trip report shows them, while the trip is still on.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Evaluation {
+    /// The trip shown ("Trip 3  ·  50 to Central Station  ·  08:00:00").
+    pub title: String,
+    /// "Trip 2 of 5", with whether there is a trip before and after it.
+    pub trip: String,
+    pub trip_steps: (bool, bool),
+    pub rows: Vec<ReportRow>,
+    /// Under the stops: (label, value).
+    pub totals: Vec<(String, String)>,
+    pub hint: String,
+}
+
 /// One of the windows, with what it shows.
 #[derive(Clone, Debug, PartialEq)]
 pub enum View {
@@ -153,6 +168,7 @@ pub enum View {
     Tour(Tour),
     Confirm(Confirm),
     Destination(Destination),
+    Evaluation(Evaluation),
 }
 
 /// A window of `w` x `h` points in the middle of a picture of `size` points.
@@ -181,6 +197,7 @@ impl View {
             View::Tour(_) => (1000.0, 600.0),
             View::Confirm(_) => (500.0, 190.0),
             View::Destination(_) => (560.0, 600.0),
+            View::Evaluation(_) => (900.0, 620.0),
         };
         centred(size, w, h)
     }
@@ -198,6 +215,7 @@ impl View {
             View::Tour(v) => tour(ui, r, v, key),
             View::Confirm(v) => confirm(ui, r, v),
             View::Destination(v) => destination(ui, r, v, key),
+            View::Evaluation(v) => evaluation(ui, r, v, key),
         }
     }
 }
@@ -631,6 +649,64 @@ fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event>
     ok.or(event)
 }
 
+fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
+    let body = ingame::window(ui, r, "Timetable evaluation", NOTE);
+    let mut event = None;
+    let sw = 190.0f32.min(body.w * 0.4);
+    let title_w = body.w - 48.0 - sw;
+    ui.text_in(
+        &v.title,
+        Rect::new(body.x + 16.0, body.y + 4.0, title_w.max(0.0), 36.0),
+        14.0 * TS,
+        Weight::Medium,
+        FG,
+        crate::paint::Align::Left,
+    );
+    if !v.trip.is_empty() {
+        let sr = Rect::new(body.right() - 16.0 - sw, body.y + 8.0, sw, 28.0);
+        let enabled = v.trip_steps.0 || v.trip_steps.1;
+        let by = stepper(ui, "tool:eval:trip", sr, &v.trip, enabled);
+        if (by < 0 && v.trip_steps.0) || (by > 0 && v.trip_steps.1) {
+            event = Some(Event::Step(0, by));
+        }
+    }
+    let totals_h = v.totals.len() as f32 * ROW_H;
+    let head_y = body.y + 44.0;
+    let area = Rect::new(
+        body.x,
+        head_y,
+        body.w,
+        (r.bottom() - FOOT_H - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+    );
+    // (each trip shown, and each opening, starts at its first stop)
+    let scroll = format!("tool:{key}:eval:{}", v.title);
+    let rows = ingame::stops_table(ui, &scroll, area, &v.rows);
+    if v.rows.is_empty() {
+        ui.text_in(
+            "No stops on this trip",
+            rows,
+            14.0 * TS,
+            Weight::Regular,
+            MUTED,
+            crate::paint::Align::Center,
+        );
+    }
+    let totals = Rect::new(r.x, rows.bottom() + 8.0, r.w, totals_h);
+    ui.p()
+        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
+    let kv: Vec<(&str, String, Option<Color>)> = v
+        .totals
+        .iter()
+        .map(|(k, val)| (k.as_str(), val.clone(), None))
+        .collect();
+    ingame::key_values(ui, totals, &kv);
+    // (it only shows: its one button closes it)
+    if foot(ui, "tool", r, &[("Close", true)], &v.hint).is_some() {
+        event = Some(Event::Cancel);
+    }
+    event
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -835,6 +911,35 @@ mod tests {
     }
 
     #[test]
+    fn the_evaluation_steps_through_the_trips_driven_and_close_closes_it() {
+        let row = |stop: &str| ReportRow {
+            stop: stop.into(),
+            scheduled: "08:00:00".into(),
+            actual: String::new(),
+            deviation: String::new(),
+            state: crate::ingame::StopState::None,
+        };
+        let v = Evaluation {
+            title: "Trip 2".into(),
+            trip: "Trip 2 / 4".into(),
+            trip_steps: (true, false),
+            rows: (0..30).map(|i| row(&format!("Stop {i}"))).collect(),
+            totals: vec![("Stops served".into(), "0 of 30".into())],
+            hint: String::new(),
+        };
+        let view = View::Evaluation(v);
+        let mut ui = Ui::new();
+        run(&mut ui, &view, None);
+        let earlier = ui.drawn[&(id_of("tool:eval:trip") ^ 1)].center();
+        assert_eq!(run(&mut ui, &view, Some(earlier)), Some(Event::Step(0, -1)));
+        // (the trip on now is the last there is to see)
+        let later = ui.drawn[&(id_of("tool:eval:trip") ^ 2)].center();
+        assert_eq!(run(&mut ui, &view, Some(later)), None);
+        let close = at(&ui, "tool:btn:0");
+        assert_eq!(run(&mut ui, &view, Some(close)), Some(Event::Cancel));
+    }
+
+    #[test]
     fn every_window_fits_a_small_picture() {
         let views = [
             View::Pick(Pick::default()),
@@ -847,6 +952,7 @@ mod tests {
             View::Tour(Tour::default()),
             View::Confirm(Confirm::default()),
             View::Destination(Destination::default()),
+            View::Evaluation(Evaluation::default()),
         ];
         // (the smallest picture: 960 x 540 pixels at the least scale)
         let small = Vec2::new(1280.0, 720.0);

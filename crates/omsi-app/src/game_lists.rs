@@ -640,6 +640,26 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     out
 }
 
+/// A tour of line `line` as the line's preview shows it: "Tour 3  ›  Terminus" (where the
+/// trip it has from the game's time `now` on goes) and the time that trip leaves.
+pub(crate) fn tour_preview(sch: &crate::schedule::Schedule, line: &str, t: &omsi_timetable::Tour, now: f64) -> (String, String) {
+    let tr = |t: &str| omsi_ui::tr(t).into_owned();
+    let hm = |m: f32| format!("{:02}:{:02}", (m / 60.0) as i32 % 24, (m % 60.0) as i32);
+    let terminus = |name: &str| sch.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)).map(|x| x.terminus.trim().to_string()).unwrap_or_default();
+    // (the trip and the time the tour has from the game's time on)
+    let next = sch.tour_stops_from(line, &t.number, now).first().cloned();
+    let end = match next.as_ref() {
+        Some(n) => tour_trip_name(sch, t, n.0).map(|name| terminus(&name)).unwrap_or_default(),
+        None => t.trips.first().map(|tt| terminus(&tt.trip)).unwrap_or_default(),
+    };
+    let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
+    let when = match next {
+        Some(n) => hm((n.3 / 60.0) as f32),
+        None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
+    };
+    (what, when)
+}
+
 /// What the open list tells the interface besides its lines: the layout it wants, its title
 /// and the small line above it, and - for lines and tours - the timetable of the chosen one.
 pub(crate) fn menu_extras(
@@ -683,24 +703,8 @@ pub(crate) fn menu_extras(
         ListKind::Lines => {
             let preview = action.strip_prefix("line ").and_then(|name| {
                 let line = schedule?.data.lines.iter().find(|l| l.name == name)?;
-                let rows = sorted_tours(line)
-                    .into_iter()
-                    .filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now)))
-                    .map(|t| {
-                        // (the trip and the time the tour has from the game's time on)
-                        let next = schedule.and_then(|s| s.tour_stops_from(&line.name, &t.number, now).first().cloned());
-                        let end = match (schedule, next.as_ref()) {
-                            (Some(s), Some(n)) => tour_trip_name(s, t, n.0).map(|name| trip_of(&name).1).unwrap_or_default(),
-                            _ => t.trips.first().map(|tt| trip_of(&tt.trip).1).unwrap_or_default(),
-                        };
-                        let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
-                        let when = match next {
-                            Some(n) => hm((n.3 / 60.0) as f32),
-                            None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
-                        };
-                        (what, when)
-                    })
-                    .collect();
+                let sch = schedule?;
+                let rows = sorted_tours(line).into_iter().filter(|t| tour_listed(sch, &line.name, t, now)).map(|t| tour_preview(sch, &line.name, t, now)).collect();
                 Some(Preview { title: format!("{} {}", tr("Line"), line.name), meta: format!("{} {}", line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count(), tr("tours")), rows, chosen: None, button: None, time: None })
             });
             (MenuKind::Lines, head("Line and tour..."), preview)
