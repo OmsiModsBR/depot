@@ -3090,6 +3090,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "vulkan" => "vulkan",
                     "dx12" => "dx12",
                     "gl" => "gl",
+                    "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9",
                     _ => "auto",
                 })
             }
@@ -3777,6 +3778,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
             "gl" => "gl",
+            "d3d9" if cfg!(windows) => "d3d9",
             _ => "auto",
         },
         v.get("ctrl_off").and_then(|x| x.as_str()).unwrap_or("").replace(['\n', '\r'], " "),
@@ -4689,6 +4691,16 @@ mod tests {
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(packs, vec!["Other".to_string()]);
+    }
+
+    /// "DirectX9 (D3D9Ex)" survives the launcher's save on Windows only.
+    #[test]
+    fn d3d9_is_kept_on_windows_only() {
+        let want = if cfg!(windows) { "d3d9" } else { "auto" };
+        let v = super::settings_from_text(Some("graphics_api=D3D9Ex\n"));
+        assert_eq!(v["graphics_api"], want);
+        let text = super::settings_to_text(&v, None);
+        assert!(text.contains(&format!("graphics_api={want}\n")));
     }
 
     #[test]

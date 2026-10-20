@@ -62,21 +62,29 @@ fn a_click_on_a_vehicle_row_and_a_paint_chooses_them() {
     shell.vehicles = VehiclesView::with_catalog(omsi_launcher_ui::sample::vehicles());
     let mut ui = Ui::new();
     frame(&mut shell, &mut ui, None);
-    assert_eq!(shell.vehicles.chosen(), (0, 0));
+    assert_eq!(shell.vehicles.chosen(), (0, None));
     let row = ui.drawn[&omsi_ui::widgets::id_of("vehicles:row:1")];
     frame(
         &mut shell,
         &mut ui,
         Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
     );
-    assert_eq!(shell.vehicles.chosen(), (1, 0));
-    let chip = ui.drawn[&omsi_ui::widgets::id_of("vehicles:paint:1")];
+    assert_eq!(shell.vehicles.chosen(), (1, None));
+    let chip = ui.drawn[&omsi_ui::widgets::id_of("vehicles:paint:0")];
     frame(
         &mut shell,
         &mut ui,
         Some(Vec2::new(chip.x + 10.0, chip.y + 10.0)),
     );
-    assert_eq!(shell.vehicles.chosen(), (1, 1));
+    assert_eq!(shell.vehicles.chosen(), (1, Some(0)));
+    // the bus's own livery is a chip of its own, before the repaints
+    let chip = ui.drawn[&omsi_ui::widgets::id_of("vehicles:paint:default")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(chip.x + 10.0, chip.y + 10.0)),
+    );
+    assert_eq!(shell.vehicles.chosen(), (1, None));
 }
 
 #[test]
@@ -86,20 +94,42 @@ fn a_click_on_a_map_row_and_a_start_point_chooses_them() {
     shell.maps = MapsView::with_catalog(omsi_launcher_ui::sample::maps());
     let mut ui = Ui::new();
     frame(&mut shell, &mut ui, None);
-    assert_eq!(shell.maps.chosen(), (0, 0));
+    assert_eq!(shell.maps.chosen(), (0, None));
     let start = ui.drawn[&omsi_ui::widgets::id_of("maps:start:2")];
     frame(
         &mut shell,
         &mut ui,
         Some(Vec2::new(start.x + 30.0, start.y + 10.0)),
     );
-    assert_eq!(shell.maps.chosen(), (0, 2));
+    assert_eq!(shell.maps.chosen(), (0, Some(2)));
+    let auto = ui.drawn[&omsi_ui::widgets::id_of("maps:start:auto")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(auto.x + 30.0, auto.y + 10.0)),
+    );
+    assert_eq!(shell.maps.chosen(), (0, None));
     let row = ui.drawn[&omsi_ui::widgets::id_of("maps:row:1")];
     frame(
         &mut shell,
         &mut ui,
         Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
     );
-    // a new map starts on its first start point
-    assert_eq!(shell.maps.chosen(), (1, 0));
+    // a new map starts on the automatic start point
+    assert_eq!(shell.maps.chosen(), (1, None));
+}
+
+#[test]
+fn a_catalog_read_again_keeps_the_bus_shown() {
+    use omsi_launcher_ui::vehicles::VehiclesView;
+    let list = omsi_launcher_ui::sample::vehicles();
+    let mut view = VehiclesView::with_catalog(list[..1].to_vec());
+    view.set_catalog(list.clone());
+    assert_eq!(view.catalog_len(), Some(list.len()));
+    view.select(&list[1].file, "");
+    // a longer list (the host's scan went on): the same bus stays chosen
+    let mut longer = list.clone();
+    longer.insert(0, list[0].clone());
+    view.set_catalog(longer);
+    assert_eq!(view.chosen(), (2, None));
 }

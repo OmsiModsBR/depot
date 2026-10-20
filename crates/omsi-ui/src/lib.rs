@@ -12,12 +12,14 @@
 //!   fields, scrolling lists) the launcher draws its pages with.
 
 pub mod alt_bar;
+pub mod alt_windows;
 pub mod atlas;
 pub mod gpu;
 pub mod i18n;
 pub mod icons;
 pub mod ingame;
 pub mod loading;
+pub mod menu_page;
 pub mod nav;
 pub mod paint;
 pub mod pause_menu;
@@ -26,7 +28,7 @@ pub mod theme;
 pub mod widgets;
 
 pub use atlas::{Atlas, Sprite};
-pub use gpu::{Draw, Gpu, Layer};
+pub use gpu::{Draw, Gpu, Layer, UiEvent, UiMirror};
 pub use i18n::tr;
 pub use paint::{Color, Painter, Rect, Vertex};
 pub use text::{Fonts, Weight};

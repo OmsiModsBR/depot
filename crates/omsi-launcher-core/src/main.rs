@@ -31,6 +31,9 @@ fn main() {
     };
     match std::process::Command::new(&game)
         .arg("--launcher")
+        // (the launcher ends with this program, stopped by hand included)
+        .arg("--parent-pid")
+        .arg(std::process::id().to_string())
         .args(&args[1..])
         .status()
     {

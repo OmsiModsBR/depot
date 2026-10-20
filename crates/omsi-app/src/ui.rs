@@ -997,12 +997,9 @@ impl TextCache {
         tex
     }
 
-    /// A plate of one colour: 0 the chat's dark translucent input box, 1 the loading
-    /// screen's bar track, 2 its fill, 3 .. 7 as said below.
+    /// A plate of one colour: 0 the chat's dark translucent input box, 3 .. 9 as said below.
     fn plate(&mut self, r: &Renderer, scene: &mut Scene, kind: u8) -> TextureId {
         let mut rgba = match kind {
-            1 => vec![255, 255, 255, 38],
-            2 => vec![235, 238, 242, 255],
             // an opaque panel as designed (translucent dark panels show the sky through
             // them), unless the opacity setting asks for less
             3 => vec![22, 22, 22, 255],
@@ -1185,37 +1182,6 @@ impl TextCache {
         scene.overlays.push((tr, [x1 - rad, y0, x1, y0 + rad]));
         scene.overlays.push((bl, [x0, y1 - rad, x0 + rad, y1]));
         scene.overlays.push((br, [x1 - rad, y1 - rad, x1, y1]));
-    }
-}
-
-impl Ui {
-    /// The loading screen over a plain dark picture: the map's name in the middle, a thin
-    /// bar of how far the start area got under it, and one quiet line (what is being done).
-    pub fn loading(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, caption: &str, progress: f32) {
-        let s = scale.max(0.5);
-        let t = self.text.label(r, scene, title, (30.0 * s) as u32, [255, 255, 255, 0]);
-        let cy = height * 0.5;
-        let tx = (width - t.w as f32) * 0.5;
-        let ty = cy - t.h as f32 - 14.0 * s;
-        scene.overlays.push((t.tex, [tx, ty, tx + t.w as f32, ty + t.h as f32]));
-        let bw = (320.0 * s).min(width * 0.6);
-        let bh = (3.0 * s).max(2.0);
-        let bx = (width - bw) * 0.5;
-        let by = cy + 4.0 * s;
-        let track = self.text.plate(r, scene, 1);
-        scene.overlays.push((track, [bx, by, bx + bw, by + bh]));
-        let fill = self.text.plate(r, scene, 2);
-        let p = progress.clamp(0.0, 1.0);
-        if p > 0.0 {
-            scene.overlays.push((fill, [bx, by, bx + bw * p, by + bh]));
-        }
-        if !caption.is_empty() {
-            let c = self.text.label(r, scene, caption, (13.0 * s) as u32, [200, 204, 210, 0]);
-            let cx = (width - c.w as f32) * 0.5;
-            let cy2 = by + bh + 14.0 * s;
-            scene.overlays.push((c.tex, [cx, cy2, cx + c.w as f32, cy2 + c.h as f32]));
-        }
-        self.text.end_frame(r, scene);
     }
 }
 

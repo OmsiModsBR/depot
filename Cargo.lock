@@ -3072,6 +3072,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "block2 0.6.2",
+ "bytemuck",
  "clap",
  "ct2rs",
  "env_logger",
@@ -3093,12 +3094,14 @@ dependencies = [
  "omsi-content",
  "omsi-geometry",
  "omsi-launcher-core",
+ "omsi-launcher-ui",
  "omsi-map",
  "omsi-model",
  "omsi-net",
  "omsi-o3d",
  "omsi-plugin",
  "omsi-render",
+ "omsi-render-d3d9",
  "omsi-scenery",
  "omsi-script",
  "omsi-sim",
@@ -3247,7 +3250,6 @@ dependencies = [
  "omsi-ui",
  "pollster",
  "wgpu",
- "winit",
 ]
 
 [[package]]
@@ -3321,6 +3323,16 @@ dependencies = [
  "pollster",
  "rayon",
  "wgpu",
+ "windows 0.62.2",
+ "winit",
+]
+
+[[package]]
+name = "omsi-render-d3d9"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "thiserror 2.0.21",
  "windows 0.62.2",
  "winit",
 ]

@@ -43,6 +43,9 @@ pub(crate) struct App {
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) surface: Option<SurfaceState<'static>>,
     pub(crate) renderer: Option<Renderer>,
+    /// The "DirectX9 (D3D9Ex)" output of the window (see `d3d9_output`).
+    #[cfg(windows)]
+    pub(crate) d3d9: Option<crate::d3d9_output::D3d9Output>,
     #[cfg(windows)]
     pub(crate) vr: Option<crate::openxr::Vr>,
     pub(crate) scene: Option<Scene>,
@@ -170,7 +173,7 @@ pub(crate) struct App {
     pub(crate) paused: bool,
     /// The game menu (Escape, OMSI's `open_mainmenue`): the chosen line of it.
     pub(crate) game_menu: Option<usize>,
-    /// The new interface's side of the overlay (`new_ui`, `OMSI_NEW_UI=1`).
+    /// The new interface's side of the overlay (`new_ui`): the Esc menu and the Alt bar.
     pub(crate) new_ui: crate::new_ui::NewUi,
     /// The first line of the game menu (or chooser) shown, when a finger has scrolled it
     /// (in lines, fractional while dragged); `None`: the chosen line is kept in view.
@@ -418,6 +421,30 @@ impl App {
     #[cfg(not(windows))]
     pub(crate) fn vr_active(&self) -> bool { false }
 
+    /// Whether the window draws with "DirectX9 (D3D9Ex)".
+    #[cfg(windows)]
+    pub(crate) fn d3d9_active(&self) -> bool { self.d3d9.is_some() }
+
+    #[cfg(not(windows))]
+    pub(crate) fn d3d9_active(&self) -> bool { false }
+
+    /// Under "DirectX9 (D3D9Ex)", shows the picture the renderer drew this frame.
+    pub(crate) fn d3d9_present(&self) {
+        #[cfg(windows)]
+        if let Some(d) = self.d3d9.as_ref() {
+            d.present();
+        }
+    }
+
+    /// Under "DirectX9 (D3D9Ex)", the mirror an `omsi-ui` Gpu drawing over the window's
+    /// picture hands its draws to.
+    pub(crate) fn d3d9_ui_mirror(&self) -> Option<omsi_ui::UiMirror> {
+        #[cfg(windows)]
+        return self.d3d9.as_ref().map(|d| d.ui_mirror());
+        #[cfg(not(windows))]
+        None
+    }
+
     pub(crate) fn resumed_impl(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.window.clone() {
             // back from the background (a phone): the window's surface is made again
@@ -425,7 +452,11 @@ impl App {
                 if let Some(r) = self.renderer.as_ref() {
                     let size = window.inner_size();
                     let vsync = self.settings.vsync && !self.vr_active();
-                    self.surface = SurfaceState::new_with(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok();
+                    self.surface = if self.d3d9_active() {
+                        SurfaceState::shown_elsewhere(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok()
+                    } else {
+                        SurfaceState::new_with(&self.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok()
+                    };
                     self.last = Instant::now();
                 }
             }
@@ -530,7 +561,18 @@ impl App {
                 }
             },
         };
-        let mut renderer = match window_renderer(&mut self.instance, &window, self.settings.render_options()) {
+        // "DirectX9 (D3D9Ex)": the renderer keeps the books on wgpu's noop device, the
+        // Direct3D 9Ex device draws the window (see `d3d9_output`)
+        #[cfg(windows)]
+        let d3d9 = crate::startup::d3d9_requested();
+        #[cfg(not(windows))]
+        let d3d9 = false;
+        let opened = if d3d9 {
+            crate::startup::books_renderer(&self.instance, self.settings.render_options())
+        } else {
+            window_renderer(&mut self.instance, &window, self.settings.render_options())
+        };
+        let mut renderer = match opened {
             Ok(r) => r,
             Err(e) => {
                 fatal_message(&format!("The game cannot draw on this computer: {e:#}"));
@@ -538,6 +580,17 @@ impl App {
                 return;
             }
         };
+        #[cfg(windows)]
+        if d3d9 {
+            match crate::d3d9_output::D3d9Output::attach(&mut renderer, &window, self.settings.vsync) {
+                Ok(out) => self.d3d9 = Some(out),
+                Err(e) => {
+                    fatal_message(&format!("The game cannot draw with DirectX9 (D3D9Ex) on this computer: {e:#}. Choose another graphics API in the options."));
+                    crate::platform::exit(event_loop);
+                    return;
+                }
+            }
+        }
         #[cfg(windows)]
         if self.settings.vr_requested() {
             match crate::openxr::Vr::new(&renderer, self.settings.vr_scale, self.settings.vr_desktop_mirror) {
@@ -554,14 +607,19 @@ impl App {
         crate::lights::load_smoke_texture(&mut renderer, &self.args.root);
         crate::lights::set_corona_root(&self.args.root);
         let size = window.inner_size();
-        let surface = match SurfaceState::new_with(
-            &self.instance,
-            window.clone(),
-            &renderer,
-            size.width,
-            size.height,
-            self.settings.vsync && !self.vr_active(),
-        ) {
+        let surface = if d3d9 {
+            SurfaceState::shown_elsewhere(&self.instance, window.clone(), &renderer, size.width, size.height, self.settings.vsync)
+        } else {
+            SurfaceState::new_with(
+                &self.instance,
+                window.clone(),
+                &renderer,
+                size.width,
+                size.height,
+                self.settings.vsync && !self.vr_active(),
+            )
+        };
+        let surface = match surface {
             Ok(s) => s,
             Err(e) => {
                 fatal_message(&format!("The game's window cannot be drawn into: {e:#}"));
@@ -600,6 +658,10 @@ impl App {
             lan::adopt_host_world(&mut self.args, l, &mut self.online.remotes);
         }
         let renderer = self.renderer.take().expect("renderer");
+        #[cfg(windows)]
+        if let Some(d) = self.d3d9.as_ref() {
+            d.new_scene();
+        }
         let mut scene = renderer.new_scene();
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
@@ -644,6 +706,8 @@ impl App {
                         700.0,
                     ));
                     self.world = Some(w);
+                    // (a new drive: its loading screen shows its own map's screenshots and bus)
+                    self.new_ui.reset_loading();
                     self.starting = Some(cam);
                 }
                 Err(e) => {
@@ -776,7 +840,10 @@ impl App {
                     self.settings.ui_opacity,
                     &self.settings.navigator_corner,
                 ));
+                // (under D3D9Ex the maps are drawn on that device too)
+                let ui_mirror = self.d3d9_ui_mirror();
                 if let Some(n) = self.navigator.as_mut() {
+                    n.ui_mirror = ui_mirror;
                     n.arrows = self.settings.nav_arrows;
                     n.show_ai = self.settings.nav_ai;
                     n.show_surface = self.settings.nav_surface;
@@ -931,7 +998,7 @@ impl App {
         let Some(cam) = self.starting.take() else {
             return true;
         };
-        let (Some(renderer), Some(mut scene)) = (self.renderer.take(), self.scene.take()) else {
+        let (Some(mut renderer), Some(mut scene)) = (self.renderer.take(), self.scene.take()) else {
             self.starting = Some(cam);
             return true;
         };
@@ -950,6 +1017,8 @@ impl App {
             None => None,
         };
         let Some((done, total)) = progress else {
+            // (the loading screen of the new interface is over)
+            self.new_ui.reset_loading();
             let w = self.world.clone().expect("world");
             log::info!(
                 "map ready after {:.2} s: {} tiles loaded",
@@ -961,46 +1030,31 @@ impl App {
             self.scene = Some(scene);
             return true;
         };
-        let name = self
-            .world
-            .as_ref()
-            .map(|w| {
-                if w.global.friendly_name.trim().is_empty() {
-                    w.global.name.clone()
-                } else {
-                    w.global.friendly_name.clone()
-                }
-            })
-            .unwrap_or_default();
+        // the loading screen of the new interface, drawn by the renderer's hook over the blank picture
+        self.new_loading_update(&mut renderer, done, total);
         let mut reconfigure = false;
-        if let (Some(ui), Some(s), Some(win)) = (
-            self.ui.as_mut(),
-            self.surface.as_ref(),
-            self.window.as_ref(),
-        ) {
+        if let (Some(s), Some(win)) = (self.surface.as_ref(), self.window.as_ref()) {
             scene.overlays.clear();
-            let dpi = win.scale_factor() as f32;
-            let scale = dpi * crate::ui::size_factor(s.config.height as f32, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
-            ui.loading(
-                &renderer,
-                &mut scene,
-                s.config.width as f32,
-                s.config.height as f32,
-                scale,
-                name.trim(),
-                "",
-                done as f32 / total.max(1) as f32,
-            );
-            let acquired = s.surface.get_current_texture();
+            let acquired = s.acquire();
             // a swapchain that no longer fits the window (Vulkan says so after the switch
             // to full screen, without a resize event) is made again, as the game's own
             // frames do: left as it was, every later frame of the loading screen failed
             // the same way and its picture stood still until the map was there (#776)
             reconfigure = matches!(acquired, wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost);
-            if let wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired
-            {
-                let view = frame.texture.create_view(&Default::default());
+            let (frame, view) = match acquired {
+                wgpu::CurrentSurfaceTexture::Success(frame)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                    let view = frame.texture.create_view(&Default::default());
+                    (Some(frame), Some(view))
+                }
+                // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
+                wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
+                    None,
+                    Some(stand_in_view(&mut self.stand_in, &renderer, s.config.width, s.config.height)),
+                ),
+                _ => (None, None),
+            };
+            if let Some(view) = view {
                 // the tiles loaded so far stay out of the picture: the camera looks at nothing
                 let blank = Camera {
                     position: DVec3::new(0.0, 0.0, -1.0e6),
@@ -1024,9 +1078,12 @@ impl App {
                     &blank,
                     &lighting,
                 );
-                win.pre_present_notify();
-                frame.present();
+                if let Some(frame) = frame {
+                    win.pre_present_notify();
+                    frame.present();
+                }
                 self.renderer = Some(renderer);
+                self.d3d9_present();
             } else {
                 self.renderer = Some(renderer);
             }
@@ -1332,4 +1389,31 @@ mod cam_blend_tests {
         assert!((blend(0.5) - 0.875).abs() < 1e-6);
         assert!(blend(0.2) > 0.4, "fast off the mark");
     }
+}
+
+/// The texture a picture is drawn into when the window gives none (OMSI_RENDER_OCCLUDED, or
+/// "DirectX9 (D3D9Ex)", whose device shows the picture), made anew at a new size.
+pub(crate) fn stand_in_view(
+    slot: &mut Option<wgpu::Texture>,
+    r: &omsi_render::Renderer,
+    w: u32,
+    h: u32,
+) -> wgpu::TextureView {
+    if slot.as_ref().map(|t| (t.width(), t.height()) != (w, h)).unwrap_or(true) {
+        *slot = Some(r.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("hidden window"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: r.format(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+    }
+    slot.as_ref().expect("made above").create_view(&Default::default())
 }

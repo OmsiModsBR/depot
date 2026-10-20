@@ -2,8 +2,14 @@
 //! progress bar and the bus and map being loaded. Drawn with `Ui`; the caller loads the
 //! pictures into the GPU (`Gpu::add_image`) and says which texture each is.
 //!
-//! Nothing here reads a file or starts a thread: `Slideshow` is arithmetic over time, so it
-//! is tested without a window.
+//! Laid out after the loading concept (v2): the logo top left, the version top right, the
+//! map, the stage and the bar bottom left, and a "Loading" card with the bus and the map
+//! bottom right, all over the full-screen picture under a veil that darkens its top and its
+//! foot. Measures are in design units (the 1672x941 concept; the caller's scale fits it to the
+//! window), so a wider window only moves the card further right.
+//!
+//! Nothing here reads a file or starts a thread: `Slideshow` is arithmetic over time and
+//! `layout` is arithmetic over the text's widths, so both are tested without a window.
 
 use crate::paint::Align;
 use crate::widgets::Ui;
@@ -15,17 +21,52 @@ pub const FADE_SECONDS: f32 = 3.5;
 /// How long a picture stays whole before it fades, in seconds.
 pub const HOLD_SECONDS: f32 = 6.0;
 
+// the colours of the v5 look (`omsi-launcher-ui`'s `look`), and the concept's own
 const BG: Color = Color::hex(0x101215);
-const PANEL: Color = Color::hex(0x171a1f);
-const PANEL_2: Color = Color::hex(0x1e2229);
 const LINE: Color = Color::hex(0x2b2f37);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const ACCENT: Color = Color::hex(0xf0a30a);
-/// Panels are 8% see-through.
-const PANEL_ALPHA: f32 = 0.92;
+// The pipeline blends in linear light, the concept (a web page) in sRGB: a see-through colour
+// here shows much more of what is under it than the same opacity there. The opacities below
+// are the concept's carried over so the screen looks as it does (`over_black` for the veils).
+/// The card: near black, a little see-through (the concept's 88%); its header band lighter.
+const CARD: Color = Color::rgba(15, 16, 20, 0.96);
+const CARD_HEAD: Color = Color::rgba(30, 34, 41, 0.97);
+const THUMB: Color = Color::hex(0x2a2f38);
+/// The author's text in the card, and the stage lines under the heading.
+const BODY: Color = Color::hex(0xb9bec7);
+const SOFT: Color = Color::hex(0xc2c7cf);
+/// The empty part of the bar: white over the picture (the concept's 18%), so it reads on
+/// any photo.
+const TRACK: Color = Color::rgba(255, 255, 255, 0.04);
+/// The version: white at the concept's 67%.
+const VERSION: Color = Color::rgba(255, 255, 255, 0.45);
+/// The soft shadow under the text straight over the picture.
+const SHADOW: Color = Color::rgba(0, 0, 0, 0.7);
 /// The text is drawn this much larger than its nominal size (the concept's face is wider).
 const TS: f32 = 1.16;
+
+/// Space between the screen's edge and what is drawn near it.
+pub const MARGIN: f32 = 40.0;
+pub const CARD_W: f32 = 400.0;
+/// The status block (heading, stage, bar) at its widest.
+pub const STATUS_W: f32 = 640.0;
+/// The header band of the card, its rule included.
+const HEAD_H: f32 = 34.0;
+const PAD_X: f32 = 18.0;
+const PAD_Y: f32 = 14.0;
+const THUMB_W: f32 = 96.0;
+const THUMB_H: f32 = 60.0;
+/// Between the thumbnail and the text.
+const THUMB_GAP: f32 = 14.0;
+/// The lines of a card's text: the title, the line under it, the author's text.
+const TITLE_LH: f32 = 23.0;
+const SUB_LH: f32 = 14.5;
+const DESC_PX: f32 = 12.5;
+const DESC_LH: f32 = 19.4;
+/// The author's text keeps to this many lines.
+const DESC_LINES: usize = 2;
 
 /// Which pictures show now: `current`, and `next` fading in over it by `mix` (0 to 1).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -49,6 +90,17 @@ impl Slideshow {
 
     pub fn count(&self) -> usize {
         self.count
+    }
+
+    /// More pictures arrived (or fewer are kept): the show goes on from where it is.
+    pub fn set_count(&mut self, count: usize) {
+        self.count = count;
+        let round = count as f32 * (HOLD_SECONDS + FADE_SECONDS);
+        if round > 0.0 {
+            self.t %= round;
+        } else {
+            self.t = 0.0;
+        }
     }
 
     /// Move on by `dt` seconds.
@@ -100,21 +152,27 @@ pub struct Slide {
     pub aspect: f32,
 }
 
-/// The bus or map card of the loading panel.
+/// The bus or map block of the loading card.
 pub struct Card<'a> {
     pub title: &'a str,
+    /// The line under the title, in the accent ("Example Maker · Default paint").
     pub sub: &'a str,
     /// The author's text, plain, cut to what fits.
     pub description: &'a str,
+    /// The icon in the thumbnail (a Material Symbol: `directions_bus`, `map`).
+    pub icon: &'a str,
 }
 
-/// What the screen says. All text is the caller's, already in the player's language.
+/// What the screen says. All text is the caller's: the interface's own (the stage, the
+/// activity) is translated here, names and the authors' texts are drawn as they are.
 pub struct View<'a> {
     pub version: &'a str,
     /// "Example map · Line 50 · 08:00"
     pub heading: &'a str,
     /// What is being done now ("Loading map tiles (first area) · 62 of 100").
     pub stage: &'a str,
+    /// Under the bar, left of the percentage ("Preparing the world").
+    pub activity: &'a str,
     /// Done over total, 0 to 1.
     pub progress: f32,
     /// The logo (texture, height over width).
@@ -125,17 +183,95 @@ pub struct View<'a> {
     pub slides: &'a [Slide],
 }
 
-fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
-    let px = px * TS;
-    let w = ui.width(s, px, weight);
-    ui.text_in(
-        s,
-        Rect::new(x, cy - px, w + 2.0, px * 2.0),
-        px,
-        weight,
-        c,
-        Align::Left,
-    );
+/// One block of the card, laid out: its box, the thumbnail and the text column.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    pub rect: Rect,
+    pub thumb: Rect,
+    /// The text column: left edge, top and width.
+    pub text: Rect,
+    /// The author's text broken into its lines (at most `DESC_LINES`, the last cut with an
+    /// ellipsis when it goes on).
+    pub lines: Vec<String>,
+}
+
+/// Where everything goes on a screen of `ui.size` design units.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Layout {
+    pub logo: Rect,
+    /// The version's line: right-aligned to its right edge.
+    pub version: Rect,
+    /// The status block, from the heading's top to the percentage's foot.
+    pub status: Rect,
+    pub bar: Rect,
+    /// The card and its blocks (none without a bus or a map).
+    pub card: Option<Rect>,
+    pub blocks: Vec<Block>,
+}
+
+/// Lay the screen out for `view`.
+pub fn layout(ui: &Ui, view: &View) -> Layout {
+    let (w, h) = (ui.size.x, ui.size.y);
+    // the logo: its letters (the picture has a thin margin round them) start near the
+    // concept's x 47 and are about 248 wide, from y 52
+    let logo_w = 254.0;
+    let logo_h = view.logo.map_or(39.0, |(_, a)| logo_w * a);
+    let logo = Rect::new(MARGIN + 4.0, 51.0, logo_w, logo_h);
+    let version = Rect::new(w * 0.5, MARGIN, w * 0.5 - MARGIN, 14.0);
+
+    // the card, from the foot up, each block as tall as its text
+    let cards: Vec<&Card> = view.bus.iter().chain(view.map.iter()).collect();
+    let text_w = CARD_W - 1.0 - PAD_X - THUMB_W - THUMB_GAP - PAD_X - 1.0;
+    let mut blocks = Vec::new();
+    let mut y = 0.0;
+    for c in &cards {
+        let lines = wrap(ui, c.description, text_w, DESC_PX * TS, DESC_LINES);
+        let mut text_h = TITLE_LH;
+        if !c.sub.trim().is_empty() {
+            text_h += 4.0 + SUB_LH;
+        }
+        if !lines.is_empty() {
+            text_h += 6.0 + DESC_LH * lines.len() as f32;
+        }
+        let bh = (PAD_Y * 2.0 + text_h.max(THUMB_H)).round();
+        blocks.push(Block {
+            rect: Rect::new(0.0, y, CARD_W, bh),
+            thumb: Rect::new(1.0 + PAD_X, y + PAD_Y, THUMB_W, THUMB_H),
+            text: Rect::new(1.0 + PAD_X + THUMB_W + THUMB_GAP, y + PAD_Y, text_w, text_h),
+            lines,
+        });
+        // (the rule between two blocks)
+        y += bh + 1.0;
+    }
+    let card = (!blocks.is_empty()).then(|| {
+        let ch = 1.0 + HEAD_H + y;
+        let r = Rect::new(w - MARGIN - CARD_W, h - MARGIN - ch, CARD_W, ch);
+        for b in &mut blocks {
+            let dy = r.y + 1.0 + HEAD_H;
+            b.rect = Rect::new(r.x, b.rect.y + dy, r.w, b.rect.h);
+            b.thumb = Rect::new(r.x + b.thumb.x, b.thumb.y + dy, b.thumb.w, b.thumb.h);
+            b.text = Rect::new(r.x + b.text.x, b.text.y + dy, b.text.w, b.text.h);
+        }
+        r
+    });
+
+    // the status block, as wide as the concept's unless the card leaves less room
+    let room = match card {
+        Some(c) => c.x - MARGIN - MARGIN,
+        None => w - 2.0 * MARGIN,
+    };
+    let sw = STATUS_W.min(room).max(240.0);
+    let bottom = h - MARGIN;
+    let status = Rect::new(MARGIN, bottom - 78.5, sw, 78.5);
+    let bar = Rect::new(MARGIN, bottom - 29.5, sw, 8.0);
+    Layout {
+        logo,
+        version,
+        status,
+        bar,
+        card,
+        blocks,
+    }
 }
 
 /// Draw the loading screen over the whole of `ui`'s window (design units: the window's size
@@ -143,6 +279,7 @@ fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color
 pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
     let (w, h) = (ui.size.x, ui.size.y);
     let full = Rect::new(0.0, 0.0, w, h);
+    let l = layout(ui, view);
     ui.p().rect(full, BG);
     // the pictures, or the default background when the player has made none
     match show.frame() {
@@ -155,128 +292,363 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
                 }
             }
         }
-        _ => {
-            ui.p().gradient(
-                Rect::new(0.0, 0.0, w, h * 0.46),
-                Color::hex(0x172030),
-                Color::hex(0x5d7494),
-            );
-            ui.p().gradient(
-                Rect::new(0.0, h * 0.46, w, h * 0.54),
-                Color::hex(0x3d3f42),
-                Color::hex(0x1b1c1e),
-            );
-        }
+        _ => default_background(ui, w, h),
     }
-    // a veil under the text, darker towards the foot
-    ui.p().gradient(
-        Rect::new(0.0, h * 0.6, w, h * 0.4),
-        Color::BLACK.alpha(0.0),
-        Color::BLACK.alpha(0.55),
-    );
-    if let Some((tex, aspect)) = view.logo {
-        ui.image(Rect::new(40.0, 32.0, 260.0, 260.0 * aspect), tex, 0.0);
+    // the veil: the top darkened under the logo, the foot under the text
+    veil(ui, Rect::new(0.0, 0.0, w, h * 0.22), 0.55, 0.0);
+    veil(ui, Rect::new(0.0, h * 0.55, w, h * 0.45), 0.0, 0.78);
+
+    if let Some((tex, _)) = view.logo {
+        ui.image(l.logo, tex, 0.0);
     }
-    let vw = ui.width(view.version, 11.0 * TS, Weight::Regular);
-    text(
+    spaced(
         ui,
-        &view.version.to_uppercase(),
-        w - 41.0 - vw,
-        47.0,
+        view.version,
+        l.version.right(),
+        l.version.y + 7.0,
         11.0,
         Weight::Regular,
-        MUTED,
+        VERSION,
+        Align::Right,
+        1.0,
+        true,
     );
 
-    text(ui, view.heading, 40.0, h - 110.0, 15.0, Weight::Bold, FG);
-    text(
+    // the status block: what loads, how far, what is being done
+    let s = l.status;
+    let line = Line {
+        x: s.x,
+        max: s.w,
+        shadow: true,
+    };
+    line.draw(ui, view.heading, s.y + 9.0, 15.0, Weight::Bold, FG, false);
+    line.draw(
         ui,
         view.stage,
-        40.0,
-        h - 89.0,
-        13.0,
+        s.y + 29.5,
+        12.5,
         Weight::Regular,
-        Color::hex(0xc9ccd2),
+        SOFT,
+        true,
     );
-    let bar = Rect::new(40.0, h - 70.0, 640.0, 8.0);
-    ui.p().rect(bar, Color::hex(0x44464a));
+    ui.p().rect(l.bar, TRACK);
     let done = view.progress.clamp(0.0, 1.0);
-    ui.p()
-        .rect(Rect::new(bar.x, bar.y, bar.w * done, bar.h), ACCENT);
-    let pct = format!("{}%", (done * 100.0).round() as u32);
-    let pw = ui.width(&pct, 12.0 * TS, Weight::Regular);
-    text(
-        ui,
-        &pct,
-        bar.right() - pw,
-        h - 47.0,
-        12.0,
-        Weight::Regular,
-        MUTED,
-    );
-
-    let cards: Vec<&Card> = view.bus.iter().chain(view.map.iter()).collect();
-    if cards.is_empty() {
-        return;
+    if done > 0.0 {
+        ui.p().rect(
+            Rect::new(l.bar.x, l.bar.y, (l.bar.w * done).max(1.0), l.bar.h),
+            ACCENT,
+        );
     }
-    let p = Rect::new(
-        w - 440.0,
-        h - 40.0 - 37.0 - cards.len() as f32 * 115.0,
-        400.0,
-        37.0 + cards.len() as f32 * 115.0,
+    let pct = format!("{}%", (done * 100.0).round() as u32);
+    let pct_cy = s.bottom() - 7.25;
+    let pw = Line {
+        x: l.bar.right(),
+        max: s.w,
+        shadow: true,
+    }
+    .right(ui, &pct, pct_cy, 12.0, SOFT);
+    Line {
+        x: s.x,
+        max: (s.w - pw - 16.0).max(0.0),
+        shadow: true,
+    }
+    .draw(ui, view.activity, pct_cy, 12.0, Weight::Regular, SOFT, true);
+
+    // the card: the bus and the map being loaded
+    let Some(c) = l.card else {
+        return;
+    };
+    let cards: Vec<&Card> = view.bus.iter().chain(view.map.iter()).collect();
+    ui.solid(c);
+    ui.p().rect(c, CARD);
+    ui.p().rect(
+        Rect::new(c.x + 1.0, c.y + 1.0, c.w - 2.0, HEAD_H - 1.0),
+        CARD_HEAD,
     );
-    ui.solid(p);
-    ui.p().rect(p, PANEL.alpha(PANEL_ALPHA));
-    ui.p().rounded_border(p, 0.0, 1.0, LINE);
-    text(
-        ui,
-        "LOADING",
-        p.x + 18.0,
-        p.y + 18.0,
-        11.0,
-        Weight::Medium,
-        MUTED,
-    );
+    ui.p().rounded_border(c, 0.0, 1.0, LINE);
     ui.p()
-        .rect(Rect::new(p.x + 1.0, p.y + 35.0, p.w - 2.0, 1.0), LINE);
-    for (i, c) in cards.iter().enumerate() {
-        let y = p.y + 36.0 + i as f32 * 115.0;
+        .rect(Rect::new(c.x + 1.0, c.y + HEAD_H, c.w - 2.0, 1.0), LINE);
+    spaced(
+        ui,
+        &crate::tr("Loading"),
+        c.x + 1.0 + PAD_X,
+        c.y + 1.0 + (HEAD_H - 1.0) * 0.5,
+        11.0,
+        Weight::Bold,
+        MUTED,
+        Align::Left,
+        2.0,
+        false,
+    );
+    for (i, (card, b)) in cards.iter().zip(&l.blocks).enumerate() {
         if i > 0 {
-            ui.p().rect(Rect::new(p.x + 1.0, y, p.w - 2.0, 1.0), LINE);
+            ui.p()
+                .rect(Rect::new(c.x + 1.0, b.rect.y - 1.0, c.w - 2.0, 1.0), LINE);
         }
-        ui.p()
-            .rect(Rect::new(p.x + 19.0, y + 15.0, 96.0, 60.0), PANEL_2);
-        let tx = p.x + 129.0;
-        text(ui, c.title, tx, y + 26.0, 19.0, Weight::Bold, FG);
-        text(ui, c.sub, tx, y + 49.0, 12.0, Weight::Regular, ACCENT);
-        let (w, px) = (p.w - 129.0 - 16.0, 13.0 * TS);
-        let text = fit_lines(ui, c.description, w, px, 2);
-        ui.paragraph(
-            &text,
-            Vec2::new(tx, y + 72.0),
-            w,
-            px,
-            Weight::Regular,
-            MUTED,
+        ui.p().rect(b.thumb, THUMB);
+        ui.icon(card.icon, b.thumb.center(), 26.0, MUTED.alpha(0.8));
+        let t = Line {
+            x: b.text.x,
+            max: b.text.w,
+            shadow: false,
+        };
+        let mut y = b.text.y;
+        t.draw(
+            ui,
+            card.title,
+            y + TITLE_LH * 0.5,
+            19.0,
+            Weight::Bold,
+            FG,
+            false,
+        );
+        y += TITLE_LH;
+        if !card.sub.trim().is_empty() {
+            y += 4.0;
+            t.draw(
+                ui,
+                card.sub,
+                y + SUB_LH * 0.5,
+                12.0,
+                Weight::Regular,
+                ACCENT,
+                false,
+            );
+            y += SUB_LH;
+        }
+        if !b.lines.is_empty() {
+            y += 6.0;
+        }
+        for (k, s) in b.lines.iter().enumerate() {
+            let cy = y + DESC_LH * (k as f32 + 0.5);
+            t.draw(ui, s, cy, DESC_PX, Weight::Regular, BODY, false);
+        }
+    }
+}
+
+/// The opacity of black that darkens a colour here as much as black at `a` does in sRGB
+/// (the concept's): what is left of the colour, (1 - a) in sRGB, is about (1 - a)^2.2 in
+/// linear light.
+pub fn over_black(a: f32) -> f32 {
+    1.0 - (1.0 - a.clamp(0.0, 1.0)).powf(2.2)
+}
+
+/// A black veil over `r`, from the concept's opacity `top` to `bottom` (a few bands, so the
+/// ramp darkens as the concept's does and not all at its dark end).
+fn veil(ui: &mut Ui, r: Rect, top: f32, bottom: f32) {
+    const BANDS: usize = 4;
+    let p = ui.p();
+    for k in 0..BANDS {
+        let (t0, t1) = (k as f32 / BANDS as f32, (k + 1) as f32 / BANDS as f32);
+        let a = |t: f32| Color::BLACK.alpha(over_black(top + (bottom - top) * t));
+        p.gradient(
+            Rect::new(r.x, r.y + r.h * t0, r.w, r.h * (t1 - t0)),
+            a(t0),
+            a(t1),
         );
     }
 }
 
-/// `text` cut at a word, with an ellipsis, so that it wraps to at most `lines` lines of `width`.
-fn fit_lines(ui: &Ui, text: &str, width: f32, px: f32, lines: usize) -> String {
-    let max_h = px * 1.38 * lines as f32 + 0.5;
-    if ui.paragraph_height(text, width, px, Weight::Regular) <= max_h {
-        return text.to_string();
+/// The background when the player has no screenshot of the map: the concept's evening sky
+/// over a road running to the horizon.
+fn default_background(ui: &mut Ui, w: f32, h: f32) {
+    let horizon = h * 0.46;
+    let p = ui.p();
+    p.gradient(
+        Rect::new(0.0, 0.0, w, horizon),
+        Color::hex(0x2b3a4d),
+        Color::hex(0x5d7490),
+    );
+    p.gradient(
+        Rect::new(0.0, horizon, w, h - horizon),
+        Color::hex(0x3a3d40),
+        Color::hex(0x1c1e20),
+    );
+    let road = Color::hex(0x4a4d50);
+    let (far, near) = (road.alpha(0.55), road.alpha(0.4));
+    let (tl, tr) = (Vec2::new(w * 0.315, horizon), Vec2::new(w * 0.696, horizon));
+    let (bl, br) = (Vec2::new(w * 0.10, h), Vec2::new(w * 0.80, h));
+    p.tri(tl, tr, br, far, far, near);
+    p.tri(tl, br, bl, far, near, near);
+}
+
+/// Where a line of text goes: its left (or right) edge, how wide it may be, and whether a
+/// soft shadow lifts it off the picture (the text straight over a photo).
+struct Line {
+    x: f32,
+    max: f32,
+    shadow: bool,
+}
+
+impl Line {
+    /// `s` left at `x`, centred on `cy`, cut with an ellipsis to `max`; translated when
+    /// `translate` (the interface's own text). Returns its width.
+    #[allow(clippy::too_many_arguments)]
+    fn draw(
+        &self,
+        ui: &mut Ui,
+        s: &str,
+        cy: f32,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        translate: bool,
+    ) -> f32 {
+        self.put(ui, s, cy, px, weight, c, translate, Align::Left)
     }
-    let mut words: Vec<&str> = text.split_whitespace().collect();
-    while !words.is_empty() {
-        words.pop();
-        let cut = format!("{}\u{2026}", words.join(" "));
-        if ui.paragraph_height(&cut, width, px, Weight::Regular) <= max_h {
-            return cut;
+
+    /// `s` (a number: never translated) ending at `x`. Returns its width.
+    fn right(&self, ui: &mut Ui, s: &str, cy: f32, px: f32, c: Color) -> f32 {
+        self.put(ui, s, cy, px, Weight::Regular, c, false, Align::Right)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn put(
+        &self,
+        ui: &mut Ui,
+        s: &str,
+        cy: f32,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        translate: bool,
+        align: Align,
+    ) -> f32 {
+        let px = px * TS;
+        let s = if translate {
+            crate::tr(s)
+        } else {
+            std::borrow::Cow::Borrowed(s)
+        };
+        let s = fit(ui, &s, px, weight, self.max);
+        if s.is_empty() {
+            return 0.0;
+        }
+        let base = cy + ui.fonts.cap_height(px, weight) * 0.5;
+        if self.shadow {
+            ui.text_as_is(&s, Vec2::new(self.x, base + 1.0), px, weight, SHADOW, align);
+        }
+        ui.text_as_is(&s, Vec2::new(self.x, base), px, weight, c, align)
+    }
+}
+
+/// Small letter-spaced capitals centred on `cy` (the version, the card's header), drawn as
+/// `s` is (the caller translates the interface's own words).
+#[allow(clippy::too_many_arguments)]
+fn spaced(
+    ui: &mut Ui,
+    s: &str,
+    x: f32,
+    cy: f32,
+    px: f32,
+    weight: Weight,
+    c: Color,
+    align: Align,
+    tracking: f32,
+    shadow: bool,
+) {
+    let px = px * TS;
+    let s = s.to_uppercase();
+    let base = cy + ui.fonts.cap_height(px, weight) * 0.5;
+    if shadow {
+        let at = Vec2::new(x, base + 1.0);
+        let shade = SHADOW;
+        ui.text_spaced(&s, at, px, weight, shade, align, tracking);
+    }
+    ui.text_spaced(&s, Vec2::new(x, base), px, weight, c, align, tracking);
+}
+
+/// A picture drawn on black (the wordmark: white and orange letters on a black field) made
+/// see-through: each pixel's brightest channel becomes its opacity and its colour is what it
+/// was before the black was under it. Over a photo the letters then stand alone, with no
+/// black box round them; over black it looks as it did.
+pub fn unmatte_black(rgba: &mut [u8]) {
+    // (the faint noise of the field stays clear, the letters' own colours stay whole)
+    const LO: u32 = 12;
+    const HI: u32 = 240;
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[0].max(px[1]).max(px[2]) as u32;
+        if a <= LO {
+            px[3] = 0;
+            continue;
+        }
+        for c in &mut px[..3] {
+            *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+        }
+        let k = ((a - LO) * 255 / (HI - LO)).min(255);
+        px[3] = ((px[3] as u32 * k + 127) / 255) as u8;
+    }
+}
+
+/// The longest start of `s` that fits in `max`, with an ellipsis when cut (measured as it
+/// is: `s` is already in the language shown).
+fn fit(ui: &Ui, s: &str, px: f32, weight: Weight, max: f32) -> String {
+    let width = |t: &str| ui.fonts.width_as_is(t, px, weight);
+    if width(s) <= max {
+        return s.to_string();
+    }
+    let chars: Vec<char> = s.chars().collect();
+    let cut = |n: usize| chars[..n].iter().collect::<String>().trim_end().to_string() + "\u{2026}";
+    let (mut lo, mut hi) = (0usize, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        if width(&cut(mid)) <= max {
+            lo = mid;
+        } else {
+            hi = mid - 1;
         }
     }
-    String::new()
+    if lo == 0 {
+        String::new()
+    } else {
+        cut(lo)
+    }
+}
+
+/// `text` broken at spaces into lines of at most `width`, at most `lines` of them; when it
+/// goes on, the last line is cut at a word with an ellipsis.
+fn wrap(ui: &Ui, text: &str, width: f32, px: f32, lines: usize) -> Vec<String> {
+    let w = |t: &str| ui.fonts.width_as_is(t, px, Weight::Regular);
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut i = 0;
+    while i < words.len() && out.len() < lines {
+        let t = if line.is_empty() {
+            words[i].to_string()
+        } else {
+            format!("{line} {}", words[i])
+        };
+        if line.is_empty() || w(&t) <= width {
+            line = t;
+            i += 1;
+        } else {
+            out.push(std::mem::take(&mut line));
+        }
+    }
+    if out.len() < lines && !line.is_empty() {
+        out.push(line);
+    } else if i < words.len() || !line.is_empty() {
+        // more than fits: the last line ends with an ellipsis, at a word when one fits
+        if let Some(last) = out.last_mut() {
+            let mut ws: Vec<&str> = last.split(' ').collect();
+            loop {
+                let cut = format!("{}\u{2026}", ws.join(" "));
+                if w(&cut) <= width || ws.len() <= 1 {
+                    *last = cut;
+                    break;
+                }
+                ws.pop();
+            }
+        }
+    }
+    // (a single word wider than the column is cut inside)
+    for l in &mut out {
+        if w(l) > width {
+            *l = fit(ui, l, px, Weight::Regular, width);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -287,6 +659,24 @@ mod tests {
         let mut s = Slideshow::new(count);
         s.update(t);
         s.frame()
+    }
+
+    #[test]
+    fn each_picture_is_held_six_seconds_and_fades_over_three_and_a_half() {
+        assert_eq!(HOLD_SECONDS, 6.0);
+        assert_eq!(FADE_SECONDS, 3.5);
+    }
+
+    #[test]
+    fn pictures_arriving_keep_the_show_going() {
+        let mut show = Slideshow::new(1);
+        show.update(100.0);
+        assert_eq!(show.frame().unwrap().current, 0);
+        show.set_count(3);
+        show.update(HOLD_SECONDS + FADE_SECONDS + 1.0);
+        assert_eq!(show.frame().unwrap().current, 1);
+        show.set_count(0);
+        assert!(show.frame().is_none());
     }
 
     #[test]
@@ -317,5 +707,211 @@ mod tests {
         assert_eq!((last.current, last.next), (2, Some(0)));
         let wrapped = at(3, 3.0 * slot + 0.5).unwrap();
         assert_eq!(wrapped.current, 0);
+    }
+
+    const LONG: &str = "A very long description that an author wrote over many lines, with \
+                        the history of the bus, its engine, its gearbox and the people who \
+                        made it, far more than the card has room for.";
+
+    fn view<'a>(long: bool) -> View<'a> {
+        View {
+            version: "example version",
+            heading: if long {
+                "An example map with a very long name indeed \u{b7} Line 50 \u{b7} 08:00 \
+                 and more words that do not fit"
+            } else {
+                "Example map \u{b7} Line 50 \u{b7} 08:00"
+            },
+            stage: "Loading map tiles (first area) \u{b7} 62 of 100",
+            activity: "Preparing the world",
+            progress: 0.62,
+            logo: Some((1, 305.0 / 2188.0)),
+            bus: Some(Card {
+                title: if long {
+                    "Example bus A with a name far too long for the card"
+                } else {
+                    "Example bus A"
+                },
+                sub: "Example Maker \u{b7} v1.2 \u{b7} Default paint",
+                description: if long { LONG } else { "Author's description." },
+                icon: "directions_bus",
+            }),
+            map: Some(Card {
+                title: "Example map",
+                sub: "Example City",
+                description: LONG,
+                icon: "map",
+            }),
+            slides: &[],
+        }
+    }
+
+    fn inside(r: Rect, outer: Rect) -> bool {
+        r.x >= outer.x - 0.01
+            && r.y >= outer.y - 0.01
+            && r.right() <= outer.right() + 0.01
+            && r.bottom() <= outer.bottom() + 0.01
+    }
+
+    fn overlap(a: Rect, b: Rect) -> bool {
+        a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
+    }
+
+    /// The design sizes the screen is drawn at: 1920x1080, 1672x941 and 2560x1080 at the
+    /// game's scale (the 1672x941 design fitted to the window), and half as large again.
+    fn sizes() -> Vec<Vec2> {
+        let mut out = Vec::new();
+        for (w, h) in [(1920.0f32, 1080.0f32), (1672.0, 941.0), (2560.0, 1080.0)] {
+            let natural = (w / 1672.0).min(h / 941.0);
+            for k in [1.0, 1.5] {
+                out.push(Vec2::new(w, h) / (natural * k));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn nothing_overlaps_or_leaves_the_screen_at_the_three_sizes_and_both_scales() {
+        let mut ui = Ui::new();
+        for size in sizes() {
+            ui.begin(size, 1.0, 0.0);
+            for long in [false, true] {
+                let v = view(long);
+                let l = layout(&ui, &v);
+                let screen = Rect::new(0.0, 0.0, size.x, size.y).inset(MARGIN - 0.01);
+                let card = l.card.expect("a card");
+                for r in [l.status, l.bar, card, l.version] {
+                    assert!(inside(r, screen), "{r:?} leaves {size:?}");
+                }
+                assert!(
+                    !overlap(l.status, card),
+                    "status under the card at {size:?}"
+                );
+                assert!(card.x - l.status.right() >= MARGIN - 0.01, "{size:?}");
+                assert!(
+                    !overlap(l.logo, card) && l.logo.bottom() < card.y,
+                    "{size:?}"
+                );
+                assert!(inside(l.bar, l.status));
+                // every block inside the card, one under the other, its text in its box
+                let mut y = card.y + HEAD_H;
+                for b in &l.blocks {
+                    assert!(inside(b.rect, card), "{b:?}");
+                    assert!(b.rect.y >= y, "blocks overlap at {size:?}");
+                    y = b.rect.bottom();
+                    assert!(inside(b.thumb, b.rect) && inside(b.text, b.rect), "{b:?}");
+                    assert!(!overlap(b.thumb, b.text));
+                    assert!(b.lines.len() <= DESC_LINES);
+                    for s in &b.lines {
+                        let w = ui.fonts.width_as_is(s, DESC_PX * TS, Weight::Regular);
+                        assert!(w <= b.text.w + 0.01, "{s:?} is {w} wide in {}", b.text.w);
+                    }
+                }
+                assert!(y <= card.bottom() + 0.01);
+            }
+        }
+    }
+
+    #[test]
+    fn the_status_block_keeps_the_concept_width_unless_the_card_needs_the_room() {
+        let mut ui = Ui::new();
+        ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.0);
+        let l = layout(&ui, &view(false));
+        assert_eq!(l.status.w, STATUS_W);
+        assert_eq!(l.card.unwrap().w, CARD_W);
+        assert_eq!(l.card.unwrap().right(), 1672.0 - MARGIN);
+        // the concept's foot: the bar 8 high, its bottom 61.5 above the screen's foot
+        assert_eq!((l.bar.h, l.bar.bottom()), (8.0, 941.0 - 61.5));
+        ui.begin(Vec2::new(1115.0, 627.0), 1.0, 0.0);
+        let l = layout(&ui, &view(false));
+        assert!(l.status.w < STATUS_W);
+        // with no card the block keeps its width on any screen
+        let mut v = view(false);
+        v.bus = None;
+        v.map = None;
+        let l = layout(&ui, &v);
+        assert_eq!((l.status.w, l.card), (STATUS_W, None));
+    }
+
+    #[test]
+    fn a_long_description_keeps_to_two_lines_and_ends_with_an_ellipsis() {
+        let ui = Ui::new();
+        let lines = wrap(&ui, LONG, 252.0, DESC_PX * TS, 2);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].ends_with('\u{2026}'), "{lines:?}");
+        assert_eq!(wrap(&ui, "short text", 252.0, 14.0, 2), vec!["short text"]);
+        assert!(wrap(&ui, "   ", 252.0, 14.0, 2).is_empty());
+        let one = wrap(&ui, &"x".repeat(200), 100.0, 14.0, 2);
+        assert_eq!(one.len(), 1);
+        assert!(ui.fonts.width_as_is(&one[0], 14.0, Weight::Regular) <= 100.0);
+    }
+
+    #[test]
+    fn a_card_with_only_a_title_is_shorter_than_one_with_text() {
+        let mut ui = Ui::new();
+        ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.0);
+        let mut v = view(false);
+        v.bus = Some(Card {
+            title: "MAN_SD200",
+            sub: "",
+            description: "",
+            icon: "directions_bus",
+        });
+        let l = layout(&ui, &v);
+        assert_eq!(l.blocks[0].rect.h, PAD_Y * 2.0 + THUMB_H);
+        // the concept's block with its sub and two lines of text: 114 high
+        assert_eq!(l.blocks[1].rect.h, 114.0);
+    }
+
+    #[test]
+    fn the_logo_loses_its_black_field_and_keeps_its_colours() {
+        let mut px = vec![
+            0, 0, 0, 255, // the field
+            255, 255, 255, 255, // a white letter
+            240, 120, 40, 255, // an orange one
+            120, 60, 20, 255, // the orange half over black (an edge)
+        ];
+        unmatte_black(&mut px);
+        assert_eq!(px[3], 0);
+        assert_eq!(&px[4..8], &[255, 255, 255, 255]);
+        assert_eq!(&px[8..12], &[255, 128, 43, 255]);
+        assert_eq!(&px[12..15], &[255, 128, 43]);
+        assert_eq!(px[15], 120);
+        // the field's faint noise is clear too
+        let mut noise = vec![9, 3, 0, 255];
+        unmatte_black(&mut noise);
+        assert_eq!(noise[3], 0);
+    }
+
+    #[test]
+    fn the_screen_draws_with_and_without_pictures() {
+        let mut ui = Ui::new();
+        for slides in [
+            &[][..],
+            &[
+                Slide {
+                    tex: 3,
+                    aspect: 1.5,
+                },
+                Slide {
+                    tex: 4,
+                    aspect: 1.5,
+                },
+            ][..],
+        ] {
+            ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.0);
+            let mut v = view(true);
+            v.slides = slides;
+            let mut show = Slideshow::new(slides.len());
+            show.update(HOLD_SECONDS + 1.0);
+            draw(&mut ui, &v, &show);
+            let (layers, verts, ranges) = ui.finish();
+            assert!(!verts.is_empty() && !layers.is_empty());
+            let textures: Vec<usize> = ranges.iter().map(|(_, t)| *t).collect();
+            // the pictures are drawn only when there are some (the fade draws both)
+            assert_eq!(textures.contains(&3), !slides.is_empty());
+            assert_eq!(textures.contains(&4), !slides.is_empty());
+            assert!(textures.contains(&1), "the logo");
+        }
     }
 }
