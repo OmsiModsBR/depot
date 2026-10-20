@@ -250,6 +250,9 @@ struct Overlay {
     format: wgpu::TextureFormat,
     ui: Ui,
     gpu: Option<Gpu>,
+    /// Handed to the Gpu when it is made: a second renderer draws the same ("DirectX9
+    /// (D3D9Ex)").
+    mirror: Option<omsi_ui::UiMirror>,
     logo: Option<(usize, f32)>,
     last: Instant,
     /// The loading screen's pictures in the GPU, and how far its slideshow is.
@@ -258,12 +261,13 @@ struct Overlay {
 }
 
 impl Overlay {
-    fn new(shared: Shared, format: wgpu::TextureFormat) -> Overlay {
+    fn new(shared: Shared, format: wgpu::TextureFormat, mirror: Option<omsi_ui::UiMirror>) -> Overlay {
         Overlay {
             shared,
             format,
             ui: Ui::new(),
             gpu: None,
+            mirror,
             logo: None,
             last: Instant::now(),
             slide_tex: Vec::new(),
@@ -309,9 +313,12 @@ impl Overlay {
         self.last = now;
         let format = self.format;
         let atlas = self.ui.atlas.size;
-        let gpu = self
-            .gpu
-            .get_or_insert_with(|| Gpu::new(device, format, 1, atlas));
+        let mirror = &mut self.mirror;
+        let gpu = self.gpu.get_or_insert_with(|| {
+            let mut gpu = Gpu::new(device, format, 1, atlas);
+            gpu.set_mirror(mirror.take());
+            gpu
+        });
         if self.logo.is_none() {
             if let Ok(img) = image::load_from_memory(LOGO) {
                 let img = img.to_rgba8();
@@ -402,12 +409,20 @@ pub(crate) struct NewUi {
 }
 
 impl NewUi {
-    /// Hand the renderer the overlay (once).
-    pub(crate) fn install(&mut self, renderer: &mut omsi_render::Renderer) {
+    pub(crate) fn installed(&self) -> bool {
+        self.installed
+    }
+
+    /// Hand the renderer the overlay (once), with the mirror its draws also go to.
+    pub(crate) fn install(
+        &mut self,
+        renderer: &mut omsi_render::Renderer,
+        mirror: Option<omsi_ui::UiMirror>,
+    ) {
         if self.installed {
             return;
         }
-        let mut overlay = Overlay::new(self.shared.clone(), renderer.format());
+        let mut overlay = Overlay::new(self.shared.clone(), renderer.format(), mirror);
         renderer.set_overlay_hook(Some(Box::new(move |device, queue, encoder, view, size| {
             overlay.draw(device, queue, encoder, view, size)
         })));
@@ -490,8 +505,9 @@ impl App {
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
+        let mirror = (!self.new_ui.installed()).then(|| self.d3d9_ui_mirror()).flatten();
         if let Some(r) = self.renderer.as_mut() {
-            self.new_ui.install(r);
+            self.new_ui.install(r, mirror);
         }
         let menu = self.new_menu_active().then(|| self.new_menu_frame());
         // (the Esc menu hides the bar and takes the keys back)
@@ -681,6 +697,79 @@ mod tests {
 
     /// The overlay itself, on a real adapter: the column is drawn over a picture and nothing
     /// is drawn while no menu is open.
+    /// Under "DirectX9 (D3D9Ex)" the overlay's draws go to the mirror too: the whole atlas
+    /// first, then the vertices and the draw, and nothing while no screen is shown.
+    #[test]
+    fn the_overlay_hands_its_draws_to_the_mirror() {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: 640,
+                height: 360,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = target.create_view(&Default::default());
+        let seen: Arc<Mutex<Vec<String>>> = Default::default();
+        let log = seen.clone();
+        let mirror: omsi_ui::UiMirror = Box::new(move |e| {
+            let what = match e {
+                omsi_ui::UiEvent::Image { .. } => "image".to_string(),
+                omsi_ui::UiEvent::Free(_) => "free".to_string(),
+                omsi_ui::UiEvent::Atlas { size, region, .. } => {
+                    format!("atlas {}", region == [0, 0, size, size])
+                }
+                omsi_ui::UiEvent::Vertices { vertices, .. } => {
+                    format!("vertices {}", !vertices.is_empty())
+                }
+                omsi_ui::UiEvent::Render { size, draws, .. } => {
+                    format!("render {size:?} {}", !draws.is_empty())
+                }
+                omsi_ui::UiEvent::Gone => "gone".to_string(),
+            };
+            log.lock().unwrap().push(what);
+        });
+        let shared: Shared = Default::default();
+        let mut overlay = Overlay::new(shared.clone(), format, Some(mirror));
+        let draw = |overlay: &mut Overlay| {
+            let mut enc = device.create_command_encoder(&Default::default());
+            overlay.draw(&device, &queue, &mut enc, &view, (640, 360));
+            queue.submit([enc.finish()]);
+        };
+        draw(&mut overlay);
+        assert!(seen.lock().unwrap().is_empty(), "no screen, nothing drawn");
+        shared.lock().unwrap().loading = Some(crate::new_ui_loading::LoadingFrame {
+            heading: "Example map".into(),
+            progress: 0.5,
+            ..Default::default()
+        });
+        draw(&mut overlay);
+        let events = seen.lock().unwrap().clone();
+        let at = |what: &str| events.iter().position(|e| e == what);
+        let (atlas, vertices, render) = (
+            at("atlas true").expect("the whole atlas"),
+            at("vertices true").expect("the vertices"),
+            at("render (640, 360) true").expect("the draw"),
+        );
+        assert!(atlas < render && vertices < render, "{events:?}");
+        drop(overlay);
+        assert_eq!(seen.lock().unwrap().last().map(String::as_str), Some("gone"));
+    }
+
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
@@ -709,7 +798,7 @@ mod tests {
         });
         let view = tex.create_view(&Default::default());
         let shared: Shared = Default::default();
-        let mut overlay = Overlay::new(shared.clone(), format);
+        let mut overlay = Overlay::new(shared.clone(), format, None);
         let clear = |enc: &mut wgpu::CommandEncoder| {
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

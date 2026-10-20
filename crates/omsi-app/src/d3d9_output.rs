@@ -4,9 +4,17 @@
 //! to the Direct3D 9Ex device of `omsi-render-d3d9`, which draws them into the window and
 //! presents them.
 //!
-//! What the plan does not carry yet is not drawn in this mode: the UI, the HUD's pictures,
-//! the sky, shadows, lamps and the OMSI material maps (see the crate's README).
+//! A window picture is drawn in three steps into one Direct3D frame: the plan sink draws the
+//! scene and the HUD's pictures over it and leaves the frame open; the new interface's
+//! `omsi-ui` draws, mirrored ([`D3d9Output::ui_mirror`]), go over that while the renderer
+//! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
+//! frame is done.
+//!
+//! What the plan does not carry yet is not drawn in this mode: the sky, shadows, lamps, the
+//! OMSI material maps, and pictures drawn on the GPU into textures (maps, mirrors; see the
+//! crate's README).
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
@@ -14,8 +22,9 @@ use omsi_render::{FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Sce
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
     BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLight,
-    SceneMaterial, SceneTexture, TexFormat,
+    SceneMaterial, SceneTexture, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
+use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
@@ -25,6 +34,11 @@ struct Inner {
     size: (u32, u32),
     main: Vec<SceneBatch>,
     cab: Vec<SceneBatch>,
+    overlays: Vec<UiOverlay>,
+    layers: Vec<UiLayer>,
+    draws: Vec<UiDraw>,
+    /// A frame is begun and waits for [`D3d9Output::present`].
+    open: bool,
     /// Problems already logged (each kind once, not every frame or every asset).
     warned: hashbrown::HashSet<&'static str>,
     /// The device draws into this window: it lives as long as the device.
@@ -103,6 +117,13 @@ impl Inner {
     }
 
     fn frame(&mut self, plan: &FramePlan, scene: &Scene) {
+        // (a frame the game never presented - a second picture in one game frame - is shown
+        // first, so the device is not left inside a scene)
+        self.present();
+        if let Err(e) = self.begin(plan.clear) {
+            self.failed(e);
+            return;
+        }
         let batch = |b: &omsi_render::PlanBatch| SceneBatch {
             kind: match b.kind {
                 PlanKind::Opaque => DrawKind::Opaque,
@@ -154,22 +175,20 @@ impl Inner {
                 uniform: m.uniform_vectors(),
             })
         };
-        let (width, height) = self.size;
+        self.overlays.clear();
+        self.overlays.extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
+            texture,
+            rect,
+            premultiplied: scene.premultiplied.contains(&texture),
+            transposed: scene.transposed.contains(&texture),
+        }));
         let device = &mut self.device;
         let drawn = device
-            .begin_frame(&FrameDesc {
-                width,
-                height,
-                clear_rgba: plan.clear,
-            })
-            .and_then(|_| {
-                let scene_drawn = device.draw_scene(&frame, material);
-                // the frame is ended (and shown) even when the scene failed
-                let ended = device.end_frame().map(drop);
-                scene_drawn.and(ended)
-            });
+            .draw_scene(&frame, material)
+            .and_then(|_| device.draw_overlays(&self.overlays));
         if let Err(e) = drawn {
-            self.failed(e);
+            // (the frame stays open: what follows is still drawn, and it is shown)
+            self.warn_once("the scene could not be drawn", e);
         }
     }
 
@@ -179,15 +198,83 @@ impl Inner {
             width,
             height,
             clear_rgba: clear,
-        })
+        })?;
+        self.open = true;
+        Ok(())
     }
 
-    fn clear(&mut self, rgb: [f32; 3]) {
-        let shown = self
-            .begin([rgb[0], rgb[1], rgb[2], 1.0])
-            .and_then(|_| self.device.end_frame().map(drop));
-        if let Err(e) = shown {
+    /// Ends the open frame and shows it.
+    fn present(&mut self) {
+        if !std::mem::take(&mut self.open) {
+            return;
+        }
+        if let Err(e) = self.device.end_frame() {
             self.failed(e);
+        }
+    }
+
+    fn ui(&mut self, owner: usize, event: UiEvent<'_>) {
+        let done = match event {
+            UiEvent::Image {
+                id,
+                width,
+                height,
+                rgba,
+            } => self.device.ui_image(owner, id, width, height, rgba),
+            UiEvent::Free(id) => {
+                self.device.ui_free(owner, id);
+                Ok(())
+            }
+            UiEvent::Atlas { size, rgba, region } => {
+                self.device.ui_atlas(owner, size, rgba, region)
+            }
+            UiEvent::Vertices { buffer, vertices } => {
+                self.device
+                    .ui_vertices(owner, buffer, bytemuck::cast_slice(vertices))
+            }
+            UiEvent::Render {
+                size,
+                clear,
+                layers,
+                draws,
+            } => {
+                if !self.open {
+                    // (drawn outside a window picture: nothing to draw into)
+                    return;
+                }
+                self.layers.clear();
+                self.layers.extend(layers.iter().map(|l| UiLayer {
+                    view_proj: l.view_proj.to_cols_array_2d(),
+                    viewport: l.viewport,
+                    clip: l.clip,
+                    radius: l.radius,
+                    opacity: l.opacity,
+                    px_scale: l.px_scale,
+                }));
+                self.draws.clear();
+                self.draws.extend(draws.iter().map(|d| UiDraw {
+                    buffer: d.buffer,
+                    range: d.range.clone(),
+                    layer: d.layer,
+                    texture: d.texture,
+                }));
+                self.device.draw_ui(
+                    owner,
+                    &UiFrame {
+                        size,
+                        clear,
+                        layers: &self.layers,
+                        draws: &self.draws,
+                    },
+                )
+            }
+            UiEvent::Gone => {
+                self.device.ui_gone(owner);
+                Ok(())
+            }
+        };
+        if let Err(e) = done {
+            self.warn_once("the interface could not be drawn", e);
         }
     }
 
@@ -241,6 +328,10 @@ impl D3d9Output {
             size: (w, h),
             main: Vec::new(),
             cab: Vec::new(),
+            overlays: Vec::new(),
+            layers: Vec::new(),
+            draws: Vec::new(),
+            open: false,
             warned: Default::default(),
             _window: window.clone(),
         }));
@@ -291,9 +382,22 @@ impl D3d9Output {
         }
     }
 
-    /// Shows the window cleared to `rgb` (the screens this renderer does not draw yet: the
-    /// loading screen, the menus).
-    pub(crate) fn present_clear(&self, rgb: [f32; 3]) {
-        self.lock().clear(rgb);
+    /// Ends and shows the frame the renderer's picture began (none: nothing happens).
+    pub(crate) fn present(&self) {
+        self.lock().present();
+    }
+
+    /// A mirror for an `omsi-ui` Gpu that draws over the window's picture: its pictures,
+    /// vertex lists and draws go to this device too, under an owner of their own.
+    pub(crate) fn ui_mirror(&self) -> omsi_ui::UiMirror {
+        static OWNERS: AtomicUsize = AtomicUsize::new(1);
+        let owner = OWNERS.fetch_add(1, Ordering::Relaxed);
+        let inner = self.inner.clone();
+        Box::new(move |event| {
+            inner
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .ui(owner, event);
+        })
     }
 }
