@@ -706,6 +706,8 @@ impl App {
                         700.0,
                     ));
                     self.world = Some(w);
+                    // (a new drive: its loading screen shows its own map's screenshots and bus)
+                    self.new_ui.reset_loading();
                     self.starting = Some(cam);
                 }
                 Err(e) => {
@@ -1013,7 +1015,7 @@ impl App {
         };
         let Some((done, total)) = progress else {
             // (the loading screen of the new interface is over)
-            self.new_ui.set_loading(None);
+            self.new_ui.reset_loading();
             let w = self.world.clone().expect("world");
             log::info!(
                 "map ready after {:.2} s: {} tiles loaded",

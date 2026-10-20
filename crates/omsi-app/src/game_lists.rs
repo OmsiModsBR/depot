@@ -151,7 +151,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
 /// (`SetLineTo`), else its IBIS's line number.
-fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
+pub(crate) fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
     [v.str_var("Matrix_Nr"), v.str_var("SetLineTo")]
         .into_iter()
         .map(|s| s.trim().to_string())
@@ -640,6 +640,26 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     out
 }
 
+/// A tour of line `line` as the line's preview shows it: "Tour 3  ›  Terminus" (where the
+/// trip it has from the game's time `now` on goes) and the time that trip leaves.
+pub(crate) fn tour_preview(sch: &crate::schedule::Schedule, line: &str, t: &omsi_timetable::Tour, now: f64) -> (String, String) {
+    let tr = |t: &str| omsi_ui::tr(t).into_owned();
+    let hm = |m: f32| format!("{:02}:{:02}", (m / 60.0) as i32 % 24, (m % 60.0) as i32);
+    let terminus = |name: &str| sch.data.trips.iter().find(|x| x.name.eq_ignore_ascii_case(name)).map(|x| x.terminus.trim().to_string()).unwrap_or_default();
+    // (the trip and the time the tour has from the game's time on)
+    let next = sch.tour_stops_from(line, &t.number, now).first().cloned();
+    let end = match next.as_ref() {
+        Some(n) => tour_trip_name(sch, t, n.0).map(|name| terminus(&name)).unwrap_or_default(),
+        None => t.trips.first().map(|tt| terminus(&tt.trip)).unwrap_or_default(),
+    };
+    let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
+    let when = match next {
+        Some(n) => hm((n.3 / 60.0) as f32),
+        None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
+    };
+    (what, when)
+}
+
 /// What the open list tells the interface besides its lines: the layout it wants, its title
 /// and the small line above it, and - for lines and tours - the timetable of the chosen one.
 pub(crate) fn menu_extras(
@@ -683,24 +703,8 @@ pub(crate) fn menu_extras(
         ListKind::Lines => {
             let preview = action.strip_prefix("line ").and_then(|name| {
                 let line = schedule?.data.lines.iter().find(|l| l.name == name)?;
-                let rows = sorted_tours(line)
-                    .into_iter()
-                    .filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now)))
-                    .map(|t| {
-                        // (the trip and the time the tour has from the game's time on)
-                        let next = schedule.and_then(|s| s.tour_stops_from(&line.name, &t.number, now).first().cloned());
-                        let end = match (schedule, next.as_ref()) {
-                            (Some(s), Some(n)) => tour_trip_name(s, t, n.0).map(|name| trip_of(&name).1).unwrap_or_default(),
-                            _ => t.trips.first().map(|tt| trip_of(&tt.trip).1).unwrap_or_default(),
-                        };
-                        let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
-                        let when = match next {
-                            Some(n) => hm((n.3 / 60.0) as f32),
-                            None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
-                        };
-                        (what, when)
-                    })
-                    .collect();
+                let sch = schedule?;
+                let rows = sorted_tours(line).into_iter().filter(|t| tour_listed(sch, &line.name, t, now)).map(|t| tour_preview(sch, &line.name, t, now)).collect();
                 Some(Preview { title: format!("{} {}", tr("Line"), line.name), meta: format!("{} {}", line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count(), tr("tours")), rows, chosen: None, button: None, time: None })
             });
             (MenuKind::Lines, head("Line and tour..."), preview)
@@ -1042,6 +1046,7 @@ pub(crate) fn button(name: &str, text: &str, desc: &str, id: &str) -> (String, S
 /// a paper sign with its line in the window, the IBIS's stop list (#1317).
 pub(crate) fn end_duty(app: &mut App) {
     app.duty = None;
+    app.duty_changed();
     if let Some(p) = app.player.as_mut() {
         clear_timetable(&mut p.vehicle);
     }
@@ -2000,7 +2005,7 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
 
 /// The name of the weather in force (the file's name without its ending).
 /// The weather files (`Weather/*.owt`) of every content root, by name.
-fn weather_files() -> Vec<String> {
+pub(crate) fn weather_files() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
         .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("owt")).unwrap_or(false))
@@ -2167,7 +2172,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
     }
 }
 
-fn weather_name(app: &App) -> String {
+pub(crate) fn weather_name(app: &App) -> String {
     if app.weather.as_ref().is_some_and(|w| w.name == CUSTOM_WEATHER) {
         return CUSTOM_WEATHER.to_string();
     }
@@ -2910,7 +2915,7 @@ fn apply_pending(v: &mut serde_json::Value, pending: &[(String, String)]) {
 }
 
 /// The personnel files there are (content folder and OMSI 2's `Drivers`), by name.
-fn driver_names(app: &App) -> Vec<String> {
+pub(crate) fn driver_names(app: &App) -> Vec<String> {
     let mut names: Vec<String> = omsi_cfg::read_dir_merged("Drivers")
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("odr")))
@@ -2924,7 +2929,7 @@ fn driver_names(app: &App) -> Vec<String> {
 
 /// Go on with another driver: this run so far into the old personnel file, the rest into
 /// the new one.
-fn switch_driver(app: &mut App, name: &str) {
+pub(crate) fn switch_driver(app: &mut App, name: &str) {
     if app.career.path.is_some() {
         if let Err(e) = app.career.save() {
             log::warn!("writing the personnel file: {e}");
@@ -3015,6 +3020,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     }
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
+    app.duty_changed();
     app.duty = Some(d);
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
@@ -3039,6 +3045,7 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
             }
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
+            app.duty_changed();
             app.duty = Some(d);
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
