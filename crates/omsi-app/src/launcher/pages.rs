@@ -519,6 +519,12 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
     });
 }
 
+/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
+/// Graphics is Vanilla there, and fixed.
+fn d3d9_fixes_vanilla(s: &Value) -> bool {
+    cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9")
+}
+
 /// How the game looks and how fast it runs.
 fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Graphics");
@@ -551,10 +557,19 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
             }
         }
     }
-    sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+    // "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no graphics improvements to choose,
+    // Vanilla and fixed (the saved choice comes back with another graphics API)
+    let fixed = d3d9_fixes_vanilla(s);
+    if fixed {
+        let r = c.row();
+        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Graphics");
+        ui.label(Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), "Vanilla (as OMSI 2), fixed with DirectX9 (D3D9Ex)");
+    } else {
+        sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+    }
     // Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain
-    let classic = get(s, "graphics").as_str() == Some("vanilla");
-    let traced = get(s, "graphics").as_str() == Some("enhanced_plus");
+    let classic = fixed || get(s, "graphics").as_str() == Some("vanilla");
+    let traced = !fixed && get(s, "graphics").as_str() == Some("enhanced_plus");
     sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
     sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
     sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
@@ -2845,6 +2860,33 @@ mod settings_tests {
             }
             assert_eq!(ui.drawn.len(), names.len(), "the {} tab has a clickable thing more than the list names", SETTINGS_TABS[tab]);
         }
+    }
+
+    /// "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no Vanilla/Vanilla+/Enhanced to
+    /// choose and none of Enhanced's rows, and the saved choice stays for the other APIs.
+    #[test]
+    fn d3d9_hides_the_graphics_choice_and_keeps_it_saved() {
+        let drawn = |s: &mut Value| {
+            let mut ui = Ui::new();
+            frame(&mut ui, 0, s, &mut outside());
+            ui
+        };
+        let mut s = all_rows();
+        assert_eq!(s["graphics"], json!("enhanced"));
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        assert!(ui.drawn.contains_key(&id_of("s-shadow")));
+
+        s["graphics_api"] = json!("d3d9");
+        let ui = drawn(&mut s);
+        assert_eq!(ui.drawn.contains_key(&id_of("s-graphics")), !cfg!(windows));
+        assert_eq!(ui.drawn.contains_key(&id_of("s-shadow")), !cfg!(windows));
+        assert_eq!(s["graphics"], json!("enhanced"));
+
+        s["graphics_api"] = json!("vulkan");
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        assert_eq!(s["graphics"], json!("enhanced"));
     }
 
     #[test]

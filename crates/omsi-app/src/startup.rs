@@ -285,7 +285,7 @@ pub(crate) fn d3d9_requested() -> bool {
     is_d3d9(&wanted) && !settings.vr_requested()
 }
 
-fn is_d3d9(name: &str) -> bool {
+pub(crate) fn is_d3d9(name: &str) -> bool {
     matches!(name.trim().to_ascii_lowercase().as_str(), "d3d9" | "d3d9ex" | "dx9")
 }
 

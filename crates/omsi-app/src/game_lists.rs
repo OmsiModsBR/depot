@@ -2368,7 +2368,12 @@ fn options_pages(app: &App) -> Vec<Page> {
         .collect();
     let graphics: Vec<(String, String)> = vec![
         preset_row(&file, "Quality preset", "Sets most of the graphics options at once"),
-        pick("graphics", "Graphics", later),
+        // ("DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: Vanilla, and nothing to choose)
+        if app.d3d9_active() {
+            Some((row("Graphics", 'i', &omsi_ui::tr("Vanilla (as OMSI 2)"), "Fixed with DirectX9 (D3D9Ex)", None), "noop".to_string()))
+        } else {
+            pick("graphics", "Graphics", later)
+        },
         pick("msaa", "Anti-aliasing", later),
         pick("render_scale", "Render scale", later),
         pick("anisotropy", "Anisotropic", later),

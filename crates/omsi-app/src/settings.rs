@@ -442,6 +442,9 @@ impl Settings {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
+        // "DirectX9 (D3D9Ex)" draws the picture as OMSI 2 does and no more: Vanilla, whatever
+        // the file says (it keeps the choice for the other graphics APIs)
+        s = s.locked_for_api();
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
         if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
@@ -772,6 +775,28 @@ impl Settings {
         }
     }
 
+    /// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9` or
+    /// OMSI_BACKEND=d3d9; Windows only, and not with VR, which takes DirectX 12).
+    pub fn d3d9_selected(&self) -> bool {
+        let wanted = omsi_cfg::flags::BACKEND.text().unwrap_or_else(|| self.graphics_api.clone());
+        cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
+    }
+
+    /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
+    fn locked_for_api(mut self) -> Self {
+        if self.d3d9_selected() {
+            self.lock_vanilla();
+        }
+        self
+    }
+
+    /// Vanilla graphics, whatever was set: the "same as OMSI 2" mode of "DirectX9 (D3D9Ex)"
+    /// has no graphics improvements to choose.
+    pub fn lock_vanilla(&mut self) {
+        self.graphics = "vanilla".into();
+        self.enhanced = false;
+    }
+
     /// Vanilla graphics: the picture as OMSI 2 draws it.
     pub fn classic(&self) -> bool {
         self.graphics == "vanilla"
@@ -850,6 +875,29 @@ mod tests {
     }
 
     /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    #[test]
+    fn d3d9_has_no_graphics_improvements_to_choose() {
+        for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
+            let text = format!("graphics={g}\ngraphics_api=d3d9\n");
+            let chosen = Settings::from_text(&text);
+            assert_eq!(chosen.graphics, g);
+            // (the game loads it with `locked_for_api`; "DirectX9 (D3D9Ex)" is Windows only)
+            let loaded = chosen.clone().locked_for_api();
+            if cfg!(windows) {
+                assert_eq!(loaded.graphics, "vanilla");
+                assert!(loaded.classic() && !loaded.enhanced && !loaded.ray_tracing());
+            } else {
+                assert_eq!(loaded, chosen);
+            }
+            // another API keeps the choice, which comes back when it is picked again
+            let other = Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
+            assert_eq!(other.graphics, g);
+        }
+        let mut s = Settings::from_text("graphics=enhanced_plus\n");
+        s.lock_vanilla();
+        assert!(s.classic() && !s.enhanced && !s.ray_tracing());
+    }
+
     #[test]
     fn d3d9_is_a_windows_graphics_api() {
         let want = if cfg!(windows) { "d3d9" } else { "auto" };
