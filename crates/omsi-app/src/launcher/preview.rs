@@ -869,6 +869,10 @@ impl Preview {
             self.busy = false;
             // (one that ended before its first picture is started on the next interface)
             if !self.drew && !self.pinned && self.backend + 1 < self.backends.len() {
+                // (its end is the interface's, not the bus's: the mark of the bus it was
+                // reading, if any, is not left for the next helper to take as a bus that hung,
+                // as when the launcher stops a helper)
+                super::showroom::clear_placing_mark();
                 self.backend += 1;
                 log::warn!("launcher: the preview helper is started again on {}", self.backends[self.backend].unwrap_or("the settings' interface"));
                 self.error = None;
