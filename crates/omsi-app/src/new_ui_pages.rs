@@ -477,11 +477,12 @@ pub(crate) enum Showing {
 }
 
 /// What shows with the game menu open or not (`menu`), a list open (`chooser`, of a kind:
-/// `list`), and a layout of its own (`hud`: the triple screen or the headset).
+/// `list`), and a layout of its own (`hud`: the triple screen or the headset). A list opened
+/// with no Esc menu (a plugin's command) stays the HUD's: the page's clicks are the menu's.
 pub(crate) fn showing(menu: bool, chooser: bool, list: bool, hud: bool) -> Showing {
     if hud {
         Showing::None
-    } else if chooser {
+    } else if chooser && menu {
         Showing::Page
     } else if menu && !list {
         Showing::Top
@@ -704,6 +705,8 @@ mod tests {
         // the triple screen and the headset keep the HUD's menu and pages
         assert_eq!(showing(true, true, true, true), Showing::None);
         assert_eq!(showing(true, false, false, true), Showing::None);
+        // a list a plugin opened with no Esc menu: the HUD's, whose clicks it has
+        assert_eq!(showing(false, true, true, false), Showing::None);
         // no list open in the HUD's frame: no page
         let mut f = test_frame(&items, MenuKind::List);
         f.menu = None;
