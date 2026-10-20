@@ -20,6 +20,9 @@ pub(super) struct SceneCaps {
     pub(super) dxt: [bool; 3],
     /// Alpha blended with its own factors (`SEPARATEALPHABLENDENABLE`).
     pub(super) separate_alpha: bool,
+    /// The interface is blended in linear light: textures read as sRGB, the target written
+    /// as sRGB and converted after the blend (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`).
+    pub(super) linear_ui: bool,
 }
 
 impl SceneCaps {
@@ -29,23 +32,33 @@ impl SceneCaps {
         let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
             .map(|_| mode.Format)
             .unwrap_or(D3DFMT_X8R8G8B8);
-        let supported = |format: D3DFORMAT| {
+        let check = |usage: u32, kind: D3DRESOURCETYPE, format: D3DFORMAT| {
             // SAFETY: plain query on a live interface.
             unsafe {
                 d3d.CheckDeviceFormat(
                     D3DADAPTER_DEFAULT,
                     D3DDEVTYPE_HAL,
                     display,
-                    0,
-                    D3DRTYPE_TEXTURE,
+                    usage,
+                    kind,
                     format,
                 )
             }
             .is_ok()
         };
+        let supported = |format: D3DFORMAT| check(0, D3DRTYPE_TEXTURE, format);
+        let srgb_write = (D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_SRGBWRITE) as u32;
         let caps = Self {
             dxt: [D3DFMT_DXT1, D3DFMT_DXT3, D3DFMT_DXT5].map(supported),
             separate_alpha: raw.PrimitiveMiscCaps & D3DPMISCCAPS_SEPARATEALPHABLEND as u32 != 0,
+            linear_ui: raw.PrimitiveMiscCaps & D3DPMISCCAPS_POSTBLENDSRGBCONVERT as u32 != 0
+                && check(
+                    D3DUSAGE_QUERY_SRGBREAD as u32,
+                    D3DRTYPE_TEXTURE,
+                    D3DFMT_A8R8G8B8,
+                )
+                && check(srgb_write, D3DRTYPE_SURFACE, display)
+                && check(srgb_write, D3DRTYPE_SURFACE, D3DFMT_A8R8G8B8),
         };
         log::info!("d3d9 scene: {caps:?}");
         caps
@@ -153,7 +166,10 @@ fn d3d_format(format: TexFormat) -> D3DFORMAT {
 
 /// Uploads every level through a system-memory texture into a default-pool one. The texture
 /// must have been validated.
-fn make_texture(device: &IDirect3DDevice9Ex, t: &SceneTexture) -> Result<IDirect3DTexture9> {
+pub(super) fn make_texture(
+    device: &IDirect3DDevice9Ex,
+    t: &SceneTexture,
+) -> Result<IDirect3DTexture9> {
     let made;
     let levels: &[Vec<u8>] = if t.wants_mips() {
         let mut all = vec![t.levels[0].clone()];
@@ -449,6 +465,10 @@ impl D3d9Device {
 
     pub fn has_scene_texture(&self, id: usize) -> bool {
         self.scene.textures.get(id).is_some_and(Option::is_some)
+    }
+
+    pub(super) fn scene_texture(&self, id: usize) -> Option<&IDirect3DTexture9> {
+        self.scene.textures.get(id).and_then(Option::as_ref)
     }
 
     /// Draws `frame` into the frame begun with [`crate::RenderBackend::begin_frame`] (whose

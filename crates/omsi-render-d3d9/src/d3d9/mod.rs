@@ -11,6 +11,7 @@
 
 mod scene;
 pub mod shader;
+mod ui;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D9::*;
@@ -101,6 +102,8 @@ pub struct D3d9Device {
     scene: scene::SceneStore,
     /// What the scene layer may use beyond the floor.
     scene_caps: scene::SceneCaps,
+    /// The game's interface ([`crate::ui`]), under each owner's ids.
+    ui: ui::UiStore,
     /// Presents wait for the display's refresh.
     vsync: bool,
 }
@@ -301,6 +304,7 @@ impl D3d9Device {
                 frame: None,
                 scene: scene::SceneStore::default(),
                 scene_caps,
+                ui: ui::UiStore::default(),
                 vsync: true,
             })
         }
@@ -722,9 +726,10 @@ impl RenderBackend for D3d9Device {
         // (the scene's meshes and textures go up again from their copies: the game does not
         // send them twice)
         let copies = std::mem::take(&mut self.scene.copies);
+        let owners = std::mem::take(&mut self.ui.owners);
         *self = fresh;
         self.generation = generation;
-        let restored = self.restore_scene(copies);
+        let restored = self.restore_scene(copies).and(self.restore_ui(owners));
         self.set_vsync(vsync).and(restored)
     }
 }
@@ -733,3 +738,5 @@ impl RenderBackend for D3d9Device {
 mod scene_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod ui_tests;

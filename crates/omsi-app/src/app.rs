@@ -428,15 +428,21 @@ impl App {
     #[cfg(not(windows))]
     pub(crate) fn d3d9_active(&self) -> bool { false }
 
-    /// Under "DirectX9 (D3D9Ex)", shows the window cleared to `rgb`: the screens it does not
-    /// draw yet (the loading screen, the menus) are not left as garbage.
-    pub(crate) fn d3d9_clear(&self, rgb: [f32; 3]) {
+    /// Under "DirectX9 (D3D9Ex)", shows the picture the renderer drew this frame.
+    pub(crate) fn d3d9_present(&self) {
         #[cfg(windows)]
         if let Some(d) = self.d3d9.as_ref() {
-            d.present_clear(rgb);
+            d.present();
         }
+    }
+
+    /// Under "DirectX9 (D3D9Ex)", the mirror an `omsi-ui` Gpu drawing over the window's
+    /// picture hands its draws to.
+    pub(crate) fn d3d9_ui_mirror(&self) -> Option<omsi_ui::UiMirror> {
+        #[cfg(windows)]
+        return self.d3d9.as_ref().map(|d| d.ui_mirror());
         #[cfg(not(windows))]
-        let _ = rgb;
+        None
     }
 
     pub(crate) fn resumed_impl(&mut self, event_loop: &ActiveEventLoop) {
@@ -1032,10 +1038,20 @@ impl App {
             // frames do: left as it was, every later frame of the loading screen failed
             // the same way and its picture stood still until the map was there (#776)
             reconfigure = matches!(acquired, wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost);
-            if let wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired
-            {
-                let view = frame.texture.create_view(&Default::default());
+            let (frame, view) = match acquired {
+                wgpu::CurrentSurfaceTexture::Success(frame)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                    let view = frame.texture.create_view(&Default::default());
+                    (Some(frame), Some(view))
+                }
+                // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
+                wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
+                    None,
+                    Some(stand_in_view(&mut self.stand_in, &renderer, s.config.width, s.config.height)),
+                ),
+                _ => (None, None),
+            };
+            if let Some(view) = view {
                 // the tiles loaded so far stay out of the picture: the camera looks at nothing
                 let blank = Camera {
                     position: DVec3::new(0.0, 0.0, -1.0e6),
@@ -1059,12 +1075,14 @@ impl App {
                     &blank,
                     &lighting,
                 );
-                win.pre_present_notify();
-                frame.present();
+                if let Some(frame) = frame {
+                    win.pre_present_notify();
+                    frame.present();
+                }
                 self.renderer = Some(renderer);
+                self.d3d9_present();
             } else {
                 self.renderer = Some(renderer);
-                self.d3d9_clear([0.08, 0.10, 0.14]);
             }
             win.request_redraw();
         } else {
@@ -1368,4 +1386,31 @@ mod cam_blend_tests {
         assert!((blend(0.5) - 0.875).abs() < 1e-6);
         assert!(blend(0.2) > 0.4, "fast off the mark");
     }
+}
+
+/// The texture a picture is drawn into when the window gives none (OMSI_RENDER_OCCLUDED, or
+/// "DirectX9 (D3D9Ex)", whose device shows the picture), made anew at a new size.
+pub(crate) fn stand_in_view(
+    slot: &mut Option<wgpu::Texture>,
+    r: &omsi_render::Renderer,
+    w: u32,
+    h: u32,
+) -> wgpu::TextureView {
+    if slot.as_ref().map(|t| (t.width(), t.height()) != (w, h)).unwrap_or(true) {
+        *slot = Some(r.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("hidden window"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: r.format(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        }));
+    }
+    slot.as_ref().expect("made above").create_view(&Default::default())
 }

@@ -11,6 +11,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - `omsi-render-d3d9` draws: Direct3D 9Ex off-screen or in a window, textures, meshes, depth test and the opaque, test and blend alpha modes, with Shader Model 3.0 shaders compiled at run time. Still not used by the game.
 - `omsi-render-d3d9` draws the game's scene: meshes and textures (RGBA with mip chains, DXT1/3/5) under the game's ids, and frames of instanced batches with the vanilla shading (sun, light from above, ambient, the material's colours, fog), transmaps, the alpha kinds, back-face culling, the road surfaces' depth bias and reversed depth. Still not used by the game.
 - The game can draw its world with Direct3D 9Ex (`OMSI_BACKEND=d3d9`; Windows, not with VR): `omsi-render` keeps the books on wgpu's noop device and the Direct3D 9Ex device draws and presents the window. The UI, the sky and the OMSI material maps are not drawn in that mode yet. The default renderer is unchanged.
+- Under "DirectX9 (D3D9Ex)" the new interface (the Esc menu, the Alt bar, the loading screen) and the HUD's pictures are drawn over the scene, as `omsi-ui` draws them; `omsi-ui`'s `Gpu` can hand its draws to a second renderer (`Gpu::set_mirror`).
 - Settings → Graphics API offers "DirectX9 (D3D9Ex)" on Windows (off by default; "Automatic" never picks it). The launcher and the game both keep the choice in `settings.cfg` as `graphics_api=d3d9`.
 
 ### Changed

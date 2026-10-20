@@ -28,7 +28,7 @@ pub mod theme;
 pub mod widgets;
 
 pub use atlas::{Atlas, Sprite};
-pub use gpu::{Draw, Gpu, Layer};
+pub use gpu::{Draw, Gpu, Layer, UiEvent, UiMirror};
 pub use i18n::tr;
 pub use paint::{Color, Painter, Rect, Vertex};
 pub use text::{Fonts, Weight};
