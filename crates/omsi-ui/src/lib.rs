@@ -19,6 +19,7 @@ pub mod i18n;
 pub mod icons;
 pub mod ingame;
 pub mod loading;
+pub mod menu_page;
 pub mod nav;
 pub mod paint;
 pub mod pause_menu;

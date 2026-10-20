@@ -749,6 +749,56 @@ impl Ui {
         self.fonts.width(text, px, weight)
     }
 
+    /// `text` translated, in capitals, its letters `spacing` points apart (the cards' and the
+    /// sections' titles of the new look), on its baseline at `at`. Returns its width.
+    pub fn caps_spaced(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        spacing: f32,
+    ) -> f32 {
+        let caps = crate::tr(text).to_uppercase();
+        let mut x = at.x;
+        let mut buf = [0u8; 4];
+        for ch in caps.chars() {
+            let s = ch.encode_utf8(&mut buf);
+            if !ch.is_whitespace() {
+                let Ui {
+                    atlas,
+                    fonts,
+                    layers,
+                    ..
+                } = self;
+                layers.last_mut().unwrap().1.text_as_is(
+                    atlas,
+                    fonts,
+                    s,
+                    px,
+                    weight,
+                    Vec2::new(x, at.y),
+                    Align::Left,
+                    c,
+                );
+            }
+            x += self.fonts.width_as_is(s, px, weight) + spacing;
+        }
+        (x - at.x - spacing).max(0.0)
+    }
+
+    /// The width [`Ui::caps_spaced`] draws `text` in.
+    pub fn caps_spaced_width(&self, text: &str, px: f32, weight: Weight, spacing: f32) -> f32 {
+        let caps = crate::tr(text).to_uppercase();
+        let mut buf = [0u8; 4];
+        let w: f32 = caps
+            .chars()
+            .map(|ch| self.fonts.width_as_is(ch.encode_utf8(&mut buf), px, weight) + spacing)
+            .sum();
+        (w - spacing).max(0.0)
+    }
+
     // --- surfaces ------------------------------------------------------------------------
 
     /// A panel: flat, dark, a hairline edge.

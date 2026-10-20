@@ -2315,6 +2315,10 @@ impl ApplicationHandler for App {
                 // (the game menu's lines, for the interface below)
                 let new_menu = self.new_menu_active();
                 let menu_lines = if self.game_menu.is_some() && !new_menu { self.game_menu_items() } else { Vec::new() };
+                // (an open list is drawn by the new interface beside the Esc menu's column: made
+                // below from the HUD's frame, `new_ui_pages`)
+                let mut page_column = self.new_pages_active().then(|| self.new_menu_frame());
+                let mut new_page = None;
                 // (the mirror editor's keys and the panel under the cursor, while it is on)
                 let mirror_help = match (self.player.as_ref(), self.mirror_hud_size()) {
                     (Some(p), Some(size)) => self.mirror_hud.help_lines(p, self.hud_cursor(), size),
@@ -2650,7 +2654,7 @@ impl ApplicationHandler for App {
                         // (the game menu's greyed-out lines: the timetable needs an active route)
                         let menu_disabled: &[&str] = &[];
                         let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(self.list_kind.as_ref(), self.admin_list.as_deref(), chooser_sel, self.schedule.as_ref(), self.clock.time);
-                        let frame = ui::Frame {
+                        let mut frame = ui::Frame {
                             scale,
                             ui_scale: ui::size_factor(h, scale, self.settings.ui_scale, self.settings.ui_scale_window),
                             opacity: ui::backdrop(self.settings.ui_opacity),
@@ -2693,10 +2697,21 @@ impl ApplicationHandler for App {
                             notices: &self.notices,
                             notice_anchor: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
+                        // (the new interface draws the open list: the HUD draws none, and the
+                        // rectangles its mouse code hit-tests are the new page's)
+                        let page = page_column.take().and_then(|c| crate::new_ui_pages::page_frame(&frame, self.list_kind.as_ref(), c));
+                        if page.is_some() {
+                            frame.menu = None;
+                        }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
+                        if let Some(p) = page.as_ref() {
+                            p.write_hits(ui, (s.config.width, s.config.height));
+                        }
+                        new_page = page;
                     }
                     *self.profile.entry("hud").or_default() += __t.elapsed().as_secs_f64();
                 }
+                self.new_ui.page = new_page;
 
                 let mut lighting = match self.weather.as_ref() {
                     Some(w) => {

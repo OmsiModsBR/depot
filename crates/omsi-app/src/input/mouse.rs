@@ -1215,6 +1215,15 @@ impl App {
             let at = glam::Vec2::new(self.cursor.0, self.cursor.1);
             return u8::from(self.new_menu_frame().hit(at, (s.config.width, s.config.height)).is_some());
         }
+        // (a page open: the Esc menu's column is drawn beside it, and its lines can be clicked)
+        if self.new_pages_active() && self.game_menu.is_some() && self.dropdown.is_none() {
+            if let Some(s) = self.surface.as_ref() {
+                let at = glam::Vec2::new(self.cursor.0, self.cursor.1);
+                if self.new_menu_frame().hit(at, (s.config.width, s.config.height)).is_some() {
+                    return 1;
+                }
+            }
+        }
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.cursor;
         let inside = |r: &[f32; 4]| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];

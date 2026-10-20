@@ -5,8 +5,8 @@
 //! renderer's overlay hook (`Renderer::set_overlay_hook`), in place of the HUD's lines. The
 //! menu stays the game's own: its lines come from `game_menu_items`, a click does what
 //! `menu_choose` does for the same line, the keys are the HUD menu's, and the simulation
-//! pauses as it did. What is behind a line ("Options...", "Controls...") is still the HUD's
-//! list: while one is open the HUD draws it and this module draws nothing.
+//! pauses as it did. What is behind a line ("Options...", "Controls...", the lists) is drawn
+//! here too, beside the column: see `new_ui_pages`.
 //!
 //! The overlay runs inside the renderer with no access to the game, so the game hands it the
 //! frame to draw through [`Shared`] before each render.
@@ -70,6 +70,7 @@ struct OwnedSection {
 pub(crate) struct MenuFrame {
     sections: Vec<OwnedSection>,
     title: String,
+    subtitle: String,
     clock: String,
     state: &'static str,
     selected: Option<String>,
@@ -136,6 +137,7 @@ pub(crate) fn menu_frame(
     MenuFrame {
         sections,
         title: "Game menu".to_string(),
+        subtitle: String::new(),
         clock,
         state: if paused { "paused" } else { "menu open" },
         selected: selected.and_then(|k| items.get(k)).map(|m| m.0.to_string()),
@@ -176,7 +178,7 @@ pub(crate) fn step_displayed(
 }
 
 impl MenuFrame {
-    fn with_view<R>(&self, f: impl FnOnce(&View) -> R, logo: Option<(usize, f32)>) -> R {
+    pub(crate) fn with_view<R>(&self, f: impl FnOnce(&View) -> R, logo: Option<(usize, f32)>) -> R {
         let sections: Vec<Section> = self
             .sections
             .iter()
@@ -200,12 +202,50 @@ impl MenuFrame {
             logo,
             sections: &sections,
             title: &self.title,
-            subtitle: "",
+            subtitle: &self.subtitle,
             clock: &self.clock,
             state: self.state,
             selected: self.selected.as_deref(),
         };
         f(&view)
+    }
+
+    /// The column beside an open page: the line the page belongs to marked as the one shown
+    /// (the first of `lines` the menu has), no line lit by the keyboard, and the bar saying
+    /// what the page is.
+    pub(crate) fn for_page(mut self, lines: &[&str], title: String, subtitle: String) -> MenuFrame {
+        let have = |id: &str| {
+            self.sections
+                .iter()
+                .any(|s| s.items.iter().any(|i| i.id == id))
+        };
+        if let Some(id) = lines.iter().copied().find(|id| have(id)) {
+            for item in self.sections.iter_mut().flat_map(|s| s.items.iter_mut()) {
+                if item.id == id {
+                    item.kind = Kind::Current;
+                }
+            }
+        }
+        self.selected = None;
+        self.title = title;
+        self.subtitle = subtitle;
+        self
+    }
+
+    /// The line marked as the page shown, if any.
+    #[cfg(test)]
+    pub(crate) fn current(&self) -> Option<&str> {
+        self.sections
+            .iter()
+            .flat_map(|s| s.items.iter())
+            .find(|i| i.kind == Kind::Current)
+            .map(|i| i.id.as_str())
+    }
+
+    /// What the bar over the page says: the title, the subtitle and the state ("paused").
+    #[cfg(test)]
+    pub(crate) fn bar(&self) -> (&str, &str, &str) {
+        (&self.title, &self.subtitle, self.state)
     }
 
     /// Pixels per design point for this menu in a window of `size` pixels: the usual one, or
@@ -249,6 +289,8 @@ impl MenuFrame {
 #[derive(Default)]
 pub(crate) struct State {
     menu: Option<MenuFrame>,
+    /// A page behind one of the menu's lines, while one is open.
+    page: Option<crate::new_ui_pages::PageFrame>,
     alt: Option<crate::new_ui_alt::AltFrame>,
     /// The "Add vehicle" window.
     add: Option<crate::new_ui_add::AddFrame>,
@@ -321,7 +363,7 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, alt, add, tool, report, win_input, loading, mouse, arrived, gen) =
+        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen) =
             match self.shared.lock() {
                 Ok(mut s) => {
                     let arrived = std::mem::take(&mut s.slides);
@@ -333,6 +375,7 @@ impl Overlay {
                     };
                     (
                         s.menu.clone(),
+                        s.page.clone(),
                         s.alt.clone(),
                         s.add.clone(),
                         s.tool.clone(),
@@ -357,6 +400,7 @@ impl Overlay {
         }
         self.gen = gen;
         if menu.is_none()
+            && page.is_none()
             && alt.is_none()
             && add.is_none()
             && tool.is_none()
@@ -382,9 +426,11 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
-        let scale = menu
-            .as_ref()
-            .map_or_else(|| scale_for(w, h), |m| m.scale((w, h)));
+        let scale = match (menu.as_ref(), page.as_ref()) {
+            (_, Some(p)) => p.scale((w, h)),
+            (Some(m), None) => m.scale((w, h)),
+            (None, None) => scale_for(w, h),
+        };
         let size = Vec2::new(w as f32, h as f32) / scale;
         // (the window's click or wheel of this frame, see `NewUi::push_input`)
         match win_input {
@@ -441,6 +487,9 @@ impl Overlay {
                 slides: &self.slide_tex,
             };
             omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
+        } else if let Some(page) = page {
+            // (a page behind a line of the menu: the column beside it, the world dimmed)
+            page.draw(&mut self.ui, size, self.logo);
         } else if let Some(menu) = menu {
             // (the world behind the menu is dimmed, the column and the bar drawn over it)
             self.ui.p().rect(
@@ -512,6 +561,8 @@ pub(crate) struct NewUi {
     pub(crate) alt: crate::new_ui_alt::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
+    /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
+    pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
     /// The Alt bar's other windows.
     pub(crate) tool: crate::new_ui_windows::Tools,
     /// The end-of-trip report, while it is open.
@@ -640,6 +691,7 @@ impl NewUi {
     ) {
         if let Ok(mut s) = self.shared.lock() {
             s.menu = menu;
+            s.page = self.page.clone();
             s.alt = alt;
             s.add = add;
             s.tool = tool;
@@ -713,11 +765,12 @@ impl App {
     /// list opened from it), and the picture is the plain window's (the triple screen and the
     /// headset keep the HUD's menu, their own layouts).
     pub(crate) fn new_menu_active(&self) -> bool {
-        self.game_menu.is_some()
-            && self.chooser.is_none()
-            && self.list_kind.is_none()
-            && !self.vr_active()
-            && !self.settings.triple.enabled
+        crate::new_ui_pages::showing(
+            self.game_menu.is_some(),
+            self.chooser.is_some(),
+            self.list_kind.is_some(),
+            self.vr_active() || self.settings.triple.enabled,
+        ) == crate::new_ui_pages::Showing::Top
     }
 
     /// The menu as it is drawn now.
@@ -750,6 +803,10 @@ impl App {
         if self.game_menu.is_some() {
             self.new_ui.alt.focus = None;
         }
+        // (the page open behind a line: made with the HUD's frame, `new_ui_pages`)
+        if !self.new_pages_active() {
+            self.new_ui.page = None;
+        }
         self.add_events();
         self.tool_events();
         self.report_events();
@@ -776,6 +833,26 @@ impl App {
     /// the click (it takes every click while it is showing, so that none reaches the HUD's rows
     /// that are not drawn).
     pub(crate) fn new_menu_click(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        // a page open beside the column: a line of the column closes the page and does what it
+        // does; the rest of the window is the page's, hit-tested by the HUD's code as before
+        // (and an open drop-down closes on a click outside it, the column too)
+        if self.new_pages_active() && self.game_menu.is_some() && self.dropdown.is_none() {
+            let Some(s) = self.surface.as_ref() else {
+                return false;
+            };
+            let size = (s.config.width, s.config.height);
+            let at = Vec2::new(self.cursor.0, self.cursor.1);
+            let Some(id) = self.new_menu_frame().hit(at, size) else {
+                return false;
+            };
+            if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == id) {
+                self.close_list();
+                self.menu_kbd = false;
+                self.game_menu = Some(k);
+                self.menu_choose(event_loop, k);
+            }
+            return true;
+        }
         if !self.new_menu_active() {
             return false;
         }
@@ -1234,5 +1311,674 @@ mod tests {
         let after = read(&mut overlay);
         assert_eq!(px(&after, 1600, 60), px(&plain, 1600, 60));
         assert!(overlay.slide_tex.is_empty());
+    }
+
+    /// The pages behind the menu's lines, with placeholder data, drawn by the overlay over a
+    /// plain picture into PNGs (`DEPOT_PAGES_PNG`: the folder; else they are only drawn), for
+    /// looking at them next to the design. Also checks a page is drawn where `write_hits`
+    /// says its rows are.
+    #[test]
+    #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+    fn the_pages_behind_the_menu_draw_in_the_new_look() {
+        use crate::game_lists::{row, ListKind, HEADING};
+        use crate::new_ui_pages::{page_frame, test_column, test_frame, PageFrame};
+        use crate::ui::{DropdownView, MenuKind, Preview};
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
+            eprintln!("no graphics adapter: skipped");
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let out = std::env::var("DEPOT_PAGES_PNG").ok();
+        let shoot = |name: &str, (w, h): (u32, u32), page: PageFrame, mouse: Vec2| {
+            let tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = tex.create_view(&Default::default());
+            let shared: Shared = Default::default();
+            let mut overlay = Overlay::new(shared.clone(), format, None);
+            {
+                let mut s = shared.lock().unwrap();
+                s.page = Some(page.clone());
+                s.mouse = mouse;
+            }
+            let mut img = Vec::new();
+            // (twice: the second frame has every animation where it goes)
+            for _ in 0..2 {
+                let mut enc = device.create_command_encoder(&Default::default());
+                enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            // (a stand-in for the world: a grey-blue picture)
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.18,
+                                g: 0.24,
+                                b: 0.30,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                overlay.draw(&device, &queue, &mut enc, &view, (w, h));
+                let stride = (w * 4).next_multiple_of(256);
+                let buf = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: None,
+                    size: (stride * h) as u64,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+                enc.copy_texture_to_buffer(
+                    tex.as_image_copy(),
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: &buf,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(stride),
+                            rows_per_image: Some(h),
+                        },
+                    },
+                    wgpu::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                queue.submit([enc.finish()]);
+                buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+                device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+                let data = buf.slice(..).get_mapped_range().to_vec();
+                img.clear();
+                for y in 0..h as usize {
+                    img.extend_from_slice(
+                        &data[y * stride as usize..y * stride as usize + (w * 4) as usize],
+                    );
+                }
+            }
+            if let Some(dir) = out.as_ref() {
+                std::fs::create_dir_all(dir).unwrap();
+                image::save_buffer(
+                    format!("{dir}/{name}.png"),
+                    &img,
+                    w,
+                    h,
+                    image::ExtendedColorType::Rgba8,
+                )
+                .unwrap();
+            }
+            // the page's card is where the HUD is told its rows are: dark, over the world
+            // (all but one row: the keyboard's or the mouse's line is lit lighter)
+            let mut ui = crate::ui::Ui::new().unwrap();
+            page.write_hits(&mut ui, (w, h));
+            let rows: Vec<[u8; 3]> = ui
+                .menu_rects
+                .iter()
+                .filter(|r| r[0] > 0.0)
+                .map(|r| {
+                    let i = (((r[1] + r[3]) * 0.5) as u32 * w + (r[2] - 4.0) as u32) as usize * 4;
+                    [img[i], img[i + 1], img[i + 2]]
+                })
+                .collect();
+            assert!(!rows.is_empty(), "{name}: a row");
+            let light: Vec<_> = rows.iter().filter(|p| p[2] >= 60).collect();
+            assert!(
+                light.len() <= 1,
+                "{name}: the card under its rows: {light:?} of {rows:?}"
+            );
+        };
+        let size = (1672, 941);
+        let away = Vec2::new(-100.0, -100.0);
+        let k = |s: &str| s.to_string();
+        // (the HUD's list: (what it does, what it says))
+        let refs = |v: &[(String, String)]| -> Vec<(String, String)> {
+            v.iter().map(|(l, id)| (id.clone(), l.clone())).collect()
+        };
+
+        // Options: a long page of switches, a slider and a select, the keyboard on a row
+        let general = refs(&[
+            (row("Navigator", 's', "on", "Enables/Disables the Minimap", None), k("navigator")),
+            (row("AI vehicles on the map", 's', "on", "Shows/hides the other (AI) vehicles on the Minimap and the city map", None), k("nav_ai")),
+            (row("Terrain contours", 's', "off", "Shows the terrain's contour lines on the city map, when the map ships them (also a button on the map)", None), k("nav_contours")),
+            (row("Light map", 's', "off", "The map in a light look: light ground and white roads instead of the dark one", None), k("nav_light")),
+            (row("Interface size", 'v', "100 %", "How large the menus and the notes are", Some(0.4)), k("ui_scale")),
+            (row("Language", 'o', "Português (Brasil)", "The interface's language", None), k("sel language")),
+            (row("Route arrows (as in OMSI 2)", 's', "on", "Shows OMSI 2's route arrows over the road", None), k("nav_arrows")),
+            (row("Ability to get up (Ctrl+Shift+G)", 's', "off", "Allows you to get out of the car and explore the world", None), k("get_up")),
+            (row("Collisions with objects", 's', "on", "Enables/disables collisions with objects such as buildings, streetlights, etc.", None), k("coll_objects")),
+            (row("Collisions with vehicles", 's', "on", "Enables/Disables Collisions with Other Vehicles", None), k("coll_vehicles")),
+            (row("Collisions with people", 's', "on", "Enables/disables knocking down people", None), k("collision_pedestrians")),
+            (row("Timetable window (Insert)", 's', "off", "Displays a list of all stops (only when a tour is active)", None), k("timetable_win")),
+            (row("Information bar (Shift+Y)", 's', "off", "Displays information such as the time, speed, and other details at the top of the screen", None), k("info_bar")),
+            (row("Passengers pay the exact fare", 's', "on", "No change is given at the cash desk", None), k("exact_fare")),
+        ]);
+        let tabs = vec![
+            k("General"),
+            k("Graphics"),
+            k("Display"),
+            k("Sound"),
+            k("Camera"),
+            k("Driving"),
+            k("Advanced"),
+        ];
+        let items: Vec<(&str, &str)> = general
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu = Some((4, &items));
+        f.menu_tabs = Some((tabs.clone(), 0));
+        let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
+        shoot("options-general", size, p.clone(), away);
+        shoot("options-general-1280x720", (1280, 720), p.clone(), away);
+        shoot(
+            "options-general-1920x1080-hover",
+            (1920, 1080),
+            p,
+            Vec2::new(900.0, 330.0),
+        );
+
+        // Graphics: sliders, a stepper, a select with its drop-down open
+        let graphics = refs(&[
+            (row("Quality preset", 'o', "Vanilla+", "Sets most of the graphics options at once", None), k("preset")),
+            (row("Sun shadows", 's', "on", "Enables/Disabled shadows", None), k("shadows")),
+            (row("Night brightness", 'v', "+0.25", "Enhanced graphics: how much brighter the night is shown", Some(0.25)), k("night_brightness")),
+            (row("LED glow", 'v', "6/15", "How strongly the dots of LED destination displays glow", Some(0.4)), k("led_glow")),
+            (row("Anti-aliasing", 'c', "FXAA", "Smooths the edges", None), k("post_aa")),
+            (row("Clouds", 's', "on", "Needs a restart", None), k("clouds")),
+            (row("Windy trees", 's', "off", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still", None), k("windy_trees")),
+        ]);
+        let items: Vec<(&str, &str)> = graphics
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_tabs = Some((tabs.clone(), 1));
+        let names = ["Vanilla", "Vanilla+", "Enhanced", "Ultra", "Custom"];
+        f.dropdown = Some(DropdownView {
+            row: 0,
+            items: names.to_vec(),
+            sel: 2,
+            top: 0,
+            current: Some(1),
+        });
+        let p = page_frame(&f, Some(&ListKind::Options(1)), test_column(true)).unwrap();
+        shoot("options-graphics-dropdown", size, p, away);
+        f.dropdown = None;
+        f.menu = Some((3, &items));
+        let p = page_frame(&f, Some(&ListKind::Options(1)), test_column(true)).unwrap();
+        shoot("options-graphics", size, p, away);
+
+        // Controls, and the keyboard's bindings (one being changed)
+        let controls = refs(&[
+            (
+                row(
+                    "Keyboard",
+                    'o',
+                    "",
+                    "Change driving, vehicle, game and camera key bindings",
+                    None,
+                ),
+                k("keyboard"),
+            ),
+            (
+                row(
+                    "Game controllers",
+                    'o',
+                    "",
+                    "Configure wheels, pedals, gamepads and force feedback",
+                    None,
+                ),
+                k("controllers"),
+            ),
+        ]);
+        let items: Vec<(&str, &str)> = controls
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_head = Some((k("Controls"), String::new()));
+        f.menu_tabs = Some((vec![k("Controls")], 0));
+        shoot(
+            "controls",
+            size,
+            page_frame(&f, Some(&ListKind::Controls), test_column(true)).unwrap(),
+            away,
+        );
+        let keys = refs(&[
+            (
+                row(
+                    "Add a vehicle event…",
+                    'o',
+                    "",
+                    "Choose a control supplied by the bus or its mods",
+                    None,
+                ),
+                k("key_events"),
+            ),
+            (
+                row(
+                    "Accelerate",
+                    'a',
+                    "W",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 0"),
+            ),
+            (
+                row(
+                    "Brake",
+                    'a',
+                    "S",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 1"),
+            ),
+            (
+                row(
+                    "Doors front",
+                    'a',
+                    "press a key…",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 2"),
+            ),
+            (
+                row(
+                    "Horn",
+                    'a',
+                    "Shift+H",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 3"),
+            ),
+            (
+                row(
+                    "Kneeling",
+                    'a',
+                    "(unbound)",
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                k("keybind v 4"),
+            ),
+        ]);
+        let items: Vec<(&str, &str)> = keys.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu = Some((3, &items));
+        f.menu_head = Some((k("Keyboard"), String::new()));
+        f.menu_tabs = Some((vec![k("Driving and bus"), k("Game and camera")], 0));
+        shoot(
+            "controls-keyboard",
+            size,
+            page_frame(&f, Some(&ListKind::Keyboard(0)), test_column(true)).unwrap(),
+            away,
+        );
+
+        // a game controller: headings, information, switches, sliders
+        let pad = refs(&[
+            (k("Connected devices"), k(HEADING)),
+            (
+                row(
+                    "Logitech G29",
+                    'o',
+                    "Wheel",
+                    "Axes, buttons and force feedback",
+                    None,
+                ),
+                k("device 0"),
+            ),
+            (k("Steering"), k(HEADING)),
+            (
+                row(
+                    "Dead zone",
+                    'v',
+                    "4 %",
+                    "Ignore movement around the centre or at pedal rest",
+                    Some(0.04),
+                ),
+                k("ctrl_deadzone"),
+            ),
+            (
+                row(
+                    "Wheel rotation",
+                    'v',
+                    "900°",
+                    "Your wheel's rotation from lock to lock",
+                    Some(0.75),
+                ),
+                k("wheel_range"),
+            ),
+            (k("Pedals"), k(HEADING)),
+            (
+                row(
+                    "Connection",
+                    'i',
+                    "Connected",
+                    "Successful changes are saved and applied immediately",
+                    None,
+                ),
+                k("noop"),
+            ),
+            (
+                row(
+                    "Force feedback and vibration",
+                    's',
+                    "on",
+                    "Enable steering forces and gamepad rumble",
+                    None,
+                ),
+                k("ff"),
+            ),
+        ]);
+        let items: Vec<(&str, &str)> = pad.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu = Some((1, &items));
+        f.menu_head = Some((k("Game controllers"), String::new()));
+        f.menu_tabs = Some((
+            vec![k("Devices"), k("Steering and pedals"), k("Force feedback")],
+            0,
+        ));
+        shoot(
+            "controls-controllers",
+            size,
+            page_frame(&f, Some(&ListKind::ControllerDevices(0)), test_column(true)).unwrap(),
+            away,
+        );
+
+        // Vehicle options, World options (a time being typed)
+        let vehicle = refs(&[
+            (
+                row(
+                    "Destination display",
+                    'o',
+                    "",
+                    "Change the current destination",
+                    None,
+                ),
+                k("dest"),
+            ),
+            (
+                row(
+                    "Depot file (HOF)",
+                    'o',
+                    "",
+                    "Change the current depot file (used for the timetable)",
+                    None,
+                ),
+                k("hof"),
+            ),
+            (
+                row(
+                    "Fleet number",
+                    'o',
+                    "",
+                    "Change the fleet number and the registration",
+                    None,
+                ),
+                k("number"),
+            ),
+            (
+                row("Driver", 'o', "", "Change the current driver profile", None),
+                k("driver"),
+            ),
+            (
+                row(
+                    "Repair",
+                    'a',
+                    "Repair now",
+                    "Repairs every damage of the vehicle",
+                    None,
+                ),
+                k("repair"),
+            ),
+        ]);
+        let items: Vec<(&str, &str)> = vehicle
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_head = Some((k("Vehicle options"), String::new()));
+        f.menu_tabs = Some((vec![k("Display"), k("Fleet"), k("Service")], 0));
+        shoot(
+            "vehicle-options",
+            size,
+            page_frame(&f, Some(&ListKind::Vehicle(0)), test_column(true)).unwrap(),
+            away,
+        );
+        let world = refs(&[
+            (
+                row(
+                    "Exact time",
+                    'E',
+                    "0842",
+                    "Press Enter to change, Esc to cancel",
+                    None,
+                ),
+                k("time_edit"),
+            ),
+            (
+                row(
+                    "Time speed",
+                    'v',
+                    "x1",
+                    "How fast the clock runs",
+                    Some(0.1),
+                ),
+                k("time_speed"),
+            ),
+            (
+                row(
+                    "Real-time sync",
+                    's',
+                    "off",
+                    "The clock follows the computer's",
+                    None,
+                ),
+                k("time_sync"),
+            ),
+            (row("Date", 'i', "14.10.2026", "", None), k("noop")),
+            (
+                row("Season", 'c', "Autumn", "Leaves and snow", None),
+                k("season"),
+            ),
+        ]);
+        let items: Vec<(&str, &str)> = world
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Options);
+        f.menu_head = Some((k("World options"), String::new()));
+        f.menu_tabs = Some((vec![k("Time"), k("Weather"), k("Traffic"), k("Tools")], 0));
+        shoot(
+            "world-options",
+            size,
+            page_frame(&f, Some(&ListKind::World(0)), test_column(true)).unwrap(),
+            away,
+        );
+
+        // Line and tour: the lines with the tours of the chosen one beside them
+        let lines: Vec<(String, String)> = ["50", "51", "N30", "107", "M49"]
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                (
+                    format!("line {n}"),
+                    format!("Line {n}  ({} tours)", 3 + i * 2),
+                )
+            })
+            .chain([(k("back"), k("Back"))])
+            .collect();
+        let items: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Lines);
+        f.menu_head = Some((k("Line and tour"), String::new()));
+        f.menu_preview = Some(Preview {
+            title: k("Line 50"),
+            meta: k("3 tours"),
+            rows: vec![
+                (k("Tour 1  ›  Central Station"), k("08:42")),
+                (k("Tour 2  ›  Market"), k("09:02")),
+                (k("Tour 10  ›  Depot"), k("09:22")),
+            ],
+            chosen: None,
+            button: None,
+            time: None,
+        });
+        shoot(
+            "line-and-tour",
+            size,
+            page_frame(&f, Some(&ListKind::Lines), test_column(true)).unwrap(),
+            away,
+        );
+        // a line's tours, the stops of the chosen one to start from
+        let tours: Vec<(String, String)> = (1..=6)
+            .map(|t| (format!("tour 50\u{1}{t}"), format!("Tour {t}")))
+            .chain([(k("back"), k("Back"))])
+            .collect();
+        let items: Vec<(&str, &str)> = tours
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::Tours);
+        f.menu = Some((1, &items));
+        f.menu_head = Some((k("Line and tour"), k("Line 50")));
+        let stops = [
+            "Depot",
+            "Market",
+            "Main Street",
+            "Central Station",
+            "Hospital",
+            "University",
+            "Airport road",
+            "Old town",
+            "Harbour",
+            "Stadium",
+            "Park",
+            "Library",
+            "Bus station",
+            "Cemetery",
+            "Terminus",
+            "Industrial estate",
+            "Riverside",
+            "North gate",
+            "Ring road",
+            "Last stop",
+        ];
+        f.menu_preview = Some(Preview {
+            title: k("Tour 2"),
+            meta: k("Line 50  ·  Trip 2/9  ·  Choose the stop to start from"),
+            rows: stops
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    (
+                        k(s),
+                        format!("{:02}:{:02}", 9 + (2 + i * 3) / 60, (2 + i * 3) % 60),
+                    )
+                })
+                .collect(),
+            chosen: Some(2),
+            button: Some(k("Start trip")),
+            time: Some(k("09:02")),
+        });
+        shoot(
+            "line-and-tour-tours",
+            size,
+            page_frame(&f, Some(&ListKind::Tours(k("50"), None)), test_column(true)).unwrap(),
+            away,
+        );
+
+        // a long list of codes and names (the destinations), scrolled, the way back under it
+        let names = [
+            "Central Station",
+            "Market",
+            "Depot",
+            "Not in service",
+            "Hospital via Main Street",
+        ];
+        let dest: Vec<(String, String)> = std::iter::once((k("routes"), k("Route number: 50...")))
+            .chain((0..40).map(|i| {
+                (
+                    format!("dest {i}"),
+                    format!("{:>3}  {}", 100 + i * 7, names[i % 5]),
+                )
+            }))
+            .chain([(k("back"), k("Back"))])
+            .collect();
+        let items: Vec<(&str, &str)> = dest.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let mut f = test_frame(&items, MenuKind::List);
+        f.menu = Some((22, &items));
+        f.menu_head = Some((k("Destination display"), String::new()));
+        shoot(
+            "vehicle-destinations",
+            size,
+            page_frame(&f, Some(&ListKind::Destinations), test_column(true)).unwrap(),
+            away,
+        );
+        // a short list (the drivers, the mouse on one), and placing a vehicle (manufacturers)
+        let drivers: Vec<(String, String)> = vec![
+            (k("driver Ana"), k("Ana  (now)")),
+            (k("driver Bruno"), k("Bruno")),
+            (k("driver Carla"), k("Carla")),
+            (k("back"), k("Back")),
+        ];
+        let items: Vec<(&str, &str)> = drivers
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::List);
+        f.menu_kbd = false;
+        f.menu_head = Some((k("Driver"), String::new()));
+        shoot(
+            "vehicle-drivers-hover",
+            size,
+            page_frame(&f, Some(&ListKind::Drivers), test_column(true)).unwrap(),
+            Vec2::new(700.0, 172.0),
+        );
+        let makers: Vec<(String, String)> = vec![
+            (k("maker man"), k("MAN  (4 models)")),
+            (k("maker mb"), k("Mercedes-Benz  (7 models)")),
+            (
+                k("bus Vehicles/Volvo/7900.bus"),
+                k("Volvo  ·  7900 Electric"),
+            ),
+            (k("maker x"), k("Unknown manufacturer  (2 models)")),
+            (k("back"), k("Back")),
+        ];
+        let items: Vec<(&str, &str)> = makers
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let mut f = test_frame(&items, MenuKind::List);
+        f.menu_head = Some((k("Place a vehicle"), String::new()));
+        shoot(
+            "vehicle-place",
+            size,
+            page_frame(&f, Some(&ListKind::PlaceMaker), test_column(true)).unwrap(),
+            away,
+        );
     }
 }
