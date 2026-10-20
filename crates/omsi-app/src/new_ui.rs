@@ -22,6 +22,22 @@ use winit::event_loop::ActiveEventLoop;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
+/// The logo is shrunk to this width before it goes to the GPU (twice what the screens draw
+/// it at, so it stays sharp at 150% and is not thinned out from 2000 pixels at once).
+const LOGO_WIDTH: u32 = 640;
+
+/// The wordmark ready for the GPU: shrunk, and its black field made see-through, so that over
+/// the loading screen's photos and the dimmed world it stands with no black box round it.
+fn logo_rgba() -> Option<image::RgbaImage> {
+    let img = image::load_from_memory(LOGO).ok()?;
+    let h = (img.height() as u64 * LOGO_WIDTH as u64 / img.width().max(1) as u64).max(1) as u32;
+    let mut img = img
+        .resize_exact(LOGO_WIDTH, h, image::imageops::FilterType::Lanczos3)
+        .to_rgba8();
+    omsi_ui::loading::unmatte_black(&mut img);
+    Some(img)
+}
+
 /// The design the menu is made for, in points (the same as the launcher's).
 const DESIGN: (f32, f32) = (1672.0, 941.0);
 const MIN_SCALE: f32 = 0.75;
@@ -238,6 +254,8 @@ pub(crate) struct State {
     loading: Option<crate::new_ui_loading::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
     slides: Vec<crate::new_ui_loading::Decoded>,
+    /// The bus's block of the loading card, once its file has been read.
+    bus_card: Option<crate::new_ui_loading::CardText>,
     /// The cursor, in window pixels.
     mouse: Vec2,
 }
@@ -313,8 +331,7 @@ impl Overlay {
             .gpu
             .get_or_insert_with(|| Gpu::new(device, format, 1, atlas));
         if self.logo.is_none() {
-            if let Ok(img) = image::load_from_memory(LOGO) {
-                let img = img.to_rgba8();
+            if let Some(img) = logo_rgba() {
                 let tex = gpu.add_image(device, queue, img.width(), img.height(), img.as_raw());
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
@@ -338,23 +355,26 @@ impl Overlay {
             }
             self.show.set_count(self.slide_tex.len());
             self.show.update(dt);
-            fn card(
-                c: &Option<crate::new_ui_loading::CardText>,
-            ) -> Option<omsi_ui::loading::Card<'_>> {
+            fn card<'a>(
+                c: &'a Option<crate::new_ui_loading::CardText>,
+                icon: &'a str,
+            ) -> Option<omsi_ui::loading::Card<'a>> {
                 c.as_ref().map(|c| omsi_ui::loading::Card {
                     title: &c.title,
                     sub: &c.sub,
                     description: &c.description,
+                    icon,
                 })
             }
             let view = omsi_ui::loading::View {
                 version: &l.version,
                 heading: &l.heading,
                 stage: &l.stage,
+                activity: &l.activity,
                 progress: l.progress,
                 logo: self.logo,
-                bus: card(&l.bus),
-                map: card(&l.map),
+                bus: card(&l.bus, "directions_bus"),
+                map: card(&l.map, "map"),
                 slides: &self.slide_tex,
             };
             omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
@@ -398,6 +418,7 @@ pub(crate) struct NewUi {
     shared: Shared,
     installed: bool,
     slides_started: bool,
+    bus_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
 }
 
@@ -446,6 +467,35 @@ impl NewUi {
                     }
                 }
             });
+    }
+
+    /// Once per session: read the bus's file (`bus`, under `root`) on a thread of its own for
+    /// the loading card's name, maker, paint and description.
+    pub(crate) fn start_bus(&mut self, root: &std::path::Path, bus: &str, paint: Option<&str>) {
+        if self.bus_started {
+            return;
+        }
+        self.bus_started = true;
+        let shared = self.shared.clone();
+        let path = omsi_cfg::resolve_path(root, bus);
+        let folder = crate::screenshot_name::folder_of(bus).unwrap_or_default();
+        let paint = paint.map(str::to_string);
+        let _ = std::thread::Builder::new()
+            .name("loading-bus".into())
+            .spawn(move || {
+                let Ok(v) = omsi_vehicle::Vehicle::load(&path) else {
+                    return;
+                };
+                let card = crate::new_ui_loading::bus_card(&v, &folder, paint.as_deref());
+                if let Ok(mut s) = shared.lock() {
+                    s.bus_card = Some(card);
+                }
+            });
+    }
+
+    /// The bus's block of the loading card, when its file has been read.
+    pub(crate) fn bus_card(&self) -> Option<crate::new_ui_loading::CardText> {
+        self.shared.lock().ok().and_then(|s| s.bus_card.clone())
     }
 
     fn set(&self, menu: Option<MenuFrame>, alt: Option<crate::new_ui_alt::AltFrame>, mouse: Vec2) {
@@ -530,6 +580,19 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_logo_is_shrunk_and_has_no_black_box_round_it() {
+        let img = logo_rgba().expect("the wordmark");
+        assert_eq!(img.width(), LOGO_WIDTH);
+        // the corner (the black field) is clear, the letters are whole
+        assert_eq!(img.get_pixel(0, 0)[3], 0);
+        let opaque = img.pixels().filter(|p| p[3] == 255).count();
+        assert!(
+            opaque > (img.width() * img.height()) as usize / 10,
+            "{opaque}"
+        );
+    }
 
     fn items() -> Vec<(&'static str, &'static str)> {
         crate::input::menus::GAME_MENU.to_vec()
