@@ -3,10 +3,10 @@ name = "omsi-render-d3d9"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Legacy Direct3D 9 renderer foundation: backend interface and device bring-up (not wired into the game)"
+description = "The Direct3D 9Ex renderer of the \"DirectX9 (D3D9Ex)\" render option"
 
-# Nothing depends on this crate: the game keeps using `omsi-render` (wgpu) and no build of
-# the game links this one. See README.md for the scope and the open decisions.
+# The game (Windows only) links it for the "DirectX9 (D3D9Ex)" render option, off by
+# default; see README.md for the scope.
 [dependencies]
 thiserror.workspace = true
 log.workspace = true
@@ -15,9 +15,9 @@ log.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D_Fxc",
     "Win32_Graphics_Direct3D9",
     "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

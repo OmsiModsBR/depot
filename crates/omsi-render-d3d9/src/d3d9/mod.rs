@@ -101,9 +101,11 @@ pub struct D3d9Device {
     scene: scene::SceneStore,
     /// What the scene layer may use beyond the floor.
     scene_caps: scene::SceneCaps,
+    /// Presents wait for the display's refresh.
+    vsync: bool,
 }
 
-fn present_params(target: Target, width: u32, height: u32) -> D3DPRESENT_PARAMETERS {
+fn present_params(target: Target, width: u32, height: u32, vsync: bool) -> D3DPRESENT_PARAMETERS {
     let (hwnd, w, h) = match target {
         // 1x1 back buffer: an off-screen device never presents.
         Target::Offscreen => (HWND::default(), 1, 1),
@@ -118,7 +120,11 @@ fn present_params(target: Target, width: u32, height: u32) -> D3DPRESENT_PARAMET
         hDeviceWindow: hwnd,
         EnableAutoDepthStencil: true.into(),
         AutoDepthStencilFormat: D3DFMT_D24X8,
-        PresentationInterval: D3DPRESENT_INTERVAL_ONE as u32,
+        PresentationInterval: if vsync {
+            D3DPRESENT_INTERVAL_ONE as u32
+        } else {
+            D3DPRESENT_INTERVAL_IMMEDIATE as u32
+        },
         ..Default::default()
     }
 }
@@ -266,7 +272,7 @@ impl D3d9Device {
                 Target::Offscreen => GetDesktopWindow(),
                 Target::Window(hwnd) => hwnd,
             };
-            let mut pp = present_params(target, width, height);
+            let mut pp = present_params(target, width, height, true);
             let mut device = None;
             d3d.CreateDeviceEx(
                 D3DADAPTER_DEFAULT,
@@ -295,6 +301,7 @@ impl D3d9Device {
                 frame: None,
                 scene: scene::SceneStore::default(),
                 scene_caps,
+                vsync: true,
             })
         }
     }
@@ -414,11 +421,21 @@ impl D3d9Device {
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         if let Target::Window(_) = self.target {
             self.window_size = (width.max(1), height.max(1));
-            let mut pp = present_params(self.target, width, height);
+            let mut pp = present_params(self.target, width, height, self.vsync);
             // SAFETY: `pp` outlives the call.
             unsafe { self.device.ResetEx(&mut pp, std::ptr::null_mut()) }.map_err(map_err)?;
         }
         Ok(())
+    }
+
+    /// Whether presents wait for the display's refresh (on when the device opens).
+    pub fn set_vsync(&mut self, on: bool) -> Result<()> {
+        if self.vsync == on {
+            return Ok(());
+        }
+        self.vsync = on;
+        let (w, h) = self.window_size;
+        self.resize(w, h)
     }
 
     /// `Ok` while the device is usable; `DeviceLost` when it was removed and needs
@@ -700,9 +717,15 @@ impl RenderBackend for D3d9Device {
     fn recover(&mut self) -> Result<()> {
         let (w, h) = self.window_size;
         let generation = self.generation.wrapping_add(1);
-        *self = Self::open_with(self.target, w, h)?;
+        let vsync = self.vsync;
+        let fresh = Self::open_with(self.target, w, h)?;
+        // (the scene's meshes and textures go up again from their copies: the game does not
+        // send them twice)
+        let copies = std::mem::take(&mut self.scene.copies);
+        *self = fresh;
         self.generation = generation;
-        Ok(())
+        let restored = self.restore_scene(copies);
+        self.set_vsync(vsync).and(restored)
     }
 }
 

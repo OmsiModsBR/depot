@@ -352,6 +352,8 @@ fn compressed_textures_and_missing_meshes() {
     assert!(!dev.has_scene_mesh(0));
     dev.move_scene_texture(7, 8);
     assert!(dev.has_scene_texture(8) && !dev.has_scene_texture(7));
+    dev.clear_scene();
+    assert!(!dev.has_scene_texture(8));
 }
 
 #[test]
@@ -485,4 +487,32 @@ fn depth_only_draws_hide_what_is_behind_without_colour() {
         Some(0),
     );
     assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+}
+
+#[test]
+fn a_device_opened_again_gets_the_scene_back() {
+    let Some(mut dev) = device() else { return };
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(4, &v, &i).unwrap();
+    dev.set_scene_mesh(6, &v, &i).unwrap();
+    dev.move_scene_mesh(6, 2);
+    dev.free_scene_mesh(4);
+    rgba(&mut dev, 1, [10, 200, 30, 255]);
+    dev.recover().unwrap();
+    assert!(dev.has_scene_mesh(2) && !dev.has_scene_mesh(4) && !dev.has_scene_mesh(6));
+    assert!(dev.has_scene_texture(1));
+    let px = draw(
+        &mut dev,
+        &[batch(DrawKind::Opaque, 2, 0, 0..1)],
+        &[IDENTITY],
+        &[VISIBLE, SECOND],
+        &[0],
+        light([0.0; 4]),
+        &[uniform(0.0)],
+        Some(1),
+    );
+    assert!(all(&px, [10, 200, 30, 255], 1), "{:?}", &px[..4]);
+    dev.clear_scene();
+    dev.recover().unwrap();
+    assert!(!dev.has_scene_mesh(2) && !dev.has_scene_texture(1));
 }
