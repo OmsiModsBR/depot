@@ -602,9 +602,10 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     toggle_setting(ui, s, dirty, c.row(), "V-sync", "vsync");
     sel_setting(ui, s, dirty, "s-fps", c.row(), "Frame limit", "max_fps", &[("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps"), ("144", "144 fps"), ("1000", "Unlimited")]);
     // (a Mac has Metal only; elsewhere a driver's Vulkan that misbehaves, or a card without
-    // it, is got round here)
+    // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
+    // renderer, Windows only and never chosen by "Automatic")
     if cfg!(windows) {
-        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL")]);
+        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL"), ("d3d9", "DirectX9 (D3D9Ex)")]);
     } else if !cfg!(target_os = "macos") {
         sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("gl", "OpenGL")]);
     }

@@ -19,6 +19,8 @@ mod head_idle;
 mod headtrack;
 #[cfg(windows)]
 mod openxr;
+#[cfg(windows)]
+mod d3d9_output;
 #[cfg(target_os = "macos")]
 mod mac_hid;
 #[cfg(target_os = "macos")]
@@ -55,8 +57,10 @@ mod lights;
 mod launcher;
 mod menu;
 mod new_ui;
+mod new_ui_add;
 mod new_ui_alt;
 mod new_ui_loading;
+mod new_ui_report;
 mod mirror_hud;
 mod map_surface;
 mod nav;
@@ -520,10 +524,12 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     let info_bar = settings.info_bar;
     let mut app = App {
         args,
-        instance: graphics_instance(),
+        instance: crate::startup::game_instance(),
         window: None,
         surface: None,
         renderer: None,
+        #[cfg(windows)]
+        d3d9: None,
         #[cfg(windows)]
         vr: None,
         scene: None,

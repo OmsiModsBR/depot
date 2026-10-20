@@ -76,6 +76,10 @@ pub struct Renderer {
     pub stats: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
     /// Drawn over the window's finished picture, before it is delivered (see `OverlayHook`).
     pub(crate) overlay_hook: Option<OverlayHook>,
+    /// A second renderer's copy of the assets and of each window picture's plan (see
+    /// `mirror.rs`).
+    pub(crate) asset_mirror: super::MirrorSlot,
+    pub(crate) plan_sink: Option<super::PlanSink>,
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
