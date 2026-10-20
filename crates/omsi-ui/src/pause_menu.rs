@@ -4,19 +4,9 @@
 //! a game state.
 
 use crate::paint::Align;
+use crate::theme::v5::{ACCENT, BAR, DANGER, FG, LINE, MUTED, ON_ACCENT, SIDE, TS};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
-
-const SIDE: Color = Color::hex(0x0c0d10);
-const BAR: Color = Color::hex(0x0e1013);
-const LINE: Color = Color::hex(0x2b2f37);
-const FG: Color = Color::hex(0xe9eaec);
-const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
-const ON_ACCENT: Color = Color::hex(0x14120a);
-const DANGER: Color = Color::hex(0xe8523f);
-/// The text is drawn this much larger than its nominal size (the concept's face is wider).
-const TS: f32 = 1.16;
 
 pub const COLUMN_W: f32 = 340.0;
 pub const BAR_H: f32 = 45.0;

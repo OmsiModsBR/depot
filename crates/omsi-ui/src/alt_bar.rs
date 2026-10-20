@@ -3,21 +3,12 @@
 //! says where the bus is. The caller supplies the buttons; what they do is the game's.
 
 use crate::paint::Align;
+use crate::theme::v5::{ACCENT, BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, TS};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
 
-const PANEL: Color = Color::hex(0x171a1f);
-const CELL: Color = Color::hex(0x1b1d22);
-const BAR: Color = Color::hex(0x0e1013);
-const LINE: Color = Color::hex(0x2b2f37);
-const ROW_LINE: Color = Color::hex(0x20242b);
-const FG: Color = Color::hex(0xe9eaec);
-const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
-const OK: Color = Color::hex(0x4fc27a);
 const PANEL_ALPHA: f32 = 0.92;
-const TS: f32 = 1.16;
 
 pub const COLUMNS: usize = 5;
 pub const CELL_W: f32 = 50.0;
