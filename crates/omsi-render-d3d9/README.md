@@ -1,43 +1,74 @@
 # omsi-render-d3d9
 
-Foundation for a **separate legacy Direct3D 9 renderer**. It is a first step only.
+A **separate legacy Direct3D 9 renderer**, built step by step. It is meant to render with
+the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
 
 ## What this is not
 
 * It is **not wired into the game**. No crate depends on it and the game still renders through
   `omsi-render` (wgpu); the default renderer and the inherited backends are untouched.
-* It **declares no supported hardware**. Widening the hardware matrix is a product decision;
-  nothing here changes `docs` on supported platforms.
-* It draws nothing yet (no meshes, textures, shaders or alpha modes).
+* It **declares no supported hardware**. Widening the hardware matrix is a product decision.
+* It does not yet draw game content: no materials beyond one texture and a tint, no lights,
+  fog or culling.
 
 ## What is in it
 
 | Part | Platforms | Content |
 | --- | --- | --- |
-| `backend` | all | `RenderBackend`, the small interface the renderer must satisfy (create texture/mesh, begin frame, draw a batch, end frame, recover from device loss), and `NullBackend`, a GPU-less implementation that validates arguments so the interface is testable everywhere |
-| `caps` | all | `Caps` / `ShaderModel`: the device facts a reduced feature profile needs |
-| `d3d9` | Windows | Opens a HAL device on the default adapter, reads its capabilities, clears an off-screen render target and reads it back, reports device loss and resets |
+| `backend` | all | The crate's drawing layer `RenderBackend` (create texture/mesh, begin frame, draw a batch, end frame, recover) with the validation every implementation shares, and `NullBackend`, a GPU-less implementation |
+| `caps` | all | `Caps` / `ShaderModel`, and the floor: **Shader Model 3.0** in both stages and textures of 2048 or more (maintainers' decision, 2026-10-19) |
+| `d3d9` | Windows | The Direct3D 9Ex implementation: off-screen targets with read-back or a window swap chain, textures (one level), meshes (16- or 32-bit indices), depth test, and the alpha modes opaque, test and blend |
+| `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
+| `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
+
+### Choices worth knowing
+
+* **Direct3D 9Ex**, not plain 9: this crate needs Windows 10 or later (the minimum of Rust's
+  Windows targets since Rust 1.78), where 9Ex is always present and resources survive
+  occlusion and mode changes. Only a removed device is rebuilt. This is a requirement of the
+  crate, not a statement about the platforms Depot supports.
+* The device is created with `D3DCREATE_FPU_PRESERVE`, so Direct3D does not switch the
+  thread's x87 unit to single precision behind the simulation's back.
+* **Alpha test and blending are render states**, applied after the pixel shader, as Direct3D
+  9 defines them. The alpha-test reference (`ALPHA_TEST_REF`, 128) is **provisional**: the
+  value the original applies is a parity item still to be observed.
+* Culling is off until the meshes' winding is settled with the content loader.
+* Shaders are compiled when the device opens (two small shaders, milliseconds). A cache on disk
+  can come when there are more of them; nothing generated is committed.
+* `d3dcompiler_47.dll` is bound at load time through the normal DLL search order. Before this
+  crate is wired into the game it must be loaded explicitly from the system directory, so the
+  game does not pick up a copy planted next to it.
+* Resources are never freed yet (textures and meshes only grow); freeing comes with the
+  scene-level interface.
 
 ## Dependencies and provenance
 
 Only the `windows` crate (Microsoft, MIT OR Apache-2.0), already used by `omsi-render`, at the
-workspace version, with the `Win32_Graphics_Direct3D9` feature. No new packages enter
-`Cargo.lock` besides this crate. All code is original to this repository.
+workspace version, with the Direct3D 9, Direct3D (blob), FXC (compiler) and GDI features;
+`winit` (workspace version) only for the example. All code is original to this repository.
 
 ## Testing
 
-`cargo test -p omsi-render-d3d9` runs the interface tests on every platform. On Windows it also
-runs a device test that skips itself only when no Direct3D 9 driver is present (any other
-failure to open fails the test), and prints the adapter it ran on.
+`cargo test -p omsi-render-d3d9` runs on every platform. On Windows it also
 
-Verified so far: opening the device, reading its capabilities, and clearing and reading back an
-off-screen target (maintainer's PC, Intel UHD 630). **Not tested:** device loss and `reset()`,
-which cannot be forced portably.
+* compiles every shader for `vs_3_0`/`ps_3_0` (CPU only, so it runs on CI without a GPU), and
+* runs device tests that draw small scenes off-screen and check the pixels: clear, texture
+  times tint, untextured batches, alpha test at the reference, blend, depth order and the
+  matrix layout, and `recover` rejecting old handles. They skip themselves only when there is
+  no Direct3D 9Ex driver or the device is below the floor; any other failure to open fails
+  them. The log says which adapter ran them.
 
-## Next steps (each its own change, after the `omsi-render` refactor in #61 finishes)
+Verified on the maintainer's PC (Intel UHD 630, 16/16 at the first phase-1 head): the shader
+compile tests and the off-screen device tests; the window example opened. **Not covered by
+any test:** `resize`, the window swap chain and present, `status` on a lost or occluded
+device, and `recover` after a real device removal (it cannot be forced portably).
 
-1. Inventory of the operations the Vanilla profile needs, taken from the modularised
-   `omsi-render`.
-2. Golden off-screen scenes and a tolerance metric to compare this renderer with the wgpu one.
-3. Meshes, textures, the OMSI alpha modes and HLSL SM3.0 shaders behind `RenderBackend`.
-4. Selecting the renderer in the game, behind a decision by the maintainers.
+## Next steps
+
+1. After the `omsi-render` refactor in #61: inventory of the facade methods the game calls,
+   a scene-level trait both renderers implement, and the CPU-side scene code (culling, level
+   of detail, alpha ordering) shared between them.
+2. The OMSI material features (night, light and environment maps, bump, transparency maps),
+   fog, lights, mirrors and off-screen targets; the alpha-test reference and other parity
+   items from the maintainer's observation of the original.
+3. Selecting the renderer in the game, behind a decision by the maintainers.

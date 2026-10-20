@@ -143,6 +143,11 @@ impl Renderer {
             return;
         };
         let lists = self.draw_lists(scene, &f, &mut clock);
+        if f.window_picture {
+            if let Some(sink) = self.plan_sink.as_mut() {
+                sink(&super::mirror::plan_of(&f, &lists), scene);
+            }
+        }
         let encoders = self.encode_frame(scene, &f, &mut clock, &lists);
         self.submit_frame(&f, clock, &lists, encoders);
     }
