@@ -3326,6 +3326,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-render-d3d9"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "thiserror 2.0.21",
+ "windows 0.62.2",
+ "winit",
+]
+
+[[package]]
 name = "omsi-scenery"
 version = "0.1.0"
 dependencies = [
