@@ -378,16 +378,24 @@ pub fn helper_log() -> PathBuf {
 }
 
 /// The graphics interfaces the helper is tried on, in turn, as `OMSI_BACKEND` names them
-/// (None: the settings' own). On Windows Vulkan first: on an Intel UHD 630 the helper's
-/// DirectX 12 device overflowed its stack compiling the scene's shaders (the game's own did
-/// not), and on Vulkan it drew. A helper that ends before its first picture is started again
-/// on the next one. `OMSI_BACKEND` set for the launcher holds for the helper too.
-fn helper_backends() -> &'static [Option<&'static str>] {
-    if cfg!(windows) && !omsi_cfg::flags::BACKEND.is_set() {
-        &[Some("vulkan"), Some("dx12"), Some("gl")]
-    } else {
-        &[None]
+/// (None: the settings' own), for the settings' graphics interface `chosen`. On Windows the
+/// one the player chose first, else Vulkan: on an Intel UHD 630 the helper's DirectX 12
+/// device overflowed its stack compiling the scene's shaders (the game's own did not), and on
+/// Vulkan it drew. A helper that ends before its first picture is started again on the next
+/// one. `OMSI_BACKEND` set for the launcher holds for the helper too.
+fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
+    if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
+        return vec![None];
     }
+    let all = ["vulkan", "dx12", "gl"];
+    // (the names the game's own start reads, see `startup::backend_order`)
+    let first = match chosen.trim().to_ascii_lowercase().as_str() {
+        "vulkan" => Some("vulkan"),
+        "dx12" | "directx" | "d3d12" => Some("dx12"),
+        "gl" | "opengl" | "gles" => Some("gl"),
+        _ => None,
+    };
+    first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).map(Some).collect()
 }
 
 /// The way to a running helper.
@@ -535,10 +543,14 @@ pub struct Preview {
     /// The player turned or zoomed the picture of a page that shows one: the live view, asked
     /// for (until another bus is chosen).
     asked: bool,
-    /// Which of `helper_backends` the helper is started on, and whether the one running has
-    /// sent a picture yet.
+    /// The graphics interfaces the helper is tried on (`helper_backends`), which one it is
+    /// started on, whether the one running has sent a picture yet, and whether one has on
+    /// that interface (then it stays: a helper that dies on one bus says nothing of the
+    /// interface).
+    backends: Vec<Option<&'static str>>,
     backend: usize,
     drew: bool,
+    pinned: bool,
 }
 
 impl Default for Preview {
@@ -569,14 +581,15 @@ impl Preview {
             picture_only: false,
             kept: None,
             asked: false,
+            backends: helper_backends(&crate::settings::Settings::load().graphics_api),
             backend: 0,
             drew: false,
+            pinned: false,
         }
     }
 
     /// Show this live (a bus, its paint, the time and weather to light it with): the page
     /// whose preview this is (Vehicles), the helper drawing it while the page is open.
-    #[allow(dead_code)] // (the Vehicles page in the new look comes in its own change)
     pub fn want(&mut self, look: Look) {
         self.picture_only = false;
         self.set(look);
@@ -718,7 +731,7 @@ impl Preview {
         // (not while the kept picture is still being read: it may be all the page needs)
         let reading = self.picture_only && self.cache.is_some();
         if self.link.is_none() && self.broken.as_ref() != Some(&look) && shown.is_some() && !reading && !self.picture_done() {
-            match Link::start(&look.root, helper_backends().get(self.backend).copied().flatten()) {
+            match Link::start(&look.root, self.backends.get(self.backend).copied().flatten()) {
                 Ok(l) => {
                     self.link = Some(l);
                     self.drew = false;
@@ -754,7 +767,7 @@ impl Preview {
             match link.msgs.try_recv() {
                 // (a picture of the bus shown before, while the one wanted is read: passed over)
                 Ok(Msg::Frame(w, h, t, px)) if t == want => {
-                    self.drew = true;
+                    (self.drew, self.pinned) = (true, true);
                     self.aspect = w as f32 / h.max(1) as f32;
                     self.frame = Some((w, h, px));
                     self.showing = Some(t);
@@ -762,7 +775,7 @@ impl Preview {
                     self.live = true;
                     self.cache = None;
                 }
-                Ok(Msg::Frame(..)) => self.drew = true,
+                Ok(Msg::Frame(..)) => (self.drew, self.pinned) = (true, true),
                 Ok(Msg::Kept(t, shape)) => self.kept = Some((t, shape)),
                 Ok(Msg::Status { busy, error }) => {
                     self.busy = busy;
@@ -796,9 +809,9 @@ impl Preview {
             self.live = false;
             self.busy = false;
             // (one that ended before its first picture is started on the next interface)
-            if !self.drew && self.backend + 1 < helper_backends().len() {
+            if !self.drew && !self.pinned && self.backend + 1 < self.backends.len() {
                 self.backend += 1;
-                log::warn!("launcher: the preview helper is started again on {}", helper_backends()[self.backend].unwrap_or("the settings' interface"));
+                log::warn!("launcher: the preview helper is started again on {}", self.backends[self.backend].unwrap_or("the settings' interface"));
                 self.error = None;
                 return;
             }
@@ -904,6 +917,7 @@ mod tests {
     fn a_helper_gone_before_its_first_picture_is_tried_on_the_next_interface() {
         let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
         let mut p = Preview::new();
+        p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
         p.link = Some(Link { cmds, msgs, child: None });
@@ -911,12 +925,39 @@ mod tests {
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_none());
-        if helper_backends().len() > 1 {
-            assert_eq!(p.backend, 1);
-            assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
-        } else {
-            assert!(p.broken.is_some() && p.error.is_some());
+        assert_eq!(p.backend, 1);
+        assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
+        // one that drew pins its interface: a later helper gone early does not move it on
+        let (cmds, _cmd_rx) = channel();
+        let (msg_tx, msgs) = channel::<Msg>();
+        p.link = Some(Link { cmds, msgs, child: None });
+        msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
+        p.update(0.016, Some((2, 1)));
+        drop(msg_tx);
+        p.update(0.016, Some((2, 1)));
+        let (cmds, _cmd_rx) = channel();
+        let (msg_tx, msgs) = channel::<Msg>();
+        p.link = Some(Link { cmds, msgs, child: None });
+        p.drew = false;
+        drop(msg_tx);
+        p.update(0.016, Some((2, 1)));
+        assert_eq!(p.backend, 1);
+        assert!(p.broken.is_some());
+    }
+
+    /// The player's own graphics interface comes first, then the others; Automatic starts on
+    /// Vulkan (Windows only: elsewhere the helper uses the settings' one as the game does).
+    #[test]
+    fn the_helper_starts_on_the_interface_the_player_chose() {
+        if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
+            assert_eq!(helper_backends("dx12"), vec![None]);
+            return;
         }
+        assert_eq!(helper_backends("auto"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
+        assert_eq!(helper_backends("dx12"), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
+        assert_eq!(helper_backends("gl"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
+        assert_eq!(helper_backends(" D3D12 "), vec![Some("dx12"), Some("vulkan"), Some("gl")]);
+        assert_eq!(helper_backends("OpenGL"), vec![Some("gl"), Some("vulkan"), Some("dx12")]);
     }
 
     /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
