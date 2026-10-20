@@ -280,8 +280,7 @@ impl Navigator {
     fn lines_panel(&mut self, ui: &mut Painter, w: f32, h: f32, s: f32, head_h: f32, lt: &LinesText, on_line: &HashMap<usize, usize>) {
         let Some(sf) = self.surface.clone() else { return };
         let lines = sf.lines();
-        let pw = (332.0 * s).min(w * 0.42);
-        let x0 = w - pw - 12.0 * s;
+        let (x0, pw) = lines_panel_span(w, s);
         let top = head_h + 12.0 * s;
         let focus = self.city.lines.focus.filter(|&i| i < lines.len());
         let card_h = if focus.is_some() { 178.0 * s } else { 84.0 * s };
@@ -642,7 +641,13 @@ impl Navigator {
         }
         match hit {
             Some(4) => self.city.lines.open = !self.city.lines.open,
-            Some(5) => self.show_contours = !self.show_contours,
+            Some(5) if self.show_surface => {
+                self.show_contours = !self.show_contours;
+                // (the heights are made off the frame, from the moment the terrain view is turned on)
+                if let (true, Some(sf)) = (self.show_contours, self.surface.as_ref()) {
+                    sf.request_contour_marks();
+                }
+            }
             Some(6) => self.orient = (self.orient + 1) % 3,
             Some(0) => self.city.follow = true,
             Some(1) => self.city.mpp = (self.city.mpp / 1.6).max(0.25),
@@ -691,14 +696,14 @@ impl Navigator {
         let pos = self.map_point(x, y)?;
         // (the search reach follows the zoom, so the zoom is part of the key)
         let reach = (self.city.mpp * 10.0).clamp(8.0, 40.0);
-        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, (reach * 100.0).round() as i64, self.show_contours);
+        let key = ((pos.x / 2.0).round() as i64, (pos.y / 2.0).round() as i64, (reach * 100.0).round() as i64, self.show_surface && self.show_contours);
         if let Some((k, found)) = &self.city.hover_cache {
             if *k == key {
                 return Some(found.clone()).filter(|f| f.0.is_some() || f.1.is_some());
             }
         }
         let street = self.surface.as_ref().and_then(|s| s.street_info(pos, reach));
-        let alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|s| s.altitude_at(pos));
+        let alt = self.surface.as_ref().filter(|_| self.show_surface && self.show_contours).and_then(|s| s.altitude_at(pos));
         self.city.hover_cache = Some((key, (street.clone(), alt)));
         Some((street, alt)).filter(|f| f.0.is_some() || f.1.is_some())
     }
@@ -1036,9 +1041,17 @@ impl Navigator {
                     let px = 11.5 * s;
                     let col = if self.light { Color::rgba(110, 72, 34, 0.62) } else { Color::rgba(236, 206, 156, 0.55) };
                     let inside = win.pad(30.0 * s, 30.0 * s);
-                    let marks = crate::map_surface::marks_to_write(sf.contour_marks(), self.city.mpp, s, |at| to_screen(at.extend(0.0)), |p| inside.contains(p));
+                    // (asking starts the worker once; until it is done the lines have no heights. This also covers a
+                    // terrain view that was already on when the map opened)
+                    sf.request_contour_marks();
+                    let weight = |m: &crate::map_surface::ContourMark| if m.index { Weight::Medium } else { Weight::Regular };
+                    let label_box = |p: Vec2, m: &crate::map_surface::ContourMark| {
+                        let tw = self.fonts.width(&format!("{} m", m.height), px, weight(m));
+                        Rect::new(p.x - tw * 0.5, p.y - px * 0.7, tw, px * 1.3)
+                    };
+                    let marks = crate::map_surface::marks_to_write(sf.contour_marks().unwrap_or(&[]), self.city.mpp, s, |at| to_screen(at.extend(0.0)), |p| inside.contains(p), &taken, label_box);
                     for (p, m) in marks {
-                        ui.text(&mut self.atlas, &self.fonts, &format!("{} m", m.height), px, if m.index { Weight::Medium } else { Weight::Regular }, p + Vec2::new(0.0, px * 0.35), Align::Center, col);
+                        ui.text(&mut self.atlas, &self.fonts, &format!("{} m", m.height), px, weight(m), p + Vec2::new(0.0, px * 0.35), Align::Center, col);
                     }
                 }
             }
@@ -1050,7 +1063,7 @@ impl Navigator {
         // the compass: where real north lies on the screen; a click changes how the map is turned
         {
             let r = 24.0 * s;
-            let c = Vec2::new(w - 36.0 * s - r, h - 62.0 * s - r);
+            let c = compass_centre(w, h, s, self.city.lines.open);
             let red = Color::rgba(226, 70, 62, 1.0);
             let grey = Color::rgba(190, 196, 204, 1.0);
             ui.rounded(Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r), r, Color::rgba(10, 12, 16, 0.78));
@@ -1192,7 +1205,7 @@ impl Navigator {
             bx = r.x - bs - 8.0 * s;
         }
         // the terrain view: a toggle (only where the package carries contour lines), a mountain pictogram and a label
-        if self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
+        if self.show_surface && self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
             let bw = (self.fonts.width(lt.terrain, 13.5 * s, Weight::Bold) + 44.0 * s).max(92.0 * s);
             let r = Rect::new(bx + bs - bw, head.y + (head.h - bs) * 0.5, bw, bs);
             ui.rounded(r, 5.0 * s, if self.show_contours { Color::rgba(60, 98, 156, 1.0) } else { Color::rgba(34, 34, 34, 1.0) });
@@ -1330,5 +1343,49 @@ impl Navigator {
         queue.submit([enc.finish()]);
         let _ = n_dots;
         scene.overlays.push((tex, [x0, y0, x0 + w, y0 + h]));
+    }
+}
+
+/// Where the lines panel stands across the city map: its left edge and its width (it keeps 12 px from the right edge).
+fn lines_panel_span(w: f32, s: f32) -> (f32, f32) {
+    let pw = (332.0 * s).min(w * 0.42);
+    (w - pw - 12.0 * s, pw)
+}
+
+/// The compass' centre on a city map `w` x `h`: at the bottom right, and left of the lines panel while that is open.
+fn compass_centre(w: f32, h: f32, s: f32, panel_open: bool) -> Vec2 {
+    let r = 24.0 * s;
+    let right = if panel_open { lines_panel_span(w, s).0 - 12.0 * s } else { w - 36.0 * s };
+    Vec2::new(right - r, h - 62.0 * s - r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The compass' clickable rect, as `draw` registers it.
+    fn compass_rect(w: f32, h: f32, s: f32, open: bool) -> Rect {
+        let (c, r) = (compass_centre(w, h, s, open), 24.0 * s);
+        Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r + 16.0 * s)
+    }
+
+    #[test]
+    fn the_compass_keeps_its_place_while_the_lines_panel_is_closed() {
+        let (w, h, s) = (1280.0, 720.0, 1.0);
+        let c = compass_centre(w, h, s, false);
+        assert_eq!((c.x, c.y), (w - 36.0 - 24.0, h - 62.0 - 24.0));
+    }
+
+    #[test]
+    fn the_compass_never_sits_under_the_lines_panel() {
+        for (w, h) in [(1920.0, 1080.0), (1280.0, 720.0), (1024.0, 600.0), (640.0, 480.0), (400.0, 300.0)] {
+            for s in [0.75, 1.0, 1.5, 2.0] {
+                let (x0, pw) = lines_panel_span(w, s);
+                let panel = Rect::new(x0, 44.0 * s, pw, h - 44.0 * s - 12.0 * s);
+                let compass = compass_rect(w, h, s, true);
+                assert!(!rects_overlap(&compass, &panel), "{w}x{h} at {s}");
+                assert!(compass.right() <= x0, "{w}x{h} at {s}");
+            }
+        }
     }
 }

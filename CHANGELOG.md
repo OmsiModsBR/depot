@@ -90,6 +90,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
   through the cursor has to reach it first. Only the outside camera checked this before, and only
   against the mesh's bounding sphere. Meshes a camera does not draw (`[viewpoint]`) neither block
   nor take clicks from it.
+- City map (Shift+M) terrain view polish: the contour heights are now computed on a worker thread when Terrain is turned on (the frame never waits; lines show without heights until they are ready, and a failed worker leaves them off), with `nav_surface` off the Terrain button and all relief are gone, a height label is skipped where it would overlap a district name, stop label or icon already placed, and the compass moves left of the lines panel instead of sitting under it. Behavior specified by the project from public discussion and reimplemented cleanly; not validated against real OMSI 2 content, only build and automated tests.
 
 ### Changed
 - `omsi-sim`'s `vehicle.rs` is split by subject into `vehicle/` submodules (the type and its

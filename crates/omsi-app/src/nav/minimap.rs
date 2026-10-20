@@ -596,7 +596,7 @@ impl Navigator {
                 Some(sf) => sf.locate(f.bus.truncate()),
                 None => (None, None),
             };
-            self.loc_alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|sf| sf.altitude_at(f.bus.truncate()));
+            self.loc_alt = self.surface.as_ref().filter(|_| self.show_surface && self.show_contours).and_then(|sf| sf.altitude_at(f.bus.truncate()));
             self.loc_limit = self.surface.as_ref().filter(|s| self.show_surface && s.has_location()).and_then(|sf| sf.street_info(f.bus.truncate(), 30.0)).map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
