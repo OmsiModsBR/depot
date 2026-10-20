@@ -194,4 +194,29 @@ fn main() {
             ],
         );
     });
+    o.shot(&format!("{dir}/add-vehicle.png"), |ui| {
+        scene(ui);
+        let vehicles: Vec<String> = (1..=30)
+            .map(|i| format!("Example maker  \u{b7}  Example bus {i}"))
+            .collect();
+        let liveries = s(&["Random livery", "Default", "Paint 2", "Paint 3"]);
+        let depots = s(&[
+            "The map's depot file",
+            "Depot A  (a.hof)",
+            "Depot B  (b.hof)",
+        ]);
+        let size = ui.size;
+        omsi_ui::ingame::add_vehicle(
+            ui,
+            size,
+            &omsi_ui::ingame::AddVehicle {
+                vehicles: &vehicles,
+                vehicle: Some(2),
+                liveries: &liveries,
+                livery: 2,
+                depots: &depots,
+                depot: 0,
+            },
+        );
+    });
 }
