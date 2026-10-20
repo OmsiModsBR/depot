@@ -178,6 +178,7 @@ use startup::{
 
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
+    let _ = startup::PROCESS_START.set(std::time::Instant::now());
     omsi_cfg::migrate_legacy_data_dir();
     #[cfg(target_os = "macos")]
     startup::restart_with_allocator_settings();
@@ -211,6 +212,9 @@ pub fn run() -> Result<()> {
     // The launcher itself runs the game with a full command line (--no-menu, --map, ...).
     let bare = std::env::args().len() == 1;
     let Some((args, server_cfg)) = prepare(args, bare)? else { return Ok(()) };
+    if args.preview_helper {
+        return launcher::preview::helper_main();
+    }
     if args.launcher || (bare && !args.menu) {
         // the launcher window (the game started again by it with a full command line);
         // OMSI_LAUNCHER=<program> still opens another launcher instead
@@ -293,7 +297,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
         });
     omsi_script::set_session_seed(seed);
     log::info!("script random seed {seed} (OMSI_SEED={seed} repeats it)");
-    let launcher_mode = args.launcher || (bare && !args.menu);
+    let launcher_mode = args.launcher || args.preview_helper || (bare && !args.menu);
     if !is_omsi_root(&args.root) {
         match find_root() {
             Some(p) => {

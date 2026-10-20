@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver};
 
 /// What the showroom shows.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Look {
     pub root: PathBuf,
     pub map: String,
@@ -84,6 +84,8 @@ pub struct Showroom {
     dirty: bool,
     /// Bumped whenever `target` was made anew (the interface binds it again).
     pub generation: u64,
+    /// Bumped whenever the picture was drawn again.
+    pub frames: u64,
 }
 
 /// Names the bus whose preview is being read and placed, until it is in the picture.
@@ -142,6 +144,7 @@ impl Showroom {
             target: None,
             dirty: true,
             generation: 0,
+            frames: 0,
         }
     }
 
@@ -432,6 +435,36 @@ impl Showroom {
         s.scene.overlays.clear();
         let _ = &s.weather;
         renderer.render(&mut s.scene, target, w, h, &cam, &s.lighting);
+        self.frames += 1;
+    }
+
+    /// The bus stands in the picture as it was asked for, the camera at rest and nothing
+    /// loading (the picture worth keeping for the next time that bus is chosen).
+    pub fn settled(&self) -> bool {
+        let still = (self.yaw_to - self.yaw).abs() <= 0.05 && (self.pitch_to - self.pitch).abs() <= 0.05 && (self.zoom_to - self.zoom).abs() <= 0.001 && (self.focus_x - self.focus_now).abs() <= 0.002;
+        self.has_picture() && self.loading.is_none() && !self.dirty && still && self.shown.as_ref().map(|s| Some(&s.look) == self.wanted.as_ref()).unwrap_or(false)
+    }
+
+    /// The picture's pixels (RGBA, sRGB) and its size, read back from the GPU.
+    pub fn pixels(&self, renderer: &Renderer) -> Option<(u32, u32, Vec<u8>)> {
+        let (tex, _, w, h) = self.target.as_ref()?;
+        let (w, h) = (*w, *h);
+        let stride = (w * 4).div_ceil(256) * 256;
+        let buf = renderer.device.create_buffer(&wgpu::BufferDescriptor { label: Some("bus preview read"), size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        let mut enc = renderer.device.create_command_encoder(&Default::default());
+        enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+        renderer.queue.submit([enc.finish()]);
+        let data = renderer.read_buffer(&buf).ok()?;
+        let bgra = matches!(renderer.format(), wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm);
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            let row = &data[(y * stride) as usize..(y * stride + w * 4) as usize];
+            for px in row.chunks_exact(4) {
+                let (r, g, b) = if bgra { (px[2], px[1], px[0]) } else { (px[0], px[1], px[2]) };
+                rgba.extend_from_slice(&[r, g, b, 255]);
+            }
+        }
+        Some((w, h, rgba))
     }
 
     /// A bus is there to show.

@@ -28,6 +28,14 @@ pub(crate) fn shift_held_now(keys: &hashbrown::HashSet<KeyCode>) -> bool {
 }
 
 /// Does this folder look like an OMSI 2 installation?
+/// When the program started (set first thing in `run`), for saying how long a window took.
+pub(crate) static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Milliseconds since the program started.
+pub(crate) fn since_start_ms() -> f64 {
+    PROCESS_START.get().map(|t| t.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
+}
+
 pub(crate) fn is_omsi_root(p: &Path) -> bool {
     // a complete installation of the original game (openOMSI's own content folder has the
     // same layout, but it is a mod overlay, not the game)
@@ -268,6 +276,17 @@ pub(crate) fn window_renderer(
     window: &std::sync::Arc<winit::window::Window>,
     options: omsi_render::RenderOptions,
 ) -> Result<Renderer> {
+    for_window(instance, window, |adapter, surface| pollster::block_on(Renderer::new_on(adapter, Some(surface), None, options)))
+}
+
+/// What `open` makes for a window (the game's renderer, or the launcher's plain device for
+/// its interface): on `instance` if it can, else on the next graphics interface and adapter
+/// that can, the way `window_renderer` says.
+pub(crate) fn for_window<T>(
+    instance: &mut wgpu::Instance,
+    window: &std::sync::Arc<winit::window::Window>,
+    mut open: impl FnMut(wgpu::Adapter, &wgpu::Surface<'static>) -> Result<T>,
+) -> Result<T> {
     let mut failures: Vec<String> = Vec::new();
     // The instance made for the settings' interface first, then every interface in turn -
     // each made only when the ones before it could not draw. Made all at once, a Windows
@@ -315,7 +334,7 @@ pub(crate) fn window_renderer(
                 if software_round {
                     log::warn!("graphics: no graphics chip could be opened; trying the software renderer {what} (a few frames a second at best)");
                 }
-                match omsi_render::catch(|| pollster::block_on(Renderer::new_on(adapter, Some(&surface), None, options))) {
+                match omsi_render::catch(|| open(adapter, &surface)) {
                     Some(Ok(r)) => {
                         if !failures.is_empty() {
                             log::warn!("graphics: drawing on {what}; before it {}", failures.join("; "));

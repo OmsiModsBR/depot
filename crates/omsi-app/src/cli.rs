@@ -190,6 +190,9 @@ pub(crate) struct Args {
     /// Day of year override (set by --situation).
     #[arg(long, hide = true)]
     pub(crate) day_of_year: Option<i32>,
+    /// The launcher's bus preview, drawn for it with no window (see `launcher::preview`).
+    #[arg(long, hide = true)]
+    pub(crate) preview_helper: bool,
     /// Vehicle state snapshot applied after spawning (set by --situation): name=value pairs.
     #[arg(skip)]
     pub(crate) situation_vars: Vec<(String, f32)>,
