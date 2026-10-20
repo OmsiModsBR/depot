@@ -43,9 +43,75 @@ impl Caps {
     }
 }
 
+/// The instruction slots every Shader Model 3.0 device gives a pixel shader at least
+/// (`D3DCAPS9::MaxPixelShader30InstructionSlots`, which goes up to 32768).
+pub const PS30_MIN_SLOTS: u32 = 512;
+
+/// About how many instruction slots compiled Shader Model 2 or 3 bytecode takes: one for
+/// each instruction, declarations, constant definitions and comments left out. The
+/// compiler has unrolled what it could; an instruction that takes more than one slot
+/// (`sincos`, a matrix macro) is counted as one, so the count can fall a little short.
+pub fn instruction_slots(code: &[u32]) -> u32 {
+    const END: u32 = 0x0000_FFFF;
+    const COMMENT: u32 = 0xFFFE;
+    // dcl, def, defi, defb, nop
+    const FREE: [u32; 5] = [0x1F, 0x51, 0x30, 0x2F, 0x00];
+    let mut slots = 0;
+    // (the first token is the version)
+    let mut i = 1;
+    while let Some(&token) = code.get(i) {
+        if token == END {
+            break;
+        }
+        let opcode = token & 0xFFFF;
+        let length = if opcode == COMMENT {
+            (token >> 16) & 0x7FFF
+        } else {
+            if !FREE.contains(&opcode) {
+                slots += 1;
+            }
+            (token >> 24) & 0x0F
+        };
+        i += 1 + length as usize;
+    }
+    slots
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn instruction_slots_leave_out_declarations_and_comments() {
+        let code = [
+            0xFFFF_0300, // ps_3_0
+            0x0002_FFFE, // a comment of two tokens
+            0x1234_5678,
+            0x9ABC_DEF0,
+            0x0500_0051, // def c0, 4 values
+            0xA00F_0000,
+            0,
+            0,
+            0,
+            0,
+            0x0200_001F, // dcl
+            0x8000_0000,
+            0x900F_0000,
+            0x0300_0042, // texld r0, v0, s0
+            0x800F_0000,
+            0x90E4_0000,
+            0xA0E4_0800,
+            0x0200_0001, // mov oC0, r0
+            0x800F_0800,
+            0x80E4_0000,
+            0x0000_FFFF,
+            0x0100_0001, // after the end: not read
+        ];
+        assert_eq!(instruction_slots(&code), 2);
+        assert_eq!(instruction_slots(&[0xFFFF_0300]), 0);
+        // (cut short: counted as far as it goes)
+        assert_eq!(instruction_slots(&code[..15]), 1);
+    }
 
     fn caps(sm: ShaderModel, tex: u32) -> Caps {
         Caps {

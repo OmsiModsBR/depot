@@ -157,6 +157,20 @@ mod tests {
     }
 
     #[test]
+    fn the_scene_pixel_shader_fits_every_sm3_card() {
+        // (every Shader Model 3.0 card gives a pixel shader this many slots; above it, the
+        // smaller ones would draw no world)
+        let ps = compile(SCENE, "scene.hlsl", "ps_main", Stage::Pixel).unwrap();
+        let slots = crate::caps::instruction_slots(&ps);
+        println!("scene pixel shader: about {slots} instruction slots");
+        assert!(slots > 50, "{slots}: the count reads nothing");
+        assert!(
+            slots <= crate::caps::PS30_MIN_SLOTS,
+            "the scene pixel shader takes about {slots} slots"
+        );
+    }
+
+    #[test]
     fn ui_shaders_compile_for_sm3() {
         let vs = compile(UI, "ui.hlsl", "vs_main", Stage::Vertex).unwrap();
         let ps = compile(UI, "ui.hlsl", "ps_main", Stage::Pixel).unwrap();
