@@ -15,6 +15,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Under "DirectX9 (D3D9Ex)" the materials' maps are drawn: light maps (and the terrain's detail texture), night maps, the `[matl_envmap]` reflections with their masks and bump maps, the specular highlight and the materials' texture addressing. The lamps are not drawn yet.
 - Under "DirectX9 (D3D9Ex)" the lamps are drawn: the map's lamps and the vehicles' lights (point lights and spots), and the vehicles' interior lamps on the meshes they light. The tile light maps baked into the map are not drawn yet.
 - Under "DirectX9 (D3D9Ex)" the tile light maps baked into the map are drawn: at night they light the roads, the plates and the objects that take them.
+- Under "DirectX9 (D3D9Ex)" the minimap and the city map are drawn again (they were missing).
 - Settings → Graphics API offers "DirectX9 (D3D9Ex)" on Windows (off by default; "Automatic" never picks it). The launcher and the game both keep the choice in `settings.cfg` as `graphics_api=d3d9`.
 
 ### Changed

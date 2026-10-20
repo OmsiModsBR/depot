@@ -624,6 +624,13 @@ impl D3d9Device {
         Ok(())
     }
 
+    /// Texture `id` is `texture`, a render target the device draws itself: no copy is kept
+    /// (a device opened again has none until it is drawn again).
+    pub(super) fn put_scene_target(&mut self, id: usize, texture: IDirect3DTexture9) {
+        put(&mut self.scene.textures, id, texture);
+        take(&mut self.scene.copies.textures, id);
+    }
+
     pub fn free_scene_texture(&mut self, id: usize) {
         take(&mut self.scene.textures, id);
         take(&mut self.scene.copies.textures, id);

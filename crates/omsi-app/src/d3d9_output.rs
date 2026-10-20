@@ -265,12 +265,13 @@ impl Inner {
                     .ui_vertices(owner, buffer, bytemuck::cast_slice(vertices))
             }
             UiEvent::Render {
+                target,
                 size,
                 clear,
                 layers,
                 draws,
             } => {
-                if !self.open {
+                if target.is_none() && !self.open {
                     // (drawn outside a window picture: nothing to draw into)
                     return;
                 }
@@ -290,15 +291,17 @@ impl Inner {
                     layer: d.layer,
                     texture: d.texture,
                 }));
-                self.device.draw_ui(
-                    owner,
-                    &UiFrame {
-                        size,
-                        clear,
-                        layers: &self.layers,
-                        draws: &self.draws,
-                    },
-                )
+                let frame = UiFrame {
+                    size,
+                    clear,
+                    layers: &self.layers,
+                    draws: &self.draws,
+                };
+                match target {
+                    // (a render texture of the renderer's: the minimap, the city map)
+                    Some(texture) => self.device.draw_ui_into(owner, texture, &frame),
+                    None => self.device.draw_ui(owner, &frame),
+                }
             }
             UiEvent::Gone => {
                 self.device.ui_gone(owner);
