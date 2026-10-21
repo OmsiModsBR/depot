@@ -2253,7 +2253,10 @@ pub struct Profile {
     pub rating_driving: f64,
     pub rating_comfort: f64,
     pub rating_tickets: f64,
+    /// The newest drives (at most 40, the list Profile / Sessions shows).
     pub sessions: Vec<Session>,
+    /// How many drives the driver has made, all of them (the Trips tile).
+    pub drives: usize,
     pub exists: bool,
 }
 
@@ -2409,6 +2412,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
         rating_driving: rating[0],
         rating_comfort: rating[1],
         rating_tickets: rating[2],
+        drives: mine.len(),
         sessions: mine.into_iter().take(40).collect(),
         exists: driver.is_some(),
     })
@@ -3216,7 +3220,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             // (a count the game can read, else its default 4)
             "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size"
-                if k != "vol_ai" && k != "min_obj_size" =>
+                if k != "vol_ai" && k != "min_obj_size" && k != "vol_scenery" =>
             {
                 v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
             }
@@ -3228,6 +3232,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .filter(|x| x.is_finite())
                     .map(|x| x.clamp(0.0, 0.2))
                     .unwrap_or(0.013))
+            }
+            // (0 to 1, as the game reads it)
+            "vol_scenery" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 1.0))
+                    .unwrap_or(1.0))
             }
             // (0 to 1, as the game reads it)
             "vol_ai" => {
