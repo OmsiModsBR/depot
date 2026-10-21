@@ -4346,8 +4346,6 @@ fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
         "--no-menu".into(),
         "--map".into(),
         d.map.clone(),
-        "--bus".into(),
-        d.bus.clone(),
         "--time".into(),
         if d.time.trim().is_empty() {
             "09:00".into()
@@ -4355,13 +4353,29 @@ fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
             d.time.trim().to_string()
         },
     ];
-    if let Some(p) = d.paint.as_deref().filter(|p| !p.trim().is_empty()) {
+    // (no bus: the session starts on foot at the start point, a bus is placed in the game;
+    // its paint, plate and number go with it)
+    let bus = !d.bus.trim().is_empty();
+    if bus {
+        a.extend(["--bus".into(), d.bus.clone()]);
+    }
+    if let Some(p) = d.paint.as_deref().filter(|p| bus && !p.trim().is_empty()) {
         a.extend(["--paint".into(), p.trim().to_string()]);
     }
-    if let Some(pl) = d.plate.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    if let Some(pl) = d
+        .plate
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| bus && !p.is_empty())
+    {
         a.extend(["--plate".into(), pl.to_string()]);
     }
-    if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+    if let Some(n) = d
+        .number
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| bus && !n.is_empty())
+    {
         a.extend(["--number".into(), n.to_string()]);
     }
     // (a vehicle file taken for a depot from a broken ailists.cfg by older launchers is none)
@@ -4892,6 +4906,37 @@ mod tests {
     }
 
     use super::*;
+
+    /// A start with no bus (the Maps page's "Without bus", or no bus chosen in Vehicles)
+    /// gives the game no bus and none of the bus's paint, plate or number; with one, all go.
+    #[test]
+    fn a_start_without_a_bus_names_none() {
+        let d = Duty {
+            map: "maps/M/global.cfg".into(),
+            bus: "Vehicles/B/B.bus".into(),
+            paint: Some("Red".into()),
+            plate: Some("B-V 1".into()),
+            time: "09:00".into(),
+            on_foot: Some(true),
+            ..Default::default()
+        };
+        let with = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+        for k in ["--bus", "--paint", "--plate", "--on-foot"] {
+            assert!(with.iter().any(|x| x == k), "{k} in {with:?}");
+        }
+        let none = duty_args_for_root(
+            &Duty {
+                bus: String::new(),
+                ..d
+            },
+            Path::new("test-omsi"),
+        )
+        .unwrap();
+        for k in ["--bus", "--paint", "--plate"] {
+            assert!(!none.iter().any(|x| x == k), "{k} in {none:?}");
+        }
+        assert!(none.iter().any(|x| x == "--on-foot"));
+    }
 
     /// A duty file written before the number plate field (or one that leaves it out) loads
     /// with no plate, and a plate the player typed is kept as it stands.

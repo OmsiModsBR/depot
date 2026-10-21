@@ -1488,6 +1488,16 @@ impl Ui {
 
     /// A date field (YYYY-MM-DD) with a calendar that opens under it.
     pub fn date_field(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, true)
+    }
+
+    /// Only the calendar's button, for a date typed beside it (YYYY-MM-DD): the calendar opens
+    /// under `r`.
+    pub fn calendar_button(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, false)
+    }
+
+    fn date_control(&mut self, name: &str, r: Rect, date: &mut String, field: bool) -> bool {
         let id = id_of(name);
         let mut changed = false;
         if let Some(p) = self.date_popup.as_mut().filter(|p| p.id == id) {
@@ -1504,31 +1514,40 @@ impl Ui {
             .map(|p| p.id == id)
             .unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
-        self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
-        self.p()
-            .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
-        self.icon(
-            "calendar_month",
-            Vec2::new(r.x + 20.0, r.center().y),
-            17.0,
-            TEXT_DIM,
-        );
         let (y, m, d) = parse_date(date);
-        let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
-        self.text_in(
-            &shown,
-            Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
-            13.0,
-            Weight::Regular,
-            TEXT,
-            Align::Left,
-        );
-        self.icon(
-            "expand_more",
-            Vec2::new(r.right() - 18.0, r.center().y),
-            20.0,
-            TEXT_DIM,
-        );
+        if !field {
+            if t > 0.01 {
+                self.p().rounded(r, CONTROL_RADIUS, HOVER.alpha(t));
+            }
+            let c = if open { accent() } else { TEXT_DIM };
+            self.icon("o-calendar", r.center(), 16.0, c);
+        }
+        if field {
+            self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
+            self.p()
+                .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
+            self.icon(
+                "calendar_month",
+                Vec2::new(r.x + 20.0, r.center().y),
+                17.0,
+                TEXT_DIM,
+            );
+            let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
+            self.text_in(
+                &shown,
+                Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
+                13.0,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            self.icon(
+                "expand_more",
+                Vec2::new(r.right() - 18.0, r.center().y),
+                20.0,
+                TEXT_DIM,
+            );
+        }
         if clicked {
             if open {
                 self.date_popup = None;
@@ -2065,7 +2084,13 @@ fn date_rect(p: &DatePopup, size: Vec2) -> Rect {
     } else {
         below
     };
-    Rect::new(p.anchor.x, y, w, h)
+    // (right-aligned to its control when it would run past the window's right edge)
+    let x = if p.anchor.x + w > size.x - 10.0 {
+        (p.anchor.right() - w).max(10.0)
+    } else {
+        p.anchor.x
+    };
+    Rect::new(x, y, w, h)
 }
 
 pub const MONTHS: [&str; 12] = [
@@ -2123,6 +2148,28 @@ pub fn weekday(y: i32, m: u32, d: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The calendar of a control at the window's right edge opens inside the window.
+    #[test]
+    fn the_calendar_stays_inside_the_window() {
+        let at = |anchor: Rect| {
+            let p = DatePopup {
+                id: 1,
+                anchor,
+                year: 2026,
+                month: 10,
+                current: (2026, 10, 21),
+                picked: None,
+                opened: 0.0,
+            };
+            date_rect(&p, Vec2::new(1200.0, 800.0))
+        };
+        let r = at(Rect::new(1150.0, 100.0, 34.0, 34.0));
+        assert!(r.right() <= 1190.0 && r.x >= 10.0, "{r:?}");
+        assert_eq!(r.right(), 1184.0);
+        // (one with room keeps its left edge on its control's)
+        assert_eq!(at(Rect::new(100.0, 100.0, 200.0, 34.0)).x, 100.0);
+    }
 
     #[test]
     fn list_visibility_respects_nested_clips_and_partial_rows() {

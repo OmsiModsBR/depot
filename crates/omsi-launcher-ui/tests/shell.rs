@@ -26,10 +26,10 @@ fn frame(shell: &mut Shell, ui: &mut Ui, click: Option<Vec2>) {
 
 #[test]
 fn clicking_a_sidebar_entry_opens_its_page() {
-    let mut shell = Shell::new(Page::Drive);
+    let mut shell = Shell::new(Page::Maps);
     let mut ui = Ui::new();
     frame(&mut shell, &mut ui, None);
-    for page in Page::ALL {
+    for &page in Page::listed().iter().chain(Page::foot()) {
         let r = *ui.drawn.get(&nav_id(page)).expect("entry drawn");
         frame(
             &mut shell,
@@ -42,14 +42,14 @@ fn clicking_a_sidebar_entry_opens_its_page() {
 
 #[test]
 fn the_foot_stays_inside_a_small_window() {
-    let mut shell = Shell::new(Page::Drive);
+    let mut shell = Shell::new(Page::Maps);
     let mut ui = Ui::new();
     // the smallest window the shell allows, in design units
     let size = Vec2::new(960.0, 540.0) / scale_for(960, 540);
     ui.begin(size, scale_for(960, 540), 0.016);
     shell.draw(&mut ui);
     ui.finish();
-    for page in Page::ALL {
+    for &page in Page::listed().iter().chain(Page::foot()) {
         let r = ui.drawn[&nav_id(page)];
         assert!(r.bottom() <= size.y + 0.5, "{page:?} is below the window");
     }
@@ -88,35 +88,29 @@ fn a_click_on_a_vehicle_row_and_a_paint_chooses_them() {
 }
 
 #[test]
-fn a_click_on_a_map_row_and_a_start_point_chooses_them() {
+fn a_click_on_a_map_row_chooses_it_and_explore_map_is_reported_once() {
     use omsi_launcher_ui::maps::MapsView;
     let mut shell = Shell::new(Page::Maps);
     shell.maps = MapsView::with_catalog(omsi_launcher_ui::sample::maps());
     let mut ui = Ui::new();
     frame(&mut shell, &mut ui, None);
-    assert_eq!(shell.maps.chosen(), (0, None));
-    let start = ui.drawn[&omsi_ui::widgets::id_of("maps:start:2")];
-    frame(
-        &mut shell,
-        &mut ui,
-        Some(Vec2::new(start.x + 30.0, start.y + 10.0)),
-    );
-    assert_eq!(shell.maps.chosen(), (0, Some(2)));
-    let auto = ui.drawn[&omsi_ui::widgets::id_of("maps:start:auto")];
-    frame(
-        &mut shell,
-        &mut ui,
-        Some(Vec2::new(auto.x + 30.0, auto.y + 10.0)),
-    );
-    assert_eq!(shell.maps.chosen(), (0, None));
+    assert_eq!(shell.maps.chosen(), 0);
+    assert!(shell.maps.start_area().is_some());
     let row = ui.drawn[&omsi_ui::widgets::id_of("maps:row:1")];
     frame(
         &mut shell,
         &mut ui,
         Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
     );
-    // a new map starts on the automatic start point
-    assert_eq!(shell.maps.chosen(), (1, None));
+    assert_eq!(shell.maps.chosen(), 1);
+    let explore = ui.drawn[&omsi_ui::widgets::id_of("maps:explore")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(explore.x + 10.0, explore.y + 10.0)),
+    );
+    assert!(shell.maps.take_explore());
+    assert!(!shell.maps.take_explore());
 }
 
 #[test]

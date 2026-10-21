@@ -1,7 +1,8 @@
 //! The launcher's pages, in the order of the sidebar.
 
-/// A page of the launcher. The first ten sit in the sidebar's list, `Settings` and `Setup`
-/// at its foot.
+/// A page of the launcher. The first nine sit in the sidebar's list, `Settings` and `Setup`
+/// at its foot. `Drive` is no longer listed: a session starts from Maps (the bus and the
+/// line are chosen inside the game, as in OMSI 2); the phone's launcher still has it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Drive,
@@ -21,9 +22,8 @@ pub enum Page {
 impl Page {
     /// Every page, the list first, then the foot.
     pub const ALL: [Page; 12] = [
-        Page::Drive,
-        Page::Vehicles,
         Page::Maps,
+        Page::Vehicles,
         Page::Mods,
         Page::Timetable,
         Page::Sessions,
@@ -33,16 +33,17 @@ impl Page {
         Page::Diagnostics,
         Page::Settings,
         Page::Setup,
+        Page::Drive,
     ];
 
     /// The pages of the sidebar's list.
     pub fn listed() -> &'static [Page] {
-        &Page::ALL[..10]
+        &Page::ALL[..9]
     }
 
     /// The pages at the sidebar's foot.
     pub fn foot() -> &'static [Page] {
-        &Page::ALL[10..]
+        &Page::ALL[9..11]
     }
 
     pub fn title(self) -> &'static str {
@@ -73,9 +74,9 @@ impl Page {
                 "Inspect the bus with its paint and the author's description before starting the map.",
             )),
             Page::Maps => Some((
-                "Map & duty",
-                "Choose your map and duty",
-                "Check the map and its description, then pick where to start and which line to drive.",
+                "Start",
+                "Choose your map and start",
+                "Pick the map, the date and the kind of session, then where to start. The line and the bus are chosen inside the game.",
             )),
             Page::Mods => Some((
                 "Install & content",
@@ -181,11 +182,19 @@ mod tests {
         }
     }
 
+    /// Every page is in the list or at the foot once, Drive aside (sessions start from Maps).
     #[test]
     fn the_list_and_the_foot_cover_every_page_once() {
-        let mut all: Vec<_> = Page::listed().iter().chain(Page::foot()).copied().collect();
+        let mut all: Vec<_> = Page::listed()
+            .iter()
+            .chain(Page::foot())
+            .chain([&Page::Drive])
+            .copied()
+            .collect();
         assert_eq!(all.len(), Page::ALL.len());
         all.dedup();
         assert_eq!(all.len(), Page::ALL.len());
+        assert_eq!(Page::listed()[0], Page::Maps);
+        assert!(!Page::listed().contains(&Page::Drive));
     }
 }

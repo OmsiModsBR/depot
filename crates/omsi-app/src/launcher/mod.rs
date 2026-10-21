@@ -23,10 +23,12 @@ mod multiplayer;
 pub(crate) mod pages;
 pub(crate) mod preview;
 mod showroom;
+mod start;
 mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use state::crash_of;
 mod theme;
+mod thumbs;
 mod timetable;
 mod ui;
 mod dialogs;
@@ -180,8 +182,12 @@ pub struct Launcher {
     /// The Maps page's picture of the chosen map (from its folder): the map file it is of, the
     /// pixels not yet on the GPU or being read, and its texture with its width over height.
     map_pic: MapPicture,
+    /// The small pictures of the Maps library's rows.
+    thumbs: thumbs::Thumbs,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
+    /// The Maps page's start: its typed date and time, and the window open over the page.
+    start: start::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -277,7 +283,9 @@ impl Launcher {
         preview_rect: None,
         preview_tex: None,
         map_pic: MapPicture::default(),
+        thumbs: thumbs::Thumbs::default(),
         backdrop: backdrop::Backdrop::default(),
+        start: start::StartView::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
@@ -319,6 +327,17 @@ impl Launcher {
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
         }
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore, maps:traffic)
+        let popup = match p.split(':').nth(1) {
+            Some("start-point") => Some(start::Popup::StartPoint),
+            Some("weather") => Some(start::Popup::Weather),
+            Some("explore") => Some(start::Popup::Explore),
+            Some("traffic") => Some(start::Popup::Traffic),
+            _ => None,
+        };
+        if let Some(popup) = popup {
+            start::open(&mut app, popup);
+        }
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
@@ -343,6 +362,7 @@ impl Launcher {
         self.preview = preview::Preview::new();
         self.map_tex = None;
         self.map_pic = MapPicture::default();
+        self.thumbs.forget_textures();
         self.backdrop.forget_texture();
         self.map_gen = 0;
         self.mapview.drop_gpu();
@@ -909,6 +929,7 @@ impl Launcher {
             self.backdrop.offer_bus(tag, *w, *h, px);
         }
         self.backdrop.update();
+        self.thumbs.update();
         if let (Some((w, h, px)), Some(gpu)) = (frame, self.gpu.as_mut()) {
             match self.preview_tex {
                 Some(id) => gpu.update_image(&renderer.device, &renderer.queue, id, w, h, &px),
@@ -917,6 +938,7 @@ impl Launcher {
         }
         if let Some(gpu) = self.gpu.as_mut() {
             self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
+            self.thumbs.upload(gpu, &renderer.device, &renderer.queue);
             self.backdrop.upload(gpu, &renderer.device, &renderer.queue);
             // (the logo's coloured part wears the accent: drawn again when another is chosen)
             let accent = omsi_ui::theme::current_accent();
@@ -1108,10 +1130,12 @@ impl Launcher {
         let disconnected = self.state.disconnected.is_some();
         let crash = !disconnected && self.state.crash.is_some();
         let reset = !crash && !disconnected && self.pages.confirm_reset;
+        // (a window of the Maps page's start lies over the page, as a dialog does)
+        let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1129,6 +1153,12 @@ impl Launcher {
             }
             phone::draw(self);
         } else {
+        // (sessions start from Maps on a computer; the Drive page is the phone's - through
+        // `go`, so that Maps shows the map the choice holds, not the library's first)
+        if self.page == Page::Drive {
+            self.go(Page::Maps);
+            self.page_anim = 1.0;
+        }
         let rail_w = self.rail_w();
         self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
         // (no wider than a page reads well: on a wide screen the rest is margin, the page
@@ -1180,6 +1210,8 @@ impl Launcher {
                 self.draw_crash_dialog();
             } else if reset {
                 pages::reset_dialog(self);
+            } else if self.browser.is_none() && window {
+                start::popup(self);
             } else {
                 self.draw_browser();
             }
@@ -1357,7 +1389,7 @@ impl Launcher {
                 Page::Maps => {
                     self.maps.retry_if_failed();
                     self.refresh_catalogs();
-                    self.maps.select(&self.state.choice.map, self.state.choice.entry);
+                    self.maps.select(&self.state.choice.map);
                 }
                 _ => {}
             }
@@ -1498,13 +1530,13 @@ impl Launcher {
             self.state.select_bus(&file);
             self.state.choice.paint = paint;
             self.state.touched();
-            self.drive.tab = 0;
-            self.go(Page::Drive);
+            self.go(Page::Maps);
         }
     }
 
-    /// The Maps page; "Drive on this map" takes the map and its start point to the Drive
-    /// page.
+    /// The Maps page: the library, the chosen map's picture and description, and the start
+    /// (`start`), which holds the session's choice - the map chosen in the library is the one
+    /// a session starts on.
     fn maps_page(&mut self, area: Rect) {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
@@ -1513,14 +1545,23 @@ impl Launcher {
         // the chosen map's picture, read from its folder on a thread
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
+            if !file.eq_ignore_ascii_case(&self.state.choice.map) {
+                self.state.select_map(&file);
+            }
         }
         self.maps.set_picture(self.map_pic.shown(), self.map_pic.reading.is_some() || self.map_pic.pending.is_some());
-        if let Some((file, entry)) = self.maps.take_use() {
-            self.state.select_map(&file);
-            self.state.choice.entry = entry;
-            self.state.touched();
-            self.drive.tab = 2;
-            self.go(Page::Drive);
+        // the rows' small pictures, the same file read on a thread of their own
+        let root = std::path::PathBuf::from(&self.state.config.root);
+        for file in self.maps.visible().to_vec() {
+            let dir = MapPicture::folder(&root, &file);
+            self.thumbs.want(&file, move || dir.and_then(|d| MapPicture::find(&d)).and_then(|f| MapPicture::read(&f)));
+            self.maps.set_thumb(&file, self.thumbs.get(&file));
+        }
+        if let Some(r) = self.maps.start_area() {
+            start::card(self, r);
+        }
+        if self.maps.take_explore() {
+            self.start.popup = Some(start::Popup::Explore);
         }
     }
 
@@ -1699,8 +1740,7 @@ impl MapPicture {
             self.pending = None;
             // (found through the content roots as the map list found it: a mod's map, or one
             // read in place from an archive, has its own picture)
-            let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
-            let dir = global.parent().map(|d| d.to_path_buf());
+            let dir = Self::folder(root, file);
             let (tx, rx) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
                 let img = dir.and_then(|d| Self::find(&d)).and_then(|f| Self::read(&f));
@@ -1718,6 +1758,12 @@ impl MapPicture {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => self.reading = None,
             }
         }
+    }
+
+    /// The folder of the map `file`, found through the content roots as the map list found it.
+    pub(super) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
+        let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
+        global.parent().map(|d| d.to_path_buf())
     }
 
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.

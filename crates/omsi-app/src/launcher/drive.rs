@@ -1205,6 +1205,14 @@ fn step_time(l: &mut Launcher, r: Rect) {
     // weather cards
     l.ui.heading(Rect::new(r.x, y, r.w, 28.0), "Weather", Some("partly_cloudy_day"));
     y += 30.0;
+    weather_picker(l, Rect::new(r.x, y, r.w, (r.bottom() - y).max(0.0)));
+}
+
+/// The weathers to choose from in `r` (the physical model, a custom one, the current one of
+/// an airport, the cycle, the weather files that fit the season), or the custom weather's
+/// editor when that is chosen. The Drive page's and the Maps page's weather window's.
+pub(super) fn weather_picker(l: &mut Launcher, r: Rect) {
+    let mut y = r.y;
     if selected_weather_as_custom(&l.state.config.root,&l.state.choice.weather).is_some() {
         if l.ui.button("weather-edit-current",Rect::new(r.x,y,r.w,34.0),"Edit selected weather as custom",Some("tune"),ButtonKind::Normal){
             if let Some(custom)=selected_weather_as_custom(&l.state.config.root,&l.state.choice.weather){
@@ -1507,7 +1515,7 @@ pub(super) fn ibis_box(l: &mut Launcher, r: Rect) {
 /// What the map picture should show, from the current choice: the map, the trip of the
 /// chosen tour that a start now would begin with (`State::first_trip`, the same one the
 /// launch choice takes), and the entry point the player picked.
-fn map_look(l: &Launcher) -> super::mapview::Look {
+pub(super) fn map_look(l: &Launcher) -> super::mapview::Look {
     let file = l.state.choice.map.clone();
     // (the map list came from the content roots; ask them the same way, case-insensitively,
     // so a mod's map is found wherever its root sits)
