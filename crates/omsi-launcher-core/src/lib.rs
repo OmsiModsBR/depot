@@ -2486,12 +2486,18 @@ pub fn key_names(lang: &str) -> Vec<(i32, String)> {
     [lang, "ENG"]
         .iter()
         .filter_map(|l| omsi_cfg::original_inputs_file(&r, &format!("{l}.kyb")))
-        .find_map(|p| omsi_content::input::load_key_names(&p).ok())
+        // (a table with no names in it is no table: English's then)
+        .find_map(|p| {
+            omsi_content::input::load_key_names(&p)
+                .ok()
+                .filter(|n| !n.is_empty())
+        })
         .unwrap_or_default()
 }
 
 /// A copy of `file` beside itself, named with the local date and time
-/// (`keyboard.cfg.backup-2026-10-21-0705`); `None` when there is no such file.
+/// (`keyboard.cfg.backup-2026-10-21-0705`, then `-2`, `-3` ... within the same minute: a
+/// backup there is never written over); `None` when there is no such file.
 pub fn backup_beside(file: &Path) -> Result<Option<PathBuf>> {
     if !file.is_file() {
         return Ok(None);
@@ -2508,9 +2514,28 @@ pub fn backup_beside(file: &Path) -> Result<Option<PathBuf>> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let to = file.with_file_name(format!("{name}.backup-{stamp}"));
-    std::fs::copy(file, &to)?;
-    Ok(Some(to))
+    let bytes = std::fs::read(file)?;
+    for k in 1..1000 {
+        let to = if k == 1 {
+            file.with_file_name(format!("{name}.backup-{stamp}"))
+        } else {
+            file.with_file_name(format!("{name}.backup-{stamp}-{k}"))
+        };
+        // (made new or not at all: an earlier backup of the same minute stays as it is)
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&to)
+        {
+            Ok(mut f) => {
+                std::io::Write::write_all(&mut f, &bytes)?;
+                return Ok(Some(to));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(anyhow!("no free name for a backup of {}", file.display()))
 }
 
 /// When the original OMSI 2's controls file was saved (Unix seconds).
@@ -5941,6 +5966,15 @@ mod original_keys_tests {
         let name = to.file_name().unwrap().to_string_lossy().into_owned();
         assert!(name.starts_with("gamectrler.cfg.backup-"), "{name}");
         assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        // a second one in the same minute: a name of its own, the first kept as it was
+        std::fs::write(&file, "[ctrl]\r\nPedals\r\n").unwrap();
+        let again = backup_beside(&file).unwrap().unwrap();
+        assert_ne!(again, to);
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        assert_eq!(
+            std::fs::read_to_string(&again).unwrap(),
+            "[ctrl]\r\nPedals\r\n"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

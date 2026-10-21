@@ -289,6 +289,8 @@ pub struct KeyboardView {
     pub original_error: Option<String>,
     /// OMSI 2's keys as it comes (`keyboard_reset.cfg`; `None`: the built-in table).
     pub factory: Option<Value>,
+    /// Why `keyboard_reset.cfg` could not be read, when it could not.
+    pub factory_error: Option<String>,
     /// The keys' names, and the language they were read for.
     pub names: KeyNames,
     names_lang: String,
@@ -309,7 +311,11 @@ impl KeyboardView {
             };
             self.original = Some(original);
             self.original_error = error;
-            self.factory = core::factory_keybindings().ok().flatten();
+            // (a keyboard_reset.cfg that cannot be read: the built-in table, and said so)
+            (self.factory, self.factory_error) = match core::factory_keybindings() {
+                Ok(f) => (f, None),
+                Err(e) => (None, Some(format!("{e:#}"))),
+            };
             self.saved = core::original_keys_saved();
             self.reloaded = core::keys_reloaded_at();
         }
@@ -699,6 +705,9 @@ fn back_to_original(l: &mut Launcher, row: &Row) {
     let plan = reload_plan(&l.state.keybindings, &only, &|a| a.to_string());
     l.state.keybindings = plan.merged;
     save_keys(l, row.action.starts_with("vr_"));
+    if let Some(e) = l.pages.kb.factory_error.clone() {
+        l.state.set_status(format!("OMSI 2's keyboard_reset.cfg could not be read ({e}): the keys came from the Depot's built-in table"), true);
+    }
 }
 
 fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>) {
