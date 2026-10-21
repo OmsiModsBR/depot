@@ -629,7 +629,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
             _ => "W A S D + arrows",
         };
         let bw = if body.w < 700.0 { 150.0 } else { 200.0 };
-        let text = format!("Driving keys: {name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.");
+        let text = omsi_ui::tr("Driving keys: %{name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.").replace("%{name}", &omsi_ui::tr(name));
         let tw = body.w - bw - 70.0;
         let th = l.ui.paragraph_height(&text, tw, 12.5, Weight::Medium);
         let bar = Rect::new(body.x, body.y, body.w, (th + 22.0).max(54.0));
@@ -725,7 +725,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         let new_action = filter.trim();
         let mut list_top = inner.y + 62.0;
         if shown.is_empty() && new_action.len() > 1 && new_action.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            if l.ui.button(&format!("kb-add-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &format!("Add \"{new_action}\" and give it a key"), Some("add"), ButtonKind::Normal) {
+            if l.ui.button(&format!("kb-add-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &omsi_ui::tr("Add \"%{action}\" and give it a key").replace("%{action}", new_action), Some("add"), ButtonKind::Normal) {
                 if let Some(a) = l.state.keybindings.get_mut(*key).and_then(|a| a.as_array_mut()) {
                     a.push(json!({ "action": new_action, "scan_code": 0, "modifier": 0 }));
                     l.pages.capturing = Some((sec, a.len() - 1));
