@@ -2282,7 +2282,10 @@ pub struct Profile {
     pub rating_driving: f64,
     pub rating_comfort: f64,
     pub rating_tickets: f64,
+    /// The newest drives (at most 40, the list Profile / Sessions shows).
     pub sessions: Vec<Session>,
+    /// How many drives the driver has made, all of them (the Trips tile).
+    pub drives: usize,
     pub exists: bool,
 }
 
@@ -2438,6 +2441,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
         rating_driving: rating[0],
         rating_comfort: rating[1],
         rating_tickets: rating[2],
+        drives: mine.len(),
         sessions: mine.into_iter().take(40).collect(),
         exists: driver.is_some(),
     })
