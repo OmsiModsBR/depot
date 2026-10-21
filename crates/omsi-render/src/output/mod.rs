@@ -6,6 +6,7 @@ mod diagnostics;
 mod image;
 mod triple;
 mod window;
+mod xr;
 
 pub use window::{winit_window, SurfaceState};
 

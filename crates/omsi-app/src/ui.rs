@@ -442,9 +442,6 @@ pub struct Frame<'a> {
     pub menu: Option<(usize, &'a [(&'a str, &'a str)])>,
     /// The first line shown when a finger scrolled the menu (`App::menu_top`).
     pub menu_top: Option<f32>,
-    /// Ids of the game menu's lines that are greyed out and cannot be chosen (the timetable
-    /// without an active route).
-    pub menu_disabled: &'a [&'a str],
     /// The timetable window: its title and per stop (name, time, 0 served / 1 next / 2 ahead).
     pub timetable: Option<(String, Vec<(String, String, u8)>)>,
     /// The information bar along the top: its parts between [`INFO_SEP`]s.
@@ -814,9 +811,7 @@ impl Ui {
         // --- the information bar, along the top in the middle: in as many rows as the room
         // it has needs
         self.info_rect = None;
-        // (not under the pause menu's rail, from under which it stood out)
-        let rail = f.menu.is_some() && f.menu_kind == MenuKind::Game && f.menu_head.is_none() && !f.vr;
-        if let Some(info) = f.info.as_ref().filter(|_| !rail) {
+        if let Some(info) = f.info.as_ref() {
             let px = (15.0 * s) as u32;
             let pad = 10.0 * s;
             let [x0, x1, y] = f.info_room.unwrap_or([12.0 * s, f.width - 12.0 * s, 8.0 * s]);
@@ -997,12 +992,9 @@ impl TextCache {
         tex
     }
 
-    /// A plate of one colour: 0 the chat's dark translucent input box, 1 the loading
-    /// screen's bar track, 2 its fill, 3 .. 7 as said below.
+    /// A plate of one colour: 0 the chat's dark translucent input box, 3 .. 9 as said below.
     fn plate(&mut self, r: &Renderer, scene: &mut Scene, kind: u8) -> TextureId {
         let mut rgba = match kind {
-            1 => vec![255, 255, 255, 38],
-            2 => vec![235, 238, 242, 255],
             // an opaque panel as designed (translucent dark panels show the sky through
             // them), unless the opacity setting asks for less
             3 => vec![22, 22, 22, 255],
@@ -1083,18 +1075,6 @@ impl TextCache {
         let tex = r.add_texture(scene, &img, false);
         self.labels.insert(key, Label { tex, w: size.0, h: size.1, used: self.frame });
         tex
-    }
-
-    /// A Material icon (`omsi_ui::icons`, as the launcher draws them) of `px` pixels in
-    /// `rgba`; `None` for a name there is no icon of.
-    fn icon(&mut self, r: &Renderer, scene: &mut Scene, name: &str, px: u32, rgba: [u8; 4]) -> Option<TextureId> {
-        omsi_ui::icons::svg(name)?;
-        let px = px.max(8);
-        let key = (format!("\u{0}icon:{name}"), px, rgba);
-        Some(self.cached(r, scene, key, (px, px), || {
-            let mask = omsi_ui::icons::rasterize(name, px).unwrap_or_else(|| vec![0; (px * px) as usize]);
-            mask.iter().flat_map(|&a| [rgba[0], rgba[1], rgba[2], (a as u32 * rgba[3] as u32 / 255) as u8]).collect()
-        }))
     }
 
     /// A whole rounded plate of `w` x `h` pixels in one texture, anti-aliased.
@@ -1188,37 +1168,6 @@ impl TextCache {
     }
 }
 
-impl Ui {
-    /// The loading screen over a plain dark picture: the map's name in the middle, a thin
-    /// bar of how far the start area got under it, and one quiet line (what is being done).
-    pub fn loading(&mut self, r: &Renderer, scene: &mut Scene, width: f32, height: f32, scale: f32, title: &str, caption: &str, progress: f32) {
-        let s = scale.max(0.5);
-        let t = self.text.label(r, scene, title, (30.0 * s) as u32, [255, 255, 255, 0]);
-        let cy = height * 0.5;
-        let tx = (width - t.w as f32) * 0.5;
-        let ty = cy - t.h as f32 - 14.0 * s;
-        scene.overlays.push((t.tex, [tx, ty, tx + t.w as f32, ty + t.h as f32]));
-        let bw = (320.0 * s).min(width * 0.6);
-        let bh = (3.0 * s).max(2.0);
-        let bx = (width - bw) * 0.5;
-        let by = cy + 4.0 * s;
-        let track = self.text.plate(r, scene, 1);
-        scene.overlays.push((track, [bx, by, bx + bw, by + bh]));
-        let fill = self.text.plate(r, scene, 2);
-        let p = progress.clamp(0.0, 1.0);
-        if p > 0.0 {
-            scene.overlays.push((fill, [bx, by, bx + bw * p, by + bh]));
-        }
-        if !caption.is_empty() {
-            let c = self.text.label(r, scene, caption, (13.0 * s) as u32, [200, 204, 210, 0]);
-            let cx = (width - c.w as f32) * 0.5;
-            let cy2 = by + bh + 14.0 * s;
-            scene.overlays.push((c.tex, [cx, cy2, cx + c.w as f32, cy2 + c.h as f32]));
-        }
-        self.text.end_frame(r, scene);
-    }
-}
-
 // ---------------------------------------------------------------------------------------
 // the game menu and its lists: flat near-black greys and one amber accent, as the launcher
 
@@ -1260,10 +1209,6 @@ const WHITE: [u8; 4] = [236, 236, 236, 0];
 const SOFT: [u8; 4] = [200, 200, 200, 0];
 const MUTED: [u8; 4] = [142, 142, 142, 0];
 const AMBER: [u8; 4] = [255, 200, 110, 0];
-
-/// The ink of a greyed-out line and its small hint.
-const OFF_INK: [u8; 4] = [96, 96, 96, 0];
-const OFF_HINT: [u8; 4] = [96, 96, 96, 0];
 
 /// The card's radius, a line's, and the inset of lines from the card's edge and of their
 /// text from the line's edge (all times the scale).
@@ -1486,12 +1431,6 @@ impl Ui {
             self.menu_overlay_range = overlay_start..scene.overlays.len();
             return;
         }
-        // the pause menu itself: the launcher's rail (not in a headset, whose menu is a card)
-        if f.menu_kind == MenuKind::Game && f.menu_head.is_none() && !f.vr {
-            self.draw_game_menu(r, scene, f, sel, items);
-            self.menu_overlay_range = overlay_start..scene.overlays.len();
-            return;
-        }
         let s = menu_scale(f);
         let kind = f.menu_kind;
         // the picture dimmed behind the menu (the first overlay: the headset's menu takes it
@@ -1611,16 +1550,13 @@ impl Ui {
             let ry = y + header_h + row_h * (k - start) as f32;
             let gap = 4.0 * s;
             let rect = [x + pad, ry, right, ry + row_h - gap];
-            // (a greyed-out line is never lit: not by the mouse, not by the keyboard)
-            let off = kind == MenuKind::Game && f.menu_disabled.contains(&id);
-            let lit = !off && (over(rect) || (k == sel && f.menu_kbd && !any_hovered));
+            let lit = over(rect) || (k == sel && f.menu_kbd && !any_hovered);
             let danger = id == "quit";
             let is_back = id == "back" && label == back_txt.as_str();
             // a thin line between the groups: the everyday lines apart from the rarer ones
             // (none in the other lists: "Back" there stands apart under them, without a line)
             let apart = k > start
                 && match kind {
-                MenuKind::Game => matches!(id, "save" | "admin" | "quit"),
                 MenuKind::Lines => id == "free",
                 _ => false,
             };
@@ -1644,14 +1580,10 @@ impl Ui {
                 // the accent bar at the left edge of the lit line, growing from its middle
                 self.accent_bar(r, scene, rect, bar, danger, s);
             }
-            let ink = if off {
-                OFF_INK
+            let ink = if danger {
+                mix([232, 138, 128, 0], [255, 176, 166, 0], glow)
             } else {
-                if danger {
-                    mix([232, 138, 128, 0], [255, 176, 166, 0], glow)
-                } else {
-                    mix(SOFT, WHITE, glow.max(a_act))
-                }
+                mix(SOFT, WHITE, glow.max(a_act))
             };
             let cy = (rect[1] + rect[3]) * 0.5;
             let lx = rect[0] + tin;
@@ -1710,11 +1642,6 @@ impl Ui {
                     let idle = if plain { SOFT } else { MUTED };
                     self.put(r, scene, &format!("‹  {text}"), px, if lit { WHITE } else { idle }, lx, cy);
                 } else {
-                    if off {
-                        // (why the line cannot be chosen)
-                        let cw = self.put_right(r, scene, "No active route", (12.0 * s) as u32, OFF_HINT, rx, cy);
-                        avail -= cw + 10.0 * s;
-                    }
                     if more {
                         // (the line opens another list)
                         let cw = self.put_right(r, scene, "›", px + 6, if lit { WHITE } else { MUTED }, rx, cy);
@@ -1883,164 +1810,6 @@ impl Ui {
             }
         }
         self.menu_overlay_range = overlay_start..scene.overlays.len();
-    }
-}
-
-/// The launcher's rail and its separator line (`launcher/theme.rs` `RAIL`, `EDGE`).
-const RAIL: [u8; 4] = [18, 18, 18, 255];
-const EDGE: [u8; 4] = [255, 255, 255, 15];
-
-/// The Material icon of a line of the game menu (the launcher's icon set).
-fn game_menu_icon(id: &str) -> &'static str {
-    match id {
-        "resume" => "play_arrow",
-        "tobus" => "directions_bus",
-        "options" => "settings",
-        "controls" => "sports_esports",
-        "camera" => "videocam",
-        "vehicle" => "airport_shuttle",
-        "world" => "partly_cloudy_day",
-        "map" => "map",
-        "duty" => "departure_board",
-        "skipstop" => "near_me",
-        "endduty" => "sports_score",
-        "save" => "save",
-        "saveslot" => "add",
-        "load" => "history",
-        "shot" => "photo_camera",
-        "admin" => "key",
-        "quit" => "logout",
-        _ => "chevron_right",
-    }
-}
-
-impl Ui {
-    /// The pause menu as the launcher's rail: a full-height panel on the left over the
-    /// dimmed picture - the game's name and version on top, "Resume" as the launcher's
-    /// amber primary button, the other lines as its pages (an icon, the name, the chosen one
-    /// on a lighter grey with the accent bar), "End the session" in the danger colour at the
-    /// end. A menu longer than the screen scrolls, as the card did.
-    fn draw_game_menu(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, sel: usize, items: &[(&str, &str)]) {
-        let s = menu_scale(f);
-        let dim = self.text.plate(r, scene, 6);
-        scene.overlays.push((dim, [0.0, 0.0, f.width, f.height]));
-        let keys = !crate::platform::touch_controls();
-        // (a phone draws to its edges, round the camera's hole in the screen: on the rail's
-        // side in one of the two landscape turns - its contents keep clear of it)
-        let cut = if crate::platform::MOBILE || omsi_cfg::flags::MOBILE.is_set() { 18.0 * s } else { 0.0 };
-        let rail_w = (264.0 * s + cut).min(f.width * 0.86).round();
-        // the rail: flat, a hairline at its edge, a soft shadow over the picture
-        self.text.shadow(r, scene, [-40.0 * s, -40.0 * s, rail_w, f.height + 40.0 * s], 0.0, 30.0 * s, 0.0, 120);
-        self.text.rounded(r, scene, [0.0, 0.0, rail_w, f.height], 0.0, RAIL);
-        self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, EDGE);
-        // the game's name and version, as at the top of the launcher's rail
-        let bx = 24.0 * s + cut;
-        let name_w = self.put(r, scene, "Project Depot", (20.0 * s) as u32 | BOLD, WHITE, bx, 34.0 * s);
-        self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, MUTED, bx, 54.0 * s);
-        // what state the game is in, a small amber tag beside the name
-        let tag = if f.paused { "PAUSED" } else { "MENU" };
-        let tl = self.text.label(r, scene, tag, (10.0 * s) as u32 | BOLD, txt(ACCENT));
-        let (tw, th) = (tl.w as f32 + 12.0 * s, tl.h as f32 + 4.0 * s);
-        let tx = (bx + name_w + 10.0 * s).min(rail_w - tw - 12.0 * s);
-        let ty = 34.0 * s - th * 0.5;
-        self.text.rounded(r, scene, [tx, ty, tx + tw, ty + th], 4.0 * s, ACCENT_SOFT);
-        scene.overlays.push((tl.tex, [tx + 6.0 * s, ty + 2.0 * s, tx + 6.0 * s + tl.w as f32, ty + 2.0 * s + tl.h as f32]));
-        // the lines: as many as fit at the launcher's 42 px pitch (down to 32), the rest
-        // scrolled to
-        let n = items.len();
-        let top = 80.0 * s;
-        let foot = if keys { 40.0 * s } else { 12.0 * s };
-        let room = (f.height - top - foot).max(32.0 * s);
-        let pitch = (42.0 * s).min(room / n.max(1) as f32).max(32.0 * s);
-        let rows = ((room / pitch).floor() as usize).clamp(1, n.max(1));
-        let start = match (n > rows, f.menu_top) {
-            (false, _) => 0,
-            (true, Some(t)) => (t.max(0.0).round() as usize).min(n - rows),
-            (true, None) => sel.min(n.saturating_sub(1)).saturating_sub(rows / 2).min(n - rows),
-        };
-        self.menu_start = start;
-        self.menu_rows = rows;
-        self.menu_row_h = pitch;
-        let scrolls = n > rows;
-        let x0 = 12.0 * s + cut;
-        let x1 = rail_w - if scrolls { 20.0 * s } else { 12.0 * s };
-        if scrolls {
-            let track = [rail_w - 10.0 * s, top, rail_w - 6.0 * s, top + pitch * rows as f32 - 4.0 * s];
-            self.menu_scroll_track = Some(track);
-            let hot = over_rect(f.cursor, [0.0, 0.0, rail_w, f.height]);
-            let thumb = self.thumb(r, scene, track, start, rows, n, hot, s);
-            self.menu_scroll_thumb = Some([thumb[0] - 6.0 * s, thumb[1], thumb[2] + 6.0 * s, thumb[3]]);
-        }
-        let any_hovered = over_rect(f.cursor, [0.0, top, rail_w, top + pitch * rows as f32]);
-        let px = (13.5 * s).round() as u32;
-        let icon_px = (18.0 * s).round() as u32;
-        for (k, &(id, label)) in items.iter().enumerate().skip(start).take(rows) {
-            let ry = top + pitch * (k - start) as f32;
-            let rect = [x0, ry, x1, ry + pitch - 4.0 * s];
-            let off = f.menu_disabled.contains(&id);
-            let hov = !off && over_rect(f.cursor, rect);
-            let chosen = !off && k == sel && f.menu_kbd && !any_hovered;
-            let lit = hov || chosen;
-            let danger = id == "quit";
-            let primary = id == "resume";
-            // a hairline between the groups: the everyday lines, saving, the way out
-            if k > start && matches!(id, "save" | "admin" | "quit") {
-                let sy = (ry - 2.0 * s).round();
-                self.text.rounded(r, scene, [x0 + 8.0 * s, sy, x1 - 8.0 * s, sy + 1.0], 0.0, EDGE);
-            }
-            let glow = self.easeq((7, id, k), if lit { 1.0 } else { 0.0 }, 1.0 / FADE_SECS);
-            let cy = (rect[1] + rect[3]) * 0.5;
-            let (ink, icon_ink) = if primary {
-                // the launcher's primary button: amber, dark bold text, lighter under the mouse
-                self.text.rounded(r, scene, rect, 6.0 * s, mix(ACCENT, ACCENT_HOT, glow));
-                ([18, 14, 8, 0], [18, 14, 8, 255])
-            } else {
-                if glow > 0.0 {
-                    let fill = if danger { LIT_DANGER } else if chosen { SELECTED } else { LIT };
-                    self.text.rounded(r, scene, rect, 6.0 * s, fade(fill, glow));
-                    self.accent_bar(r, scene, rect, glow, danger, s);
-                }
-                let c = if off {
-                    OFF_INK
-                } else if danger {
-                    mix([222, 110, 100, 0], [255, 176, 166, 0], glow)
-                } else {
-                    mix(MUTED, WHITE, glow)
-                };
-                (c, [c[0], c[1], c[2], 255])
-            };
-            if let Some(t) = self.text.icon(r, scene, game_menu_icon(id), icon_px, icon_ink) {
-                let (ix, iy) = ((rect[0] + 20.0 * s - icon_px as f32 * 0.5).round(), (cy - icon_px as f32 * 0.5).round());
-                scene.overlays.push((t, [ix, iy, ix + icon_px as f32, iy + icon_px as f32]));
-            }
-            let (text, more) = strip_more(label);
-            let lx = rect[0] + 40.0 * s;
-            let mut right = rect[2] - 12.0 * s;
-            if more {
-                if let Some(t) = self.text.icon(r, scene, "chevron_right", icon_px, fade(icon_ink, if off { 1.0 } else { 0.55 + 0.45 * glow })) {
-                    let (ix, iy) = ((right - icon_px as f32 + 4.0 * s).round(), (cy - icon_px as f32 * 0.5).round());
-                    scene.overlays.push((t, [ix, iy, ix + icon_px as f32, iy + icon_px as f32]));
-                }
-                right -= icon_px as f32;
-            } else if primary && keys {
-                // ("Resume" shows the key that does the same)
-                let left = self.chip(r, scene, "Esc", (11.0 * s) as u32, [18, 14, 8, 0], [255, 214, 150, 255], false, right + 4.0 * s, cy, s);
-                right = left - 6.0 * s;
-            } else if off {
-                let cw = self.put_right(r, scene, "No active route", (11.0 * s) as u32, OFF_HINT, right, cy);
-                right -= cw + 8.0 * s;
-            }
-            let size = if primary { (14.0 * s).round() as u32 | BOLD } else { px };
-            let text = clip_to(&self.text, text, (size & !BOLD) as f32, right - lx);
-            self.put(r, scene, &text, size, ink, lx, cy);
-            self.menu_rects.push(rect);
-        }
-        // the keys, quietly at the bottom, where there is a keyboard
-        if keys {
-            let hint = omsi_ui::tr("Esc resumes  ·  P pauses").into_owned();
-            let hint = clip_to(&self.text, &hint, 11.0 * s, rail_w - bx * 2.0);
-            self.put(r, scene, &hint, (11.0 * s) as u32, OFF_INK, bx, f.height - 20.0 * s);
-        }
     }
 }
 

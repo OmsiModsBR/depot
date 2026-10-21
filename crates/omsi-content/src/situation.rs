@@ -41,6 +41,20 @@ pub struct Situation {
 }
 
 impl Situation {
+    /// The `[name]` of a situation from the start of its file, for the lists that show
+    /// the saved ones: the first line after `[name]` (matched trimmed and in any case),
+    /// when it is not empty. `head` may be cut anywhere after the name.
+    pub fn read_name(head: &[u8]) -> Option<String> {
+        let text = omsi_cfg::decode_text(head);
+        let mut lines = text.lines().map(str::trim);
+        lines
+            .by_ref()
+            .find(|l| l.eq_ignore_ascii_case("[name]"))
+            .and_then(|_| lines.next())
+            .map(str::to_string)
+            .filter(|n| !n.is_empty())
+    }
+
     /// Write the situation the way OMSI does (UTF-16 LE with a BOM, CR LF).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut t = String::new();
@@ -237,5 +251,18 @@ mod tests {
         let loaded = Situation::load(&path).unwrap();
         std::fs::remove_file(path).unwrap();
         assert_eq!(loaded.vehicles, sit.vehicles);
+    }
+
+    #[test]
+    fn the_name_is_read_from_the_start_of_the_file() {
+        let bytes = omsi_cfg::encode_utf16_bom(
+            "\r\n[Name]\r\n Slot 1: SD202, 09:00 \r\n[description]\r\nx\r\n",
+        );
+        assert_eq!(
+            Situation::read_name(&bytes[..72]).as_deref(),
+            Some("Slot 1: SD202, 09:00")
+        );
+        assert_eq!(Situation::read_name(b"[name]\r\n\r\n"), None);
+        assert_eq!(Situation::read_name(b"[map]\r\nmaps\\x\r\n"), None);
     }
 }

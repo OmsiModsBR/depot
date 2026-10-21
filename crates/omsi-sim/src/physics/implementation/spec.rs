@@ -14,8 +14,8 @@
 //! (`params::fallbacks`) until the physics is validated in game.
 
 use crate::physics::domain::params::{
-    AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV,
-    GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE, TRACK_SHARE,
+    AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE,
+    TRACK_SHARE,
 };
 use crate::physics::domain::{AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
 use glam::Vec3;
@@ -36,7 +36,11 @@ pub fn mass_kg(def: &Vehicle) -> f32 {
 /// kilograms in a few files (a value of 100 or more), at least 500 kg. Kept apart from
 /// [`mass_kg`] until the AI's physics is taken up again.
 pub fn kinematic_mass_kg(def: &Vehicle) -> f32 {
-    let kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
+    let kg = if def.mass < 100.0 {
+        def.mass * 1000.0
+    } else {
+        def.mass
+    };
     kg.max(500.0)
 }
 
@@ -49,7 +53,11 @@ pub(crate) fn coupled_rolling_resistance(def: &Vehicle) -> f32 {
 impl AxleSpec {
     pub fn of(a: &Axle) -> AxleSpec {
         let kinematic_outer = (a.max_width / 2.0).max(0.3);
-        let kinematic_track = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { kinematic_outer * TRACK_SHARE };
+        let kinematic_track = if a.min_width > 0.0 && a.min_width < a.max_width {
+            (a.max_width + a.min_width) / 4.0
+        } else {
+            kinematic_outer * TRACK_SHARE
+        };
         AxleSpec {
             long: a.long,
             radius: a.wheel_diameter / 2.0,
@@ -62,8 +70,16 @@ impl AxleSpec {
             spring: a.spring * 1000.0,
             damper: a.damper * 1000.0,
             max_force: a.max_force * 1000.0,
-            sag_spring: if a.spring > 0.0 { a.spring * 1000.0 } else { 150_000.0 },
-            inertia_inv: if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV },
+            sag_spring: if a.spring > 0.0 {
+                a.spring * 1000.0
+            } else {
+                150_000.0
+            },
+            inertia_inv: if a.inertia_inv > 0.0 {
+                a.inertia_inv
+            } else {
+                DEFAULT_INERTIA_INV
+            },
             driven: a.driven,
         }
     }
@@ -74,7 +90,11 @@ impl PhysicsSpec {
         let mass = mass_kg(def);
         // in t m², as OMSI reads it whatever the numbers, and 100 t m² about each axis for a
         // file without the section (OMSI's default; this parser leaves it at zero)
-        let moi = if def.moment_of_inertia == [0.0; 3] { [100.0; 3] } else { def.moment_of_inertia };
+        let moi = if def.moment_of_inertia == [0.0; 3] {
+            [100.0; 3]
+        } else {
+            def.moment_of_inertia
+        };
         let inertia = Vec3::from(moi) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
@@ -82,7 +102,10 @@ impl PhysicsSpec {
         // the kinematic model's lock: the file's, held to 10..60° (with the arm from the
         // turning line at least 1 m), and the least for a file without a usable one
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
-        let kinematic_max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
+        let kinematic_max_steer_deg = (def.inv_min_turn_radius * s)
+            .atan()
+            .to_degrees()
+            .clamp(LOCK_DEG_MIN, LOCK_DEG_MAX);
         let springs: f32 = def.axles.iter().map(|a| 2.0 * a.spring).sum();
         PhysicsSpec {
             mass_kg: mass,
@@ -92,7 +115,9 @@ impl PhysicsSpec {
             rolling_resistance: def.rolling_resistance,
             rot_pnt_long: def.rot_pnt_long,
             front_long,
-            max_steer_deg: (def.inv_min_turn_radius * (front_long - def.rot_pnt_long).abs()).atan().to_degrees(),
+            max_steer_deg: (def.inv_min_turn_radius * (front_long - def.rot_pnt_long).abs())
+                .atan()
+                .to_degrees(),
             kinematic_max_steer_deg,
             inv_min_turn_radius: def.inv_min_turn_radius,
             body_freq: (springs / (mass / 1000.0)).max(0.0).sqrt(),
@@ -151,19 +176,25 @@ fn rest_loads(def: &Vehicle, mass: f32, least_share: f32) -> Vec<f32> {
     } else {
         (mass * g / n, 0.0)
     };
-    def.axles.iter().map(|x| (a + b * x.long).max(mass * g / n * least_share)).collect()
+    def.axles
+        .iter()
+        .map(|x| (a + b * x.long).max(mass * g / n * least_share))
+        .collect()
 }
 
 /// The least-squares split of a load `total` with its centre at `centre` over points at
 /// `(long, count)`: the load per point grows linearly along the vehicle, so that the shares
 /// balance the load and its moment (exactly, with two places to rest on).
-pub(super) fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
+pub fn split(points: &[(f32, f32)], total: f32, centre: f32) -> (f32, f32) {
     let n: f32 = points.iter().map(|p| p.1).sum::<f32>().max(1.0);
     let sy: f32 = points.iter().map(|p| p.1 * p.0).sum();
     let syy: f32 = points.iter().map(|p| p.1 * p.0 * p.0).sum();
     let det = n * syy - sy * sy;
     if det.abs() > 1e-6 {
-        ((total * syy - sy * total * centre) / det, (n * total * centre - sy * total) / det)
+        (
+            (total * syy - sy * total * centre) / det,
+            (n * total * centre - sy * total) / det,
+        )
     } else {
         (total / n, 0.0)
     }
@@ -181,7 +212,13 @@ pub fn wheel_rest_loads_supported(def: &Vehicle, support_long: f32) -> (Vec<f32>
     points.push((support_long, 1.0));
     let (a, b) = split(&points, weight, cog_y);
     let joint = (a + b * support_long).clamp(0.0, weight);
-    (def.axles.iter().map(|x| (a + b * x.long).max(0.0)).collect(), joint)
+    (
+        def.axles
+            .iter()
+            .map(|x| (a + b * x.long).max(0.0))
+            .collect(),
+        joint,
+    )
 }
 
 /// The line an AI vehicle turns about (`[rot_pnt_long]`, normally the rear axle) and the
@@ -194,7 +231,11 @@ pub fn ai_rotation_point(def: &Vehicle) -> (f32, f32) {
         return (-1.3, 2.6);
     }
     // a rotation point at (or in front of) the front axle is a file without one
-    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 { def.rot_pnt_long } else { rear };
+    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 {
+        def.rot_pnt_long
+    } else {
+        rear
+    };
     (rot, (front - rot).max(0.8))
 }
 
@@ -203,7 +244,11 @@ impl AiSpec {
         let (rot_long, wheelbase) = ai_rotation_point(def);
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
-        let (front_long, rear_long) = if def.axles.len() >= 2 { (front_long, rear_long) } else { (rot_long + wheelbase, rot_long) };
+        let (front_long, rear_long) = if def.axles.len() >= 2 {
+            (front_long, rear_long)
+        } else {
+            (rot_long + wheelbase, rot_long)
+        };
         // `[mass]` is in tonnes (a few files give kilograms), `[momentofintertia]` in the
         // same unit times m²: 1 t and 1.49 for a Golf, 10.9 t and 300 for an SD200
         let tonnes = def.mass < 100.0;
@@ -211,13 +256,27 @@ impl AiSpec {
         let unit = if tonnes { 1000.0 } else { 1.0 };
         let heavy = mass > AI_HEAVY_MASS;
         // inv_min_turnradius = tan(max angle) / wheelbase
-        let max_steer = if def.inv_min_turn_radius > 0.0 { (def.inv_min_turn_radius * wheelbase).atan().to_degrees().clamp(15.0, 55.0) } else { 35.0 };
+        let max_steer = if def.inv_min_turn_radius > 0.0 {
+            (def.inv_min_turn_radius * wheelbase)
+                .atan()
+                .to_degrees()
+                .clamp(15.0, 55.0)
+        } else {
+            35.0
+        };
         let mut wheels = Vec::new();
         for (i, a) in def.axles.iter().enumerate() {
             let half = (a.max_width * 0.5).max(0.4);
             for (side, lat) in [(0, -half), (1, half)] {
                 // `achse_feder` / `achse_daempfer`: kN/m and kNs/m per side
-                wheels.push(AiWheelSpec { axle: i, side, lat, long: a.long, k: a.spring.max(0.0) * 1000.0, c: a.damper.max(0.0) * 1000.0 });
+                wheels.push(AiWheelSpec {
+                    axle: i,
+                    side,
+                    lat,
+                    long: a.long,
+                    k: a.spring.max(0.0) * 1000.0,
+                    c: a.damper.max(0.0) * 1000.0,
+                });
             }
         }
         let n = wheels.len().max(1) as f32;
@@ -243,7 +302,10 @@ impl AiSpec {
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
         // (pitch and roll: the first and the third value, as the player's body once read them;
         // OMSI's roll is the second - see `PhysicsSpec::inertia`)
-        let mut inertia = [def.moment_of_inertia[0] * unit, def.moment_of_inertia[2] * unit];
+        let mut inertia = [
+            def.moment_of_inertia[0] * unit,
+            def.moment_of_inertia[2] * unit,
+        ];
         if inertia[0] <= 0.0 {
             inertia[0] = mass * (front_long * front_long + rear_long * rear_long) * 0.5;
         }
@@ -275,7 +337,11 @@ impl AiSpec {
             wheels,
             axle_count: def.axles.len().max(1),
             mass,
-            cog: if def.cog_height > 0.0 { def.cog_height } else { 0.6 },
+            cog: if def.cog_height > 0.0 {
+                def.cog_height
+            } else {
+                0.6
+            },
             inertia,
             spring,
             damper,

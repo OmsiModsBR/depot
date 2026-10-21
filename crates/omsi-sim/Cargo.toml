@@ -26,6 +26,9 @@ parking_lot = { workspace = true }
 # The values the player's physics once gave a `.bus` file that leaves one out, kept unused
 # (`rigid::params::fallbacks`).
 model-fallbacks = []
+# `omsi_sim::testing`: what the tests in `tests/` reach of the crate's insides.
+test-support = []
 
 [dev-dependencies]
+omsi-sim = { path = ".", features = ["test-support"] }
 omsi-audio = { path = "../omsi-audio" }

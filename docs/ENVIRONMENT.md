@@ -41,7 +41,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_OPENXR_SCALE` | number | `omsi-app::openxr` |  | The size of the VR picture against the headset's recommendation. |
 | `OMSI_RADIO_ALLOW_HTTP` | text | `omsi-audio::url_guard` |  | `1`, `true` or `yes`: radio stations on plain `http` are allowed. |
 | `OMSI_SAFE_GPU` | number | `omsi-app::settings` | yes | How many times in a row the game started again after a lost graphics device (set by the game itself; any number starts it with the safe graphics settings). |
-| `OMSI_SEED` | number | `omsi-app` | yes | Repeat a session: the scripts' `random` is seeded with this number. |
+| `OMSI_SEED` | number | `omsi-app` | yes | Repeat a session: the scripts' `random` and the cars on the parking spaces are seeded with this number. |
 | `OMSI_TEXTURE_MEMORY` | number | `omsi-app::memory` | yes | The texture budget in MB, in place of the setting (an eighth of the machine's memory when neither says). |
 | `OMSI_TOUCH` | switch | `omsi-app::platform` | yes | The on-screen controls of a phone on a computer too. |
 | `OMSI_TRACKIR_NATIVE` | text | `omsi-app::headtrack` |  | `0`: TrackIR read through its own interface left off. |
@@ -94,6 +94,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_DAY_AIR` | text | `omsi-render::sky::air` |  | The air fixed for comparisons (`haze,angstrom[,height,strat]`). |
 | `OMSI_DEBUG_AI_WIDE` | switch | `omsi-sim::ai` |  | Log, every tenth of a second, an AI car standing over 1.5 m beside its way. |
 | `OMSI_DEBUG_ANIM` | text | `omsi-sim::vehicle` |  | Log the animation of the meshes whose name contains this text. |
+| `OMSI_DEBUG_AUDIO` | number | `omsi-audio::mixer` |  | Log, every this many seconds (10 by default), how the sound device's callbacks come (late ones, blocks mixed too slowly, waits for the voice list) and the loops started again soon after they stopped. |
 | `OMSI_DEBUG_BOARDS` | switch | `omsi-app::schedule` |  | Log what the stops' departure boards show. |
 | `OMSI_DEBUG_CAMERA` | number | `omsi-app::camera_arm` |  | Log the camera's arm (1, or a higher number for more). |
 | `OMSI_DEBUG_CAR` | number | `omsi-app::traffic` |  | Log the AI vehicle with this id, every frame. |

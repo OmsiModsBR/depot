@@ -5,6 +5,7 @@ use super::state::{fmt_bytes, hhmm, short_map};
 use super::theme::*;
 use super::ui::{id_of, matches, ButtonKind, Ui};
 use super::{Launcher, Page};
+use omsi_launcher_ui::Page as UiPage;
 use glam::Vec2;
 use omsi_launcher_lib as core;
 use omsi_ui::paint::Align;
@@ -98,14 +99,14 @@ fn release_feedback(io: &mut Option<crate::controllers::Devices>, active: &mut b
 // --- profile --------------------------------------------------------------------------------
 
 pub fn profile(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Profile", "The driver whose personnel file the game writes: hours, kilometres, punctuality, tickets.");
+    let body = l.page_title(area, UiPage::Profile);
     let left_w = (body.w * 0.56).min(700.0);
     let left = Rect::new(body.x, body.y, left_w, body.h);
     let right = Rect::new(body.x + left_w + GAP * 2.0, body.y, body.w - left_w - GAP * 2.0, body.h);
     // driver chooser
     let top = Rect::new(left.x, left.y, left.w, 132.0);
     l.ui.panel(top);
-    let inner = l.ui.heading(Rect::new(top.x + 18.0, top.y + 14.0, top.w - 36.0, top.h - 28.0), "Driver", Some("person"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(top.x + 18.0, top.y + 14.0, top.w - 36.0, top.h - 28.0), "Driver");
     let names = l.state.profiles.clone();
     let mut sel = names.iter().position(|n| *n == l.state.config.profile).unwrap_or(0);
     let half = (inner.w - GAP) * 0.5;
@@ -116,7 +117,8 @@ pub fn profile(l: &mut Launcher, area: Rect) {
         l.state.touched();
     }
     let danger_armed = l.pages.confirm_delete.map(|t| t.elapsed().as_secs() < 4).unwrap_or(false);
-    if l.ui.button("profile-delete", Rect::new(inner.x + half + GAP, inner.y, half, ROW), if danger_armed { "Click again to delete" } else { "Delete this driver" }, Some("delete"), ButtonKind::Danger) {
+    // (no driver yet: nothing to delete)
+    if !names.is_empty() && l.ui.button("profile-delete", Rect::new(inner.x + half + GAP, inner.y, half, ROW), if danger_armed { "Click again to delete" } else { "Delete this driver" }, Some("delete"), ButtonKind::Danger) {
         if danger_armed {
             let name = l.state.config.profile.clone();
             match core::delete_profile(&name) {
@@ -134,7 +136,8 @@ pub fn profile(l: &mut Launcher, area: Rect) {
             l.pages.confirm_delete = Some(std::time::Instant::now());
         }
     }
-    let y = inner.y + ROW + 10.0;
+    // (with no driver yet the new one's line takes the first row)
+    let y = if names.is_empty() { inner.y } else { inner.y + ROW + 10.0 };
     l.ui.text_input("new-driver", Rect::new(inner.x, y, half, ROW), &mut l.pages.new_driver, "New driver's name", Some("person"));
     if l.ui.button("profile-create", Rect::new(inner.x + half + GAP, y, half, ROW), "Create", Some("add"), ButtonKind::Normal) {
         let name = l.pages.new_driver.trim().to_string();
@@ -204,7 +207,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
     }
     // recent runs
     l.ui.panel(right);
-    let inner = l.ui.heading(Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent runs", Some("history"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent runs");
     let sessions = p.sessions.clone();
     l.ui.scroll_area("runs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
         if sessions.is_empty() {
@@ -323,7 +326,10 @@ thread_local! {
 }
 
 pub fn settings(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Settings", "Every change is saved at once; the game reads them when it starts.");
+    // (where on the page: the tab shown)
+    let (_, title, line) = UiPage::Settings.heading().unwrap_or_default();
+    let place = SETTINGS_TABS[l.pages.settings_tab.min(SETTINGS_TABS.len() - 1)];
+    let body = l.page_title_with(area, UiPage::Settings.title(), (place, title, line));
     // (one tab at a time: the whole page in three columns was taller than two screens, and a
     // setting was found by reading all of it)
     let bar = Rect::new(body.x, body.y, body.w.min(660.0), 36.0);
@@ -407,7 +413,7 @@ impl Col {
     /// The column in `r`, under the title of its first section.
     fn new(ui: &mut Ui, r: Rect, title: &str) -> Col {
         ui.panel(r);
-        let inner = ui.heading(Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title, None);
+        let inner = Launcher::card_title(ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title);
         Col { top: r.y, inner, y: inner.y }
     }
 
@@ -421,7 +427,7 @@ impl Col {
     /// Another section, under its title.
     fn section(&mut self, ui: &mut Ui, title: &str) {
         self.y += 6.0;
-        ui.heading(Rect::new(self.inner.x, self.y, self.inner.w, 28.0), title, None);
+        Launcher::part_title(ui, Rect::new(self.inner.x, self.y, self.inner.w, 28.0), title);
         self.y += 32.0;
     }
 
@@ -513,6 +519,13 @@ fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut 
     });
 }
 
+/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
+/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
+fn d3d9_fixes_vanilla(s: &Value) -> bool {
+    let vr = get(s, "vr").as_bool().unwrap_or(false) || omsi_cfg::flags::OPENXR.is_set();
+    cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9") && !vr
+}
+
 /// How the game looks and how fast it runs.
 fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Graphics");
@@ -545,10 +558,19 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
             }
         }
     }
-    sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+    // "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no graphics improvements to choose,
+    // Vanilla and fixed (the saved choice comes back with another graphics API)
+    let fixed = d3d9_fixes_vanilla(s);
+    if fixed {
+        let r = c.row();
+        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Graphics");
+        ui.label(Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), "Vanilla (as OMSI 2), fixed with DirectX9 (D3D9Ex)");
+    } else {
+        sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+    }
     // Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain
-    let classic = get(s, "graphics").as_str() == Some("vanilla");
-    let traced = get(s, "graphics").as_str() == Some("enhanced_plus");
+    let classic = fixed || get(s, "graphics").as_str() == Some("vanilla");
+    let traced = !fixed && get(s, "graphics").as_str() == Some("enhanced_plus");
     sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
     sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
     sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
@@ -598,9 +620,10 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     toggle_setting(ui, s, dirty, c.row(), "V-sync", "vsync");
     sel_setting(ui, s, dirty, "s-fps", c.row(), "Frame limit", "max_fps", &[("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps"), ("144", "144 fps"), ("1000", "Unlimited")]);
     // (a Mac has Metal only; elsewhere a driver's Vulkan that misbehaves, or a card without
-    // it, is got round here)
+    // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
+    // renderer, Windows only and never chosen by "Automatic")
     if cfg!(windows) {
-        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL")]);
+        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL"), ("d3d9", "DirectX9 (D3D9Ex)")]);
     } else if !cfg!(target_os = "macos") {
         sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("gl", "OpenGL")]);
     }
@@ -684,7 +707,6 @@ fn driving_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
     toggle_setting(ui, s, dirty, c.row(), "Force feedback and vibration", "ff_enabled");
     toggle_setting(ui, s, dirty, c.row(), "Invert force feedback by default", "ff_invert");
     c.y += ui.paragraph("Wheels with a saved direction use their own setting under Controls → Game controllers.", Vec2::new(c.inner.x, c.y), c.inner.w, 12.5, Weight::Regular, TEXT_DIM) + 8.0;
-    toggle_setting(ui, s, dirty, c.row(), "Invert force feedback", "ff_invert");
     // what the wheel feels all the time while the bus runs: the road's grain and the
     // engine's buzz, and how long a jolt eases away once it is over
     for (key, label, id) in [("ff_road_vib", "Road texture vibration", "s-ffroad"), ("ff_engine_vib", "Engine vibration", "s-ffeng")] {
@@ -1279,9 +1301,12 @@ fn known_action(a: &str) -> Option<String> {
 }
 
 pub fn controls(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Controls", if l.pages.controls_tab == 0 { "Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is." } else { "What each axis and button of a wheel, pedals or joystick does - OMSI 2's gamectrler.cfg, kept in the content folder." });
+    // (where on the page is the tab shown, and its line says how it is used)
+    let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
+    let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
+    let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
-    if l.ui.segmented("controls-tab", Rect::new(body.right() - 320.0, body.y - 46.0, 320.0, 34.0), &mut tab, &["Keyboard", "Game controllers"]) {
+    if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
         l.pages.controls_tab = tab;
     }
     if l.pages.controls_tab == 1 {
@@ -1348,7 +1373,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     for (sec, (title, sub, key)) in [("Driving & the bus", "The bus's own keys", "vehicles"), ("The game", "Menus, views, pausing", "game")].iter().enumerate() {
         let r = Rect::new(body.x + sec as f32 * (half + GAP * 2.0), body.y, half, body.h);
         l.ui.panel(r);
-        let inner = l.ui.heading(Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title, Some(if sec == 0 { "directions_bus" } else { "sports_esports" }));
+        let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title);
         l.ui.text_in(sub, Rect::new(inner.x, inner.y - 6.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         let mut filter = std::mem::take(&mut l.pages.kb_filter[sec]);
         let event_w = if sec == 0 { 138.0 } else { 0.0 };
@@ -1544,7 +1569,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
     let left = Rect::new(body.x, body.y, list_w, body.h);
     let right = Rect::new(body.x + list_w + GAP * 2.0, body.y, body.w - list_w - GAP * 2.0, body.h);
     l.ui.panel(left);
-    let inner = l.ui.heading(Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0), "Devices", Some("sports_esports"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0), "Devices");
     let mut add: Option<String> = None;
     let mut sel = pv.selected;
     let list_r = Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h - 108.0);
@@ -1624,7 +1649,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
     // the device shown
     l.ui.panel(right);
     let Some(d) = devices.get_mut(pv.selected) else { return };
-    let inner = l.ui.heading(Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), &d.name.clone(), Some("tune"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), &d.name.clone());
     let live_dev = crate::controllers::find_connected(&connected, &d.name);
     let live: Vec<(usize, f32)> = live_dev.map(|c| c.axes.clone()).unwrap_or_default();
     // every button the device has gets its line (DirectInput says how many)
@@ -2143,7 +2168,7 @@ fn ago(t: u64) -> String {
 }
 
 pub fn sessions(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Sessions", "The games you started, and who drives with you.");
+    let body = l.page_title(area, UiPage::Sessions);
     let list = l.state.instances.clone();
     if list.is_empty() {
         let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
@@ -2301,14 +2326,14 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     if !l.state.mods_asked {
         l.state.load_mods();
     }
-    let body = l.page_title(area, "Mods", "A bus, a map, scenery, a whole OMSI folder - as a folder, or a .zip that the game reads in place from Archives. The original OMSI 2 folder is never written to.");
+    let body = l.page_title(area, UiPage::Mods);
     let cols = 3;
     let cw = (body.w - GAP * 2.0 * (cols as f32 - 1.0)) / cols as f32;
     let colr = |k: usize| Rect::new(body.x + k as f32 * (cw + GAP * 2.0), body.y, cw, body.h);
     // install
     let c0 = colr(0);
     l.ui.panel(c0);
-    let inner = l.ui.heading(Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod", Some("download"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod");
     let mut y = inner.y;
     let half = (inner.w - GAP) * 0.5;
     if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
@@ -2365,7 +2390,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     }
     y += 10.0;
     if let Some(m) = l.state.mods.clone() {
-        l.ui.heading(Rect::new(inner.x, y, inner.w, 28.0), "The Mods folder", None);
+        Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "The Mods folder");
         y += 30.0;
         y += l.ui.paragraph(&format!("Anything put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM);
         if !m.inbox_items.is_empty() {
@@ -2375,7 +2400,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     // installs
     let c1 = colr(1);
     l.ui.panel(c1);
-    let inner = l.ui.heading(Rect::new(c1.x + 18.0, c1.y + 14.0, c1.w - 36.0, c1.h - 28.0), "Installs", Some("inventory_2"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(c1.x + 18.0, c1.y + 14.0, c1.w - 36.0, c1.h - 28.0), "Installs");
     if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 130.0, c1.y + 12.0, 130.0, 30.0), "Clear finished", None, ButtonKind::Ghost) {
         core::install::clear_finished();
         l.state.poll_now();
@@ -2428,49 +2453,54 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     // content folder
     let c2 = colr(2);
     l.ui.panel(c2);
-    let inner = l.ui.heading(Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, c2.h - 28.0), "Content folder", Some("folder_open"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, c2.h - 28.0), "Content folder");
     let Some(m) = l.state.mods.clone() else {
         l.ui.text_in("Reading…", Rect::new(inner.x, inner.y, inner.w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
         return;
     };
-    let mut y = inner.y;
-    y += l.ui.paragraph(&m.content_dir, Vec2::new(inner.x, y), inner.w, 12.0, Weight::Medium, TEXT_SOFT);
-    y += 6.0;
-    l.ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(inner.x, y, inner.w, 20.0), 13.0, Weight::Bold, ACCENT, Align::Left);
-    y += 30.0;
-    for (f, n) in &m.folders {
-        l.ui.icon("folder_open", Vec2::new(inner.x + 9.0, y + 10.0), 16.0, TEXT_DIM);
-        l.ui.text_in(f, Rect::new(inner.x + 26.0, y, inner.w * 0.6, 20.0), 12.5, Weight::Medium, TEXT, Align::Left);
-        l.ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(inner.x, y, inner.w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
-        y += 24.0;
-    }
-    if !m.archives.is_empty() {
-        y += 8.0;
-        l.ui.heading(Rect::new(inner.x, y, inner.w, 28.0), "Archives used in place", None);
+    // (scrolled: a long list of archives or buses waiting would run past the card)
+    l.ui.scroll_area("mods-content", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
+        let (x, w) = (v.x + 6.0, v.w - 16.0);
+        let mut y = v.y;
+        y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 12.0, Weight::Medium, TEXT_SOFT);
+        y += 6.0;
+        ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(x, y, w, 20.0), 13.0, Weight::Bold, ACCENT, Align::Left);
         y += 30.0;
-        for (n, b) in &m.archives {
-            l.ui.text_in(&format!("{n}  ({})", fmt_bytes(*b)), Rect::new(inner.x, y, inner.w, 20.0), 12.0, Weight::Regular, TEXT_SOFT, Align::Left);
-            y += 22.0;
+        for (f, n) in &m.folders {
+            ui.icon("folder_open", Vec2::new(x + 9.0, y + 10.0), 16.0, TEXT_DIM);
+            ui.text_in(f, Rect::new(x + 26.0, y, w * 0.6, 20.0), 12.5, Weight::Medium, TEXT, Align::Left);
+            ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+            y += 24.0;
         }
-    }
-    if !m.waiting.is_empty() {
-        y += 8.0;
-        l.ui.heading(Rect::new(inner.x, y, inner.w, 28.0), "Waiting for their bus", None);
-        y += 30.0;
-        for w in &m.waiting {
-            l.ui.text_in(w, Rect::new(inner.x, y, inner.w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
-            y += 22.0;
+        if !m.archives.is_empty() {
+            y += 8.0;
+            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Archives used in place");
+            y += 30.0;
+            for (n, b) in &m.archives {
+                ui.text_in(&format!("{n}  ({})", fmt_bytes(*b)), Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_SOFT, Align::Left);
+                y += 22.0;
+            }
         }
-    }
+        if !m.waiting.is_empty() {
+            y += 8.0;
+            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Waiting for their bus");
+            y += 30.0;
+            for item in &m.waiting {
+                ui.text_in(item, Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+                y += 22.0;
+            }
+        }
+        y - v.y
+    });
 }
 
 // --- setup -----------------------------------------------------------------------------------------
 
 pub fn setup(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Setup", "Where the original game and this one are.");
+    let body = l.page_title(area, UiPage::Setup);
     let r = Rect::new(body.x, body.y, body.w.min(820.0), 300.0);
     l.ui.panel(r);
-    let inner = l.ui.heading(Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Folders", Some("folder_open"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Folders");
     let mut root = l.pages.setup_root.clone().unwrap_or_else(|| l.state.config.root.clone());
     let mut game = l.pages.setup_game.clone().unwrap_or_else(|| l.state.config.game.clone());
     let mut y = inner.y;
@@ -2548,11 +2578,15 @@ pub fn setup(l: &mut Launcher, area: Rect) {
 
 /// OMSI's four tutorials: what each teaches, and a button to start it.
 pub fn tutorials(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Tutorials", "OMSI 2's own lessons: each opens its situation, with its pages beside the picture (Enter turns the page).");
+    let body = l.page_title(area, UiPage::Tutorials);
     static LIST: std::sync::OnceLock<Vec<(usize, String, String)>> = std::sync::OnceLock::new();
     let list = LIST.get_or_init(omsi_launcher_lib::tutorials);
     if list.is_empty() {
-        l.ui.paragraph("No tutorials were found in the OMSI 2 folder (Tutorials).", Vec2::new(body.x, body.y), body.w, 13.0, Weight::Regular, TEXT_DIM);
+        // (a card, as Sessions says it has none)
+        let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
+        l.ui.panel(r);
+        l.ui.icon("help", Vec2::new(r.x + 40.0, r.center().y), 36.0, TEXT_FAINT);
+        l.ui.paragraph("No tutorials were found in the OMSI 2 folder (Tutorials).", Vec2::new(r.x + 76.0, r.y + 52.0), r.w - 100.0, 13.5, Weight::Regular, TEXT_DIM);
         return;
     }
     let cols = 2;
@@ -2827,6 +2861,41 @@ mod settings_tests {
             }
             assert_eq!(ui.drawn.len(), names.len(), "the {} tab has a clickable thing more than the list names", SETTINGS_TABS[tab]);
         }
+    }
+
+    /// "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no Vanilla/Vanilla+/Enhanced to
+    /// choose and none of Enhanced's rows, and the saved choice stays for the other APIs.
+    #[test]
+    fn d3d9_hides_the_graphics_choice_and_keeps_it_saved() {
+        let drawn = |s: &mut Value| {
+            let mut ui = Ui::new();
+            frame(&mut ui, 0, s, &mut outside());
+            ui
+        };
+        let mut s = all_rows();
+        assert_eq!(s["graphics"], json!("enhanced"));
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        assert!(ui.drawn.contains_key(&id_of("s-shadow")));
+
+        // (`all_rows` has VR on, which takes DirectX 12 instead)
+        s["vr"] = json!(false);
+        s["graphics_api"] = json!("d3d9");
+        let ui = drawn(&mut s);
+        assert_eq!(ui.drawn.contains_key(&id_of("s-graphics")), !cfg!(windows));
+        assert_eq!(ui.drawn.contains_key(&id_of("s-shadow")), !cfg!(windows));
+        assert_eq!(s["graphics"], json!("enhanced"));
+
+        // (VR takes DirectX 12 instead: the choice stays)
+        s["vr"] = json!(true);
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        s["vr"] = json!(false);
+
+        s["graphics_api"] = json!("vulkan");
+        let ui = drawn(&mut s);
+        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
+        assert_eq!(s["graphics"], json!("enhanced"));
     }
 
     #[test]

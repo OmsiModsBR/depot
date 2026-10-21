@@ -11,6 +11,14 @@ use super::route::{RouteStyle, build_route, lane_from_right, probe_lanes};
 use super::streets::build_streets;
 
 impl Navigator {
+    /// The maps' Gpu (the small map's and the city map's), handing its draws to the
+    /// D3D9Ex mirror when there is one.
+    pub(super) fn new_gpu(&mut self, renderer: &Renderer) -> Gpu {
+        let mut gpu = Gpu::new(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size);
+        gpu.set_mirror(self.ui_mirror.take());
+        gpu
+    }
+
     pub fn new(enabled: bool, opacity: f32, corner: &str) -> Navigator {
         Navigator {
             panel_overlay: None,
@@ -28,6 +36,7 @@ impl Navigator {
             panel_rect: [0.0; 4],
             origin_x: 0.0,
             gpu: None,
+            ui_mirror: None,
             fonts: Fonts::new(),
             atlas: Atlas::new(1024),
             target: None,
@@ -587,7 +596,7 @@ impl Navigator {
                 Some(sf) => sf.locate(f.bus.truncate()),
                 None => (None, None),
             };
-            self.loc_alt = self.surface.as_ref().filter(|_| self.show_contours).and_then(|sf| sf.altitude_at(f.bus.truncate()));
+            self.loc_alt = self.surface.as_ref().filter(|_| self.show_surface && self.show_contours).and_then(|sf| sf.altitude_at(f.bus.truncate()));
             self.loc_limit = self.surface.as_ref().filter(|s| self.show_surface && s.has_location()).and_then(|sf| sf.street_info(f.bus.truncate(), 30.0)).map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
@@ -621,7 +630,7 @@ impl Navigator {
         let (x0, y0) = self.panel_origin((sw, sh), (pw, ph), crate::platform::touch_controls(), f.info_rect);
 
         if self.gpu.is_none() {
-            self.gpu = Some(Gpu::new(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
+            self.gpu = Some(self.new_gpu(renderer));
         }
         let resized = self.target.map(|t| (t.1, t.2) != (w, h)).unwrap_or(true);
         if resized {
@@ -693,7 +702,7 @@ impl Navigator {
             let key = self.surface_version * 2 + self.light as u64;
             if self.surface_mesh.map(|m| m.0 != key || m.1 != anchor).unwrap_or(true) {
                 let mut p = Painter::new();
-                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light, false);
+                sf.build(&mut p, anchor, Some((anchor, ROAD_RADIUS * 1.4)), self.light, 0.0);
                 self.surface_mesh = Some((key, anchor, p.len()));
                 surface_verts = Some(p.verts);
             }
@@ -1081,6 +1090,12 @@ impl Navigator {
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ];
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
+        // (drawn into the panel's texture, made in `frame` before: under D3D9Ex the device
+        // draws into its own copy of it, which a device opened again does not keep; the
+        // next redraw, a thirtieth of a second on, puts it back, and the city map is drawn
+        // again every frame it is open)
+        debug_assert!(self.target.is_some(), "the minimap draws without its texture");
+        gpu.set_mirror_target(self.target.map(|t| t.0));
         gpu.render(device, queue, &mut enc, target, size, Some(wgpu::Color::TRANSPARENT), &layers, &draws);
         queue.submit([enc.finish()]);
     }

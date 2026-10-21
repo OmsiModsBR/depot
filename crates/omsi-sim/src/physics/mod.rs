@@ -50,11 +50,8 @@
 //!   The buffers a step works in (contacts, the solver's rows) stay with the procedures that
 //!   fill them.
 
-mod domain;
-mod implementation;
+pub(crate) mod domain;
+pub(crate) mod implementation;
 mod interface;
 
 pub use interface::*;
-
-#[cfg(test)]
-mod tests;

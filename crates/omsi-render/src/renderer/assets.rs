@@ -5,7 +5,7 @@ use crate::assets::{
     Freed, GpuTexture, Material, MaterialExtra, MaterialId, MaterialMaps, MaterialUniform, RgbaRef,
     TexAddressing, TextureId, Vertex,
 };
-use crate::gpu::buffer_init;
+use crate::gpu::{buffer_init, mip_levels};
 use crate::renderer::Renderer;
 use crate::scene::Scene;
 
@@ -477,7 +477,7 @@ impl Renderer {
             height,
             rgba,
         };
-        let mip_count = (32 - img.width.max(img.height).leading_zeros()).max(1);
+        let mip_count = mip_levels(img.width, img.height);
         let size = wgpu::Extent3d {
             width: img.width,
             height: img.height,

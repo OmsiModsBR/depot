@@ -2,7 +2,9 @@
 
 use super::draw::post_pass;
 use crate::assets::GpuTexture;
-use crate::gpu::{float_tex, pass_timer};
+use crate::gpu::{
+    float_tex, fullscreen_pipeline, pass_timer, sampler_entry, target_2d, uniform_entry,
+};
 use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
 use crate::sky::{atmosphere, SkyResources};
@@ -51,23 +53,9 @@ pub(crate) fn post_pipelines(
     let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("post"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
             float_tex(1),
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            sampler_entry(2),
             float_tex(3),
             float_tex(4),
             // (the screen mask for the tone mapping: the condensation on the bus's
@@ -94,35 +82,19 @@ pub(crate) fn post_pipelines(
         immediate_size: 0,
     });
     let post_pipeline = |entry: &str, target: wgpu::TextureFormat| {
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(entry),
-            layout: Some(&post_pl),
-            vertex: wgpu::VertexState {
-                module: &post_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
+        fullscreen_pipeline(
+            device,
+            entry,
+            &post_pl,
+            &post_shader,
+            "vs_main",
+            entry,
+            wgpu::ColorTargetState {
+                format: target,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &post_shader,
-                entry_point: Some(entry),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        })
+        )
     };
     PostPipelines {
         down_first: post_pipeline("fs_down_first", hdr_format),
@@ -400,20 +372,17 @@ impl Exposure {
             depth_or_array_layers: 1,
         };
         let tiny = |label: &str| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: one,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: hdr_format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            target_2d(
+                device,
+                label,
+                one,
+                1,
+                hdr_format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+            )
+            .create_view(&Default::default())
         };
         let meter_view = tiny("exposure meter");
         let adapt_views = [tiny("exposure a"), tiny("exposure b")];

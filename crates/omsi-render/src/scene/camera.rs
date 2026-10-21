@@ -1,6 +1,9 @@
 //! The camera and the camera uniform the shaders read.
 
-use crate::gpu::{array_layout_entry_on, ArrayPath};
+use crate::gpu::{
+    array_layout_entry_on, depth_texture_entry, sampler_entry, texture_entry, uniform_entry,
+    ArrayPath,
+};
 use glam::{DVec3, Mat4, Vec3};
 
 #[derive(Default)]
@@ -137,72 +140,22 @@ pub(crate) fn camera_layout_entries(
     sixteen: bool,
 ) -> Vec<wgpu::BindGroupLayoutEntry> {
     let mut camera_entries = vec![
-        wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        },
+        uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
         array_layout_entry_on(path, 1, wgpu::ShaderStages::VERTEX, true),
         array_layout_entry_on(path, 2, wgpu::ShaderStages::VERTEX, true),
-        wgpu::BindGroupLayoutEntry {
-            binding: 5,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Depth,
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        },
+        depth_texture_entry(5),
         wgpu::BindGroupLayoutEntry {
             binding: 6,
             visibility: wgpu::ShaderStages::FRAGMENT,
             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
             count: None,
         },
-        wgpu::BindGroupLayoutEntry {
-            binding: 7,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Depth,
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        },
-        wgpu::BindGroupLayoutEntry {
-            binding: 8,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        },
-        wgpu::BindGroupLayoutEntry {
-            binding: 9,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count: None,
-        },
+        depth_texture_entry(7),
+        texture_entry(8),
+        sampler_entry(9),
         array_layout_entry_on(path, 10, wgpu::ShaderStages::VERTEX, false),
         // enhanced: its lighting, the reflection probe, a clamped linear sampler, the sky table
-        wgpu::BindGroupLayoutEntry {
-            binding: 11,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        },
+        uniform_entry(11, wgpu::ShaderStages::VERTEX_FRAGMENT),
         wgpu::BindGroupLayoutEntry {
             binding: 12,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -213,22 +166,8 @@ pub(crate) fn camera_layout_entries(
             },
             count: None,
         },
-        wgpu::BindGroupLayoutEntry {
-            binding: 13,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count: None,
-        },
-        wgpu::BindGroupLayoutEntry {
-            binding: 14,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        },
+        sampler_entry(13),
+        texture_entry(14),
         wgpu::BindGroupLayoutEntry {
             binding: 17,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -240,26 +179,8 @@ pub(crate) fn camera_layout_entries(
             count: None,
         },
         // the tile light maps around the camera, and where they lie
-        wgpu::BindGroupLayoutEntry {
-            binding: 18,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        },
-        wgpu::BindGroupLayoutEntry {
-            binding: 19,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        },
+        texture_entry(18),
+        uniform_entry(19, wgpu::ShaderStages::FRAGMENT),
     ];
     // the point lights and their grid (see `ArrayPath::NoStorage`)
     if path != ArrayPath::NoStorage {

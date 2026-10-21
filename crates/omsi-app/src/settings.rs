@@ -442,6 +442,9 @@ impl Settings {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
+        // "DirectX9 (D3D9Ex)" draws the picture as OMSI 2 does and no more: Vanilla, whatever
+        // the file says (it keeps the choice for the other graphics APIs)
+        s = s.locked_for_api();
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
         if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
@@ -546,7 +549,7 @@ impl Settings {
                 }
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
-                "volume" => s.volume = v.parse().unwrap_or(s.volume),
+                "volume" => s.volume = v.parse::<f32>().ok().filter(|x| x.is_finite()).unwrap_or(s.volume),
                 // "auto", a fraction (0.75) or a percentage (75)
                 "render_scale" => {
                     s.render_scale = if v.eq_ignore_ascii_case("auto") {
@@ -573,7 +576,7 @@ impl Settings {
                 "auto_clutch" | "automatic_clutch" => s.auto_clutch = b(v),
                 "momentary_gears" | "gear_buttons_hold" => s.momentary_gears = b(v),
                 "auto_shift" => s.auto_shift = b(v),
-                "min_obj_size" | "performance_minobjsize" => s.min_obj_size = v.parse::<f32>().map(|x| x.clamp(0.0, 0.2)).unwrap_or(s.min_obj_size),
+                "min_obj_size" | "performance_minobjsize" => s.min_obj_size = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 0.2)).unwrap_or(s.min_obj_size),
                 "max_obj_dist" | "performance_maxobjdist" => s.max_obj_dist = if v.eq_ignore_ascii_case("off") { 0.0 } else if v.eq_ignore_ascii_case("auto") { -1.0 } else { v.parse::<f32>().map(|x| x.max(0.0)).unwrap_or(s.max_obj_dist) },
                 "max_fps" | "maxfps" => {
                     s.max_fps = v.parse::<f32>().map(|x| x.max(0.0) as u32).unwrap_or(s.max_fps);
@@ -589,9 +592,9 @@ impl Settings {
                 "show_fps" | "fps" => s.show_fps = b(v),
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
-                "pax_density" | "aipassfactor" => s.pax_density = v.trim_end_matches('%').parse::<f32>().map(|x| if x > 5.0 { x / 100.0 } else { x }).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.pax_density),
-                "vol_ai" => s.vol_ai = v.parse::<f32>().map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_ai),
-                "vol_scenery" => s.vol_scenery = v.parse::<f32>().map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_scenery),
+                "pax_density" | "aipassfactor" => s.pax_density = v.trim_end_matches('%').parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x > 5.0 { x / 100.0 } else { x }).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.pax_density),
+                "vol_ai" => s.vol_ai = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_ai),
+                "vol_scenery" => s.vol_scenery = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(s.vol_scenery),
                 "doppler" | "sound_doppler" => s.doppler = b(v),
                 "muffle_outside" => s.muffle_outside = b(v),
                 "mirror_hud" => s.mirror_hud = v.parse::<u8>().map(|x| x.min(3)).unwrap_or(s.mirror_hud),
@@ -604,7 +607,7 @@ impl Settings {
                 .into(),
                 "texture_memory" | "texmemlimit" => s.texture_memory = v.parse::<f32>().map(|x| x.max(0.0) as u32).unwrap_or(s.texture_memory),
                 "maintenance" | "wear_lifespan" => s.maintenance = v.parse::<u8>().map(|x| x.min(4)).unwrap_or(s.maintenance),
-                "ai_unsched_factor" | "aiunschedfactor" => s.ai_unsched_factor = v.trim_end_matches('%').parse::<f32>().map(|x| (x / 100.0).clamp(0.0, 3.0)).unwrap_or(s.ai_unsched_factor),
+                "ai_unsched_factor" | "aiunschedfactor" => s.ai_unsched_factor = v.trim_end_matches('%').parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (x / 100.0).clamp(0.0, 3.0)).unwrap_or(s.ai_unsched_factor),
                 "ai_max_scheduled" | "aimaxcountscheduled" => s.ai_max_scheduled = v.parse().unwrap_or(s.ai_max_scheduled),
                 "ai_max_humans" | "aimaxhumans" => s.ai_max_humans = v.parse::<u32>().map(|x| x.max(1)).unwrap_or(s.ai_max_humans),
                 "ai_max_parked" | "aimaxcountparked" => s.ai_max_parked = v.parse::<i32>().map(|x| x.max(-1)).unwrap_or(s.ai_max_parked),
@@ -630,7 +633,7 @@ impl Settings {
                 "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
                 "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
                 "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = v.trim().to_ascii_lowercase(),
+                "graphics_api" => s.graphics_api = match v.trim().to_ascii_lowercase().as_str() { x @ ("vulkan" | "dx12" | "gl") => x.to_string(), "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9".to_string(), _ => "auto".to_string() },
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),
@@ -657,12 +660,12 @@ impl Settings {
                 "head_idle_pace" => s.head_idle_pace = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 2.0)).unwrap_or(s.head_idle_pace),
                 "head_tracking" => s.head_tracking = b(v),
                 "head_tracking_invert" => s.head_tracking_invert = v.to_ascii_lowercase(),
-                "head_tracking_yaw_sens" => s.head_tracking_yaw_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_yaw_sens),
-                "head_tracking_pitch_sens" => s.head_tracking_pitch_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_pitch_sens),
-                "head_tracking_roll_sens" => s.head_tracking_roll_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_roll_sens),
-                "head_tracking_x_sens" => s.head_tracking_x_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_x_sens),
-                "head_tracking_y_sens" => s.head_tracking_y_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_y_sens),
-                "head_tracking_z_sens" => s.head_tracking_z_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| if x <= 2.0 { x * 100.0 } else { x.clamp(0.0, 100.0) }).unwrap_or(s.head_tracking_z_sens),
+                "head_tracking_yaw_sens" => s.head_tracking_yaw_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_yaw_sens),
+                "head_tracking_pitch_sens" => s.head_tracking_pitch_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_pitch_sens),
+                "head_tracking_roll_sens" => s.head_tracking_roll_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_roll_sens),
+                "head_tracking_x_sens" => s.head_tracking_x_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_x_sens),
+                "head_tracking_y_sens" => s.head_tracking_y_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_y_sens),
+                "head_tracking_z_sens" => s.head_tracking_z_sens = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| (if x <= 2.0 { x * 100.0 } else { x }).clamp(0.0, 100.0)).unwrap_or(s.head_tracking_z_sens),
                 "head_tracking_invert_yaw" => s.head_tracking_invert_yaw = b(v),
                 "head_tracking_invert_pitch" => s.head_tracking_invert_pitch = b(v),
                 "head_tracking_invert_roll" => s.head_tracking_invert_roll = b(v),
@@ -740,7 +743,7 @@ impl Settings {
         text.push_str(&format!("triple_screen={}\ntriple_span={}\ntriple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\ntriple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", self.triple.enabled as u8, self.triple_span as u8, self.triple.width_mm, self.triple.distance_mm, self.triple.bezel_mm, self.triple.left_angle_deg, self.triple.right_angle_deg, self.triple.eye_height_mm));
         text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8));
         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
-        text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", self.head_tracking_yaw_sens, self.head_tracking_pitch_sens, self.head_tracking_roll_sens, self.head_tracking_x_sens, self.head_tracking_y_sens, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
+        text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", { let p = self.head_tracking_yaw_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_pitch_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_roll_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_x_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_y_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_z_sens; if p <= 2.0 { p / 100.0 } else { p } }, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
         text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
         text.push_str(&format!("right_stick_look={}\n", self.right_stick_look as u8));
         text.push_str(&format!("pad_steer_smooth={}\n", self.pad_steer_smooth));
@@ -770,6 +773,32 @@ impl Settings {
             Some(v) => v.trim() != "0",
             None => self.windy_trees,
         }
+    }
+
+    /// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9` or
+    /// OMSI_BACKEND=d3d9; Windows only, and not with VR, which takes DirectX 12).
+    pub fn d3d9_selected(&self) -> bool {
+        let wanted = omsi_cfg::flags::BACKEND.text().unwrap_or_else(|| self.graphics_api.clone());
+        cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
+    }
+
+    /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
+    fn locked_for_api(mut self) -> Self {
+        if self.d3d9_selected() {
+            self.lock_vanilla();
+        }
+        self
+    }
+
+    /// Vanilla graphics, whatever was set: the "same as OMSI 2" mode of "DirectX9 (D3D9Ex)"
+    /// has no graphics improvements to choose.
+    pub fn lock_vanilla(&mut self) {
+        self.graphics = "vanilla".into();
+        self.enhanced = false;
+        // (what a Vanilla file is loaded without, see `from_text`)
+        self.shadows = false;
+        self.ssao = false;
+        self.detail_textures = false;
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
@@ -847,6 +876,53 @@ mod tests {
         assert!(!super::Settings::default().info_bar);
         assert!(super::Settings::from_text("info_bar=1\n").info_bar);
         assert!(!super::Settings::from_text("info_bar=0\n").info_bar);
+    }
+
+    /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    #[test]
+    fn d3d9_has_no_graphics_improvements_to_choose() {
+        for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
+            let text = format!("graphics={g}\ngraphics_api=d3d9\n");
+            let chosen = Settings::from_text(&text);
+            assert_eq!(chosen.graphics, g);
+            // (the game loads it with `locked_for_api`; "DirectX9 (D3D9Ex)" is Windows only)
+            let loaded = chosen.clone().locked_for_api();
+            if cfg!(windows) {
+                assert_eq!(loaded.graphics, "vanilla");
+                assert!(loaded.classic() && !loaded.enhanced && !loaded.ray_tracing());
+                // as a file that says graphics=vanilla is loaded
+                let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
+                assert_eq!((loaded.shadows, loaded.ssao, loaded.detail_textures), (file.shadows, file.ssao, file.detail_textures));
+                assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
+                // VR takes DirectX 12 instead, with the graphics as chosen
+                let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
+                assert_eq!(vr.graphics, g);
+            } else {
+                assert_eq!(loaded, chosen);
+            }
+            // another API keeps the choice, which comes back when it is picked again
+            let other = Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
+            assert_eq!(other.graphics, g);
+        }
+        // --enhanced / --enhanced-plus (and their variables) do not apply to DirectX9 (D3D9Ex)
+        let d3d9 = Settings::from_text("graphics_api=d3d9\n");
+        assert_eq!(crate::startup::enhanced_wanted(&d3d9, true, true), if cfg!(windows) { (false, false) } else { (true, true) });
+        let vulkan = Settings::from_text("graphics_api=vulkan\n");
+        assert_eq!(crate::startup::enhanced_wanted(&vulkan, true, true), (true, true));
+        let mut s = Settings::from_text("graphics=enhanced_plus\n");
+        s.lock_vanilla();
+        assert!(s.classic() && !s.enhanced && !s.ray_tracing());
+    }
+
+    #[test]
+    fn d3d9_is_a_windows_graphics_api() {
+        let want = if cfg!(windows) { "d3d9" } else { "auto" };
+        for v in ["d3d9", "D3D9Ex", "dx9"] {
+            let s = super::Settings::from_text(&format!("graphics_api={v}\n"));
+            assert_eq!(s.graphics_api, want);
+            assert_eq!(super::Settings::from_text(&s.to_text()).graphics_api, want);
+        }
+        assert_eq!(super::Settings::default().graphics_api, "auto");
     }
 
     #[test]

@@ -27,6 +27,68 @@ pub(crate) fn shift_held_now(keys: &hashbrown::HashSet<KeyCode>) -> bool {
     keys.contains(&KeyCode::ShiftLeft) || keys.contains(&KeyCode::ShiftRight)
 }
 
+/// The launcher ends when the program that started it (`depot-launcher`, process `pid`) does,
+/// stopped by hand included: else it stayed open on its own, and its preview helper with it
+/// (the helper ends with the launcher, its input closing). Sessions it started go on.
+pub(crate) fn end_with(pid: u32) {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+            fn WaitForSingleObject(h: isize, ms: u32) -> u32;
+        }
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        const INFINITE: u32 = 0xFFFF_FFFF;
+        // SAFETY: a handle of the launcher's own, kept until the process ends (that program
+        // waits for the launcher, so `pid` is still its own here)
+        let h = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+        if h == 0 {
+            log::warn!("launcher: the program that started it ({pid}) is not found; it is not followed");
+            return;
+        }
+        std::thread::spawn(move || {
+            // SAFETY: as above
+            unsafe { WaitForSingleObject(h, INFINITE) };
+            log::warn!("launcher: the program that started it ended, so does the launcher");
+            std::process::exit(0);
+        });
+    }
+    #[cfg(unix)]
+    std::thread::spawn(move || loop {
+        // (a process whose parent ends is handed to another one)
+        if std::os::unix::process::parent_id() != pid {
+            log::warn!("launcher: the program that started it ended, so does the launcher");
+            std::process::exit(0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    });
+}
+
+/// Log lines to the error output and to a file.
+pub(crate) struct Tee(pub std::fs::File);
+
+impl std::io::Write for Tee {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        self.0.write_all(buf)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _ = std::io::stderr().flush();
+        self.0.flush()
+    }
+}
+
+/// When the program started (set first thing in `run`), for saying how long a window took.
+pub(crate) static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Milliseconds since the program started.
+pub(crate) fn since_start_ms() -> f64 {
+    PROCESS_START.get().map(|t| t.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
+}
+
 /// Does this folder look like an OMSI 2 installation?
 pub(crate) fn is_omsi_root(p: &Path) -> bool {
     // a complete installation of the original game (openOMSI's own content folder has the
@@ -88,12 +150,12 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 }
 
 /// The keys held with `modifier` (a chord: `KEY_SHIFT` …) that the file in use binds otherwise than OMSI 2's
-/// own assignment ([`crate::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
+/// own assignment ([`omsi_content::input::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else { return Default::default() };
-    let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
+    let stock: std::collections::HashSet<(String, i32, i32)> = omsi_content::input::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
     m.vehicles
         .iter()
         .chain(m.game.iter())
@@ -185,10 +247,7 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
     #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         // the dedicated server draws nothing: wgpu's no-op device takes every call
-        let mut descriptor = descriptor;
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        return wgpu::Instance::new(descriptor);
+        return noop_instance();
     }
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
     // Basic Render Driver" on a chip without a DirectX 12 driver - comes after the others)
@@ -209,6 +268,44 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
         }
     }
     software.or(last).unwrap_or_else(|| wgpu::Instance::new(descriptor))
+}
+
+/// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
+/// OMSI_BACKEND=d3d9): Windows only, and not with VR (OpenXR takes DirectX 12).
+pub(crate) fn d3d9_requested() -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    #[cfg(feature = "server")]
+    if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
+    let settings = crate::settings::Settings::load();
+    let wanted = omsi_cfg::flags::BACKEND.text().unwrap_or_else(|| settings.graphics_api.clone());
+    is_d3d9(&wanted) && !settings.vr_requested()
+}
+
+pub(crate) fn is_d3d9(name: &str) -> bool {
+    matches!(name.trim().to_ascii_lowercase().as_str(), "d3d9" | "d3d9ex" | "dx9")
+}
+
+/// wgpu's device that draws nothing (the dedicated server's, and the books of "DirectX9
+/// (D3D9Ex)", see `d3d9_output`).
+fn noop_instance() -> wgpu::Instance {
+    let mut descriptor = instance_descriptor(None);
+    descriptor.backends = wgpu::Backends::NOOP;
+    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+    wgpu::Instance::new(descriptor)
+}
+
+/// The game window's instance: [`graphics_instance`], or wgpu's noop device under "DirectX9
+/// (D3D9Ex)", where `omsi-render` only keeps the books.
+pub(crate) fn game_instance() -> wgpu::Instance {
+    if d3d9_requested() {
+        log::info!("graphics: DirectX9 (D3D9Ex) chosen; wgpu runs on its noop device for the scene's books");
+        return noop_instance();
+    }
+    graphics_instance()
 }
 
 /// The graphics interfaces in the order they are tried: Metal on a Mac; on Windows DirectX
@@ -256,6 +353,12 @@ fn backend_instance(b: wgpu::Backends) -> wgpu::Instance {
     wgpu::Instance::new(instance_descriptor(Some(b)))
 }
 
+/// The renderer of "DirectX9 (D3D9Ex)": on `instance` (wgpu's noop device, see
+/// [`game_instance`]), keeping the books of the scene for the Direct3D 9Ex device.
+pub(crate) fn books_renderer(instance: &wgpu::Instance, options: omsi_render::RenderOptions) -> Result<Renderer> {
+    pollster::block_on(Renderer::new_with(instance, None, Some(wgpu::TextureFormat::Bgra8UnormSrgb), options))
+}
+
 /// The renderer for a window: on `instance` if it can, else on the next graphics interface
 /// and adapter that can (`instance` then becomes that one's). Laptops with a GeForce GT or
 /// GTX beside the processor's graphics listed a Vulkan adapter whose device then could not
@@ -268,6 +371,17 @@ pub(crate) fn window_renderer(
     window: &std::sync::Arc<winit::window::Window>,
     options: omsi_render::RenderOptions,
 ) -> Result<Renderer> {
+    for_window(instance, window, |adapter, surface| pollster::block_on(Renderer::new_on(adapter, Some(surface), None, options)))
+}
+
+/// What `open` makes for a window (the game's renderer, or the launcher's plain device for
+/// its interface): on `instance` if it can, else on the next graphics interface and adapter
+/// that can, the way `window_renderer` says.
+pub(crate) fn for_window<T>(
+    instance: &mut wgpu::Instance,
+    window: &std::sync::Arc<winit::window::Window>,
+    mut open: impl FnMut(wgpu::Adapter, &wgpu::Surface<'static>) -> Result<T>,
+) -> Result<T> {
     let mut failures: Vec<String> = Vec::new();
     // The instance made for the settings' interface first, then every interface in turn -
     // each made only when the ones before it could not draw. Made all at once, a Windows
@@ -315,7 +429,7 @@ pub(crate) fn window_renderer(
                 if software_round {
                     log::warn!("graphics: no graphics chip could be opened; trying the software renderer {what} (a few frames a second at best)");
                 }
-                match omsi_render::catch(|| pollster::block_on(Renderer::new_on(adapter, Some(&surface), None, options))) {
+                match omsi_render::catch(|| open(adapter, &surface)) {
                     Some(Ok(r)) => {
                         if !failures.is_empty() {
                             log::warn!("graphics: drawing on {what}; before it {}", failures.join("; "));
@@ -427,6 +541,20 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
     let img = image::load_from_memory(PNG).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
+}
+
+/// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
+/// is the "as OMSI 2" renderer: it ignores all of them.
+pub(crate) fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool, flag_plus: bool) -> (bool, bool) {
+    let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
+    let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
+    if settings.d3d9_selected() {
+        if enhanced || plus {
+            log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
+        }
+        return (false, false);
+    }
+    (enhanced, plus)
 }
 
 /// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).

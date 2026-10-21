@@ -793,9 +793,9 @@ fn check_misc(root: &Path, verbose: bool) {
         Ok(_) => errors.push("keyboard.cfg: empty".into()),
         Err(e) => errors.push(e.to_string()),
     }
-    if let Err(e) = omsi_content::input::load_game_controllers(&root.join("Inputs/gamectrler.cfg"))
-    {
-        errors.push(e.to_string());
+    let gamectrler = root.join("Inputs/gamectrler.cfg");
+    if let Err(e) = omsi_content::input::gamectrler::read(&gamectrler) {
+        errors.push(format!("{}: {e}", gamectrler.display()));
     }
     match omsi_content::Options::load(&root.join("options.cfg")) {
         Ok(o) if o.values.len() > 10 => {}

@@ -1,13 +1,13 @@
 //! The public methods for meshes, textures and materials: adding, updating, freeing and
 //! recycling them.
 use crate::assets::{
-    fit_image, fit_size, make_meshes, mesh_page_bytes, next_gen, snow_texture_flag, texture_bytes,
-    upload_texture, AlphaMode, BindKey, GpuTexture, Material, MaterialExtra, MaterialMaps,
-    MaterialUniform, MeshPage, PbrMaps, PreparedMesh, PreparedTexture, TexAddressing,
-    MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
+    drop_top_levels, fit_image, fit_size, make_meshes, mesh_page_bytes, mesh_vertices, next_gen,
+    snow_texture_flag, upload_speed_mb_s, upload_texture, AlphaMode, BindKey, GpuTexture, Material,
+    MaterialExtra, MaterialMaps, MaterialUniform, MeshPage, PbrMaps, PreparedMesh, PreparedTexture,
+    TexAddressing, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
 };
-use crate::gpu::buffer_init;
-use crate::renderer::Renderer;
+use crate::gpu::{buffer_init, mip_levels};
+use crate::renderer::{MirrorEvent, MirrorTexture, Renderer};
 use crate::scene::{
     mesh_bounds_changed, mesh_slot_replaced, MaterialId, MeshId, Scene, TextureId, Vertex,
 };
@@ -40,6 +40,10 @@ impl Renderer {
         if (m.vertex_bytes as usize) < bytes.len() {
             return;
         }
+        self.mirror(MirrorEvent::MeshVertices {
+            id,
+            vertices: &verts,
+        });
         {
             // (a newer pose of the same mesh replaces one still waiting)
             let mut pending = self.assets.pending_meshes.borrow_mut();
@@ -87,7 +91,15 @@ impl Renderer {
             scene.mesh_pages[k].place(&self.queue, data, k as u32, at)
         };
         scene.meshes.push(mesh);
-        scene.meshes.len() - 1
+        let id = scene.meshes.len() - 1;
+        if self.mirroring() {
+            self.mirror(MirrorEvent::Mesh {
+                id,
+                vertices: &mesh_vertices(data),
+                indices: &data.indices,
+            });
+        }
+        id
     }
 
     /// Whether this renderer's adapter draws meshes from shared pages (it can draw with a
@@ -99,7 +111,19 @@ impl Renderer {
     /// Put a mesh made on another thread ([`prepare_mesh`]) into the scene.
     pub fn add_prepared_mesh(&self, scene: &mut Scene, mesh: PreparedMesh) -> MeshId {
         scene.meshes.push(mesh.0);
-        scene.meshes.len() - 1
+        let id = scene.meshes.len() - 1;
+        if let Some(cpu) = &mesh.1 {
+            self.mirror(MirrorEvent::Mesh {
+                id,
+                vertices: &cpu.0,
+                indices: &cpu.1,
+            });
+        } else if self.mirroring() {
+            log::warn!(
+                "asset mirror: mesh {id} was prepared before the mirror was set; not mirrored"
+            );
+        }
+        id
     }
 
     /// Bytes of all textures of the scene on the GPU (render targets included).
@@ -112,7 +136,18 @@ impl Renderer {
     /// Put a texture made on another thread ([`prepare_texture`]) into the scene.
     pub fn add_prepared_texture(&self, scene: &mut Scene, texture: PreparedTexture) -> TextureId {
         scene.textures.push(texture.0);
-        scene.textures.len() - 1
+        let id = scene.textures.len() - 1;
+        if let Some(data) = &texture.1 {
+            self.mirror(MirrorEvent::Texture {
+                id,
+                texture: MirrorTexture::Data(data),
+            });
+        } else if self.mirroring() {
+            log::warn!(
+                "asset mirror: texture {id} was prepared before the mirror was set; not mirrored"
+            );
+        }
+        id
     }
 
     pub fn add_texture(
@@ -129,7 +164,15 @@ impl Renderer {
             upload_texture(&self.device, &self.queue, img, false)
         };
         scene.textures.push(t);
-        scene.textures.len() - 1
+        let id = scene.textures.len() - 1;
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Image {
+                image: img,
+                mipmaps,
+            },
+        });
+        id
     }
 
     pub fn add_blank_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
@@ -149,7 +192,15 @@ impl Renderer {
         };
         let texture = upload_texture(&self.device, &self.queue, &image, false);
         scene.textures.push(texture);
-        scene.textures.len() - 1
+        let id = scene.textures.len() - 1;
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Image {
+                image: &image,
+                mipmaps: false,
+            },
+        });
+        id
     }
 
     /// The PBR set found beside diffuse texture `diffuse` (`omsi_texture::pbr`): its maps up
@@ -206,7 +257,12 @@ impl Renderer {
     ) -> TextureId {
         let t = self.upload_texture_data(data);
         scene.textures.push(t);
-        scene.textures.len() - 1
+        let id = scene.textures.len() - 1;
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Data(data),
+        });
+        id
     }
 
     pub fn texture_bytes(&self, scene: &Scene) -> u64 {
@@ -224,46 +280,7 @@ impl Renderer {
     }
 
     pub fn upload_speed_mb_s(&self) -> f64 {
-        let n = 1024u32;
-        let size = wgpu::Extent3d {
-            width: n,
-            height: n,
-            depth_or_array_layers: 1,
-        };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("upload check"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let data = vec![0u8; (n * n * 4) as usize];
-        let rounds = 4;
-        let t = std::time::Instant::now();
-        for _ in 0..rounds {
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(n * 4),
-                    rows_per_image: Some(n),
-                },
-                size,
-            );
-        }
-        let secs = t.elapsed().as_secs_f64().max(1e-6);
-        self.queue.submit([]);
-        texture.destroy();
-        (data.len() * rounds) as f64 / 1e6 / secs
+        upload_speed_mb_s(&self.device, &self.queue)
     }
 
     /// Replace the pixels of a texture (same size as when created, no mipmaps regenerated).
@@ -281,6 +298,13 @@ impl Renderer {
         {
             return;
         }
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Image {
+                image: img,
+                mipmaps: false,
+            },
+        });
         let t = &gt.texture;
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -317,9 +341,16 @@ impl Renderer {
         };
         let fitted = fit_image(img, self.device.limits().max_texture_dimension_2d);
         let img = fitted.as_ref().unwrap_or(img);
-        let levels = (32 - img.width.max(img.height).leading_zeros()).max(1);
+        let levels = mip_levels(img.width, img.height);
         if old.size != (img.width, img.height) || old.texture.mip_level_count() != levels {
             scene.textures[id] = self.upload_texture_gpu_mips(img);
+            self.mirror(MirrorEvent::Texture {
+                id,
+                texture: MirrorTexture::Image {
+                    image: img,
+                    mipmaps: true,
+                },
+            });
             return true;
         }
         self.update_texture(scene, id, img);
@@ -341,6 +372,10 @@ impl Renderer {
             return;
         }
         scene.textures[id] = self.upload_texture_data(data);
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Data(data),
+        });
     }
 
     /// Mip levels and size of a texture: (width, height, levels).
@@ -358,65 +393,10 @@ impl Renderer {
         let Some(t) = scene.textures.get(id) else {
             return false;
         };
-        let (w, h) = t.size;
-        let levels = t.texture.mip_level_count();
-        let format = t.texture.format();
-        if n == 0 || n >= levels || !t.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+        let Some(smaller) = drop_top_levels(&self.device, &self.queue, t, n) else {
             return false;
-        }
-        let (nw, nh) = ((w >> n).max(1), (h >> n).max(1));
-        let (bw, bh) = format.block_dimensions();
-        if nw % bw != 0 || nh % bh != 0 {
-            return false;
-        }
-        let new_levels = levels - n;
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d {
-                width: nw,
-                height: nh,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: new_levels,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("drop levels"),
-            });
-        for l in 0..new_levels {
-            let (lw, lh) = ((nw >> l).max(1), (nh >> l).max(1));
-            let size = wgpu::Extent3d {
-                width: lw.div_ceil(bw) * bw,
-                height: lh.div_ceil(bh) * bh,
-                depth_or_array_layers: 1,
-            };
-            encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &t.texture,
-                    mip_level: l + n,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: l,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                size,
-            );
-        }
-        self.queue.submit([encoder.finish()]);
-        scene.textures[id] =
-            GpuTexture::new(texture, (nw, nh), texture_bytes(format, nw, nh, new_levels));
+        };
+        scene.textures[id] = smaller;
         true
     }
 
@@ -887,6 +867,7 @@ impl Renderer {
         m.bounds_center = Vec3::ZERO;
         m.bounds_radius = 0.0;
         mesh_slot_replaced(scene, id);
+        self.mirror(MirrorEvent::FreeMesh(id));
     }
 
     /// Release a texture (a material still using it keeps it alive until it is freed too).
@@ -906,6 +887,7 @@ impl Renderer {
                 bytes: 0,
                 gen: next_gen(),
             };
+            self.mirror(MirrorEvent::FreeTexture(id));
         }
     }
 
@@ -950,6 +932,7 @@ impl Renderer {
         let m = scene.meshes.pop().unwrap();
         scene.meshes[into] = m;
         mesh_slot_replaced(scene, into);
+        self.mirror(MirrorEvent::MoveMesh { from: new, into });
         into
     }
 
@@ -959,6 +942,7 @@ impl Renderer {
         }
         let t = scene.textures.pop().unwrap();
         scene.textures[into] = t;
+        self.mirror(MirrorEvent::MoveTexture { from: new, into });
         into
     }
 

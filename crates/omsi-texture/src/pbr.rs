@@ -17,10 +17,8 @@
 //! occlusion/roughness/metalness picture for the GPU. OMSI itself knows none of this: a map
 //! without such files looks as it always did.
 
-use crate::Image;
+use crate::{Image, IMAGE_EXTENSIONS};
 use std::path::{Path, PathBuf};
-
-const EXTS: [&str; 6] = ["png", "tga", "dds", "bmp", "jpg", "jpeg"];
 
 /// The files of a PBR set found beside a diffuse texture.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -164,7 +162,7 @@ fn pictures_in(dir: &Path) -> Listing {
         };
         let x = x.to_string_lossy().to_ascii_lowercase();
         let s = s.to_string_lossy().to_ascii_lowercase();
-        if EXTS.contains(&x.as_str()) && (s.contains('_') || s.contains('-')) {
+        if IMAGE_EXTENSIONS.contains(&x.as_str()) && (s.contains('_') || s.contains('-')) {
             v.push((s, name));
         }
     }

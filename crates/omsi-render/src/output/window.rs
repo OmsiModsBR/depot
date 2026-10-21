@@ -1,7 +1,10 @@
 //! The window: its surface, and presenting a frame to it with upscale, FXAA, the overlays
 //! and the HUD.
 
-use crate::gpu::{buffer_init, pass_timer, DEPTH_FORMAT};
+use crate::gpu::{
+    buffer_init, fullscreen_pipeline, pass_timer, sampler_entry, texture_entry, uniform_entry,
+    DEPTH_FORMAT,
+};
 use crate::scene::{Scene, TextureId};
 use std::sync::Arc;
 
@@ -12,6 +15,9 @@ pub struct SurfaceState<'w> {
     pub config: wgpu::SurfaceConfiguration,
     /// The renderer's `device_lost`.
     pub(crate) lost: Arc<std::sync::Mutex<Option<String>>>,
+    /// Another renderer shows the pictures (see [`SurfaceState::shown_elsewhere`]): the
+    /// surface is never configured and gives no frames.
+    pub(crate) elsewhere: bool,
 }
 
 impl Drop for SurfaceState<'_> {
@@ -57,32 +63,9 @@ pub(crate) fn overlay_pipeline(
     let overlay_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("overlay"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
+            texture_entry(1),
+            sampler_entry(2),
         ],
     });
     log::info!("renderer: compiling the overlays shaders");
@@ -161,71 +144,37 @@ pub(crate) fn overlay_1x_pipelines(
     overlay_shader: &wgpu::ShaderModule,
     premul: wgpu::BlendState,
 ) -> (wgpu::RenderPipeline, wgpu::RenderPipeline) {
-    let overlay_pipeline_1x = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("overlay 1x"),
-        layout: Some(&overlay_pl),
-        vertex: wgpu::VertexState {
-            module: &overlay_shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
+    let overlay_pipeline_1x = fullscreen_pipeline(
+        device,
+        "overlay 1x",
+        overlay_pl,
+        overlay_shader,
+        "vs_main",
+        "fs_main",
+        wgpu::ColorTargetState {
+            format,
+            blend: Some(premul),
+            write_mask: wgpu::ColorWrites::ALL,
         },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            front_face: wgpu::FrontFace::Ccw,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &overlay_shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend: Some(premul),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
+    );
     log::info!("renderer: compiling the VR interface shaders");
     let xr_ui_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("OpenXR spatial UI"),
         source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/output/xr_ui.wgsl").into()),
     });
-    let xr_ui_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("OpenXR spatial UI"),
-        layout: Some(&overlay_pl),
-        vertex: wgpu::VertexState {
-            module: &xr_ui_shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
+    let xr_ui_pipeline = fullscreen_pipeline(
+        device,
+        "OpenXR spatial UI",
+        overlay_pl,
+        &xr_ui_shader,
+        "vs_main",
+        "fs_main",
+        wgpu::ColorTargetState {
+            format,
+            blend: Some(premul),
+            write_mask: wgpu::ColorWrites::ALL,
         },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            front_face: wgpu::FrontFace::Ccw,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &xr_ui_shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend: Some(premul),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
+    );
     (overlay_pipeline_1x, xr_ui_pipeline)
 }
 
@@ -250,32 +199,9 @@ pub(crate) fn upscale_pipelines(
     let upscale_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("upscale"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
+            uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
+            texture_entry(1),
+            sampler_entry(2),
         ],
     });
     let upscale_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -284,35 +210,19 @@ pub(crate) fn upscale_pipelines(
         immediate_size: 0,
     });
     let upscale_pipeline_for = |entry| {
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("upscale"),
-            layout: Some(&upscale_pl),
-            vertex: wgpu::VertexState {
-                module: &upscale_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
+        fullscreen_pipeline(
+            device,
+            "upscale",
+            &upscale_pl,
+            &upscale_shader,
+            "vs_main",
+            entry,
+            wgpu::ColorTargetState {
+                format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &upscale_shader,
-                entry_point: Some(entry),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        })
+        )
     };
     let upscale_pipeline = upscale_pipeline_for("fs_main");
     let copy_pipeline = upscale_pipeline_for("fs_copy");

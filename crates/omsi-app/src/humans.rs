@@ -43,7 +43,7 @@ use crate::scene::World;
 use crate::traffic::Traffic;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
-use omsi_geometry::util::wrap_deg;
+use omsi_geometry::util::{angle_diff, wrap_deg};
 use omsi_render::{AlphaMode, Camera, MaterialId, MeshId, Renderer, Scene};
 use omsi_sim::crowd::{self, Block, CrowdParams, PathGraph, Walker};
 use omsi_sim::human::{skin, Activity, HumanType};
@@ -58,6 +58,19 @@ use std::sync::Arc;
 #[path = "humans_pax.rs"]
 mod pax;
 use pax::*;
+
+/// The height of somebody on foot after a step, given the walking surface `target` under
+/// them: up a kerb quickly (1.5 m/s), down it smoothly (2 m/s), straight onto it when it is
+/// over a kerb's height above (the pavement's tile came after them) or when they stand still.
+fn follow_surface(cur: f64, target: f64, speed: f64, dt: f64) -> f64 {
+    if target - cur > 0.35 || speed < 0.05 {
+        target
+    } else if target > cur {
+        target.min(cur + 1.5 * dt)
+    } else {
+        target.max(cur - 2.0 * dt)
+    }
+}
 
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
 pub(crate) static LEFT_HAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -855,7 +868,7 @@ fn train_heading(heading: f64, trailers: &[PartFrame], local: Vec3) -> f64 {
         if w <= 0.0 {
             break;
         }
-        here += crowd::angle_diff(here, t.heading) * w as f64;
+        here += angle_diff(here, t.heading) * w as f64;
         if w < 1.0 {
             break;
         }
@@ -3155,7 +3168,7 @@ impl Humans {
             .filter(|(_, stop)| stop.is_named(&name))
             .min_by(|(_, a), (_, b)| {
                 let back =
-                    |stop: &PaxStop| crowd::angle_diff(vehicle.heading, stop.heading).abs() > 100.0;
+                    |stop: &PaxStop| angle_diff(vehicle.heading, stop.heading).abs() > 100.0;
                 back(a).cmp(&back(b)).then_with(|| {
                     (a.pos - vehicle.position)
                         .length_squared()
@@ -3184,7 +3197,7 @@ impl Humans {
                 .iter()
                 .filter(|s| (s.1 - pos).length() < reach)
                 .min_by(|a, c| {
-                    let back = |s: &(i64, DVec3, f64)| crowd::angle_diff(heading, s.2).abs() > 100.0;
+                    let back = |s: &(i64, DVec3, f64)| angle_diff(heading, s.2).abs() > 100.0;
                     back(a)
                         .cmp(&back(c))
                         .then((a.1 - pos).length().total_cmp(&(c.1 - pos).length()))
@@ -4153,7 +4166,7 @@ impl Humans {
             for bn in buses.iter_mut() {
                 let accel = match self.bus_motion.get(&bn.id) {
                     Some(&(v0, h0, a0)) => {
-                        let yaw_rate = crowd::angle_diff(h0, bn.heading).to_radians() / dt as f64;
+                        let yaw_rate = angle_diff(h0, bn.heading).to_radians() / dt as f64;
                         let raw = DVec2::new(bn.speed * yaw_rate, (bn.speed - v0) / dt as f64).clamp(DVec2::splat(-6.0), DVec2::splat(6.0));
                         a0 + (raw - a0) * (1.0 - (-(dt as f64) / 0.2).exp())
                     }
@@ -4689,13 +4702,7 @@ impl Humans {
                     // pavement's tile came after them): straight onto it
                     // (and whoever stands still simply stands on it: waiting people sank
                     // into a pavement that came after them and rose only when they walked)
-                    p.position.z = if z - p.position.z > 0.35 || speed < 0.05 {
-                        z
-                    } else if z > p.position.z {
-                        z.min(p.position.z + 1.5 * dt64)
-                    } else {
-                        z.max(p.position.z - 2.0 * dt64)
-                    };
+                    p.position.z = follow_surface(p.position.z, z, speed, dt64);
                 }
             }
             Place::Bus(b, l) => {
@@ -4746,7 +4753,7 @@ impl Humans {
         // rate follows the angle still to go, up to the most a walker or a stander turns
         let turned = match target {
             Some(t) => {
-                let left = crowd::angle_diff(current, t);
+                let left = angle_diff(current, t);
                 let max_rate = if walking { 260.0 } else { 140.0 };
                 let rate = (left.abs() * 5.0).min(max_rate).max(12.0);
                 crowd::turn_towards(current, t, rate, dt64)
@@ -6414,6 +6421,60 @@ mod tests {
         assert_eq!(x, vec![true, true, true, true]);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #189: on a kerb or pavement that slopes, somebody waiting stands on the surface and
+    /// somebody walking along it (to the door, back to a seat) stays on it within a hair; a
+    /// step down is followed at once, a step up within a kerb's height too.
+    #[test]
+    fn people_keep_the_floor_height_on_sloped_ground() {
+        let surface = |x: f64, slope: f64| 0.15 + slope * x;
+        for slope in [-0.15, -0.05, 0.0, 0.05, 0.15] {
+            for x in [0.0, 2.5, 7.0] {
+                assert_eq!(follow_surface(surface(x, slope) + 0.2, surface(x, slope), 0.0, 1.0 / 60.0), surface(x, slope));
+                assert_eq!(follow_surface(surface(x, slope) - 0.2, surface(x, slope), 0.0, 1.0 / 60.0), surface(x, slope));
+            }
+            for dir in [1.0, -1.0] {
+                let (mut x, mut z) = (3.0, surface(3.0, slope));
+                let dt = 1.0 / 60.0;
+                for _ in 0..300 {
+                    x += dir * 1.4 * dt;
+                    z = follow_surface(z, surface(x, slope), 1.4, dt);
+                    assert!((z - surface(x, slope)).abs() < 0.03, "slope {slope}, dir {dir}: {:.3} m off", z - surface(x, slope));
+                }
+            }
+        }
+        assert_eq!(follow_surface(0.0, 2.0, 1.4, 1.0 / 60.0), 2.0);
+        assert!((follow_surface(0.0, 0.2, 1.4, 0.5) - 0.2).abs() < 1e-9);
+    }
+
+    /// #171: a bus whose exit door opens only on a request. The passenger's request leaves
+    /// the passengers' side as `PAX_Exit<i>_Req` (`DoorWants`), reaches the AI bus's script
+    /// through `write_door_requests`, the script opens the door at the stop, and the open state
+    /// it reports (`PAX_Exit<i>_Open`) is what the passengers read back as the exit being open.
+    /// The door script here is a stand-in written for the test (open = asked for and at a
+    /// stop; the host reports "at a stop" as -1, as the AI scripts read it), not any bus's own.
+    #[test]
+    fn a_request_opens_the_manual_exit_door_of_an_ai_bus_and_the_passenger_sees_it() {
+        let script = "{frame_ai}\n(L.L.PAX_Exit0_Req) (L.L.AI_Scheduled_AtStation) * -1 * (S.L.PAX_Exit0_Open)\n{end}\n";
+        let vars = "PAX_Exit0_Req\nPAX_Exit0_Open\nPAX_Entry0_Open\nAI_Scheduled_AtStation\n";
+        let mut bus = crate::schedule::tests::script_test_vehicle(script, vars, "");
+        let doors = |exit_req: bool| DoorWants { entry_req: vec![false], exit_req: vec![exit_req], entry_busy: vec![false], exit_busy: vec![false], places: Vec::new() };
+        let frame = |bus: &mut VehicleInstance, at_stop: bool, exit_req: bool| {
+            // (the order of the app: the traffic sets the stop state, the passengers' requests go in,
+            // the AI script runs, the passengers read the doors)
+            bus.set_var("AI_Scheduled_AtStation", if at_stop { -1.0 } else { 0.0 });
+            Humans::write_door_requests(bus, &doors(exit_req));
+            bus.update_ai(0.05, &Default::default());
+            Humans::doors_open(bus, 1, 1).1[0]
+        };
+        // driving, with a request: shut; at the stop without a request: shut (manual door)
+        assert!(!frame(&mut bus, false, true), "open while driving");
+        assert!(!frame(&mut bus, true, false), "opened without a request");
+        // at the stop, with the request: open, and the passengers see it open
+        assert!(frame(&mut bus, true, true), "a request at the stop did not open the exit door");
+        // the request is dropped when nobody asks any more
+        assert!(!frame(&mut bus, true, false));
     }
 
     /// #718: a trailer on a lorry's hitch (`[coupling_front_character]` type 0) whose cabin

@@ -1,9 +1,9 @@
 //! Per-mesh display properties (`[visible]`, light maps, alpha, texture offsets) from the
 //! scripts' variables.
 
+use super::vehicle_type::VehicleType;
 use hashbrown::HashMap;
 use omsi_model::MaterialDef;
-use super::vehicle_type::VehicleType;
 
 /// Per-mesh dynamic display properties evaluated from script variables every frame.
 #[derive(Debug, Clone)]
@@ -68,7 +68,11 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
                 // when the variable is set
                 if let Some((_, _, v)) = m.change.as_ref().filter(|_| !m.item) {
                     // (its items follow it: item n shows at n, 1 <= n <= their number)
-                    let items = def.materials[mi + 1..].iter().take_while(|d| d.item).count().max(1) as f32;
+                    let items = def.materials[mi + 1..]
+                        .iter()
+                        .take_while(|d| d.item)
+                        .count()
+                        .max(1) as f32;
                     if let Some(slot) = override_slot(&vm.materials, m) {
                         // (the item as OMSI picks it: the variable rounded is 1; an
                         // undeclared one is 0 - see scene.rs `change_picks_item`)
@@ -78,7 +82,11 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
                             .ok()
                             .or_else(|| var(v))
                             .unwrap_or(0.0);
-                        let n = if x.is_finite() { x.round_ties_even() } else { 0.0 };
+                        let n = if x.is_finite() {
+                            x.round_ties_even()
+                        } else {
+                            0.0
+                        };
                         props.slot_night[slot] = if n >= 1.0 && n <= items { 1.0 } else { 0.0 };
                     }
                 }
@@ -98,7 +106,8 @@ pub fn compute_mesh_props(ty: &VehicleType, var: &dyn Fn(&str) -> Option<f32>) -
                             .or_else(|| var(v))
                             // (a variable the bus does not have: always on, see below)
                             .unwrap_or(1.0);
-                        props.slot_light[slot] = props.slot_light[slot].max(if x >= 0.5 { 1.0 } else { 0.0 });
+                        props.slot_light[slot] =
+                            props.slot_light[slot].max(if x >= 0.5 { 1.0 } else { 0.0 });
                     }
                 }
             }
@@ -199,7 +208,7 @@ struct MeshPlan {
 /// name and allocated four vectors per mesh - for every mesh of every AI car, which made
 /// the mesh properties the costliest part of the traffic's frame.
 #[derive(Debug, Clone, Default)]
-pub(super) struct PropsPlan {
+pub struct PropsPlan {
     meshes: Vec<MeshPlan>,
     /// Size of the variable table the plan was resolved against (engine variables such
     /// as `Dirt_Norm` join it later, and an `[alphascale]` on one must then find it).
@@ -208,7 +217,7 @@ pub(super) struct PropsPlan {
 }
 
 impl PropsPlan {
-    pub(super) fn refresh(&mut self, ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>) {
+    pub fn refresh(&mut self, ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>) {
         if self.built && self.vars_seen == var_index.len() {
             return;
         }
@@ -275,7 +284,7 @@ impl PropsPlan {
     }
 
     /// The mesh properties for the current variables, written into `out` in place.
-    pub(super) fn apply(&self, vars: &[f32], out: &mut Vec<MeshProps>) {
+    pub fn apply(&self, vars: &[f32], out: &mut Vec<MeshProps>) {
         out.resize_with(self.meshes.len(), MeshProps::default);
         for (plan, props) in self.meshes.iter().zip(out.iter_mut()) {
             let n = plan.slots;
@@ -292,7 +301,11 @@ impl PropsPlan {
             props.visible = true;
             for &(slot, src) in &plan.night {
                 let x = src.value(vars, 0.0);
-                props.slot_night[slot] = if x.is_finite() && x.round_ties_even() == 1.0 { 1.0 } else { 0.0 };
+                props.slot_night[slot] = if x.is_finite() && x.round_ties_even() == 1.0 {
+                    1.0
+                } else {
+                    0.0
+                };
             }
             for &(slot, _) in &plan.light {
                 props.slot_light[slot] = 0.0;
@@ -301,7 +314,12 @@ impl PropsPlan {
             // texture stage of one whose variable reads under 0.5 - never half lit;
             // one whose variable the bus does not have - index -1 - is always on)
             for &(slot, src) in &plan.light {
-                props.slot_light[slot] = props.slot_light[slot].max(if src.value(vars, 1.0) >= 0.5 { 1.0 } else { 0.0 });
+                props.slot_light[slot] =
+                    props.slot_light[slot].max(if src.value(vars, 1.0) >= 0.5 {
+                        1.0
+                    } else {
+                        0.0
+                    });
             }
             if let Some((i, value)) = plan.visible {
                 if let Some(x) = vars.get(i) {

@@ -106,6 +106,8 @@ pub struct BusService {
     /// The doors have been open at this stop already (a layover bus opens them only for
     /// the last minute before its departure).
     pub boarded: bool,
+    /// The people at the doors have kept it past `MAX_HELD`: they hold it no longer.
+    held_out: bool,
     /// Seconds behind (positive) or ahead of the timetable, as of the last stop.
     pub delay: f64,
     /// Put out before its departure: it waits for it at its first stop.
@@ -147,6 +149,12 @@ const ENGINE_ON_BEFORE: f64 = 20.0;
 fn boarding_time(id: u64) -> f32 {
     7.0 + (id % 5) as f32
 }
+
+/// How long past its normal dwell (s, counted in the frames' own time) the people at its doors
+/// may keep a timetable bus at a stop. Somebody who cannot get on or off - an exit that never opens, a door that
+/// stays shut - asks for the doors every frame, and the bus stood at its stop for good (#172).
+/// The people of a crowd getting on one after the other finish well within this.
+const MAX_HELD: f32 = 180.0;
 
 /// An early bus waits at its stop until this long before its departure, a train at its
 /// station until `EARLY_LEAVE_RAIL` before (as in OMSI: it stands while it is more
@@ -244,6 +252,7 @@ impl BusService {
             leave_at: 0.0,
             arrived_at: 0.0,
             boarded: false,
+            held_out: false,
             delay: 0.0,
             layover: false,
             route_open: false,
@@ -310,7 +319,7 @@ impl BusService {
     /// person's stop is the bus's), not a stop it stands next to.
     pub fn hold(&mut self, stop: Option<i64>, secs: f32) {
         let here = stop.is_none_or(|s| self.stops.front().is_some_and(|f| f.id == s));
-        if self.phase == Phase::Boarding && here {
+        if self.phase == Phase::Boarding && here && !self.held_out {
             self.boarding = self.boarding.max(secs);
         }
     }
@@ -324,6 +333,7 @@ impl BusService {
         self.phase_t = 0.0;
         self.boarding = 0.0;
         self.boarded = false;
+        self.held_out = false;
         self.layover = layover;
     }
 
@@ -356,6 +366,7 @@ impl BusService {
         self.arrived_at = ctx.day_time;
         self.boarding = boarding_time(ctx.id);
         self.boarded = false;
+        self.held_out = false;
         // a layover opens the doors for the last minute only; anywhere else people get off
         // straight away
         if layover && wait > LAYOVER_BOARDING + 10.0 {
@@ -440,6 +451,22 @@ impl BusService {
             }
             Phase::Boarding => {
                 self.boarding -= ctx.dt;
+                // kept past the normal dwell by people who cannot get in or out: the doors
+                // close (the people stay aboard or on the kerb for the next bus). Counted in
+                // the frames' own seconds (`phase_t`), not the day clock, which runs faster
+                // at a higher time speed; an early bus still waits for its departure time
+                if !self.held_out && self.phase_t > boarding_time(ctx.id) + MAX_HELD {
+                    self.held_out = true;
+                    self.boarding = 0.0;
+                    if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
+                        log::info!(
+                            "t={:.1}: timetable bus {} leaves its stop {:?}: held at the doors for over {MAX_HELD:.0} s",
+                            ctx.day_time,
+                            ctx.id,
+                            self.stops.front().map(|s| s.id)
+                        );
+                    }
+                }
                 // an early bus waits for its departure with the doors open, as drivers do
                 // (shut, it stood at the stop for half a minute for no reason anyone could
                 // see); the doors close when it is time to go
@@ -761,6 +788,198 @@ mod tests {
         s.serve_early = vec![2];
         assert!(!s.must_serve(&stop(2, 200.0), 190.0));
         assert!(s.must_serve(&stop(2, 200.0), 170.0));
+    }
+
+    /// One timetable bus on a straight street, standing at its first stop (the stop point is
+    /// where the bus rests), with a second stop ahead so that the service does not end the
+    /// trip when it pulls out. Nothing is simulated but the service itself: no physics, no
+    /// passengers, a script that answers nothing (so the doors count as shut at once).
+    struct Rig {
+        net: Network,
+        st: AiState,
+        vehicle: VehicleInstance,
+        svc: BusService,
+        now: f64,
+        id: u64,
+    }
+
+    impl Rig {
+        fn at_first_stop(depart: f64, now: f64, id: u64) -> Rig {
+            let lane = omsi_sim::traffic::LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 300.0, 0.0, 0.0, LaneKind::Street, 2.5);
+            let net = Network { lanes: vec![lane], crossings: vec![Vec::new()], ..Default::default() };
+            let mut st = AiState::new(0, 100.0, id);
+            st.route = vec![0];
+            let stop = |id, s, depart| Stop { ri: 0, s, bay: 0.0, depart, id, side: 0.0 };
+            let svc = BusService::new(vec![stop(1, 100.0, depart), stop(2, 250.0, depart + 300.0)]);
+            let vehicle = crate::schedule::tests::script_test_vehicle("{frame_ai}\n{end}\n", "", "");
+            Rig { net, st, vehicle, svc, now, id }
+        }
+
+        /// One frame of `dt` seconds; whether `holds` keeps the doors open (somebody at them).
+        fn frame(&mut self, dt: f32, hold: bool) {
+            self.now += dt as f64;
+            if hold {
+                self.svc.hold(None, 2.5);
+            }
+            let way = [(0usize, 0.0f32)];
+            let ctx = Ctx {
+                net: &self.net,
+                way: &way,
+                day_time: self.now,
+                dt,
+                id: self.id,
+                stopped: 0.0,
+                passing: false,
+                kerb_swerve: None,
+                wanted: Some(true),
+                debug: false,
+            };
+            self.svc.step(&mut self.st, &mut self.vehicle, &ctx);
+        }
+
+        /// Frames of 0.1 s until the bus has left its first stop; the seconds that took, or
+        /// None when it was still there after `limit` seconds.
+        fn seconds_to_leave(&mut self, limit: f32, hold: bool) -> Option<f32> {
+            let mut t = 0.0;
+            while t < limit {
+                self.frame(0.1, hold);
+                t += 0.1;
+                if self.svc.phase == Phase::Running && self.svc.stops.len() == 1 {
+                    return Some(t);
+                }
+            }
+            None
+        }
+    }
+
+    /// #172: one stop, one bus, boarding finished, nobody at the doors and nothing ahead: the
+    /// bus pulls out. A late bus stands no longer than the doors' time and the closing.
+    #[test]
+    fn a_bus_leaves_its_stop_when_boarding_is_over() {
+        for id in 1..=10u64 {
+            // due at 08:00:00, there at 08:00:30 (late): off as soon as the doors are shut
+            let mut rig = Rig::at_first_stop(28_800.0, 28_830.0, id);
+            let left = rig.seconds_to_leave(120.0, false).unwrap_or_else(|| panic!("bus {id} never left ({:?})", rig.svc.phase));
+            assert!(left <= boarding_time(id) + CLOSE_MAX + 1.0, "bus {id} stood {left:.1} s");
+            assert!(left >= boarding_time(id), "bus {id} left with its doors open {left:.1} s");
+        }
+    }
+
+    /// #172: an early bus waits for its time and not a second longer: it leaves when its
+    /// departure is reached (a bus that is more than `EARLY_LEAVE` early stands until then).
+    #[test]
+    fn an_early_bus_leaves_when_its_time_comes_and_not_later() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_700.0, 3);
+        let left = rig.seconds_to_leave(300.0, false).expect("never left");
+        let wait = early_wait(28_800.0, 28_700.0, false, false) as f32;
+        assert!(left >= wait && left <= wait + 2.0 + CLOSE_MAX, "left after {left:.1} s, expected about {wait:.0} s");
+    }
+
+    /// #172: somebody at the doors who cannot get on or off (an exit that never opens, a
+    /// door that stays shut) must not keep a timetable bus at its stop for good: the people
+    /// hold the doors every frame (`hold`), so without a limit the bus never leaves.
+    /// Until the cause of the reports is seen on a real map, this limit is the safety net;
+    /// what the original does with such a case is not known (#49).
+    #[test]
+    fn nobody_keeps_a_bus_at_its_stop_for_good() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        let left = rig.seconds_to_leave(600.0, true);
+        assert!(left.is_some(), "still {:?} after ten minutes of somebody at the doors", rig.svc.phase);
+    }
+
+    /// The limit does not cut short a crowd: people getting on one after another keep the
+    /// doors open until just before `MAX_HELD` past the normal dwell, and
+    /// not much longer.
+    #[test]
+    fn a_queue_of_people_still_holds_the_doors() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        let base = boarding_time(3);
+        let left = rig.seconds_to_leave(base + MAX_HELD - 5.0, true);
+        assert!(left.is_none(), "left after {left:?} with people at the doors");
+        assert_eq!(rig.svc.phase, Phase::Boarding);
+        let left = rig.seconds_to_leave(20.0 + CLOSE_MAX, true).expect("never left");
+        assert!(left < 20.0 + CLOSE_MAX);
+    }
+
+    /// At a higher time speed the day clock runs faster than the frames: the limit is in the
+    /// frames' seconds, so a normal dwell is never cut short by it.
+    #[test]
+    fn the_hold_limit_does_not_follow_the_day_clock() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        for _ in 0..(boarding_time(3) * 10.0) as usize - 5 {
+            // (x30: a frame of 0.1 s is 3 s of the day)
+            rig.now += 2.9;
+            rig.frame(0.1, true);
+        }
+        assert!(!rig.svc.held_out);
+        assert_eq!(rig.svc.phase, Phase::Boarding);
+    }
+
+    /// The limit is per stop: after being held out at one stop the bus serves the next
+    /// one normally.
+    #[test]
+    fn a_bus_held_out_of_one_stop_boards_normally_at_the_next() {
+        let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
+        rig.seconds_to_leave(600.0, true).expect("never left");
+        assert!(rig.svc.held_out);
+        rig.svc.restart(vec![Stop { ri: 0, s: 100.0, bay: 0.0, depart: rig.now, id: 5, side: 0.0 }, Stop { ri: 0, s: 250.0, bay: 0.0, depart: rig.now + 300.0, id: 6, side: 0.0 }], false);
+        rig.st.s = 100.0;
+        rig.st.speed = 0.0;
+        for _ in 0..50 {
+            rig.frame(0.1, false);
+        }
+        assert_eq!(rig.svc.phase, Phase::Boarding);
+        assert!(!rig.svc.held_out);
+        rig.svc.hold(None, 2.5);
+        assert!(rig.svc.boarding >= 2.4, "a hold at the new stop is ignored");
+    }
+
+    /// Steps `s` once every half second from `from` up to `to`, as the traffic does, and
+    /// returns the first time `stop_when` holds.
+    fn run_until(
+        s: &mut BusService,
+        st: &mut AiState,
+        v: &mut VehicleInstance,
+        net: &Network,
+        from: f64,
+        to: f64,
+        stop_when: impl Fn(&BusService) -> bool,
+    ) -> Option<f64> {
+        let mut t = from;
+        while t < to {
+            let ctx = Ctx { net, way: &[], day_time: t, dt: 0.5, id: 1, stopped: 0.0, passing: false, kerb_swerve: None, wanted: None, debug: false };
+            s.step(st, v, &ctx);
+            if stop_when(s) {
+                return Some(t);
+            }
+            t += 0.5;
+        }
+        None
+    }
+
+    /// A timetable bus that reaches the last stop of its trip early stands there until
+    /// the next trip of its tour is due, and leaves on it no sooner than its departure.
+    #[test]
+    fn a_bus_early_at_the_end_of_a_trip_waits_for_the_next_trips_departure() {
+        use omsi_sim::traffic::LaneBuilder;
+        let net = Network {
+            lanes: vec![LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 200.0, 0.0, 0.0, LaneKind::Street, 3.0)],
+            ..Default::default()
+        };
+        let mut st = AiState::new(0, 10.0, 1);
+        st.route = vec![0];
+        let mut v = crate::schedule::tests::script_test_vehicle("{frame}\n{end}\n", "", "");
+        // the last stop of the first trip, due at 1000 s; the bus is there at 500
+        let stop = |id: i64, s: f32, depart: f64| Stop::from_tuple((0, s, 0.0, depart, id, 0.0));
+        let mut b = BusService::new(vec![stop(1, 10.3, 1000.0)]);
+        b.last_stop = Some(1);
+        let done = run_until(&mut b, &mut st, &mut v, &net, 500.0, 2000.0, |b| b.trip_done()).expect("the trip ends");
+        assert!(done >= 1000.0 - EARLY_LEAVE, "the first trip is over at {done}");
+        // the tour's next trip leaves the same place at 1300 s: the bus takes it on in place
+        b.restart(vec![stop(2, 10.3, 1300.0), stop(3, 150.0, 1500.0)], true);
+        let left = run_until(&mut b, &mut st, &mut v, &net, done, 3000.0, |b| b.stops.len() == 1).expect("it sets off");
+        assert!(left >= 1300.0, "left at {left} for a trip that leaves at 1300");
+        assert!(left < 1310.0, "left at {left}: it waits for no more than the doors take to close");
     }
 
     #[test]

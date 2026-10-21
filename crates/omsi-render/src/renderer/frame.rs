@@ -3,7 +3,7 @@
 //! (`lists.rs`) and the passes (`encode.rs`) follow, and the commands are submitted at the end.
 
 use super::state::Renderer;
-use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, HDR_FORMAT};
+use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, target_2d, HDR_FORMAT};
 use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
 use crate::passes::{Batch, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
@@ -27,12 +27,15 @@ pub(crate) struct FrameContext<'a> {
     pub(crate) cu: CameraUniform,
     /// What `Output::flags` says: the window's picture, the texture left out, the projection.
     pub(crate) with_overlays: bool,
+    /// The window's own picture (`Output::Window`), the only one the overlay hook is called for.
+    pub(crate) window_picture: bool,
     pub(crate) exclude_texture: Option<TextureId>,
     pub(crate) projection: Option<Mat4>,
     /// The render origin; the window's width (`full_w`) and the picture's size (smaller with
     /// the render scale); whether it goes through a scaled target, and its aspect.
     pub(crate) ro: DVec3,
     pub(crate) full_w: u32,
+    pub(crate) full_h: u32,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) vanilla_fxaa: bool,
@@ -140,6 +143,12 @@ impl Renderer {
             return;
         };
         let lists = self.draw_lists(scene, &f, &mut clock);
+        if f.window_picture && self.plan_sink.is_some() {
+            let light_map = self.light_map_place(f.ro);
+            if let Some(sink) = self.plan_sink.as_mut() {
+                sink(&super::mirror::plan_of(&f, &lists, light_map), scene);
+            }
+        }
         let encoders = self.encode_frame(scene, &f, &mut clock, &lists);
         self.submit_frame(&f, clock, &lists, encoders);
     }
@@ -205,20 +214,18 @@ impl Renderer {
             && self.started.elapsed().as_secs_f32() > 3.0
         {
             // test hook for the fallback below
-            let _ = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("invalid"),
-                size: wgpu::Extent3d {
+            let _ = target_2d(
+                &self.device,
+                "invalid",
+                wgpu::Extent3d {
                     width: 4,
                     height: 4,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
-                sample_count: 3,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.gpu.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+                3,
+                self.gpu.format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            );
         }
         if self.gpu.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
             self.fall_back_without_ray_tracing(scene);
@@ -432,13 +439,7 @@ impl Renderer {
             .unwrap_or_else(|| camera.view_proj(aspect, ro));
         // where the tile light maps lie, relative to the render origin
         {
-            let (lx, ly, side) = self.light_map.lm_place.get();
-            let v: [f32; 4] = [
-                (lx - ro.x) as f32,
-                (ly - ro.y) as f32,
-                side as f32,
-                if side > 0.0 { 1.0 } else { 0.0 },
-            ];
+            let v = self.light_map_place(ro);
             self.queue
                 .write_buffer(&self.light_map.lm_uniform, 0, bytemuck::cast_slice(&v));
         }
@@ -662,10 +663,12 @@ impl Renderer {
                 lamp_shadows,
                 cu,
                 with_overlays,
+                window_picture: output.is_window(),
                 exclude_texture,
                 projection,
                 ro,
                 full_w,
+                full_h,
                 width,
                 height,
                 vanilla_fxaa,

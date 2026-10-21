@@ -5,33 +5,75 @@
 use crate::Image;
 use omsi_cfg::bytes::le32;
 
+/// The fields of a DDS header the decoder and the block loader read. Offsets are those of
+/// the file: the 4-byte magic, then `DDS_HEADER`, then `DDS_HEADER_DXT10` when the fourcc
+/// is `DX10`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DdsHeader {
+    pub flags: u32,
+    pub height: u32,
+    pub width: u32,
+    pub mips: u32,
+    pub pf_flags: u32,
+    pub fourcc: [u8; 4],
+    pub bpp: u32,
+    /// Red, green, blue and alpha masks of an uncompressed format.
+    pub masks: [u32; 4],
+    pub caps2: u32,
+    /// The DXGI format of a `DX10` header, when the file is long enough to hold it.
+    pub dxgi: Option<u32>,
+    /// Where the pixel data starts.
+    pub data_start: usize,
+}
+
+impl DdsHeader {
+    /// None when `bytes` do not start with a whole DDS header.
+    pub(crate) fn parse(bytes: &[u8]) -> Option<DdsHeader> {
+        if bytes.len() < 128 || &bytes[..4] != b"DDS " {
+            return None;
+        }
+        let fourcc = [bytes[84], bytes[85], bytes[86], bytes[87]];
+        let dx10 = &fourcc == b"DX10";
+        Some(DdsHeader {
+            flags: le32(bytes, 8),
+            height: le32(bytes, 12),
+            width: le32(bytes, 16),
+            mips: le32(bytes, 28),
+            pf_flags: le32(bytes, 80),
+            fourcc,
+            bpp: le32(bytes, 88),
+            masks: [
+                le32(bytes, 92),
+                le32(bytes, 96),
+                le32(bytes, 100),
+                le32(bytes, 104),
+            ],
+            caps2: le32(bytes, 112),
+            dxgi: (dx10 && bytes.len() >= 148).then(|| le32(bytes, 128)),
+            data_start: if dx10 { 148 } else { 128 },
+        })
+    }
+}
+
 /// Decode a DDS file. Returns None when the header is not a DDS one.
 pub fn decode(bytes: &[u8]) -> Result<Image, String> {
-    if bytes.len() < 128 || &bytes[..4] != b"DDS " {
+    let Some(header) = DdsHeader::parse(bytes) else {
         return Err("not a DDS file".into());
-    }
-    let height = le32(bytes, 12) as usize;
-    let width = le32(bytes, 16) as usize;
-    let pf_flags = le32(bytes, 80);
-    let fourcc = &bytes[84..88];
-    let bpp = le32(bytes, 88) as usize;
-    let masks = [
-        le32(bytes, 92),
-        le32(bytes, 96),
-        le32(bytes, 100),
-        le32(bytes, 104),
-    ];
-    let mut data_start = 128;
-    if fourcc == b"DX10" {
-        data_start += 20;
-    }
+    };
+    let height = header.height as usize;
+    let width = header.width as usize;
+    let pf_flags = header.pf_flags;
+    let fourcc = &header.fourcc;
+    let bpp = header.bpp as usize;
+    let masks = header.masks;
+    let data_start = header.data_start;
     let data = &bytes[data_start.min(bytes.len())..];
     if width == 0 || height == 0 {
         return Err("empty image".into());
     }
     // a cube map (six faces of the same size, one after the other): OMSI's reflections are
     // sphere maps, so the faces are turned into one (the first face alone had been taken)
-    let caps2 = le32(bytes, 112);
+    let caps2 = header.caps2;
     if caps2 & 0x200 != 0 && caps2 & 0xFC00 == 0xFC00 && data.len() >= 6 {
         let face_len = data.len() / 6;
         let mut faces = Vec::with_capacity(6);
@@ -51,13 +93,13 @@ pub fn decode(bytes: &[u8]) -> Result<Image, String> {
     if pf_flags & 0x4 != 0 {
         // D3DFORMAT numbers in the fourcc: the wide RGBA formats D3DX writes for float or
         // 16-bit pictures (a Citaro repaint's `lublins.dds` is A32B32G32R32F)
-        if let Some(img) = wide_rgba(le32(bytes, 84), data, width, height) {
+        if let Some(img) = wide_rgba(u32::from_le_bytes(header.fourcc), data, width, height) {
             return img;
         }
         // the DX10 header names a DXGI format: the block formats as their DXT names, the
         // plain ones read as they lie (D3DX 9 itself knows none of them; newer tools write
         // them for mods)
-        let dxgi = (fourcc == b"DX10" && bytes.len() >= 148).then(|| le32(bytes, 128));
+        let dxgi = header.dxgi;
         if let Some(img) = dxgi.and_then(|f| dxgi_plain(f, data, width, height)) {
             return img;
         }
@@ -476,5 +518,33 @@ mod cube_tests {
         // the middle looks straight back at the viewer: the +Z face (index 4)
         let c = ((32 * 64 + 32) * 4) as usize;
         assert_eq!(img.rgba[c + 2], 4 * 40);
+    }
+}
+
+#[cfg(test)]
+mod header_tests {
+    use super::DdsHeader;
+
+    #[test]
+    fn the_header_gives_the_fields_and_where_the_data_starts() {
+        let mut b = vec![0u8; 148];
+        b[..4].copy_from_slice(b"DDS ");
+        b[12..16].copy_from_slice(&64u32.to_le_bytes());
+        b[16..20].copy_from_slice(&128u32.to_le_bytes());
+        b[28..32].copy_from_slice(&8u32.to_le_bytes());
+        b[80..84].copy_from_slice(&4u32.to_le_bytes());
+        b[84..88].copy_from_slice(b"DXT5");
+        let h = DdsHeader::parse(&b).unwrap();
+        assert_eq!((h.height, h.width, h.mips, h.pf_flags), (64, 128, 8, 4));
+        assert_eq!((&h.fourcc, h.dxgi, h.data_start), (b"DXT5", None, 128));
+        // a DX10 header: the DXGI format when the file holds it, the data after it always
+        b[84..88].copy_from_slice(b"DX10");
+        b[128..132].copy_from_slice(&77u32.to_le_bytes());
+        let h = DdsHeader::parse(&b).unwrap();
+        assert_eq!((h.dxgi, h.data_start), (Some(77), 148));
+        let h = DdsHeader::parse(&b[..140]).unwrap();
+        assert_eq!((h.dxgi, h.data_start), (None, 148));
+        assert_eq!(DdsHeader::parse(&b[..127]), None);
+        assert_eq!(DdsHeader::parse(b"PNG \0\0\0\0"), None);
     }
 }

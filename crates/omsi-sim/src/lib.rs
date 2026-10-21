@@ -9,9 +9,9 @@ pub mod daylight;
 pub mod host;
 pub use omsi_html as htmlengine;
 pub mod htmltex;
-pub mod ibis;
 pub mod human;
 pub mod human_omsi;
+pub mod ibis;
 pub mod input;
 pub mod particles;
 pub mod physics;
@@ -30,3 +30,6 @@ pub use host::VehicleHost;
 pub use input::{engine_action, EngineAction, KeyboardAxes};
 pub use physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 pub use vehicle::{VehicleInstance, VehicleType};
+
+#[cfg(feature = "test-support")]
+pub mod testing;

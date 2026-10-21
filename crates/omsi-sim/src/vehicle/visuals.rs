@@ -1,15 +1,15 @@
 //! What a vehicle shows each frame: its animated meshes, its shadow on the ground under
 //! its wheels, and the reports of how its wheels sit.
 
-use crate::particles::ParticleSet;
-use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use super::props::override_slot;
 use super::vehicle_type::VehicleType;
 use super::VehicleInstance;
+use crate::particles::ParticleSet;
+use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 
 impl VehicleInstance {
     /// Animations and per-mesh material properties after the scripts ran.
-    pub(super) fn update_visuals(&mut self, dt: f32) {
+    pub(crate) fn update_visuals(&mut self, dt: f32) {
         // coupled vehicles come first, because they write the joint's angles this vehicle's
         // plates and bellows turn with (a frame late, the joint lagged behind the rear section)
         self.update_trailers(dt);
@@ -82,13 +82,24 @@ impl VehicleInstance {
         }
         // the lamps come on and go out with their `timeconst`
         let mut lf = std::mem::take(&mut self.light_fade);
-        let mut part_fades: Vec<Vec<f32>> = self.trailers.iter_mut().map(|t| std::mem::take(&mut t.light_fade)).collect();
-        let value = |n: &str| -> f32 { n.trim().parse::<f32>().ok().or_else(|| self.var(n.trim())).unwrap_or(0.0) };
+        let mut part_fades: Vec<Vec<f32>> = self
+            .trailers
+            .iter_mut()
+            .map(|t| std::mem::take(&mut t.light_fade))
+            .collect();
+        let value = |n: &str| -> f32 {
+            n.trim()
+                .parse::<f32>()
+                .ok()
+                .or_else(|| self.var(n.trim()))
+                .unwrap_or(0.0)
+        };
         let fade = |model: &omsi_model::Model, fades: &mut Vec<f32>| {
             let mut k = 0;
             for md in &model.meshes {
                 for l in &md.light_enh_2 {
-                    let target = (value(&l.variable) * if l.factor > 0.0 { l.factor } else { 1.0 }).clamp(0.0, 2.0);
+                    let target = (value(&l.variable) * if l.factor > 0.0 { l.factor } else { 1.0 })
+                        .clamp(0.0, 2.0);
                     // (a NaN stays NaN through clamp: the lamp's glow was drawn black on Windows)
                     let target = if target.is_finite() { target } else { 0.0 };
                     if fades.len() <= k {
@@ -120,14 +131,30 @@ impl VehicleInstance {
         // vehicle and its coupled parts, which read the same scripts' variables
         if !self.particles.is_empty() || self.trailers.iter().any(|t| !t.particles.is_empty()) {
             let mut ps = std::mem::take(&mut self.particles);
-            let mut parts: Vec<ParticleSet> = self.trailers.iter_mut().map(|t| std::mem::take(&mut t.particles)).collect();
+            let mut parts: Vec<ParticleSet> = self
+                .trailers
+                .iter_mut()
+                .map(|t| std::mem::take(&mut t.particles))
+                .collect();
             {
                 // (each puff keeps the height of the road under it - the plane the wheels
                 // stand on - for the renderer to fade it out into, see `particles`)
                 let value = |n: &str| self.var(n).unwrap_or(0.0);
-                ps.update_over(dt, self.position, self.body_rotation(), &|| self.particle_ground(), &value);
+                ps.update_over(
+                    dt,
+                    self.position,
+                    self.body_rotation(),
+                    &|| self.particle_ground(),
+                    &value,
+                );
                 for (t, set) in self.trailers.iter().zip(parts.iter_mut()) {
-                    set.update_over(dt, t.position, t.body_rotation(), &|| [-t.ground_lift(), 0.0, 0.0], &value);
+                    set.update_over(
+                        dt,
+                        t.position,
+                        t.body_rotation(),
+                        &|| [-t.ground_lift(), 0.0, 0.0],
+                        &value,
+                    );
                 }
             }
             self.particles = ps;
@@ -271,7 +298,7 @@ const SHADOW_STEP_UP: f64 = 0.6;
 /// a road under a bridge - and not the face this wheel stands on.
 const SHADOW_STEP_DOWN: f64 = 3.0;
 
-pub(super) fn is_shadow_mesh(ty: &VehicleType, i: usize) -> bool {
+pub fn is_shadow_mesh(ty: &VehicleType, i: usize) -> bool {
     ty.meshes
         .get(i)
         .is_some_and(|m| ty.model.meshes[m.def_index].is_shadow)
@@ -284,7 +311,7 @@ pub(super) fn is_shadow_mesh(ty: &VehicleType, i: usize) -> bool {
 /// canopy had its `[isshadow]` blob laid onto the deck over it (the same sampler lifted the
 /// coupled parts onto the bridge, #140). The plain sampler stays the fallback where the
 /// tiles put no road face near the wheel.
-pub(super) fn wheel_ground(
+pub fn wheel_ground(
     contact: Option<&dyn crate::physics::Ground>,
     ground: Option<&(dyn Fn(f64, f64) -> Option<f64> + Send + Sync)>,
     p: DVec3,
