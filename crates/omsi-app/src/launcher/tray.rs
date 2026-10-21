@@ -6,6 +6,7 @@
 use std::sync::mpsc::Receiver;
 
 /// What the tray icon's menu asked for.
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayCmd {
     /// "Show launcher", or a double click on the icon.
@@ -15,7 +16,7 @@ pub enum TrayCmd {
     Quit,
 }
 
-/// The icon in the tray, while it lives (dropped: the icon goes).
+/// The icon in the tray, while it lives (dropped: the icon is gone when the drop returns).
 pub struct Tray {
     rx: Receiver<TrayCmd>,
     #[cfg(windows)]
@@ -43,6 +44,14 @@ impl Tray {
     pub fn take(&self) -> Option<TrayCmd> {
         self.rx.try_recv().ok()
     }
+
+    /// A new first line for the menu (shown the next time it opens).
+    pub fn set_head(&self, head: &str) {
+        #[cfg(windows)]
+        imp::set_head(&self.window, head);
+        #[cfg(not(windows))]
+        let _ = head;
+    }
 }
 
 #[cfg(windows)]
@@ -53,6 +62,7 @@ impl Drop for Tray {
 }
 
 /// The menu's lines, in order, with what each asks for (`None`: a divider).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const MENU: [(Option<TrayCmd>, &str); 5] = [
     (Some(TrayCmd::Show), "Show launcher"),
     (Some(TrayCmd::OpenLog), "Open log"),
@@ -65,27 +75,46 @@ pub const MENU: [(Option<TrayCmd>, &str); 5] = [
 mod imp {
     use super::{TrayCmd, MENU};
     use std::cell::RefCell;
-    use std::sync::mpsc::Sender;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::mpsc::{Receiver, Sender};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW};
     use windows::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, LoadImageW, PostMessageW,
-        PostQuitMessage, RegisterClassW, SetForegroundWindow, TrackPopupMenu, TranslateMessage, HICON, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTCOLOR, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, SM_CXSMICON,
-        SM_CYSMICON, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
+        PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TrackPopupMenu, TranslateMessage, HICON, IDI_APPLICATION, IMAGE_ICON, LR_SHARED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG,
+        SM_CXSMICON, SM_CYSMICON, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK, WM_NULL, WM_RBUTTONUP, WM_USER,
+        WNDCLASSW,
     };
 
     /// The message the icon sends its window.
     const WM_TRAY: u32 = WM_APP + 1;
+    /// What the icon says when it is chosen with the mouse, or with Enter or Space after the
+    /// keyboard reached it (`NIN_SELECT`, `NIN_KEYSELECT` in the system's headers).
+    const NIN_SELECT: u32 = WM_USER;
+    const NIN_KEYSELECT: u32 = WM_USER + 1;
+    /// How long the launcher waits for the icon's thread (to start, and to take the icon away).
+    const WAIT: Duration = Duration::from_secs(2);
+
+    /// The message Explorer sends every top window when the taskbar is made anew (Explorer
+    /// restarted): the icon must be added again then.
+    static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
 
     /// The icon's hidden window (its handle as a number: it is used from the launcher's
-    /// thread only to close it).
-    pub struct Window(isize);
+    /// thread only to close it), the menu's first line, and the end of its thread.
+    pub struct Window {
+        hwnd: isize,
+        head: Arc<Mutex<Vec<u16>>>,
+        done: Receiver<()>,
+    }
 
     struct Own {
         tx: Sender<TrayCmd>,
-        head: Vec<u16>,
+        head: Arc<Mutex<Vec<u16>>>,
+        icon: NOTIFYICONDATAW,
     }
 
     thread_local! {
@@ -99,15 +128,19 @@ mod imp {
     /// The icon on a thread of its own, with the window and the message loop it needs.
     pub fn start(tip: &str, head: &str, tx: Sender<TrayCmd>) -> Option<Window> {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        // (never sent on: it is dropped when the thread ends, which is what `stop` waits for)
+        let (done_tx, done) = std::sync::mpsc::channel::<()>();
         let tip = tip.to_string();
-        let head = wide(head);
+        let head = Arc::new(Mutex::new(wide(head)));
+        let shared = head.clone();
         std::thread::Builder::new()
             .name("launcher tray".into())
             .spawn(move || {
-                let hwnd = unsafe { open(&tip) };
-                let _ = ready_tx.send(hwnd.map(|h| h.0 as isize));
-                let Some(hwnd) = hwnd else { return };
-                OWN.with(|o| *o.borrow_mut() = Some(Own { tx, head }));
+                let _done = done_tx;
+                let opened = unsafe { open(&tip) };
+                let _ = ready_tx.send(opened.map(|(h, _)| h.0 as isize));
+                let Some((_, icon)) = opened else { return };
+                OWN.with(|o| *o.borrow_mut() = Some(Own { tx, head: shared, icon }));
                 let mut msg = MSG::default();
                 unsafe {
                     while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -115,20 +148,29 @@ mod imp {
                         DispatchMessageW(&msg);
                     }
                 }
-                let _ = hwnd;
             })
             .ok()?;
-        ready_rx.recv().ok().flatten().map(Window)
+        let hwnd = ready_rx.recv_timeout(WAIT).ok().flatten()?;
+        Some(Window { hwnd, head, done })
     }
 
-    /// The icon goes: its window is closed (on its own thread, which then ends).
-    pub fn stop(w: &Window) {
-        unsafe {
-            let _ = PostMessageW(Some(HWND(w.0 as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
+    pub fn set_head(w: &Window, head: &str) {
+        if let Ok(mut h) = w.head.lock() {
+            *h = wide(head);
         }
     }
 
-    unsafe fn open(tip: &str) -> Option<HWND> {
+    /// The icon goes: its window is closed on its own thread, and the launcher waits until
+    /// that thread has ended (the icon is then out of the tray, also when the launcher quits
+    /// right after).
+    pub fn stop(w: &Window) {
+        unsafe {
+            let _ = PostMessageW(Some(HWND(w.hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+        let _ = w.done.recv_timeout(WAIT);
+    }
+
+    unsafe fn open(tip: &str) -> Option<(HWND, NOTIFYICONDATAW)> {
         let module = GetModuleHandleW(None).ok()?;
         let instance = HINSTANCE(module.0);
         let class = w!("DepotLauncherTray");
@@ -140,10 +182,12 @@ mod imp {
         };
         // (registered once a process: a second icon finds the class there)
         RegisterClassW(&wc);
+        TASKBAR_CREATED.store(RegisterWindowMessageW(w!("TaskbarCreated")), Ordering::Relaxed);
         let hwnd = CreateWindowExW(WINDOW_EX_STYLE(0), class, w!("Project Depot"), WINDOW_STYLE(0), 0, 0, 0, 0, None, None, Some(instance), None).ok()?;
-        // the program's own icon (the executable's first icon resource), small
+        // the program's own icon (the executable's first icon resource), small; shared, so
+        // the system keeps it and there is nothing to free
         let (cx, cy) = (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-        let icon = LoadImageW(Some(instance), PCWSTR(1 as *const u16), IMAGE_ICON, cx, cy, LR_DEFAULTCOLOR)
+        let icon = LoadImageW(Some(instance), PCWSTR(1 as *const u16), IMAGE_ICON, cx, cy, LR_SHARED)
             .map(|h| HICON(h.0))
             .or_else(|_| LoadIconW(None, IDI_APPLICATION))
             .unwrap_or_default();
@@ -163,7 +207,7 @@ mod imp {
             let _ = DestroyWindow(hwnd);
             return None;
         }
-        Some(hwnd)
+        Some((hwnd, nid))
     }
 
     fn send(cmd: TrayCmd) {
@@ -176,7 +220,7 @@ mod imp {
 
     unsafe fn menu(hwnd: HWND) {
         let Ok(m) = CreatePopupMenu() else { return };
-        let head = OWN.with(|o| o.borrow().as_ref().map(|o| o.head.clone())).unwrap_or_else(|| wide("Project Depot"));
+        let head = OWN.with(|o| o.borrow().as_ref().and_then(|o| o.head.lock().ok().map(|h| h.clone()))).unwrap_or_else(|| wide("Project Depot"));
         let _ = AppendMenuW(m, MF_STRING | MF_GRAYED, 0, PCWSTR(head.as_ptr()));
         let _ = AppendMenuW(m, MF_SEPARATOR, 0, PCWSTR::null());
         let labels: Vec<Vec<u16>> = MENU.iter().map(|x| wide(omsi_ui::tr(x.1).as_ref())).collect();
@@ -203,7 +247,8 @@ mod imp {
         match msg {
             WM_TRAY => {
                 match (lparam.0 as u32) & 0xffff {
-                    WM_LBUTTONDBLCLK => send(TrayCmd::Show),
+                    // (a double click, or Enter or Space on the icon reached by the keyboard)
+                    WM_LBUTTONDBLCLK | NIN_KEYSELECT | NIN_SELECT => send(TrayCmd::Show),
                     WM_RBUTTONUP | WM_CONTEXTMENU => menu(hwnd),
                     _ => {}
                 }
@@ -222,6 +267,14 @@ mod imp {
                 };
                 let _ = Shell_NotifyIconW(NIM_DELETE, &nid);
                 PostQuitMessage(0);
+                LRESULT(0)
+            }
+            m if m != 0 && m == TASKBAR_CREATED.load(Ordering::Relaxed) => {
+                OWN.with(|o| {
+                    if let Some(o) = o.borrow().as_ref() {
+                        let _ = Shell_NotifyIconW(NIM_ADD, &o.icon);
+                    }
+                });
                 LRESULT(0)
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),

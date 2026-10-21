@@ -198,9 +198,11 @@ pub struct Launcher {
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
     occluded: bool,
-    /// The window put away while a game runs (the Windows 11 concept): into the tray where
-    /// there is one, else minimized; it comes back when the game ends.
-    tucked: bool,
+    /// The window put away while a game started from it runs (the Windows 11 concept): into
+    /// the tray where there is one, else minimized; it comes back when that game ends. The
+    /// game: its process and when it started (a later process with the same number is
+    /// another), and the minute the tray's menu last showed.
+    tucked: Option<(u32, u64, u64)>,
     tray: Option<tray::Tray>,
     /// The player came back to the launcher's window while a game runs (clicked it, Alt+Tab):
     /// it is drawn and answers again until the game has the focus back. Before, it stood
@@ -297,7 +299,7 @@ impl Launcher {
         map_gen: 0,
         focused: true,
         occluded: false,
-        tucked: false,
+        tucked: None,
         tray: None,
         awake_in_game: false,
         last_input: Instant::now(),
@@ -521,10 +523,7 @@ impl ApplicationHandler for Launcher {
             self.last_input = Instant::now();
         }
         match event {
-            WindowEvent::CloseRequested => {
-                self.pages.pads.cancel_feedback_test();
-                event_loop.exit();
-            }
+            WindowEvent::CloseRequested => self.quit(event_loop),
             WindowEvent::Touch(t) => self.touch(t, scale),
             WindowEvent::Focused(f) => self.set_focus(f),
             WindowEvent::Occluded(o) => {
@@ -719,32 +718,77 @@ impl ApplicationHandler for Launcher {
     }
 }
 
+/// Seconds since 1970.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Whether the program can bring its window back from the taskbar by itself (not on
+/// Wayland, where only the player can).
+fn can_restore(w: &Window) -> bool {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    !matches!(w.window_handle().map(|h| h.as_raw()), Ok(RawWindowHandle::Wayland(_)))
+}
+
 impl Launcher {
-    /// While a game runs the launcher's window goes into the tray (Windows; elsewhere it is
-    /// minimized), and comes back when the last game ends; the tray's menu is answered here.
+    /// The launcher ends: the window's close button, or the tray's Quit (the games keep
+    /// running).
+    fn quit(&mut self, event_loop: &ActiveEventLoop) {
+        self.pages.pads.cancel_feedback_test();
+        // (the icon leaves the tray before the process ends)
+        self.tray = None;
+        event_loop.exit();
+    }
+
+    /// While a game started from here runs the launcher's window goes into the tray
+    /// (Windows; elsewhere it is minimized), and comes back when that game ends; the tray's
+    /// menu is answered here.
     fn tray_tick(&mut self, event_loop: &ActiveEventLoop) {
         if mobile::mobile() || self.shot.is_some() {
             return;
         }
         let Some(w) = self.window.clone() else { return };
-        let running: Vec<&core::Instance> = self.state.instances.iter().filter(|i| i.running).collect();
-        if !running.is_empty() && !self.tucked {
-            let head = format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&running[0].map), omsi_ui::tr("running"));
-            self.tray = tray::Tray::new(&omsi_ui::tr("Project Depot: a game is running"), &head);
-            if self.tray.is_some() {
-                w.set_visible(false);
-            } else {
-                w.set_minimized(true);
+        let game = |l: &Launcher, pid: u32, started: u64| l.state.instances.iter().find(|i| i.running && i.pid == pid && i.started == started).cloned();
+        let head = |i: &core::Instance| format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&i.map), pages::ago(i.started));
+        if let Some((pid, started, shown)) = self.tucked {
+            match game(self, pid, started) {
+                None => {
+                    self.tray = None;
+                    self.tucked = None;
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                }
+                Some(i) => {
+                    // (the menu's first line says how long it has run: brought up to date
+                    // once a minute)
+                    let minute = now_secs() / 60;
+                    if minute != shown {
+                        if let Some(t) = self.tray.as_ref() {
+                            t.set_head(&head(&i));
+                        }
+                        self.tucked = Some((pid, started, minute));
+                    }
+                }
             }
-            self.tucked = true;
-        } else if running.is_empty() && self.tucked {
-            self.tray = None;
-            self.tucked = false;
-            w.set_visible(true);
-            w.set_minimized(false);
-            w.focus_window();
+        }
+        if self.tucked.is_none() {
+            let mine = self.state.started_here.and_then(|pid| self.state.instances.iter().find(|i| i.running && i.pid == pid).cloned());
+            if let Some(i) = mine {
+                self.state.started_here = None;
+                self.tray = tray::Tray::new(&omsi_ui::tr("Project Depot: a game is running"), &head(&i));
+                if self.tray.is_some() {
+                    w.set_visible(false);
+                } else if can_restore(&w) {
+                    // (where there is no tray; on Wayland a window minimized cannot be brought
+                    // back by the program, so it stays where it is there)
+                    w.set_minimized(true);
+                }
+                self.tucked = Some((i.pid, i.started, now_secs() / 60));
+            }
         }
         while let Some(cmd) = self.tray.as_ref().and_then(|t| t.take()) {
+            let Some((pid, started, _)) = self.tucked else { break };
             match cmd {
                 tray::TrayCmd::Show => {
                     w.set_visible(true);
@@ -753,21 +797,20 @@ impl Launcher {
                     w.request_redraw();
                 }
                 tray::TrayCmd::OpenLog => {
-                    // (the game started last: the one being played)
-                    let log = self.state.instances.iter().filter(|i| i.running).max_by_key(|i| i.started).map(|i| i.log.clone());
+                    // (the game the menu names)
+                    let log = game(self, pid, started).map(|i| i.log);
                     if !log.is_some_and(|l| core::open_file(std::path::Path::new(&l))) {
                         self.state.set_status("The game's log could not be opened.", true);
                     }
                 }
                 tray::TrayCmd::StopGame => {
-                    let pids: Vec<u32> = self.state.instances.iter().filter(|i| i.running).map(|i| i.pid).collect();
-                    for pid in pids {
+                    if game(self, pid, started).is_some() {
                         self.state.stop(pid);
                     }
                 }
                 tray::TrayCmd::Quit => {
-                    self.tray = None;
-                    event_loop.exit();
+                    self.quit(event_loop);
+                    break;
                 }
             }
         }
