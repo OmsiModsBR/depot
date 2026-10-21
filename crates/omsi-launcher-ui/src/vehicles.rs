@@ -1,12 +1,14 @@
-//! The Vehicles page: the library of buses, what is known about the chosen one, its paints
-//! and what was found of its files. The catalog is read by the launcher core on a thread of
-//! its own, so the window never waits for the disk.
+//! The Vehicles page: the library of buses, the chosen one's preview, what is known about it
+//! (and whether its files were found), its paints, and the bus to use for the next start from
+//! Maps - optional: in the game the ALT menu adds and changes vehicles as always. The catalog
+//! is read by the launcher core on a thread of its own, so the window never waits for the disk.
 
 use crate::kit::{self, card, clipped, dot, shorten, text, Status};
 use crate::look::*;
+use crate::shell::BODY_TOP;
 use omsi_launcher_lib::VehicleInfo;
 use omsi_ui::paint::Align;
-use omsi_ui::widgets::{matches, Ui};
+use omsi_ui::widgets::{matches, ButtonKind, Ui};
 use omsi_ui::{Rect, Weight};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
@@ -29,14 +31,37 @@ pub struct VehiclesView {
     paint: Option<usize>,
     /// A bus (its file) and paint to show once the catalog is there (`select`).
     pending: Option<(String, String)>,
-    /// "Drive this bus" was clicked: the bus's file and the paint (`take_use`).
-    used: Option<(String, String)>,
+    /// "Use this bus" was clicked (`take_use`).
+    used: Option<UseBus>,
+    /// The "Use for the next start" card's choices, for the bus `prep_for` (its file): the
+    /// depot file (0: automatic, else the bus's list from 1), the fleet number and the plate.
+    prep_for: String,
+    garage: usize,
+    number: usize,
+    plate: String,
+    /// Those were just chosen afresh for another bus (`fresh_bus`).
+    fresh: bool,
     /// The bus and paint the page shows (its file and the paint's name), for the host to draw.
     current: Option<(String, String)>,
     /// What the host drew of that bus for the preview (`set_picture`), and where the preview
     /// was this frame.
     picture: Option<Picture>,
     preview_area: Option<Rect>,
+}
+
+/// The bus to start with from Maps, as the "Use for the next start" card has it.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct UseBus {
+    /// The bus's file.
+    pub file: String,
+    /// The paint's name, empty for the bus's own livery.
+    pub paint: String,
+    /// The depot file (`None`: chosen as the map and the date say).
+    pub hof: Option<String>,
+    /// The fleet number from the bus's list (`None`: it has none).
+    pub number: Option<String>,
+    /// The number plate typed (empty: as the content says).
+    pub plate: String,
 }
 
 /// The bus's picture in the preview, as the host has it: drawn by a helper process (live) or
@@ -61,6 +86,11 @@ impl Default for VehiclesView {
             paint: None,
             pending: None,
             used: None,
+            prep_for: String::new(),
+            garage: 0,
+            number: 0,
+            plate: String::new(),
+            fresh: false,
             current: None,
             picture: None,
             preview_area: None,
@@ -160,9 +190,36 @@ impl VehiclesView {
         }
     }
 
-    /// The bus (its file) and paint "Drive this bus" was clicked for, once.
-    pub fn take_use(&mut self) -> Option<(String, String)> {
+    /// The bus "Use this bus" was clicked for, once.
+    pub fn take_use(&mut self) -> Option<UseBus> {
         self.used.take()
+    }
+
+    /// The bus (its file) the "Use for the next start" card has just started over for, once:
+    /// when it is the one the next start uses, the host fills the card in with `prepare`.
+    pub fn fresh_bus(&mut self) -> Option<String> {
+        std::mem::take(&mut self.fresh).then(|| self.prep_for.clone())
+    }
+
+    /// Fill the "Use for the next start" card with what the next start uses, when it is the
+    /// bus shown: its depot file (None: automatic), fleet number and plate.
+    pub fn prepare(&mut self, file: &str, hof: Option<&str>, number: &str, plate: &str) {
+        let Catalog::Ready(list) = &self.catalog else {
+            return;
+        };
+        let Some(v) = list
+            .get(self.selected)
+            .filter(|v| v.file.eq_ignore_ascii_case(file))
+        else {
+            return;
+        };
+        self.garage = hof
+            .and_then(|h| v.hofs.iter().position(|x| x.eq_ignore_ascii_case(h)))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        self.number = v.numbers.iter().position(|(n, _)| n == number).unwrap_or(0);
+        self.plate = plate.to_string();
+        self.prep_for = v.file.clone();
     }
 
     /// Start reading the catalog if that has not begun.
@@ -218,7 +275,7 @@ impl VehiclesView {
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + 137.0, body.w, 120.0);
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 120.0);
                 card(ui, r, "Vehicles could not be listed", None);
                 clipped(
                     ui,
@@ -243,7 +300,7 @@ impl VehiclesView {
                 return;
             }
             _ => {
-                let r = Rect::new(body.x, body.y + 137.0, body.w, 90.0);
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 90.0);
                 card(ui, r, "Vehicle library", None);
                 clipped(
                     ui,
@@ -264,33 +321,38 @@ impl VehiclesView {
             self.selected = shown[0];
             self.paint = None;
         }
-        let top = body.y + 137.0;
-        let rows_h = (body.h - 137.0 - 24.0).max(300.0);
-        let upper_h = (rows_h * 0.6).floor();
-        let lower_h = rows_h - upper_h - 16.0;
-        let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
-        let details_w = kit::fit(392.0, body.w);
-        let details = Rect::new(body.right() - details_w, top, details_w, upper_h);
+        // (three columns over two rows: the library, the preview and the details above; the
+        // paints under the first two, the bus for the next start under the details)
+        let top = body.y + BODY_TOP;
+        let rows_h = (body.h - BODY_TOP - 24.0).max(420.0);
+        let lower_h = 222.0_f32.min(rows_h * 0.45);
+        let upper_h = rows_h - lower_h - 14.0;
+        let lib = Rect::new(body.x, top, kit::fit(330.0, body.w), upper_h);
+        let side_w = kit::fit(340.0, body.w);
+        let details = Rect::new(body.right() - side_w, top, side_w, upper_h);
         let preview = Rect::new(
-            lib.right() + 16.0,
+            lib.right() + 14.0,
             top,
-            details.x - lib.right() - 32.0,
+            details.x - lib.right() - 28.0,
             upper_h,
         );
         self.library(ui, lib, &list, &shown);
         let chosen = kit::chosen(&list, &shown, self.selected);
         self.current = chosen.map(|v| (v.file.clone(), self.paint_name(v)));
+        if let Some(v) = chosen.filter(|v| !v.file.eq_ignore_ascii_case(&self.prep_for)) {
+            // (another bus: its own depot files and numbers, chosen afresh)
+            self.prep_for = v.file.clone();
+            (self.garage, self.number) = (0, 0);
+            self.plate.clear();
+            self.fresh = true;
+        }
         self.preview(ui, preview);
         self.details(ui, details, chosen);
-        let y2 = top + upper_h + 16.0;
-        let launch_w = kit::fit(426.0, body.w);
-        let files_w = kit::fit(330.0, body.w);
-        let launch = Rect::new(body.right() - launch_w, y2, launch_w, lower_h);
-        let files = Rect::new(launch.x - 16.0 - files_w, y2, files_w, lower_h);
-        let paints = Rect::new(body.x, y2, files.x - 16.0 - body.x, lower_h);
+        let y2 = top + upper_h + 14.0;
+        let paints = Rect::new(body.x, y2, preview.right() - body.x, lower_h);
+        let next = Rect::new(details.x, y2, side_w, lower_h);
         self.paints(ui, paints, chosen);
-        self.files(ui, files, chosen);
-        self.launch(ui, launch, chosen);
+        self.next_start(ui, next, chosen);
     }
 
     fn library(&mut self, ui: &mut Ui, r: Rect, list: &[VehicleInfo], shown: &[usize]) {
@@ -353,6 +415,12 @@ impl VehiclesView {
                         Weight::Regular,
                         status.color(),
                     );
+                    ui.icon(
+                        "o-chevron",
+                        glam::Vec2::new(row.right() - 16.0, row.center().y),
+                        14.0,
+                        MUTED,
+                    );
                 }
                 y += 84.0;
             }
@@ -369,14 +437,14 @@ impl VehiclesView {
         let note = pic
             .as_ref()
             .filter(|p| p.texture.is_some() && p.from_cache)
-            .map(|_| "image from cache \u{b7} live view only on this page");
+            .map(|_| "image from cache \u{b7} live view on demand");
         card(ui, r, "Preview", note);
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
         self.preview_area = Some(inner);
         ui.p().rect(inner, PANEL_2);
         let Some(pic) = pic else {
             ui.text_in(
-                "Choose a map on the Drive page: the bus is shown in its light.",
+                "Choose a map on Maps: the bus is shown in its light.",
                 inner.inset(24.0),
                 14.0 * TEXT_SCALE,
                 Weight::Regular,
@@ -435,14 +503,42 @@ impl VehiclesView {
             );
             return;
         };
+        // (whether its files were found: the worst of them, all of them under the mouse)
+        let files = file_status(v);
+        let worst = if files.iter().any(|f| f.1 == Status::Missing) {
+            (Status::Missing, "Files missing")
+        } else if files.iter().any(|f| f.1 == Status::Warning) {
+            (Status::Warning, "Check files")
+        } else {
+            (Status::Found, "Files found")
+        };
+        let bw = ui.width(worst.1, 12.0 * TEXT_SCALE, Weight::Medium) + 20.0;
+        let badge = Rect::new(r.right() - 17.0 - bw, r.y + 58.0, bw, 24.0);
+        ui.p().rounded(badge, 4.0, worst.0.color().alpha(0.12));
+        ui.p()
+            .rounded_border(badge, 4.0, 1.0, worst.0.color().alpha(0.5));
+        ui.text_in(
+            worst.1,
+            badge,
+            12.0 * TEXT_SCALE,
+            Weight::Medium,
+            worst.0.color(),
+            Align::Center,
+        );
+        let tip: Vec<String> = files
+            .iter()
+            .map(|(label, _, note)| format!("{label}: {note}"))
+            .collect();
+        ui.tooltip(badge, &tip.join("\n"));
         let name = omsi_launcher_lib::display_bus_name(&v.name);
+        let name_w = badge.x - 12.0 - (r.x + 19.0);
         clipped(
             ui,
             &name,
             r.x + 19.0,
-            r.y + 58.0,
-            r.w - 38.0,
-            17.0,
+            r.y + 62.0,
+            name_w,
+            15.0,
             Weight::Bold,
             FG,
         );
@@ -450,13 +546,13 @@ impl VehiclesView {
             ui,
             &v.manufacturer,
             r.x + 19.0,
-            r.y + 80.0,
-            r.w - 38.0,
+            r.y + 82.0,
+            name_w,
             12.0,
             Weight::Regular,
             MUTED,
         );
-        let rows = [
+        let mut rows = vec![
             ("Type", v.type_name.clone()),
             ("Folder", v.folder.clone()),
             // (the bus's own livery and its repaints, as the Paints card counts them)
@@ -464,7 +560,10 @@ impl VehiclesView {
             ("Depot files", v.hofs.len().to_string()),
             ("Fleet numbers", v.numbers.len().to_string()),
         ];
-        let mut y = r.y + 112.0;
+        if !v.missing_packs.is_empty() {
+            rows.push(("Missing packs", v.missing_packs.join(", ")));
+        }
+        let mut y = r.y + 116.0;
         for (k, val) in rows {
             ui.p()
                 .rect(Rect::new(r.x + 1.0, y - 14.0, r.w - 2.0, 1.0), LINE);
@@ -492,27 +591,27 @@ impl VehiclesView {
         );
         let box_ = Rect::new(
             r.x + 15.0,
-            y + 34.0,
+            y + 32.0,
             r.w - 30.0,
-            (r.bottom() - y - 46.0).max(0.0),
+            (r.bottom() - y - 40.0).max(0.0),
         );
-        ui.p().rounded(box_, 6.0, PANEL_2);
         let desc = shorten(v.description.trim(), DESCRIPTION_CHARS);
         let desc = if desc.is_empty() {
             "The author wrote no description.".to_string()
         } else {
             desc
         };
-        ui.push_clip(box_.inset(1.0), 5.0);
-        ui.paragraph(
-            &desc,
-            glam::Vec2::new(box_.x + 12.0, box_.y + 18.0),
-            box_.w - 24.0,
-            12.5 * TEXT_SCALE,
-            Weight::Regular,
-            FG,
-        );
-        ui.pop_clip();
+        ui.scroll_area("vehicles:about", box_, &mut |ui, view| {
+            let h = ui.paragraph(
+                &desc,
+                glam::Vec2::new(view.x + 4.0, view.y + 12.0),
+                view.w - 16.0,
+                12.5 * TEXT_SCALE,
+                Weight::Regular,
+                FG,
+            );
+            h + 20.0
+        });
     }
 
     fn paints(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
@@ -563,62 +662,96 @@ impl VehiclesView {
         }
     }
 
-    fn files(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
-        card(ui, r, "Files found", None);
+    /// The bus to start with from Maps: its paint, depot file, fleet number and plate, and
+    /// "Use this bus". Optional: in the game the ALT menu adds and changes vehicles as always.
+    fn next_start(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
+        card(ui, r, "Use for the next start", None);
         let Some(v) = v else { return };
-        let rows = file_status(v);
-        let mut y = r.y + 58.0;
-        for (label, status, note) in rows {
-            dot(ui, r.x + 24.0, y, status);
-            let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
-            // (the note gives way to the label on a narrow card, never under it)
-            let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
-            let note = kit::fit_text(ui, &note, 12.0 * TEXT_SCALE, room);
-            kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
-            y += 30.0;
-        }
-    }
-
-    fn launch(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
-        card(ui, r, "Launch preparation", None);
-        let bus = v
-            .map(|v| omsi_launcher_lib::display_bus_name(&v.name))
-            .unwrap_or_default();
-        let paint = match v {
-            Some(v) if self.paint.is_some() => self.paint_name(v),
-            Some(v) => default_livery(v).to_string(),
-            None => String::new(),
+        let gap = 10.0;
+        let col = (r.w - 34.0 - gap) / 2.0;
+        let (x1, x2) = (r.x + 17.0, r.x + 17.0 + col + gap);
+        let label = |ui: &mut Ui, s: &str, x: f32, y: f32| {
+            text(ui, s, x, y, 12.0, Weight::Regular, MUTED);
         };
-        let mut y = r.y + 58.0;
-        for (k, val) in [("Bus", bus), ("Paint", paint)] {
-            ui.p()
-                .rect(Rect::new(r.x + 1.0, y - 20.0, r.w - 2.0, 1.0), LINE);
-            text(ui, k, r.x + 19.0, y, 13.0, Weight::Regular, MUTED);
-            clipped(
-                ui,
-                &val,
-                r.x + 150.0,
-                y,
-                r.w - 170.0,
-                13.0,
-                Weight::Regular,
-                FG,
-            );
-            y += 40.0;
-        }
-        let b = Rect::new(r.x + 19.0, r.bottom() - 100.0, r.w - 38.0, 48.0);
-        if kit::action(
-            ui,
-            "vehicles:use",
-            b,
-            "DRIVE THIS BUS",
-            "Takes this bus and paint to the Drive page.",
-            v.is_some(),
+        let mut y = r.y + 50.0;
+        label(ui, "Paint", x1, y);
+        label(ui, "Garage", x2, y);
+        y += 10.0;
+        let paints: Vec<String> = std::iter::once(default_livery(v).to_string())
+            .chain(v.paints.iter().cloned())
+            .collect();
+        let mut paint = self.paint.map(|i| i + 1).unwrap_or(0);
+        if ui.select(
+            "vehicles:next-paint",
+            Rect::new(x1, y, col, 30.0),
+            &mut paint,
+            &paints,
         ) {
-            if let Some(v) = v {
-                self.used = Some((v.file.clone(), self.paint_name(v)));
-            }
+            self.paint = paint.checked_sub(1);
         }
+        let garages: Vec<String> = std::iter::once("Automatic".to_string())
+            .chain(v.hofs.iter().cloned())
+            .collect();
+        ui.select(
+            "vehicles:next-garage",
+            Rect::new(x2, y, col, 30.0),
+            &mut self.garage,
+            &garages,
+        );
+        y += 46.0;
+        label(ui, "Fleet number", x1, y);
+        label(ui, "Plate", x2, y);
+        y += 10.0;
+        let numbers: Vec<String> = if v.numbers.is_empty() {
+            vec!["None listed".to_string()]
+        } else {
+            v.numbers.iter().map(|(n, _)| n.clone()).collect()
+        };
+        ui.select(
+            "vehicles:next-number",
+            Rect::new(x1, y, col, 30.0),
+            &mut self.number,
+            &numbers,
+        );
+        // (the plate the number comes with, unless one is typed)
+        let shown_plate = v
+            .numbers
+            .get(self.number)
+            .map(|(_, p)| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| "Automatic".to_string());
+        ui.text_input(
+            "vehicles:next-plate",
+            Rect::new(x2, y, col, 30.0),
+            &mut self.plate,
+            &shown_plate,
+            None,
+        );
+        let b = Rect::new(r.x + 17.0, y + 42.0, r.w - 34.0, 32.0);
+        let note_y = b.bottom() + 18.0;
+        if ui.button("vehicles:use", b, "Use this bus", None, ButtonKind::Primary) {
+            self.used = Some(UseBus {
+                file: v.file.clone(),
+                paint: self.paint_name(v),
+                hof: self
+                    .garage
+                    .checked_sub(1)
+                    .and_then(|i| v.hofs.get(i))
+                    .cloned(),
+                number: v.numbers.get(self.number).map(|(n, _)| n.clone()),
+                plate: self.plate.trim().to_string(),
+            });
+        }
+        clipped(
+            ui,
+            "Optional. The ALT menu works as always.",
+            r.x + 17.0,
+            note_y,
+            r.w - 34.0,
+            12.0,
+            Weight::Regular,
+            MUTED,
+        );
     }
 }
 

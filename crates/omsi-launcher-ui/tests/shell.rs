@@ -127,3 +127,38 @@ fn a_catalog_read_again_keeps_the_bus_shown() {
     view.set_catalog(longer);
     assert_eq!(view.chosen(), (2, None));
 }
+
+#[test]
+fn use_this_bus_reports_the_bus_and_what_the_card_holds() {
+    use omsi_launcher_ui::vehicles::VehiclesView;
+    let mut shell = Shell::new(Page::Vehicles);
+    shell.vehicles = VehiclesView::with_catalog(omsi_launcher_ui::sample::vehicles());
+    let mut ui = Ui::new();
+    frame(&mut shell, &mut ui, None);
+    // (the card starts over for the bus shown, once; the host fills in the next start's)
+    let file = shell.vehicles.fresh_bus().expect("a bus shown");
+    assert_eq!(shell.vehicles.fresh_bus(), None);
+    shell
+        .vehicles
+        .prepare(&file, Some("Depot B"), "50044", "AB 1");
+    let b = ui.drawn[&omsi_ui::widgets::id_of("vehicles:use")];
+    frame(&mut shell, &mut ui, Some(Vec2::new(b.x + 10.0, b.y + 10.0)));
+    let used = shell.vehicles.take_use().expect("Use this bus clicked");
+    assert_eq!(used.file, file);
+    assert_eq!(used.hof.as_deref(), Some("Depot B"));
+    assert_eq!(used.number.as_deref(), Some("50044"));
+    assert_eq!(used.plate, "AB 1");
+    assert!(shell.vehicles.take_use().is_none());
+    // (another bus: automatic again)
+    let row = ui.drawn[&omsi_ui::widgets::id_of("vehicles:row:1")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(row.x + 30.0, row.y + 20.0)),
+    );
+    let b = ui.drawn[&omsi_ui::widgets::id_of("vehicles:use")];
+    frame(&mut shell, &mut ui, Some(Vec2::new(b.x + 10.0, b.y + 10.0)));
+    let used = shell.vehicles.take_use().unwrap();
+    assert_ne!(used.file, file);
+    assert_eq!((used.hof, used.plate.as_str()), (None, ""));
+}
