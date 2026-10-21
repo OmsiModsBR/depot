@@ -801,13 +801,14 @@ impl App {
         let idle = if (now - before).abs() > 1e-4 { 0.0 } else { idle + dt };
         if idle > SERVICE_SETTLE {
             self.pumping = None;
-            let line = if kind == "refuel" { format!("refuelled: {now:.0} l in the tank") } else { format!("washed: dirt {:.0}%", now * 100.0) };
-            log::info!("{line}");
-            self.service_msg = Some((line, 6.0));
+            let (text, value) = if kind == "refuel" { ("refuelled: %{litres} l in the tank", format!("{now:.0}")) } else { ("washed: dirt %{dirt}%", format!("{:.0}", now * 100.0)) };
+            let fill = |t: &str| t.replace("%{litres}", &value).replace("%{dirt}", &value);
+            log::info!("{}", fill(text));
+            self.service_msg = Some((fill(&omsi_ui::tr(text)), 6.0));
         } else {
             self.pumping = Some((kind, idle));
             if kind == "refuel" {
-                self.service_msg = Some((format!("Refuelling: {now:.0} l"), 1.0));
+                self.service_msg = Some((omsi_ui::tr("Refuelling: %{litres} l").replace("%{litres}", &format!("{now:.0}")), 1.0));
             }
         }
     }

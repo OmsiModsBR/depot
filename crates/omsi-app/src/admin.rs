@@ -30,7 +30,7 @@ pub(crate) const SPEEDS: [f64; 6] = [1.0, 2.0, 4.0, 8.0, 15.0, 30.0];
 pub(crate) fn items(app: &App) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let Some(lan) = app.online.lan.as_ref() else { return out };
-    let mut peers: Vec<(u32, String)> = lan.peers().map(|p| (p.pose.id, if p.pose.name.is_empty() { format!("Player {}", p.pose.id) } else { p.pose.name.clone() })).collect();
+    let mut peers: Vec<(u32, String)> = lan.peers().map(|p| (p.pose.id, if p.pose.name.is_empty() { omsi_ui::tr("Player %{id}").replace("%{id}", &p.pose.id.to_string()) } else { p.pose.name.clone() })).collect();
     peers.sort();
     for (id, name) in &peers {
         if *id == lan.my_id {

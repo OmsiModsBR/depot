@@ -56,10 +56,14 @@ fn names(template: &str) -> Vec<&str> {
     out
 }
 
+/// Placeholder names the tables use for counts and amounts.
+const COUNTS: [&str; 8] = ["n", "v", "count", "total", "done", "maps", "speed", "num"];
+
 struct Template {
     parts: Vec<String>,
-    /// Words on one side only and few of them ("%{n} vehicles"): its value must be a number,
-    /// or "Clear all placed vehicles" would be taken for it.
+    /// Words on one side only and few of them, and a value named as a count ("%{n} vehicles"):
+    /// that value must have digits, or "Clear all placed vehicles" would be taken for it. A name
+    /// ("Stop skipped: %{name}") takes any value.
     number: bool,
     names: Vec<String>,
     /// The translation, with the same placeholders.
@@ -85,10 +89,11 @@ fn templates(lang: &str) -> Arc<Vec<Template>> {
             // would also take texts that are not it)
             let letters = parts.iter().flat_map(|s| s.chars()).filter(|c| c.is_alphabetic()).count();
             let one_side = parts.len() == 2 && (parts[0].is_empty() || parts[1].is_empty());
+            let names: Vec<String> = names(&k).into_iter().map(str::to_string).collect();
             (letters >= 8).then(|| Template {
-                number: one_side && letters < 20,
+                number: one_side && letters < 20 && names.iter().all(|n| COUNTS.contains(&n.as_str())),
                 weight: parts.iter().map(|s| s.chars().count()).sum(),
-                names: names(&k).into_iter().map(str::to_string).collect(),
+                names,
                 parts,
                 text: v.into_owned(),
             })
@@ -168,5 +173,8 @@ mod tests {
         // (too few words to tell it apart: its caller fills it in)
         assert!(templates("de").iter().all(|t| t.parts != parts("Line %{line}")));
         assert_eq!(fill("de", "Loading map tiles (first area) \u{b7}  of 100"), None);
+        // (a name without digits is still a value; a count without them is not)
+        assert_eq!(fill("de", "Stop skipped: Hauptbahnhof").as_deref(), Some("Haltestelle ausgelassen: Hauptbahnhof"));
+        assert_eq!(fill("de", "Clear all placed vehicles"), None);
     }
 }
