@@ -1314,8 +1314,7 @@ impl State {
         let months = [("spring", "04"), ("summer", "07"), ("autumn", "10"), ("winter", "01")];
         if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
             let date = self.choice.date.clone();
-            let (yy, dd) = (date.get(0..4).unwrap_or("1989").to_string(), date.get(8..10).unwrap_or("15").to_string());
-            self.choice.date = format!("{yy}-{month}-{dd}");
+            self.choice.date = date_in_month(&date, month);
             self.load_lines();
         }
         let w = self.choice.weather.clone();
@@ -1404,6 +1403,25 @@ pub(super) fn trip_index_at(tour: &core::TourInfo, now: f64) -> Option<usize> {
 pub fn hhmm(seconds: f64) -> String {
     let s = seconds.max(0.0).round() as i64;
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
+}
+
+/// `date` (`YYYY-MM-DD`) moved into `month` (`04`, `07`, `10` or `01`, a season's), the day
+/// kept within the month: 31 March into spring is 30 April.
+fn date_in_month(date: &str, month: &str) -> String {
+    let yy = date.get(0..4).unwrap_or("1989");
+    let last = if month == "04" { 30 } else { 31 };
+    let dd = date.get(8..10).and_then(|d| d.parse::<u32>().ok()).unwrap_or(15).clamp(1, last);
+    format!("{yy}-{month}-{dd:02}")
+}
+
+#[cfg(test)]
+mod season_date_tests {
+    #[test]
+    fn a_season_keeps_the_day_within_its_month() {
+        assert_eq!(super::date_in_month("2026-03-31", "04"), "2026-04-30");
+        assert_eq!(super::date_in_month("2026-03-31", "07"), "2026-07-31");
+        assert_eq!(super::date_in_month("2026-11-05", "01"), "2026-01-05");
+    }
 }
 
 pub fn fmt_bytes(b: u64) -> String {

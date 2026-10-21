@@ -128,6 +128,9 @@ fn signed_deg(v: f32) -> String {
 fn cm(v: f32) -> String {
     format!("{:+.0} cm", v * 100.0)
 }
+fn whole_pct(v: f32) -> String {
+    format!("{v:.0} %")
+}
 fn ms_or_off(v: f32) -> String {
     if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }
 }
@@ -219,8 +222,8 @@ pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[("auto", "Automatic"), ("1280x
 /// Every option of the page, section by section, card by card.
 pub static OPTS: &[Opt] = &[
     // General
-    special(GENERAL, "Language", "language", "Language", "The game's texts; the launcher's change at once", Kind::Language),
-    toggle(GENERAL, "Language", "machine_translation", "Translate the remaining texts automatically", "Offline; downloads 620 MB once"),
+    now(special(GENERAL, "Language", "language", "Language", "The launcher's texts at once, the game's at its next start", Kind::Language)),
+    now(toggle(GENERAL, "Language", "machine_translation", "Translate the remaining texts automatically", "Offline; the 620 MB download starts at once")),
     toggle(GENERAL, "Driving help", "steering_linear", "Steering linearity", "Keys turn the wheel at OMSI's steady pace"),
     toggle(GENERAL, "Driving help", "old_steering", "Old steering", "The wheel stays; turn it back yourself"),
     toggle(GENERAL, "Driving help", "red_steer_spd", "Dynamic steering", "Slower steering keys at speed (OMSI's redSteerSpd)"),
@@ -374,7 +377,16 @@ pub static OPTS: &[Opt] = &[
     slide(DEVICES, "Seat", "seat_z", "Seat up / down", "", (-0.6, 0.6, 0.01), cm, hundredths),
     slide(DEVICES, "Seat", "seat_x", "Seat right / left", "", (-0.6, 0.6, 0.01), cm, hundredths),
     slide(DEVICES, "Seat", "seat_pitch_deg", "Head pitch", "", (-45.0, 45.0, 1.0), signed_deg, whole),
+    // interface: the launcher's own, at once (the accent also colours the game's menus)
+    now(pick(INTERFACE, "Accent color", "ui_accent", "Accent color", "The launcher and every menu of the game", ACCENTS)),
+    now(pick(INTERFACE, "Layout", "ui_nav", "Navigation", "Top bar: the pages in a row", &[("sidebar", "Sidebar"), ("top", "Top bar")])),
+    now(pick(INTERFACE, "Layout", "ui_background", "Background", "Scene: a blurred picture behind", &[("plain", "Plain dark"), ("scene", "Scene")])),
+    now(slide(INTERFACE, "Layout", "ui_dimming", "Dimming", "How much the scene is darkened under the text", (30.0, 90.0, 1.0), whole_pct, whole_int)),
+    now(pick(INTERFACE, "Layout", "ui_corners", "Corners", "Square is flatter", &[("rounded", "Rounded"), ("square", "Square")])),
 ];
+
+/// The accent colours (`omsi_ui::theme::Accent`), the default first.
+const ACCENTS: &[(&str, &str)] = &[("Amber", "Amber"), ("Orange", "Orange"), ("Red", "Red"), ("Pink", "Pink"), ("Purple", "Purple"), ("Blue", "Blue"), ("Teal", "Teal"), ("Green", "Green")];
 
 /// The settings and the start's choices the page changes, and whether it changed either.
 pub struct Store<'a> {
@@ -463,8 +475,8 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
 /// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
 /// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
 fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    let vr = s.get("vr").and_then(Value::as_bool).unwrap_or(false) || omsi_cfg::flags::OPENXR.is_set();
-    cfg!(windows) && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9") && !vr
+    // (the environment read last: the page asks this for every option, every frame)
+    cfg!(windows) && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9") && !s.get("vr").and_then(Value::as_bool).unwrap_or(false) && !omsi_cfg::flags::OPENXR.is_set()
 }
 
 /// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
@@ -506,6 +518,7 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
         k if k.starts_with("head_tracking_") => st.on("head_tracking"),
+        "ui_dimming" => st.get("ui_background").as_str() == Some("scene"),
         _ => true,
     };
     if visible { Shown::Row } else { Shown::Hidden }
@@ -621,6 +634,7 @@ fn after(key: &str, st: &mut Store) {
         // (the field of view of the three screens follows from their distance)
         "triple_distance_mm" => st.s["triple_fov_deg"] = json!(0.0),
         "machine_translation" => crate::mt::enable(st.on("machine_translation")),
+        "ui_accent" => omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(st.get("ui_accent").as_str().unwrap_or("")).unwrap_or_default()),
         _ => {}
     }
 }
@@ -630,8 +644,12 @@ pub fn listed<'a>(sec: usize, query: &str, changed_only: bool, st: &Store) -> Ve
     let q = query.trim().to_lowercase();
     OPTS.iter()
         .filter(|o| if q.is_empty() { changed_only || o.sec == sec } else { matches(o.label, &q) || matches(o.hint, &q) || matches(o.group, &q) || matches(SECTIONS[o.sec], &q) })
-        .filter(|o| shown(o, st) != Shown::Hidden)
-        .filter(|o| !changed_only || changed(o, st))
+        .filter(|o| match shown(o, st) {
+            Shown::Hidden => false,
+            // (a row fixed by the graphics API cannot be taken back here: "changed" leaves it out)
+            Shown::Locked(_) => !changed_only,
+            Shown::Row => !changed_only || changed(o, st),
+        })
         .collect()
 }
 
@@ -642,6 +660,8 @@ const HEAD_H: f32 = 44.0;
 enum Card<'a> {
     Group(String, Vec<&'a Opt>),
     Api(&'a Opt),
+    /// The accent colour as swatches (a search lists it as a dropdown row).
+    Accent(&'a Opt),
     Own(&'static str),
 }
 
@@ -654,6 +674,7 @@ impl Card<'_> {
         match self {
             Card::Group(_, rows) => HEAD_H + rows.len() as f32 * ROW_H + 6.0,
             Card::Api(_) => 148.0,
+            Card::Accent(_) => 312.0,
             Card::Own(name) => OWN_H.with(|h| h.borrow().get(name).copied().unwrap_or(200.0)),
         }
     }
@@ -662,8 +683,6 @@ impl Card<'_> {
 thread_local! {
     /// How high each of the page's own cards came out the frame before.
     static OWN_H: RefCell<HashMap<&'static str, f32>> = RefCell::new(HashMap::new());
-    /// How high the Interface section's columns came out.
-    static INTERFACE_H: std::cell::Cell<[f32; 2]> = const { std::cell::Cell::new([400.0, 300.0]) };
 }
 
 /// The cards of what is listed, in the order of the table (a search: "Section · Group").
@@ -672,6 +691,10 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool) -> Vec<Card<'a>> {
     for o in opts {
         if !mixed && matches!(o.kind, Kind::Api) {
             out.push(Card::Api(o));
+            continue;
+        }
+        if !mixed && o.key == "ui_accent" {
+            out.push(Card::Accent(o));
             continue;
         }
         let title = if mixed { format!("{} · {}", SECTIONS[o.sec], o.group) } else { o.group.to_string() };
@@ -686,6 +709,7 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool) -> Vec<Card<'a>> {
             DEVICES => &["controls"],
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
+            INTERFACE => &["preview"],
             _ => &[],
         };
         out.extend(own.iter().map(|n| Card::Own(n)));
@@ -715,7 +739,19 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let mut st = Store { s: &mut l.state.settings, start: &mut start, changed: false, start_changed: false };
     // the bar: the search, all or the changed ones, how many are changed, the presets
     let bar_h = 34.0;
-    let n_changed = OPTS.iter().filter(|o| changed(o, &st)).count();
+    // (each section's rows and whether one is changed, once a frame: the list and the chip use them)
+    let mut per_sec = [(0usize, false); SECTIONS.len()];
+    let mut n_changed = 0;
+    for o in OPTS {
+        if shown(o, &st) == Shown::Row {
+            let c = changed(o, &st);
+            per_sec[o.sec].0 += 1;
+            per_sec[o.sec].1 |= c;
+            n_changed += c as usize;
+        } else if matches!(shown(o, &st), Shown::Locked(_)) {
+            per_sec[o.sec].0 += 1;
+        }
+    }
     let sw = if narrow { body.w } else { (body.w * 0.4).min(520.0) };
     ui.text_input("set-search", Rect::new(body.x, body.y, sw, bar_h), &mut view.query, "Search every option...", Some("search"));
     let mut show = view.changed_only as usize;
@@ -752,7 +788,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     } else {
         let lw = omsi_launcher_ui::kit::fit(230.0, body.w);
         let nav = Rect::new(body.x, y, lw, (body.bottom() - y).max(0.0));
-        if let Some(s) = sections_card(ui, nav, sec, mixed, &st) {
+        if let Some(s) = sections_card(ui, nav, sec, mixed, &per_sec) {
             view.sec = s;
             view.query.clear();
             view.changed_only = false;
@@ -795,20 +831,6 @@ fn section_body(ui: &mut Ui, content: Rect, sec: usize, mixed: bool, narrow: boo
     let id = format!("set-page-{sec}-{mixed}");
     ui.scroll_area(&id, content, &mut |ui, v| {
         let w = v.w - 8.0;
-        if !mixed && sec == INTERFACE {
-            let hs = INTERFACE_H.with(|c| c.get());
-            let (cols, h) = if narrow {
-                ([Rect::new(v.x, v.y, w, hs[0]), Rect::new(v.x, v.y + hs[0] + GAP, w, hs[1])], hs[0] + hs[1] + GAP)
-            } else {
-                let cw = (w - GAP) / 2.0;
-                ([Rect::new(v.x, v.y, cw, hs[0].max(hs[1])), Rect::new(v.x + cw + GAP, v.y, cw, hs[0].max(hs[1]))], hs[0].max(hs[1]))
-            };
-            let mut dirty = 0.0;
-            let used = interface_tab(ui, st.s, &mut dirty, cols);
-            st.changed |= dirty > 0.0;
-            INTERFACE_H.with(|c| c.set(used));
-            return h;
-        }
         let list = cards(opts, sec, mixed);
         if list.is_empty() {
             let text = if mixed { "Nothing matches. A search looks through every section." } else { "Nothing to set here with the options chosen now." };
@@ -834,6 +856,7 @@ fn section_body(ui: &mut Ui, content: Rect, sec: usize, mixed: bool, narrow: boo
             match c {
                 Card::Group(title, rows) => group_card(ui, r, title, rows, st),
                 Card::Api(o) => api_card(ui, r, o, st),
+                Card::Accent(o) => accent_card(ui, r, o, st),
                 Card::Own(name) => {
                     let used = own_card(ui, r, name, st, out, root);
                     OWN_H.with(|m| m.borrow_mut().insert(name, used));
@@ -846,7 +869,7 @@ fn section_body(ui: &mut Ui, content: Rect, sec: usize, mixed: bool, narrow: boo
 
 /// The sections on the left, with how many options each shows (a dot: one of them changed).
 /// Returns a section clicked.
-fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, st: &Store) -> Option<usize> {
+fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, per_sec: &[(usize, bool)]) -> Option<usize> {
     ui.panel(r);
     let mut picked = None;
     let x = r.x + 12.0;
@@ -863,10 +886,10 @@ fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, st: &Store) -> O
         }
         let name = omsi_launcher_ui::kit::fit_text(ui, name, 13.5, rr.w - 60.0);
         ui.text_in(&name, Rect::new(rr.x + 10.0, rr.y, rr.w - 50.0, rr.h), 13.5, Weight::Medium, TEXT, Align::Left);
-        let mine: Vec<&Opt> = OPTS.iter().filter(|o| o.sec == i && shown(o, st) != Shown::Hidden).collect();
-        if !mine.is_empty() {
-            ui.text_in(&mine.len().to_string(), Rect::new(rr.right() - 44.0, rr.y, 34.0, rr.h), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
-            if mine.iter().any(|o| changed(o, st)) {
+        let (n, any_changed) = per_sec[i];
+        if n > 0 {
+            ui.text_in(&n.to_string(), Rect::new(rr.right() - 44.0, rr.y, 34.0, rr.h), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+            if any_changed {
                 ui.p().circle(Vec2::new(rr.right() - 52.0, rr.center().y), 3.0, accent());
             }
         }
@@ -1038,7 +1061,8 @@ fn own_card(ui: &mut Ui, r: Rect, name: &str, st: &mut Store, out: &mut Outside,
             y + 34.0 + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
-        "oop" => option_presets_card(ui, r, st),
+        "oop" => option_presets_card(ui, r, st, root),
+        "preview" => preview_card(ui, r),
         "profiles" => profiles_card(ui, r, st),
         _ => files_card(ui, r, out),
     }
@@ -1130,13 +1154,20 @@ fn plugins_card(ui: &mut Ui, r: Rect, root: &std::path::Path) -> f32 {
 }
 
 thread_local! {
-    /// OMSI 2's own option presets (`option_presets/*.oop`), read once.
-    static OOP: RefCell<Option<Vec<(String, Value)>>> = const { RefCell::new(None) };
+    /// OMSI 2's own option presets (`option_presets/*.oop`), read once for each OMSI 2 folder.
+    static OOP: RefCell<Option<(std::path::PathBuf, Vec<(String, Value)>)>> = const { RefCell::new(None) };
 }
 
 /// OMSI 2's option presets: each applied with a click (only the options this game reads from them).
-fn option_presets_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
-    let list = OOP.with(|c| c.borrow_mut().get_or_insert_with(core::option_presets).clone());
+fn option_presets_card(ui: &mut Ui, r: Rect, st: &mut Store, root: &std::path::Path) -> f32 {
+    // (read again for another OMSI 2 folder)
+    let list = OOP.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.as_ref().is_none_or(|(at, _)| at != root) {
+            *c = Some((root.to_path_buf(), core::option_presets()));
+        }
+        c.as_ref().map(|x| x.1.clone()).unwrap_or_default()
+    });
     let mut y = card_frame(ui, r, "OMSI 2's option presets", Some(list.len()));
     let x = r.x + 16.0;
     let w = r.w - 32.0;
@@ -1271,7 +1302,7 @@ pub fn reset_dialog(l: &mut Launcher) {
     let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
     l.ui.icon("restart_alt", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, DANGER);
     l.ui.text_in("Reset every setting?", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
-    l.ui.paragraph("Graphics, sound, controllers and game settings go back to how they came. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+    l.ui.paragraph("Every option on this page goes back to how it came, the start's choices (season, traffic, passengers) included. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     let by = inner.bottom() - 38.0;
     if l.ui.button("reset-no", Rect::new(inner.right() - 250.0, by, 110.0, 38.0), "Cancel", None, ButtonKind::Normal) {
         l.pages.confirm_reset = false;
@@ -1283,6 +1314,15 @@ pub fn reset_dialog(l: &mut Launcher) {
             l.state.settings["language"] = lang;
         }
         l.state.settings_dirty = 0.3;
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
+        // (the start's choices this page shows go back too, the season with what it brings)
+        let season_before = l.state.choice.season.clone();
+        apply_start(&mut l.state.choice, &start_values(&Choice::default()));
+        let season = l.state.choice.season.clone();
+        if season != season_before {
+            l.state.set_season(&season);
+        }
+        l.state.touched();
         l.pages.confirm_reset = false;
         l.state.set_status("Every setting is back to how it came.", false);
     }
@@ -1290,157 +1330,79 @@ pub fn reset_dialog(l: &mut Launcher) {
 
 // --- interface ----------------------------------------------------------------------------------
 
-/// A value of the settings as the pages show it.
-fn get<'a>(v: &'a Value, k: &str) -> &'a Value {
-    v.get(k).unwrap_or(&Value::Null)
-}
-
-
-/// A choice of a few words, side by side as a segmented control (Windows 11's): each one
-/// clickable as `{key}-{value}`.
-fn seg_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &str, key: &str, options: &[(&str, &str)]) {
-    ui.label(Rect::new(r.x, r.y, r.w * 0.38, r.h), label);
-    let cur = get(s, key).as_str().unwrap_or("").to_string();
-    let bar = Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h);
-    ui.p().rounded(bar, 6.0, FIELD);
-    ui.p().rounded_border(bar, 6.0, 1.0, EDGE);
-    let w = bar.w / options.len().max(1) as f32;
-    for (k, (value, text)) in options.iter().enumerate() {
-        let cell = Rect::new(bar.x + w * k as f32, bar.y, w, bar.h);
-        let (hover, _, clicked) = ui.interact_key(id_of(&format!("{key}-{value}")), cell);
-        let on = cur == *value || (cur.is_empty() && k == 0);
-        if on {
-            let knob = cell.inset(3.0);
-            ui.p().rounded(knob, 4.0, SELECTED);
-            ui.p().rounded(Rect::new(knob.x + 1.0, knob.bottom() - 2.0, knob.w - 2.0, 2.0), 1.0, accent());
-        }
-        let c = if on { TEXT } else if hover { TEXT_SOFT } else { TEXT_DIM };
-        ui.text_in(text, cell, 12.5, Weight::Medium, c, Align::Center);
-        if clicked && !on {
-            s[key] = json!(value);
-            *dirty = 0.3;
-        }
-    }
-}
-
-/// A column of a settings tab: its panel, and the rows and sections laid down it.
-struct Col {
-    top: f32,
-    inner: Rect,
-    y: f32,
-}
-
-impl Col {
-    /// The column in `r`, under the title of its first section.
-    fn new(ui: &mut Ui, r: Rect, title: &str) -> Col {
-        ui.panel(r);
-        let inner = Launcher::card_title(ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title);
-        Col { top: r.y, inner, y: inner.y }
-    }
-
-    /// The next row.
-    fn row(&mut self) -> Rect {
-        let r = Rect::new(self.inner.x, self.y, self.inner.w, ROW - 2.0);
-        self.y += ROW + 4.0;
-        r
-    }
-
-    /// Another section, under its title.
-    fn section(&mut self, ui: &mut Ui, title: &str) {
-        self.y += 6.0;
-        Launcher::part_title(ui, Rect::new(self.inner.x, self.y, self.inner.w, 28.0), title);
-        self.y += 32.0;
-    }
-
-    /// How high the column came out.
-    fn used(&self) -> f32 {
-        self.y - self.top + 14.0
-    }
-}
-
-/// The Interface section: the accent colour of the launcher and of the game's menus, and a
-/// preview of what wears it.
-fn interface_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
+/// The accent colour as swatches: the launcher and every menu of the game wear it. Its title
+/// marks a change, as a row's name does, and the button under it takes it back.
+fn accent_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     use omsi_ui::theme::Accent;
-    let mut c = Col::new(ui, cols[0], "Accent color");
-    let chosen = Accent::named(get(s, "ui_accent").as_str().unwrap_or("")).unwrap_or_default();
+    let top = card_frame(ui, r, o.label, None);
+    let x = r.x + 16.0;
+    let iw = r.w - 32.0;
+    if changed(o, st) {
+        let tw = ui.width(&omsi_ui::tr(o.label).to_uppercase(), 12.0, Weight::Bold) * 1.12;
+        ui.p().circle(Vec2::new(x + tw + 10.0, r.y + 22.0), 3.0, accent());
+    }
+    ui.text_in(&omsi_ui::tr(When::Now.text()), Rect::new(r.right() - 116.0, r.y + 8.0, 100.0, 24.0), 11.5, Weight::Regular, OK, Align::Right);
+    let chosen = Accent::named(st.get(o.key).as_str().unwrap_or("")).unwrap_or_default();
     let gap = 12.0;
-    let w = (c.inner.w - gap * 3.0) / 4.0;
+    let w = (iw - gap * 3.0) / 4.0;
     for (i, a) in Accent::ALL.into_iter().enumerate() {
-        let x = c.inner.x + (i % 4) as f32 * (w + gap);
-        let y = c.y + (i / 4) as f32 * 84.0;
-        let r = Rect::new(x, y, w, 52.0);
+        let sx = x + (i % 4) as f32 * (w + gap);
+        let sy = top + (i / 4) as f32 * 84.0;
+        let sw = Rect::new(sx, sy, w, 52.0);
         let id = id_of(&format!("accent-{}", a.name().to_ascii_lowercase()));
-        let (hover, _, clicked) = ui.interact_key(id, Rect::new(x, y, w, 76.0));
+        let (hover, _, clicked) = ui.interact_key(id, Rect::new(sx, sy, w, 76.0));
         let on = a == chosen;
-        ui.p().rounded(r, RADIUS, if hover && !on { a.color().lighten(0.08) } else { a.color() });
+        ui.p().rounded(sw, RADIUS, if hover && !on { a.color().lighten(0.08) } else { a.color() });
         if on {
-            ui.p().rounded_border(r.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
-            ui.icon("check_circle", r.center(), 22.0, omsi_ui::theme::on(a.color()));
+            ui.p().rounded_border(sw.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
+            ui.icon("check_circle", sw.center(), 22.0, omsi_ui::theme::on(a.color()));
         }
         let name = if a == Accent::default() { format!("{} (default)", a.name()) } else { a.name().to_string() };
-        ui.text_in(&name, Rect::new(x, y + 56.0, w, 20.0), 12.0, omsi_ui::Weight::Regular, if on { TEXT } else { TEXT_DIM }, omsi_ui::paint::Align::Center);
+        ui.text_in(&name, Rect::new(sx, sy + 56.0, w, 20.0), 12.0, Weight::Regular, if on { TEXT } else { TEXT_DIM }, Align::Center);
         if clicked && !on {
-            s["ui_accent"] = json!(a.name());
-            omsi_ui::theme::set_accent(a);
-            *dirty = 0.3;
+            st.set(o.key, json!(a.name()));
+            after(o.key, st);
         }
     }
-    c.y += 84.0 * 2.0;
-    let note = "A short fixed palette, chosen for contrast on the dark background. It applies to the launcher and to every menu of the game, the Alt bar included.";
-    c.y += ui.paragraph(note, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 10.0;
-    if ui.button("accent-default", Rect::new(c.inner.x, c.y, 160.0, 34.0), "Back to default", Some("restart_alt"), ButtonKind::Normal) && chosen != Accent::default() {
-        s["ui_accent"] = json!(Accent::default().name());
-        omsi_ui::theme::set_accent(Accent::default());
-        *dirty = 0.3;
+    let mut y = top + 84.0 * 2.0;
+    y += ui.paragraph("A short fixed palette, chosen for contrast on the dark background. It applies to the launcher and to every menu of the game, the Alt bar included.", Vec2::new(x, y), iw, 12.0, Weight::Regular, TEXT_DIM) + 10.0;
+    if ui.button("accent-default", Rect::new(x, y, 160.0, 34.0), "Back to default", Some("restart_alt"), ButtonKind::Normal) && chosen != Accent::default() {
+        reset(o, st);
     }
-    c.y += 34.0 + 12.0;
-    c.section(ui, "Layout");
-    let note = |ui: &mut Ui, c: &mut Col, text: &str| c.y += ui.paragraph(text, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 8.0;
-    seg_setting(ui, s, dirty, c.row(), "Navigation", "ui_nav", &[("sidebar", "Sidebar"), ("top", "Top bar")]);
-    note(ui, &mut c, "The top bar puts the pages in a row and gives them more width. In a narrow window it shows their icons, and a page's name when the mouse is on it.");
-    seg_setting(ui, s, dirty, c.row(), "Background", "ui_background", &[("plain", "Plain dark"), ("scene", "Scene")]);
-    note(ui, &mut c, "Scene: the picture of the chosen map or bus, blurred, behind panels you see through. Other pages show your latest screenshot, or plain dark when there is none.");
-    let mut dim = core::dimming_of(&get(s, "ui_dimming")) as f32;
-    if ui.slider("s-dimming", c.row(), &mut dim, 30.0, 90.0, 1.0, "Dimming", &|v| format!("{v:.0} %")) {
-        s["ui_dimming"] = json!(dim as i64);
-        *dirty = 0.3;
-    }
-    note(ui, &mut c, "How much the scene is darkened under the text (with the Scene background).");
-    seg_setting(ui, s, dirty, c.row(), "Corners", "ui_corners", &[("rounded", "Rounded"), ("square", "Square")]);
-    note(ui, &mut c, "Square is flatter, closer to Content Manager. Only the launcher's corners change.");
-    let left = c.used();
-    // (what wears the accent, drawn and not clickable: the page's own widgets are the real ones)
-    let mut p = Col::new(ui, cols[1], "Preview");
-    let nav = Rect::new(p.inner.x, p.y, 200.0, 40.0);
+}
+
+/// What wears the accent, drawn and not clickable: the page's own widgets are the real ones.
+fn preview_card(ui: &mut Ui, r: Rect) -> f32 {
+    let mut y = card_frame(ui, r, "Preview", None);
+    let x = r.x + 16.0;
+    let iw = r.w - 32.0;
+    let nav = Rect::new(x, y, 200.0, 40.0);
     ui.p().rounded(nav, 4.0, HOVER);
     ui.p().rounded(Rect::new(nav.x, nav.y + 11.0, 3.0, 18.0), 1.5, accent());
     ui.icon("map", Vec2::new(nav.x + 24.0, nav.center().y), 20.0, accent());
-    ui.text_in("Maps", Rect::new(nav.x + 44.0, nav.y, 140.0, nav.h), 14.0, omsi_ui::Weight::Medium, TEXT, omsi_ui::paint::Align::Left);
-    p.y += 52.0;
-    let go = Rect::new(p.inner.x, p.y, 130.0, 34.0);
+    ui.text_in("Maps", Rect::new(nav.x + 44.0, nav.y, 140.0, nav.h), 14.0, Weight::Medium, TEXT, Align::Left);
+    y += 52.0;
+    let go = Rect::new(x, y, 130.0, 34.0);
     ui.p().rounded(go, 6.0, accent());
-    ui.text_in("Start driving", go, 13.0, omsi_ui::Weight::Bold, on_accent(), omsi_ui::paint::Align::Center);
-    let cancel = Rect::new(go.right() + 10.0, p.y, 90.0, 34.0);
+    ui.text_in("Start driving", go, 13.0, Weight::Bold, on_accent(), Align::Center);
+    let cancel = Rect::new(go.right() + 10.0, y, 90.0, 34.0);
     ui.p().rounded(cancel, 6.0, FIELD);
     ui.p().rounded_border(cancel, 6.0, 1.0, EDGE);
-    ui.text_in("Cancel", cancel, 13.0, omsi_ui::Weight::Medium, TEXT, omsi_ui::paint::Align::Center);
+    ui.text_in("Cancel", cancel, 13.0, Weight::Medium, TEXT, Align::Center);
     for (k, on) in [(0.0, true), (1.0, false)] {
-        let t = Rect::new(cancel.right() + 16.0 + k * 50.0, p.y + 8.0, 34.0, 18.0);
-        ui.p().rounded(t, 9.0, if on { accent() } else { omsi_ui::Color::rgba(62, 62, 62, 1.0) });
-        ui.p().circle(Vec2::new(if on { t.right() - 9.0 } else { t.x + 9.0 }, t.center().y), 6.0, omsi_ui::Color::rgba(240, 240, 240, 1.0));
+        let t = Rect::new(cancel.right() + 16.0 + k * 50.0, y + 8.0, 34.0, 18.0);
+        ui.p().rounded(t, 9.0, if on { accent() } else { Color::rgba(62, 62, 62, 1.0) });
+        ui.p().circle(Vec2::new(if on { t.right() - 9.0 } else { t.x + 9.0 }, t.center().y), 6.0, Color::rgba(240, 240, 240, 1.0));
     }
-    p.y += 50.0;
-    let row = Rect::new(p.inner.x, p.y, (p.inner.w * 0.55).max(200.0), 48.0);
+    y += 50.0;
+    let row = Rect::new(x, y, (iw * 0.55).max(200.0), 48.0);
     ui.p().rounded(row, 6.0, omsi_ui::theme::accent_soft());
     ui.p().rounded_border(row, 6.0, 1.0, accent().alpha(0.55));
-    ui.text_in("Example bus A", Rect::new(row.x + 12.0, row.y + 5.0, row.w - 24.0, 20.0), 13.5, omsi_ui::Weight::Bold, TEXT, omsi_ui::paint::Align::Left);
-    ui.text_in("Selected item", Rect::new(row.x + 12.0, row.y + 24.0, row.w - 24.0, 18.0), 12.0, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
-    ui.text_in("Link and highlight text", Rect::new(row.right() + 14.0, row.y, p.inner.right() - row.right() - 14.0, row.h), 13.5, omsi_ui::Weight::Regular, accent(), omsi_ui::paint::Align::Left);
-    p.y += 60.0;
-    [left, p.used()]
+    ui.text_in("Example bus A", Rect::new(row.x + 12.0, row.y + 5.0, row.w - 24.0, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+    ui.text_in("Selected item", Rect::new(row.x + 12.0, row.y + 24.0, row.w - 24.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    ui.text_in("Link and highlight text", Rect::new(row.right() + 14.0, row.y, (x + iw - row.right() - 14.0).max(0.0), row.h), 13.5, Weight::Regular, accent(), Align::Left);
+    y + 60.0 - r.y
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1463,6 +1425,8 @@ mod tests {
         "maintenance", "collision_vehicles", "collision_objects", "collision_pedestrians", "use_real_time", "use_real_date", "time_sync", "metar_sync", "time_speed",
         "language", "machine_translation", "launcher_rest", "voice_chat", "ui_scale", "ui_scale_window", "ui_opacity", "tooltips", "show_fps", "notes", "chat", "chat_size", "name_tags",
         "navigator", "nav_arrows", "nav_ai", "navigator_corner",
+        // (the Interface section, drawn on its own before)
+        "ui_accent", "ui_nav", "ui_background", "ui_dimming", "ui_corners",
         // (the Maps page's temporary window: the start's own choices)
         "start.season", "start.traffic", "start.passengers", "start.schedule", "start.autostart",
     ];
@@ -1536,7 +1500,9 @@ mod tests {
             frame(&mut ui, sec, "", &mut s, &mut start, &mut Outside::default());
             let st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
             for o in OPTS.iter().filter(|o| o.sec == sec && shown(o, &st) == Shown::Row) {
-                assert!(ui.drawn.contains_key(&id_of(&format!("opt-{}", o.key))), "{} is not drawn in {}", o.key, SECTIONS[sec]);
+                // (the accent colour as swatches in its section)
+                let id = if o.key == "ui_accent" { "accent-amber".to_string() } else { format!("opt-{}", o.key) };
+                assert!(ui.drawn.contains_key(&id_of(&id)), "{} is not drawn in {}", o.key, SECTIONS[sec]);
             }
         }
     }
@@ -1624,6 +1590,32 @@ mod tests {
         click(INTERFACE, "accent-default", &mut s, &mut start);
         assert_eq!(s["ui_accent"], json!("Amber"));
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
+    }
+
+    /// The Interface options are found by a search, counted as changed and taken back row by row.
+    #[test]
+    fn the_interface_options_are_searched_counted_and_reset() {
+        let (mut s, mut start) = (all_rows(), start());
+        let st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
+        let keys = |q: &str, st: &Store| listed(0, q, false, st).iter().map(|o| o.key).collect::<Vec<_>>();
+        assert!(keys("accent", &st).contains(&"ui_accent"));
+        assert!(keys("corners", &st).contains(&"ui_corners"));
+        drop(st);
+        s["ui_corners"] = json!("square");
+        s["ui_background"] = json!("scene");
+        s["ui_dimming"] = json!(40);
+        let mut st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
+        let changed_keys: Vec<&str> = listed(0, "", true, &st).iter().map(|o| o.key).collect();
+        assert!(["ui_corners", "ui_background", "ui_dimming"].iter().all(|k| changed_keys.contains(k)), "{changed_keys:?}");
+        let corners = OPTS.iter().find(|o| o.key == "ui_corners").unwrap();
+        assert_eq!(corners.when, When::Now);
+        reset(corners, &mut st);
+        assert_eq!(st.get("ui_corners"), &json!("rounded"));
+        // (the dimming only with the scene behind the pages)
+        st.set("ui_background", json!("plain"));
+        let dimming = OPTS.iter().find(|o| o.key == "ui_dimming").unwrap();
+        assert_eq!(shown(dimming, &st), Shown::Hidden);
+        assert!(!listed(0, "", true, &st).iter().any(|o| o.key == "ui_dimming"));
     }
 
     /// The mouse steering's smoothing is on unless switched off, and the switch is kept (#1092).
