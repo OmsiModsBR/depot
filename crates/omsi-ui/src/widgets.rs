@@ -1488,6 +1488,16 @@ impl Ui {
 
     /// A date field (YYYY-MM-DD) with a calendar that opens under it.
     pub fn date_field(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, true)
+    }
+
+    /// Only the calendar's button, for a date typed beside it (YYYY-MM-DD): the calendar opens
+    /// under `r`.
+    pub fn calendar_button(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, false)
+    }
+
+    fn date_control(&mut self, name: &str, r: Rect, date: &mut String, field: bool) -> bool {
         let id = id_of(name);
         let mut changed = false;
         if let Some(p) = self.date_popup.as_mut().filter(|p| p.id == id) {
@@ -1504,31 +1514,40 @@ impl Ui {
             .map(|p| p.id == id)
             .unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
-        self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
-        self.p()
-            .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
-        self.icon(
-            "calendar_month",
-            Vec2::new(r.x + 20.0, r.center().y),
-            17.0,
-            TEXT_DIM,
-        );
         let (y, m, d) = parse_date(date);
-        let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
-        self.text_in(
-            &shown,
-            Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
-            13.0,
-            Weight::Regular,
-            TEXT,
-            Align::Left,
-        );
-        self.icon(
-            "expand_more",
-            Vec2::new(r.right() - 18.0, r.center().y),
-            20.0,
-            TEXT_DIM,
-        );
+        if !field {
+            if t > 0.01 {
+                self.p().rounded(r, CONTROL_RADIUS, HOVER.alpha(t));
+            }
+            let c = if open { accent() } else { TEXT_DIM };
+            self.icon("o-calendar", r.center(), 16.0, c);
+        }
+        if field {
+            self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
+            self.p()
+                .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
+            self.icon(
+                "calendar_month",
+                Vec2::new(r.x + 20.0, r.center().y),
+                17.0,
+                TEXT_DIM,
+            );
+            let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
+            self.text_in(
+                &shown,
+                Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
+                13.0,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            self.icon(
+                "expand_more",
+                Vec2::new(r.right() - 18.0, r.center().y),
+                20.0,
+                TEXT_DIM,
+            );
+        }
         if clicked {
             if open {
                 self.date_popup = None;

@@ -23,6 +23,7 @@ mod multiplayer;
 pub(crate) mod pages;
 pub(crate) mod preview;
 mod showroom;
+mod start;
 mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use state::crash_of;
@@ -182,6 +183,8 @@ pub struct Launcher {
     map_pic: MapPicture,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
+    /// The Maps page's start: its typed date and time, and the window open over the page.
+    start: start::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -278,6 +281,7 @@ impl Launcher {
         preview_tex: None,
         map_pic: MapPicture::default(),
         backdrop: backdrop::Backdrop::default(),
+        start: start::StartView::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
@@ -318,6 +322,16 @@ impl Launcher {
             "sheet-time" => app.phone.sheet = Some(phone::Sheet::Time),
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
+        }
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
+        let popup = match p.split(':').nth(1) {
+            Some("start-point") => Some(start::Popup::StartPoint),
+            Some("weather") => Some(start::Popup::Weather),
+            Some("explore") => Some(start::Popup::Explore),
+            _ => None,
+        };
+        if let Some(popup) = popup {
+            start::open(&mut app, popup);
         }
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
@@ -1108,10 +1122,12 @@ impl Launcher {
         let disconnected = self.state.disconnected.is_some();
         let crash = !disconnected && self.state.crash.is_some();
         let reset = !crash && !disconnected && self.pages.confirm_reset;
+        // (a window of the Maps page's start lies over the page, as a dialog does)
+        let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1129,6 +1145,10 @@ impl Launcher {
             }
             phone::draw(self);
         } else {
+        // (sessions start from Maps on a computer; the Drive page is the phone's)
+        if self.page == Page::Drive {
+            self.page = Page::Maps;
+        }
         let rail_w = self.rail_w();
         self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
         // (no wider than a page reads well: on a wide screen the rest is margin, the page
@@ -1180,6 +1200,8 @@ impl Launcher {
                 self.draw_crash_dialog();
             } else if reset {
                 pages::reset_dialog(self);
+            } else if self.browser.is_none() && window {
+                start::popup(self);
             } else {
                 self.draw_browser();
             }
@@ -1357,7 +1379,7 @@ impl Launcher {
                 Page::Maps => {
                     self.maps.retry_if_failed();
                     self.refresh_catalogs();
-                    self.maps.select(&self.state.choice.map, self.state.choice.entry);
+                    self.maps.select(&self.state.choice.map);
                 }
                 _ => {}
             }
@@ -1498,13 +1520,13 @@ impl Launcher {
             self.state.select_bus(&file);
             self.state.choice.paint = paint;
             self.state.touched();
-            self.drive.tab = 0;
-            self.go(Page::Drive);
+            self.go(Page::Maps);
         }
     }
 
-    /// The Maps page; "Drive on this map" takes the map and its start point to the Drive
-    /// page.
+    /// The Maps page: the library, the chosen map's picture and description, and the start
+    /// (`start`), which holds the session's choice - the map chosen in the library is the one
+    /// a session starts on.
     fn maps_page(&mut self, area: Rect) {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
@@ -1513,14 +1535,16 @@ impl Launcher {
         // the chosen map's picture, read from its folder on a thread
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
+            if !file.eq_ignore_ascii_case(&self.state.choice.map) {
+                self.state.select_map(&file);
+            }
         }
         self.maps.set_picture(self.map_pic.shown(), self.map_pic.reading.is_some() || self.map_pic.pending.is_some());
-        if let Some((file, entry)) = self.maps.take_use() {
-            self.state.select_map(&file);
-            self.state.choice.entry = entry;
-            self.state.touched();
-            self.drive.tab = 2;
-            self.go(Page::Drive);
+        if let Some(r) = self.maps.start_area() {
+            start::card(self, r);
+        }
+        if self.maps.take_explore() {
+            self.start.popup = Some(start::Popup::Explore);
         }
     }
 

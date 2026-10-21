@@ -21,7 +21,7 @@ pub struct Shell {
 
 impl Default for Shell {
     fn default() -> Self {
-        Shell::new(Page::Drive)
+        Shell::new(Page::Maps)
     }
 }
 
@@ -77,6 +77,10 @@ impl Shell {
             }
             Page::Maps => {
                 self.maps.draw(ui, area);
+                // (the game's launcher draws the start: here only its card)
+                if let Some(r) = self.maps.start_area() {
+                    kit::card(ui, r, "Start", None);
+                }
                 return;
             }
             _ => {}

@@ -129,6 +129,9 @@ pub struct Choice {
     pub lan_addr: String,
     /// 2: `entry` may be -1 (automatic); older files had a fixed entry point there.
     pub version: u32,
+    /// The kind of session the Maps page starts: "new", "saved" (a situation the game saved)
+    /// or "without_bus" (on foot at the start point).
+    pub session: String,
 }
 
 impl Default for Choice {
@@ -158,6 +161,7 @@ impl Default for Choice {
             lan_mode: "off".into(),
             lan_addr: String::new(),
             version: 2,
+            session: "new".into(),
         }
     }
 }
