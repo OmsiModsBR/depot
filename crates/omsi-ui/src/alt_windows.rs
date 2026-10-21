@@ -158,6 +158,40 @@ pub struct Evaluation {
     pub hint: String,
 }
 
+/// Where a stop of the trip being driven is, for [`Running`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RunStop {
+    /// Behind the bus: served, skipped or missed.
+    Done,
+    /// The stop the bus is due at.
+    #[default]
+    Next,
+    /// Still to come.
+    Ahead,
+}
+
+/// One stop of [`Running`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RunRow {
+    pub stop: String,
+    /// Under the name: its time and how it went ("08:56 · served, +1 min").
+    pub detail: String,
+    pub state: RunStop,
+    /// The label of the button at its right ("Skip this stop"); none for a stop behind.
+    pub skip: Option<String>,
+}
+
+/// The timetable being driven: the trip's stops, each still to come with a button to skip
+/// it (a deliberate improvement: the original has no such list).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Running {
+    /// At the right of the title ("Line 136 · trip 08:52").
+    pub sub: String,
+    pub rows: Vec<RunRow>,
+    /// Under the stops: what skipping does.
+    pub hint: String,
+}
+
 /// One of the windows, with what it shows.
 #[derive(Clone, Debug, PartialEq)]
 pub enum View {
@@ -169,6 +203,7 @@ pub enum View {
     Confirm(Confirm),
     Destination(Destination),
     Evaluation(Evaluation),
+    Running(Running),
 }
 
 /// A window of `w` x `h` points in the middle of a picture of `size` points.
@@ -198,6 +233,7 @@ impl View {
             View::Confirm(_) => (500.0, 190.0),
             View::Destination(_) => (560.0, 600.0),
             View::Evaluation(_) => (900.0, 620.0),
+            View::Running(_) => (700.0, 470.0),
         };
         centred(size, w, h)
     }
@@ -216,6 +252,7 @@ impl View {
             View::Confirm(v) => confirm(ui, r, v),
             View::Destination(v) => destination(ui, r, v, key),
             View::Evaluation(v) => evaluation(ui, r, v, key),
+            View::Running(v) => running(ui, r, v),
         }
     }
 }
@@ -707,6 +744,139 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
     event
 }
 
+/// The height of a stop's row in [`Running`].
+const RUN_ROW_H: f32 = 52.0;
+
+/// The red of a step that ends something (the timetable).
+const DANGER: Color = Color::hex(0xe8523f);
+
+/// The stops of the trip being driven, from two behind the next on, as many as fit. Skipping
+/// one is `Event::Row(0, stop)`, "Cancel the timetable" `Event::Check(0)`, Close `Cancel`.
+fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
+    let body = ingame::window(ui, r, "Timetable running", &v.sub);
+    let mut event = None;
+    let hint_h = 40.0;
+    let list = Rect::new(
+        body.x + 16.0,
+        body.y + 10.0,
+        body.w - 32.0,
+        (r.bottom() - FOOT_H - hint_h - body.y - 10.0).max(0.0),
+    );
+    let fit = (list.h / RUN_ROW_H).floor().max(1.0) as usize;
+    let next = v
+        .rows
+        .iter()
+        .position(|x| x.state != RunStop::Done)
+        .unwrap_or(v.rows.len());
+    let from = next.saturating_sub(2).min(v.rows.len().saturating_sub(fit));
+    for (k, row) in v.rows.iter().enumerate().skip(from).take(fit) {
+        let rr = Rect::new(
+            list.x,
+            list.y + (k - from) as f32 * RUN_ROW_H,
+            list.w,
+            RUN_ROW_H - 4.0,
+        );
+        if row.state == RunStop::Next {
+            ui.p().rounded(rr, 4.0, accent().alpha(0.18));
+            ui.p().rounded_border(rr, 4.0, 1.0, accent().alpha(0.7));
+        }
+        let icon = if row.state == RunStop::Done {
+            "check_circle"
+        } else {
+            "location_on"
+        };
+        ui.icon(icon, Vec2::new(rr.x + 18.0, rr.center().y), 18.0, FG);
+        let bw = row
+            .skip
+            .as_deref()
+            .map(|l| ui.width(l, 13.0 * TS, Weight::Medium) + 30.0)
+            .unwrap_or(0.0);
+        let tw = (rr.w - 48.0 - bw - 12.0).max(0.0);
+        ui.text_in(
+            &row.stop,
+            Rect::new(rr.x + 40.0, rr.y + 4.0, tw, 22.0),
+            14.0 * TS,
+            Weight::Medium,
+            FG,
+            crate::paint::Align::Left,
+        );
+        ui.text_in(
+            &row.detail,
+            Rect::new(rr.x + 40.0, rr.y + 24.0, tw, 18.0),
+            12.0 * TS,
+            Weight::Regular,
+            MUTED,
+            crate::paint::Align::Left,
+        );
+        if let Some(label) = row.skip.as_deref() {
+            let b = Rect::new(rr.right() - 10.0 - bw, rr.center().y - 14.0, bw, 28.0);
+            if button(
+                ui,
+                &format!("tool:run:skip:{k}"),
+                b,
+                label,
+                ButtonKind::Normal,
+                true,
+            ) {
+                event = Some(Event::Row(0, k));
+            }
+        }
+    }
+    if v.rows.is_empty() {
+        ingame::note(ui, "This trip has no stops", list);
+    }
+    ui.paragraph(
+        &v.hint,
+        Vec2::new(body.x + 16.0, r.bottom() - FOOT_H - hint_h + 4.0),
+        body.w - 32.0,
+        12.0 * TS,
+        Weight::Regular,
+        MUTED,
+    );
+    // the foot: ending the timetable at the left, in red; Close at the right
+    ui.p().rect(
+        Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
+        LINE,
+    );
+    let y = r.bottom() - FOOT_H + 12.0;
+    let end = "Cancel the timetable";
+    let ew = ingame::button_width(ui, end);
+    let er = Rect::new(r.x + 16.0, y, ew, BUTTON_H);
+    let (hover, _, click) = ui.interact(crate::widgets::id_of("tool:run:end"), er);
+    ui.p().rect(
+        er,
+        if hover {
+            DANGER.alpha(0.14)
+        } else {
+            DANGER.alpha(0.06)
+        },
+    );
+    ui.p().rounded_border(er, 0.0, 1.0, DANGER);
+    ui.text_in(
+        end,
+        er,
+        14.0 * TS,
+        Weight::Medium,
+        DANGER,
+        crate::paint::Align::Center,
+    );
+    if click {
+        event = Some(Event::Check(0));
+    }
+    let cw = ingame::button_width(ui, "Close");
+    if button(
+        ui,
+        "tool:run:close",
+        Rect::new(r.right() - 16.0 - cw, y, cw, BUTTON_H),
+        "Close",
+        ButtonKind::Normal,
+        true,
+    ) {
+        event = Some(Event::Cancel);
+    }
+    event
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -967,5 +1137,39 @@ mod tests {
             assert_eq!(v.draw(&mut ui, small, 0), None);
             ui.finish();
         }
+    }
+
+    #[test]
+    fn the_running_timetable_skips_a_stop_ends_or_closes() {
+        let row = |stop: &str, state, skip: bool| RunRow {
+            stop: stop.into(),
+            detail: "08:52".into(),
+            state,
+            skip: skip.then(|| "Skip this stop".into()),
+        };
+        let mut rows = vec![
+            row("A", RunStop::Done, false),
+            row("B", RunStop::Done, false),
+        ];
+        rows.push(row("C", RunStop::Next, true));
+        rows.extend((0..30).map(|i| row(&format!("S{i}"), RunStop::Ahead, true)));
+        let v = View::Running(Running {
+            sub: "Line 5 · trip 08:52".into(),
+            rows,
+            hint: "Skipping a stop".into(),
+        });
+        let mut ui = Ui::new();
+        run(&mut ui, &v, None);
+        // the list starts two stops before the next; a stop behind has no button
+        assert!(!ui.drawn.contains_key(&id_of("tool:run:skip:0")));
+        assert!(!ui.drawn.contains_key(&id_of("tool:run:skip:1")));
+        let skip = at(&ui, "tool:run:skip:3");
+        assert_eq!(run(&mut ui, &v, Some(skip)), Some(Event::Row(0, 3)));
+        // (the window shows as many as fit, not all thirty)
+        assert!(!ui.drawn.contains_key(&id_of("tool:run:skip:32")));
+        let end = at(&ui, "tool:run:end");
+        assert_eq!(run(&mut ui, &v, Some(end)), Some(Event::Check(0)));
+        let close = at(&ui, "tool:run:close");
+        assert_eq!(run(&mut ui, &v, Some(close)), Some(Event::Cancel));
     }
 }

@@ -94,7 +94,7 @@ fn main() {
                 next_stop: Some("Central Station"),
                 clock: "08:42",
                 doors: None,
-                hint: "Alt = toggle the icon bar \u{b7} the simulation keeps running",
+                hint: "Alt = icon bar \u{b7} F4 = select/move vehicle",
             },
         );
         let size = alt_bar::panel_size(bar.len());
@@ -104,6 +104,12 @@ fn main() {
             &bar,
             &mut state,
         );
+        alt_bar::hint(ui, "Alt closes the bar \u{b7} the simulation keeps running");
+    });
+    // folded with its arrow: only a tab is left at the corner
+    o.shot(&format!("{dir}/alt-bar-folded.png"), |ui| {
+        scene(ui);
+        alt_bar::draw_folded(ui, Vec2::new(ui.size.x - 16.0, ui.size.y - 20.0));
     });
     o.shot(&format!("{dir}/ingame-windows.png"), |ui| {
         scene(ui);
@@ -545,12 +551,35 @@ fn main() {
             }),
         ),
         (
+            "alt-running",
+            View::Running(aw::Running {
+                sub: "Line 50  \u{b7}  trip 08:27".into(),
+                rows: {
+                    use aw::{RunRow, RunStop};
+                    let row = |stop: &str, detail: &str, state, skip: Option<&str>| RunRow {
+                        stop: stop.into(),
+                        detail: detail.into(),
+                        state,
+                        skip: skip.map(str::to_string),
+                    };
+                    vec![
+                        row("Depot", "08:27  \u{b7}  served", RunStop::Done, None),
+                        row("Main Street", "08:31  \u{b7}  skipped", RunStop::Done, None),
+                        row("Market", "08:36  \u{b7}  next stop", RunStop::Next, Some("Skip this stop")),
+                        row("Town Hall", "08:40  \u{b7}  skipped when the bus gets there", RunStop::Ahead, Some("Keep this stop")),
+                        row("Central Station", "08:47", RunStop::Ahead, Some("Skip this stop")),
+                    ]
+                },
+                hint: "Skipping a stop tells the timetable you did not stop there for a reason on the trip. In the evaluation it counts with no mark: neither missed nor late.".into(),
+            }),
+        ),
+        (
             "alt-end-tour",
             View::Confirm(aw::Confirm {
-                title: "End the tour".into(),
-                text: "End the tour you are driving? The bus drives on without a timetable.".into(),
-                ok: "End the tour".into(),
-                cancel: "Keep driving it".into(),
+                title: "Cancel the timetable?".into(),
+                text: "The bus stops following line 50. This does not change the saved timetable.".into(),
+                ok: "Yes, cancel it".into(),
+                cancel: "Keep it".into(),
             }),
         ),
         (
@@ -573,7 +602,7 @@ fn main() {
     ];
     for (name, view) in &views {
         let open = match name.trim_start_matches("alt-") {
-            "end-tour" => "tour",
+            "end-tour" | "running" => "tour",
             "driver-no-tour" | "evaluation" => "driver",
             other => other,
         };

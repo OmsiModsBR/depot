@@ -1,7 +1,8 @@
 //! The Alt bar in the running game, drawn by the new interface.
 //!
 //! A tap of Alt (pressed and let go with no other key or button between) shows or hides the
-//! bar; a click on a button does it. The bar has the original's fifteen buttons, in its
+//! bar; a click on a button does it. The arrow at the bar's corner folds it down to a small
+//! tab (and the tab unfolds it); Alt shows it unfolded again. The bar has the original's fifteen buttons, in its
 //! order, five by three. It never pauses the game and never opens the Esc menu: every button
 //! runs an action the game already has, directly, or opens a small window of its own for it
 //! (`new_ui_windows`), and a button for something the game does not have yet is drawn dim
@@ -17,7 +18,7 @@
 use crate::app::App;
 use crate::new_ui::scale_for;
 use glam::Vec2;
-use omsi_ui::alt_bar::{self, Button, Glyph, State as BarState, COLUMNS};
+use omsi_ui::alt_bar::{self, Button, Glyph, Hit, State as BarState, COLUMNS};
 use omsi_ui::widgets::Ui;
 use winit::keyboard::KeyCode;
 
@@ -232,15 +233,30 @@ pub(crate) fn wait_for(buttons: &mut [OwnedButton], open: &str) {
 pub(crate) struct AltFrame {
     pub buttons: Vec<OwnedButton>,
     pub focus: Option<&'static str>,
+    /// Folded down to the tab in the corner.
+    pub folded: bool,
 }
+
+/// The line at the bottom left while the bar is shown.
+pub(crate) const HINT: &str = "Alt closes the bar · the simulation keeps running";
 
 /// Where the bar's top left corner is in a window of `size` design points.
 fn origin(size: Vec2, n: usize) -> Vec2 {
     size - alt_bar::panel_size(n) - Vec2::splat(MARGIN)
 }
 
+/// The folded bar's corner (its tab's bottom right) in a window of `size` design points.
+fn corner(size: Vec2) -> Vec2 {
+    size - Vec2::splat(MARGIN)
+}
+
 impl AltFrame {
     pub(crate) fn draw(&self, ui: &mut Ui) {
+        alt_bar::hint(ui, HINT);
+        if self.folded {
+            alt_bar::draw_folded(ui, corner(ui.size));
+            return;
+        }
         let bs: Vec<Button> = self
             .buttons
             .iter()
@@ -276,18 +292,39 @@ impl AltFrame {
     }
 
     /// The index of the button under `px` (window pixels) in a window of `size` pixels.
+    #[cfg(test)]
     pub(crate) fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<usize> {
-        let (scale, at) = self.geometry(size);
-        alt_bar::hit(at, self.buttons.len(), px / scale)
+        match self.hit_any(px, size) {
+            Some(Hit::Button(i)) => Some(i),
+            _ => None,
+        }
     }
 
-    /// Whether `px` is on the panel at all (buttons, gaps, header).
+    /// What is under `px`: a button or the arrow (the folded bar's tab is all arrow).
+    pub(crate) fn hit_any(&self, px: Vec2, size: (u32, u32)) -> Option<Hit> {
+        let (scale, at) = self.geometry(size);
+        let p = px / scale;
+        if self.folded {
+            let pts = Vec2::new(size.0 as f32, size.1 as f32) / scale;
+            return inside(alt_bar::tab_rect(corner(pts)), p).then_some(Hit::Arrow);
+        }
+        alt_bar::hit_any(at, self.buttons.len(), p)
+    }
+
+    /// Whether `px` is on the panel at all (buttons, gaps, the arrow), or on the folded tab.
     pub(crate) fn over(&self, px: Vec2, size: (u32, u32)) -> bool {
         let (scale, at) = self.geometry(size);
-        let r = alt_bar::panel_rect(at, self.buttons.len());
         let p = px / scale;
-        p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
+        if self.folded {
+            let pts = Vec2::new(size.0 as f32, size.1 as f32) / scale;
+            return inside(alt_bar::tab_rect(corner(pts)), p);
+        }
+        inside(alt_bar::panel_rect(at, self.buttons.len()), p)
     }
+}
+
+fn inside(r: omsi_ui::Rect, p: Vec2) -> bool {
+    p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -352,6 +389,8 @@ pub(crate) fn pressable(bs: &[OwnedButton], focus: Option<usize>) -> Option<&'st
 pub(crate) struct AltState {
     /// The bar is shown (when nothing hides it).
     pub open: bool,
+    /// Folded down to its tab (the arrow); Alt shows it unfolded again.
+    pub folded: bool,
     /// The keyboard is on this button.
     pub focus: Option<usize>,
     /// Alt went down and nothing else has since.
@@ -387,6 +426,7 @@ impl AltState {
         let tap = std::mem::take(&mut self.tap) && allowed;
         if tap {
             self.open = !self.open;
+            self.folded = false;
             if !self.open {
                 self.focus = None;
             }
@@ -459,7 +499,11 @@ impl App {
             .focus
             .and_then(|i| buttons.get(i))
             .map(|b| b.id);
-        AltFrame { buttons, focus }
+        AltFrame {
+            buttons,
+            focus,
+            folded: self.new_ui.alt.folded,
+        }
     }
 
     /// The button whose window is open now, if one is.
@@ -505,11 +549,18 @@ impl App {
             return false;
         }
         self.new_ui.alt.swallowed = true;
-        if let Some(b) = frame.hit(at, size).and_then(|i| frame.buttons.get(i)) {
-            if b.disabled.is_none() {
+        match frame.hit_any(at, size) {
+            Some(Hit::Arrow) => {
+                self.new_ui.alt.folded = !self.new_ui.alt.folded;
                 self.new_ui.alt.focus = None;
-                self.alt_do(b.id);
             }
+            Some(Hit::Button(i)) => {
+                if let Some(b) = frame.buttons.get(i).filter(|b| b.disabled.is_none()) {
+                    self.new_ui.alt.focus = None;
+                    self.alt_do(b.id);
+                }
+            }
+            None => {}
         }
         true
     }
@@ -570,6 +621,8 @@ impl App {
             if self.chord_bound(code, false, false, true) {
                 return false;
             }
+            // (a folded bar unfolds for the keyboard)
+            self.new_ui.alt.folded = false;
             self.new_ui.alt.focus = if focused {
                 None
             } else {
@@ -852,11 +905,10 @@ mod tests {
         // a click on the bar finds the button but does nothing with it (see `alt_click`)
         let frame = AltFrame {
             buttons: bs,
-            focus: None,
+            ..Default::default()
         };
         let size = (1672, 941);
-        let at = origin(Vec2::new(1672.0, 941.0), frame.buttons.len())
-            + Vec2::new(9.0 + alt_bar::CELL_W * 0.5, alt_bar::HEADER_H + 9.0 + 10.0);
+        let at = alt_bar::cell_rect(origin(Vec2::new(1672.0, 941.0), frame.buttons.len()), 0).center();
         let hit = frame.hit(at, size).and_then(|i| frame.buttons.get(i));
         assert!(hit.is_some_and(|b| b.disabled.is_some()));
     }
@@ -884,6 +936,15 @@ mod tests {
         // an Alt release with no press seen (the window had lost the focus) does nothing
         assert!(!s.alt_up(true));
         assert!(!s.open);
+        // a bar folded and hidden comes back unfolded
+        s.alt_down();
+        assert!(s.alt_up(true));
+        s.folded = true;
+        s.alt_down();
+        assert!(s.alt_up(true));
+        s.alt_down();
+        assert!(s.alt_up(true));
+        assert!(s.open && !s.folded);
     }
 
     #[test]
@@ -948,9 +1009,9 @@ mod tests {
 
     #[test]
     fn clicks_find_the_buttons_at_any_window_size() {
-        let frame = AltFrame {
+        let mut frame = AltFrame {
             buttons: buttons(&all_on()),
-            focus: None,
+            ..Default::default()
         };
         for size in [(1280u32, 720u32), (1672, 941), (3840, 2160), (960, 540)] {
             let scale = scale_for(size.0, size.1);
@@ -958,15 +1019,7 @@ mod tests {
             let at = origin(pts, frame.buttons.len());
             for i in 0..frame.buttons.len() {
                 // the centre of cell i, in window pixels
-                let (col, row) = ((i % COLUMNS) as f32, (i / COLUMNS) as f32);
-                let p = at
-                    + Vec2::new(
-                        9.0 + col * (alt_bar::CELL_W + alt_bar::GAP) + alt_bar::CELL_W * 0.5,
-                        alt_bar::HEADER_H
-                            + 9.0
-                            + row * (alt_bar::CELL_H + 6.0)
-                            + alt_bar::CELL_H * 0.5,
-                    );
+                let p = alt_bar::cell_rect(at, i).center();
                 assert_eq!(frame.hit(p * scale, size), Some(i), "{size:?} button {i}");
                 assert!(frame.over(p * scale, size));
             }
@@ -974,6 +1027,15 @@ mod tests {
             // the panel sits inside the window
             let r = alt_bar::panel_rect(at, frame.buttons.len());
             assert!(r.x >= 0.0 && r.y >= 0.0 && r.x + r.w <= pts.x && r.y + r.h <= pts.y);
+            // the arrow folds it; folded, only the tab in the corner is the bar's
+            let arrow = alt_bar::arrow_rect(at, frame.buttons.len()).center();
+            assert_eq!(frame.hit_any(arrow * scale, size), Some(Hit::Arrow), "{size:?}");
+            frame.folded = true;
+            let mid = alt_bar::cell_rect(at, 7).center();
+            assert!(!frame.over(mid * scale, size));
+            let tab = alt_bar::tab_rect(corner(pts)).center();
+            assert_eq!(frame.hit_any(tab * scale, size), Some(Hit::Arrow));
+            frame.folded = false;
         }
     }
 }

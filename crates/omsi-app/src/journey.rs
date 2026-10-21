@@ -20,6 +20,8 @@ struct Row {
     /// The trip begins here (no arrival to tell) / ends here (no departure).
     first: bool,
     last: bool,
+    /// The driver skipped it on purpose: no mark, neither missed nor late.
+    skipped: bool,
 }
 
 /// A trip's report: its title, a row per stop, and the totals as (label, value).
@@ -64,7 +66,7 @@ impl Journey {
             let n = trip.stops.len();
             // (the stations a depot run passes are not stops)
             for (k, s) in trip.stops.iter().enumerate().filter(|(_, s)| s.stops) {
-                rows.push(Row { trip: t, stop: k, name: s.name.trim().to_string(), plan: (s.arr, s.dep), arrived: None, left: None, first: k == 0, last: k + 1 == n });
+                rows.push(Row { trip: t, stop: k, name: s.name.trim().to_string(), plan: (s.arr, s.dep), arrived: None, left: None, first: k == 0, last: k + 1 == n, skipped: false });
             }
         }
         let head = format!("{}\nLine {}, tour {}", head.trim_end(), key.0.trim(), key.1.trim());
@@ -81,6 +83,34 @@ impl Journey {
             }
             _ => false,
         }
+    }
+
+    /// The driver skipped stop `at` (trip, stop). True when that is news.
+    fn skipped(&mut self, at: (usize, usize)) -> bool {
+        match self.row(at) {
+            Some(r) if !r.skipped && !r.reached() => {
+                r.skipped = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// How stop `at` (trip, stop) went, in a few words for the timetable window ("served, +1
+    /// min", "skipped"); None while the bus has not been there.
+    pub(crate) fn how(&self, at: (usize, usize)) -> Option<String> {
+        let r = self.rows.iter().find(|r| (r.trip, r.stop) == at)?;
+        if r.skipped {
+            return Some("skipped".into());
+        }
+        // (the first stop is about its departure, every other about its arrival)
+        let (real, plan) = if r.first { (r.left?, r.plan.1) } else { (r.arrived.or(r.left)?, r.plan.0) };
+        let m = ((real - plan) / 60.0).round() as i64;
+        Some(match m {
+            0 => "served, on time".into(),
+            m if m > 0 => format!("served, +{m} min"),
+            m => format!("served, {m} min"),
+        })
     }
 
     /// The bus left stop `at`, having arrived and left `late` s after its times.
@@ -100,6 +130,7 @@ impl Journey {
         // driver's)
         let from = rows.iter().position(|r| r.reached()).unwrap_or(rows.len());
         let (mut served, mut late, mut early) = (0, 0, 0);
+        let skipped = rows.iter().skip(from).filter(|r| r.skipped).count();
         let mut out = Vec::new();
         for (i, r) in rows.iter().enumerate() {
             let (is_late, is_early) = r.judged();
@@ -117,6 +148,8 @@ impl Journey {
                     (false, true) => StopState::LeftEarly,
                     _ => StopState::OnTime,
                 }
+            } else if r.skipped {
+                StopState::Skipped
             } else if i > from && rows[i + 1..].iter().any(|x| x.reached()) {
                 StopState::Missed
             } else {
@@ -125,7 +158,8 @@ impl Journey {
             out.push(ReportRow { stop: r.name.clone(), scheduled: plan, actual: real, deviation: diff, state });
         }
         let totals = vec![
-            ("Stops served", format!("{served} of {}", rows.len() - from)),
+            // (a stop skipped on purpose is not one the trip had to serve)
+            ("Stops served", format!("{served} of {}", rows.len() - from - skipped)),
             ("Late arrivals", late.to_string()),
             ("Early departures", early.to_string()),
         ];
@@ -162,6 +196,8 @@ impl Journey {
                         (false, true) => "left early",
                         _ => "OK",
                     }
+                } else if r.skipped {
+                    "skipped"
                 } else if i > from && rows[i + 1..].iter().any(|x| x.reached()) {
                     "missed"
                 } else {
@@ -214,7 +250,11 @@ pub(crate) fn note(slot: &mut Option<Journey>, duty: &PlayerDuty, due: (usize, u
     let Some(j) = slot.as_mut() else { return };
     let left = served.is_some_and(|s| j.left(due, s));
     let arrived = duty.arrived().is_some_and(|late| j.arrived((duty.trip_index, duty.next_stop), late));
-    if left || arrived {
+    let mut skipped = false;
+    for at in duty.skipped_stops() {
+        skipped |= j.skipped(*at);
+    }
+    if left || arrived || skipped {
         j.write();
     }
 }
@@ -321,6 +361,30 @@ mod tests {
         assert_eq!(states, vec![StopState::None, StopState::None, StopState::OnTime, StopState::OnTime]);
         assert_eq!(totals[0], ("Stops served", "2 of 2".to_string()));
         assert!(!j.text().contains("missed"), "{}", j.text());
+    }
+
+    /// A stop the driver skipped has no mark: not missed, not counted against the trip.
+    #[test]
+    fn a_skipped_stop_is_neither_missed_nor_counted() {
+        let t0 = 8.0 * 3600.0;
+        let trips = [trip(&[("Metro Mlociny", t0), ("Zajezdnia", t0 + 300.0), ("Prozy", t0 + 600.0), ("Muzealna", t0 + 900.0)])];
+        let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", std::env::temp_dir());
+        assert!(j.left((0, 0), (0.0, 60.0)));
+        assert!(j.skipped((0, 1)));
+        assert!(!j.skipped((0, 1)), "told once");
+        assert!(j.arrived((0, 3), 120.0));
+        let (_, rows, totals) = j.report(0).expect("trip 1");
+        let states: Vec<StopState> = rows.iter().map(|r| r.state).collect();
+        // (Prozy, passed without a word, is missed as before)
+        assert_eq!(states, vec![StopState::OnTime, StopState::Skipped, StopState::Missed, StopState::OnTime]);
+        assert_eq!(totals[0], ("Stops served", "2 of 3".to_string()));
+        assert!(j.text().lines().any(|l| l.starts_with("Zajezdnia") && l.ends_with("skipped")), "{}", j.text());
+        assert_eq!(j.how((0, 1)).as_deref(), Some("skipped"));
+        assert_eq!(j.how((0, 0)).as_deref(), Some("served, +1 min"));
+        assert_eq!(j.how((0, 3)).as_deref(), Some("served, +2 min"));
+        assert_eq!(j.how((0, 2)), None);
+        // a stop the bus has been at cannot be skipped after the fact
+        assert!(!j.skipped((0, 0)));
     }
 
     /// A stop reached late and left before its departure time says both.

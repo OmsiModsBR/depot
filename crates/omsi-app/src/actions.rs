@@ -563,6 +563,27 @@ impl App {
         self.service_msg = Some((format!("Stop skipped: {name}"), 3.0));
     }
 
+    /// The timetable window's "Skip this stop" (or "Keep this stop") on stop `k` of the
+    /// current trip: the stop due now is skipped at once, one still to come is marked to be
+    /// skipped when the bus gets there, or unmarked (see `PlayerDuty::toggle_skip`).
+    pub(crate) fn skip_stop_at(&mut self, k: usize) {
+        let Some(d) = self.duty.as_mut() else { return };
+        let Some((name, now)) = d.toggle_skip(k) else { return };
+        if now {
+            log::info!("duty: stop '{name}' skipped, next stop {}", d.next_stop);
+            if let Some(p) = self.player.as_mut() {
+                let (trip, k) = d.trip_for_ibis();
+                p.ibis_to_stop(trip, k);
+            }
+            self.service_msg = Some((format!("Stop skipped: {name}"), 3.0));
+        } else if d.skip_marked(k) {
+            log::info!("duty: stop '{name}' to be skipped");
+            self.service_msg = Some((format!("Skipped when the bus gets there: {name}"), 3.0));
+        } else {
+            self.service_msg = Some((format!("Stop kept: {name}"), 3.0));
+        }
+    }
+
     /// Read the vehicles that can be placed, once (the place list and the "Add vehicle" window).
     pub(crate) fn load_vehicle_list(&mut self) {
         if self.vehicle_list.is_empty() {
