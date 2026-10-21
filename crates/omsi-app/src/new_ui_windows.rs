@@ -756,7 +756,7 @@ impl App {
             trip_steps: (trip > 0, trip < last),
             rows,
             totals,
-            hint: "Updated at every stop  \u{b7}  the journey log is in Journeys".into(),
+            hint: "Updated at every stop  ·  the journey log is in Journeys".into(),
         }
     }
 
@@ -1204,11 +1204,9 @@ impl App {
         }
         let (d, m) = self.clock.day_month();
         self.service_msg = Some((
-            format!(
-                "Clock: {:04}-{m:02}-{d:02} {}",
-                self.clock.year,
-                hm(self.clock.time)
-            ),
+            omsi_ui::tr("Clock: %{date} %{time}")
+                .replace("%{date}", &format!("{:04}-{m:02}-{d:02}", self.clock.year))
+                .replace("%{time}", &hm(self.clock.time)),
             3.0,
         ));
         self.clock_jump += gap;

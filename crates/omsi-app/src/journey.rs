@@ -41,13 +41,20 @@ impl Row {
     }
 }
 
+/// A trip's title (the log file keeps it in English, the report shows it translated).
+const TRIP_TITLE: &str = "Trip %{n}  ·  %{line} to %{to}  ·  %{at}";
+
+fn trip_title(text: &str, (n, line, to, at): &(usize, String, String, String)) -> String {
+    text.replace("%{n}", &n.to_string()).replace("%{line}", line).replace("%{to}", to).replace("%{at}", at)
+}
+
 pub(crate) struct Journey {
     /// The duty it is the log of: line, tour and where its trips begin in the tour.
     key: (String, String, usize),
     /// The lines above the trips (driver, map, bus, date; line and tour).
     head: String,
-    /// Each trip's title.
-    trips: Vec<String>,
+    /// Each trip's number in the tour, line, terminus and departure (its title).
+    trips: Vec<(usize, String, String, String)>,
     rows: Vec<Row>,
     dir: PathBuf,
     /// The file, chosen when there is first something to write.
@@ -62,7 +69,7 @@ impl Journey {
         let mut rows = Vec::new();
         for (t, trip) in trips_planned.iter().enumerate() {
             let line = if trip.line.trim().is_empty() { key.0.trim() } else { trip.line.trim() };
-            trips.push(format!("Trip {}  ·  {} to {}  ·  {}", key.2 + t + 1, line, trip.terminus.trim(), hms(trip.departure)));
+            trips.push((key.2 + t + 1, line.to_string(), trip.terminus.trim().to_string(), hms(trip.departure)));
             let n = trip.stops.len();
             // (the stations a depot run passes are not stops)
             for (k, s) in trip.stops.iter().enumerate().filter(|(_, s)| s.stops) {
@@ -115,8 +122,8 @@ impl Journey {
         let m = ((real - plan) / 60.0).round() as i64;
         Some(match m {
             0 => "served, on time".into(),
-            m if m > 0 => format!("served, +{m} min"),
-            m => format!("served, {m} min"),
+            m if m > 0 => omsi_ui::tr("served, %{m} min").replace("%{m}", &format!("+{m}")),
+            m => omsi_ui::tr("served, %{m} min").replace("%{m}", &m.to_string()),
         })
     }
 
@@ -132,7 +139,7 @@ impl Journey {
     /// What the end-of-trip report shows of trip `t` (its place in the duty): its title, a
     /// row per stop and the totals, as the log counts them.
     pub(crate) fn report(&self, t: usize) -> Option<TripLines> {
-        let title = self.trips.get(t)?.clone();
+        let title = trip_title(&omsi_ui::tr(TRIP_TITLE), self.trips.get(t)?);
         let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
         // (a duty taken up or resumed in the middle of the trip: the stops before are not the
         // driver's)
@@ -167,7 +174,7 @@ impl Journey {
         }
         let totals = vec![
             // (a stop skipped on purpose is not one the trip had to serve)
-            ("Stops served", format!("{served} of {}", rows.len() - from - skipped)),
+            ("Stops served", omsi_ui::tr("%{served} of %{total}").replace("%{served}", &served.to_string()).replace("%{total}", &(rows.len() - from - skipped).to_string())),
             ("Late arrivals", late.to_string()),
             ("Early departures", early.to_string()),
         ];
@@ -183,7 +190,8 @@ impl Journey {
         let rule = "-".repeat(108);
         let mut out = format!("Project Depot journey log\n{}\n", self.head);
         let (mut served, mut late, mut early) = (0, 0, 0);
-        for (t, title) in self.trips.iter().enumerate() {
+        for (t, trip) in self.trips.iter().enumerate() {
+            let title = trip_title(TRIP_TITLE, trip);
             let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
             // (a trip is in it once the bus has reached one of its stops: a tour has dozens)
             let Some(from) = rows.iter().position(|r| r.reached()) else {

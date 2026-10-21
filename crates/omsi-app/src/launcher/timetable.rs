@@ -515,7 +515,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
             }
             if add_line {
                 let name = tv.new_line.trim().to_string();
-                if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+                if name.is_empty() || name.contains(|c: char| "/\\:*?\"<>|".contains(c)) {
                     status = Some(("Type the new line's name (it becomes the file name, so no / \\ : * ? \" < > |)".into(), true));
                 } else if data.lines.iter().any(|x| x.name.eq_ignore_ascii_case(&name)) {
                     status = Some((omsi_ui::tr("Line %{line} is there already").replace("%{line}", &name), true));
