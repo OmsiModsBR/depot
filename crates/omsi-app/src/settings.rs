@@ -798,10 +798,10 @@ impl Settings {
         cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
     }
 
-    /// Whether a clear sky with no weather chosen gets a few fair-weather clouds: an addition
-    /// OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)", whose sky is OMSI 2's.
+    /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
+    /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
     pub fn fair_weather_clouds(&self) -> bool {
-        self.clouds && !self.d3d9_selected()
+        !self.d3d9_selected()
     }
 
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
@@ -985,7 +985,7 @@ mod tests {
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
                 // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
                 let saved = Settings::from_text(&format!(
-                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\n"
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!((saved.msaa, saved.anisotropy, saved.render_scale), (1, 1, 0.0));
@@ -993,7 +993,7 @@ mod tests {
                 // (what it does draw stays as saved: env maps and shadow meshes)
                 assert!(saved.reflections && saved.shadow_blobs);
                 assert_eq!((saved.windy_trees, saved.post_aa.as_str()), (false, "off"));
-                // (clouds also set the weather's light: they stay as chosen)
+                // (clouds are on, as OMSI 2 has the weather's own: a saved "off" is not taken)
                 assert!(saved.clouds);
                 // VR takes DirectX 12 instead, with the graphics as chosen
                 let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
