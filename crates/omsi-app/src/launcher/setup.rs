@@ -42,16 +42,14 @@ fn check(field: usize, value: &str, root: &str) -> (Status, String) {
             if missing.is_empty() {
                 (Status::Found, "The essential files are there. Read only: the launcher never writes to it.".into())
             } else {
-                let shown: Vec<&str> = missing.iter().map(String::as_str).take(4).collect();
-                let more = if missing.len() > shown.len() { format!(" and {} more", missing.len() - shown.len()) } else { String::new() };
-                (Status::Error, format!("Not a complete OMSI 2 installation: it lacks {}{more}.", shown.join(", ")))
+                (Status::Error, omsi_ui::tr("Not a complete OMSI 2 installation: it lacks %{files}.").replace("%{files}", &lacking(&missing, 4)))
             }
         }
         1 if v.is_empty() => (Status::Warning, "Not found: choose the depot program.".into()),
         1 if p.is_file() => {
             let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf()));
             if beside.is_some_and(|d| p.parent() == Some(d.as_path())) {
-                (Status::Found, format!("Found next to the launcher. Version {}", env!("CARGO_PKG_VERSION")))
+                (Status::Found, omsi_ui::tr("Found next to the launcher. Version %{version}").replace("%{version}", env!("CARGO_PKG_VERSION")))
             } else {
                 (Status::Found, "Found.".into())
             }
@@ -64,11 +62,38 @@ fn check(field: usize, value: &str, root: &str) -> (Status, String) {
         _ if v.is_empty() => (Status::Found, "Beside the game program. Mods put here are not available in OMSI 2.".into()),
         _ if p.is_file() => (Status::Error, "This is a file, not a folder.".into()),
         _ => match core::content_choice_problem(p, std::path::Path::new(root.trim())) {
-            Some(why) => (Status::Error, format!("Cannot be used: {why}.")),
+            Some(why) => (Status::Error, omsi_ui::tr("Cannot be used: %{why}.").replace("%{why}", &why_text(&why))),
             None if !p.exists() => (Status::Warning, "It does not exist yet: it is made when you save.".into()),
             None => (Status::Found, "Mods put here are not available in OMSI 2.".into()),
         },
     }
+}
+
+/// What an OMSI 2 folder lacks, as its lines say it: the first `n` files, and how many more.
+fn lacking(missing: &[String], n: usize) -> String {
+    let shown = missing.iter().take(n).map(String::as_str).collect::<Vec<_>>().join(", ");
+    if missing.len() > n {
+        omsi_ui::tr("%{files} and %{n} more").replace("%{files}", &shown).replace("%{n}", &(missing.len() - n).to_string())
+    } else {
+        shown
+    }
+}
+
+/// Why a content folder cannot be used (`core::content_folder_problem`, in English with the
+/// folder in it) in the interface's language.
+fn why_text(why: &str) -> String {
+    let templates = [
+        "%{path} is not a full path (from the drive, or from /)",
+        "it is in an OMSI 2 installation (%{path}), which the Depot never writes to",
+        "%{path} cannot be made or written to",
+    ];
+    for t in templates {
+        let (head, tail) = t.split_once("%{path}").unwrap_or((t, ""));
+        if let Some(path) = why.strip_prefix(head).and_then(|x| x.strip_suffix(tail)) {
+            return omsi_ui::tr(t).replace("%{path}", path);
+        }
+    }
+    omsi_ui::tr(why).into_owned()
 }
 
 /// The colour of a type of content (`disk::TYPES`), in the chart and its legend.
@@ -255,7 +280,7 @@ fn own_files(l: &mut Launcher, at: Rect) {
     l.ui.icon("o-folder", Vec2::new(field.x + 18.0, field.center().y), 15.0, TEXT_DIM);
     omsi_launcher_ui::kit::clipped(&mut l.ui, &dir.to_string_lossy(), field.x + 34.0, field.center().y, field.w - 44.0, 13.5, Weight::Regular, TEXT);
     if l.ui.button("open-depot-folder", Rect::new(inner.right() - 122.0, inner.y, 122.0, 34.0), "Open folder", None, ButtonKind::Normal) && !core::open_folder(&dir) {
-        l.state.set_status(format!("The folder could not be opened: {}", dir.display()), true);
+        l.state.set_status(omsi_ui::tr("The folder could not be opened: %{path}").replace("%{path}", &dir.display().to_string()), true);
     }
     l.ui.paragraph("Holds the game log, the launcher log, the preview cache and your settings. Safe to open; nothing here changes the original OMSI 2.", Vec2::new(inner.x, inner.y + 44.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
 }
@@ -490,15 +515,13 @@ fn save_folders(l: &mut Launcher) {
     // before, while the page said "Saved" (#1656).
     let missing = if chosen.is_empty() { Vec::new() } else { omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen)) };
     if !missing.is_empty() {
-        let shown: Vec<&str> = missing.iter().map(String::as_str).take(6).collect();
-        let more = if missing.len() > shown.len() { format!(" and {} more", missing.len() - shown.len()) } else { String::new() };
-        l.state.set_status(format!("Not saved: {chosen} is not a complete OMSI 2 installation - it lacks {}{more}", shown.join(", ")), true);
+        l.state.set_status(omsi_ui::tr("Not saved: %{path} is not a complete OMSI 2 installation - it lacks %{files}").replace("%{path}", &chosen).replace("%{files}", &lacking(&missing, 6)), true);
         return;
     }
     // (checked at each Save, against the OMSI 2 folder saved with it)
     if !content.is_empty() {
         if let Some(why) = core::content_folder_problem(std::path::Path::new(&content), std::path::Path::new(&chosen)) {
-            l.state.set_status(format!("Not saved: the content folder cannot be used - {why}"), true);
+            l.state.set_status(omsi_ui::tr("Not saved: the content folder cannot be used - %{why}").replace("%{why}", &why_text(&why)), true);
             return;
         }
     }
@@ -519,7 +542,7 @@ fn save_folders(l: &mut Launcher) {
             } else if same {
                 l.state.set_status("Saved. Reading the content again…", false);
             } else {
-                l.state.set_status(format!("Saved, but the OMSI 2 folder used is {}", l.state.config.root), true);
+                l.state.set_status(omsi_ui::tr("Saved, but the OMSI 2 folder used is %{path}").replace("%{path}", &l.state.config.root), true);
             }
             // (a phone: the gallery is kept out of the folder chosen at once, before
             // its media scanner lists its textures as photos, #1632)

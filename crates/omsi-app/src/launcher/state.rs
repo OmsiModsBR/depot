@@ -658,7 +658,7 @@ impl State {
             // The Drive page needs a map of this installation chosen, so the choice stays
             // as it is then: `duty()` starts the game on the server's map anyway.
             if !self.maps.is_empty() && !self.maps.iter().any(|m| m.file.eq_ignore_ascii_case(&info.map)) {
-                self.set_status(format!("The server plays {}, which is not installed here: it is fetched from the server on joining.", info.map), false);
+                self.set_status(omsi_ui::tr("The server plays %{map}, which is not installed here: it is fetched from the server on joining.").replace("%{map}", &info.map), false);
             } else {
                 self.choice.map = info.map.clone();
             }
@@ -667,11 +667,11 @@ impl State {
         self.choice.lan_addr = lan_addr;
         self.joined_server = Some(address.to_string());
         let name = info.as_ref().map(|i| i.name.clone()).unwrap_or_else(|| address.to_string());
-        self.join = (true, format!("the server {name}"));
+        self.join = (true, omsi_ui::tr("the server %{name}").replace("%{name}", &name));
         self.join_checked = address.to_string();
         self.touched();
-        let how = if proto == JoinProto::Udp { " over UDP" } else { "" };
-        self.set_status(format!("Joined {name}{how} - choose your bus and duty, then Start the duty"), false);
+        let how = if proto == JoinProto::Udp { omsi_ui::tr(" over UDP").into_owned() } else { String::new() };
+        self.set_status(omsi_ui::tr("Joined %{name}%{how} - choose your bus and duty, then Start the duty").replace("%{name}", &name).replace("%{how}", &how), false);
     }
 
     /// Back to playing alone (the Drive page's "Leave Server").
@@ -856,7 +856,7 @@ impl State {
                 true
             }
             Err(e) => {
-                self.set_status(format!("Could not save settings: {e:#}"), true);
+                self.set_status(omsi_ui::tr("Could not save settings: %{error}").replace("%{error}", &format!("{e:#}")), true);
                 false
             }
         }
@@ -932,7 +932,7 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
-                self.set_status(format!("Reading the content stopped on an error: {why}"), true);
+                self.set_status(omsi_ui::tr("Reading the content stopped on an error: %{error}").replace("%{error}", &why.to_string()), true);
             }
             #[cfg(feature = "lan")]
             Msg::Server { address, info } => {
@@ -948,7 +948,7 @@ impl State {
                                 self.choice.tour = None;
                                 self.choice.entry = 0;
                                 self.touched();
-                                self.set_status(format!("The host drives on {name}: that map is chosen"), false);
+                                self.set_status(omsi_ui::tr("The host drives on %{map}: that map is chosen").replace("%{map}", &name), false);
                             }
                         }
                     }
@@ -965,7 +965,7 @@ impl State {
                 self.weathers = weathers;
                 self.pick_map();
                 self.load_lines();
-                self.set_status(format!("{} maps - reading the buses…", self.maps.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps - reading the buses…").replace("%{maps}", &self.maps.len().to_string()), false);
             }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
@@ -973,7 +973,7 @@ impl State {
                 }
                 crate::mt::protect(batch.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(batch.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
                 self.vehicles.extend(batch);
-                self.set_status(format!("{} maps, {} buses - reading the vehicle folders: {done} of {total}", self.maps.len(), self.vehicles.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
                 // (names of things, not the interface: never machine-translated)
@@ -988,7 +988,7 @@ impl State {
                         }
                     }
                 }
-                self.set_status(format!("{} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses, %{weathers} weathers").replace("%{maps}", &maps.len().to_string()).replace("%{buses}", &vehicles.len().to_string()).replace("%{weathers}", &weathers.len().to_string()), false);
                 // (other files than before - another content folder chosen under Setup: the
                 // Maps and Vehicles pages take the new lists even when as many came)
                 let same = self.maps.iter().map(|m| &m.file).eq(maps.iter().map(|m| &m.file)) && self.vehicles.iter().map(|v| &v.file).eq(vehicles.iter().map(|v| &v.file));
@@ -1031,7 +1031,7 @@ impl State {
                 self.content_first = false;
                 self.content_done();
                 if omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root)).is_empty() {
-                    self.set_status(format!("{e}\nSet the OMSI 2 folder under Setup."), true);
+                    self.set_status(omsi_ui::tr("%{error}\nSet the OMSI 2 folder under Setup.").replace("%{error}", &e.to_string()), true);
                 } else {
                     self.set_status(root_problem(&self.config.root), true);
                 }
@@ -1051,7 +1051,7 @@ impl State {
                         if let Some(line) = self.choice.line.clone() {
                             match self.lines.iter().find(|x| x.name == line) {
                                 None => {
-                                    note = format!(" - line {line} does not run on {}", self.choice.date);
+                                    note = omsi_ui::tr(" - line %{line} does not run on %{date}").replace("%{line}", &line.to_string()).replace("%{date}", &self.choice.date.to_string());
                                     self.choice.line = None;
                                     self.choice.tour = None;
                                 }
@@ -1059,14 +1059,14 @@ impl State {
                                     if let Some(t) = &self.choice.tour {
                                         match l.tours.iter().find(|x| &x.number == t) {
                                             None => self.choice.tour = None,
-                                            Some(t) if !t.runs => note = format!(" - tour {} of line {line} does not run that day ({})", t.number, t.days),
+                                            Some(t) if !t.runs => note = omsi_ui::tr(" - tour %{tour} of line %{line} does not run that day (%{days})").replace("%{tour}", &t.number).replace("%{line}", &line.to_string()).replace("%{days}", &super::days_text(&t.days)),
                                             _ => {}
                                         }
                                     }
                                 }
                             }
                         }
-                        self.set_status(format!("{} lines on {}{note}", self.lines.len(), self.choice.date), !note.is_empty());
+                        self.set_status(omsi_ui::tr("%{n} lines on %{date}%{note}").replace("%{n}", &self.lines.len().to_string()).replace("%{date}", &self.choice.date.to_string()).replace("%{note}", &note), !note.is_empty());
                     }
                     Err(e) => {
                         self.lines.clear();
@@ -1083,7 +1083,7 @@ impl State {
                             core::log_to_file(&format!("inbox: installing {s}"));
                         }
                         if !p.started.is_empty() {
-                            self.set_status(format!("Installing from the Mods folder: {}", p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
+                            self.set_status(omsi_ui::tr("Installing from the Mods folder: %{list}").replace("%{list}", &p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
                         }
                         let mut installed = false;
                         for j in &p.jobs {
@@ -1177,7 +1177,7 @@ impl State {
                 core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
                 self.launched_pid = Some(l.pid);
                 self.started_here = Some(l.pid);
-                self.set_status(format!("Game started (process {}), log {}{}", l.pid, l.log, if l.others > 0 { format!(" - {} other game(s) keep running", l.others) } else { String::new() }), false);
+                self.set_status(omsi_ui::tr("Game started (process %{pid}), log %{log}%{others}").replace("%{pid}", &l.pid.to_string()).replace("%{log}", &l.log.to_string()).replace("%{others}", &if l.others > 0 { omsi_ui::tr(" - %{n} other game(s) keep running").replace("%{n}", &l.others.to_string()) } else { String::new() }), false);
                 self.poll_now();
             }
             Msg::Launched(Err(e)) => {
@@ -1187,8 +1187,8 @@ impl State {
             Msg::Stopped { pid, result } => {
                 self.stopping.remove(&pid);
                 match result {
-                    Ok(true) => self.set_status(format!("Game {pid} ended by itself."), false),
-                    Ok(false) => self.set_status(format!("Game {pid} did not end by itself and was killed - this run is not saved."), true),
+                    Ok(true) => self.set_status(omsi_ui::tr("Game %{pid} ended by itself.").replace("%{pid}", &pid.to_string()), false),
+                    Ok(false) => self.set_status(omsi_ui::tr("Game %{pid} did not end by itself and was killed - this run is not saved.").replace("%{pid}", &pid.to_string()), true),
                     Err(e) => self.set_status(e, true),
                 }
                 self.poll_now();

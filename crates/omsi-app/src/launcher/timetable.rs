@@ -168,7 +168,7 @@ fn reset_timetable(map_dir: &Path, map_folder: &str) -> Result<String, String> {
     let copy = content.join("maps").join(map_folder).join("TTData");
     if copy.join(COPY_MARK).is_file() {
         std::fs::remove_dir_all(&copy).map_err(|e| e.to_string())?;
-        return Ok(format!("The timetable of {map_folder} is the map's own again (the edited copy was removed)"));
+        return Ok(omsi_ui::tr("The timetable of %{map} is the map's own again (the edited copy was removed)").replace("%{map}", &map_folder));
     }
     let own = map_dir.join("TTData");
     let mut restored = 0;
@@ -182,9 +182,9 @@ fn reset_timetable(map_dir: &Path, map_folder: &str) -> Result<String, String> {
         }
     }
     if restored > 0 {
-        Ok(format!("{restored} line(s) of {map_folder} put back as they were"))
+        Ok(omsi_ui::tr("%{n} line(s) of %{map} put back as they were").replace("%{n}", &restored.to_string()).replace("%{map}", &map_folder))
     } else {
-        Err(format!("The timetable of {map_folder} has not been changed here"))
+        Err(omsi_ui::tr("The timetable of %{map} has not been changed here").replace("%{map}", &map_folder))
     }
 }
 
@@ -301,7 +301,7 @@ fn chip(ui: &mut Ui, r: Rect, t: &str) {
 /// could not be. None once it is.
 fn plan_note(tv: &TimetableView) -> Option<String> {
     if let Some(e) = &tv.plan_error {
-        return Some(format!("Could not read the lines: {e}"));
+        return Some(omsi_ui::tr("Could not read the lines: %{error}").replace("%{error}", &e.to_string()));
     }
     (tv.plan_rx.is_some() && tv.plan.lines.is_empty()).then(|| "Reading the lines…".to_string())
 }
@@ -414,8 +414,8 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         if !tv.dirty.is_empty() {
             let (saved, err) = save_all(tv);
             match err {
-                Some(e) => l.state.set_status(format!("Not saved: {e}"), true),
-                None => l.state.set_status(format!("{saved} line(s) saved"), false),
+                Some(e) => l.state.set_status(omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
+                None => l.state.set_status(omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             }
         }
         tv.map = m;
@@ -477,7 +477,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
         1 => {
             let dirs = plan.line(&tv.chosen).map(|k| plan.directions(k)).unwrap_or_default();
             if !dirs.is_empty() {
-                let names: Vec<String> = dirs.iter().map(|d| format!("Direction: to {d}")).collect();
+                let names: Vec<String> = dirs.iter().map(|d| omsi_ui::tr("Direction: to %{stop}").replace("%{stop}", &d.to_string())).collect();
                 let mut d = tv.dir % dirs.len();
                 if ui.select("tt-dir", Rect::new(foot.x, foot.y, foot.w, ROW), &mut d, &names) {
                     tv.dir = d;
@@ -515,10 +515,10 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
             }
             if add_line {
                 let name = tv.new_line.trim().to_string();
-                if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+                if name.is_empty() || name.contains(|c: char| "/\\:*?\"<>|".contains(c)) {
                     status = Some(("Type the new line's name (it becomes the file name, so no / \\ : * ? \" < > |)".into(), true));
                 } else if data.lines.iter().any(|x| x.name.eq_ignore_ascii_case(&name)) {
-                    status = Some((format!("Line {name} is there already"), true));
+                    status = Some((omsi_ui::tr("Line %{line} is there already").replace("%{line}", &name), true));
                 } else {
                     let path = omsi_cfg::resolve_path(&tv.map_dir, "TTData").join(format!("{name}.ttl"));
                     data.lines.push(Line { path, name: name.clone(), user_allowed: true, priority: 0, tours: Vec::new() });
@@ -529,7 +529,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
                     tv.times_for = None;
                     tv.dirty.insert(name.clone());
                     tv.new_line.clear();
-                    status = Some((format!("Line {name} added: give it tours, then save"), false));
+                    status = Some((omsi_ui::tr("Line %{line} added: give it tours, then save").replace("%{line}", &name), false));
                 }
             }
         }
@@ -543,7 +543,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
                 let stops = plan.route(k, 0).map(|t| t.stops.iter().filter(|s| s.stops).count()).unwrap_or(0);
                 let trips: usize = plan.lines[k].tours.iter().map(|t| t.trips.len()).sum();
                 let title = if dirs.len() >= 2 { format!("{} - {}", dirs[1], dirs[0]) } else { dirs.first().map(|d| d.to_string()).unwrap_or_else(|| name.to_string()) };
-                (title, format!("{stops} stops · {trips} trips"))
+                (title, omsi_ui::tr("%{stops} stops · %{trips} trips").replace("%{stops}", &stops.to_string()).replace("%{trips}", &trips.to_string()))
             }
             None => (name.to_string(), fallback),
         };
@@ -551,7 +551,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
         (name.to_string(), format!("{title}{dirty}"), sub, color_of(&tv.palette, name), tv.hidden.contains(&name.to_lowercase()))
     };
     let (rows, sel): (Vec<LineRow>, usize) = if tab == 2 {
-        (data.lines.iter().map(|x| row_of(&x.name, format!("{} tours", x.tours.len()))).collect(), tv.line)
+        (data.lines.iter().map(|x| row_of(&x.name, omsi_ui::tr("%{n} tours").replace("%{n}", &x.tours.len().to_string()))).collect(), tv.line)
     } else {
         (plan.lines.iter().map(|x| row_of(&x.name, String::new())).collect(), plan.line(&tv.chosen).unwrap_or(0))
     };
@@ -808,7 +808,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
     let hint_y = card.bottom() - 34.0;
     let shown = placed.iter().filter(|p| map.contains(p.at)).count();
     let mut x = card.x + 12.0;
-    let mut chips = vec!["Scroll to zoom · drag to move · click a stop".to_string(), format!("{shown} stops shown")];
+    let mut chips = vec!["Scroll to zoom · drag to move · click a stop".to_string(), omsi_ui::tr("%{n} stops shown").replace("%{n}", &shown.to_string())];
     // (the map and the stop card show the timetable as saved)
     if !l.pages.tt.dirty.is_empty() {
         chips.push("Showing the saved times: save to see the changes".into());
@@ -889,7 +889,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
     let kind = match lines.len() {
         0 => "No line leaves from here".to_string(),
         1 => "1 line".to_string(),
-        n => format!("Interchange · {n} lines"),
+        n => omsi_ui::tr("Interchange · %{n} lines").replace("%{n}", &n.to_string()),
     };
     l.ui.text_in(&kind, Rect::new(inner.x + 28.0, y + 22.0, inner.w - 28.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
     y += 52.0;
@@ -903,8 +903,8 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         l.ui.p().rounded(row, 6.0, if off { FIELD.alpha(0.5) } else { FIELD });
         badge(&mut l.ui, Rect::new(row.x + 10.0, row.y + 12.0, 36.0, 22.0), &line.name, color_of(&palette, &line.name), off);
         let next: Vec<String> = plan.departures(&stop, from, 2, Some(*k)).iter().map(|d| hm(d.0)).collect();
-        let sub = if off { "line hidden".to_string() } else if next.is_empty() { "no more departures today".to_string() } else { format!("next {}", next.join(", ")) };
-        let title = format!("to {}", to.join(" / "));
+        let sub = if off { "line hidden".to_string() } else if next.is_empty() { "no more departures today".to_string() } else { omsi_ui::tr("next %{times}").replace("%{times}", &next.join(", ")) };
+        let title = omsi_ui::tr("to %{stops}").replace("%{stops}", &to.join(" / "));
         let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, &title, 13.5, row.w - 70.0);
         l.ui.text_in(&title, Rect::new(row.x + 56.0, row.y + 5.0, row.w - 66.0, 20.0), 13.5, Weight::Medium, if off { TEXT_DIM } else { TEXT }, Align::Left);
         l.ui.text_in(&sub, Rect::new(row.x + 56.0, row.y + 24.0, row.w - 66.0, 16.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
@@ -962,7 +962,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
     let plan = tv.plan.clone();
     let palette = tv.palette.clone();
     let name = tv.chosen.clone();
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), &format!("Line {name} · diagram"));
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), &omsi_ui::tr("Line %{line} · diagram").replace("%{line}", &name));
     omsi_launcher_ui::kit::right(&mut l.ui, "schematic, stops in order", r.right() - 18.0, r.y + 22.0, 12.0, Weight::Regular, TEXT_DIM);
     let Some(k) = plan.line(&name) else {
         let t = plan_note(tv).unwrap_or_else(|| "This line runs no trips the map's timetable knows of.".to_string());
@@ -1016,7 +1016,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
                 let gi = row * per + i;
                 if let (Some(next), true) = (stops.get(gi + 1), i + 1 < n) {
                     let mins = ((next.arr - st.dep) / 60.0).round().max(0.0);
-                    ui.text_in(&format!("{mins:.0} min"), Rect::new(x, cy + 6.0, step, 16.0), 10.5, Weight::Regular, TEXT_DIM, Align::Center);
+                    ui.text_in(&omsi_ui::tr("%{m} min").replace("%{m}", &format!("{mins:.0}")), Rect::new(x, cy + 6.0, step, 16.0), 10.5, Weight::Regular, TEXT_DIM, Align::Center);
                 }
                 // the other lines here
                 for (j, o) in others[gi].iter().take(3).enumerate() {
@@ -1034,7 +1034,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
     let whole = ((stops.last().map(|s| s.arr).unwrap_or(0.0) - stops.first().map(|s| s.dep).unwrap_or(0.0)) / 60.0).round();
     let mut x = inner.x;
     let mut y = area.bottom() + 8.0;
-    let mut notes = vec!["Coloured tags under a stop: other lines that serve it".to_string(), "Minutes: running time between stops".to_string(), format!("Whole route {whole:.0} min")];
+    let mut notes = vec!["Coloured tags under a stop: other lines that serve it".to_string(), "Minutes: running time between stops".to_string(), omsi_ui::tr("Whole route %{m} min").replace("%{m}", &format!("{whole:.0}"))];
     if dirty {
         notes.push("Showing the saved times: save to see the changes".into());
     }
@@ -1121,7 +1121,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
     let inner = Launcher::card_title(ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Trips");
     // the tour: chosen in a list, made, copied or deleted at the top right
     tv.tour = tv.tour.min(line.tours.len().saturating_sub(1));
-    let tour_names: Vec<String> = line.tours.iter().map(|t| format!("Tour {} · {} · {} trips", t.number, t.trips.first().map(|x| fmt_time(x.departure)).unwrap_or_default(), t.trips.len())).collect();
+    let tour_names: Vec<String> = line.tours.iter().map(|t| omsi_ui::tr("Tour %{tour} · %{time} · %{n} trips").replace("%{tour}", &t.number.to_string()).replace("%{time}", &t.trips.first().map(|x| fmt_time(x.departure)).unwrap_or_default()).replace("%{n}", &t.trips.len().to_string())).collect();
     let bw = 34.0;
     let tools = Rect::new(inner.right() - 3.0 * (bw + 6.0), right.y + 10.0, 3.0 * (bw + 6.0), bw);
     let sel_r = Rect::new(tools.x - 10.0 - 260.0f32.min(inner.w * 0.45), right.y + 10.0, 260.0f32.min(inner.w * 0.45), bw);
@@ -1131,7 +1131,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             tv.tour = t;
         }
     } else {
-        ui.text_in(&format!("line {line_name} · no tours yet"), sel_r, 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+        ui.text_in(&omsi_ui::tr("line %{line} · no tours yet").replace("%{line}", &line_name), sel_r, 12.0, Weight::Regular, TEXT_DIM, Align::Right);
     }
     let icon_at = |k: usize| glam::Vec2::new(tools.x + k as f32 * (bw + 6.0) + bw * 0.5, tools.center().y);
     let off = tv.offset.trim().parse::<f32>().ok();
@@ -1167,7 +1167,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
     let save_label = match tv.dirty.len() {
         0 => "Saved".to_string(),
         1 => "Save".to_string(),
-        n => format!("Save all ({n} lines)"),
+        n => omsi_ui::tr("Save all (%{n} lines)").replace("%{n}", &n.to_string()),
     };
     let foot_y = inner.bottom() - ROW;
     let Some(tour) = line.tours.get_mut(tv.tour) else {
@@ -1177,8 +1177,8 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             // (what the lines run is read again: the map and the diagram show it)
             tv.plan_for = None;
             status = Some(match err {
-                Some(e) => (format!("Not saved: {e}"), true),
-                None => (format!("{saved} line(s) saved"), false),
+                Some(e) => (omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
+                None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
         if let Some((s, e)) = status {
@@ -1300,7 +1300,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
                     tv.tour = line.tours.len() - 1;
                     tv.dirty.insert(line_name.clone());
                 }
-                status = Some((format!("{made} tour(s) made, every {every} min up to {}", fmt_time(until)), false));
+                status = Some((omsi_ui::tr("%{n} tour(s) made, every %{every} min up to %{time}").replace("%{n}", &made.to_string()).replace("%{every}", &every.to_string()).replace("%{time}", &fmt_time(until)), false));
             }
             (None, _, _) => status = Some(("Type the minutes between the tours (1 or more)".into(), true)),
             (_, None, _) => status = Some(("Type the last departure as h:mm".into(), true)),
@@ -1314,7 +1314,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
     let save_label = match n {
         0 => "Saved".to_string(),
         1 => "Save".to_string(),
-        n => format!("Save all ({n} lines)"),
+        n => omsi_ui::tr("Save all (%{n} lines)").replace("%{n}", &n.to_string()),
     };
     let save_r = Rect::new(inner.right() - 150.0, foot_y, 150.0, ROW);
     if ui.button("tt-save", save_r, &save_label, Some("save"), if n > 0 { ButtonKind::Primary } else { ButtonKind::Normal }) && n > 0 {
@@ -1326,8 +1326,8 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             // (what the lines run is read again: the map and the diagram show the new times)
             tv.plan_for = None;
             status = Some(match err {
-                Some(e) => (format!("Not saved: {e}"), true),
-                None => (format!("{saved} line(s) saved"), false),
+                Some(e) => (omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
+                None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
     }

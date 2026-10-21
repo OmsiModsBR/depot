@@ -159,9 +159,9 @@ fn pedal(v: f32) -> String {
     if (v - 1.0).abs() < 0.01 {
         "Normal".to_string()
     } else if v < 1.0 {
-        format!("Softer x{v:.2}")
+        omsi_ui::tr("Softer x%{v}").replace("%{v}", &format!("{v:.2}"))
     } else {
-        format!("Stronger x{v:.2}")
+        omsi_ui::tr("Stronger x%{v}").replace("%{v}", &format!("{v:.2}"))
     }
 }
 fn vibration(v: f32) -> String {
@@ -567,7 +567,7 @@ fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
                 (0, a) => a,
                 (m, a) => m.min(a),
             };
-            let auto = if auto > 0 { format!("Automatic ({} here)", mb(auto)) } else { "Automatic".to_string() };
+            let auto = if auto > 0 { omsi_ui::tr("Automatic (%{size} here)").replace("%{size}", &mb(auto)) } else { "Automatic".to_string() };
             let mut out = vec![("0".to_string(), auto)];
             out.extend([500, 1000, 1500, 2000, 3000, 4000, 6000].map(|m| (m.to_string(), mb(m))));
             out
@@ -766,7 +766,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
             view.query.clear();
             view.changed_only = false;
         }
-        let chip = if n_changed == 1 { "1 changed from default".to_string() } else { format!("{n_changed} changed from default") };
+        let chip = if n_changed == 1 { "1 changed from default".to_string() } else { omsi_ui::tr("%{n} changed from default").replace("%{n}", &n_changed.to_string()) };
         let cw = ui.width(&chip, 12.0, Weight::Regular) + 24.0;
         let cr = Rect::new(body.right() - pw - 10.0 - cw, body.y + 4.0, cw, 26.0);
         ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
@@ -1230,15 +1230,15 @@ fn profiles_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
                 Some(p) => {
                     core::apply_graphics_profile(p, st.s);
                     st.changed = true;
-                    g.msg = format!("Loaded \"{name}\".");
+                    g.msg = omsi_ui::tr("Loaded \"%{name}\".").replace("%{name}", &name);
                 }
-                None => g.msg = format!("\"{name}\" is gone."),
+                None => g.msg = omsi_ui::tr("\"%{name}\" is gone.").replace("%{name}", &name),
             }
         }
         if ui.button("s-gp-del", Rect::new(r.x + half + GAP, r.y, half, r.h), "Delete", Some("delete"), ButtonKind::Danger) && !names.is_empty() {
             let name = names[g.sel].clone();
             g.msg = match core::delete_graphics_profile(&name) {
-                Ok(()) => format!("Deleted \"{name}\"."),
+                Ok(()) => omsi_ui::tr("Deleted \"%{name}\".").replace("%{name}", &name),
                 Err(e) => format!("{e:#}"),
             };
             g.list = None;
@@ -1254,7 +1254,7 @@ fn profiles_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
                     if let Some(i) = core::graphics_profiles().keys().position(|k| *k == name) {
                         g.sel = i;
                     }
-                    format!("Saved \"{name}\".")
+                    omsi_ui::tr("Saved \"%{name}\".").replace("%{name}", &name)
                 }
                 Err(e) => format!("{e:#}"),
             };
@@ -1281,7 +1281,7 @@ fn files_card(ui: &mut Ui, r: Rect, out: &mut Outside) -> f32 {
     y += 46.0;
     // this build's version and the project's release page (in-app updating is disabled, see
     // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
-    ui.text_in(&format!("This is Project Depot {}", crate::about::current_version()), Rect::new(x, y, w, 22.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+    ui.text_in(&omsi_ui::tr("This is Project Depot %{version}").replace("%{version}", &crate::about::current_version().to_string()), Rect::new(x, y, w, 22.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
     y += 26.0;
     if ui.button("s-about-releases", Rect::new(x, y, w, 34.0), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
         crate::about::open_url(crate::about::RELEASES_URL);
@@ -1357,7 +1357,7 @@ fn accent_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             ui.p().rounded_border(sw.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
             ui.icon("check_circle", sw.center(), 22.0, omsi_ui::theme::on(a.color()));
         }
-        let name = if a == Accent::default() { format!("{} (default)", a.name()) } else { a.name().to_string() };
+        let name = if a == Accent::default() { omsi_ui::tr("%{name} (default)").replace("%{name}", &omsi_ui::tr(a.name())) } else { a.name().to_string() };
         ui.text_in(&name, Rect::new(sx, sy + 56.0, w, 20.0), 12.0, Weight::Regular, if on { TEXT } else { TEXT_DIM }, Align::Center);
         if clicked && !on {
             st.set(o.key, json!(a.name()));
