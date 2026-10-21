@@ -98,6 +98,11 @@ impl Journey {
         }
     }
 
+    /// Whether the bus stopped at stop `at` (trip, stop).
+    pub(crate) fn served(&self, at: (usize, usize)) -> bool {
+        self.rows.iter().any(|r| (r.trip, r.stop) == at && r.reached())
+    }
+
     /// How stop `at` (trip, stop) went, in a few words for the timetable window ("served, +1
     /// min", "skipped"); None while the bus has not been there.
     pub(crate) fn how(&self, at: (usize, usize)) -> Option<String> {
@@ -399,7 +404,9 @@ mod tests {
         let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", std::env::temp_dir());
         assert!(j.left((0, 0), (0.0, 0.0)));
         assert!(j.skipped((0, 1)));
+        assert!(!j.served((0, 1)), "skipped: not served yet");
         assert!(j.arrived((0, 1), 60.0));
+        assert!(j.served((0, 1)));
         assert!(j.arrived((0, 2), 60.0));
         let (_, rows, totals) = j.report(0).expect("trip 1");
         let states: Vec<StopState> = rows.iter().map(|r| r.state).collect();

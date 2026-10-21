@@ -12,7 +12,8 @@ use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
 
-const PANEL: Color = Color::hex(0x202124);
+/// The window's face (under [`PANEL_ALPHA`]); what a window's tints are mixed over.
+pub const PANEL: Color = Color::hex(0x202124);
 const LINE: Color = Color::hex(0x2e2f33);
 /// The window's edge (the Windows 11 concept's thin light stroke, mixed over the panel).
 const EDGE: Color = Color::hex(0x3a3b3f);
@@ -251,12 +252,23 @@ pub fn buttons_enabled(
     at: glam::Vec2,
     labels: &[(&str, bool)],
 ) -> Option<usize> {
+    row_of_buttons(ui, name, at, labels, true)
+}
+
+/// [`buttons_enabled`], the first button the accent one only when `accent`.
+fn row_of_buttons(
+    ui: &mut Ui,
+    name: &str,
+    at: glam::Vec2,
+    labels: &[(&str, bool)],
+    accent: bool,
+) -> Option<usize> {
     let mut x = at.x;
     let mut clicked = None;
     for (i, (label, enabled)) in labels.iter().enumerate() {
         let w = button_width(ui, label);
         let r = Rect::new(x, at.y, w, BUTTON_H);
-        let kind = if i == 0 {
+        let kind = if i == 0 && accent {
             ButtonKind::Primary
         } else {
             ButtonKind::Normal
@@ -282,6 +294,23 @@ pub fn foot(
     labels: &[(&str, bool)],
     hint: &str,
 ) -> Option<usize> {
+    foot_with(ui, name, r, labels, hint, true)
+}
+
+/// A window's foot with only Close in it, grey (a window that only shows something has no
+/// accent action). Returns whether Close was clicked.
+pub fn foot_close(ui: &mut Ui, name: &str, r: Rect, hint: &str) -> bool {
+    foot_with(ui, name, r, &[("Close", true)], hint, false).is_some()
+}
+
+fn foot_with(
+    ui: &mut Ui,
+    name: &str,
+    r: Rect,
+    labels: &[(&str, bool)],
+    hint: &str,
+    accent: bool,
+) -> Option<usize> {
     ui.p().rect(
         Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
         LINE,
@@ -293,7 +322,7 @@ pub fn foot(
         .sum::<f32>()
         - 8.0;
     let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 12.0);
-    let clicked = buttons_enabled(ui, name, at, labels);
+    let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
     ui.text_in(
@@ -658,8 +687,8 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     let r = add_vehicle_rect(size);
     let body = window(ui, r, "Add vehicle", "the game keeps running");
     let mut event = None;
-    let foot = 64.0;
-    let lists_h = (body.h - foot - 36.0).max(ROW_H);
+    let foot_h = FOOT_H;
+    let lists_h = (body.h - foot_h - 36.0).max(ROW_H);
     let left_w = (body.w * 0.5).floor();
     let right_x = body.x + left_w + 1.0;
     let right_w = body.right() - right_x;
@@ -673,7 +702,7 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
         event = Some(AddVehicleEvent::Vehicle(i));
     }
     ui.p().rect(
-        Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot - 8.0),
+        Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot_h - 8.0),
         LINE,
     );
     let half = ((lists_h - 34.0) * 0.5).floor();
@@ -688,30 +717,17 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     if let Some(i) = list(ui, "add:depots", depots, v.depots, Some(v.depot)) {
         event = Some(AddVehicleEvent::Depot(i));
     }
-    ui.p().rect(
-        Rect::new(r.x + 1.0, r.bottom() - foot, r.w - 2.0, 1.0),
-        LINE,
-    );
-    let labels: &[&str] = if v.vehicle.is_some() {
-        &["Place", "Cancel"]
+    let labels: &[(&str, bool)] = if v.vehicle.is_some() {
+        &[("Place", true), ("Cancel", true)]
     } else {
-        &["Cancel"]
+        &[("Cancel", true)]
     };
-    let at = glam::Vec2::new(r.x + 16.0, r.bottom() - foot + 12.0);
-    match buttons(ui, "add", at, labels) {
+    let hint = "The vehicle follows the mouse until a click puts it down";
+    match foot(ui, "add", r, labels, hint) {
         Some(0) if v.vehicle.is_some() => event = Some(AddVehicleEvent::Place),
         Some(_) => event = Some(AddVehicleEvent::Cancel),
         None => {}
     }
-    text_right(
-        ui,
-        "The vehicle follows the mouse until a click puts it down",
-        r.right() - 16.0,
-        r.bottom() - foot * 0.5,
-        12.0,
-        Weight::Regular,
-        MUTED,
-    );
     event
 }
 
@@ -852,14 +868,14 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         Weight::Medium,
         FG,
     );
-    let foot = 64.0;
+    let foot_h = FOOT_H;
     let totals_h = v.totals.len() as f32 * ROW_H;
     let head_y = body.y + 44.0;
     let area = Rect::new(
         body.x,
         head_y,
         body.w,
-        (r.bottom() - foot - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+        (r.bottom() - foot_h - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
     );
     // (each trip's report starts at its first stop: the id is the trip's)
     let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
@@ -872,22 +888,14 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         .map(|(k, val)| (*k, val.clone(), None))
         .collect();
     key_values(ui, totals, &rows);
-    ui.p().rect(
-        Rect::new(r.x + 1.0, r.bottom() - foot, r.w - 2.0, 1.0),
-        LINE,
-    );
-    let at = glam::Vec2::new(r.x + 16.0, r.bottom() - foot + 12.0);
-    let clicked = buttons(ui, "report", at, &["Continue"]).is_some();
-    text_right(
+    foot(
         ui,
+        "report",
+        r,
+        &[("Continue", true)],
         "Enter or Esc also continues",
-        r.right() - 16.0,
-        r.bottom() - foot * 0.5,
-        12.0,
-        Weight::Regular,
-        MUTED,
-    );
-    clicked
+    )
+    .is_some()
 }
 
 #[cfg(test)]

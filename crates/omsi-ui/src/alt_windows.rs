@@ -9,8 +9,8 @@
 //! behind them.
 
 use crate::ingame::{
-    self, button, check_row, foot, head, list_rows, stepper, text_field, ButtonKind, ListLook,
-    ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, ROW_H, TITLE_H,
+    self, button, check_row, foot, foot_close, head, list_rows, stepper, text_field, ButtonKind,
+    ListLook, ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, PANEL, ROW_H, TITLE_H,
 };
 use crate::theme::accent;
 use crate::widgets::Ui;
@@ -161,13 +161,22 @@ pub struct Evaluation {
 /// Where a stop of the trip being driven is, for [`Running`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RunStop {
-    /// Behind the bus: served, skipped or missed.
+    /// Behind the bus, served.
     Done,
+    /// Behind the bus, not served: skipped or missed.
+    Passed,
     /// The stop the bus is due at.
     #[default]
     Next,
     /// Still to come.
     Ahead,
+}
+
+impl RunStop {
+    /// Whether the bus is past it.
+    pub fn behind(self) -> bool {
+        matches!(self, RunStop::Done | RunStop::Passed)
+    }
 }
 
 /// One stop of [`Running`].
@@ -474,29 +483,9 @@ fn menu(ui: &mut Ui, r: Rect, v: &Menu) -> Option<Event> {
         }
     }
     // (a menu's entries apply at once: its only button closes it)
-    ui.p().rect(
-        Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
-        LINE,
-    );
-    let w = ingame::button_width(ui, "Close");
-    let b = Rect::new(r.x + 16.0, r.bottom() - FOOT_H + 12.0, w, BUTTON_H);
-    if button(ui, "tool:btn:0", b, "Close", ButtonKind::Normal, true) {
+    if foot_close(ui, "tool", r, &v.hint) {
         event = Some(Event::Cancel);
     }
-    let room = Rect::new(
-        b.right() + 16.0,
-        r.bottom() - FOOT_H,
-        (r.right() - 16.0 - b.right() - 16.0).max(0.0),
-        FOOT_H,
-    );
-    ui.text_in(
-        &v.hint,
-        room,
-        12.0 * TS,
-        Weight::Regular,
-        MUTED,
-        crate::paint::Align::Right,
-    );
     event
 }
 
@@ -738,7 +727,7 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
         .collect();
     ingame::key_values(ui, totals, &kv);
     // (it only shows: its one button closes it)
-    if foot(ui, "tool", r, &[("Close", true)], &v.hint).is_some() {
+    if foot_close(ui, "tool", r, &v.hint) {
         event = Some(Event::Cancel);
     }
     event
@@ -766,7 +755,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     let next = v
         .rows
         .iter()
-        .position(|x| x.state != RunStop::Done)
+        .position(|x| !x.state.behind())
         .unwrap_or(v.rows.len());
     let from = next.saturating_sub(2).min(v.rows.len().saturating_sub(fit));
     for (k, row) in v.rows.iter().enumerate().skip(from).take(fit) {
@@ -778,17 +767,22 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
         );
         if row.state == RunStop::Next {
             // (mixed over the panel, as the Alt bar's tiles: blended they came out lighter)
-            let panel = Color::hex(0x202124);
-            ui.p().rounded(rr, 4.0, panel.mix(accent(), 0.18));
+            ui.p().rounded(rr, 4.0, PANEL.mix(accent(), 0.18));
             ui.p()
-                .rounded_border(rr, 4.0, 1.0, panel.mix(accent(), 0.7));
+                .rounded_border(rr, 4.0, 1.0, PANEL.mix(accent(), 0.7));
         }
-        let icon = if row.state == RunStop::Done {
-            "o-check"
-        } else {
-            "o-pin"
+        let icon = match row.state {
+            RunStop::Done => "o-check",
+            RunStop::Passed => "o-skip",
+            RunStop::Next | RunStop::Ahead => "o-pin",
         };
-        ui.icon(icon, Vec2::new(rr.x + 18.0, rr.center().y), 18.0, FG);
+        // (a stop left unserved keeps no mark: its sign is muted)
+        let tone = if row.state == RunStop::Passed {
+            MUTED
+        } else {
+            FG
+        };
+        ui.icon(icon, Vec2::new(rr.x + 18.0, rr.center().y), 18.0, tone);
         let bw = row
             .skip
             .as_deref()
@@ -844,7 +838,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     let y = r.bottom() - FOOT_H + 12.0;
     let end = "Cancel the timetable";
     let ew = ingame::button_width(ui, end);
-    let er = Rect::new(r.x + 16.0, y, ew, BUTTON_H);
+    let er = Rect::new(r.x + 20.0, y, ew, BUTTON_H);
     let (hover, _, click) = ui.interact(crate::widgets::id_of("tool:run:end"), er);
     ui.p().rounded(
         er,
@@ -871,7 +865,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     if button(
         ui,
         "tool:run:close",
-        Rect::new(r.right() - 16.0 - cw, y, cw, BUTTON_H),
+        Rect::new(r.right() - 20.0 - cw, y, cw, BUTTON_H),
         "Close",
         ButtonKind::Normal,
         true,
