@@ -14,6 +14,9 @@ mod backdrop;
 mod chrome;
 mod diagnostics;
 mod gfx;
+mod keyboard;
+pub(crate) mod settings;
+pub(crate) mod setup;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -30,6 +33,8 @@ pub(crate) use state::crash_of;
 mod theme;
 mod thumbs;
 mod timetable;
+mod timetable_plan;
+mod tray;
 mod ui;
 mod dialogs;
 
@@ -193,10 +198,18 @@ pub struct Launcher {
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
+    /// The content reading the Maps and Vehicles pages' lists are of (`State::content_gen`).
+    catalog_gen: u64,
     /// The window has the keyboard / is hidden: without focus it is drawn ten times a
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
     occluded: bool,
+    /// The window put away while a game started from it runs (the Windows 11 concept): into
+    /// the tray where there is one, else minimized; it comes back when that game ends. The
+    /// game: its process and when it started (a later process with the same number is
+    /// another), and the minute the tray's menu last showed.
+    tucked: Option<(u32, u64, u64)>,
+    tray: Option<tray::Tray>,
     /// The player came back to the launcher's window while a game runs (clicked it, Alt+Tab):
     /// it is drawn and answers again until the game has the focus back. Before, it stood
     /// still the whole game long, and the session code could not be copied (#825).
@@ -290,8 +303,11 @@ impl Launcher {
         map_rect: None,
         map_tex: None,
         map_gen: 0,
+        catalog_gen: 0,
         focused: true,
         occluded: false,
+        tucked: None,
+        tray: None,
         awake_in_game: false,
         last_input: Instant::now(),
         fingers: Default::default(),
@@ -327,16 +343,53 @@ impl Launcher {
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
         }
-        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore, maps:traffic)
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
         let popup = match p.split(':').nth(1) {
             Some("start-point") => Some(start::Popup::StartPoint),
             Some("weather") => Some(start::Popup::Weather),
             Some("explore") => Some(start::Popup::Explore),
-            Some("traffic") => Some(start::Popup::Traffic),
             _ => None,
         };
         if let Some(popup) = popup {
             start::open(&mut app, popup);
+        }
+        // (controls:reload, controls:add: the keyboard's windows)
+        match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
+            Some("reload") => app.pages.kb.dialog = Some(keyboard::Dialog::Reload { backup: true, pads: true }),
+            Some("add") => app.pages.kb.dialog = Some(keyboard::Dialog::Add { query: String::new(), chosen: None, key: None, waiting: false }),
+            // (controls:action=NAME: that action chosen, in the game's keys when it is one of them)
+            Some(a) if a.starts_with("action=") => {
+                let a = a["action=".len()..].to_string();
+                let game = app.state.keybindings.get("game").and_then(|x| x.as_array()).is_some_and(|x| x.iter().any(|b| b.get("action").and_then(|v| v.as_str()) == Some(a.as_str())));
+                app.pages.kb.chosen = Some((game as usize, a));
+            }
+            _ => {}
+        }
+        // (settings:q=TEXT: the settings searched for TEXT; settings:changed: the changed ones)
+        match p.split(':').nth(1) {
+            Some(q) if q.starts_with("q=") => app.pages.set.query = q["q=".len()..].to_string(),
+            Some("changed") => app.pages.set.changed_only = true,
+            _ => {}
+        }
+        // (setup:usage: the Content card's disk usage; setup:usage=0,1 a part of it looked into)
+        if let Some(u) = p.split_once(':').filter(|x| x.0 == "setup").map(|x| x.1) {
+            if let Some(rest) = u.strip_prefix("usage") {
+                app.pages.setup.tab = 1;
+                app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
+            }
+        }
+        // (timetable:stop=NAME: that stop chosen on the map)
+        let tt_part = |key: &str| p.strip_prefix("timetable:").and_then(|rest| rest.split(':').find_map(|x| x.strip_prefix(key)));
+        if let Some(stop) = tt_part("stop=") {
+            app.pages.tt.set_stop(stop);
+        }
+        // (timetable:line=NAME: that line chosen, timetable:find=TEXT: that typed in the
+        // map's search)
+        if let Some(line) = tt_part("line=") {
+            app.pages.tt.set_line(line);
+        }
+        if let Some(q) = tt_part("find=") {
+            app.pages.tt.set_find(q);
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
@@ -345,10 +398,12 @@ impl Launcher {
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
-            // (the Controls and Settings pages' second part is their tab: controls:1 the game
-            // controllers, settings:3 Sound)
+            // (the Controls page's second part is its tab, controls:1 the game controllers; the
+            // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
-            app.pages.settings_tab = step.min(pages::SETTINGS_TABS.len() - 1);
+            app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+            // (and the Timetable page's its tab, timetable:1 the schematic)
+            app.pages.tt.tab = step.min(2);
         }
     }
     app
@@ -514,10 +569,7 @@ impl ApplicationHandler for Launcher {
             self.last_input = Instant::now();
         }
         match event {
-            WindowEvent::CloseRequested => {
-                self.pages.pads.cancel_feedback_test();
-                event_loop.exit();
-            }
+            WindowEvent::CloseRequested => self.quit(event_loop),
             WindowEvent::Touch(t) => self.touch(t, scale),
             WindowEvent::Focused(f) => self.set_focus(f),
             WindowEvent::Occluded(o) => {
@@ -643,8 +695,8 @@ impl ApplicationHandler for Launcher {
                 }
             }
             WindowEvent::DroppedFile(path) => {
-                // a .zip dropped on the window is installed (a folder too where the game runs in
-                // the launcher's process; `State::install` says why one is refused)
+                // a .zip dropped on the window is installed (a folder is refused:
+                // `State::install` says why)
                 self.page = Page::Mods;
                 self.state.install(path.to_string_lossy().to_string());
             }
@@ -659,6 +711,7 @@ impl ApplicationHandler for Launcher {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.check_exit(event_loop);
+        self.tray_tick(event_loop);
         // (a screenshot asked for by a script is drawn even when hidden, and so is the frame
         // that gives the graphics device up again when the game is back in front: the
         // game's window hides the launcher's then, and drawn nothing, it kept the device)
@@ -668,8 +721,10 @@ impl ApplicationHandler for Launcher {
         // Device given up while a game runs: still need a redraw when the game ends so the
         // device is opened again (Occluded alone used to leave the resting picture forever).
         let resume_needed = !mobile::mobile() && self.gfx.is_none() && !self.state.in_game();
-        // (a minimized window is hidden too, whether or not the system said it was covered)
-        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
+        // (a minimized window is hidden too, whether or not the system said it was covered,
+        // and so is one put into the tray)
+        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
+            || self.window.as_ref().and_then(|w| w.is_visible()) == Some(false);
         let occluded = (self.occluded || minimized) && self.shot.is_none() && !resting && !waking && !resume_needed
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
@@ -709,7 +764,115 @@ impl ApplicationHandler for Launcher {
     }
 }
 
+/// Seconds since 1970.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// How long a game started at `t` (s since 1970) has run, in whole minutes: the tray's menu
+/// shows it, brought up to date once a minute.
+fn run_time(t: u64) -> String {
+    let m = now_secs().saturating_sub(t) / 60;
+    if m < 60 {
+        format!("{m} min")
+    } else {
+        format!("{} h {} min", m / 60, m % 60)
+    }
+}
+
+/// Whether the program can bring its window back from the taskbar by itself (not on
+/// Wayland, where only the player can).
+fn can_restore(w: &Window) -> bool {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    !matches!(w.window_handle().map(|h| h.as_raw()), Ok(RawWindowHandle::Wayland(_)))
+}
+
 impl Launcher {
+    /// The launcher ends: the window's close button, or the tray's Quit (the games keep
+    /// running).
+    fn quit(&mut self, event_loop: &ActiveEventLoop) {
+        self.pages.pads.cancel_feedback_test();
+        // (the icon leaves the tray before the process ends)
+        self.tray = None;
+        event_loop.exit();
+    }
+
+    /// While a game started from here runs the launcher's window goes into the tray
+    /// (Windows; elsewhere it is minimized), and comes back when that game ends; the tray's
+    /// menu is answered here.
+    fn tray_tick(&mut self, event_loop: &ActiveEventLoop) {
+        if mobile::mobile() || self.shot.is_some() {
+            return;
+        }
+        let Some(w) = self.window.clone() else { return };
+        let game = |l: &Launcher, pid: u32, started: u64| l.state.instances.iter().find(|i| i.running && i.pid == pid && i.started == started).cloned();
+        let head = |i: &core::Instance| format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&i.map), run_time(i.started));
+        if let Some((pid, started, shown)) = self.tucked {
+            match game(self, pid, started) {
+                None => {
+                    self.tray = None;
+                    self.tucked = None;
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                }
+                Some(i) => {
+                    // (the menu's first line says how long it has run: brought up to date
+                    // once a minute)
+                    let minute = now_secs() / 60;
+                    if minute != shown {
+                        if let Some(t) = self.tray.as_ref() {
+                            t.set_head(&head(&i));
+                        }
+                        self.tucked = Some((pid, started, minute));
+                    }
+                }
+            }
+        }
+        if self.tucked.is_none() {
+            let mine = self.state.started_here.and_then(|pid| self.state.instances.iter().find(|i| i.running && i.pid == pid).cloned());
+            if let Some(i) = mine {
+                self.state.started_here = None;
+                self.tray = tray::Tray::new(&omsi_ui::tr("Project Depot: a game is running"), &head(&i));
+                if self.tray.is_some() {
+                    w.set_visible(false);
+                } else if can_restore(&w) {
+                    // (where there is no tray; on Wayland a window minimized cannot be brought
+                    // back by the program, so it stays where it is there)
+                    w.set_minimized(true);
+                }
+                self.tucked = Some((i.pid, i.started, now_secs() / 60));
+            }
+        }
+        while let Some(cmd) = self.tray.as_ref().and_then(|t| t.take()) {
+            let Some((pid, started, _)) = self.tucked else { break };
+            match cmd {
+                tray::TrayCmd::Show => {
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                    w.request_redraw();
+                }
+                tray::TrayCmd::OpenLog => {
+                    // (the game the menu names)
+                    let log = game(self, pid, started).map(|i| i.log);
+                    if !log.is_some_and(|l| core::open_file(std::path::Path::new(&l))) {
+                        self.state.set_status("The game's log could not be opened.", true);
+                    }
+                }
+                tray::TrayCmd::StopGame => {
+                    if game(self, pid, started).is_some() {
+                        self.state.stop(pid);
+                    }
+                }
+                tray::TrayCmd::Quit => {
+                    self.quit(event_loop);
+                    break;
+                }
+            }
+        }
+    }
+
     /// Physical pixels per interface pixel: the screen's scale, times a zoom that makes the
     /// interface (laid out for a 1440 x 880 window) grow with a bigger window and shrink a
     /// little with a smaller one, so that it fills the window the same way at any size.
@@ -1139,10 +1302,12 @@ impl Launcher {
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         // (and a drive's details over Profile / Sessions)
         let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
+        // (and the keyboard's Reload and Add a control over Controls)
+        let keys = !mobile && self.page == Page::Controls && self.pages.controls_tab == 0 && self.pages.kb.dialog.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive || keys).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1200,13 +1365,13 @@ impl Launcher {
             #[cfg(not(feature = "lan"))]
             Page::Multiplayer => {}
             Page::Profile => pages::profile(self, content),
-            Page::Settings => pages::settings(self, content),
+            Page::Settings => settings::settings(self, content),
             Page::Controls => pages::controls(self, content),
             Page::Sessions => pages::sessions(self, content),
             Page::Mods => pages::mods(self, content),
             Page::Tutorials => pages::tutorials(self, content),
             Page::Timetable => timetable::draw(self, content),
-            Page::Setup => pages::setup(self, content),
+            Page::Setup => setup::setup(self, content),
         }
         // the rail over the page (a scrolled page passes under it)
         self.rail();
@@ -1221,11 +1386,13 @@ impl Launcher {
             } else if crash {
                 self.draw_crash_dialog();
             } else if reset {
-                pages::reset_dialog(self);
+                settings::reset_dialog(self);
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
                 pages::drive_dialog(self);
+            } else if self.browser.is_none() && keys {
+                keyboard::dialog(self);
             } else {
                 self.draw_browser();
             }
@@ -1398,6 +1565,8 @@ impl Launcher {
                 }
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
+                // (counted again each time the page opens: a mod installed meanwhile counts)
+                Page::Setup => self.state.usage_asked = false,
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();
@@ -1501,12 +1670,15 @@ impl Launcher {
     /// pages show (the host reads them again after Setup or an install, and fills them as its
     /// scan goes on).
     fn refresh_catalogs(&mut self) {
+        // (as many as before, but other ones: another content folder chosen under Setup)
+        let other = self.catalog_gen != self.state.content_gen;
+        self.catalog_gen = self.state.content_gen;
         let host = self.state.vehicles.len();
-        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+        if host > 0 && (other || self.vehicles.catalog_len() != Some(host)) {
             self.vehicles.set_catalog(self.state.vehicles.clone());
         }
         let host = self.state.maps.len();
-        if host > 0 && self.maps.catalog_len() != Some(host) {
+        if host > 0 && (other || self.maps.catalog_len() != Some(host)) {
             self.maps.set_catalog(self.state.maps.clone());
         }
     }

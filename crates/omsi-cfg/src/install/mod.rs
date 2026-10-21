@@ -12,4 +12,6 @@ pub use layout::{
     content_folder_of, ensure_content_layout, is_programs_folder, is_writable, CONTENT_FOLDERS,
     CONTENT_MARKER, LEGACY_CONTENT_MARKER,
 };
-pub use original::{missing_original_essentials, original_keyboard_cfg, ORIGINAL_ESSENTIALS};
+pub use original::{
+    missing_original_essentials, original_inputs_file, original_keyboard_cfg, ORIGINAL_ESSENTIALS,
+};
