@@ -884,6 +884,15 @@ mod round_trip;
 
 #[cfg(test)]
 mod tests {
+    /// The launcher writes the accents the game reads: the same names, in the same order, the
+    /// default first.
+    #[test]
+    fn the_launcher_and_the_game_know_the_same_accents() {
+        let game: Vec<&str> = omsi_ui::theme::Accent::ALL.iter().map(|a| a.name()).collect();
+        assert_eq!(game, omsi_launcher_lib::ACCENTS);
+        assert_eq!(omsi_launcher_lib::ACCENTS[0], omsi_ui::theme::Accent::default().name());
+    }
+
     /// The information bar is as the last session left it (#1164); off at first.
     #[test]
     fn the_information_bar_is_kept_between_sessions() {

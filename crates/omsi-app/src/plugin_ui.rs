@@ -565,7 +565,12 @@ pub(crate) fn layout(p: &Panel, fonts: &Fonts, backdrop: f32) -> Laid {
 /// A notification as a panel: the stripe in its colour, the icon and the title in a row
 /// above the text.
 pub(crate) fn toast_panel(t: &Toast) -> Panel {
-    let accent = t.color.unwrap_or(Rgba([232, 160, 48, 255]));
+    // (no colour of its own: the interface's accent, as the player chose it)
+    let accent = t.color.unwrap_or_else(|| {
+        let c = omsi_ui::theme::accent().0;
+        let b = |v: f32| (v * 255.0).round() as u8;
+        Rgba([b(c[0]), b(c[1]), b(c[2]), 255])
+    });
     let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
         id: None,
         color: c,
