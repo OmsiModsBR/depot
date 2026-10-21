@@ -815,6 +815,16 @@ impl Settings {
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
+        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
+        self.msaa = 1;
+        self.render_scale = 0.0;
+        self.anisotropy = 1;
+        self.post_aa = "off".into();
+        self.mirror_size = 0;
+        self.mirror_refresh = "off".into();
+        self.windy_trees = false;
+        // (the sun's own light only: Enhanced's brighter night is an improvement)
+        self.night_brightness = 0.0;
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
@@ -913,6 +923,40 @@ mod tests {
     }
 
     /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    /// The locked values of the "DirectX9 (D3D9Ex)" table (`api_limits`) are what `lock_vanilla`
+    /// sets, option by option; a new table entry needs its check here.
+    #[test]
+    fn the_d3d9_lock_sets_every_option_of_the_table() {
+        let mut s = Settings::default();
+        s.msaa = 8;
+        s.anisotropy = 16;
+        s.render_scale = 0.5;
+        s.mirror_size = 512;
+        s.mirror_refresh = "full".into();
+        s.windy_trees = true;
+        s.night_brightness = 1.0;
+        s.lock_vanilla();
+        for l in crate::api_limits::D3D9 {
+            let ok = match l.key {
+                "graphics" => s.graphics == "vanilla" && s.classic(),
+                "msaa" => s.msaa == 1,
+                "render_scale" => s.render_scale == 0.0,
+                "anisotropy" => s.anisotropy == 1,
+                "mirror_size" => s.mirror_size == 0,
+                "mirror_refresh" => s.mirror_refresh == "off",
+                "windy_trees" => !s.windy_trees,
+                "shadows" => !s.shadows,
+                "ssao" => !s.ssao,
+                "detail_textures" => !s.detail_textures,
+                "night_brightness" => s.night_brightness == 0.0,
+                // (hidden, and with nothing of their own to switch off under Vanilla)
+                "preset" | "shadow_size" | "shadow_casters" | "led_glow" | "led_mips" => true,
+                other => panic!("{other} is in the table but `lock_vanilla` is not checked for it"),
+            };
+            assert!(ok, "{} is not set by the lock", l.key);
+        }
+    }
+
     #[test]
     fn d3d9_has_no_graphics_improvements_to_choose() {
         for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
@@ -928,6 +972,18 @@ mod tests {
                 let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
                 assert_eq!((loaded.shadows, loaded.ssao, loaded.detail_textures), (file.shadows, file.ssao, file.detail_textures));
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
+                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
+                let saved = Settings::from_text(&format!(
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\n"
+                ))
+                .locked_for_api();
+                assert_eq!((saved.msaa, saved.anisotropy, saved.render_scale), (1, 1, 0.0));
+                assert_eq!((saved.mirror_size, saved.mirror_refresh.as_str()), (0, "off"));
+                // (what it does draw stays as saved: env maps and shadow meshes)
+                assert!(saved.reflections && saved.shadow_blobs);
+                assert_eq!((saved.windy_trees, saved.post_aa.as_str()), (false, "off"));
+                // (clouds also set the weather's light: they stay as chosen)
+                assert!(saved.clouds);
                 // VR takes DirectX 12 instead, with the graphics as chosen
                 let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
                 assert_eq!(vr.graphics, g);
