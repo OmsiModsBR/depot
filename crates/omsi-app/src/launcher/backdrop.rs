@@ -4,7 +4,8 @@
 //! the player's latest screenshot; none of those, the plain dark.
 //!
 //! A picture is blurred once, on a thread of its own (shrunk first: the blur of a small picture
-//! drawn large is soft and cheap), and kept for the rest of the run.
+//! drawn large is soft and cheap), and kept for the rest of the run; one that is a screenshot
+//! is read again after a game, which may have taken newer ones.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -33,12 +34,17 @@ pub enum Want {
 pub struct Backdrop {
     /// What the page asked for in this frame.
     want: Option<Want>,
-    /// Pictures blurred (None: there was none to blur).
-    kept: HashMap<Want, Option<image::RgbaImage>>,
+    /// Pictures blurred (None: there was none to blur), and whether each is a screenshot (or
+    /// stands for one: none there was).
+    kept: HashMap<Want, (Option<image::RgbaImage>, bool)>,
     order: Vec<Want>,
-    reading: Vec<(Want, Receiver<Option<image::RgbaImage>>)>,
+    reading: Vec<(Want, Receiver<(Option<image::RgbaImage>, bool)>)>,
+    /// A game ran when last asked (see `game_running`).
+    playing: bool,
     /// What the texture holds, and what goes to it next.
     shown: Option<Want>,
+    /// What is shown is a screenshot read again after a game: it goes when the new one comes.
+    shown_stale: bool,
     pending: Option<(Want, image::RgbaImage)>,
     texture: Option<usize>,
     aspect: f32,
@@ -48,21 +54,22 @@ pub struct Backdrop {
 
 /// `img` made small and blurred.
 pub fn blur(img: &image::DynamicImage) -> image::RgbaImage {
-    let h = (img.height() as u64 * WIDTH as u64 / img.width().max(1) as u64).clamp(1, WIDTH as u64 * 2) as u32;
-    let small = img.resize_exact(WIDTH, h, image::imageops::FilterType::Triangle).to_rgba8();
+    // (WIDTH wide, keeping the shape; a tall picture no taller than twice that)
+    let small = img.resize(WIDTH, WIDTH * 2, image::imageops::FilterType::Triangle).to_rgba8();
     image::imageops::blur(&small, SIGMA)
 }
 
-/// The picture of a map: its own "picture" file, else the latest screenshot of it, else any.
-fn map_picture(root: &std::path::Path, file: &str) -> Option<image::RgbaImage> {
+/// The picture of a map: its own "picture" file, else the latest screenshot of it, else any;
+/// and whether it is (or would have been) a screenshot.
+fn map_picture(root: &std::path::Path, file: &str) -> (Option<image::RgbaImage>, bool) {
     let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
     let own = global.parent().and_then(super::MapPicture::find).and_then(|f| super::MapPicture::read(&f));
     if own.is_some() {
-        return own;
+        return (own, false);
     }
     let folder = crate::screenshot_name::folder_of(file).unwrap_or_default();
     let shot = omsi_launcher_lib::screenshots::for_map(&folder).pop().or_else(omsi_launcher_lib::screenshots::latest);
-    shot.and_then(|p| super::MapPicture::read(&p))
+    (shot.and_then(|p| super::MapPicture::read(&p)), true)
 }
 
 impl Backdrop {
@@ -75,12 +82,15 @@ impl Backdrop {
         if self.kept.contains_key(&want) || self.reading.iter().any(|(w, _)| *w == want) {
             return;
         }
-        let job: Box<dyn FnOnce() -> Option<image::RgbaImage> + Send> = match &want {
+        let job: Box<dyn FnOnce() -> (Option<image::RgbaImage>, bool) + Send> = match &want {
             Want::Map { root, file } => {
                 let (root, file) = (root.clone(), file.clone());
-                Box::new(move || map_picture(&root, &file).map(|i| blur(&image::DynamicImage::ImageRgba8(i))))
+                Box::new(move || {
+                    let (img, shot) = map_picture(&root, &file);
+                    (img.map(|i| blur(&image::DynamicImage::ImageRgba8(i))), shot)
+                })
             }
-            Want::Latest => Box::new(|| omsi_launcher_lib::screenshots::latest().and_then(|p| super::MapPicture::read(&p)).map(|i| blur(&image::DynamicImage::ImageRgba8(i)))),
+            Want::Latest => Box::new(|| (omsi_launcher_lib::screenshots::latest().and_then(|p| super::MapPicture::read(&p)).map(|i| blur(&image::DynamicImage::ImageRgba8(i))), true)),
             Want::Bus(_) => return,
         };
         let (tx, rx) = channel();
@@ -99,7 +109,7 @@ impl Backdrop {
         let Some(img) = image::RgbaImage::from_raw(w, h, rgba.to_vec()) else { return };
         let (tx, rx) = channel();
         let _ = std::thread::Builder::new().name("launcher-backdrop".into()).spawn(move || {
-            let _ = tx.send(Some(blur(&image::DynamicImage::ImageRgba8(img))));
+            let _ = tx.send((Some(blur(&image::DynamicImage::ImageRgba8(img))), false));
         });
         self.reading.push((want, rx));
     }
@@ -119,13 +129,13 @@ impl Backdrop {
             self.keep(w, img);
         }
         let Some(want) = self.want.clone() else { return };
-        if self.shown.as_ref() == Some(&want) || self.pending.as_ref().is_some_and(|p| p.0 == want) {
+        if (self.shown.as_ref() == Some(&want) && !self.shown_stale) || self.pending.as_ref().is_some_and(|p| p.0 == want) {
             return;
         }
         match self.kept.get(&want) {
-            Some(Some(img)) => self.pending = Some((want, img.clone())),
+            Some((Some(img), _)) => self.pending = Some((want, img.clone())),
             // (nothing to show for it: the plain dark)
-            Some(None) => {
+            Some((None, _)) => {
                 self.shown = None;
                 self.pending = None;
             }
@@ -134,7 +144,28 @@ impl Backdrop {
         }
     }
 
-    fn keep(&mut self, w: Want, img: Option<image::RgbaImage>) {
+    /// What the page asked for last, if anything.
+    pub fn wanted(&self) -> Option<&Want> {
+        self.want.as_ref()
+    }
+
+    /// Whether a game runs now: when one has ended, the pictures that were screenshots are read
+    /// again (the player may have taken newer ones); the one shown stays until then.
+    pub fn game_running(&mut self, on: bool) {
+        if std::mem::replace(&mut self.playing, on) && !on {
+            let shots: Vec<Want> = self.kept.iter().filter(|(_, (_, shot))| *shot).map(|(w, _)| w.clone()).collect();
+            for w in shots {
+                self.kept.remove(&w);
+                self.order.retain(|k| *k != w);
+            }
+            // (shown again once read: not the same picture by name)
+            if self.shown.as_ref().is_some_and(|w| !matches!(w, Want::Bus(_))) {
+                self.shown_stale = true;
+            }
+        }
+    }
+
+    fn keep(&mut self, w: Want, img: (Option<image::RgbaImage>, bool)) {
         self.order.retain(|k| *k != w);
         self.order.push(w.clone());
         self.kept.insert(w, img);
@@ -157,6 +188,7 @@ impl Backdrop {
             self.fade = 0.0;
         }
         self.shown = Some(want);
+        self.shown_stale = false;
     }
 
     /// The texture and its width over its height, while it holds a picture.
@@ -185,6 +217,9 @@ mod tests {
         }
         let b = blur(&image::DynamicImage::ImageRgba8(img));
         assert_eq!(b.dimensions(), (WIDTH, 180));
+        // (a tall one keeps its shape)
+        let tall = blur(&image::DynamicImage::ImageRgba8(image::RgbaImage::new(100, 1000)));
+        assert_eq!(tall.dimensions(), (64, 640));
         // (the stripes are gone: one grey)
         let p = b.get_pixel(160, 90).0;
         assert!((100..=155).contains(&p[0]), "{p:?}");
@@ -193,7 +228,7 @@ mod tests {
     #[test]
     fn what_was_blurred_is_kept_and_shown_without_reading_again() {
         let mut b = Backdrop::default();
-        b.keep(Want::Latest, Some(image::RgbaImage::new(4, 2)));
+        b.keep(Want::Latest, (Some(image::RgbaImage::new(4, 2)), true));
         b.want(Want::Latest);
         assert!(b.reading.is_empty());
         b.update();
@@ -208,10 +243,36 @@ mod tests {
     }
 
     #[test]
+    fn screenshots_are_read_again_after_a_game_and_the_last_stays_meanwhile() {
+        let mut b = Backdrop::default();
+        b.keep(Want::Latest, (Some(image::RgbaImage::new(4, 2)), true));
+        b.keep(Want::Bus(3), (Some(image::RgbaImage::new(4, 2)), false));
+        b.want(Want::Latest);
+        b.update();
+        // (as `upload` leaves it)
+        b.shown = b.pending.take().map(|p| p.0);
+        b.game_running(true);
+        assert!(b.kept.contains_key(&Want::Latest));
+        b.game_running(false);
+        assert!(!b.kept.contains_key(&Want::Latest));
+        assert!(b.kept.contains_key(&Want::Bus(3)));
+        b.want(Want::Latest);
+        assert_eq!(b.reading.len(), 1);
+        // (still reading: the old picture stays; read: it replaces it)
+        b.update();
+        assert_eq!(b.shown, Some(Want::Latest));
+        assert!(b.pending.is_none());
+        b.reading.clear();
+        b.keep(Want::Latest, (Some(image::RgbaImage::new(2, 2)), true));
+        b.update();
+        assert!(b.pending.is_some());
+    }
+
+    #[test]
     fn only_the_latest_pictures_are_kept() {
         let mut b = Backdrop::default();
         for t in 0..KEPT as u64 + 5 {
-            b.keep(Want::Bus(t), None);
+            b.keep(Want::Bus(t), (None, false));
         }
         assert_eq!(b.kept.len(), KEPT);
         assert!(!b.kept.contains_key(&Want::Bus(0)));

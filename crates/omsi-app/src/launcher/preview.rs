@@ -919,6 +919,11 @@ impl Preview {
     pub fn has_picture(&self) -> bool {
         self.showing.is_some() && self.showing == self.wanted.as_ref().map(tag)
     }
+
+    /// A bus is wanted and its picture is still to come (no error stopped it).
+    pub fn loading(&self) -> bool {
+        self.wanted.is_some() && !self.has_picture() && self.error.is_none()
+    }
 }
 
 #[cfg(test)]

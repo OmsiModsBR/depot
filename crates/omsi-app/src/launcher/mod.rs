@@ -901,11 +901,11 @@ impl Launcher {
         self.preview.update(dt, shown);
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
-        let scene = self.scene();
         let Some(renderer) = self.gfx.as_mut() else { return };
         let frame = self.preview.take_frame();
-        // (the bus as the preview drew it, behind the Vehicles page with the Scene background)
-        if let (Some((w, h, px)), Some(tag), true) = (frame.as_ref(), self.preview.showing(), scene) {
+        // (the bus as the preview drew it, behind the Vehicles page with the Scene background:
+        // blurred even while that is off, as no other frame may come once it is switched on)
+        if let (Some((w, h, px)), Some(tag)) = (frame.as_ref(), self.preview.showing()) {
             self.backdrop.offer_bus(tag, *w, *h, px);
         }
         self.backdrop.update();
@@ -1377,9 +1377,13 @@ impl Launcher {
         }
         let root = std::path::PathBuf::from(&self.state.config.root);
         let map = |file: &str| backdrop::Want::Map { root: root.clone(), file: file.to_string() };
+        self.backdrop.game_running(self.state.in_game());
         let want = match self.page {
             Page::Maps => self.maps.current().map(map),
-            Page::Vehicles => self.preview.showing().filter(|_| self.preview.has_picture()).map(backdrop::Want::Bus),
+            Page::Vehicles if self.preview.has_picture() => self.preview.showing().map(backdrop::Want::Bus),
+            // (while the next bus is drawn, the picture before stays: not a screenshot between)
+            Page::Vehicles if self.preview.loading() => self.backdrop.wanted().cloned(),
+            Page::Vehicles => None,
             Page::Drive => Some(&self.state.choice.map).filter(|m| !m.is_empty()).map(|m| map(m)),
             _ => None,
         };

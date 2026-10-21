@@ -2759,7 +2759,11 @@ pub fn background_name(name: &str) -> &'static str {
 pub fn dimming_of(v: &Value) -> i64 {
     v.as_i64()
         .or_else(|| v.as_f64().map(|f| f.round() as i64))
-        .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+        .or_else(|| {
+            v.as_str()
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .map(|f| f.round() as i64)
+        })
         .unwrap_or(62)
         .clamp(30, 90)
 }
@@ -5223,6 +5227,11 @@ mod tests {
         assert_eq!(
             (&odd["ui_nav"], &odd["ui_background"], &odd["ui_dimming"]),
             (&json!("sidebar"), &json!("plain"), &json!(30))
+        );
+        // (a hand-written dimming with decimals is still read)
+        assert_eq!(
+            settings_from_text(Some("ui_dimming=75.0\n"))["ui_dimming"],
+            json!(75)
         );
         // (the minutes between automatic saves: five unless set, 0 for off, and kept)
         assert_eq!(settings_from_text(None)["autosave_minutes"], json!(5));
