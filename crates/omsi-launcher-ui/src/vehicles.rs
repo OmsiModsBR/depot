@@ -3,7 +3,7 @@
 //! Maps - optional: in the game the ALT menu adds and changes vehicles as always. The catalog
 //! is read by the launcher core on a thread of its own, so the window never waits for the disk.
 
-use crate::kit::{self, card, clipped, dot, shorten, text, Status};
+use crate::kit::{self, card, clipped, dot, shorten, subheading, text, Status};
 use crate::look::*;
 use crate::shell::BODY_TOP;
 use omsi_launcher_lib::VehicleInfo;
@@ -173,6 +173,9 @@ impl VehiclesView {
     /// catalog; one not yet read is shown once it is.
     pub fn select(&mut self, file: &str, paint: &str) {
         self.pending = Some((file.to_string(), paint.to_string()));
+        // (the card starts over from what the next start uses: edits never applied with
+        // "Use for the next start" do not stay on it)
+        self.prep_for.clear();
         self.apply_pending();
     }
 
@@ -437,7 +440,7 @@ impl VehiclesView {
         let note = pic
             .as_ref()
             .filter(|p| p.texture.is_some() && p.from_cache)
-            .map(|_| "image from cache \u{b7} live view on demand");
+            .map(|_| "image from cache \u{b7} live view while this page is open");
         card(ui, r, "Preview", note);
         let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
         self.preview_area = Some(inner);
@@ -563,55 +566,56 @@ impl VehiclesView {
         if !v.missing_packs.is_empty() {
             rows.push(("Missing packs", v.missing_packs.join(", ")));
         }
-        let mut y = r.y + 116.0;
-        for (k, val) in rows {
-            ui.p()
-                .rect(Rect::new(r.x + 1.0, y - 14.0, r.w - 2.0, 1.0), LINE);
-            text(ui, k, r.x + 19.0, y + 6.0, 12.5, Weight::Regular, MUTED);
-            clipped(
-                ui,
-                &val,
-                r.x + 140.0,
-                y + 6.0,
-                r.w - 160.0,
-                12.5,
-                Weight::Regular,
-                FG,
-            );
-            y += 29.0;
-        }
-        text(
-            ui,
-            "AUTHOR'S DESCRIPTION",
-            r.x + 19.0,
-            y + 18.0,
-            12.0,
-            Weight::Bold,
-            MUTED,
-        );
-        let box_ = Rect::new(
-            r.x + 15.0,
-            y + 32.0,
-            r.w - 30.0,
-            (r.bottom() - y - 40.0).max(0.0),
-        );
         let desc = shorten(v.description.trim(), DESCRIPTION_CHARS);
         let desc = if desc.is_empty() {
             "The author wrote no description.".to_string()
         } else {
             desc
         };
-        ui.scroll_area("vehicles:about", box_, &mut |ui, view| {
-            let h = ui.paragraph(
-                &desc,
-                glam::Vec2::new(view.x + 4.0, view.y + 12.0),
-                view.w - 16.0,
-                12.5 * TEXT_SCALE,
-                Weight::Regular,
-                FG,
+        // (the rows, then the description in a box of its own that scrolls; on a short window,
+        // where that box would be under DESCRIPTION_MIN, the rows and the description scroll
+        // together)
+        let top = r.y + 102.0;
+        let id = format!("vehicles:about:{}", v.file);
+        if r.bottom() - (top + rows.len() as f32 * ROW) - 54.0 >= DESCRIPTION_MIN {
+            let y = detail_rows(ui, r.x, r.w, top, &rows);
+            subheading(
+                ui,
+                Rect::new(r.x + 18.0, y + 20.0, r.w - 36.0, 20.0),
+                "Author's description",
             );
-            h + 20.0
-        });
+            let box_ = Rect::new(r.x + 15.0, y + 46.0, r.w - 30.0, r.bottom() - y - 54.0);
+            ui.scroll_area(&id, box_, &mut |ui, view| {
+                let h = ui.paragraph(
+                    &desc,
+                    glam::Vec2::new(view.x + 4.0, view.y + 12.0),
+                    view.w - 16.0,
+                    12.5 * TEXT_SCALE,
+                    Weight::Regular,
+                    FG,
+                );
+                h + 20.0
+            });
+        } else {
+            let area = Rect::new(r.x + 1.0, top - 2.0, r.w - 2.0, r.bottom() - top - 6.0);
+            ui.scroll_area(&id, area, &mut |ui, view| {
+                let y = detail_rows(ui, view.x - 1.0, view.w + 2.0, view.y + 2.0, &rows);
+                subheading(
+                    ui,
+                    Rect::new(view.x + 17.0, y + 20.0, view.w - 36.0, 20.0),
+                    "Author's description",
+                );
+                let h = ui.paragraph(
+                    &desc,
+                    glam::Vec2::new(view.x + 18.0, y + 58.0),
+                    view.w - 40.0,
+                    12.5 * TEXT_SCALE,
+                    Weight::Regular,
+                    FG,
+                );
+                y + 58.0 + h + 16.0 - view.y
+            });
+        }
     }
 
     fn paints(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
@@ -820,6 +824,33 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
     });
     rows.push(("Other files", Status::Unverified, "not checked yet".into()));
     rows
+}
+
+/// A detail row's height.
+const ROW: f32 = 29.0;
+/// The least room the author's description keeps under the rows before they scroll with it.
+const DESCRIPTION_MIN: f32 = 80.0;
+
+/// The detail rows (name and value, a line above each) of a card at `x` `w` wide, the first
+/// line at `y`; returns where the last row ends.
+fn detail_rows(ui: &mut Ui, x: f32, w: f32, y: f32, rows: &[(&str, String)]) -> f32 {
+    let mut y = y;
+    for (k, val) in rows {
+        ui.p().rect(Rect::new(x + 1.0, y, w - 2.0, 1.0), LINE);
+        text(ui, k, x + 19.0, y + 20.0, 12.5, Weight::Regular, MUTED);
+        clipped(
+            ui,
+            val,
+            x + 140.0,
+            y + 20.0,
+            w - 160.0,
+            12.5,
+            Weight::Regular,
+            FG,
+        );
+        y += ROW;
+    }
+    y
 }
 
 #[cfg(test)]

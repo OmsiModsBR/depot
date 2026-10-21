@@ -160,7 +160,7 @@ impl Default for Choice {
             on_foot: false,
             lan_mode: "off".into(),
             lan_addr: String::new(),
-            version: 2,
+            version: 3,
             session: "new".into(),
         }
     }
@@ -171,6 +171,30 @@ fn choice_path() -> std::path::PathBuf {
 }
 
 impl Choice {
+    /// The bus "Use for the next start" was clicked for, with what its card held (after
+    /// `State::select_bus`, which picks the bus and its automatic depot file).
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.bus = u.file;
+        self.paint = u.paint;
+        self.hof_manual = u.hof.is_some();
+        if let Some(hof) = u.hof {
+            self.hof = hof;
+        }
+        self.number = u.number.unwrap_or_default();
+        self.plate = u.plate;
+    }
+
+    /// No bus picked for the next start: the whole preselection goes, no depot file, number
+    /// or plate picked for it stays behind for the game (the depot file goes back to the
+    /// automatic one, which the caller sets).
+    pub fn clear_bus(&mut self) {
+        self.bus.clear();
+        self.paint.clear();
+        self.number.clear();
+        self.plate.clear();
+        self.hof_manual = false;
+    }
+
     pub fn load() -> Choice {
         let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         Self::fresh(c)
@@ -188,6 +212,18 @@ impl Choice {
             // the start was always the map's first entry point: now it is automatic
             c.entry = -1;
             c.version = 2;
+        }
+        if c.version < 3 {
+            // the Drive page always held a bus; on a computer the bus of a start is now only one
+            // picked on Vehicles ("Use this bus"), so the old one is no preselection
+            if !super::mobile::mobile() {
+                c.bus.clear();
+                c.paint.clear();
+                c.number.clear();
+                c.plate.clear();
+                c.hof_manual = false;
+            }
+            c.version = 3;
         }
         // (older launchers took a vehicle line of a broken ailists.cfg for the map's depot)
         if c.hof.to_ascii_lowercase().contains(".bus") || c.hof.to_ascii_lowercase().contains(".ovh") {
@@ -640,6 +676,12 @@ impl State {
     }
 
     pub fn launch(&mut self) {
+        self.launch_with(|_| {});
+    }
+
+    /// Start a session with the duty the choice makes, as `adjust` changes it (Maps: a start
+    /// without a bus leaves the bus out of the duty, not out of the choice kept for the next).
+    pub fn launch_with(&mut self, adjust: impl FnOnce(&mut core::Duty)) {
         if !self.save_pending_settings() {
             return;
         }
@@ -647,7 +689,8 @@ impl State {
             self.set_status("A session needs the original OMSI 2: choose its folder under Setup first.", true);
             return;
         }
-        let d = self.duty();
+        let mut d = self.duty();
+        adjust(&mut d);
         self.set_status("Starting the game…", false);
         self.queued_launch = Some(d);
     }
@@ -912,9 +955,19 @@ impl State {
                 self.vehicles = vehicles;
                 self.weathers = weathers;
                 self.loading_content = false;
-                // what was chosen last time, where it still exists
+                // what was chosen last time, where it still exists (the phone's Drive page always
+                // has a bus; on a computer none is preselected unless Vehicles picked one)
                 if !self.vehicles.iter().any(|v| v.file == self.choice.bus) {
-                    if let Some(v) = self.vehicles.first() {
+                    if !super::mobile::mobile() {
+                        if !self.choice.bus.is_empty() {
+                            self.choice.bus.clear();
+                            self.choice.paint.clear();
+                            self.choice.number.clear();
+                            self.choice.plate.clear();
+                            self.choice.hof_manual = false;
+                            self.choice.hof = self.default_hof();
+                        }
+                    } else if let Some(v) = self.vehicles.first() {
                         self.choice.bus = v.file.clone();
                         self.choice.paint.clear();
                         self.choice.hof = self.default_hof();
@@ -1181,6 +1234,23 @@ impl State {
             .unwrap_or_default()
     }
 
+    /// The bus "Use for the next start" was clicked for on Vehicles.
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.select_bus(&u.file);
+        self.choice.use_bus(u);
+        if !self.choice.hof_manual {
+            self.choice.hof = self.default_hof();
+        }
+        self.touched();
+    }
+
+    /// No bus for the next start (the Start card's Clear).
+    pub fn clear_bus(&mut self) {
+        self.choice.clear_bus();
+        self.choice.hof = self.default_hof();
+        self.touched();
+    }
+
     pub fn select_bus(&mut self, file: &str) {
         if self.choice.bus == file {
             return;
@@ -1310,6 +1380,17 @@ pub fn is_zip(path: &str) -> bool {
     std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
 }
 
+/// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
+/// and plate left out, and the depot file the map and the date give (not one picked for a bus).
+pub fn without_bus(d: &mut core::Duty, default_hof: Option<String>) {
+    d.bus.clear();
+    d.paint = None;
+    d.number = None;
+    d.plate = None;
+    d.hof = default_hof.filter(|h| !h.is_empty());
+    d.on_foot = Some(true);
+}
+
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
 pub fn root_problem(root: &str) -> String {
     let root = root.trim();
@@ -1431,6 +1512,39 @@ mod choice_tests {
         assert_eq!(super::Choice::fresh(saved).lan_mode, "off");
         let host: super::Choice = serde_json::from_str(r#"{"lan_mode":"host"}"#).unwrap();
         assert_eq!(super::Choice::fresh(host).lan_mode, "host");
+    }
+
+    /// A choice the Drive page left (it always held a bus) is no preselection on a computer:
+    /// only a bus picked on Vehicles is.
+    #[test]
+    fn the_drive_pages_bus_is_not_a_preselection() {
+        let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","paint":"Red","number":"12","plate":"AB","hof":"H","hof_manual":true,"version":2}"#).unwrap();
+        let c = super::Choice::fresh(old);
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str(), c.hof_manual), ("", "", "", "", false));
+        assert_eq!(c.version, 3);
+        // (one picked since stays)
+        let mut now = super::Choice::default();
+        now.bus = "Vehicles/y.bus".into();
+        assert_eq!(super::Choice::fresh(now).bus, "Vehicles/y.bus");
+    }
+
+    /// "Use for the next start" puts the card's choices in the next start, a depot file
+    /// picked by hand among them; Clear leaves nothing of it, the hand-picked depot file
+    /// included, so the duty carries the automatic one.
+    #[test]
+    fn a_used_bus_and_its_clear() {
+        let mut c = super::Choice::default();
+        c.hof = "Automatic".into();
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: "Red".into(), hof: Some("Picked".into()), number: Some("3201".into()), plate: "B-V 1".into() });
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.hof.as_str(), c.number.as_str(), c.plate.as_str()), ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1"));
+        assert!(c.hof_manual);
+        c.clear_bus();
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str()), ("", "", "", ""));
+        assert!(!c.hof_manual);
+        // (automatic depot file and no number: nothing picked by hand)
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: String::new(), hof: None, number: None, plate: String::new() });
+        assert!(!c.hof_manual);
+        assert_eq!(c.number, "");
     }
 
     #[test]

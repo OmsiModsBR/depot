@@ -2084,7 +2084,13 @@ fn date_rect(p: &DatePopup, size: Vec2) -> Rect {
     } else {
         below
     };
-    Rect::new(p.anchor.x, y, w, h)
+    // (right-aligned to its control when it would run past the window's right edge)
+    let x = if p.anchor.x + w > size.x - 10.0 {
+        (p.anchor.right() - w).max(10.0)
+    } else {
+        p.anchor.x
+    };
+    Rect::new(x, y, w, h)
 }
 
 pub const MONTHS: [&str; 12] = [
@@ -2142,6 +2148,28 @@ pub fn weekday(y: i32, m: u32, d: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The calendar of a control at the window's right edge opens inside the window.
+    #[test]
+    fn the_calendar_stays_inside_the_window() {
+        let at = |anchor: Rect| {
+            let p = DatePopup {
+                id: 1,
+                anchor,
+                year: 2026,
+                month: 10,
+                current: (2026, 10, 21),
+                picked: None,
+                opened: 0.0,
+            };
+            date_rect(&p, Vec2::new(1200.0, 800.0))
+        };
+        let r = at(Rect::new(1150.0, 100.0, 34.0, 34.0));
+        assert!(r.right() <= 1190.0 && r.x >= 10.0, "{r:?}");
+        assert_eq!(r.right(), 1184.0);
+        // (one with room keeps its left edge on its control's)
+        assert_eq!(at(Rect::new(100.0, 100.0, 200.0, 34.0)).x, 100.0);
+    }
 
     #[test]
     fn list_visibility_respects_nested_clips_and_partial_rows() {
