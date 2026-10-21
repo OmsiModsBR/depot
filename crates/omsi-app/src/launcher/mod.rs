@@ -662,8 +662,8 @@ impl ApplicationHandler for Launcher {
                 }
             }
             WindowEvent::DroppedFile(path) => {
-                // a .zip dropped on the window is installed (a folder too where the game runs in
-                // the launcher's process; `State::install` says why one is refused)
+                // a .zip dropped on the window is installed (a folder is refused:
+                // `State::install` says why)
                 self.page = Page::Mods;
                 self.state.install(path.to_string_lossy().to_string());
             }
