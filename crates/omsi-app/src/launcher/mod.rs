@@ -30,6 +30,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod thumbs;
 mod timetable;
+mod tray;
 mod ui;
 mod dialogs;
 
@@ -197,6 +198,10 @@ pub struct Launcher {
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
     occluded: bool,
+    /// The window put away while a game runs (the Windows 11 concept): into the tray where
+    /// there is one, else minimized; it comes back when the game ends.
+    tucked: bool,
+    tray: Option<tray::Tray>,
     /// The player came back to the launcher's window while a game runs (clicked it, Alt+Tab):
     /// it is drawn and answers again until the game has the focus back. Before, it stood
     /// still the whole game long, and the session code could not be copied (#825).
@@ -292,6 +297,8 @@ impl Launcher {
         map_gen: 0,
         focused: true,
         occluded: false,
+        tucked: false,
+        tray: None,
         awake_in_game: false,
         last_input: Instant::now(),
         fingers: Default::default(),
@@ -659,6 +666,7 @@ impl ApplicationHandler for Launcher {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.check_exit(event_loop);
+        self.tray_tick(event_loop);
         // (a screenshot asked for by a script is drawn even when hidden, and so is the frame
         // that gives the graphics device up again when the game is back in front: the
         // game's window hides the launcher's then, and drawn nothing, it kept the device)
@@ -668,8 +676,10 @@ impl ApplicationHandler for Launcher {
         // Device given up while a game runs: still need a redraw when the game ends so the
         // device is opened again (Occluded alone used to leave the resting picture forever).
         let resume_needed = !mobile::mobile() && self.gfx.is_none() && !self.state.in_game();
-        // (a minimized window is hidden too, whether or not the system said it was covered)
-        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
+        // (a minimized window is hidden too, whether or not the system said it was covered,
+        // and so is one put into the tray)
+        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
+            || self.window.as_ref().and_then(|w| w.is_visible()) == Some(false);
         let occluded = (self.occluded || minimized) && self.shot.is_none() && !resting && !waking && !resume_needed
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
@@ -710,6 +720,59 @@ impl ApplicationHandler for Launcher {
 }
 
 impl Launcher {
+    /// While a game runs the launcher's window goes into the tray (Windows; elsewhere it is
+    /// minimized), and comes back when the last game ends; the tray's menu is answered here.
+    fn tray_tick(&mut self, event_loop: &ActiveEventLoop) {
+        if mobile::mobile() || self.shot.is_some() {
+            return;
+        }
+        let Some(w) = self.window.clone() else { return };
+        let running: Vec<&core::Instance> = self.state.instances.iter().filter(|i| i.running).collect();
+        if !running.is_empty() && !self.tucked {
+            let head = format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&running[0].map), omsi_ui::tr("running"));
+            self.tray = tray::Tray::new(&omsi_ui::tr("Project Depot: a game is running"), &head);
+            if self.tray.is_some() {
+                w.set_visible(false);
+            } else {
+                w.set_minimized(true);
+            }
+            self.tucked = true;
+        } else if running.is_empty() && self.tucked {
+            self.tray = None;
+            self.tucked = false;
+            w.set_visible(true);
+            w.set_minimized(false);
+            w.focus_window();
+        }
+        while let Some(cmd) = self.tray.as_ref().and_then(|t| t.take()) {
+            match cmd {
+                tray::TrayCmd::Show => {
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                    w.request_redraw();
+                }
+                tray::TrayCmd::OpenLog => {
+                    // (the game started last: the one being played)
+                    let log = self.state.instances.iter().filter(|i| i.running).max_by_key(|i| i.started).map(|i| i.log.clone());
+                    if !log.is_some_and(|l| core::open_file(std::path::Path::new(&l))) {
+                        self.state.set_status("The game's log could not be opened.", true);
+                    }
+                }
+                tray::TrayCmd::StopGame => {
+                    let pids: Vec<u32> = self.state.instances.iter().filter(|i| i.running).map(|i| i.pid).collect();
+                    for pid in pids {
+                        self.state.stop(pid);
+                    }
+                }
+                tray::TrayCmd::Quit => {
+                    self.tray = None;
+                    event_loop.exit();
+                }
+            }
+        }
+    }
+
     /// Physical pixels per interface pixel: the screen's scale, times a zoom that makes the
     /// interface (laid out for a 1440 x 880 window) grow with a bigger window and shrink a
     /// little with a smaller one, so that it fills the window the same way at any size.
