@@ -215,6 +215,8 @@ pub struct Ui {
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
+    /// Keyboard focus over the clickable widgets (off unless `nav.enabled`).
+    pub nav: crate::nav::KeyNav,
     /// The widget that took the mouse wheel this frame (the innermost scroll area).
     wheel_taken: bool,
     anims: HashMap<Id, f32>,
@@ -254,6 +256,7 @@ impl Ui {
             hot: None,
             active: None,
             focus: None,
+            nav: Default::default(),
             wheel_taken: false,
             anims: HashMap::new(),
             scroll: HashMap::new(),
@@ -339,6 +342,8 @@ impl Ui {
                 }
             }
         }
+        let modal = self.popup.is_some() || self.date_popup.is_some();
+        self.nav.begin(&mut self.input, &mut self.focus, modal);
     }
 
     fn push_layer(&mut self, clip: Rect, radius: f32) {
@@ -452,6 +457,44 @@ impl Ui {
         self.push_layer(c, rad);
     }
 
+    /// A picture of texture `tex` (`aspect`: its width over its height) covering `r` with its
+    /// centre, the overhang cut, drawn with opacity `alpha`.
+    pub fn image_cover(&mut self, r: Rect, tex: usize, aspect: f32, alpha: f32) {
+        let clip = intersect(self.clip_now(), r);
+        self.push_layer(clip, 0.0);
+        self.layers.last_mut().unwrap().2 = tex;
+        // the part of the picture that is shown: the whole of one side, a middle strip of the other
+        let want = r.w / r.h.max(1.0);
+        let (u, v) = if aspect > want {
+            (want / aspect, 1.0)
+        } else {
+            (1.0, aspect / want)
+        };
+        let sprite = crate::Sprite {
+            uv: [
+                (1.0 - u) * 0.5,
+                (1.0 - v) * 0.5,
+                (1.0 + u) * 0.5,
+                (1.0 + v) * 0.5,
+            ],
+            w: r.w,
+            h: r.h,
+            ascent: 0.0,
+        };
+        self.p().sprite(
+            sprite,
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.w, r.h),
+            Color::WHITE.alpha(alpha),
+        );
+        let (c, rad) = self
+            .clip_stack
+            .last()
+            .copied()
+            .unwrap_or((Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0));
+        self.push_layer(c, rad);
+    }
+
     /// Mark `r` as interface (the showroom does not orbit under it).
     pub fn solid(&mut self, r: Rect) {
         if r.contains(self.input.mouse) {
@@ -483,6 +526,19 @@ impl Ui {
         let clicked = self.active == Some(id) && self.input.released && h;
         if self.active == Some(id) && self.input.released {
             self.active = None;
+        }
+        (h, held, clicked)
+    }
+
+    /// `interact` for a widget that does something when clicked: with the keyboard focus on
+    /// (`nav.enabled`) it is also a stop for Tab, and Enter or Space press it. Sliders, text
+    /// fields, scroll bars and the cells inside a field use plain `interact`: nothing would
+    /// happen on Enter there.
+    pub fn interact_key(&mut self, id: Id, r: Rect) -> (bool, bool, bool) {
+        let (h, held, mut clicked) = self.interact(id, r);
+        if self.nav.enabled {
+            let seen = intersect(self.clip_now(), r);
+            clicked |= self.nav.seen(id, r, seen);
         }
         (h, held, clicked)
     }
@@ -521,6 +577,30 @@ impl Ui {
             .text(atlas, fonts, text, px, weight, at, align, c)
     }
 
+    /// [`Ui::text`] of a text that is not the interface's own (a map's or a bus's name, an
+    /// author's description): drawn as it is, not looked up in the translations.
+    pub fn text_as_is(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+    ) -> f32 {
+        let Ui {
+            atlas,
+            fonts,
+            layers,
+            ..
+        } = self;
+        layers
+            .last_mut()
+            .unwrap()
+            .1
+            .text_as_is(atlas, fonts, text, px, weight, at, align, c)
+    }
+
     /// Text vertically centred in `r`, cut to fit.
     pub fn text_in(
         &mut self,
@@ -542,6 +622,55 @@ impl Ui {
             .unwrap()
             .1
             .text_in(atlas, fonts, text, px, weight, r, align, c)
+    }
+
+    /// Text on its baseline with `tracking` pixels more between its letters (the small
+    /// letter-spaced capitals of headings and labels); returns its width. Drawn as it is (the
+    /// caller translates the text before it makes it capitals), letter by letter, each where
+    /// the whole text would put it plus the spacing, so the font's kerning is kept.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_spaced(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+        tracking: f32,
+    ) -> f32 {
+        let n = text.chars().count();
+        let w = self.fonts.width_as_is(text, px, weight) + tracking * n.saturating_sub(1) as f32;
+        let x0 = match align {
+            Align::Left => at.x,
+            Align::Center => at.x - w * 0.5,
+            Align::Right => at.x - w,
+        };
+        let Ui {
+            atlas,
+            fonts,
+            layers,
+            ..
+        } = self;
+        let p = &mut layers.last_mut().unwrap().1;
+        for (k, (i, ch)) in text.char_indices().enumerate() {
+            if ch.is_whitespace() {
+                continue;
+            }
+            let x = x0 + fonts.width_as_is(&text[..i], px, weight) + tracking * k as f32;
+            let s = &text[i..i + ch.len_utf8()];
+            p.text_as_is(
+                atlas,
+                fonts,
+                s,
+                px,
+                weight,
+                Vec2::new(x, at.y),
+                Align::Left,
+                c,
+            );
+        }
+        w
     }
 
     /// Several lines broken at spaces to `width`; returns the height used.
@@ -620,6 +749,56 @@ impl Ui {
         self.fonts.width(text, px, weight)
     }
 
+    /// `text` translated, in capitals, its letters `spacing` points apart (the cards' and the
+    /// sections' titles of the new look), on its baseline at `at`. Returns its width.
+    pub fn caps_spaced(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        spacing: f32,
+    ) -> f32 {
+        let caps = crate::tr(text).to_uppercase();
+        let mut x = at.x;
+        let mut buf = [0u8; 4];
+        for ch in caps.chars() {
+            let s = ch.encode_utf8(&mut buf);
+            if !ch.is_whitespace() {
+                let Ui {
+                    atlas,
+                    fonts,
+                    layers,
+                    ..
+                } = self;
+                layers.last_mut().unwrap().1.text_as_is(
+                    atlas,
+                    fonts,
+                    s,
+                    px,
+                    weight,
+                    Vec2::new(x, at.y),
+                    Align::Left,
+                    c,
+                );
+            }
+            x += self.fonts.width_as_is(s, px, weight) + spacing;
+        }
+        (x - at.x - spacing).max(0.0)
+    }
+
+    /// The width [`Ui::caps_spaced`] draws `text` in.
+    pub fn caps_spaced_width(&self, text: &str, px: f32, weight: Weight, spacing: f32) -> f32 {
+        let caps = crate::tr(text).to_uppercase();
+        let mut buf = [0u8; 4];
+        let w: f32 = caps
+            .chars()
+            .map(|ch| self.fonts.width_as_is(ch.encode_utf8(&mut buf), px, weight) + spacing)
+            .sum();
+        (w - spacing).max(0.0)
+    }
+
     // --- surfaces ------------------------------------------------------------------------
 
     /// A panel: flat, dark, a hairline edge.
@@ -630,15 +809,16 @@ impl Ui {
         p.rounded_border(r, RADIUS, 1.0, EDGE);
     }
 
-    /// A section heading inside a panel: an accent tick and the title in capitals.
+    /// A section heading inside a panel: the title in capitals, as the new look's cards
+    /// name themselves.
     pub fn heading(&mut self, r: Rect, title: &str, icon: Option<&str>) -> Rect {
         let _ = icon;
         self.text(
             &crate::tr(title).to_uppercase(),
             Vec2::new(r.x, r.y + 14.0),
-            11.0,
+            12.5,
             Weight::Bold,
-            TEXT_DIM,
+            TEXT_SOFT,
             Align::Left,
         );
         Rect::new(r.x, r.y + 26.0, r.w, (r.h - 26.0).max(0.0))
@@ -660,7 +840,7 @@ impl Ui {
         kind: ButtonKind,
     ) -> bool {
         let id = id_of(name);
-        let (h, held, clicked) = self.interact(id, r);
+        let (h, held, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
         let rr = if held { r.inset(0.5) } else { r };
         let (fill, text_c, edge) = match kind {
@@ -719,7 +899,7 @@ impl Ui {
     pub fn icon_button(&mut self, name: &str, c: Vec2, r: f32, icon: &str, tip: &str) -> bool {
         let id = id_of(name);
         let rect = Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r);
-        let (h, _, clicked) = self.interact(id, rect);
+        let (h, _, clicked) = self.interact_key(id, rect);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         self.p().circle(c, r, Color::WHITE.alpha(0.06 * t));
         self.icon(icon, c, r * 1.1, if h { TEXT } else { TEXT_DIM });
@@ -732,7 +912,7 @@ impl Ui {
     /// A switch: returns true when it was flipped.
     pub fn toggle(&mut self, name: &str, r: Rect, value: &mut bool, label: &str) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         if clicked {
             *value = !*value;
         }
@@ -899,7 +1079,7 @@ impl Ui {
                 self.popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self.popup.as_ref().map(|p| p.id == id).unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
@@ -1299,7 +1479,7 @@ impl Ui {
                 self.date_popup = None;
             }
         }
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let open = self
             .date_popup
             .as_ref()
@@ -1447,7 +1627,7 @@ impl Ui {
     /// A row of a list: hover highlight, the chosen one marked. Returns clicked.
     pub fn row(&mut self, name: &str, r: Rect, selected: bool) -> bool {
         let id = id_of(name);
-        let (h, _, clicked) = self.interact(id, r);
+        let (h, _, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
         let s = self.anim(id ^ 4, if selected { 1.0 } else { 0.0 }, 0.1);
         if s > 0.01 {
@@ -1501,6 +1681,9 @@ impl Ui {
                 Weight::Medium,
                 TEXT_SOFT,
             );
+        }
+        if let Some(r) = self.nav.ring() {
+            self.p().rounded_border(r, 8.0, 2.0, ACCENT);
         }
         let mut layers = Vec::new();
         let mut verts = Vec::new();

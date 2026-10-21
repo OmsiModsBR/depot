@@ -1203,6 +1203,9 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
     l.ui.push_clip(Rect::new(body.x, body.y + top, body.w, body.h - top), 0.0);
     match page {
         Page::Drive => super::drive::draw(l, content),
+        // (the phone chooses the bus and the map in its sheets, see `Sheet`)
+        Page::Vehicles | Page::Maps => super::drive::draw(l, content),
+        Page::Diagnostics => super::diagnostics::draw(l, content),
         #[cfg(feature = "lan")]
         Page::Multiplayer => super::multiplayer::draw(l, content),
         #[cfg(not(feature = "lan"))]

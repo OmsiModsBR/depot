@@ -273,3 +273,89 @@ fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
         assert!(!p.verts.is_empty() && p.verts.len() % 3 == 0, "{icon:?}");
     }
 }
+
+/// The city map of a made-up grid town with a trip on it (a route, its stops, street names),
+/// drawn by the navigator into its texture and laid over a plain picture by the renderer, into
+/// a PNG (`DEPOT_CITY_MAP_PNG`: the file; else it is only drawn), for looking at it next to
+/// the design. Also checks the map's buttons are where its header is drawn.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn the_city_map_draws_over_the_picture() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), omsi_render::RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() })) else {
+        eprintln!("no graphics adapter: skipped");
+        return;
+    };
+    let mut scene = renderer.new_scene();
+    // streets every 150 m both ways, each block a lane of its own each way
+    let mut lanes = Vec::new();
+    let mut route = Vec::new();
+    for k in -6..=6 {
+        let c = k as f64 * 150.0;
+        for j in -6..6 {
+            let (a, b) = (j as f64 * 150.0, (j + 1) as f64 * 150.0);
+            // (the trip: east along y = 0 to x = 600, then north)
+            if k == 0 && (-4..4).contains(&j) {
+                route.push(lanes.len());
+            }
+            lanes.push(straight((a, c), (b, c)));
+            lanes.push(straight((b, c + 4.0), (a, c + 4.0)));
+            if k == 4 && (0..3).contains(&j) {
+                route.push(lanes.len());
+            }
+            lanes.push(straight((c, a), (c, b)));
+            lanes.push(straight((c - 4.0, b), (c - 4.0, a)));
+        }
+    }
+    let signs = vec![(DVec3::new(-375.0, 6.0, 0.0), 0.0, "Main Street".to_string()), (DVec3::new(606.0, 225.0, 0.0), 90.0, "Station Road".to_string())];
+    let mut nav = Navigator::new(false, 0.85, "bottom-left");
+    nav.set_map(crate::scene::NavigationMap { lanes, road_surfaces: Vec::new(), places: HashMap::new(), signs });
+    nav.set_route("50/1", route, true, nav.global_version + (1 << 40));
+    nav.toggle_map();
+    let stop = |id: i64, x: f64, y: f64, name: &str, min: f64| NavStop { object_id: id, position: DVec3::new(x, y, 0.0), name: name.into(), arrival: 8.0 * 3600.0 + min * 60.0 };
+    let frame = NavFrame {
+        traffic: None,
+        players: Vec::new(),
+        bus: DVec3::new(-420.0, -2.0, 0.0),
+        heading: 90.0,
+        speed_kmh: 32.0,
+        outside_temp: 18.0,
+        inside_temp: 21.0,
+        line: Some("50".into()),
+        terminus: Some("Central Station".into()),
+        stops: vec![stop(1, -300.0, -2.0, "Depot", 44.0), stop(2, 0.0, -2.0, "Market", 47.0), stop(3, 450.0, -2.0, "Main Street", 50.0), stop(4, 602.0, 300.0, "Central Station", 54.0)],
+        delay: Some(30.0),
+        passengers: Some(12),
+        stop_requested: false,
+        time: 8.0 * 3600.0 + 42.0 * 60.0,
+        weekday: 1,
+        date: 20261020,
+        car_line: None,
+        language: "ENG",
+        screen: (1672.0, 941.0),
+        ui_scale: 1.0,
+        follow_window: true,
+        dt: 1.0 / 60.0,
+        info_rect: None,
+    };
+    // (a few frames: the bus is found on the route, the views settle)
+    for _ in 0..4 {
+        scene.overlays.clear();
+        nav.frame(&renderer, &mut scene, &frame);
+    }
+    assert!(nav.map_open() && !scene.overlays.is_empty());
+    let r = nav.city.rect;
+    // the close button is in the header, at its right end
+    let close = nav.city.buttons.iter().find(|b| b.1 == 3).map(|b| b.0).expect("the close button");
+    assert!(close.right() <= r[2] - r[0] && close.y < 60.0, "{close:?}");
+    let camera = omsi_render::Camera { position: DVec3::new(0.0, 0.0, 2.0), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 2000.0 };
+    let lighting = omsi_render::Lighting { shadows: false, ..Default::default() };
+    let pixels = renderer.render_to_image(&mut scene, 1672, 941, &camera, &lighting).unwrap();
+    if let Ok(path) = std::env::var("DEPOT_CITY_MAP_PNG") {
+        image::save_buffer(&path, &pixels, 1672, 941, image::ExtendedColorType::Rgba8).unwrap();
+    }
+    // the map covers the middle of the picture: dark ground, not the sky
+    let at = |x: u32, y: u32| { let i = ((y * 1672 + x) * 4) as usize; [pixels[i], pixels[i + 1], pixels[i + 2]] };
+    let mid = at(((r[0] + r[2]) * 0.5) as u32, (r[3] - 40.0) as u32);
+    assert!(mid.iter().all(|&c| c < 90), "{mid:?}");
+}

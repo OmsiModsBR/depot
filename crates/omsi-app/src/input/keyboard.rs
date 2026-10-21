@@ -69,6 +69,20 @@ impl App {
             }
             return;
         }
+        // the new interface's end-of-trip report has the keys while it shows
+        if self.report_key(code, pressed) {
+            return;
+        }
+        // Esc closes the new interface's "Add vehicle" window before anything else (the city
+        // map, the mirror editor)
+        if self.add_key(code, pressed) {
+            return;
+        }
+        // and the Alt bar's other windows: Esc closes them, and while the route number's
+        // field has the keyboard the keys are the field's
+        if self.tool_key(code, pressed) {
+            return;
+        }
         // The mirror panels (see mirror_hud.rs): Ctrl+M shows or hides them, Ctrl+Shift+M
         // starts and ends their editor; in the editor Insert, Delete, C and Esc are its keys.
         if self.in_cab && self.game_menu.is_none() && self.player.is_some() {
@@ -212,6 +226,10 @@ impl App {
                 self.keys.insert(code);
             } else if !pressed {
                 self.keys.remove(&code);
+            }
+            // the Alt bar of the new interface: a tap of Alt, and its keys while the keyboard is on it
+            if self.alt_key(code, pressed, repeat) {
+                return;
             }
             // Alt+Enter: full screen on and off
             if pressed && !repeat && matches!(code, KeyCode::Enter | KeyCode::NumpadEnter) && (self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight)) {
@@ -883,8 +901,14 @@ impl App {
             // P changes only the simulation state, even while a menu is open.
             KeyCode::KeyP if !modified => self.toggle_pause(),
             KeyCode::Escape => self.close_game_menu(),
-            KeyCode::ArrowUp | KeyCode::KeyW => self.game_menu = Some(self.menu_step(sel, n, false)),
-            KeyCode::ArrowDown | KeyCode::KeyS => self.game_menu = Some(self.menu_step(sel, n, true)),
+            KeyCode::ArrowUp | KeyCode::KeyW => {
+                let k = if self.new_menu_active() { self.new_menu_step(sel, false) } else { self.menu_step(sel, n, false) };
+                self.game_menu = Some(k);
+            }
+            KeyCode::ArrowDown | KeyCode::KeyS => {
+                let k = if self.new_menu_active() { self.new_menu_step(sel, true) } else { self.menu_step(sel, n, true) };
+                self.game_menu = Some(k);
+            }
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => self.menu_choose(event_loop, sel),
             _ => {}
         }
