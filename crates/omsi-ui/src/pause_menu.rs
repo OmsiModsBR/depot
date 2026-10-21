@@ -4,7 +4,8 @@
 //! a game state.
 
 use crate::paint::Align;
-use crate::theme::v5::{ACCENT, BAR, DANGER, FG, LINE, MUTED, ON_ACCENT, SIDE, TS};
+use crate::theme::v5::{BAR, DANGER, FG, LINE, MUTED, SIDE, TS};
+use crate::theme::{accent, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 
@@ -159,10 +160,10 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
             let (hover, _, click) = ui.interact(id, r);
             let enabled = item.disabled.is_none();
             match item.kind {
-                Kind::Primary => ui.p().rect(r, ACCENT),
+                Kind::Primary => ui.p().rect(r, accent()),
                 Kind::Current => {
                     ui.p().rect(r, Color::hex(0x2a2518));
-                    ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+                    ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
                 }
                 _ if (hover || view.selected == Some(item.id)) && enabled => {
                     ui.p().rect(r, Color::WHITE.alpha(0.06))
@@ -170,7 +171,7 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
                 _ => {}
             }
             let (label_c, icon_c) = match item.kind {
-                Kind::Primary => (ON_ACCENT, ON_ACCENT),
+                Kind::Primary => (on_accent(), on_accent()),
                 Kind::Danger => (DANGER, DANGER),
                 _ => (FG, MUTED),
             };
@@ -190,7 +191,7 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
             text(ui, item.label, 69.0, cy, 15.0, weight, label_c.alpha(dim));
             if !item.key.is_empty() {
                 let key_c = if item.kind == Kind::Primary {
-                    ON_ACCENT
+                    on_accent()
                 } else {
                     MUTED
                 };
@@ -253,7 +254,7 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
         BAR_H * 0.5,
         13.0,
         Weight::Medium,
-        ACCENT,
+        accent(),
     );
     Output {
         clicked,

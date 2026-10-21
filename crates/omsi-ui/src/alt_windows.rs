@@ -12,6 +12,7 @@ use crate::ingame::{
     self, button, check_row, foot, head, list_rows, stepper, text_field, ButtonKind, ListLook,
     ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, ROW_H, TITLE_H,
 };
+use crate::theme::accent;
 use crate::widgets::Ui;
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -22,7 +23,6 @@ pub const NOTE: &str = "the game keeps running";
 const LINE: Color = Color::hex(0x2b2f37);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const FG: Color = Color::hex(0xe9eaec);
-const ACCENT: Color = Color::hex(0xf0a30a);
 const TS: f32 = 1.16;
 
 /// What a click in a window asked for.
@@ -498,7 +498,7 @@ fn opens_row(ui: &mut Ui, id: &str, r: Rect, label: &str, disabled: Option<&str>
             );
         }
         None => {
-            let c = if hover { ACCENT } else { MUTED };
+            let c = if hover { accent() } else { MUTED };
             ui.icon(
                 "chevron_right",
                 Vec2::new(r.right() - 24.0, r.center().y),

@@ -12,6 +12,7 @@
 //! `layout` is arithmetic over the text's widths, so both are tested without a window.
 
 use crate::paint::Align;
+use crate::theme::accent;
 use crate::widgets::Ui;
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -26,7 +27,6 @@ const BG: Color = Color::hex(0x101215);
 const LINE: Color = Color::hex(0x2b2f37);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
 // The pipeline blends in linear light, the concept (a web page) in sRGB: a see-through colour
 // here shows much more of what is under it than the same opacity there. The opacities below
 // are the concept's carried over so the screen looks as it does (`over_black` for the veils).
@@ -336,7 +336,7 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
     if done > 0.0 {
         ui.p().rect(
             Rect::new(l.bar.x, l.bar.y, (l.bar.w * done).max(1.0), l.bar.h),
-            ACCENT,
+            accent(),
         );
     }
     let pct = format!("{}%", (done * 100.0).round() as u32);
@@ -411,7 +411,7 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
                 y + SUB_LH * 0.5,
                 12.0,
                 Weight::Regular,
-                ACCENT,
+                accent(),
                 false,
             );
             y += SUB_LH;

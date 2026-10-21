@@ -165,6 +165,7 @@ const VARIED: &[(&str, &str)] = &[
     ("notes", "0"),
     ("info_bar", "1"),
     ("autosave_minutes", "10"),
+    ("ui_accent", "Teal"),
     ("shadow_casters", "omsi"),
     ("post_aa", "off"),
     ("drive_keys", "wasd"),

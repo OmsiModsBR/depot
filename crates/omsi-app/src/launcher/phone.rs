@@ -127,9 +127,9 @@ fn tab_bar(l: &mut Launcher, r: Rect) {
         if down {
             l.ui.p().rounded(cell.pad(10.0, 6.0), 12.0, HOVER);
         }
-        let c = if on { ACCENT } else { TEXT_DIM };
+        let c = if on { accent() } else { TEXT_DIM };
         if on {
-            l.ui.p().rounded(Rect::new(cell.center().x - 28.0, cell.y + 7.0, 56.0, 28.0), 14.0, ACCENT.alpha(0.16));
+            l.ui.p().rounded(Rect::new(cell.center().x - 28.0, cell.y + 7.0, 56.0, 28.0), 14.0, accent().alpha(0.16));
         }
         l.ui.icon(icon, Vec2::new(cell.center().x, cell.y + 21.0), 22.0, c);
         l.ui.text_in(name, Rect::new(cell.x, cell.y + 36.0, cell.w, 16.0), 11.5, if on { Weight::Bold } else { Weight::Medium }, c, Align::Center);
@@ -163,7 +163,7 @@ fn card(l: &mut Launcher, name: &str, r: Rect, icon: &str, label: &str, value: &
     l.ui.p().rounded(r, 14.0, if down { SELECTED } else if h { HOVER } else { FIELD });
     let ic = Vec2::new(r.x + 26.0, r.center().y);
     l.ui.p().circle(ic, 17.0, Color::rgba(255, 255, 255, 0.05));
-    l.ui.icon(icon, ic, 19.0, if warn { WARN } else { ACCENT });
+    l.ui.icon(icon, ic, 19.0, if warn { WARN } else { accent() });
     l.ui.text_in(label, Rect::new(r.x + 54.0, r.y + 8.0, r.w - 84.0, 15.0), 11.0, Weight::Medium, TEXT_DIM, Align::Left);
     l.ui.text_in(value, Rect::new(r.x + 54.0, r.y + 24.0, r.w - 84.0, r.h - 30.0), 14.5, Weight::Bold, TEXT, Align::Left);
     l.ui.icon("chevron_right", Vec2::new(r.right() - 18.0, r.center().y), 20.0, TEXT_FAINT);
@@ -244,7 +244,7 @@ fn play(l: &mut Launcher, body: Rect) {
         let chip = Rect::new(shade.right() - cw - 10.0, shade.y + 13.0, cw, 32.0);
         let (_, down, clicked) = l.ui.interact(id_of("p-livery"), chip);
         l.ui.p().rounded(chip, 16.0, if down { SELECTED } else { Color::rgba(255, 255, 255, 0.1) });
-        l.ui.icon("palette", Vec2::new(chip.x + 16.0, chip.center().y), 15.0, ACCENT);
+        l.ui.icon("palette", Vec2::new(chip.x + 16.0, chip.center().y), 15.0, accent());
         l.ui.text_in(&label, Rect::new(chip.x + 28.0, chip.y, chip.w - 34.0, chip.h), 12.0, Weight::Medium, TEXT, Align::Left);
         if clicked {
             open(l, Sheet::Livery);
@@ -349,7 +349,7 @@ fn big_row(ui: &mut super::ui::Ui, id: &str, r: Rect, title: &str, sub: &str, ch
         ui.text_in(sub, Rect::new(tx, r.y + 32.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
     }
     if chosen {
-        ui.icon("check_circle", Vec2::new(r.right() - 24.0, r.center().y), 20.0, ACCENT);
+        ui.icon("check_circle", Vec2::new(r.right() - 24.0, r.center().y), 20.0, accent());
     }
     clicked
 }
@@ -1041,13 +1041,13 @@ fn online(l: &mut Launcher, body: Rect) {
     // the official server, first and large
     let card = Rect::new(inner.x, inner.y, inner.w, 104.0);
     l.ui.p().rounded(card, 16.0, FIELD);
-    l.ui.p().rounded(Rect::new(card.x, card.y, 5.0, card.h), 2.5, ACCENT);
+    l.ui.p().rounded(Rect::new(card.x, card.y, 5.0, card.h), 2.5, accent());
     let ir = Rect::new(card.x + 18.0, card.y + 18.0, 68.0, 68.0);
     match l.icons.get(official) {
         Some(tex) => l.ui.image(ir, *tex, 12.0),
         None => {
             l.ui.p().rounded(ir, 12.0, SELECTED);
-            l.ui.icon("public", ir.center(), 32.0, ACCENT);
+            l.ui.icon("public", ir.center(), 32.0, accent());
         }
     }
     let info = l.state.server_info.get(official).map(|x| x.1.clone());
@@ -1181,7 +1181,7 @@ fn more(l: &mut Launcher, body: Rect) {
         let r = Rect::new(inner.x + (tw + gap) * c as f32, inner.y + (th + gap) * rw as f32, tw, th);
         let (h, down, clicked) = l.ui.interact(id_of(&format!("pmore-{name}")), r);
         l.ui.p().rounded(r, 14.0, if down { SELECTED } else if h { HOVER } else { FIELD });
-        l.ui.icon(icon, Vec2::new(r.x + 28.0, r.y + 28.0), 24.0, ACCENT);
+        l.ui.icon(icon, Vec2::new(r.x + 28.0, r.y + 28.0), 24.0, accent());
         l.ui.text_in(name, Rect::new(r.x + 16.0, r.bottom() - 46.0, r.w - 24.0, 20.0), 15.0, Weight::Bold, TEXT, Align::Left);
         l.ui.text_in(sub, Rect::new(r.x + 16.0, r.bottom() - 26.0, r.w - 24.0, 18.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
         if clicked {

@@ -290,6 +290,8 @@ pub(crate) fn launcher_statics() {
 /// nothing more to do (a fatal error was shown).
 pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option<ServerCfg>)>> {
     ui_language(&settings::Settings::load().language);
+    // (the launcher and every menu of the game wear the accent chosen in Settings > Interface)
+    settings::Settings::load().apply_accent();
     // (a server has no interface to translate)
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
