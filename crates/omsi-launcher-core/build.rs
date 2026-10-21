@@ -6,7 +6,9 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=../../assets/icons/app/depot.ico");
     let mut res = winresource::WindowsResource::new();
-    res.set_icon("../../assets/icons/app/depot.ico").set("ProductName", "Project Depot").set("FileDescription", "Project Depot launcher tools");
+    res.set_icon("../../assets/icons/app/depot.ico")
+        .set("ProductName", "Project Depot")
+        .set("FileDescription", "Project Depot launcher tools");
     if let Err(e) = res.compile() {
         println!("cargo:warning=no icon in the executable: {e}");
     }
