@@ -36,6 +36,8 @@ pub struct PagesView {
     pub settings_tab: usize,
     pub pads: PadsView,
     pub tt: super::timetable::TimetableView,
+    /// The keyboard tab on a computer (`keyboard`).
+    pub kb: super::keyboard::KeyboardView,
 }
 
 /// The game controllers tab: the devices `gamectrler.cfg` sets up, the ones connected now,
@@ -1584,11 +1586,11 @@ fn mb(v: i64) -> String {
 /// which a controller could not bring back to the first camera (#1167).
 const PAD_GAME_ACTIONS: [&str; 26] = ["doors_all", "door_4", "door_3", "door_2", "door_1", "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_reset_direction", "view_reset_all_directions", "view_interiorcam_plus", "view_interiorcam_minus", "view_toggle_viewpoint", "view_toggle_interior", "view_set_driver", "view_set_passenger", "view_set_outside", "sim_pause", "screenshot", "quicksave", "toggel_mouse_ctrl", "toggel_ctrler", "voice_radio"];
 
-fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
+pub(super) fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
     known_action(a).unwrap_or_else(|| names.control(a))
 }
 
-fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
+pub(super) fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
     crate::describe::names(std::path::Path::new(&l.state.config.root), l.state.settings.get("language").and_then(|x| x.as_str()).unwrap_or("ENG"))
 }
 
@@ -1659,6 +1661,23 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
+    if !super::mobile::mobile() {
+        // (a computer, as the Windows 11 concept: the tabs under the heading, the keyboard in
+        // groups with the chosen action beside it)
+        let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
+        let mut tab = l.pages.controls_tab;
+        if l.ui.segmented("controls-tab", Rect::new(body.x, body.y, 330.0, 36.0), &mut tab, &["Keyboard", "Game controllers"]) {
+            l.pages.controls_tab = tab;
+        }
+        let body = Rect::new(body.x, body.y + 50.0, body.w, (body.h - 50.0).max(0.0));
+        if l.pages.controls_tab == 1 {
+            game_controllers(l, body);
+        } else {
+            l.pages.pads.cancel_feedback_test();
+            super::keyboard::draw(l, body);
+        }
+        return;
+    }
     let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
     if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
@@ -2476,7 +2495,7 @@ fn save_gamectrler(devices: &[crate::controllers::DeviceCfg]) -> Result<std::pat
 }
 
 /// Settings → Driving keys: "Custom controls", the keys of the Controls page.
-fn use_custom_keys(l: &mut Launcher) -> bool {
+pub(super) fn use_custom_keys(l: &mut Launcher) -> bool {
     if l.state.settings.get("drive_keys").and_then(|v| v.as_str()) == Some("omsi") {
         return false;
     }
@@ -2486,7 +2505,7 @@ fn use_custom_keys(l: &mut Launcher) -> bool {
     true
 }
 
-fn save_keys(l: &mut Launcher, vr_binding: bool) {
+pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
     match core::save_keybindings(&l.state.keybindings) {
         Ok(()) => {
             l.state.keybindings_error.clear();

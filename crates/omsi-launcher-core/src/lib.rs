@@ -2450,6 +2450,63 @@ pub fn get_keybindings() -> Result<Value> {
     )
 }
 
+/// The keys of the original OMSI 2 (its own `Inputs/keyboard.cfg`, only read), in the shape
+/// `get_keybindings` gives; `None` when its folder has no such file.
+pub fn original_keybindings() -> Result<Option<Value>> {
+    let path = omsi_cfg::original_keyboard_cfg(&root()?);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let k = omsi_content::input::KeyboardCfg::load(&path)?
+        .with_game_defaults()
+        .with_vr_defaults();
+    Ok(Some(
+        json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
+    ))
+}
+
+/// When the original OMSI 2's controls file was saved (Unix seconds).
+pub fn original_keys_saved() -> Option<u64> {
+    let path = omsi_cfg::original_keyboard_cfg(&root().ok()?);
+    let t = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
+}
+
+fn keys_reloaded_path() -> PathBuf {
+    data_dir().join("keys-reloaded.txt")
+}
+
+/// When the keys were last reloaded from the original OMSI 2 (Unix seconds), if ever.
+pub fn keys_reloaded_at() -> Option<u64> {
+    std::fs::read_to_string(keys_reloaded_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Save `v`, the keys reloaded from the original OMSI 2, as `save_keybindings` does; with
+/// `backup`, the file in use is copied beside itself first (`keyboard.cfg.backup-<time>`),
+/// whose path is returned. The original's own file is only read.
+pub fn reload_keybindings(v: &Value, backup: bool) -> Result<Option<PathBuf>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut kept = None;
+    if backup {
+        let cur = keyboard_cfg_write_path()?;
+        if cur.is_file() {
+            let to = cur.with_extension(format!("cfg.backup-{now}"));
+            std::fs::copy(&cur, &to)?;
+            kept = Some(to);
+        }
+    }
+    save_keybindings(v)?;
+    let _ = std::fs::write(keys_reloaded_path(), now.to_string());
+    Ok(kept)
+}
+
 /// Replace the bindings with the page's list. Written to a temp file and read back through
 /// the same loader the game uses before it replaces the real file, so a page bug never
 /// leaves the player with a `keyboard.cfg` the game itself cannot parse.
