@@ -196,8 +196,8 @@ pub fn action(ui: &mut Ui, id: &str, b: Rect, label: &str, note: &str, enabled: 
     };
     let fill = match (enabled, hover || down) {
         (false, _) => PANEL_2,
-        (true, true) => ACCENT.mix(Color::WHITE, 0.12),
-        (true, false) => ACCENT,
+        (true, true) => accent().mix(Color::WHITE, 0.12),
+        (true, false) => accent(),
     };
     ui.solid(b);
     ui.p().rounded(b, 6.0, fill);
@@ -206,7 +206,7 @@ pub fn action(ui: &mut Ui, id: &str, b: Rect, label: &str, note: &str, enabled: 
         b,
         14.0 * TEXT_SCALE,
         Weight::Bold,
-        if enabled { ON_ACCENT } else { MUTED },
+        if enabled { on_accent() } else { MUTED },
         Align::Center,
     );
     clipped(

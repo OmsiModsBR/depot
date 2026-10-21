@@ -34,9 +34,9 @@ use std::time::Instant;
 // line's route in the map's own red - so the two maps are the same picture.
 use crate::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
 const STOP: Color = Color::rgba(240, 240, 240, 1.0);
-/// Entry points wear the launcher's own amber; the one under the mouse a grey ring, the
-/// chosen one a white (a click on the map takes the place of a name in a list of seventy).
-const ENTRY: Color = Color::rgba(232, 160, 48, 1.0);
+// Entry points wear the launcher's accent (`omsi_ui::theme::accent`); the one under the mouse
+// a grey ring, the chosen one a white (a click on the map takes the place of a name in a list
+// of seventy).
 const ENTRY_HOVER: Color = Color::rgba(160, 160, 160, 1.0);
 const ENTRY_HERE: Color = Color::rgba(255, 255, 255, 1.0);
 /// A road is at least this wide on the screen when the map is far out, its own metres when
@@ -710,7 +710,7 @@ impl MapView {
         }
         let chosen = self.chosen();
         for (i, e) in roads.entries.iter().enumerate() {
-            p.world_disc(at(e.at), 0.0, ENTRY_PX * k, ENTRY);
+            p.world_disc(at(e.at), 0.0, ENTRY_PX * k, omsi_ui::theme::accent());
             if self.hover == Some(i) {
                 ring(&mut p, at(e.at), (ENTRY_PX + 3.0) * k, 2.0 * k, ENTRY_HOVER, mpp);
             }

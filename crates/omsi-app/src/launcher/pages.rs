@@ -168,7 +168,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
     l.ui.p().circle(c, 50.0, Color::rgba(28, 31, 37, 1.0));
     l.ui.p().arc(c, 44.0, 52.0, 0.0, std::f32::consts::TAU, Color::WHITE.alpha(0.08));
     let a0 = -std::f32::consts::FRAC_PI_2;
-    l.ui.p().arc(c, 44.0, 52.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), ACCENT);
+    l.ui.p().arc(c, 44.0, 52.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), accent());
     l.ui.text_in(&p.level.to_string(), Rect::new(c.x - 40.0, c.y - 26.0, 80.0, 40.0), 34.0, Weight::Black, TEXT, Align::Center);
     l.ui.text_in("LEVEL", Rect::new(c.x - 40.0, c.y + 12.0, 80.0, 16.0), 10.0, Weight::Black, TEXT_DIM, Align::Center);
     let tx = card.x + 142.0;
@@ -201,7 +201,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
             break;
         }
         l.ui.p().rounded(r, 10.0, Color::WHITE.alpha(0.04));
-        l.ui.icon(icon, Vec2::new(r.x + 22.0, r.y + 22.0), 18.0, ACCENT);
+        l.ui.icon(icon, Vec2::new(r.x + 22.0, r.y + 22.0), 18.0, accent());
         l.ui.text_in(v, Rect::new(r.x + 40.0, r.y + 8.0, r.w - 48.0, 28.0), 18.0, Weight::Black, TEXT, Align::Left);
         l.ui.text_in(label, Rect::new(r.x + 14.0, r.y + 42.0, r.w - 20.0, 18.0), 11.5, Weight::Medium, TEXT_DIM, Align::Left);
     }
@@ -226,7 +226,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
             ui.text_in(&format!("{} · {:.1} km · {} stops · {} tickets · {} crashes", s.bus.rsplit('/').next().unwrap_or(""), s.metres / 1000.0, s.stops, s.tickets, s.crashes), Rect::new(r.x + 12.0, r.y + 28.0, r.w - 130.0, 18.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
             let when = chrono_like(s.time);
             ui.text_in(&when, Rect::new(r.right() - 120.0, r.y + 6.0, 110.0, 20.0), 11.5, Weight::Medium, TEXT_SOFT, Align::Right);
-            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 120.0, r.y + 28.0, 110.0, 18.0), 11.5, Weight::Medium, ACCENT, Align::Right);
+            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 120.0, r.y + 28.0, 110.0, 18.0), 11.5, Weight::Medium, accent(), Align::Right);
         }
         sessions.len() as f32 * rh
     });
@@ -312,7 +312,7 @@ fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &
 }
 
 /// The settings page's tabs: what one has come to change.
-pub const SETTINGS_TABS: [&str; 6] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General"];
+pub const SETTINGS_TABS: [&str; 7] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General", "Interface"];
 
 /// What the tabs show of the launcher and ask of it (they see only the settings): the
 /// "Reset all settings" and the Controls page at one of its tabs.
@@ -448,8 +448,78 @@ fn settings_tab(ui: &mut Ui, tab: usize, s: &mut Value, dirty: &mut f32, out: &m
         2 => camera_tab(ui, s, dirty, out, cols),
         3 => sound_tab(ui, s, dirty, cols),
         4 => gameplay_tab(ui, s, dirty, cols),
-        _ => general_tab(ui, s, dirty, out, cols),
+        5 => general_tab(ui, s, dirty, out, cols),
+        _ => interface_tab(ui, s, dirty, cols),
     }
+}
+
+/// The Interface tab: the accent colour of the launcher and of the game's menus, and a
+/// preview of what wears it.
+fn interface_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
+    use omsi_ui::theme::Accent;
+    let mut c = Col::new(ui, cols[0], "Accent color");
+    let chosen = Accent::named(get(s, "ui_accent").as_str().unwrap_or("")).unwrap_or_default();
+    let gap = 12.0;
+    let w = (c.inner.w - gap * 3.0) / 4.0;
+    for (i, a) in Accent::ALL.into_iter().enumerate() {
+        let x = c.inner.x + (i % 4) as f32 * (w + gap);
+        let y = c.y + (i / 4) as f32 * 84.0;
+        let r = Rect::new(x, y, w, 52.0);
+        let id = id_of(&format!("accent-{}", a.name().to_ascii_lowercase()));
+        let (hover, _, clicked) = ui.interact_key(id, Rect::new(x, y, w, 76.0));
+        let on = a == chosen;
+        ui.p().rounded(r, RADIUS, if hover && !on { a.color().lighten(0.08) } else { a.color() });
+        if on {
+            ui.p().rounded_border(r.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
+            ui.icon("check_circle", r.center(), 22.0, omsi_ui::theme::on(a.color()));
+        }
+        let name = if a == Accent::default() { format!("{} (default)", a.name()) } else { a.name().to_string() };
+        ui.text_in(&name, Rect::new(x, y + 56.0, w, 20.0), 12.0, omsi_ui::Weight::Regular, if on { TEXT } else { TEXT_DIM }, omsi_ui::paint::Align::Center);
+        if clicked && !on {
+            s["ui_accent"] = json!(a.name());
+            omsi_ui::theme::set_accent(a);
+            *dirty = 0.3;
+        }
+    }
+    c.y += 84.0 * 2.0;
+    let note = "A short fixed palette, chosen for contrast on the dark background. It applies to the launcher and to every menu of the game, the Alt bar included.";
+    c.y += ui.paragraph(note, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 10.0;
+    if ui.button("accent-default", Rect::new(c.inner.x, c.y, 160.0, 34.0), "Back to default", Some("restart_alt"), ButtonKind::Normal) && chosen != Accent::default() {
+        s["ui_accent"] = json!(Accent::default().name());
+        omsi_ui::theme::set_accent(Accent::default());
+        *dirty = 0.3;
+    }
+    c.y += 34.0;
+    let left = c.used();
+    // (what wears the accent, drawn and not clickable: the page's own widgets are the real ones)
+    let mut p = Col::new(ui, cols[1], "Preview");
+    let nav = Rect::new(p.inner.x, p.y, 200.0, 40.0);
+    ui.p().rounded(nav, 4.0, HOVER);
+    ui.p().rounded(Rect::new(nav.x, nav.y + 11.0, 3.0, 18.0), 1.5, accent());
+    ui.icon("map", Vec2::new(nav.x + 24.0, nav.center().y), 20.0, accent());
+    ui.text_in("Maps", Rect::new(nav.x + 44.0, nav.y, 140.0, nav.h), 14.0, omsi_ui::Weight::Medium, TEXT, omsi_ui::paint::Align::Left);
+    p.y += 52.0;
+    let go = Rect::new(p.inner.x, p.y, 130.0, 34.0);
+    ui.p().rounded(go, 6.0, accent());
+    ui.text_in("Start driving", go, 13.0, omsi_ui::Weight::Bold, on_accent(), omsi_ui::paint::Align::Center);
+    let cancel = Rect::new(go.right() + 10.0, p.y, 90.0, 34.0);
+    ui.p().rounded(cancel, 6.0, FIELD);
+    ui.p().rounded_border(cancel, 6.0, 1.0, EDGE);
+    ui.text_in("Cancel", cancel, 13.0, omsi_ui::Weight::Medium, TEXT, omsi_ui::paint::Align::Center);
+    for (k, on) in [(0.0, true), (1.0, false)] {
+        let t = Rect::new(cancel.right() + 16.0 + k * 50.0, p.y + 8.0, 34.0, 18.0);
+        ui.p().rounded(t, 9.0, if on { accent() } else { omsi_ui::Color::rgba(62, 62, 62, 1.0) });
+        ui.p().circle(Vec2::new(if on { t.right() - 9.0 } else { t.x + 9.0 }, t.center().y), 6.0, omsi_ui::Color::rgba(240, 240, 240, 1.0));
+    }
+    p.y += 50.0;
+    let row = Rect::new(p.inner.x, p.y, (p.inner.w * 0.55).max(200.0), 48.0);
+    ui.p().rounded(row, 6.0, omsi_ui::theme::accent_soft());
+    ui.p().rounded_border(row, 6.0, 1.0, accent().alpha(0.55));
+    ui.text_in("Example bus A", Rect::new(row.x + 12.0, row.y + 5.0, row.w - 24.0, 20.0), 13.5, omsi_ui::Weight::Bold, TEXT, omsi_ui::paint::Align::Left);
+    ui.text_in("Selected item", Rect::new(row.x + 12.0, row.y + 24.0, row.w - 24.0, 18.0), 12.0, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
+    ui.text_in("Link and highlight text", Rect::new(row.right() + 14.0, row.y, p.inner.right() - row.right() - 14.0, row.h), 13.5, omsi_ui::Weight::Regular, accent(), omsi_ui::paint::Align::Left);
+    p.y += 60.0;
+    [left, p.used()]
 }
 
 /// The saved graphics profiles' part of the Graphics tab: the list, the name being typed.
@@ -1211,13 +1281,13 @@ fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, c
             *dirty = 0.3;
         }
         let on = cur == name;
-        ui.p().rounded(cell, 3.0, if on { ACCENT } else { Color::WHITE.alpha(if h { 0.2 } else { 0.08 }) });
+        ui.p().rounded(cell, 3.0, if on { accent() } else { Color::WHITE.alpha(if h { 0.2 } else { 0.08 }) });
     }
     // (dragged somewhere else in the game, #940: that place, until a corner is chosen)
     if let Some(a) = crate::nav::placed_at(&cur) {
         let (cw, ch) = (screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0);
         let cell = Rect::new(screen.x + 5.0 + a[0] * (screen.w - 10.0 - cw), screen.y + 5.0 + a[1] * (screen.h - 10.0 - ch), cw, ch);
-        ui.p().rounded(cell, 3.0, ACCENT);
+        ui.p().rounded(cell, 3.0, accent());
     }
     c.y += 74.0;
     let left = c.used();
@@ -1383,9 +1453,9 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         let tw = body.w - bw - 70.0;
         let th = l.ui.paragraph_height(&text, tw, 12.5, Weight::Medium);
         let bar = Rect::new(body.x, body.y, body.w, (th + 22.0).max(54.0));
-        l.ui.p().rounded(bar, 8.0, ACCENT.alpha(0.1));
-        l.ui.p().rounded_border(bar, 8.0, 1.0, ACCENT.alpha(0.45));
-        l.ui.icon("info", Vec2::new(bar.x + 22.0, bar.center().y), 20.0, ACCENT);
+        l.ui.p().rounded(bar, 8.0, accent().alpha(0.1));
+        l.ui.p().rounded_border(bar, 8.0, 1.0, accent().alpha(0.45));
+        l.ui.icon("info", Vec2::new(bar.x + 22.0, bar.center().y), 20.0, accent());
         l.ui.paragraph(&text, Vec2::new(bar.x + 42.0, bar.center().y - th * 0.5), tw, 12.5, Weight::Medium, TEXT_SOFT);
         if l.ui.button("kb-use-custom", Rect::new(bar.right() - bw - 10.0, bar.center().y - 18.0, bw, 36.0), "Use these keys", Some("keyboard"), ButtonKind::Primary) {
             use_custom_keys(l);
@@ -1498,7 +1568,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 // same key pressed for each)
                 let pr = Rect::new(rr.right() - 222.0, rr.y + 5.0, 26.0, rr.h - 10.0);
                 let (hp, _, cp) = ui.interact(id_of(&format!("kb-{sec}-{i}-more")), pr);
-                ui.icon("add", pr.center(), 16.0, if hp { ACCENT } else { TEXT_FAINT });
+                ui.icon("add", pr.center(), 16.0, if hp { accent() } else { TEXT_FAINT });
                 if cp {
                     more = Some(*i);
                 }
@@ -1509,9 +1579,9 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 if c {
                     clicked = Some((*i, false));
                 }
-                let base = if waiting { ACCENT.alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
+                let base = if waiting { accent().alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
                 ui.p().rounded(kr, 6.0, base);
-                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { ACCENT } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
+                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { accent() } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
                 ui.text_in(if waiting { "press a key…" } else { keyn }, kr, 12.0, Weight::Bold, if *clash { DANGER.lighten(0.3) } else { TEXT }, Align::Center);
                 let xr = Rect::new(rr.right() - 32.0, rr.y + 5.0, 26.0, rr.h - 10.0);
                 let (hx, _, cx) = ui.interact(id ^ 1, xr);
@@ -1790,7 +1860,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
             if let Some((_, v)) = live.iter().find(|(k, _)| *k == a) {
                 let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, ACCENT);
+                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, accent());
             }
             let mut sel = (Func::code(d.axes[a].map(|x| x.0)) + 1) as usize;
             if ui.select(&format!("pad-axis-{a}"), Rect::new(bar.right() + GAP, r.y, sel_w, r.h), &mut sel, &funcs) {
@@ -1834,7 +1904,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
                 None => format!("Button {}", b + 1),
             };
             if lit == Some(b) {
-                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, ACCENT.alpha(0.28));
+                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, accent().alpha(0.28));
             }
             ui.label(Rect::new(r.x, r.y, 90.0, r.h), &label);
             // (a latching switch - a turn signal lever, a lit hazard button - also switches
@@ -1947,7 +2017,7 @@ fn wizard(ui: &mut Ui, r: Rect, w: &mut Wizard, d: &mut crate::controllers::Devi
         ui.text_in(["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider 1", "Slider 2"][*k], Rect::new(r.x, y, 84.0, 24.0), 12.0, Weight::Medium, TEXT_DIM, Align::Left);
         ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
         let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, ACCENT);
+        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, accent());
         y += 26.0;
     }
     let now = |live: &[(usize, f32)]| {
@@ -2267,9 +2337,9 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         if role == "host" {
             let code = lan.get("code").and_then(|x| x.as_str()).unwrap_or("").to_string();
             let box_r = Rect::new(r.x + 20.0, yy, r.w - 40.0, 84.0);
-            l.ui.p().rounded(box_r, 10.0, ACCENT.alpha(0.10));
-            l.ui.p().rounded_border(box_r, 10.0, 1.0, ACCENT.alpha(0.5));
-            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, ACCENT, Align::Left);
+            l.ui.p().rounded(box_r, 10.0, accent().alpha(0.10));
+            l.ui.p().rounded_border(box_r, 10.0, 1.0, accent().alpha(0.5));
+            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, accent(), Align::Left);
             l.ui.text_in(&code, Rect::new(box_r.x + 16.0, box_r.y + 26.0, box_r.w - 170.0, 30.0), 20.0, Weight::Condensed, TEXT, Align::Left);
             l.ui.text_in("Your friends paste it into Multiplayer → Connect by Code.", Rect::new(box_r.x + 16.0, box_r.y + 58.0, box_r.w - 170.0, 18.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
             if l.ui.button(&format!("copy-{}", i.pid), Rect::new(box_r.right() - 146.0, box_r.y + 24.0, 130.0, 36.0), "Copy code", Some("content_copy"), ButtonKind::Primary) {
@@ -2381,7 +2451,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     let drop = Rect::new(inner.x, y, inner.w, 110.0);
     let hot = l.pages.drop_hover;
     let t = l.ui.anim(id_of("drop"), if hot { 1.0 } else { 0.0 }, 0.1);
-    l.ui.p().rounded(drop, 12.0, ACCENT.alpha(0.05 + 0.12 * t));
+    l.ui.p().rounded(drop, 12.0, accent().alpha(0.05 + 0.12 * t));
     // a dashed edge
     let per = 2.0 * (drop.w + drop.h);
     let n = (per / 14.0) as usize;
@@ -2396,9 +2466,9 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         } else {
             Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h))
         };
-        l.ui.p().circle(p, 1.3, ACCENT.alpha(0.35 + 0.5 * t));
+        l.ui.p().circle(p, 1.3, accent().alpha(0.35 + 0.5 * t));
     }
-    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, ACCENT.alpha(0.6 + 0.4 * t));
+    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, accent().alpha(0.6 + 0.4 * t));
     l.ui.text_in("…or drop a mod folder or .zip onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
     y += 122.0;
     if !l.state.mod_path.is_empty() {
@@ -2451,7 +2521,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
                 "done" => OK,
                 "failed" => DANGER,
                 "cancelled" => TEXT_DIM,
-                _ => ACCENT,
+                _ => accent(),
             };
             ui.badge(Vec2::new(r.right() - 90.0, r.y + 10.0), &j.state.to_uppercase(), sc);
             let mut yy = r.y + 34.0;
@@ -2491,7 +2561,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         let mut y = v.y;
         y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 12.0, Weight::Medium, TEXT_SOFT);
         y += 6.0;
-        ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(x, y, w, 20.0), 13.0, Weight::Bold, ACCENT, Align::Left);
+        ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(x, y, w, 20.0), 13.0, Weight::Bold, accent(), Align::Left);
         y += 30.0;
         for (f, n) in &m.folders {
             ui.icon("folder_open", Vec2::new(x + 9.0, y + 10.0), 16.0, TEXT_DIM);
@@ -2828,7 +2898,10 @@ mod settings_tests {
             "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
             "s-about-releases", "s-reset",
         ];
-        vec![graphics, driving, camera, sound, gameplay, general]
+        let interface = vec![
+            "accent-amber", "accent-orange", "accent-red", "accent-pink", "accent-purple", "accent-blue", "accent-teal", "accent-green", "accent-default",
+        ];
+        vec![graphics, driving, camera, sound, gameplay, general, interface]
     }
 
     /// Settings that show every row: Enhanced (Vanilla hides the shadows and effects), VR on.
@@ -2923,6 +2996,22 @@ mod settings_tests {
         let ui = drawn(&mut s);
         assert!(ui.drawn.contains_key(&id_of("s-graphics")));
         assert_eq!(s["graphics"], json!("enhanced"));
+    }
+
+    /// A colour clicked on the Interface tab is the accent and is saved by its name; "Back to
+    /// default" is amber again.
+    #[test]
+    fn the_accent_is_chosen_on_the_interface_tab_and_saved() {
+        let tab = SETTINGS_TABS.iter().position(|t| *t == "Interface").unwrap();
+        let mut s = all_rows();
+        assert_eq!(s["ui_accent"], json!("Amber"));
+        click(tab, "accent-blue", &mut s);
+        assert_eq!(s["ui_accent"], json!("Blue"));
+        let saved = core::settings_to_text(&s, None);
+        assert_eq!(core::settings_from_text(Some(&saved))["ui_accent"], json!("Blue"));
+        click(tab, "accent-default", &mut s);
+        assert_eq!(s["ui_accent"], json!("Amber"));
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
     }
 
     /// Every option of the "DirectX9 (D3D9Ex)" table (`api_limits`) has no control on the

@@ -844,11 +844,7 @@ impl Ui {
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
         let rr = if held { r.inset(0.5) } else { r };
         let (fill, text_c, edge) = match kind {
-            ButtonKind::Primary => (
-                ACCENT.lighten(0.08 * t),
-                Color::rgba(18, 14, 8, 1.0),
-                Color::CLEAR,
-            ),
+            ButtonKind::Primary => (accent().lighten(0.08 * t), on_accent(), Color::CLEAR),
             ButtonKind::Danger => (FIELD.mix(HOVER, t), DANGER, DANGER.alpha(0.35 + 0.3 * t)),
             ButtonKind::Normal => (FIELD.mix(HOVER, t), TEXT, EDGE),
             ButtonKind::Ghost => (
@@ -923,7 +919,7 @@ impl Ui {
         self.p().rounded(
             track,
             th * 0.5,
-            Color::rgba(62, 62, 62, 1.0).mix(ACCENT, on),
+            Color::rgba(62, 62, 62, 1.0).mix(accent(), on),
         );
         let kx = track.x + th * 0.5 + (tw - th) * on;
         self.p().circle(
@@ -998,7 +994,7 @@ impl Ui {
         self.p().rounded(
             Rect::new(track.x, track.y, track.w * shown, th),
             th * 0.5,
-            ACCENT,
+            accent(),
         );
         let kc = Vec2::new(track.x + track.w * shown, cy);
         self.p().circle(
@@ -1084,7 +1080,7 @@ impl Ui {
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
         self.p()
-            .rounded_border(r, 6.0, 1.0, if open { ACCENT.alpha(0.7) } else { EDGE });
+            .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
         let txt = options.get(*selected).cloned().unwrap_or_default();
         self.text_in(
             &txt,
@@ -1283,8 +1279,12 @@ impl Ui {
             0.08,
         );
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t * 0.5));
-        self.p()
-            .rounded_border(r, 6.0, 1.0, if focused { ACCENT.alpha(0.7) } else { EDGE });
+        self.p().rounded_border(
+            r,
+            6.0,
+            1.0,
+            if focused { accent().alpha(0.7) } else { EDGE },
+        );
         let mut x = r.x + 12.0;
         if let Some(i) = icon {
             self.icon(i, Vec2::new(x + 8.0, r.center().y), 18.0, TEXT_DIM);
@@ -1363,7 +1363,7 @@ impl Ui {
 
                     self.p().rect(
                         Rect::new(inner.x + sx, r.y + 5.0, sw, r.h - 10.0),
-                        ACCENT.alpha(0.35),
+                        accent().alpha(0.35),
                     );
                 }
             }
@@ -1383,7 +1383,7 @@ impl Ui {
             {
                 self.p().rect(
                     Rect::new(inner.x - shift + cw + 0.5, r.center().y - 8.5, 1.5, 17.0),
-                    ACCENT,
+                    accent(),
                 );
             }
         }
@@ -1488,7 +1488,7 @@ impl Ui {
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
         self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
         self.p()
-            .rounded_border(r, 6.0, 1.0, if open { ACCENT.alpha(0.7) } else { EDGE });
+            .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
         self.icon(
             "calendar_month",
             Vec2::new(r.x + 20.0, r.center().y),
@@ -1535,7 +1535,7 @@ impl Ui {
         self.p().rounded(r, r.h * 0.5, Color::rgba(50, 50, 50, 1.0));
         let w = (r.w * frac.clamp(0.0, 1.0)).max(r.h);
         self.p()
-            .rounded(Rect::new(r.x, r.y, w, r.h), r.h * 0.5, ACCENT);
+            .rounded(Rect::new(r.x, r.y, w, r.h), r.h * 0.5, accent());
         if busy {
             let x = r.x + ((self.time * 0.6) % 1.0) * (w + 60.0) - 60.0;
             self.push_clip(Rect::new(r.x, r.y, w, r.h), r.h * 0.5);
@@ -1635,7 +1635,7 @@ impl Ui {
             self.p().rounded(
                 Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0),
                 1.0,
-                ACCENT.alpha(s),
+                accent().alpha(s),
             );
         } else if t > 0.01 {
             self.p().rounded(r, 6.0, HOVER.alpha(t));
@@ -1683,7 +1683,7 @@ impl Ui {
             );
         }
         if let Some(r) = self.nav.ring() {
-            self.p().rounded_border(r, 8.0, 2.0, ACCENT);
+            self.p().rounded_border(r, 8.0, 2.0, accent());
         }
         let mut layers = Vec::new();
         let mut verts = Vec::new();
@@ -1831,7 +1831,7 @@ impl Ui {
                     "check",
                     Vec2::new(cell.right() - 16.0, cell.center().y),
                     15.0,
-                    ACCENT,
+                    accent(),
                 );
             } else if h {
                 self.p().rounded(cell, 5.0, HOVER);
@@ -1905,7 +1905,7 @@ impl Ui {
                 self.p().rounded(b, 6.0, Color::WHITE.alpha(0.08));
                 self.cursor = winit::window::CursorIcon::Pointer;
             }
-            self.icon(icon, b.center(), 20.0, if h { ACCENT } else { TEXT_DIM });
+            self.icon(icon, b.center(), 20.0, if h { accent() } else { TEXT_DIM });
         }
         if click && prev.contains(m) {
             if p.month == 1 {
@@ -1940,7 +1940,7 @@ impl Ui {
                 11.0,
                 Weight::Bold,
                 if k >= 5 {
-                    ACCENT.alpha(0.8)
+                    accent().alpha(0.8)
                 } else {
                     TEXT_FAINT
                 },
@@ -1963,7 +1963,7 @@ impl Ui {
             let h = cell.contains(m);
             let is_chosen = chosen == Some((p.year, p.month, d));
             if is_chosen {
-                self.p().rounded(cell, 7.0, ACCENT);
+                self.p().rounded(cell, 7.0, accent());
             } else if h {
                 self.p().rounded(cell, 7.0, Color::WHITE.alpha(0.09));
             }

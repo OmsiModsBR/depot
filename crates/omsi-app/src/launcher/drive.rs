@@ -210,7 +210,7 @@ fn steps(l: &mut Launcher, r: Rect) {
     let w = r.w / STEPS.len() as f32;
     l.ui.p().rect(Rect::new(r.x, r.bottom() - 1.0, r.w, 1.0), EDGE);
     let sel = l.ui.anim(id_of("drive-tab"), l.drive.tab as f32, 0.08);
-    l.ui.p().rect(Rect::new(r.x + w * sel, r.bottom() - 2.0, w, 2.0), ACCENT);
+    l.ui.p().rect(Rect::new(r.x + w * sel, r.bottom() - 2.0, w, 2.0), accent());
     for (k, name) in STEPS.iter().enumerate() {
         let cell = Rect::new(r.x + w * k as f32, r.y, w, r.h - 2.0);
         l.ui.solid(cell);
@@ -221,7 +221,7 @@ fn steps(l: &mut Launcher, r: Rect) {
         let on = l.drive.tab == k;
         let c = if on { TEXT } else if h { TEXT_SOFT } else { TEXT_DIM };
         let dot = Vec2::new(cell.x + 14.0, cell.center().y);
-        l.ui.p().circle(dot, 10.0, if on { ACCENT } else { Color::rgba(52, 52, 52, 1.0) });
+        l.ui.p().circle(dot, 10.0, if on { accent() } else { Color::rgba(52, 52, 52, 1.0) });
         l.ui.text_in(&format!("{}", k + 1), Rect::new(dot.x - 10.0, dot.y - 10.0, 20.0, 20.0), 11.5, Weight::Bold, if on { Color::rgba(18, 14, 8, 1.0) } else { TEXT_SOFT }, Align::Center);
         l.ui.text_in(name, Rect::new(cell.x + 30.0, cell.y, (cell.w - 34.0).max(20.0), cell.h), 12.5, if on { Weight::Bold } else { Weight::Medium }, c, Align::Left);
     }
@@ -319,7 +319,7 @@ fn duty_panel(l: &mut Launcher, body: Rect) {
             let cw = ui.width(&count, 11.5, Weight::Bold) + 8.0;
             let bw = (ui.width(name, 12.5, Weight::Bold) + 14.0).clamp(34.0, (rr.w - cw - 40.0).max(34.0));
             let badge = Rect::new(rr.x + 10.0, rr.y + 6.0, bw, 20.0);
-            ui.p().rounded(badge, 4.0, if on { ACCENT } else { Color::rgba(56, 56, 56, 1.0) });
+            ui.p().rounded(badge, 4.0, if on { accent() } else { Color::rgba(56, 56, 56, 1.0) });
             ui.text_in(name, badge.pad(6.0, 0.0), 12.0, Weight::Bold, if on { Color::rgba(18, 14, 8, 1.0) } else { TEXT }, Align::Center);
             ui.icon("event", Vec2::new(rr.right() - cw - 10.0, badge.center().y), 13.0, TEXT_FAINT);
             ui.text_in(&count, Rect::new(rr.right() - cw - 2.0, badge.y, cw, badge.h), 11.5, Weight::Bold, TEXT_DIM, Align::Right);
@@ -410,7 +410,7 @@ fn duty_panel(l: &mut Launcher, body: Rect) {
             // the trip a start now would take on the right
             ui.text_in(num, Rect::new(rr.x + 10.0, rr.y + 6.0, rr.w - 120.0, 18.0), 13.5, Weight::Bold, c, Align::Left);
             if let Some(x) = trip {
-                ui.text_in(&format!("{} - {}", hhmm(x.departure), hhmm(x.arrival)), Rect::new(rr.right() - 112.0, rr.y + 6.0, 102.0, 18.0), 12.0, Weight::Medium, if live { ACCENT } else { TEXT_FAINT }, Align::Right);
+                ui.text_in(&format!("{} - {}", hhmm(x.departure), hhmm(x.arrival)), Rect::new(rr.right() - 112.0, rr.y + 6.0, 102.0, 18.0), 12.0, Weight::Medium, if live { accent() } else { TEXT_FAINT }, Align::Right);
             }
             let route = match trip {
                 Some(x) if searching => format!("{} · {} → {}", x.name, x.from, x.terminus),
@@ -700,7 +700,7 @@ fn map_labels(l: &mut Launcher, map: Rect, avoid: &[Rect]) {
                 let right = Rect::new(at.x + 12.0, at.y - 28.0, w, 20.0);
                 let rr = if inside(&right) { right } else { Rect::new(at.x - 12.0 - w, at.y - 28.0, w, 20.0) };
                 if inside(&rr) {
-                    l.ui.p().rounded(rr, 4.0, ACCENT);
+                    l.ui.p().rounded(rr, 4.0, accent());
                     l.ui.text_in(&name, rr.pad(7.0, 0.0), 11.5, Weight::Bold, Color::rgba(18, 14, 8, 1.0), Align::Left);
                     taken.push(rr);
                 }
@@ -725,7 +725,7 @@ fn map_labels(l: &mut Launcher, map: Rect, avoid: &[Rect]) {
         let Some(rr) = [right, left].into_iter().find(|r| inside(r) && !taken.iter().any(|t| hits(t, r))) else { continue };
         l.ui.p().rounded(rr, 4.0, Color::rgba(10, 10, 10, 0.84));
         let tw = l.ui.width(&time, 11.0, Weight::Bold);
-        l.ui.text_in(&time, Rect::new(rr.x + 6.0, rr.y, tw + 2.0, rr.h), 11.0, Weight::Bold, ACCENT, Align::Left);
+        l.ui.text_in(&time, Rect::new(rr.x + 6.0, rr.y, tw + 2.0, rr.h), 11.0, Weight::Bold, accent(), Align::Left);
         l.ui.text_in(&st.name, Rect::new(rr.x + 12.0 + tw, rr.y, rr.w - tw - 16.0, rr.h), 11.0, Weight::Medium, TEXT_SOFT, Align::Left);
         taken.push(rr);
     }
@@ -914,7 +914,7 @@ fn step_bus(l: &mut Launcher, r: Rect) {
                 if model.variants.len() == 1 { pick = Some(model.variants[0].file.clone()); }
                 else { toggle = Some(model.key.clone()); }
             }
-            ui.icon("directions_bus", Vec2::new(row.x + 20.0, row.y + 23.0), 20.0, if selected.is_some() { ACCENT } else { TEXT_DIM });
+            ui.icon("directions_bus", Vec2::new(row.x + 20.0, row.y + 23.0), 20.0, if selected.is_some() { accent() } else { TEXT_DIM });
             let title = Rect::new(row.x + 42.0, row.y + 7.0, row.w - 78.0, 20.0);
             ui.text_in(&model.name, title, 13.0, Weight::Medium, TEXT, Align::Left);
             ui.tooltip(title, &model.name);
@@ -925,7 +925,7 @@ fn step_bus(l: &mut Launcher, r: Rect) {
             else if selected.is_some_and(|v| v.fresh) { format!("{subtitle} · {}", omsi_ui::tr("NEW")) }
             else if selected.is_some_and(|v| v.installed) { format!("{subtitle} · {}", omsi_ui::tr("MOD")) } else { subtitle };
             ui.text_in(&subtitle, Rect::new(title.x, row.y + 29.0, title.w, 17.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
-            ui.icon(if model.variants.len() == 1 { if selected.is_some() { "check" } else { "chevron_right" } } else if open { "expand_less" } else { "expand_more" }, Vec2::new(row.right() - 18.0, row.center().y), 18.0, if selected.is_some() { ACCENT } else { TEXT_DIM });
+            ui.icon(if model.variants.len() == 1 { if selected.is_some() { "check" } else { "chevron_right" } } else if open { "expand_less" } else { "expand_more" }, Vec2::new(row.right() - 18.0, row.center().y), 18.0, if selected.is_some() { accent() } else { TEXT_DIM });
             // the star: a bus of its own is starred here, a family's types in its list below
             let starred = model.variants.iter().any(|v| is_fav(&v.file));
             let sr = Rect::new(row.right() - 62.0, row.center().y - 13.0, 26.0, 26.0);
@@ -934,10 +934,10 @@ fn step_bus(l: &mut Launcher, r: Rect) {
                 if cs {
                     star = Some(model.variants[0].file.clone());
                 }
-                ui.icon("star", sr.center(), 16.0, if starred { ACCENT } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.16) });
+                ui.icon("star", sr.center(), 16.0, if starred { accent() } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.16) });
                 ui.tooltip(sr, if starred { "Remove from the favourites" } else { "Add to the favourites" });
             } else if starred {
-                ui.icon("star", sr.center(), 14.0, ACCENT.alpha(0.8));
+                ui.icon("star", sr.center(), 14.0, accent().alpha(0.8));
             }
             y += 58.0;
             if open {
@@ -960,7 +960,7 @@ fn step_bus(l: &mut Launcher, r: Rect) {
                     if cs {
                         star = Some(variant.file.clone());
                     }
-                    ui.icon("star", sr.center(), 18.0, if on { ACCENT } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.2) });
+                    ui.icon("star", sr.center(), 18.0, if on { accent() } else if hs { TEXT_SOFT } else { Color::WHITE.alpha(0.2) });
                     ui.tooltip(sr, if on { "Remove from the favourites" } else { "Add to the favourites" });
                 }
                 if let Some(variant) = selected {
@@ -1382,7 +1382,7 @@ fn step_time(l: &mut Launcher, r: Rect) {
             }
             let t = ui.anim(id, if h { 1.0 } else { 0.0 }, 0.08);
             ui.p().rounded(rr, 6.0, if on { SELECTED } else { FIELD.mix(HOVER, t) });
-            ui.p().rounded_border(rr, 6.0, 1.0, if on { ACCENT.alpha(0.6) } else { EDGE });
+            ui.p().rounded_border(rr, 6.0, 1.0, if on { accent().alpha(0.6) } else { EDGE });
             ui.icon(icon, Vec2::new(rr.x + 24.0, rr.center().y), 22.0, if on { TEXT } else { TEXT_DIM });
             let tw = ui.text_in(name, Rect::new(rr.x + 46.0, rr.y + 10.0, rr.w - 56.0, 20.0), 13.0, Weight::Bold, TEXT, Align::Left);
             if *fresh {
