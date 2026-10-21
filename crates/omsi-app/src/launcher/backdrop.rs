@@ -258,6 +258,10 @@ mod tests {
         assert!(b.kept.contains_key(&Want::Bus(3)));
         b.want(Want::Latest);
         assert_eq!(b.reading.len(), 1);
+        // (the reading held open here: the real one may already be done, there being no
+        // screenshots where the tests run)
+        let (_still, rx) = channel();
+        b.reading[0].1 = rx;
         // (still reading: the old picture stays; read: it replaces it)
         b.update();
         assert_eq!(b.shown, Some(Want::Latest));
