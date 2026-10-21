@@ -7,6 +7,7 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+pub mod disk;
 pub mod index;
 pub mod install;
 pub mod instances;
@@ -28,6 +29,9 @@ pub struct Config {
     pub game: String,
     /// The current profile name.
     pub profile: String,
+    /// The content folder chosen under Setup (empty: beside the game program).
+    #[serde(default)]
+    pub content: String,
 }
 
 pub fn data_dir() -> PathBuf {
@@ -281,13 +285,13 @@ fn root() -> Result<PathBuf> {
     Ok(r)
 }
 
-/// The game's own content folder: the folder of the game binary, laid out like OMSI 2
-/// (Vehicles, maps, Sceneryobjects ...). Installed mods live here; the game searches it
-/// before the original installation.
+/// The game's own content folder, laid out like OMSI 2 (Vehicles, maps, Sceneryobjects ...).
+/// Installed mods live here; the game searches it before the original installation.
 pub fn content_dir() -> Option<PathBuf> {
-    // the same rules as the game: $OMSI_CONTENT, else the folder of the game binary (beside
-    // the bundle when the binary sits inside a macOS .app)
-    let dir = match omsi_cfg::flags::CONTENT.path() {
+    // the same rules as the game: $OMSI_CONTENT, else the folder chosen under Setup (when it
+    // can be one, `chosen_content`), else the folder of the game binary (beside the bundle
+    // when the binary sits inside a macOS .app)
+    let dir = match omsi_cfg::flags::CONTENT.path().or_else(chosen_content) {
         Some(d) => d,
         None => {
             let c = load_config_raw();
@@ -314,17 +318,167 @@ pub fn content_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
+/// The content folder chosen under Setup, when one is and it can be used: the game started by
+/// the launcher and the one started by itself read it too (`$OMSI_CONTENT` wins over it). A
+/// choice that cannot be one (`content_choice_problem`, a folder that cannot be made or
+/// written to) is left aside with a line in the log, and the folder beside the game is used.
+pub fn chosen_content() -> Option<PathBuf> {
+    static SEEN: std::sync::Mutex<Option<(String, String, Option<PathBuf>)>> =
+        std::sync::Mutex::new(None);
+    let c = load_config_raw();
+    let dir = c.content.trim().to_string();
+    if dir.is_empty() {
+        return None;
+    }
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((d, r, out)) = seen.as_ref() {
+        if *d == dir && *r == c.root {
+            return out.clone();
+        }
+    }
+    let out = usable_choice(&dir, &c.root);
+    *seen = Some((dir, c.root.clone(), out.clone()));
+    out
+}
+
+/// The content folder `dir` chosen under Setup, with the OMSI 2 folder `root`, when it can
+/// be used (see `chosen_content`); said in the log when it cannot.
+fn usable_choice(dir: &str, root: &str) -> Option<PathBuf> {
+    let p = PathBuf::from(dir);
+    match content_folder_problem(&p, Path::new(root.trim())) {
+        Some(why) => {
+            log_to_file(&format!("content folder chosen under Setup not used: {why}; the folder beside the game is used"));
+            None
+        }
+        None => Some(p),
+    }
+}
+
+/// `a` is `b` or inside it, the letters' case aside on Windows.
+fn within(a: &Path, b: &Path) -> bool {
+    let mut b = b.components();
+    let mut a = a.components();
+    loop {
+        match (b.next(), a.next()) {
+            (None, _) => return true,
+            (Some(_), None) => return false,
+            (Some(x), Some(y)) => {
+                let (x, y) = (
+                    x.as_os_str().to_string_lossy(),
+                    y.as_os_str().to_string_lossy(),
+                );
+                let same = if cfg!(windows) {
+                    x.eq_ignore_ascii_case(&y)
+                } else {
+                    x == y
+                };
+                if !same {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
+/// `p` with its links resolved as far as it exists (the rest as typed): a folder not made yet
+/// is still compared where it will be.
+fn resolved(p: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut at = p.to_path_buf();
+    loop {
+        if let Ok(c) = at.canonicalize() {
+            let mut out = c;
+            for r in rest.iter().rev() {
+                out.push(r);
+            }
+            return out;
+        }
+        match (at.file_name().map(|f| f.to_os_string()), at.parent()) {
+            (Some(f), Some(parent)) => {
+                rest.push(f);
+                at = parent.to_path_buf();
+            }
+            _ => return p.to_path_buf(),
+        }
+    }
+}
+
+/// Why `dir` cannot be the content folder, with the OMSI 2 folder `root` (empty when none is
+/// set): the original is never written to, so the content folder is a full path that is
+/// neither in the OMSI 2 folder (nor the folder itself) nor in any OMSI 2 installation, and
+/// is none itself. `None` when it can be; nothing is written to find out.
+pub fn content_choice_problem(dir: &Path, root: &Path) -> Option<String> {
+    if !dir.is_absolute() {
+        return Some(format!(
+            "{} is not a full path (from the drive, or from /)",
+            dir.display()
+        ));
+    }
+    let here = resolved(dir);
+    if !root.as_os_str().is_empty() && within(&here, &resolved(root)) {
+        return Some("it is in the OMSI 2 folder, which the Depot never writes to: choose a folder outside it".into());
+    }
+    // (an installation the launcher was not told of: the folder itself or one it lies in)
+    let install = |d: &Path| {
+        d.is_dir()
+            && (omsi_cfg::missing_original_essentials(d).is_empty()
+                || std::fs::read_dir(d)
+                    .map(|rd| {
+                        rd.flatten().any(|e| {
+                            e.file_name()
+                                .to_string_lossy()
+                                .eq_ignore_ascii_case("Omsi.exe")
+                        })
+                    })
+                    .unwrap_or(false))
+    };
+    if let Some(i) = here.ancestors().find(|d| install(d)) {
+        return Some(format!(
+            "it is in an OMSI 2 installation ({}), which the Depot never writes to",
+            i.display()
+        ));
+    }
+    None
+}
+
+/// Why `dir` cannot be the content folder (`content_choice_problem`), or why it cannot be
+/// made or written to - Save asks this; it makes the folder when it is missing.
+pub fn content_folder_problem(dir: &Path, root: &Path) -> Option<String> {
+    if let Some(why) = content_choice_problem(dir, root) {
+        return Some(why);
+    }
+    if std::fs::create_dir_all(dir).is_err() || !omsi_cfg::is_writable(dir) {
+        return Some(format!("{} cannot be made or written to", dir.display()));
+    }
+    None
+}
+
 /// Tell the OMSI readers about the content folder, the archives used in place in its
 /// `Archives` folder and the OMSI folder (in that order, as the game has them), so that a
 /// path inside one is also looked for in the others (a repaint's `.cti` in the content
 /// folder's copy of a stock bus folder, a map inside an archive).
 fn register_roots(content: &Path) {
-    static DONE: std::sync::Once = std::sync::Once::new();
-    let content = content.to_path_buf();
-    DONE.call_once(|| {
-        omsi_cfg::add_content_root(content.clone());
-        mount_archives(&content);
-    });
+    static NOW: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+    let mut now = NOW.lock().unwrap_or_else(|e| e.into_inner());
+    if now.as_deref() != Some(content) {
+        match now.take() {
+            // (another folder chosen under Setup: the one before and its archives are no
+            // longer searched, the new one is, first)
+            Some(old) => {
+                let archives = old.join(install::ARCHIVES);
+                for r in omsi_cfg::content_roots() {
+                    if r == old || r.starts_with(&archives) {
+                        omsi_cfg::remove_content_root(&r);
+                    }
+                }
+                omsi_cfg::add_content_root_first(content.to_path_buf());
+            }
+            None => omsi_cfg::add_content_root(content.to_path_buf()),
+        }
+        mount_archives(content);
+        *now = Some(content.to_path_buf());
+    }
+    drop(now);
     // the OMSI folder - also one chosen under Setup while the launcher runs (it was only
     // looked for once, at the start, and a folder set later was never a root)
     if let Some(r) = find_root(&load_config_raw().root) {
@@ -351,11 +505,10 @@ fn mount_archives(content: &Path) {
         })
         .collect();
     zips.sort();
-    let mounted: Vec<PathBuf> = omsi_cfg::vfs::mounts()
-        .iter()
-        .map(|m| m.path().to_path_buf())
-        .collect();
-    for z in zips.into_iter().filter(|z| !mounted.contains(z)) {
+    // (one mounted before that is no root any more is made one again: a folder chosen back
+    // under Setup)
+    let roots = omsi_cfg::content_roots();
+    for z in zips.into_iter().filter(|z| !roots.contains(z)) {
         mount_archive(&z);
     }
 }
@@ -1536,9 +1689,14 @@ fn content_language() -> &'static str {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct StopInfo {
+    /// The stop's object on the map (where it stands: the Timetable page's map).
+    pub id: i64,
     pub name: String,
     pub arr: f64,
     pub dep: f64,
+    /// The bus stops here; false for a station the profile has it pass
+    /// (`[profile_otherstopping] 2`: every station of a depot run).
+    pub stops: bool,
 }
 
 /// One trip of a tour, as OMSI's timetable dialog lists it: when it leaves, from where to
@@ -1597,6 +1755,9 @@ pub struct TripPath {
     pub route: Vec<RoadPiece>,
     /// The stop objects the trip calls at, in order.
     pub stops: Vec<i64>,
+    /// How many stretches from one stop to the next the timetable has no road for (no
+    /// station link between them, or one without a step): nothing can be drawn there.
+    pub missing: usize,
 }
 
 /// One spline of the map a trip drives over: its id in its tile, which `[path]` of it the
@@ -1616,6 +1777,12 @@ pub struct RoadPiece {
 /// The trip's own track (`.ttr`) when it names one - trains, ferries, and the type-1 trips
 /// of mod maps - else the station links between its stops, as the game walks them.
 pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
+    Ok(trip_paths(map, date, &[trip])?.pop().unwrap_or_default())
+}
+
+/// The routes of several trips of the map `map` on `date`, in the order asked (a trip the
+/// timetable does not have: an empty one): the timetable is read once for all of them.
+pub fn trip_paths(map: &str, date: &str, trips: &[&str]) -> Result<Vec<TripPath>> {
     let map_dir = resolve_content(map)?
         .parent()
         .map(|p| p.to_path_buf())
@@ -1630,13 +1797,25 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     let chrono = omsi_map::active_chrono_dirs(&map_dir, code);
     let off = omsi_map::chrono_deactivated_lines(&chrono);
     let data = omsi_timetable::TimetableData::load_with_chrono(&map_dir, &chrono, &off);
+    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
+    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
+        .map(|g| g.raw_tiles)
+        .unwrap_or_default();
+    Ok(trips
+        .iter()
+        .map(|trip| path_of(&data, &tiles, trip))
+        .collect())
+}
+
+/// The route of trip `trip` of a map's timetable `data`, whose `[map]` list is `tiles`.
+fn path_of(data: &omsi_timetable::TimetableData, tiles: &[(i32, i32)], trip: &str) -> TripPath {
     let mut out = TripPath::default();
     let Some(t) = data
         .trips
         .iter()
         .find(|x| x.name.eq_ignore_ascii_case(trip.trim()))
     else {
-        return Ok(out);
+        return out;
     };
     // a type-1 trip's stations are its own `[station]` records (all of Novi Sad)
     out.stops = if t.stations.is_empty() {
@@ -1647,10 +1826,6 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     } else {
         t.stations.clone()
     };
-    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
-    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
-        .map(|g| g.raw_tiles)
-        .unwrap_or_default();
     let at = |tile_index: f64| tiles.get(tile_index as usize).copied();
     let track_name = if t.display_name.trim().is_empty() {
         t.name.trim()
@@ -1676,14 +1851,16 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
                 });
             }
         }
-        return Ok(out);
+        return out;
     }
     for w in out.stops.windows(2) {
         let Some(link) = data
             .stn_links
             .iter()
             .find(|l| l.from_id == w[0] && l.to_id == w[1])
+            .filter(|l| !l.entries.is_empty())
         else {
+            out.missing += 1;
             continue;
         };
         for e in &link.entries {
@@ -1705,7 +1882,7 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 /// The lines of a map's timetable on `date` (`YYYY-MM-DD`, the game's default when empty):
@@ -1780,13 +1957,10 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                     continue;
                 };
                 let departure = tt.departure as f64 * 60.0;
-                let duration = trip
+                let profile = trip
                     .profiles
                     .get(tt.profile.max(0) as usize)
-                    .or(trip.profiles.first())
-                    .map(|p| p.factor as f64 * 60.0)
-                    .filter(|d| *d > 0.0)
-                    .unwrap_or(600.0);
+                    .or(trip.profiles.first());
                 // its stations: [station_typ2] objects, or the [station] records of a type-1
                 // trip (all of Novi Sad), which carry their stop's name themselves
                 let legacy: Vec<(i64, String)> = trip
@@ -1804,21 +1978,30 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                 } else {
                     trip.stations.clone()
                 };
-                let mut lens = Vec::new();
-                for w in stations.windows(2) {
-                    lens.push(
+                // the times the game runs the trip by: the profile's own minutes, the rest
+                // shared out by the lengths of the station links
+                let times = omsi_timetable::TripTimes::new(&stations, profile, &|a, b| {
+                    data.stn_links
+                        .iter()
+                        .find(|k| k.from_id == a && k.to_id == b)
+                        .map(|k| k.length)
+                });
+                let duration = times.duration;
+                // (how far it runs: a missing link counts 500 m, as for the times)
+                let total: f64 = stations
+                    .windows(2)
+                    .map(|w| {
                         data.stn_links
                             .iter()
                             .find(|k| k.from_id == w[0] && k.to_id == w[1])
                             .map(|k| k.length.max(1.0))
-                            .unwrap_or(500.0),
-                    );
-                }
-                let total: f64 = lens.iter().sum::<f64>().max(1.0);
-                let mut acc = 0.0;
+                            .unwrap_or(500.0)
+                    })
+                    .sum::<f64>()
+                    .max(1.0);
                 let mut stops = Vec::new();
                 for (i, id) in stations.iter().enumerate() {
-                    let t_at = departure + duration * acc / total;
+                    let (arr, dep) = times.stations.get(i).copied().unwrap_or_default();
                     let name = data
                         .bus_stops
                         .iter()
@@ -1833,13 +2016,12 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                         })
                         .unwrap_or_else(|| format!("stop {id}"));
                     stops.push(StopInfo {
+                        id: *id,
                         name,
-                        arr: t_at,
-                        dep: if i == 0 { departure } else { t_at },
+                        arr: departure + arr,
+                        dep: departure + dep,
+                        stops: times.stops.get(i).copied().unwrap_or(true),
                     });
-                    if i < lens.len() {
-                        acc += lens[i];
-                    }
                 }
                 if !trip.terminus.trim().is_empty()
                     && !termini.iter().any(|x| x == trip.terminus.trim())
@@ -5917,6 +6099,64 @@ fn hof_fix(a: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "file": group.file_name, "results": results }))
+}
+
+#[cfg(test)]
+mod content_choice_tests {
+    use super::*;
+
+    fn base(name: &str) -> PathBuf {
+        let b = std::env::temp_dir().join(format!("depot-choice-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&b);
+        std::fs::create_dir_all(&b).unwrap();
+        b
+    }
+
+    /// An OMSI 2 installation as far as the check goes: its program.
+    fn install(at: &Path) {
+        std::fs::create_dir_all(at.join("Vehicles")).unwrap();
+        std::fs::write(at.join("Omsi.exe"), b"x").unwrap();
+    }
+
+    #[test]
+    fn the_content_folder_is_never_in_an_omsi_installation() {
+        let b = base("rules");
+        let omsi = b.join("OMSI 2");
+        install(&omsi);
+        let root = omsi.as_path();
+        // the folder itself, a folder in it (made or not), one in its Vehicles
+        assert!(content_choice_problem(&omsi, root).is_some());
+        assert!(content_choice_problem(&omsi.join("depot"), root).is_some());
+        assert!(content_choice_problem(&omsi.join("Vehicles").join("mods"), root).is_some());
+        // with no OMSI 2 folder set: the installation is still seen
+        assert!(content_choice_problem(&omsi, Path::new("")).is_some());
+        assert!(content_choice_problem(&omsi.join("Vehicles"), Path::new("")).is_some());
+        // a relative path
+        assert!(content_choice_problem(Path::new("content"), root).is_some());
+        // a folder of its own beside it
+        assert!(content_choice_problem(&b.join("Depot content"), root).is_none());
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn a_choice_gone_bad_is_left_aside_when_read() {
+        let b = base("read");
+        let omsi = b.join("OMSI 2");
+        install(&omsi);
+        let root = omsi.to_string_lossy().to_string();
+        assert_eq!(
+            usable_choice(&omsi.join("Vehicles").to_string_lossy(), &root),
+            None
+        );
+        assert_eq!(usable_choice("relative/content", &root), None);
+        let own = b.join("content");
+        assert_eq!(
+            usable_choice(&own.to_string_lossy(), &root),
+            Some(own.clone())
+        );
+        assert!(own.is_dir());
+        let _ = std::fs::remove_dir_all(&b);
+    }
 }
 
 #[cfg(test)]
