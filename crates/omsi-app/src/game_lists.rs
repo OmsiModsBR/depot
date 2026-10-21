@@ -145,7 +145,7 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             p.vehicle.var("IBIS_LinieKurs"),
             p.vehicle.str_var("Matrix_Nr")
         );
-        app.service_msg = Some((format!("Route {line}"), 3.0));
+        app.service_msg = Some((omsi_ui::tr("Route %{line}").replace("%{line}", &line.to_string()), 3.0));
     }
 }
 
@@ -694,7 +694,7 @@ pub(crate) fn menu_extras(
         ListKind::Keyboard(_) => (MenuKind::Options, head("Keyboard"), None),
         ListKind::ControllerDevices(_) => (MenuKind::Options, head("Game controllers"), None),
         ListKind::Controller(name, _) => (MenuKind::Options, Some((name.clone(), String::new())), None),
-        ListKind::ControllerAxis(name, a) => (MenuKind::Options, Some((format!("{} · Axis {}", name, a + 1), String::new())), None),
+        ListKind::ControllerAxis(name, a) => (MenuKind::Options, Some((omsi_ui::tr("%{device} · Axis %{n}").replace("%{device}", name).replace("%{n}", &(a + 1).to_string()), String::new())), None),
         ListKind::ControllerButtons(name) => (MenuKind::List, Some(("Choose a button".into(), name.clone())), None),
         ListKind::ControllerButtonSettings(name, b) => (MenuKind::Options, Some((crate::game_controller_menu::button_label(*b), name.clone())), None),
         ListKind::ControllerButton(_, b) => (MenuKind::List, Some((format!("{}: choose an action", crate::game_controller_menu::button_label(*b)), String::new())), None),
@@ -2711,7 +2711,7 @@ fn world_pages(app: &App) -> Vec<Page> {
         let src = if app.settings.metar_station.is_empty() { format!("{} ({})", app.metar_station(), omsi_ui::tr("automatic")) } else { app.metar_station() };
         weather.push((row("METAR source", 'o', &src, "The airport used for real weather.", None), "metar_src".to_string()));
         let typed=if app.menu_edit_icao{
-            let mut s=app.menu_edit.clone().unwrap_or_default(); while s.len()<4{s.push('_');} format!("{s}  (typing)")
+            let mut s=app.menu_edit.clone().unwrap_or_default(); while s.len()<4{s.push('_');} omsi_ui::tr("%{text}  (typing)").replace("%{text}", &s)
         }else{app.metar_station()};
         weather.push((row("ICAO",if app.menu_edit_icao{'E'}else{'e'},&typed,"Enter any 4-letter ICAO station.",None),"metar_icao_edit".to_string()));
         if app.metar_locked() {
@@ -2735,7 +2735,7 @@ fn world_pages(app: &App) -> Vec<Page> {
         weather.extend(switch_row(app,"snow_road","Snow on road","Treat the road surface as snow-covered."));
         climate.extend(slider_row(app, "temp", "Temperature", "The air temperature.", &|v| format!("{} °C", v as i64)));
         let dew_temp=app.weather.as_ref().map(|w|w.temp.0).unwrap_or(15.0);
-        climate.extend(slider_row(app,"humidity","Humidity","Relative humidity of the air.",&|v|format!("{:.0} % · dew {:.0} °C",v,crate::weather_setup::dew_point_c(dew_temp,v))));
+        climate.extend(slider_row(app,"humidity","Humidity","Relative humidity of the air.",&|v|omsi_ui::tr("%{humidity} % · dew %{dew} °C").replace("%{humidity}",&format!("{:.0}",v)).replace("%{dew}",&format!("{:.0}",crate::weather_setup::dew_point_c(dew_temp,v)))));
         climate.extend(slider_row(app, "wind_speed", "Wind speed", "How fast the wind blows; it drives the clouds.", &|v| format!("{} m/s", v as i64)));
         climate.extend(slider_row(app, "wind_dir", "Wind direction", "The direction of the wind in degrees (0 is north).", &|v| format!("{}°", v as i64)));
         // the METAR sync on: only its own rows stay (the weather is the report's)
@@ -2962,7 +2962,7 @@ pub(crate) fn switch_driver(app: &mut App, name: &str) {
     next.seconds = app.career.seconds;
     app.career = next;
     app.args.driver = Some(rel);
-    app.service_msg = Some((format!("Driver: {name}"), 3.0));
+    app.service_msg = Some((omsi_ui::tr("Driver: %{name}").replace("%{name}", &name), 3.0));
 }
 
 /// The fleet numbers of the bus's `[number]` list with their registrations.
@@ -3022,7 +3022,7 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     let mut d = match sch.player_duty(&w, line, tour, at, None, false) {
         Ok(d) => d,
         Err(e) => {
-            app.service_msg = Some((format!("No duty: {e}"), 8.0));
+            app.service_msg = Some((omsi_ui::tr("No duty: %{error}").replace("%{error}", &e.to_string()), 8.0));
             return;
         }
     };
@@ -3070,7 +3070,7 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.duty = Some(d);
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
-        Err(e) => app.service_msg = Some((format!("No duty: {e}"), 8.0)),
+        Err(e) => app.service_msg = Some((omsi_ui::tr("No duty: %{error}").replace("%{error}", &e.to_string()), 8.0)),
     }
 }
 

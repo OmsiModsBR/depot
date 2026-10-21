@@ -109,7 +109,7 @@ impl App {
             }
         }
         log::info!("weather: going over to {file:?} ({name})");
-        self.service_msg = Some((format!("Weather: {name}"), 4.0));
+        self.service_msg = Some((omsi_ui::tr("Weather: %{name}").replace("%{name}", &name), 4.0));
     }
 
     /// The weather this frame: a change coming in, and the cycle's next one (`secs` of the
@@ -293,7 +293,7 @@ impl App {
         self.weather_blend = Some(crate::weather_cycle::Blend::new(from, to, 60.0));
         self.share_weather_as_host(&wire);
         log::info!("weather: METAR sync, going over to {file} ({name})");
-        self.service_msg = Some((format!("Weather: {name}"), 4.0));
+        self.service_msg = Some((omsi_ui::tr("Weather: %{name}").replace("%{name}", &name), 4.0));
     }
 
     /// The clock follows the real time and cannot be changed (the `time_sync` setting). In a
@@ -347,7 +347,7 @@ impl App {
             p.vehicle.host.clock = self.clock.clone();
         }
         let h = (t / 3600.0) as u32;
-        self.service_msg = Some((format!("Clock: {h:02}:{:02}", ((t / 60.0) as u32) % 60), 3.0));
+        self.service_msg = Some((omsi_ui::tr("Clock: %{time}").replace("%{time}", &format!("{h:02}:{:02}", ((t / 60.0) as u32) % 60)), 3.0));
         self.clock_jump += secs;
         // (held Page Up/Down: once they are let go)
         if self.clock_hold == 0.0 {
