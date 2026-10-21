@@ -414,7 +414,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         if !tv.dirty.is_empty() {
             let (saved, err) = save_all(tv);
             match err {
-                Some(e) => l.state.set_status(format!("Not saved: {e}"), true),
+                Some(e) => l.state.set_status(omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
                 None => l.state.set_status(omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             }
         }
@@ -1178,7 +1178,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             tv.plan_for = None;
             status = Some(match err {
                 Some(e) => (format!("Not saved: {e}"), true),
-                None => (format!("{saved} line(s) saved"), false),
+                None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
         if let Some((s, e)) = status {
@@ -1327,7 +1327,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             tv.plan_for = None;
             status = Some(match err {
                 Some(e) => (format!("Not saved: {e}"), true),
-                None => (format!("{saved} line(s) saved"), false),
+                None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
     }
