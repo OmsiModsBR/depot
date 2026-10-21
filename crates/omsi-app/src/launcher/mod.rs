@@ -723,6 +723,17 @@ fn now_secs() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+/// How long a game started at `t` (s since 1970) has run, in whole minutes: the tray's menu
+/// shows it, brought up to date once a minute.
+fn run_time(t: u64) -> String {
+    let m = now_secs().saturating_sub(t) / 60;
+    if m < 60 {
+        format!("{m} min")
+    } else {
+        format!("{} h {} min", m / 60, m % 60)
+    }
+}
+
 /// Whether the program can bring its window back from the taskbar by itself (not on
 /// Wayland, where only the player can).
 fn can_restore(w: &Window) -> bool {
@@ -749,7 +760,7 @@ impl Launcher {
         }
         let Some(w) = self.window.clone() else { return };
         let game = |l: &Launcher, pid: u32, started: u64| l.state.instances.iter().find(|i| i.running && i.pid == pid && i.started == started).cloned();
-        let head = |i: &core::Instance| format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&i.map), pages::ago(i.started));
+        let head = |i: &core::Instance| format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&i.map), run_time(i.started));
         if let Some((pid, started, shown)) = self.tucked {
             match game(self, pid, started) {
                 None => {

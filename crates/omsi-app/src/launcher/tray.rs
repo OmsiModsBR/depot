@@ -82,7 +82,7 @@ mod imp {
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW};
+    use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION, NOTIFYICONDATAW, NOTIFYICONDATAW_0, NOTIFYICON_VERSION};
     use windows::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, LoadImageW, PostMessageW,
         PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TrackPopupMenu, TranslateMessage, HICON, IDI_APPLICATION, IMAGE_ICON, LR_SHARED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG,
@@ -92,9 +92,9 @@ mod imp {
 
     /// The message the icon sends its window.
     const WM_TRAY: u32 = WM_APP + 1;
-    /// What the icon says when it is chosen with the mouse, or with Enter or Space after the
-    /// keyboard reached it (`NIN_SELECT`, `NIN_KEYSELECT` in the system's headers).
-    const NIN_SELECT: u32 = WM_USER;
+    /// What the icon says when Enter or Space is pressed on it after the keyboard reached it
+    /// (`NIN_KEYSELECT` in the system's headers; sent once the icon has asked for the newer
+    /// behaviour with `NIM_SETVERSION`).
     const NIN_KEYSELECT: u32 = WM_USER + 1;
     /// How long the launcher waits for the icon's thread (to start, and to take the icon away).
     const WAIT: Duration = Duration::from_secs(2);
@@ -115,6 +115,9 @@ mod imp {
         tx: Sender<TrayCmd>,
         head: Arc<Mutex<Vec<u16>>>,
         icon: NOTIFYICONDATAW,
+        /// The icon took the newer behaviour: its menu comes with `WM_CONTEXTMENU` (by mouse
+        /// or keyboard), no longer with the right button's `WM_RBUTTONUP`.
+        versioned: bool,
     }
 
     thread_local! {
@@ -138,9 +141,16 @@ mod imp {
             .spawn(move || {
                 let _done = done_tx;
                 let opened = unsafe { open(&tip) };
-                let _ = ready_tx.send(opened.map(|(h, _)| h.0 as isize));
-                let Some((_, icon)) = opened else { return };
-                OWN.with(|o| *o.borrow_mut() = Some(Own { tx, head: shared, icon }));
+                let sent = ready_tx.send(opened.map(|(h, ..)| h.0 as isize)).is_ok();
+                let Some((hwnd, icon, versioned)) = opened else { return };
+                if !sent {
+                    // (the launcher gave up waiting: nobody owns this icon, so it goes now)
+                    unsafe {
+                        let _ = DestroyWindow(hwnd);
+                    }
+                    return;
+                }
+                OWN.with(|o| *o.borrow_mut() = Some(Own { tx, head: shared, icon, versioned }));
                 let mut msg = MSG::default();
                 unsafe {
                     while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -170,7 +180,9 @@ mod imp {
         let _ = w.done.recv_timeout(WAIT);
     }
 
-    unsafe fn open(tip: &str) -> Option<(HWND, NOTIFYICONDATAW)> {
+    /// The icon's window and the icon in the tray: the window, the icon's data (to add it
+    /// again) and whether it took the newer behaviour.
+    unsafe fn open(tip: &str) -> Option<(HWND, NOTIFYICONDATAW, bool)> {
         let module = GetModuleHandleW(None).ok()?;
         let instance = HINSTANCE(module.0);
         let class = w!("DepotLauncherTray");
@@ -207,7 +219,17 @@ mod imp {
             let _ = DestroyWindow(hwnd);
             return None;
         }
-        Some((hwnd, nid))
+        let versioned = set_version(&nid);
+        Some((hwnd, nid, versioned))
+    }
+
+    /// Ask for the newer icon behaviour (keyboard selection, the menu by `WM_CONTEXTMENU`).
+    unsafe fn set_version(nid: &NOTIFYICONDATAW) -> bool {
+        let v = NOTIFYICONDATAW {
+            Anonymous: NOTIFYICONDATAW_0 { uVersion: NOTIFYICON_VERSION },
+            ..*nid
+        };
+        Shell_NotifyIconW(NIM_SETVERSION, &v).as_bool()
     }
 
     fn send(cmd: TrayCmd) {
@@ -246,10 +268,12 @@ mod imp {
     unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match msg {
             WM_TRAY => {
+                let versioned = OWN.with(|o| o.borrow().as_ref().is_some_and(|o| o.versioned));
                 match (lparam.0 as u32) & 0xffff {
                     // (a double click, or Enter or Space on the icon reached by the keyboard)
-                    WM_LBUTTONDBLCLK | NIN_KEYSELECT | NIN_SELECT => send(TrayCmd::Show),
-                    WM_RBUTTONUP | WM_CONTEXTMENU => menu(hwnd),
+                    WM_LBUTTONDBLCLK | NIN_KEYSELECT => send(TrayCmd::Show),
+                    WM_CONTEXTMENU => menu(hwnd),
+                    WM_RBUTTONUP if !versioned => menu(hwnd),
                     _ => {}
                 }
                 LRESULT(0)
@@ -271,8 +295,10 @@ mod imp {
             }
             m if m != 0 && m == TASKBAR_CREATED.load(Ordering::Relaxed) => {
                 OWN.with(|o| {
-                    if let Some(o) = o.borrow().as_ref() {
-                        let _ = Shell_NotifyIconW(NIM_ADD, &o.icon);
+                    if let Some(o) = o.borrow_mut().as_mut() {
+                        if Shell_NotifyIconW(NIM_ADD, &o.icon).as_bool() {
+                            o.versioned = set_version(&o.icon);
+                        }
                     }
                 });
                 LRESULT(0)

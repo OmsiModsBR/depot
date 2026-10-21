@@ -2510,7 +2510,7 @@ fn save_keys(l: &mut Launcher, vr_binding: bool) {
 
 // --- sessions ---------------------------------------------------------------------------------
 
-pub(super) fn ago(t: u64) -> String {
+fn ago(t: u64) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(t);
     let s = now.saturating_sub(t);
     if s < 60 {
