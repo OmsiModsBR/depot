@@ -27,7 +27,7 @@ const MARGIN: f32 = 20.0;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum OwnedGlyph {
     Icon(&'static str),
-    Text(&'static str),
+    Sign(&'static str),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -83,7 +83,7 @@ pub(crate) const FREE: &str = "service";
 
 /// The buttons, in the order of the bar (rows of five): the original's fifteen, in its order.
 pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
-    use OwnedGlyph::{Icon, Text};
+    use OwnedGlyph::{Icon, Sign};
     // (English: the widgets translate what they draw, a second time would garble it)
     let b = |id, glyph, title: &str, off: Option<&str>| OwnedButton {
         id,
@@ -97,25 +97,25 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
     vec![
         b(
             "add",
-            Icon("add"),
+            Icon("alt-add"),
             "Add vehicle",
             ctx.placing.then_some(crate::new_ui_add::PLACING),
         ),
         b(
             "swap",
-            Icon("sync_alt"),
+            Icon("alt-swap"),
             "Switch vehicle",
             need(ctx.other_vehicle, "There is no other vehicle to drive"),
         ),
         b(
             "remove",
-            Icon("close"),
+            Icon("alt-remove"),
             "Remove vehicle",
             need(ctx.player, "No vehicle to remove"),
         ),
         b(
             "reposition",
-            Icon("download"),
+            Icon("alt-reposition"),
             "Reposition at an entry point",
             first(&[
                 (ctx.player, "No vehicle to reposition"),
@@ -123,14 +123,14 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
                 (ctx.entry_points, "This map has no entry points"),
             ]),
         ),
-        b("ai", Text("AI"), "AI drives my vehicle", Some(NOT_YET)),
+        b("ai", Icon("alt-ai"), "AI drives my vehicle", Some(NOT_YET)),
         OwnedButton {
             title: if ctx.on_tour { "End the tour" } else { "Line and tour" }.to_string(),
             on: ctx.on_tour,
             // (a tour running can always be ended)
             ..b(
                 "tour",
-                Icon("route"),
+                Icon("alt-tour"),
                 "Line and tour",
                 if ctx.on_tour {
                     None
@@ -145,19 +145,19 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
         },
         b(
             "destination",
-            Icon("departure_board"),
+            Sign("92E"),
             "Line and destination",
             need(ctx.player, "No vehicle"),
         ),
         b(
             "accident",
-            Icon("warning"),
+            Icon("alt-accident"),
             "Clear the accident",
             Some(NOT_YET),
         ),
         b(
             "repair",
-            Icon("construction"),
+            Icon("alt-repair"),
             "Repair",
             need(ctx.player, "No vehicle to repair"),
         ),
@@ -167,7 +167,7 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             on: ctx.pumping.is_some(),
             ..b(
                 "service",
-                Icon("local_gas_station"),
+                Icon("alt-fuel"),
                 "Wash and refuel",
                 first(&[
                     (ctx.player, "No vehicle to service"),
@@ -175,23 +175,23 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
                 ]),
             )
         },
-        b("help", Icon("help"), "Help marker", Some(NOT_YET)),
+        b("help", Icon("alt-help"), "Help marker", Some(NOT_YET)),
         b(
             "time",
-            Icon("schedule"),
+            Icon("alt-clock"),
             "Date and time",
             need(!ctx.lan_client, "In a LAN session the host sets the clock"),
         ),
         b(
             "weather",
-            Icon("cloud"),
+            Icon("alt-weather"),
             "Weather",
             need(!ctx.lan_client, "In a LAN session the host sets the weather"),
         ),
         b(
             "controls",
             Icon(if ctx.controls.is_empty() {
-                "keyboard"
+                "alt-wheel"
             } else {
                 ctx.controls
             }),
@@ -200,7 +200,7 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
         ),
         b(
             "driver",
-            Icon("badge"),
+            Icon("alt-driver"),
             "Timetable evaluation and driver profile",
             None,
         ),
@@ -252,11 +252,12 @@ fn corner(size: Vec2) -> Vec2 {
 
 impl AltFrame {
     pub(crate) fn draw(&self, ui: &mut Ui) {
-        alt_bar::hint(ui, HINT);
+        // (folded, the bar is only its tab: no hint, as the concept has it)
         if self.folded {
             alt_bar::draw_folded(ui, corner(ui.size));
             return;
         }
+        alt_bar::hint(ui, HINT);
         let bs: Vec<Button> = self
             .buttons
             .iter()
@@ -264,7 +265,7 @@ impl AltFrame {
                 id: b.id,
                 glyph: match b.glyph {
                     OwnedGlyph::Icon(i) => Glyph::Icon(i),
-                    OwnedGlyph::Text(t) => Glyph::Text(t),
+                    OwnedGlyph::Sign(t) => Glyph::Sign(t),
                 },
                 title: &b.title,
                 disabled: b.disabled.as_deref(),
@@ -469,11 +470,11 @@ impl App {
                 .as_ref()
                 .is_some_and(|w| !w.global.entry_points.is_empty()),
             controls: if controller {
-                "sports_esports"
+                "o-gamepad"
             } else if self.mouse_drive {
-                "mouse"
+                "alt-mouse"
             } else {
-                "keyboard"
+                "alt-wheel"
             },
             pumping: self.pumping.map(|p| p.0),
         }
@@ -678,7 +679,7 @@ mod tests {
             timetable: true,
             on_tour: false,
             entry_points: true,
-            controls: "keyboard",
+            controls: "alt-wheel",
             pumping: None,
         }
     }
@@ -853,12 +854,12 @@ mod tests {
         assert!(!by_id(&buttons(&all_on()), "service").on);
         // the controls button shows what drives the vehicle
         let pad = buttons(&AltCtx {
-            controls: "sports_esports",
+            controls: "o-gamepad",
             ..all_on()
         });
         assert_eq!(
             by_id(&pad, "controls").glyph,
-            OwnedGlyph::Icon("sports_esports")
+            OwnedGlyph::Icon("o-gamepad")
         );
     }
 

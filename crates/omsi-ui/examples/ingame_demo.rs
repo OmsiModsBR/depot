@@ -47,39 +47,50 @@ fn main() {
     };
     // (the game's bar: the original's fifteen, in its order, five by three)
     let bar = [
-        ic("add", "add", "Add vehicle"),
-        ic("swap", "sync_alt", "Switch vehicle"),
-        ic("remove", "close", "Remove vehicle"),
-        ic("reposition", "download", "Reposition at an entry point"),
+        ic("add", "alt-add", "Add vehicle"),
+        ic("swap", "alt-swap", "Switch vehicle"),
+        ic("remove", "alt-remove", "Remove vehicle"),
+        ic(
+            "reposition",
+            "alt-reposition",
+            "Reposition at an entry point",
+        ),
         off(
             "ai",
-            Glyph::Text("AI"),
+            Glyph::Icon("alt-ai"),
             "AI drives my vehicle",
             "Not in the game yet",
         ),
         Button {
             on: true,
-            ..ic("tour", "route", "End the tour")
+            ..ic("tour", "alt-tour", "End the tour")
         },
-        ic("destination", "departure_board", "Line and destination"),
+        Button {
+            glyph: Glyph::Sign("92E"),
+            ..ic("destination", "", "Line and destination")
+        },
         off(
             "accident",
-            Glyph::Icon("warning"),
+            Glyph::Icon("alt-accident"),
             "Clear the accident",
             "Not in the game yet",
         ),
-        ic("repair", "construction", "Repair"),
-        ic("service", "local_gas_station", "Wash and refuel"),
+        ic("repair", "alt-repair", "Repair"),
+        ic("service", "alt-fuel", "Wash and refuel"),
         off(
             "help",
-            Glyph::Icon("help"),
+            Glyph::Icon("alt-help"),
             "Help marker",
             "Not in the game yet",
         ),
-        ic("time", "schedule", "Date and time"),
-        ic("weather", "cloud", "Weather"),
-        ic("controls", "keyboard", "Controls"),
-        ic("driver", "badge", "Timetable evaluation and driver profile"),
+        ic("time", "alt-clock", "Date and time"),
+        ic("weather", "alt-weather", "Weather"),
+        ic("controls", "alt-wheel", "Controls"),
+        ic(
+            "driver",
+            "alt-driver",
+            "Timetable evaluation and driver profile",
+        ),
     ];
     let mut state = State {
         chosen: Some("reposition".into()),
@@ -566,7 +577,7 @@ fn main() {
                         row("Depot", "08:27  \u{b7}  served", RunStop::Done, None),
                         row("Main Street", "08:31  \u{b7}  skipped", RunStop::Done, None),
                         row("Market", "08:36  \u{b7}  next stop", RunStop::Next, Some("Skip this stop")),
-                        row("Town Hall", "08:40  \u{b7}  skipped when the bus gets there", RunStop::Ahead, Some("Keep this stop")),
+                        row("Town Hall", "08:40  \u{b7}  to be skipped", RunStop::Ahead, Some("Keep this stop")),
                         row("Central Station", "08:47", RunStop::Ahead, Some("Skip this stop")),
                     ]
                 },

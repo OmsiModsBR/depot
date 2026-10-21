@@ -576,12 +576,10 @@ impl App {
             ToolWindow::Running => View::Running(self.running()),
             ToolWindow::EndTour => View::Confirm(aw::Confirm {
                 title: "Cancel the timetable?".into(),
-                text: format!(
-                    "{} {}. {}",
-                    omsi_ui::tr("The bus stops following line"),
-                    self.duty.as_ref().map(|d| d.line.trim()).unwrap_or_default(),
-                    omsi_ui::tr("This does not change the saved timetable.")
-                ),
+                // (one text with the line in its place, so every language can put it where
+                // its own word order wants it)
+                text: omsi_ui::tr("The bus stops following line {}. This does not change the saved timetable.")
+                    .replacen("{}", self.duty.as_ref().map(|d| d.line.trim()).unwrap_or_default(), 1),
                 ok: "Yes, cancel it".into(),
                 cancel: "Keep it".into(),
             }),
@@ -654,8 +652,6 @@ impl App {
         }
     }
 
-    /// The timetable evaluation of trip `trip` of the duty: its stops with their planned and
-    /// actual times as the journey log has them so far (the end-of-trip report's rows).
     /// The timetable running: the current trip's stops with how each went, the one due now,
     /// and a button to skip each still to come.
     fn running(&self) -> aw::Running {
@@ -688,7 +684,7 @@ impl App {
                     }
                     aw::RunStop::Next => format!("{t}  \u{b7}  {}", omsi_ui::tr("next stop")),
                     aw::RunStop::Ahead if marked => {
-                        format!("{t}  \u{b7}  {}", omsi_ui::tr("skipped when the bus gets there"))
+                        format!("{t}  \u{b7}  {}", omsi_ui::tr("to be skipped"))
                     }
                     aw::RunStop::Ahead => t,
                 };
@@ -718,6 +714,8 @@ impl App {
         }
     }
 
+    /// The timetable evaluation of trip `trip` of the duty: its stops with their planned and
+    /// actual times as the journey log has them so far (the end-of-trip report's rows).
     fn evaluation(&self, trip: usize) -> aw::Evaluation {
         let Some(d) = self.duty.as_ref() else {
             return aw::Evaluation::default();
@@ -872,9 +870,13 @@ impl App {
 
     /// Apply what the clicks in the window asked for (before each frame).
     pub(crate) fn tool_events(&mut self) {
-        // (the timetable evaluation is the running tour's: it closes with the tour)
+        // (the timetable evaluation, the running timetable and its "Cancel the timetable?"
+        // are the running tour's: they close with the tour, however it ended)
         if self.duty.is_none()
-            && matches!(self.new_ui.tool.window, Some(ToolWindow::Evaluation { .. }))
+            && matches!(
+                self.new_ui.tool.window,
+                Some(ToolWindow::Evaluation { .. } | ToolWindow::Running | ToolWindow::EndTour)
+            )
         {
             self.new_ui.close_tool();
         }

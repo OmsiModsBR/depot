@@ -5154,7 +5154,8 @@ impl PlayerDuty {
 
     /// The timetable window's "Skip this stop" on stop `k` of the current trip: the stop due
     /// now is skipped at once (as [`PlayerDuty::skip_next`]); one still to come is marked,
-    /// and skipped when the duty is due at it - a second press takes the mark off. Returns
+    /// and skipped as soon as it becomes the next stop (the bus has left the one before it,
+    /// so the IBIS never announces it) - a second press takes the mark off. Returns
     /// the stop's name and whether it is skipped now (true) or marked or unmarked (false);
     /// None for a stop behind the bus, or once the trip is over.
     pub fn toggle_skip(&mut self, k: usize) -> Option<(String, bool)> {

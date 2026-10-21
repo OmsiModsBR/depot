@@ -26,14 +26,19 @@ pub const TAB: Vec2 = Vec2::new(30.0, 40.0);
 const PANEL: Color = Color::rgba(14, 15, 17, 0.92);
 const EDGE: Color = Color::rgba(255, 255, 255, 0.12);
 /// A tile that cannot be used now, and its icon.
-const DIM_FILL: Color = Color::rgba(255, 255, 255, 0.07);
+/// (the tiles' tints are mixed here, over the panel's own colour, as the concept's page
+/// mixes them: blended by the GPU they came out much lighter)
+const DIM_FILL: Color = Color::hex(0x26272a);
+/// The panel's colour, for the tints.
+const BASE: Color = Color::hex(0x0e0f11);
 const DIM_ICON: Color = Color::hex(0x6f747e);
 
-/// What a button shows: a Material icon, or a short word (the "AI" button).
+/// What a button shows: an icon, or a word on a destination sign (the "Line and
+/// destination" button).
 #[derive(Debug, Clone, Copy)]
 pub enum Glyph<'a> {
     Icon(&'a str),
-    Text(&'a str),
+    Sign(&'a str),
 }
 
 pub struct Button<'a> {
@@ -172,13 +177,13 @@ pub fn draw<'a>(
         let chosen = state.chosen.as_deref() == Some(b.id);
         // a tile on is filled; one that can be used is tinted; one that cannot is grey
         let (fill, edge, ink) = if b.on {
-            (a.alpha(0.85), Color::rgba(0, 0, 0, 0.0), on_color(a))
+            (BASE.mix(a, 0.85), Color::rgba(0, 0, 0, 0.0), on_color(a))
         } else if !enabled {
             (DIM_FILL, Color::rgba(0, 0, 0, 0.0), DIM_ICON)
         } else if hover {
-            (a.alpha(0.38), a.alpha(0.7), a)
+            (BASE.mix(a, 0.38), BASE.mix(a, 0.7), a)
         } else {
-            (a.alpha(0.22), a.alpha(0.4), a)
+            (BASE.mix(a, 0.22), BASE.mix(a, 0.4), a)
         };
         ui.p().rounded(r, 6.0, fill);
         ui.p().rounded_border(r, 6.0, 1.0, edge);
@@ -192,9 +197,10 @@ pub fn draw<'a>(
         }
         match b.glyph {
             Glyph::Icon(name) => ui.icon(name, r.center(), 28.0, ink),
-            Glyph::Text(t) => {
-                let px = 20.0 * TS;
-                ui.text_in(t, r, px, Weight::Bold, ink, Align::Center);
+            Glyph::Sign(t) => {
+                let sign = Rect::new(r.center().x - 17.0, r.center().y - 11.0, 34.0, 22.0);
+                ui.p().rounded_border(sign, 3.0, 1.5, ink);
+                ui.text_in(t, sign, 12.0 * TS, Weight::Bold, ink, Align::Center);
             }
         }
         if hover || focus {
@@ -223,7 +229,17 @@ pub fn draw<'a>(
             .map(|(i, b)| (b, cell_rect(at, i)))
     });
     if let Some((b, r)) = shown {
-        tip(ui, b.disabled.unwrap_or(b.title), r, p);
+        // (a tile on names what it opened; one that cannot be used, why)
+        tip(
+            ui,
+            if b.on {
+                b.title
+            } else {
+                b.disabled.unwrap_or(b.title)
+            },
+            r,
+            p,
+        );
     } else if hover {
         tip(ui, "Fold the bar", ar, p);
     }
