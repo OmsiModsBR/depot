@@ -79,6 +79,47 @@ struct Uniform {
 const SLOT: u64 = 256;
 const MAX_LAYERS: u64 = 256;
 
+/// What a [`Gpu`] is asked to do, for a second renderer that draws the same interface into
+/// the window (see [`Gpu::set_mirror`]).
+pub enum UiEvent<'a> {
+    /// Picture `id` is (now) these pixels: straight alpha, sRGB, `width * height * 4` bytes.
+    Image {
+        id: usize,
+        width: u32,
+        height: u32,
+        rgba: &'a [u8],
+    },
+    /// Picture `id` is gone, or is drawn elsewhere (`add_view`): draws with it draw nothing.
+    Free(usize),
+    /// The atlas (texture 0) is `size` pixels square and `rgba` all of it; `region` (x, y,
+    /// w, h) is what changed.
+    Atlas {
+        size: u32,
+        rgba: &'a [u8],
+        region: [u32; 4],
+    },
+    /// Vertex buffer `buffer` holds `vertices`.
+    Vertices {
+        buffer: usize,
+        vertices: &'a [Vertex],
+    },
+    /// Draw into the target (`size` pixels), cleared to `clear` first when given. `target`
+    /// is the scene texture drawn into (see [`Gpu::set_mirror_target`]); None is the
+    /// window's picture.
+    Render {
+        target: Option<usize>,
+        size: (u32, u32),
+        clear: Option<[f32; 4]>,
+        layers: &'a [Layer],
+        draws: &'a [Draw],
+    },
+    /// The [`Gpu`] is dropped: everything it put up goes.
+    Gone,
+}
+
+/// Receives a [`Gpu`]'s [`UiEvent`]s.
+pub type UiMirror = Box<dyn FnMut(UiEvent<'_>) + Send>;
+
 struct Tex {
     texture: Option<wgpu::Texture>,
     group: wgpu::BindGroup,
@@ -100,6 +141,11 @@ pub struct Gpu {
     atlas_size: u32,
     /// (to make the atlas texture anew when the atlas grows)
     device: wgpu::Device,
+    mirror: Option<UiMirror>,
+    /// The mirror has had the whole atlas.
+    mirror_has_atlas: bool,
+    /// The scene texture the renders draw into, for the mirror (None: the window's picture).
+    mirror_target: Option<usize>,
 }
 
 impl Gpu {
@@ -243,6 +289,9 @@ impl Gpu {
             format,
             atlas_size: atlas_size.max(1),
             device: device.clone(),
+            mirror: None,
+            mirror_has_atlas: false,
+            mirror_target: None,
         };
         let atlas = vec![0u8; (atlas_size * atlas_size * 4) as usize];
         g.add_texture_internal(device, None, atlas_size, atlas_size, &atlas);
@@ -331,6 +380,31 @@ impl Gpu {
         );
     }
 
+    /// Hands every picture, vertex list and draw from now on to `mirror` as well (None
+    /// stops): a second renderer then draws the same interface into the window. Set it
+    /// before the first picture is added: pictures added before are not sent (the atlas is,
+    /// whole, at its next upload). Meant for a Gpu that draws into the window's picture (or,
+    /// see [`Gpu::set_mirror_target`], into scene textures); pictures drawn elsewhere
+    /// (`add_view`) are not sent.
+    pub fn set_mirror(&mut self, mirror: Option<UiMirror>) {
+        self.mirror = mirror;
+        self.mirror_has_atlas = false;
+    }
+
+    /// The renders from now on draw into the renderer's scene texture `target` (a render
+    /// texture shown as an overlay or on a screen), not into the window's picture: the
+    /// mirror is told so with each [`UiEvent::Render`] and draws into its own copy of it.
+    /// None goes back to the window's picture.
+    pub fn set_mirror_target(&mut self, target: Option<usize>) {
+        self.mirror_target = target;
+    }
+
+    fn mirror(&mut self, event: UiEvent<'_>) {
+        if let Some(m) = self.mirror.as_mut() {
+            m(event);
+        }
+    }
+
     /// An RGBA picture (straight alpha, sRGB) to draw with; returns its texture index.
     pub fn add_image(
         &mut self,
@@ -340,7 +414,14 @@ impl Gpu {
         h: u32,
         rgba: &[u8],
     ) -> usize {
-        self.add_texture_internal(device, Some(queue), w, h, rgba)
+        let id = self.add_texture_internal(device, Some(queue), w, h, rgba);
+        self.mirror(UiEvent::Image {
+            id,
+            width: w,
+            height: h,
+            rgba,
+        });
+        id
     }
 
     /// Replace the pixels of a picture added by `add_image` (same size; else it is made
@@ -354,6 +435,12 @@ impl Gpu {
         h: u32,
         rgba: &[u8],
     ) {
+        self.mirror(UiEvent::Image {
+            id,
+            width: w,
+            height: h,
+            rgba,
+        });
         let same = matches!(self.textures.get(id), Some(Some(t)) if t.size == (w, h) && t.texture.is_some());
         if same {
             let t = self.textures[id]
@@ -388,7 +475,9 @@ impl Gpu {
             group,
             size,
         }));
-        self.textures.len() - 1
+        let id = self.textures.len() - 1;
+        self.mirror(UiEvent::Free(id));
+        id
     }
 
     /// Point `id` at another view (a render target made anew at another size).
@@ -406,6 +495,7 @@ impl Gpu {
                 group,
                 size,
             });
+            self.mirror(UiEvent::Free(id));
         }
     }
 
@@ -414,6 +504,7 @@ impl Gpu {
             if let Some(t) = self.textures.get_mut(id) {
                 *t = None;
             }
+            self.mirror(UiEvent::Free(id));
         }
     }
 
@@ -449,12 +540,28 @@ impl Gpu {
             self.atlas_size = size;
             atlas.mark_all_dirty();
         }
-        if let Some(r) = atlas.take_dirty() {
+        let dirty = atlas.take_dirty();
+        if let Some(r) = dirty {
             if let Some(Some(Tex {
                 texture: Some(t), ..
             })) = self.textures.first()
             {
                 Self::write(queue, t, atlas.size, r, &atlas.rgba);
+            }
+        }
+        if self.mirror.is_some() {
+            let region = if self.mirror_has_atlas {
+                dirty
+            } else {
+                Some([0, 0, atlas.size, atlas.size])
+            };
+            if let Some(region) = region {
+                self.mirror_has_atlas = true;
+                self.mirror(UiEvent::Atlas {
+                    size: atlas.size,
+                    rgba: &atlas.rgba,
+                    region,
+                });
             }
         }
     }
@@ -478,6 +585,10 @@ impl Gpu {
         if let (Some(buf), true) = (&self.buffers[id].0, bytes > 0) {
             queue.write_buffer(buf, 0, bytemuck::cast_slice(verts));
         }
+        self.mirror(UiEvent::Vertices {
+            buffer: id,
+            vertices: verts,
+        });
     }
 
     /// A vertex buffer of `size` bytes, made where its failure can be seen: a card out of
@@ -518,6 +629,13 @@ impl Gpu {
         draws: &[Draw],
     ) {
         let (w, h) = (size.0.max(1), size.1.max(1));
+        self.mirror(UiEvent::Render {
+            target: self.mirror_target,
+            size: (w, h),
+            clear: clear.map(|c| [c.r as f32, c.g as f32, c.b as f32, c.a as f32]),
+            layers,
+            draws,
+        });
         // the layers' uniforms
         let mut data = vec![0u8; (SLOT * MAX_LAYERS) as usize];
         for (k, l) in layers.iter().take(MAX_LAYERS as usize).enumerate() {
@@ -639,6 +757,12 @@ impl Gpu {
             pass.set_vertex_buffer(0, buf.slice(..));
             pass.draw(d.range.clone(), 0..1);
         }
+    }
+}
+
+impl Drop for Gpu {
+    fn drop(&mut self) {
+        self.mirror(UiEvent::Gone);
     }
 }
 
