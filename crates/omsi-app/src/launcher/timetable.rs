@@ -1177,7 +1177,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             // (what the lines run is read again: the map and the diagram show it)
             tv.plan_for = None;
             status = Some(match err {
-                Some(e) => (format!("Not saved: {e}"), true),
+                Some(e) => (omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
                 None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
@@ -1326,7 +1326,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             // (what the lines run is read again: the map and the diagram show the new times)
             tv.plan_for = None;
             status = Some(match err {
-                Some(e) => (format!("Not saved: {e}"), true),
+                Some(e) => (omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
                 None => (omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()), false),
             });
         }
