@@ -2867,7 +2867,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         }
         if !m.waiting.is_empty() {
             y += 8.0;
-            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Waiting for their bus");
+            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Kept aside by an older version (copy by hand)");
             y += 30.0;
             for item in &m.waiting {
                 ui.text_in(item, Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);

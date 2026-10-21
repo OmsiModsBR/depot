@@ -10,9 +10,9 @@
 //!    out what goes where: OMSI-style folders (`Vehicles`, `maps`, `Sceneryobjects` ...) are
 //!    merged into the same folders of the content folder, a lone bus / map / object folder is
 //!    put under the right folder, and everything else (read-mes, screenshots) is left out.
-//!    A pack that only adds paints or textures to a bus that is not installed is kept aside
-//!    in `Mods/waiting` (a folder: it is not installed from there, it is copied by hand once
-//!    the bus is there). A `.zip` whose folders
+//!    Paints or textures for a bus that is not installed stay in their `.zip`, and are only
+//!    used if that bus is installed (the folder copy, which tests alone reach now, kept such
+//!    a pack aside in `Mods/waiting`). A `.zip` whose folders
 //!    are not where the game looks for them (a lone bus folder, say) is refused: it would
 //!    have to be unpacked.
 //! 2. **Check** - for a folder, the size of the planned files plus a margin must fit on the
@@ -825,7 +825,7 @@ fn plan(entries: &[Entry], source_name: &str, installed: &Installed) -> Plan {
                                         aside: false,
                                     }),
                                     None => {
-                                        plan.warnings.push(format!("{bus}: only paints or textures for a bus that is not installed (Vehicles/{bus}) - kept aside in Mods/{WAITING}: copy it by hand once that bus is installed"));
+                                        plan.warnings.push(format!("{bus}: paints or textures for a bus that is not installed (Vehicles/{bus}) - they stay in this .zip and are only used if that bus is installed"));
                                         plan.maps.push(Mapping {
                                             src: bpath,
                                             dest: format!("Vehicles/{bus}"),
