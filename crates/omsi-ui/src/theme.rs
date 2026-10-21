@@ -174,6 +174,31 @@ pub fn corner(radius: f32) -> f32 {
     }
 }
 
+/// Glass (Settings > Interface > Background: Scene): the launcher's panels let the blurred
+/// picture behind its pages show through.
+static GLASS: AtomicBool = AtomicBool::new(false);
+
+/// Draw panels as glass from now on (or solid again).
+pub fn set_glass(on: bool) {
+    GLASS.store(on, Ordering::Relaxed);
+}
+
+pub fn glass() -> bool {
+    GLASS.load(Ordering::Relaxed)
+}
+
+/// How much of a panel's own colour covers the scene behind it, as glass.
+pub const GLASS_COVER: f32 = 0.6;
+
+/// A panel's fill `c` as it is drawn now: solid, or seen through as glass (see `set_glass`).
+pub fn surface(c: Color) -> Color {
+    if glass() {
+        c.alpha(GLASS_COVER)
+    } else {
+        c
+    }
+}
+
 /// The in-game look of the new interface (the Esc menu and its pages, the Alt bar, the city
 /// map): darker than the launcher's, with a cooler grey and a stronger amber. Shared so the
 /// screens drawn by different code keep the same colours.

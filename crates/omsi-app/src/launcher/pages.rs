@@ -518,9 +518,19 @@ fn interface_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -
     }
     c.y += 34.0 + 12.0;
     c.section(ui, "Layout");
+    let note = |ui: &mut Ui, c: &mut Col, text: &str| c.y += ui.paragraph(text, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 8.0;
+    seg_setting(ui, s, dirty, c.row(), "Navigation", "ui_nav", &[("sidebar", "Sidebar"), ("top", "Top bar")]);
+    note(ui, &mut c, "The top bar puts the pages in a row and gives them more width. In a narrow window it shows their icons, and a page's name when the mouse is on it.");
+    seg_setting(ui, s, dirty, c.row(), "Background", "ui_background", &[("plain", "Plain dark"), ("scene", "Scene")]);
+    note(ui, &mut c, "Scene: the picture of the chosen map or bus, blurred, behind panels you see through. Other pages show your latest screenshot, or plain dark when there is none.");
+    let mut dim = core::dimming_of(&get(s, "ui_dimming")) as f32;
+    if ui.slider("s-dimming", c.row(), &mut dim, 30.0, 90.0, 1.0, "Dimming", &|v| format!("{v:.0} %")) {
+        s["ui_dimming"] = json!(dim as i64);
+        *dirty = 0.3;
+    }
+    note(ui, &mut c, "How much the scene is darkened under the text (with the Scene background).");
     seg_setting(ui, s, dirty, c.row(), "Corners", "ui_corners", &[("rounded", "Rounded"), ("square", "Square")]);
-    let note = "Square is flatter, closer to Content Manager. Only the launcher's corners change.";
-    c.y += ui.paragraph(note, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 4.0;
+    note(ui, &mut c, "Square is flatter, closer to Content Manager. Only the launcher's corners change.");
     let left = c.used();
     // (what wears the accent, drawn and not clickable: the page's own widgets are the real ones)
     let mut p = Col::new(ui, cols[1], "Preview");
@@ -2931,7 +2941,7 @@ mod settings_tests {
         ];
         let interface = vec![
             "accent-amber", "accent-orange", "accent-red", "accent-pink", "accent-purple", "accent-blue", "accent-teal", "accent-green", "accent-default",
-            "ui_corners-rounded", "ui_corners-square",
+            "ui_nav-sidebar", "ui_nav-top", "ui_background-plain", "ui_background-scene", "s-dimming", "ui_corners-rounded", "ui_corners-square",
         ];
         vec![graphics, driving, camera, sound, gameplay, general, interface]
     }

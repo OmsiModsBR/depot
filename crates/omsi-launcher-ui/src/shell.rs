@@ -300,7 +300,7 @@ impl Sidebar<'_> {
     pub fn draw(&self, ui: &mut Ui, h: f32) -> Option<Nav> {
         let side = Rect::new(0.0, 0.0, SIDEBAR_W, h);
         ui.solid(side);
-        ui.p().rect(side, SIDE);
+        ui.p().rect(side, omsi_ui::theme::surface(SIDE));
         ui.p().rect(Rect::new(SIDEBAR_W - 1.0, 0.0, 1.0, h), LINE);
         if let Some((tex, aspect)) = self.logo {
             // (the wordmark 27 points high, as the concept's lettering)
@@ -409,6 +409,186 @@ impl Sidebar<'_> {
     }
 }
 
+/// The bar along the top (Settings > Interface > Navigation: Top bar): the logo, the pages in
+/// a row, Settings and Setup at its right before the caption buttons. When the names do not
+/// all fit, the entries show their icons only: the open page keeps its name, and an entry
+/// under the mouse opens to show its own.
+pub struct TopBar<'a> {
+    /// The page shown (lit).
+    pub page: Page,
+    /// The logo's texture and its height over its width.
+    pub logo: Option<(usize, f32)>,
+    /// A short count beside a page's name (games running, downloads) and its colour.
+    pub badges: &'a [(Page, String, omsi_ui::Color)],
+}
+
+/// A top bar entry's name.
+const TOP_TEXT_PX: f32 = 14.0;
+/// Space between the top bar's entries, and between its two groups.
+const TOP_GAP: f32 = 2.0;
+const TOP_GROUP_GAP: f32 = 24.0;
+/// The logo's height in the top bar.
+const TOP_LOGO_H: f32 = 22.0;
+
+/// The id of the animation that opens a top bar entry to show its name.
+fn top_open_id(page: Page) -> u64 {
+    id_of(&format!("topnav-open:{}", page.title()))
+}
+
+impl TopBar<'_> {
+    /// The width of `page`'s entry with its name.
+    fn full_w(&self, ui: &Ui, page: Page) -> f32 {
+        let badge = self
+            .badges
+            .iter()
+            .find(|b| b.0 == page)
+            .map_or(0.0, |b| ui.width(&b.1, 12.5, Weight::Bold) + 8.0);
+        12.0 + 20.0 + 10.0 + ui.width(page.title(), TOP_TEXT_PX, Weight::Regular) + badge + 14.0
+    }
+
+    /// The logo's width (and the space after it).
+    fn logo_w(&self) -> f32 {
+        match self.logo {
+            Some((_, aspect)) => TOP_LOGO_H / aspect.max(0.01),
+            None => 140.0,
+        }
+    }
+
+    /// Whether the entries show only their icons in a window `w` points wide.
+    pub fn compact(&self, ui: &Ui, w: f32) -> bool {
+        let pages = Page::listed().iter().chain(Page::foot());
+        let full: f32 = pages.map(|&p| self.full_w(ui, p) + TOP_GAP).sum();
+        full + TOP_GROUP_GAP > top_space(w, self.logo_w())
+    }
+
+    /// Draw it across a window `w` points wide; what was clicked.
+    pub fn draw(&self, ui: &mut Ui, w: f32) -> Option<Nav> {
+        let bar = Rect::new(0.0, 0.0, w, TOPBAR_H);
+        ui.solid(bar);
+        ui.p().rect(bar, omsi_ui::theme::surface(SIDE));
+        ui.p().rect(Rect::new(0.0, TOPBAR_H - 1.0, w, 1.0), LINE);
+        if let Some((tex, aspect)) = self.logo {
+            let lw = self.logo_w();
+            ui.image(
+                Rect::new(18.0, (TOPBAR_H - lw * aspect) * 0.5, lw, lw * aspect),
+                tex,
+                0.0,
+            );
+        }
+        let compact = self.compact(ui, w);
+        let start = 18.0 + self.logo_w() + 22.0;
+        let end = start + top_space(w, self.logo_w());
+        let mut nav = None;
+        // (Settings and Setup at the right, laid out from there leftwards)
+        let foot: Vec<(Page, f32)> = Page::foot()
+            .iter()
+            .map(|&p| (p, self.entry_w(ui, p, compact)))
+            .collect();
+        let mut x = end - foot.iter().map(|(_, ew)| ew + TOP_GAP).sum::<f32>();
+        for (page, ew) in foot {
+            if self.entry(ui, page, Rect::new(x, 0.0, ew, TOPBAR_H), compact) {
+                nav = Some(Nav::Page(page));
+            }
+            x += ew + TOP_GAP;
+        }
+        let mut x = start;
+        for &page in Page::listed() {
+            let ew = self.entry_w(ui, page, compact);
+            if self.entry(ui, page, Rect::new(x, 0.0, ew, TOPBAR_H), compact) {
+                nav = Some(Nav::Page(page));
+            }
+            x += ew + TOP_GAP;
+        }
+        nav
+    }
+
+    /// The width `page`'s entry has in this frame: with its name, or its icon only (opening
+    /// while the mouse is on it).
+    fn entry_w(&self, ui: &mut Ui, page: Page, compact: bool) -> f32 {
+        let full = self.full_w(ui, page);
+        if !compact || page == self.page {
+            return full;
+        }
+        TOPBAR_ICON_W + (full - TOPBAR_ICON_W) * ui.anim_now(top_open_id(page))
+    }
+
+    fn entry(&self, ui: &mut Ui, page: Page, r: Rect, compact: bool) -> bool {
+        let on = page == self.page;
+        let id = nav_id(page);
+        let (hover, down, clicked) = ui.interact_key(id, r);
+        let open = if compact && !on {
+            ui.anim(top_open_id(page), if hover { 1.0 } else { 0.0 }, 0.09)
+        } else {
+            1.0
+        };
+        let tile = Rect::new(r.x, 8.0, r.w, TOPBAR_H - 16.0);
+        // (as the sidebar: the chosen entry a layer lighter, with a short accent bar - under
+        // it here, along the bar's edge)
+        if on {
+            ui.p().rounded(tile, CONTROL_RADIUS, SELECTED_LAYER);
+            let lit = ui.anim(id, 1.0, 0.08);
+            let bar = (r.w - 24.0) * lit;
+            ui.p().rounded(
+                Rect::new(r.center().x - bar * 0.5, TOPBAR_H - 3.0, bar, 3.0),
+                1.5,
+                accent(),
+            );
+        } else {
+            let _ = ui.anim(id, 0.0, 0.08);
+            if hover || down {
+                ui.p().rounded(tile, CONTROL_RADIUS, HOVER_LAYER);
+            }
+        }
+        let ic = if on { accent() } else { NAV_TEXT };
+        let cy = r.center().y;
+        // (an entry with only its icon has it in the middle; opening, the icon moves to where
+        // it stands before the name)
+        let icon_x = if compact && !on {
+            r.x + TOPBAR_ICON_W * 0.5 + (22.0 - TOPBAR_ICON_W * 0.5) * open
+        } else {
+            r.x + 22.0
+        };
+        ui.icon(page.icon(), Vec2::new(icon_x, cy), 20.0, ic);
+        let badge = self.badges.iter().find(|b| b.0 == page);
+        if open > 0.02 {
+            let tx = Rect::new(r.x + 42.0, r.y, (r.w - 42.0 - 8.0).max(0.0), r.h);
+            let ink = if on { FG } else { NAV_TEXT };
+            // (cut by the entry while it opens, not shortened)
+            ui.push_clip(tx, 0.0);
+            ui.text_in(
+                page.title(),
+                Rect::new(tx.x, tx.y, tx.w + 200.0, tx.h),
+                TOP_TEXT_PX,
+                Weight::Regular,
+                ink.alpha(open),
+                Align::Left,
+            );
+            ui.pop_clip();
+            if let Some((_, n, color)) = badge.filter(|_| open > 0.98) {
+                ui.text_in(
+                    n,
+                    Rect::new(r.x, r.y, r.w - 14.0, r.h),
+                    12.5,
+                    Weight::Bold,
+                    *color,
+                    Align::Right,
+                );
+            }
+        } else if let Some((_, _, color)) = badge {
+            // (an entry with only its icon: a dot says there is something to see)
+            ui.p()
+                .circle(Vec2::new(icon_x + 11.0, cy - 9.0), 3.5, *color);
+        }
+        clicked
+    }
+}
+
+/// The room the top bar's entries have in a window `w` points wide after a logo `logo_w`
+/// wide: from after the logo to before the caption buttons.
+fn top_space(w: f32, logo_w: f32) -> f32 {
+    (w - CAPTION_W * 3.0 - 8.0 - (18.0 + logo_w + 22.0)).max(0.0)
+}
+
 /// The height of a listed page's row in a window `h` design points high: the design's, or less
 /// when the foot entries would otherwise cover the last pages.
 fn nav_row(h: f32) -> f32 {
@@ -419,6 +599,46 @@ fn nav_row(h: f32) -> f32 {
 #[cfg(test)]
 mod nav_tests {
     use super::*;
+
+    /// A top bar too narrow for the names shows the icons, the open page with its name; the
+    /// entry under the mouse opens to show its own, and closes when the mouse leaves.
+    #[test]
+    fn a_narrow_top_bar_shows_icons_and_opens_the_one_under_the_mouse() {
+        let bar = TopBar {
+            page: Page::Maps,
+            logo: None,
+            badges: &[],
+        };
+        let mut ui = Ui::new();
+        assert!(!bar.compact(&ui, 4000.0));
+        assert!(bar.compact(&ui, 1100.0));
+        let frame = |ui: &mut Ui| {
+            ui.begin(Vec2::new(1100.0, 700.0), 1.0, 0.05);
+            bar.draw(ui, 1100.0);
+        };
+        frame(&mut ui);
+        let drawn = |ui: &Ui, p: Page| ui.drawn[&nav_id(p)];
+        let maps = drawn(&ui, Page::Maps);
+        let mods = drawn(&ui, Page::Mods);
+        assert!(
+            maps.w > TOPBAR_ICON_W + 20.0,
+            "the open page keeps its name"
+        );
+        assert!(
+            (mods.w - TOPBAR_ICON_W).abs() < 0.5,
+            "the others show their icons"
+        );
+        ui.input.mouse = mods.center();
+        for _ in 0..20 {
+            frame(&mut ui);
+        }
+        assert!(drawn(&ui, Page::Mods).w > TOPBAR_ICON_W + 20.0);
+        ui.input.mouse = Vec2::new(-100.0, -100.0);
+        for _ in 0..20 {
+            frame(&mut ui);
+        }
+        assert!((drawn(&ui, Page::Mods).w - TOPBAR_ICON_W).abs() < 1.0);
+    }
 
     #[test]
     fn listed_pages_never_reach_the_foot_entries() {

@@ -10,6 +10,7 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+mod backdrop;
 mod chrome;
 mod diagnostics;
 mod gfx;
@@ -179,6 +180,8 @@ pub struct Launcher {
     /// The Maps page's picture of the chosen map (from its folder): the map file it is of, the
     /// pixels not yet on the GPU or being read, and its texture with its width over height.
     map_pic: MapPicture,
+    /// The Scene background's picture (Settings > Interface > Background).
+    backdrop: backdrop::Backdrop,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -274,6 +277,7 @@ impl Launcher {
         preview_rect: None,
         preview_tex: None,
         map_pic: MapPicture::default(),
+        backdrop: backdrop::Backdrop::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
@@ -339,6 +343,7 @@ impl Launcher {
         self.preview = preview::Preview::new();
         self.map_tex = None;
         self.map_pic = MapPicture::default();
+        self.backdrop.forget_texture();
         self.map_gen = 0;
         self.mapview.drop_gpu();
         self.icons.clear();
@@ -897,7 +902,14 @@ impl Launcher {
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
         let Some(renderer) = self.gfx.as_mut() else { return };
-        if let (Some((w, h, px)), Some(gpu)) = (self.preview.take_frame(), self.gpu.as_mut()) {
+        let frame = self.preview.take_frame();
+        // (the bus as the preview drew it, behind the Vehicles page with the Scene background:
+        // blurred even while that is off, as no other frame may come once it is switched on)
+        if let (Some((w, h, px)), Some(tag)) = (frame.as_ref(), self.preview.showing()) {
+            self.backdrop.offer_bus(tag, *w, *h, px);
+        }
+        self.backdrop.update();
+        if let (Some((w, h, px)), Some(gpu)) = (frame, self.gpu.as_mut()) {
             match self.preview_tex {
                 Some(id) => gpu.update_image(&renderer.device, &renderer.queue, id, w, h, &px),
                 None => self.preview_tex = Some(gpu.add_image(&renderer.device, &renderer.queue, w, h, &px)),
@@ -905,6 +917,7 @@ impl Launcher {
         }
         if let Some(gpu) = self.gpu.as_mut() {
             self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
+            self.backdrop.upload(gpu, &renderer.device, &renderer.queue);
             // (the logo's coloured part wears the accent: drawn again when another is chosen)
             let accent = omsi_ui::theme::current_accent();
             if let (Some((tex, _)), true) = (self.logo, accent != self.logo_accent) {
@@ -1116,11 +1129,13 @@ impl Launcher {
             }
             phone::draw(self);
         } else {
-        let rail_w = RAIL_W;
+        let rail_w = self.rail_w();
         self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
         // (no wider than a page reads well: on a wide screen the rest is margin, the page
-        // in the middle - the panels stretched across 2000 px with their text at one end)
+        // in the middle - the panels stretched across 2000 px with their text at one end;
+        // under the top bar, the heading a little closer to it than to the window's edge)
         let (margin, top) = if mobile { (36.0, 14.0) } else { (64.0, 28.0) };
+        let top = if self.top_nav() { top + omsi_launcher_ui::look::TOPBAR_H - 8.0 } else { top };
         let avail = size.x - rail_w - margin;
         let w = avail.min(1760.0);
         let seen = size.y - top - 40.0;
@@ -1131,6 +1146,8 @@ impl Launcher {
         let content = Rect::new(rail_w + margin * 0.5 + (avail - w) * 0.5, top - self.page_scroll, w, h);
         let e = 1.0 - (1.0 - self.page_anim).powi(3);
         let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
+        let glass = self.draw_backdrop();
+        omsi_ui::theme::set_glass(glass);
         match self.page {
             Page::Drive => drive::draw(self, content),
             Page::Vehicles => self.vehicles_page(content),
@@ -1152,6 +1169,8 @@ impl Launcher {
         // the rail over the page (a scrolled page passes under it)
         self.rail();
         self.status_bar();
+        // (dialogs and what lies over the pages stay solid)
+        omsi_ui::theme::set_glass(false);
         }
         if let Some(i) = saved {
             self.ui.input = i;
@@ -1345,8 +1364,59 @@ impl Launcher {
         }
     }
 
-    /// The sidebar over the page's left side (a scrolled page passes under it): the pages,
-    /// and the driver at its foot.
+    /// The Scene background is chosen (Settings > Interface > Background).
+    fn scene(&self) -> bool {
+        !mobile::mobile() && self.state.settings.get("ui_background").and_then(|v| v.as_str()) == Some("scene")
+    }
+
+    /// With the Scene background, the page's picture behind it, blurred and darkened: true
+    /// when there is one (the panels are drawn as glass then), false for the plain dark.
+    fn draw_backdrop(&mut self) -> bool {
+        if !self.scene() {
+            return false;
+        }
+        let root = std::path::PathBuf::from(&self.state.config.root);
+        let map = |file: &str| backdrop::Want::Map { root: root.clone(), file: file.to_string() };
+        self.backdrop.game_running(self.state.in_game());
+        let want = match self.page {
+            Page::Maps => self.maps.current().map(map),
+            Page::Vehicles if self.preview.has_picture() => self.preview.showing().map(backdrop::Want::Bus),
+            // (while the next bus is drawn, the picture before stays: not a screenshot between)
+            Page::Vehicles if self.preview.loading() => self.backdrop.wanted().cloned(),
+            Page::Vehicles => None,
+            Page::Drive => Some(&self.state.choice.map).filter(|m| !m.is_empty()).map(|m| map(m)),
+            _ => None,
+        };
+        self.backdrop.want(want.unwrap_or(backdrop::Want::Latest));
+        let Some((tex, aspect)) = self.backdrop.shown() else { return false };
+        self.backdrop.fade = (self.backdrop.fade + self.ui.dt / 0.35).min(1.0);
+        let full = Rect::new(0.0, 0.0, self.ui.size.x, self.ui.size.y);
+        self.ui.image_cover(full, tex, aspect, self.backdrop.fade);
+        // (the dimming as the eye sees it: the veil is laid in linear light, where the same
+        // cover darkens far less)
+        let dim = core::dimming_of(self.state.settings.get("ui_dimming").unwrap_or(&serde_json::Value::Null)) as f32 / 100.0;
+        let cover = 1.0 - (1.0 - dim).powf(2.2);
+        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, cover * self.backdrop.fade));
+        true
+    }
+
+    /// The pages are listed in a bar along the top (Settings > Interface > Navigation), not in
+    /// the sidebar.
+    pub(crate) fn top_nav(&self) -> bool {
+        !mobile::mobile() && self.state.settings.get("ui_nav").and_then(|v| v.as_str()) == Some("top")
+    }
+
+    /// The width the sidebar takes from the pages (none under a top bar).
+    pub(crate) fn rail_w(&self) -> f32 {
+        if self.top_nav() {
+            0.0
+        } else {
+            RAIL_W
+        }
+    }
+
+    /// The sidebar over the page's left side (a scrolled page passes under it), or the top
+    /// bar over its top: the pages, and the driver at the sidebar's foot.
     fn rail(&mut self) {
         let size = self.ui.size;
         let running = self.state.instances.iter().filter(|i| i.running).count();
@@ -1364,13 +1434,13 @@ impl Launcher {
         };
         let name = if name.is_empty() { "No driver".to_string() } else { name };
         let level = format!("Level {level}");
-        let bar = omsi_launcher_ui::shell::Sidebar {
-            page: self.page.shown().unwrap_or(UiPage::Drive),
-            logo: self.logo,
-            badges: &badges,
-            footer: (&name, &level),
+        let page = self.page.shown().unwrap_or(UiPage::Drive);
+        let nav = if self.top_nav() {
+            omsi_launcher_ui::shell::TopBar { page, logo: self.logo, badges: &badges }.draw(&mut self.ui, size.x)
+        } else {
+            omsi_launcher_ui::shell::Sidebar { page, logo: self.logo, badges: &badges, footer: (&name, &level) }.draw(&mut self.ui, size.y)
         };
-        match bar.draw(&mut self.ui, size.y) {
+        match nav {
             Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
             Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
             None => {}
@@ -1498,7 +1568,7 @@ impl Launcher {
 
     fn status_bar(&mut self) {
         let size = self.ui.size;
-        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
+        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { self.rail_w() };
         let left = if mobile::mobile() { rail_w + 20.0 } else { self.status_chips(rail_w + 28.0, size.y - 22.0) };
         let (text, err, at) = self.state.status.clone();
         if text.is_empty() {
@@ -1651,7 +1721,7 @@ impl MapPicture {
     }
 
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
-    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    pub(super) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
             .into_iter()
             .filter(|(_, is_dir)| !is_dir)
@@ -1666,7 +1736,7 @@ impl MapPicture {
     /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
     /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
     /// on any card).
-    fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+    pub(super) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
         if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
             return None;
         }

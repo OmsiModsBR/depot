@@ -4,7 +4,7 @@
 
 use super::Launcher;
 use glam::Vec2;
-use omsi_launcher_ui::look::{CAPTION_H, CAPTION_W};
+use omsi_launcher_ui::look::{CAPTION_H, CAPTION_W, TOPBAR_H};
 use omsi_launcher_ui::shell::Caption;
 use std::time::{Duration, Instant};
 use winit::window::{CursorIcon, ResizeDirection, Window};
@@ -63,10 +63,10 @@ fn cursor_of(d: ResizeDirection) -> CursorIcon {
     }
 }
 
-/// Whether `p` is on the strip that moves the window: along the top, left of the caption
-/// buttons, of a window `w` points wide.
-pub fn on_title_strip(p: Vec2, w: f32) -> bool {
-    p.y >= 0.0 && p.y < CAPTION_H && p.x >= 0.0 && p.x < w - CAPTION_W * 3.0
+/// Whether `p` is on the strip that moves the window: along the top, `h` points high, left of
+/// the caption buttons, of a window `w` points wide.
+pub fn on_title_strip(p: Vec2, w: f32, h: f32) -> bool {
+    p.y >= 0.0 && p.y < h && p.x >= 0.0 && p.x < w - CAPTION_W * 3.0
 }
 
 impl Launcher {
@@ -96,7 +96,9 @@ impl Launcher {
             None => {}
         }
         let p = self.ui.input.mouse;
-        if self.ui.input.pressed && self.ui.hot.is_none() && self.ui.active.is_none() && on_title_strip(p, size.x) {
+        // (the top bar's free part moves the window too, as a title bar's)
+        let strip = if self.top_nav() { TOPBAR_H } else { CAPTION_H };
+        if self.ui.input.pressed && self.ui.hot.is_none() && self.ui.active.is_none() && on_title_strip(p, size.x, strip) {
             let now = Instant::now();
             let double = self.chrome.last_press.is_some_and(|t| now.duration_since(t) < Duration::from_millis(400));
             if double {
@@ -138,8 +140,9 @@ mod tests {
 
     #[test]
     fn the_title_strip_ends_at_the_caption_buttons() {
-        assert!(on_title_strip(Vec2::new(600.0, 10.0), 1440.0));
-        assert!(!on_title_strip(Vec2::new(600.0, 40.0), 1440.0));
-        assert!(!on_title_strip(Vec2::new(1440.0 - 60.0, 10.0), 1440.0));
+        assert!(on_title_strip(Vec2::new(600.0, 10.0), 1440.0, CAPTION_H));
+        assert!(!on_title_strip(Vec2::new(600.0, 40.0), 1440.0, CAPTION_H));
+        assert!(on_title_strip(Vec2::new(600.0, 40.0), 1440.0, TOPBAR_H));
+        assert!(!on_title_strip(Vec2::new(1440.0 - 60.0, 10.0), 1440.0, TOPBAR_H));
     }
 }
