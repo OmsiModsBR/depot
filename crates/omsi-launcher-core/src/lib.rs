@@ -2867,9 +2867,18 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             // (a count the game can read, else its default 4)
             "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size"
-                if k != "vol_ai" =>
+                if k != "vol_ai" && k != "min_obj_size" =>
             {
                 v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
+            }
+            // (0 to 0.2, as the game reads it)
+            "min_obj_size" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 0.2))
+                    .unwrap_or(0.013))
             }
             // (0 to 1, as the game reads it)
             "vol_ai" => {
