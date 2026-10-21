@@ -15,6 +15,7 @@ pub use crate::lighting::{
 pub use crate::output::{winit_window, SurfaceState};
 pub use crate::passes::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};
 pub use crate::renderer::{
+    AssetMirror, FramePlan, MirrorEvent, MirrorTexture, OverlayHook, PlanBatch, PlanKind, PlanSink,
     RenderOptions, Renderer, AUTO_SCALE_PIXELS, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE,
 };
 pub use crate::scene::{

@@ -297,6 +297,9 @@ pub struct Navigator {
     panel_rect: [f32; 4],
     origin_x: f32,
     gpu: Option<Gpu>,
+    /// Under "DirectX9 (D3D9Ex)", the mirror the maps' Gpu hands its draws to when it is
+    /// made (the maps' textures are drawn on that device too).
+    pub(crate) ui_mirror: Option<omsi_ui::UiMirror>,
     fonts: Fonts,
     atlas: Atlas,
     target: Option<(TextureId, u32, u32)>,
