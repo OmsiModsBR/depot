@@ -172,8 +172,8 @@ mod tests {
         std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
     }
 
-    /// The inbox's README is written once, and an older version's (which promised folders on
-    /// a computer) is brought up to date; one the player wrote stays.
+    /// The inbox's README is written once, and an older version's (which promised folder
+    /// installs) is brought up to date; one the player wrote stays.
     #[test]
     fn an_older_readme_is_rewritten_a_players_kept() {
         let dir = std::env::temp_dir().join(format!("omsi-readme-{}", std::process::id()));
@@ -188,8 +188,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(first, README_TEXT);
         assert_eq!(kept, "my notes");
-        if cfg!(not(target_os = "android")) {
-            assert!(!README_TEXT.contains("a folder or a .zip"));
-        }
+        assert!(!README_TEXT.contains("a folder or a .zip"));
     }
 }

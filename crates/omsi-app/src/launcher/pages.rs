@@ -2699,7 +2699,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     let mut y = inner.y;
     // (a .zip only, everywhere: loose files are copied by hand, see below)
     if l.ui.button("mod-zip", Rect::new(inner.x, y, inner.w, 42.0), "Choose a .zip file", Some("o-package"), ButtonKind::Primary) {
-        if let Some(p) = core::pick_mod(true) {
+        if let Some(p) = core::pick_mod() {
             l.state.install(p.to_string_lossy().to_string());
         }
     }
@@ -2903,7 +2903,7 @@ pub fn setup(l: &mut Launcher, area: Rect) {
     y += ROW + 10.0;
     if core::IN_PROCESS_GAMES {
         // (a phone: the game is this app itself)
-        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into depot/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
+        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. A mod's .zip goes into depot/Mods.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
     } else {
         l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "Game binary");
         if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "depot", Some("terminal")) {

@@ -264,8 +264,8 @@ const README: &str = "Project Depot\n\
 \n\
 Put a complete copy of OMSI 2 (the folder with Omsi.exe, maps and Vehicles in it) here as\n\
 \"OMSI 2\", e.g. depot/OMSI 2, and choose it in the launcher under Setup.\n\
-Mods: copy a mod's .zip into depot/Mods (it is installed when the launcher opens), or install\n\
-it from the launcher's Mods page; loose folders are not installed.\n\
+Mods: copy a mod's .zip into depot/Mods (it is installed when the launcher opens); loose\n\
+folders are not installed.\n\
 Screenshots are written to depot/Screenshots.\n\
 The folders here hold a .nomedia file so that the gallery leaves the game's textures alone:\n\
 they are not photos - deleting them breaks buses and maps.\n";

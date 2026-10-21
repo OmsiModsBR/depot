@@ -459,11 +459,11 @@ From a shell, `openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` in
 `.zip`, and `--cli mods` installs the `.zip` files in `Mods/`, as the page does (`--cli poll`
 with `watch` likewise). `--cli install` refuses a folder too. **`.rar` and `.7z` archives are
 not supported** (unpack them with your own tool and copy the folder by hand), and **a `.zip`
-is never unpacked by the launcher**. An installation is a background job: a folder's listing
-(or a `.zip`'s table of contents) becomes a plan, the disk is checked for room, a folder is
-copied into a staging folder on the content volume and moved into place in one step, and it
-can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is
-kept aside and installed when the bus arrives.
+is never unpacked by the launcher**. An installation is a background job: the `.zip`'s table
+of contents becomes a plan, the disk is checked for room, the archive is put into place in one
+step, and it can be cancelled and cleaned up at any point. A pack an older version kept aside
+in `Mods/waiting` (a repaint for a bus that was not installed) is a folder: it is not
+installed from there, copy it by hand once the bus is installed.
 
 A `.zip` is **used in place**, and only that way: a `.zip` laid out like OMSI 2 is put into the
 content folder's `Archives/` (hard-linked when it is on the same disk, moved from the

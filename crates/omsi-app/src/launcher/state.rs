@@ -1375,11 +1375,9 @@ pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
-/// Whether `path` is a .zip file (what the Mods page installs on a computer): named .zip and a
-/// file, not a folder named so.
+/// Whether `path` is a .zip file (what the Mods page installs): `core::is_zip`.
 pub fn is_zip(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) && p.is_file()
+    core::is_zip(std::path::Path::new(path))
 }
 
 /// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number

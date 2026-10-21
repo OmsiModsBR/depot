@@ -508,9 +508,9 @@ pub struct ModsStatus {
     pub jobs: Vec<install::Progress>,
 }
 
-/// Start installing the mod at `src` (a folder, or a .zip) into the content folder in the
-/// background. A folder is copied; a .zip is never unpacked, only put into `Archives` and read
-/// in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
+/// Start installing the mod `.zip` at `src` into the content folder in the background (a
+/// folder is refused, see `only_a_zip`). A .zip is never unpacked, only put into `Archives` and
+/// read in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content =
         content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
@@ -654,9 +654,8 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let mut started = Vec::new();
     let mut guard = SEEN.lock().unwrap_or_else(|e| e.into_inner());
     let seen = guard.get_or_insert_with(Default::default);
-    let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    seen.retain(|p, _| items.contains(p));
     for p in items {
         if install::is_busy(&p) {
             continue;
@@ -703,50 +702,17 @@ fn watch_inbox(content: &Path) -> Vec<String> {
             }
         }
     }
-    let busy = install::jobs().iter().any(|j| j.finished.is_none());
-    if !busy {
-        for p in install::waiting_ready(content, root().ok().as_deref()) {
-            let sig = tree_signature(&p);
-            if seen
-                .get(&p)
-                .map(|s| s.started && s.sig == sig)
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            seen.insert(
-                p.clone(),
-                Seen {
-                    sig,
-                    at: std::time::Instant::now(),
-                    started: true,
-                    checked: std::time::Instant::now(),
-                },
-            );
-            install::start(
-                content.to_path_buf(),
-                root().ok(),
-                p.clone(),
-                install::InstallMode::Extract,
-                true,
-            );
-            started.push(p.to_string_lossy().to_string());
-        }
-    }
     started
 }
 
-/// Install everything in the inbox (and the waiting packs whose bus is there) now, and
-/// wait (the terminal's `mods`).
+/// Install every .zip in the inbox now, and wait (the terminal's `mods`). A pack an older
+/// version kept aside in `Mods/waiting` is a folder: it is not installed (copy it by hand).
 pub fn install_inbox_blocking() -> Vec<install::Progress> {
     let Some(content) = content_dir() else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for p in inbox_entries(&content)
-        .into_iter()
-        .chain(install::waiting_ready(&content, root().ok().as_deref()))
-    {
+    for p in inbox_entries(&content) {
         let job = install::start(
             content.clone(),
             root().ok(),
@@ -4635,25 +4601,18 @@ pub fn cleanup() {
     }
 }
 
-/// Native folder / file picker (Finder, Explorer, the GTK dialog) for a mod. Must run on
-/// the main thread. (None on a phone: the launcher browses the storage itself there.)
-pub fn pick_mod(zip: bool) -> Option<PathBuf> {
+/// Native file picker (Finder, Explorer, the GTK dialog) for a mod's `.zip`. Must run on
+/// the main thread. (None on a phone, which has no such dialog.)
+pub fn pick_mod() -> Option<PathBuf> {
     #[cfg(not(target_os = "android"))]
     {
-        if zip {
-            rfd::FileDialog::new()
-                .set_title("Choose a mod archive")
-                .add_filter("Mod archive", &["zip"])
-                .pick_file()
-        } else {
-            rfd::FileDialog::new()
-                .set_title("Choose the mod folder")
-                .pick_folder()
-        }
+        rfd::FileDialog::new()
+            .set_title("Choose a mod archive")
+            .add_filter("Mod archive", &["zip"])
+            .pick_file()
     }
     #[cfg(target_os = "android")]
     {
-        let _ = zip;
         None
     }
 }
@@ -4850,9 +4809,9 @@ mod tests {
         assert_eq!(names, ["Map.zip"]);
     }
 
-    /// No entry point installs a folder: the page, the inbox and the terminal take a .zip only.
+    /// `only_a_zip`, which guards every install entry point, refuses a folder.
     #[test]
-    fn a_folder_is_never_installed() {
+    fn only_a_zip_refuses_folders() {
         let dir = std::env::temp_dir().join(format!("depot-only-zip-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("Bus")).unwrap();
         std::fs::create_dir_all(dir.join("Named.zip")).unwrap();
