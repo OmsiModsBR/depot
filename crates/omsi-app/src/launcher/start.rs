@@ -276,14 +276,7 @@ pub fn card(l: &mut Launcher, r: Rect) {
             if clicked {
                 // (the whole preselection goes: no depot file, number or plate picked for it
                 // stays behind for the game)
-                let c = &mut l.state.choice;
-                c.bus.clear();
-                c.paint.clear();
-                c.number.clear();
-                c.plate.clear();
-                c.hof_manual = false;
-                l.state.choice.hof = l.state.default_hof();
-                l.state.touched();
+                l.state.clear_bus();
             }
         }
     }

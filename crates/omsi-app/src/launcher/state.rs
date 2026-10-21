@@ -171,6 +171,30 @@ fn choice_path() -> std::path::PathBuf {
 }
 
 impl Choice {
+    /// The bus "Use for the next start" was clicked for, with what its card held (after
+    /// `State::select_bus`, which picks the bus and its automatic depot file).
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.bus = u.file;
+        self.paint = u.paint;
+        self.hof_manual = u.hof.is_some();
+        if let Some(hof) = u.hof {
+            self.hof = hof;
+        }
+        self.number = u.number.unwrap_or_default();
+        self.plate = u.plate;
+    }
+
+    /// No bus picked for the next start: the whole preselection goes, no depot file, number
+    /// or plate picked for it stays behind for the game (the depot file goes back to the
+    /// automatic one, which the caller sets).
+    pub fn clear_bus(&mut self) {
+        self.bus.clear();
+        self.paint.clear();
+        self.number.clear();
+        self.plate.clear();
+        self.hof_manual = false;
+    }
+
     pub fn load() -> Choice {
         let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         Self::fresh(c)
@@ -1204,6 +1228,23 @@ impl State {
             .unwrap_or_default()
     }
 
+    /// The bus "Use for the next start" was clicked for on Vehicles.
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.select_bus(&u.file);
+        self.choice.use_bus(u);
+        if !self.choice.hof_manual {
+            self.choice.hof = self.default_hof();
+        }
+        self.touched();
+    }
+
+    /// No bus for the next start (the Start card's Clear).
+    pub fn clear_bus(&mut self) {
+        self.choice.clear_bus();
+        self.choice.hof = self.default_hof();
+        self.touched();
+    }
+
     pub fn select_bus(&mut self, file: &str) {
         if self.choice.bus == file {
             return;
@@ -1474,6 +1515,25 @@ mod choice_tests {
         let mut now = super::Choice::default();
         now.bus = "Vehicles/y.bus".into();
         assert_eq!(super::Choice::fresh(now).bus, "Vehicles/y.bus");
+    }
+
+    /// "Use for the next start" puts the card's choices in the next start, a depot file
+    /// picked by hand among them; Clear leaves nothing of it, the hand-picked depot file
+    /// included, so the duty carries the automatic one.
+    #[test]
+    fn a_used_bus_and_its_clear() {
+        let mut c = super::Choice::default();
+        c.hof = "Automatic".into();
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: "Red".into(), hof: Some("Picked".into()), number: Some("3201".into()), plate: "B-V 1".into() });
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.hof.as_str(), c.number.as_str(), c.plate.as_str()), ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1"));
+        assert!(c.hof_manual);
+        c.clear_bus();
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str()), ("", "", "", ""));
+        assert!(!c.hof_manual);
+        // (automatic depot file and no number: nothing picked by hand)
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: String::new(), hof: None, number: None, plate: String::new() });
+        assert!(!c.hof_manual);
+        assert_eq!(c.number, "");
     }
 
     #[test]

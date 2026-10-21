@@ -1532,19 +1532,7 @@ impl Launcher {
             }
         }
         if let Some(u) = self.vehicles.take_use() {
-            self.state.select_bus(&u.file);
-            let c = &mut self.state.choice;
-            c.paint = u.paint;
-            c.hof_manual = u.hof.is_some();
-            if let Some(hof) = u.hof {
-                c.hof = hof;
-            }
-            c.number = u.number.unwrap_or_default();
-            c.plate = u.plate;
-            if !self.state.choice.hof_manual {
-                self.state.choice.hof = self.state.default_hof();
-            }
-            self.state.touched();
+            self.state.use_bus(u);
             self.go(Page::Maps);
         }
     }
