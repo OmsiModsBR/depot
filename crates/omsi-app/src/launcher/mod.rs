@@ -338,6 +338,10 @@ impl Launcher {
         if let Some(popup) = popup {
             start::open(&mut app, popup);
         }
+        // (profile:drive: the chosen drive's details over Profile / Sessions)
+        if p.split(':').nth(1) == Some("drive") {
+            app.pages.drive_details = true;
+        }
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
@@ -1133,10 +1137,12 @@ impl Launcher {
         let reset = !crash && !disconnected && self.pages.confirm_reset;
         // (a window of the Maps page's start lies over the page, as a dialog does)
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
+        // (and a drive's details over Profile / Sessions)
+        let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected || window).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1158,6 +1164,11 @@ impl Launcher {
         // `go`, so that Maps shows the map the choice holds, not the library's first)
         if self.page == Page::Drive {
             self.go(Page::Maps);
+            self.page_anim = 1.0;
+        }
+        // (and the games open now are on Profile / Sessions)
+        if self.page == Page::Sessions {
+            self.go(Page::Profile);
             self.page_anim = 1.0;
         }
         let rail_w = self.rail_w();
@@ -1213,6 +1224,8 @@ impl Launcher {
                 pages::reset_dialog(self);
             } else if self.browser.is_none() && window {
                 start::popup(self);
+            } else if self.browser.is_none() && drive {
+                pages::drive_dialog(self);
             } else {
                 self.draw_browser();
             }
@@ -1379,7 +1392,10 @@ impl Launcher {
                 other => { self.phone.tab = phone::Tab::More; Some(other) }
             };
             match p {
-                Page::Profile => self.state.load_profile(),
+                Page::Profile => {
+                    self.state.load_profile();
+                    self.state.poll_now();
+                }
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
                 Page::Vehicles => {
@@ -1456,7 +1472,8 @@ impl Launcher {
         let jobs = self.state.jobs.iter().filter(|j| j.finished.is_none()).count();
         let mut badges = Vec::new();
         if running > 0 {
-            badges.push((UiPage::Sessions, running.to_string(), OK));
+            // (the phone lists Sessions; the sidebar has them on Profile / Sessions)
+            badges.push((if mobile::mobile() { UiPage::Sessions } else { UiPage::Profile }, running.to_string(), OK));
         }
         if jobs > 0 {
             badges.push((UiPage::Mods, jobs.to_string(), accent()));

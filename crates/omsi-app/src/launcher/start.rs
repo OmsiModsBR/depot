@@ -347,7 +347,7 @@ fn start(l: &mut Launcher) {
 
 /// The dialog's frame, `w` x `h` in the middle of the window, over the page darkened: its
 /// title and a note at the right of it. Returns its inside, under the title.
-fn dialog(l: &mut Launcher, w: f32, h: f32, title: &str, note: &str) -> Rect {
+pub(super) fn dialog(l: &mut Launcher, w: f32, h: f32, title: &str, note: &str) -> Rect {
     let size = l.ui.size;
     let full = Rect::new(0.0, 0.0, size.x, size.y);
     l.ui.solid(full);
@@ -363,7 +363,7 @@ fn dialog(l: &mut Launcher, w: f32, h: f32, title: &str, note: &str) -> Rect {
 
 /// The dialog's foot (a line over it) at the bottom of `inside`; returns the row its buttons
 /// sit in, and the inside above it.
-fn dialog_foot(l: &mut Launcher, inside: Rect) -> (Rect, Rect) {
+pub(super) fn dialog_foot(l: &mut Launcher, inside: Rect) -> (Rect, Rect) {
     let foot = Rect::new(inside.x, inside.bottom() - 62.0, inside.w, 62.0);
     l.ui.p().rect(Rect::new(inside.x - 20.0, foot.y, inside.w + 40.0, 1.0), EDGE);
     let body = Rect::new(inside.x, inside.y, inside.w, (foot.y - 14.0 - inside.y).max(0.0));

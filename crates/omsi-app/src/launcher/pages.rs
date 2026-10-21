@@ -16,6 +16,10 @@ use serde_json::{json, Value};
 pub struct PagesView {
     pub new_driver: String,
     pub confirm_delete: Option<std::time::Instant>,
+    /// The drive chosen on Profile / Sessions (the driver's drives, most recent first).
+    pub drive: usize,
+    /// Its details window is open.
+    pub drive_details: bool,
     /// The "reset every setting" dialog is open.
     pub confirm_reset: bool,
     pub kb_filter: [String; 2],
@@ -100,11 +104,33 @@ fn release_feedback(io: &mut Option<crate::controllers::Devices>, active: &mut b
 
 pub fn profile(l: &mut Launcher, area: Rect) {
     let body = l.page_title(area, UiPage::Profile);
-    let left_w = (body.w * 0.56).min(700.0);
-    let left = Rect::new(body.x, body.y, left_w, body.h);
-    let right = Rect::new(body.x + left_w + GAP * 2.0, body.y, body.w - left_w - GAP * 2.0, body.h);
-    // driver chooser
+    if super::mobile::mobile() {
+        // (a phone: the driver and the record on the left, the drives on the right; its games
+        // running have a page of their own)
+        let left_w = (body.w * 0.56).min(700.0);
+        let left = Rect::new(body.x, body.y, left_w, body.h);
+        let right = Rect::new(body.x + left_w + GAP * 2.0, body.y, body.w - left_w - GAP * 2.0, body.h);
+        let top = Rect::new(left.x, left.y, left.w, 132.0);
+        driver_card(l, top);
+        record_card(l, Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, left.h - top.h - GAP * 1.5));
+        recent_drives(l, right);
+        return;
+    }
+    // (as the concept: the driver and their record on the left, the drives finished on the
+    // right, and the games open now along the foot - they belong to the driver too)
+    let open = open_sessions_h(l, body.h);
+    let upper = (body.h - open - GAP * 1.5).max(0.0);
+    let right_w = omsi_launcher_ui::kit::fit(440.0, body.w);
+    let left = Rect::new(body.x, body.y, body.w - right_w - GAP * 1.5, upper);
     let top = Rect::new(left.x, left.y, left.w, 132.0);
+    driver_card(l, top);
+    record_card(l, Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, (left.h - top.h - GAP * 1.5).max(0.0)));
+    recent_drives(l, Rect::new(left.right() + GAP * 1.5, body.y, right_w, upper));
+    open_sessions(l, Rect::new(body.x, body.y + upper + GAP * 1.5, body.w, open));
+}
+
+/// The driver: the one chosen, deleting them, and a new one.
+fn driver_card(l: &mut Launcher, top: Rect) {
     l.ui.panel(top);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(top.x + 18.0, top.y + 14.0, top.w - 36.0, top.h - 28.0), "Driver");
     let names = l.state.profiles.clone();
@@ -115,6 +141,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
         let _ = core::save_config(&l.state.config);
         l.state.load_profile();
         l.state.touched();
+        l.pages.drive = 0;
     }
     let danger_armed = l.pages.confirm_delete.map(|t| t.elapsed().as_secs() < 4).unwrap_or(false);
     // (no driver yet: nothing to delete)
@@ -154,82 +181,272 @@ pub fn profile(l: &mut Launcher, area: Rect) {
             }
         }
     }
-    // level and stats
-    let card = Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, left.h - top.h - GAP * 1.5);
-    l.ui.panel(card);
-    let Some(p) = l.state.profile.clone() else {
-        l.ui.text_in("Create a driver to start a personnel file.", card.pad(20.0, 20.0), 14.0, Weight::Medium, TEXT_DIM, Align::Left);
-        return;
-    };
-    let c = Vec2::new(card.x + 70.0, card.y + 76.0);
-    let prev = ((p.level - 1) * (p.level - 1) * 250) as f64;
-    let frac = ((p.xp as f64 - prev) / (p.next_level_xp as f64 - prev).max(1.0)).clamp(0.0, 1.0) as f32;
-    let shown = l.ui.anim(id_of("xp-ring"), frac, 0.6);
-    l.ui.p().circle(c, 50.0, Color::rgba(28, 31, 37, 1.0));
-    l.ui.p().arc(c, 44.0, 52.0, 0.0, std::f32::consts::TAU, Color::WHITE.alpha(0.08));
-    let a0 = -std::f32::consts::FRAC_PI_2;
-    l.ui.p().arc(c, 44.0, 52.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), accent());
-    l.ui.text_in(&p.level.to_string(), Rect::new(c.x - 40.0, c.y - 26.0, 80.0, 40.0), 34.0, Weight::Black, TEXT, Align::Center);
-    l.ui.text_in("LEVEL", Rect::new(c.x - 40.0, c.y + 12.0, 80.0, 16.0), 10.0, Weight::Black, TEXT_DIM, Align::Center);
-    let tx = card.x + 142.0;
-    l.ui.text_in(&format!("{}{}", p.name, if p.exists { "" } else { " (no personnel file yet)" }), Rect::new(tx, card.y + 34.0, card.w - 160.0, 30.0), 24.0, Weight::Black, TEXT, Align::Left);
-    l.ui.progress(Rect::new(tx, card.y + 76.0, card.w - 170.0, 10.0), shown, false);
-    l.ui.text_in(&format!("{} XP · {} to level {}", p.xp, (p.next_level_xp - p.xp).max(0), p.level + 1), Rect::new(tx, card.y + 94.0, card.w - 160.0, 18.0), 12.5, Weight::Medium, TEXT_DIM, Align::Left);
+}
+
+/// What the driver's record says, as the tiles of the Profile page show it: (icon, value, what).
+fn record_tiles(p: &core::Profile) -> [(&'static str, String, &'static str); 12] {
     let hours = |h: f64| format!("{} h {:02} min", h.floor() as i64, ((h - h.floor()) * 60.0).round() as i64);
-    let stats = [
+    let on_time = (p.stops - p.early - p.late).max(0);
+    [
         ("schedule", hours(p.hours), "hours driven"),
         ("route", format!("{:.1} km", p.km), "distance"),
         ("location_on", p.stops.to_string(), "stops served"),
-        ("timer", format!("{} / {}", p.early, p.late), "early / late"),
+        ("timer", format!("{on_time} / {} / {}", p.early, p.late), "on time / early / late"),
         ("confirmation_number", format!("{:.0}", p.tickets), "tickets sold"),
         ("payments", format!("{:.2}", p.cash), "takings"),
         ("warning", p.crashes.to_string(), "crashes"),
         ("person", p.hurt.to_string(), "pedestrians hurt"),
         ("speed", format!("{:.0} %", p.rating_driving), "driving"),
         ("airport_shuttle", format!("{:.0} %", p.rating_comfort), "comfort"),
-        ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket selling"),
-        ("history", p.sessions.len().to_string(), "runs"),
-    ];
-    let grid = Rect::new(card.x + 18.0, card.y + 150.0, card.w - 36.0, card.h - 170.0);
-    let cols = 3;
-    let cw = (grid.w - GAP * (cols as f32 - 1.0)) / cols as f32;
-    let ch = 68.0;
-    for (k, (icon, v, label)) in stats.iter().enumerate() {
+        ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket sales"),
+        ("history", p.sessions.len().to_string(), "trips"),
+    ]
+}
+
+/// The driver's level and record.
+fn record_card(l: &mut Launcher, card: Rect) {
+    l.ui.panel(card);
+    let Some(p) = l.state.profile.clone() else {
+        l.ui.text_in("Create a driver to start a personnel file.", card.pad(20.0, 20.0), 14.0, Weight::Medium, TEXT_DIM, Align::Left);
+        return;
+    };
+    let c = Vec2::new(card.x + 64.0, card.y + 64.0);
+    let prev = ((p.level - 1) * (p.level - 1) * 250) as f64;
+    let frac = ((p.xp as f64 - prev) / (p.next_level_xp as f64 - prev).max(1.0)).clamp(0.0, 1.0) as f32;
+    let shown = l.ui.anim(id_of("xp-ring"), frac, 0.6);
+    l.ui.p().circle(c, 46.0, Color::rgba(28, 31, 37, 1.0));
+    l.ui.p().arc(c, 39.0, 46.0, 0.0, std::f32::consts::TAU, Color::WHITE.alpha(0.08));
+    let a0 = -std::f32::consts::FRAC_PI_2;
+    l.ui.p().arc(c, 39.0, 46.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), accent());
+    l.ui.text_in(&p.level.to_string(), Rect::new(c.x - 40.0, c.y - 24.0, 80.0, 36.0), 30.0, Weight::Black, TEXT, Align::Center);
+    l.ui.text_in("LEVEL", Rect::new(c.x - 40.0, c.y + 10.0, 80.0, 16.0), 10.0, Weight::Black, TEXT_DIM, Align::Center);
+    let tx = card.x + 130.0;
+    l.ui.text_in(&format!("{}{}", p.name, if p.exists { "" } else { " (no personnel file yet)" }), Rect::new(tx, card.y + 26.0, card.w - 148.0, 30.0), 20.0, Weight::Bold, TEXT, Align::Left);
+    l.ui.progress(Rect::new(tx, card.y + 62.0, card.w - 152.0, 8.0), shown, false);
+    l.ui.text_in(&format!("{} XP · {} to level {}", p.xp, (p.next_level_xp - p.xp).max(0), p.level + 1), Rect::new(tx, card.y + 78.0, card.w - 148.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    let grid = Rect::new(card.x + 18.0, card.y + 126.0, card.w - 36.0, card.h - 140.0);
+    let gap = 10.0;
+    // (three across as the concept has them; four across, three rows, where four rows do not
+    // fit - a 720 p window - and the tiles a little lower still if need be)
+    let cols = if grid.h >= 4.0 * 62.0 + 3.0 * gap || grid.w < 560.0 { 3 } else { 4 };
+    let rows = 12_usize.div_ceil(cols);
+    let cw = (grid.w - gap * (cols as f32 - 1.0)) / cols as f32;
+    let ch = ((grid.h - gap * (rows as f32 - 1.0)) / rows as f32).clamp(48.0, 62.0);
+    for (k, (icon, v, label)) in record_tiles(&p).iter().enumerate() {
         let (cx, cy) = ((k % cols) as f32, (k / cols) as f32);
-        let r = Rect::new(grid.x + cx * (cw + GAP), grid.y + cy * (ch + 10.0), cw, ch);
+        let r = Rect::new(grid.x + cx * (cw + gap), grid.y + cy * (ch + gap), cw, ch);
         if r.bottom() > card.bottom() - 6.0 {
             break;
         }
-        l.ui.p().rounded(r, 10.0, Color::WHITE.alpha(0.04));
-        l.ui.icon(icon, Vec2::new(r.x + 22.0, r.y + 22.0), 18.0, accent());
-        l.ui.text_in(v, Rect::new(r.x + 40.0, r.y + 8.0, r.w - 48.0, 28.0), 18.0, Weight::Black, TEXT, Align::Left);
-        l.ui.text_in(label, Rect::new(r.x + 14.0, r.y + 42.0, r.w - 20.0, 18.0), 11.5, Weight::Medium, TEXT_DIM, Align::Left);
+        let top = r.y + (ch - 48.0) * 0.4;
+        l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
+        l.ui.p().rounded_border(r, 6.0, 1.0, EDGE);
+        l.ui.icon(icon, Vec2::new(r.x + 22.0, top + 18.0), 15.0, accent());
+        l.ui.text_in(v, Rect::new(r.x + 36.0, top + 5.0, r.w - 44.0, 26.0), 16.5, Weight::Bold, TEXT, Align::Left);
+        l.ui.text_in(label, Rect::new(r.x + 14.0, r.bottom() - 24.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
     }
-    // recent runs
+}
+
+/// The drive's title in the lists: its line (and tour) or a free drive, and the map.
+fn drive_title(s: &core::Session) -> String {
+    match &s.line {
+        Some(line) => format!("Line {line}{} · {}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default(), short_map(&s.map)),
+        None => format!("Free drive · {}", short_map(&s.map)),
+    }
+}
+
+/// The drives the driver finished, most recent first: one chosen, its details in a window.
+fn recent_drives(l: &mut Launcher, right: Rect) {
     l.ui.panel(right);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent runs");
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent drives");
+    let Some(p) = l.state.profile.clone() else { return };
+    if !super::mobile::mobile() {
+        let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, &format!("{} · most recent first", p.name), 12.0, inner.w - 150.0);
+        l.ui.text_in(&note, Rect::new(inner.x, right.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+    }
     let sessions = p.sessions.clone();
-    l.ui.scroll_area("runs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
+    let foot = !sessions.is_empty() && !super::mobile::mobile();
+    let list_h = if foot { inner.h - 58.0 } else { inner.h };
+    let chosen = l.pages.drive.min(sessions.len().saturating_sub(1));
+    let mut picked = None;
+    let mut open = false;
+    l.ui.scroll_area("runs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, list_h), &mut |ui, v| {
         if sessions.is_empty() {
-            ui.text_in("No runs yet. Drive a duty and it shows up here.", Rect::new(v.x + 8.0, v.y, v.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in("No drives yet. Start one from Maps and it shows up here.", Rect::new(v.x + 8.0, v.y, v.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
             return 30.0;
         }
-        let rh = 62.0;
+        let rh = 74.0;
         for (k, s) in sessions.iter().enumerate() {
-            let r = Rect::new(v.x + 6.0, v.y + k as f32 * rh, v.w - 16.0, rh - 6.0);
-            ui.p().rounded(r, 9.0, Color::WHITE.alpha(0.04));
-            let title = match &s.line {
-                Some(line) => format!("Line {line}{} · {}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default(), short_map(&s.map)),
-                None => format!("Free drive · {}", short_map(&s.map)),
-            };
-            ui.text_in(&title, Rect::new(r.x + 12.0, r.y + 6.0, r.w - 130.0, 20.0), 13.0, Weight::Bold, TEXT, Align::Left);
-            ui.text_in(&format!("{} · {:.1} km · {} stops · {} tickets · {} crashes", s.bus.rsplit('/').next().unwrap_or(""), s.metres / 1000.0, s.stops, s.tickets, s.crashes), Rect::new(r.x + 12.0, r.y + 28.0, r.w - 130.0, 18.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
-            let when = chrono_like(s.time);
-            ui.text_in(&when, Rect::new(r.right() - 120.0, r.y + 6.0, 110.0, 20.0), 11.5, Weight::Medium, TEXT_SOFT, Align::Right);
-            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 120.0, r.y + 28.0, 110.0, 18.0), 11.5, Weight::Medium, accent(), Align::Right);
+            let r = Rect::new(v.x + 6.0, v.y + k as f32 * rh, v.w - 16.0, rh - 8.0);
+            let (hover, _, clicked) = ui.interact_key(id_of(&format!("drive-{k}")), r);
+            let on = k == chosen;
+            ui.p().rounded(r, 6.0, if on { accent().alpha(0.12) } else if hover { Color::WHITE.alpha(0.06) } else { Color::WHITE.alpha(0.0) });
+            if on {
+                ui.p().rounded_border(r, 6.0, 1.0, accent().alpha(0.6));
+            }
+            if clicked {
+                // (a click on the one chosen opens its details)
+                open = on;
+                picked = Some(k);
+            }
+            ui.text_in(&drive_title(s), Rect::new(r.x + 10.0, r.y + 6.0, r.w - 80.0, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 80.0, r.y + 6.0, 70.0, 20.0), 12.0, Weight::Bold, accent(), Align::Right);
+            ui.text_in(&format!("{} · {:.1} km · {} stops · {} tickets · {} crashes", s.bus.rsplit('/').next().unwrap_or(""), s.metres / 1000.0, s.stops, s.tickets, s.crashes), Rect::new(r.x + 10.0, r.y + 26.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in(&chrono_like(s.time), Rect::new(r.x + 10.0, r.y + 44.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         }
         sessions.len() as f32 * rh
     });
+    if let Some(k) = picked {
+        l.pages.drive = k;
+    }
+    if foot {
+        let line_y = inner.y + list_h + 8.0;
+        l.ui.p().rect(Rect::new(right.x + 1.0, line_y, right.w - 2.0, 1.0), EDGE);
+        if l.ui.button("drive-details", Rect::new(inner.x, line_y + 12.0, inner.w, 34.0), "Open details", None, ButtonKind::Normal) {
+            open = true;
+        }
+    }
+    if open {
+        l.pages.drive_details = true;
+    }
+}
+
+/// The open sessions card's height for a page `body_h` high: a row for each game, the log
+/// under its row when open, a third of the page at most.
+fn open_sessions_h(l: &Launcher, body_h: f32) -> f32 {
+    let rows = l.state.instances.len().max(1) as f32;
+    let logs = l.state.instances.iter().filter(|i| l.state.open_logs.contains(&i.pid)).count() as f32;
+    (52.0 + rows * 62.0 + logs * 190.0).min((body_h * 0.36).max(118.0))
+}
+
+/// The games open now (and those that ended since the launcher started): their log and stop.
+fn open_sessions(l: &mut Launcher, r: Rect) {
+    l.ui.panel(r);
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "Open sessions");
+    l.ui.text_in("games running now", Rect::new(inner.x, r.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+    let list = l.state.instances.clone();
+    if list.is_empty() {
+        l.ui.text_in("No game started from here is running. Start one from Maps.", Rect::new(inner.x, inner.y, inner.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        return;
+    }
+    let names: std::collections::HashMap<String, String> = l.state.vehicles.iter().map(|v| (v.file.clone(), v.name.clone())).collect();
+    let short_bus = |b: &str| names.get(b).cloned().unwrap_or_else(|| b.rsplit('/').next().unwrap_or("").trim_end_matches(".bus").to_string());
+    let mut actions: Vec<(u32, &str)> = Vec::new();
+    let stopping = l.state.stopping.clone();
+    let open_logs = l.state.open_logs.clone();
+    let logs = l.state.logs.clone();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    l.ui.scroll_area("open-sessions", Rect::new(inner.x - 4.0, inner.y - 4.0, inner.w + 8.0, inner.h + 8.0), &mut |ui, v| {
+        let mut y = v.y + 4.0;
+        for i in &list {
+            let row = Rect::new(v.x + 4.0, y, v.w - 16.0, 52.0);
+            ui.p().rounded(row, 6.0, Color::WHITE.alpha(0.04));
+            let running = i.running;
+            ui.p().circle(Vec2::new(row.x + 16.0, row.center().y), 4.5, if running { OK } else { TEXT_FAINT });
+            let on_line = i.line.as_ref().map(|ln| format!(" on line {ln}{}", i.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).unwrap_or_default();
+            let bus = if i.bus.is_empty() { "on foot".to_string() } else { short_bus(&i.bus) };
+            let bw = 96.0;
+            let buttons = if running { bw * 2.0 + 8.0 } else { bw };
+            let tw = row.w - 40.0 - buttons - 16.0;
+            ui.text_in(&format!("{} · {bus}{on_line}", short_map(&i.map)), Rect::new(row.x + 30.0, row.y + 7.0, tw, 20.0), 13.5, Weight::Medium, TEXT, Align::Left);
+            let status = if running {
+                if stopping.contains(&i.pid) || i.stopping.is_some() {
+                    "stopping - saving the drive…".to_string()
+                } else {
+                    let t = now.saturating_sub(i.started);
+                    format!("running {:02}:{:02}:{:02}", t / 3600, (t / 60) % 60, t % 60)
+                }
+            } else {
+                let how = if i.exit_code == Some(0) { String::new() } else if i.killed { " (killed - it did not end by itself, the drive is not saved)".into() } else { i.exit_code.map(|c| format!(" (exit code {c})")).unwrap_or_default() };
+                format!("ended{how}")
+            };
+            ui.text_in(&format!("{} · {status}", i.profile), Rect::new(row.x + 30.0, row.y + 27.0, tw, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            let log_open = open_logs.contains(&i.pid);
+            let mut bx = row.right() - 10.0 - bw;
+            if running {
+                let busy = stopping.contains(&i.pid);
+                if ui.button(&format!("stop-{}", i.pid), Rect::new(bx, row.y + 10.0, bw, 32.0), if busy { "Stopping…" } else { "Stop" }, None, ButtonKind::Danger) && !busy {
+                    actions.push((i.pid, "stop"));
+                }
+                bx -= bw + 8.0;
+            }
+            if ui.button(&format!("log-{}", i.pid), Rect::new(bx, row.y + 10.0, bw, 32.0), if log_open { "Hide log" } else { "Open log" }, None, ButtonKind::Normal) {
+                actions.push((i.pid, "log"));
+            }
+            y += 60.0;
+            if log_open {
+                let lr = Rect::new(row.x, y - 2.0, row.w, 180.0);
+                ui.p().rounded(lr, 6.0, Color::rgba(6, 8, 10, 0.9));
+                let lines = logs.get(&i.pid).cloned().unwrap_or_default();
+                for (k, line) in lines.iter().rev().take(9).rev().enumerate() {
+                    ui.text_in(line, Rect::new(lr.x + 10.0, lr.y + 6.0 + k as f32 * 18.0, lr.w - 20.0, 18.0), 11.0, Weight::Regular, if line.contains("ERROR") { DANGER } else if line.contains("WARN") { WARN } else { TEXT_DIM }, Align::Left);
+                }
+                y += 190.0;
+            }
+        }
+        y - v.y
+    });
+    for (pid, what) in actions {
+        match what {
+            "stop" => l.state.stop(pid),
+            _ => {
+                if !l.state.open_logs.remove(&pid) {
+                    l.state.open_logs.insert(pid);
+                    l.state.log_tail(pid);
+                }
+            }
+        }
+    }
+}
+
+/// What a drive's details window lists: (what, the value).
+fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
+    let on_time = (s.stops - s.early - s.late).max(0);
+    vec![
+        ("Map", short_map(&s.map)),
+        ("Bus", s.bus.rsplit('/').next().unwrap_or("").to_string()),
+        ("Line", s.line.as_ref().map(|l| format!("{l}{}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).unwrap_or_else(|| "Free drive".into())),
+        ("Started", chrono_like(s.time)),
+        ("Time driven", hours_short(s.seconds / 3600.0)),
+        ("Distance", format!("{:.1} km", s.metres / 1000.0)),
+        ("Stops served", s.stops.to_string()),
+        ("On time / early / late", format!("{on_time} / {} / {}", s.early, s.late)),
+        ("Tickets sold", s.tickets.to_string()),
+        ("Takings", format!("{:.2}", s.cash)),
+        ("Crashes", s.crashes.to_string()),
+        ("Pedestrians hurt", s.hurt.to_string()),
+        ("Jolts", s.jolts.to_string()),
+        ("Driving", format!("{:.0} %", s.driving)),
+        ("Comfort", format!("{:.0} %", s.comfort)),
+        ("Ticket sales", format!("{:.0} %", s.ticketing)),
+    ]
+}
+
+/// The window over Profile / Sessions with the chosen drive's details.
+pub fn drive_dialog(l: &mut Launcher) {
+    let s = l.state.profile.as_ref().and_then(|p| p.sessions.get(l.pages.drive.min(p.sessions.len().saturating_sub(1)))).cloned();
+    let Some(s) = s else {
+        l.pages.drive_details = false;
+        return;
+    };
+    if l.ui.input.keys.contains(&super::ui::Key::Escape) {
+        l.pages.drive_details = false;
+        return;
+    }
+    let rows = drive_rows(&s);
+    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "from the personnel file");
+    let (buttons, body) = super::start::dialog_foot(l, inside);
+    for (k, (what, value)) in rows.iter().enumerate() {
+        let y = body.y + k as f32 * 26.0;
+        if y + 22.0 > body.bottom() {
+            break;
+        }
+        l.ui.text_in(what, Rect::new(body.x, y, 200.0, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        l.ui.text_in(value, Rect::new(body.x + 200.0, y, body.w - 200.0, 22.0), 13.0, Weight::Medium, TEXT, Align::Left);
+    }
+    if l.ui.button("drive-close", Rect::new(buttons.right() - 110.0, buttons.y, 110.0, 34.0), "Close", None, ButtonKind::Normal) {
+        l.pages.drive_details = false;
+    }
 }
 
 fn hours_short(h: f64) -> String {
@@ -3241,3 +3458,23 @@ mod pad_remove_tests {
         assert!(names(&cfg_text(&devices)).is_empty());
     }
 }
+
+#[cfg(test)]
+mod profile_tests {
+    fn drive() -> super::core::Session {
+        serde_json::from_value(serde_json::json!({"time":0,"driver":"T","map":"maps/Spandau/global.cfg","bus":"Vehicles/X/a.bus","line":"136","tour":"2","seconds":1500.0,"metres":8400.0,"stops":14,"early":1,"late":2,"tickets":4,"cash":7.5,"crashes":0,"hurt":0,"jolts":2,"driving":96.0,"comfort":88.0,"ticketing":100.0})).unwrap()
+    }
+
+    /// The stops on time are the ones served neither early nor late (the personnel file
+    /// counts all of them, and of those the early and the late ones).
+    #[test]
+    fn a_drives_details_count_the_stops_on_time() {
+        let rows = super::drive_rows(&drive());
+        let get = |k: &str| rows.iter().find(|r| r.0 == k).map(|r| r.1.clone()).unwrap();
+        assert_eq!(get("On time / early / late"), "11 / 1 / 2");
+        assert_eq!(get("Line"), "136 / 2");
+        assert_eq!(get("Distance"), "8.4 km");
+        assert_eq!(super::drive_title(&drive()), "Line 136 / 2 · Spandau");
+    }
+}
+
