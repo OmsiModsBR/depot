@@ -859,7 +859,7 @@ impl Ui {
                 }
                 let color = match state {
                     0 => [140, 140, 140, 0],
-                    1 => [255, 200, 110, 0],
+                    1 => accent_ink(),
                     _ => [235, 235, 235, 0],
                 };
                 let tl = self.text.label(r, scene, time, px, color);
@@ -894,7 +894,7 @@ impl Ui {
             let tp = (18.0 * s) as u32;
             if !title.is_empty() {
                 for line in wrap(&self.text, title, tp as f32, w - pad * 2.0) {
-                    let l = self.text.label(r, scene, &line, tp, [255, 200, 110, 0]);
+                    let l = self.text.label(r, scene, &line, tp, accent_ink());
                     items.push((l.tex, [x + pad, y, x + pad + l.w as f32, y + l.h as f32]));
                     y += l.h as f32;
                 }
@@ -1205,7 +1205,6 @@ const ON_ACCENT: [u8; 4] = [18, 14, 8, 0];
 const WHITE: [u8; 4] = [236, 236, 236, 0];
 const SOFT: [u8; 4] = [200, 200, 200, 0];
 const MUTED: [u8; 4] = [142, 142, 142, 0];
-const AMBER: [u8; 4] = [255, 200, 110, 0];
 
 /// The card's radius, a line's, and the inset of lines from the card's edge and of their
 /// text from the line's edge (all times the scale).
@@ -1219,7 +1218,6 @@ fn quant(v: f32) -> f32 {
     (v.clamp(0.0, 1.0) * 8.0).round() / 8.0
 }
 
-/// The colour `t` (0 to 1) of the way from `a` to `b`.
 /// The interface's accent (the player's choice, `omsi_ui::theme::accent`), opaque.
 fn accent() -> [u8; 4] {
     let c = omsi_ui::theme::accent().0;
@@ -1238,6 +1236,14 @@ fn accent_hot() -> [u8; 4] {
     mix(accent(), [255, 255, 255, 255], 0.25)
 }
 
+/// Text in the accent, lighter than it (alpha 0: no outline on the flat panel): the times in
+/// lists, a value being typed, the current stop, a tutorial's title.
+fn accent_ink() -> [u8; 4] {
+    let [r, g, b, _] = mix(accent(), [255, 255, 255, 255], 0.4);
+    [r, g, b, 0]
+}
+
+/// The colour `t` (0 to 1) of the way from `a` to `b`.
 fn mix(a: [u8; 4], b: [u8; 4], t: f32) -> [u8; 4] {
     let t = t.clamp(0.0, 1.0);
     let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
@@ -1612,7 +1618,7 @@ impl Ui {
                         let bl = self.text.label(r, scene, name, (15.0 * s) as u32, ON_ACCENT);
                         let (bw, bh) = (sign_w, 28.0 * s);
                         let bx = lx;
-                        let sign = mix(mix(accent(), [150, 104, 30, 255], 0.30), accent_hot(), glow);
+                        let sign = mix(mix(accent(), [0, 0, 0, 255], 0.11), accent_hot(), glow);
                         self.text.rounded(r, scene, [bx, cy - bh * 0.5, bx + bw, cy + bh * 0.5], 7.0 * s, sign);
                         let (lx0, ly0) = (bx + (bw - bl.w as f32) * 0.5, cy - bl.h as f32 * 0.5);
                         scene.overlays.push((bl.tex, [lx0, ly0, lx0 + bl.w as f32, ly0 + bl.h as f32]));
@@ -1743,7 +1749,7 @@ impl Ui {
                 let mid_r = right - bw - 10.0 * s;
                 let time = clip_to(&self.text, time, fs * s, mid_r - mid_l);
                 let tw = self.text.width(&time, fs * s);
-                self.put(r, scene, &time, (fs * s) as u32, if base == 0 { AMBER } else { WHITE }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
+                self.put(r, scene, &time, (fs * s) as u32, if base == 0 { accent_ink() } else { WHITE }, mid_l + (mid_r - mid_l - tw) * 0.5, by + bh * 0.5);
                 top = by + bh + 8.0 * s;
             }
             let n = p.rows.len();
@@ -1781,7 +1787,7 @@ impl Ui {
                         self.text.rounded(r, scene, rect, ROW_R * s, fade(SELECTED, a_on));
                         self.text.rounded(r, scene, [rect[0], rect[1] + 7.0 * s, rect[0] + 2.0 * s, rect[3] - 7.0 * s], 1.0 * s, fade(accent(), a_on));
                     }
-                    self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                    self.put_right(r, scene, when, rpx, accent_ink(), px1 - pad, ry);
                     let what = clip_to(&self.text, what, rpx as f32, inner - time_w - 14.0 * s);
                     self.put(r, scene, &what, rpx, mix(SOFT, WHITE, a_on), px0 + pad, ry);
                     self.menu_pane.push(rect);
@@ -1803,7 +1809,7 @@ impl Ui {
                 let tile_w = p.rows.iter().take(shown).filter_map(|row| row.0.strip_prefix(tp.as_str()).and_then(|x| x.split_once("  ›  ").map(|(n, _)| n).or(Some(x)))).map(|n| self.text.width(n.trim(), rpx as f32) + 16.0 * s).fold(30.0 * s, f32::max);
                 for (i, (what, when)) in p.rows.iter().take(shown).enumerate() {
                     let ry = top + lh * i as f32 + lh * 0.5;
-                    self.put_right(r, scene, when, rpx, AMBER, px1 - pad, ry);
+                    self.put_right(r, scene, when, rpx, accent_ink(), px1 - pad, ry);
                     if let Some(rest) = what.strip_prefix(tp.as_str()) {
                         let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                         let th = lh - 6.0 * s;
@@ -2033,13 +2039,13 @@ impl Ui {
                     rx - cw
                 }
                 // a value being typed: lit in the accent
-                "E" => self.chip(r, scene, value, (13.0 * s) as u32, AMBER, accent_soft(), false, rx, cy, s),
+                "E" => self.chip(r, scene, value, (13.0 * s) as u32, accent_ink(), accent_soft(), false, rx, cy, s),
                 // a button
                 _ => {
                     if value.is_empty() {
                         rx
                     } else {
-                        self.chip(r, scene, value, (13.0 * s) as u32, mix(SOFT, AMBER, a), mix(CHIP, accent_soft(), a), false, rx, cy, s)
+                        self.chip(r, scene, value, (13.0 * s) as u32, mix(SOFT, accent_ink(), a), mix(CHIP, accent_soft(), a), false, rx, cy, s)
                     }
                 }
             };

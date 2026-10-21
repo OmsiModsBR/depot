@@ -2971,6 +2971,22 @@ mod settings_tests {
         assert_eq!(s["graphics"], json!("enhanced"));
     }
 
+    /// A colour clicked on the Interface tab is the accent and is saved by its name; "Back to
+    /// default" is amber again.
+    #[test]
+    fn the_accent_is_chosen_on_the_interface_tab_and_saved() {
+        let tab = SETTINGS_TABS.iter().position(|t| *t == "Interface").unwrap();
+        let mut s = all_rows();
+        assert_eq!(s["ui_accent"], json!("Amber"));
+        click(tab, "accent-blue", &mut s);
+        assert_eq!(s["ui_accent"], json!("Blue"));
+        let saved = core::settings_to_text(&s, None);
+        assert_eq!(core::settings_from_text(Some(&saved))["ui_accent"], json!("Blue"));
+        click(tab, "accent-default", &mut s);
+        assert_eq!(s["ui_accent"], json!("Amber"));
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
+    }
+
     #[test]
     fn right_stick_look_switch_toggles_and_saves_from_the_camera_tab() {
         let mut s = all_rows();

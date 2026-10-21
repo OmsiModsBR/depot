@@ -2711,7 +2711,6 @@ fn mirror_refresh(x: &str) -> &'static str {
     }
 }
 
-/// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 /// The interface's accent colours (`ui_accent=`), the default first: the palette of
 /// `omsi_ui::theme::Accent`, by name.
 pub const ACCENTS: [&str; 8] = [
@@ -2726,6 +2725,7 @@ pub fn accent_name(name: &str) -> &'static str {
         .unwrap_or(ACCENTS[0])
 }
 
+/// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["triple_screen"] = json!(false);
