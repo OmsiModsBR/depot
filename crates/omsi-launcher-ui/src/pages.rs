@@ -123,7 +123,7 @@ impl Page {
             Page::Setup => Some((
                 "Folders",
                 "Find the original game",
-                "Where the original OMSI 2 is, and the program of this game.",
+                "Where the original OMSI 2 is, where this game's program is, and where the Depot keeps its own files.",
             )),
         }
     }

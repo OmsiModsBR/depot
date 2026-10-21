@@ -28,6 +28,9 @@ pub enum Msg {
     Stopped { pid: u32, result: Result<bool, String> },
     LogTail { pid: u32, lines: Vec<String> },
     Mods(Result<core::ModsStatus, String>),
+    /// What the content takes on disk and how much of it there is (Setup), for the reading
+    /// of that number.
+    Usage(u64, core::disk::Usage),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -282,6 +285,13 @@ pub struct State {
     pub jobs: Vec<core::install::Progress>,
     pub mods: Option<core::ModsStatus>,
     pub mods_asked: bool,
+    /// What the content takes on disk (Setup), read when the page opens; the reading asked
+    /// last (an earlier one that ends after it is not taken).
+    pub usage: Option<core::disk::Usage>,
+    pub usage_asked: bool,
+    usage_gen: u64,
+    /// Counts the readings of the content that brought other files than before.
+    pub content_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
@@ -356,6 +366,10 @@ impl State {
             jobs: Vec::new(),
             mods: None,
             mods_asked: false,
+            usage: None,
+            usage_asked: false,
+            usage_gen: 0,
+            content_gen: 0,
             mod_info: None,
             mod_path: String::new(),
             ibis: None,
@@ -521,6 +535,26 @@ impl State {
     pub fn load_mods(&mut self) {
         self.mods_asked = true;
         self.spawn(|| Msg::Mods(core::mods_status().map_err(|e| format!("{e:#}"))));
+    }
+
+    /// Reads what the OMSI 2 folder and the content folder take on disk (Setup's Content
+    /// card), in the background.
+    pub fn load_usage(&mut self) {
+        self.usage_asked = true;
+        self.usage = None;
+        self.usage_gen += 1;
+        let gen = self.usage_gen;
+        let root = std::path::PathBuf::from(&self.config.root);
+        self.spawn(move || {
+            let mut folders = Vec::new();
+            if !root.as_os_str().is_empty() {
+                folders.push(("OMSI 2 folder".to_string(), root));
+            }
+            if let Some(c) = core::content_dir() {
+                folders.push(("Depot content folder".to_string(), c));
+            }
+            Msg::Usage(gen, core::disk::scan(&folders))
+        });
     }
 
     #[cfg(feature = "lan")]
@@ -951,6 +985,12 @@ impl State {
                     }
                 }
                 self.set_status(format!("{} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
+                // (other files than before - another content folder chosen under Setup: the
+                // Maps and Vehicles pages take the new lists even when as many came)
+                let same = self.maps.iter().map(|m| &m.file).eq(maps.iter().map(|m| &m.file)) && self.vehicles.iter().map(|v| &v.file).eq(vehicles.iter().map(|v| &v.file));
+                if !same {
+                    self.content_gen += 1;
+                }
                 self.maps = maps;
                 self.vehicles = vehicles;
                 self.weathers = weathers;
@@ -1159,6 +1199,8 @@ impl State {
                 self.mods = Some(m);
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
+            Msg::Usage(gen, u) if gen == self.usage_gen => self.usage = Some(u),
+            Msg::Usage(..) => {}
             Msg::ModInfo(r) => {
                 self.mod_info = Some(r);
             }
