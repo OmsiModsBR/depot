@@ -20,6 +20,8 @@ pub enum Popup {
     StartPoint,
     Weather,
     Explore,
+    /// The season, the traffic and the passengers (until Settings has them).
+    Traffic,
 }
 
 /// The kinds of session, as `Choice::session` names them, and their labels.
@@ -111,6 +113,14 @@ fn label(l: &mut Launcher, text: &str, x: f32, y: f32, w: f32) {
     l.ui.text_in(text, Rect::new(x, y, w, 18.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
 }
 
+/// A field that follows the computer's clock (nothing to type): what it shows, quiet.
+fn clock_field(l: &mut Launcher, r: Rect, text: &str) {
+    l.ui.p().rounded(r, CONTROL_RADIUS, FIELD.alpha(0.5));
+    l.ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
+    l.ui.icon("o-clock", Vec2::new(r.x + 18.0, r.center().y), 15.0, TEXT_DIM);
+    l.ui.text_in(text, Rect::new(r.x + 36.0, r.y, r.w - 44.0, r.h), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+}
+
 /// A field that opens a window: an icon, what is chosen, an arrow. True when clicked.
 fn opener(l: &mut Launcher, id: &str, r: Rect, icon: &str, text: &str) -> bool {
     let (h, _, clicked) = l.ui.interact_key(id_of(id), r);
@@ -139,20 +149,27 @@ pub fn card(l: &mut Launcher, r: Rect) {
     if l.ui.focus != Some(date_id) && date_typed(&l.start.date_text).as_deref() != Some(l.state.choice.date.as_str()) {
         l.start.date_text = shown;
     }
-    let mut text = std::mem::take(&mut l.start.date_text);
-    if l.ui.text_input("start-date", Rect::new(x, y, w - 42.0, 34.0), &mut text, "dd/mm/yyyy", None) {
-        if let Some(iso) = date_typed(&text) {
-            l.state.choice.date = iso;
+    // (Settings can have a session start on today's date, at the real time: the fields then
+    // follow the computer's clock, and say so, instead of taking what is typed)
+    let follows = |l: &Launcher, k: &str| l.state.settings.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
+    if follows(l, "use_real_date") {
+        clock_field(l, Rect::new(x, y, w, 34.0), "Today's date (Settings)");
+    } else {
+        let mut text = std::mem::take(&mut l.start.date_text);
+        if l.ui.text_input("start-date", Rect::new(x, y, w - 42.0, 34.0), &mut text, "dd/mm/yyyy", None) {
+            if let Some(iso) = date_typed(&text) {
+                l.state.choice.date = iso;
+                l.state.choice.season = "auto".into();
+                l.state.touched();
+            }
+        }
+        l.start.date_text = text;
+        let mut d = l.state.choice.date.clone();
+        if l.ui.calendar_button("start-calendar", Rect::new(x + w - 34.0, y, 34.0, 34.0), &mut d) {
+            l.state.choice.date = d;
             l.state.choice.season = "auto".into();
             l.state.touched();
         }
-    }
-    l.start.date_text = text;
-    let mut d = l.state.choice.date.clone();
-    if l.ui.calendar_button("start-calendar", Rect::new(x + w - 34.0, y, 34.0, 34.0), &mut d) {
-        l.state.choice.date = d;
-        l.state.choice.season = "auto".into();
-        l.state.touched();
     }
     y += 44.0;
     // the time: typed, or the computer's clock
@@ -163,20 +180,26 @@ pub fn card(l: &mut Launcher, r: Rect) {
     if l.ui.focus != Some(time_id) && time_typed(&l.start.time_text) != Some(l.state.choice.time) {
         l.start.time_text = shown;
     }
-    let mut text = std::mem::take(&mut l.start.time_text);
-    if l.ui.text_input("start-time", Rect::new(x, y, w - 78.0, 34.0), &mut text, "hh:mm", None) {
-        if let Some(t) = time_typed(&text) {
-            l.state.choice.time = t;
-            l.state.touched();
+    if follows(l, "use_real_time") {
+        clock_field(l, Rect::new(x, y, w, 34.0), "The real time (Settings)");
+    } else {
+        let mut text = std::mem::take(&mut l.start.time_text);
+        if l.ui.text_input("start-time", Rect::new(x, y, w - 78.0, 34.0), &mut text, "hh:mm", None) {
+            if let Some(t) = time_typed(&text) {
+                l.state.choice.time = t;
+                l.state.touched();
+            }
         }
-    }
-    l.start.time_text = text;
-    if l.ui.button("start-now", Rect::new(x + w - 70.0, y, 70.0, 34.0), "Now", None, ButtonKind::Normal) {
-        if let Some((yy, mo, dd, h, m)) = omsi_launcher_lib::local_now() {
-            l.state.choice.time = h * 60 + m;
-            l.state.choice.date = format!("{yy:04}-{mo:02}-{dd:02}");
-            l.state.choice.season = "auto".into();
-            l.state.touched();
+        l.start.time_text = text;
+        if l.ui.button("start-now", Rect::new(x + w - 70.0, y, 70.0, 34.0), "Now", None, ButtonKind::Normal) {
+            if let Some((yy, mo, dd, h, m)) = omsi_launcher_lib::local_now() {
+                l.state.choice.time = h * 60 + m;
+                if !follows(l, "use_real_date") {
+                    l.state.choice.date = format!("{yy:04}-{mo:02}-{dd:02}");
+                    l.state.choice.season = "auto".into();
+                }
+                l.state.touched();
+            }
         }
     }
     y += 44.0;
@@ -217,6 +240,14 @@ pub fn card(l: &mut Launcher, r: Rect) {
         if opener(l, "start-weather", Rect::new(x, y, w, 34.0), "o-cloud", &wl) {
             open(l, Popup::Weather);
         }
+        y += 44.0;
+        label(l, "Traffic and passengers", x, y, w);
+        y += 20.0;
+        let c = &l.state.choice;
+        let tl = format!("{:.0} cars around{}{}", c.traffic, if c.passengers { " · passengers" } else { "" }, if c.schedule { " · timetable buses" } else { "" });
+        if opener(l, "start-traffic", Rect::new(x, y, w, 34.0), "o-bus", &tl) {
+            open(l, Popup::Traffic);
+        }
     }
     // at the foot: the bus picked on the Vehicles page (a new session puts it down), and the
     // button that starts
@@ -243,14 +274,23 @@ pub fn card(l: &mut Launcher, r: Rect) {
             let (h, _, clicked) = l.ui.interact_key(id_of("start-clear-bus"), clear);
             l.ui.text_in("Clear", clear, 12.5, Weight::Medium, if h { accent().lighten(0.15) } else { accent() }, Align::Right);
             if clicked {
-                l.state.choice.bus.clear();
-                l.state.choice.paint.clear();
+                // (the whole preselection goes: no depot file, number or plate picked for it
+                // stays behind for the game)
+                let c = &mut l.state.choice;
+                c.bus.clear();
+                c.paint.clear();
+                c.number.clear();
+                c.plate.clear();
+                c.hof_manual = false;
+                l.state.choice.hof = l.state.default_hof();
                 l.state.touched();
             }
         }
     }
     let _ = foot;
-    if l.ui.button("start-go", go, "Start driving", Some("o-play"), ButtonKind::Primary) {
+    let armed = l.state.instances.iter().any(|i| i.running) && l.state.second_armed.is_some_and(|t| t.elapsed().as_secs() < 6);
+    let label = if armed { "Start another game" } else { "Start driving" };
+    if l.ui.button("start-go", go, label, Some("o-play"), ButtonKind::Primary) {
         start(l);
     }
 }
@@ -280,6 +320,15 @@ fn start(l: &mut Launcher) {
         l.state.set_status("Choose a map first.", true);
         return;
     }
+    // a second game on one computer is for testing, not something to do by accident: with one
+    // running (its window may be in the tray), the button asks for a second click
+    let running = l.state.instances.iter().filter(|i| i.running).count();
+    if running > 0 && l.state.second_armed.map(|t| t.elapsed().as_secs() >= 6).unwrap_or(true) {
+        l.state.second_armed = Some(std::time::Instant::now());
+        l.state.set_status("A game is running already (its window may be behind this one, or in the tray). Click again to start another one anyway.", true);
+        return;
+    }
+    l.state.second_armed = None;
     match l.state.choice.session.as_str() {
         "saved" => {
             l.state.choice.save();
@@ -287,15 +336,17 @@ fn start(l: &mut Launcher) {
         }
         kind => {
             // (the line is chosen in the game; without a bus picked, or without one at all,
-            // the player starts on foot and places one with the ALT menu)
+            // the player starts on foot at the start point and places one with the ALT menu -
+            // the bus picked on Vehicles stays for the next start)
             l.state.choice.free = true;
             let bus = kind == "new" && !l.state.choice.bus.is_empty() && l.state.bus().is_some();
             l.state.choice.on_foot = !bus;
-            let kept = (!bus).then(|| std::mem::take(&mut l.state.choice.bus));
             l.state.choice.save();
-            l.state.launch();
-            if let Some(b) = kept {
-                l.state.choice.bus = b;
+            if bus {
+                l.state.launch();
+            } else {
+                let hof = l.state.default_hof();
+                l.state.launch_with(|d| super::state::without_bus(d, Some(hof)));
             }
         }
     }
@@ -337,6 +388,7 @@ pub fn popup(l: &mut Launcher) {
         Popup::StartPoint => start_point(l),
         Popup::Weather => weather(l),
         Popup::Explore => explore(l),
+        Popup::Traffic => traffic(l),
     }
 }
 
@@ -437,6 +489,49 @@ fn weather(l: &mut Launcher) {
     }
 }
 
+/// The season, the traffic and the passengers of the start: here until the regrouped Settings
+/// has them (they were on the Drive page). They apply at once; Close shuts the window.
+fn traffic(l: &mut Launcher) {
+    let inside = dialog(l, 560.0, 330.0, "Traffic and passengers", "Applies to the next start");
+    let (buttons, body) = dialog_foot(l, inside);
+    let mut y = body.y;
+    label(l, "Season", body.x, y, body.w);
+    y += 20.0;
+    let seasons = ["auto", "spring", "summer", "autumn", "winter"];
+    let mut s = seasons.iter().position(|x| *x == l.state.choice.season).unwrap_or(0);
+    if l.ui.segmented("start-season", Rect::new(body.x, y, body.w, 34.0), &mut s, &["By date", "Spring", "Summer", "Autumn", "Winter"]) {
+        l.state.choice.season = seasons[s].to_string();
+        l.state.touched();
+    }
+    y += 50.0;
+    let mut traffic = l.state.choice.traffic;
+    if l.ui.slider("start-traffic-cars", Rect::new(body.x, y, body.w, 34.0), &mut traffic, 0.0, 120.0, 1.0, "Cars around", &|v| format!("{v:.0}")) {
+        l.state.choice.traffic = traffic;
+        l.state.touched();
+    }
+    y += 46.0;
+    let col = (body.w - 12.0) / 2.0;
+    let mut v = l.state.choice.passengers;
+    if l.ui.toggle("start-pax", Rect::new(body.x, y, col, 32.0), &mut v, "Passengers") {
+        l.state.choice.passengers = v;
+        l.state.touched();
+    }
+    let mut v = l.state.choice.schedule;
+    if l.ui.toggle("start-sched", Rect::new(body.x + col + 12.0, y, col, 32.0), &mut v, "Timetable buses") {
+        l.state.choice.schedule = v;
+        l.state.touched();
+    }
+    y += 40.0;
+    let mut v = l.state.choice.autostart;
+    if l.ui.toggle("start-autostart", Rect::new(body.x, y, body.w, 32.0), &mut v, "Put the bus into service on start (Shift+U)") {
+        l.state.choice.autostart = v;
+        l.state.touched();
+    }
+    if l.ui.button("start-traffic-close", Rect::new(buttons.right() - 90.0, buttons.y, 90.0, 34.0), "Close", None, ButtonKind::Normal) {
+        close(l, true);
+    }
+}
+
 fn explore(l: &mut Launcher) {
     let name = l.state.map().map(|m| if m.friendly.trim().is_empty() { m.name.clone() } else { m.friendly.clone() }).unwrap_or_default();
     let size = l.ui.size;
@@ -481,6 +576,19 @@ fn explore(l: &mut Launcher) {
 
 #[cfg(test)]
 mod tests {
+    /// A start without a bus leaves the bus, its paint, number and plate and a depot file picked
+    /// for it out of the duty, on foot - the choice itself keeps them for the next start.
+    #[test]
+    fn a_start_without_a_bus_leaves_the_bus_out_of_the_duty_only() {
+        let mut d = omsi_launcher_lib::Duty { bus: "Vehicles/A/a.bus".into(), paint: Some("Red".into()), number: Some("3201".into()), plate: Some("B-V 1".into()), hof: Some("Picked".into()), on_foot: Some(false), ..Default::default() };
+        super::super::state::without_bus(&mut d, Some("Map's own".into()));
+        assert!(d.bus.is_empty());
+        assert_eq!((&d.paint, &d.number, &d.plate), (&None, &None, &None));
+        assert_eq!(d.hof.as_deref(), Some("Map's own"));
+        assert_eq!(d.on_foot, Some(true));
+        // (the arguments of a duty without a bus: omsi-launcher-core's a_start_without_a_bus_names_none)
+    }
+
     use super::*;
 
     #[test]
