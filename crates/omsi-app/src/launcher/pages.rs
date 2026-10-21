@@ -36,6 +36,8 @@ pub struct PagesView {
     pub settings_tab: usize,
     pub pads: PadsView,
     pub tt: super::timetable::TimetableView,
+    /// The keyboard tab on a computer (`keyboard`).
+    pub kb: super::keyboard::KeyboardView,
 }
 
 /// The game controllers tab: the devices `gamectrler.cfg` sets up, the ones connected now,
@@ -199,7 +201,7 @@ fn record_tiles(p: &core::Profile) -> [(&'static str, String, &'static str); 12]
         ("speed", format!("{:.0} %", p.rating_driving), "driving"),
         ("airport_shuttle", format!("{:.0} %", p.rating_comfort), "comfort"),
         ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket sales"),
-        ("history", p.sessions.len().to_string(), "trips"),
+        ("history", p.drives.to_string(), "trips"),
     ]
 }
 
@@ -434,7 +436,7 @@ pub fn drive_dialog(l: &mut Launcher) {
         return;
     }
     let rows = drive_rows(&s);
-    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "from the personnel file");
+    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "as saved after the drive");
     let (buttons, body) = super::start::dialog_foot(l, inside);
     for (k, (what, value)) in rows.iter().enumerate() {
         let y = body.y + k as f32 * 26.0;
@@ -1586,11 +1588,11 @@ fn mb(v: i64) -> String {
 /// which a controller could not bring back to the first camera (#1167).
 const PAD_GAME_ACTIONS: [&str; 26] = ["doors_all", "door_4", "door_3", "door_2", "door_1", "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_reset_direction", "view_reset_all_directions", "view_interiorcam_plus", "view_interiorcam_minus", "view_toggle_viewpoint", "view_toggle_interior", "view_set_driver", "view_set_passenger", "view_set_outside", "sim_pause", "screenshot", "quicksave", "toggel_mouse_ctrl", "toggel_ctrler", "voice_radio"];
 
-fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
+pub(super) fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
     known_action(a).unwrap_or_else(|| names.control(a))
 }
 
-fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
+pub(super) fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
     crate::describe::names(std::path::Path::new(&l.state.config.root), l.state.settings.get("language").and_then(|x| x.as_str()).unwrap_or("ENG"))
 }
 
@@ -1661,6 +1663,23 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
+    if !super::mobile::mobile() {
+        // (a computer, as the Windows 11 concept: the tabs under the heading, the keyboard in
+        // groups with the chosen action beside it)
+        let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
+        let mut tab = l.pages.controls_tab;
+        if l.ui.segmented("controls-tab", Rect::new(body.x, body.y, 330.0, 36.0), &mut tab, &["Keyboard", "Game controllers"]) {
+            l.pages.controls_tab = tab;
+        }
+        let body = Rect::new(body.x, body.y + 50.0, body.w, (body.h - 50.0).max(0.0));
+        if l.pages.controls_tab == 1 {
+            game_controllers(l, body);
+        } else {
+            l.pages.pads.cancel_feedback_test();
+            super::keyboard::draw(l, body);
+        }
+        return;
+    }
     let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
     if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
@@ -2478,7 +2497,7 @@ fn save_gamectrler(devices: &[crate::controllers::DeviceCfg]) -> Result<std::pat
 }
 
 /// Settings → Driving keys: "Custom controls", the keys of the Controls page.
-fn use_custom_keys(l: &mut Launcher) -> bool {
+pub(super) fn use_custom_keys(l: &mut Launcher) -> bool {
     if l.state.settings.get("drive_keys").and_then(|v| v.as_str()) == Some("omsi") {
         return false;
     }
@@ -2488,7 +2507,7 @@ fn use_custom_keys(l: &mut Launcher) -> bool {
     true
 }
 
-fn save_keys(l: &mut Launcher, vr_binding: bool) {
+pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
     match core::save_keybindings(&l.state.keybindings) {
         Ok(()) => {
             l.state.keybindings_error.clear();
@@ -2685,10 +2704,6 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     }
     let body = l.page_title(area, UiPage::Mods);
     let phone = super::mobile::mobile();
-    // (what is installed follows the platform as `State::install` and the inbox do: a folder too
-    // where the game runs in the launcher's process, a .zip only on a computer - the layout
-    // follows `phone`, which a computer can preview)
-    let folders_too = core::IN_PROCESS_GAMES;
     // (three columns: installing, the installs, the content folder - on a phone of one width)
     let (w0, w2) = if phone {
         let cw = (body.w - GAP * 4.0) / 3.0;
@@ -2703,17 +2718,9 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     l.ui.panel(c0);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod");
     let mut y = inner.y;
-    if folders_too {
-        // (a phone has no OMSI 2 folder of its own to copy into: a folder is installed too)
-        let half = (inner.w - GAP) * 0.5;
-        if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
-            l.browse(super::mobile::Purpose::ModFolder, "");
-        }
-        if l.ui.button("mod-zip", Rect::new(inner.x + half + GAP, y, half, 40.0), "Choose archive", Some("inventory_2"), ButtonKind::Normal) {
-            l.browse(super::mobile::Purpose::ModZip, "");
-        }
-    } else if l.ui.button("mod-zip", Rect::new(inner.x, y, inner.w, 42.0), "Choose a .zip file", Some("o-package"), ButtonKind::Primary) {
-        if let Some(p) = core::pick_mod(true) {
+    // (a .zip only, everywhere: loose files are copied by hand, see below)
+    if l.ui.button("mod-zip", Rect::new(inner.x, y, inner.w, 42.0), "Choose a .zip file", Some("o-package"), ButtonKind::Primary) {
+        if let Some(p) = core::pick_mod() {
             l.state.install(p.to_string_lossy().to_string());
         }
     }
@@ -2740,8 +2747,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.ui.p().rect(dash, accent().alpha(0.45 + 0.45 * t));
     }
     l.ui.icon("o-plus", Vec2::new(drop.center().x, drop.center().y - 12.0), 20.0, TEXT_SOFT);
-    let drop_text = if folders_too { "…or drop a mod folder or .zip onto this window" } else { "…or drop a .zip onto this window" };
-    l.ui.text_in(drop_text, Rect::new(drop.x, drop.center().y + 4.0, drop.w, 24.0), 13.0, Weight::Regular, TEXT_SOFT, Align::Center);
+    l.ui.text_in("…or drop a .zip onto this window", Rect::new(drop.x, drop.center().y + 4.0, drop.w, 24.0), 13.0, Weight::Regular, TEXT_SOFT, Align::Center);
     y += 142.0;
     if !l.state.mod_path.is_empty() {
         let p = l.state.mod_path.clone();
@@ -2761,8 +2767,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     y += l.ui.paragraph("The .zip is kept as it is in the Archives folder and read in place; nothing is unpacked.", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     let mods = l.state.mods.clone();
     if let Some(m) = &mods {
-        let what = if folders_too { "Anything" } else { "A .zip" };
-        y += 4.0 + l.ui.paragraph(&format!("{what} put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
+        y += 4.0 + l.ui.paragraph(&format!("A .zip put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
         if !m.inbox_items.is_empty() {
             // (a long name with no spaces is cut to the card, not run past it)
             let now: Vec<String> = m.inbox_items.iter().map(|n| omsi_launcher_ui::kit::fit_text(&mut l.ui, n, 12.0, inner.w - 80.0)).collect();
@@ -2770,35 +2775,33 @@ pub fn mods(l: &mut Launcher, area: Rect) {
             y += 4.0 + l.ui.paragraph(&format!("In it now: {now}"), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
         }
     }
-    if !folders_too {
-        y += 18.0;
-        Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "Loose files (not a .zip)");
-        y += 32.0;
-        y += l.ui.paragraph("The launcher does not install loose folders. If you want to install them, copy them yourself:", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_SOFT) + 10.0;
-        let content = mods.as_ref().map(|m| m.content_dir.clone()).unwrap_or_default();
-        let places = [
-            ("mods-open-root", "In your original OMSI 2 folder", "The mod works in OMSI 2 and in the Depot.", TEXT_DIM, l.state.config.root.clone()),
-            ("mods-open-content", "In the Depot content folder", "The mod will not be available in OMSI 2.", WARN, content),
-        ];
-        for (id, title, note, note_c, folder) in places {
-            let r = Rect::new(inner.x, y, inner.w, 50.0);
-            l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
-            l.ui.icon("o-folder", Vec2::new(r.x + 20.0, r.center().y), 18.0, TEXT_SOFT);
-            let bw = 104.0;
-            let tw = r.w - 40.0 - bw - 20.0;
-            let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, title, 13.5, tw);
-            l.ui.text_in(&title, Rect::new(r.x + 40.0, r.y + 7.0, tw, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
-            let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, note, 12.0, tw);
-            l.ui.text_in(&note, Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0), 12.0, Weight::Regular, note_c, Align::Left);
-            let b = Rect::new(r.right() - 10.0 - bw, r.y + 11.0, bw, 28.0);
-            if l.ui.button(id, b, "Open folder", None, ButtonKind::Normal) {
-                if folder.trim().is_empty() || !core::open_folder(std::path::Path::new(&folder)) {
-                    let msg = if id == "mods-open-root" { "Choose the OMSI 2 folder under Setup first." } else { "The content folder is not there yet." };
-                    l.state.set_status(msg, true);
-                }
+    y += 18.0;
+    Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "Loose files (not a .zip)");
+    y += 32.0;
+    y += l.ui.paragraph("The launcher does not install loose folders. If you want to install them, copy them yourself:", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_SOFT) + 10.0;
+    let content = mods.as_ref().map(|m| m.content_dir.clone()).unwrap_or_default();
+    let places = [
+        ("mods-open-root", "In your original OMSI 2 folder", "The mod works in OMSI 2 and in the Depot.", TEXT_DIM, l.state.config.root.clone()),
+        ("mods-open-content", "In the Depot content folder", "The mod will not be available in OMSI 2.", WARN, content),
+    ];
+    for (id, title, note, note_c, folder) in places {
+        let r = Rect::new(inner.x, y, inner.w, 50.0);
+        l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
+        l.ui.icon("o-folder", Vec2::new(r.x + 20.0, r.center().y), 18.0, TEXT_SOFT);
+        let bw = 104.0;
+        let tw = r.w - 40.0 - bw - 20.0;
+        let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, title, 13.5, tw);
+        l.ui.text_in(&title, Rect::new(r.x + 40.0, r.y + 7.0, tw, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+        let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, note, 12.0, tw);
+        l.ui.text_in(&note, Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0), 12.0, Weight::Regular, note_c, Align::Left);
+        let b = Rect::new(r.right() - 10.0 - bw, r.y + 11.0, bw, 28.0);
+        if l.ui.button(id, b, "Open folder", None, ButtonKind::Normal) {
+            if folder.trim().is_empty() || !core::open_folder(std::path::Path::new(&folder)) {
+                let msg = if id == "mods-open-root" { "Choose the OMSI 2 folder under Setup first." } else { "The content folder is not there yet." };
+                l.state.set_status(msg, true);
             }
-            y += 60.0;
         }
+        y += 60.0;
     }
     // installs
     l.ui.panel(c1);
@@ -2885,7 +2888,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         }
         if !m.waiting.is_empty() {
             y += 8.0;
-            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Waiting for their bus");
+            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Kept aside by an older version (copy by hand)");
             y += 30.0;
             for item in &m.waiting {
                 ui.text_in(item, Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
@@ -2921,7 +2924,7 @@ pub fn setup(l: &mut Launcher, area: Rect) {
     y += ROW + 10.0;
     if core::IN_PROCESS_GAMES {
         // (a phone: the game is this app itself)
-        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into depot/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
+        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. A mod's .zip goes into depot/Mods.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
     } else {
         l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "Game binary");
         if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "depot", Some("terminal")) {

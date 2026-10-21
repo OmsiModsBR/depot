@@ -508,15 +508,16 @@ pub struct ModsStatus {
     pub jobs: Vec<install::Progress>,
 }
 
-/// Start installing the mod at `src` (a folder, or a .zip) into the content folder in the
-/// background. A folder is copied; a .zip is never unpacked, only put into `Archives` and read
-/// in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
+/// Start installing the mod `.zip` at `src` into the content folder in the background (a
+/// folder is refused, see `only_a_zip`). A .zip is never unpacked, only put into `Archives` and
+/// read in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content =
         content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     if !src.exists() {
         return Err(anyhow!("{} does not exist", src.display()));
     }
+    only_a_zip(src)?;
     let from_inbox = src.starts_with(content.join("Mods"));
     let job = install::start(
         content,
@@ -543,6 +544,7 @@ pub fn install_mod_blocking(
 ) -> Result<install::Progress> {
     let content =
         content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
+    only_a_zip(src)?;
     Ok(install::run_blocking(
         content,
         root().ok(),
@@ -551,6 +553,27 @@ pub fn install_mod_blocking(
         cancel_after_ms.map(std::time::Duration::from_millis),
         true,
     ))
+}
+
+/// Whether `p` is a `.zip` file (a folder named like one is not).
+pub fn is_zip(p: &Path) -> bool {
+    p.is_file()
+        && p.extension()
+            .map(|x| x.eq_ignore_ascii_case("zip"))
+            .unwrap_or(false)
+}
+
+/// A mod is installed from a `.zip` only, by the page and from the terminal alike: loose
+/// files are copied by hand, into the OMSI 2 folder or the content folder.
+fn only_a_zip(src: &Path) -> Result<()> {
+    if is_zip(src) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "{} is not a .zip: the launcher installs a .zip only, copy loose files by hand into the OMSI 2 folder or the content folder",
+            src.display()
+        ))
+    }
 }
 
 fn inbox_entries(content: &Path) -> Vec<PathBuf> {
@@ -573,13 +596,9 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
                 || name.eq_ignore_ascii_case(install::PLUGINS_HELD)
                 || name.eq_ignore_ascii_case(install::UNINSTALLED)
                 || name.eq_ignore_ascii_case("README.txt"))
-                // (a loose folder only on a phone: on a computer the launcher installs a .zip,
-                // loose files are copied by hand into the OMSI 2 or the content folder)
-                && ((IN_PROCESS_GAMES && p.is_dir())
-                    || (p.is_file()
-                        && p.extension()
-                            .map(|x| x.eq_ignore_ascii_case("zip"))
-                            .unwrap_or(false)))
+                // (a .zip only: loose files are copied by hand into the OMSI 2 or the content
+                // folder, never installed)
+                && is_zip(p)
         })
         .collect();
     v.sort();
@@ -635,9 +654,8 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let mut started = Vec::new();
     let mut guard = SEEN.lock().unwrap_or_else(|e| e.into_inner());
     let seen = guard.get_or_insert_with(Default::default);
-    let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    seen.retain(|p, _| items.contains(p));
     for p in items {
         if install::is_busy(&p) {
             continue;
@@ -684,50 +702,17 @@ fn watch_inbox(content: &Path) -> Vec<String> {
             }
         }
     }
-    let busy = install::jobs().iter().any(|j| j.finished.is_none());
-    if !busy {
-        for p in install::waiting_ready(content, root().ok().as_deref()) {
-            let sig = tree_signature(&p);
-            if seen
-                .get(&p)
-                .map(|s| s.started && s.sig == sig)
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            seen.insert(
-                p.clone(),
-                Seen {
-                    sig,
-                    at: std::time::Instant::now(),
-                    started: true,
-                    checked: std::time::Instant::now(),
-                },
-            );
-            install::start(
-                content.to_path_buf(),
-                root().ok(),
-                p.clone(),
-                install::InstallMode::Extract,
-                true,
-            );
-            started.push(p.to_string_lossy().to_string());
-        }
-    }
     started
 }
 
-/// Install everything in the inbox (and the waiting packs whose bus is there) now, and
-/// wait (the terminal's `mods`).
+/// Install every .zip in the inbox now, and wait (the terminal's `mods`). A pack an older
+/// version kept aside in `Mods/waiting` is a folder: it is not installed (copy it by hand).
 pub fn install_inbox_blocking() -> Vec<install::Progress> {
     let Some(content) = content_dir() else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for p in inbox_entries(&content)
-        .into_iter()
-        .chain(install::waiting_ready(&content, root().ok().as_deref()))
-    {
+    for p in inbox_entries(&content) {
         let job = install::start(
             content.clone(),
             root().ok(),
@@ -2100,7 +2085,10 @@ pub struct Profile {
     pub rating_driving: f64,
     pub rating_comfort: f64,
     pub rating_tickets: f64,
+    /// The newest drives (at most 40, the list Profile / Sessions shows).
     pub sessions: Vec<Session>,
+    /// How many drives the driver has made, all of them (the Trips tile).
+    pub drives: usize,
     pub exists: bool,
 }
 
@@ -2256,6 +2244,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
         rating_driving: rating[0],
         rating_comfort: rating[1],
         rating_tickets: rating[2],
+        drives: mine.len(),
         sessions: mine.into_iter().take(40).collect(),
         exists: driver.is_some(),
     })
@@ -2448,6 +2437,132 @@ pub fn get_keybindings() -> Result<Value> {
     Ok(
         json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
     )
+}
+
+/// A controls file of the original OMSI 2 as it is (only read: none of the Depot's own
+/// actions added), in the shape `get_keybindings` gives.
+fn keys_as_they_are(path: &Path) -> Result<Value> {
+    let k = omsi_content::input::KeyboardCfg::load(path)?;
+    Ok(
+        json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
+    )
+}
+
+/// The keys of the original OMSI 2 (its own `Inputs/keyboard.cfg`, only read), in the shape
+/// `get_keybindings` gives; `None` when its folder has no such file. Only what the file has:
+/// an action only the Depot knows is not the original's.
+pub fn original_keybindings() -> Result<Option<Value>> {
+    let path = omsi_cfg::original_keyboard_cfg(&root()?);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    keys_as_they_are(&path).map(Some)
+}
+
+/// OMSI 2's keys as it comes (its `Inputs/keyboard_reset.cfg`, only read), as
+/// `original_keybindings`; `None` when its folder has no such file.
+pub fn factory_keybindings() -> Result<Option<Value>> {
+    match omsi_cfg::original_inputs_file(&root()?, "keyboard_reset.cfg") {
+        Some(path) => keys_as_they_are(&path).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// The keys' names in the language `lang` (OMSI 2's `Inputs/<lang>.kyb`, English's where it
+/// has none): scan code and name.
+pub fn key_names(lang: &str) -> Vec<(i32, String)> {
+    let Ok(r) = root() else { return Vec::new() };
+    [lang, "ENG"]
+        .iter()
+        .filter_map(|l| omsi_cfg::original_inputs_file(&r, &format!("{l}.kyb")))
+        // (a table with no names in it is no table: English's then)
+        .find_map(|p| {
+            omsi_content::input::load_key_names(&p)
+                .ok()
+                .filter(|n| !n.is_empty())
+        })
+        .unwrap_or_default()
+}
+
+/// A copy of `file` beside itself, named with the local date and time
+/// (`keyboard.cfg.backup-2026-10-21-0705`, then `-2`, `-3` ... within the same minute: a
+/// backup there is never written over); `None` when there is no such file.
+pub fn backup_beside(file: &Path) -> Result<Option<PathBuf>> {
+    if !file.is_file() {
+        return Ok(None);
+    }
+    let stamp = match local_now() {
+        Some((y, mo, d, h, mi)) => format!("{y:04}-{mo:02}-{d:02}-{h:02}{mi:02}"),
+        None => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+            .to_string(),
+    };
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let bytes = std::fs::read(file)?;
+    for k in 1..1000 {
+        let to = if k == 1 {
+            file.with_file_name(format!("{name}.backup-{stamp}"))
+        } else {
+            file.with_file_name(format!("{name}.backup-{stamp}-{k}"))
+        };
+        // (made new or not at all: an earlier backup of the same minute stays as it is)
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&to)
+        {
+            Ok(mut f) => {
+                std::io::Write::write_all(&mut f, &bytes)?;
+                return Ok(Some(to));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(anyhow!("no free name for a backup of {}", file.display()))
+}
+
+/// When the original OMSI 2's controls file was saved (Unix seconds).
+pub fn original_keys_saved() -> Option<u64> {
+    let path = omsi_cfg::original_keyboard_cfg(&root().ok()?);
+    let t = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
+}
+
+fn keys_reloaded_path() -> PathBuf {
+    data_dir().join("keys-reloaded.txt")
+}
+
+/// When the keys were last reloaded from the original OMSI 2 (Unix seconds), if ever.
+pub fn keys_reloaded_at() -> Option<u64> {
+    std::fs::read_to_string(keys_reloaded_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Save `v`, the keys reloaded from the original OMSI 2, as `save_keybindings` does; with
+/// `backup`, the file in use is copied beside itself first (`keyboard.cfg.backup-<time>`),
+/// whose path is returned. The original's own file is only read.
+pub fn reload_keybindings(v: &Value, backup: bool) -> Result<Option<PathBuf>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let kept = if backup {
+        backup_beside(&keyboard_cfg_write_path()?)?
+    } else {
+        None
+    };
+    save_keybindings(v)?;
+    let _ = std::fs::write(keys_reloaded_path(), now.to_string());
+    Ok(kept)
 }
 
 /// Replace the bindings with the page's list. Written to a temp file and read back through
@@ -4616,25 +4731,18 @@ pub fn cleanup() {
     }
 }
 
-/// Native folder / file picker (Finder, Explorer, the GTK dialog) for a mod. Must run on
-/// the main thread. (None on a phone: the launcher browses the storage itself there.)
-pub fn pick_mod(zip: bool) -> Option<PathBuf> {
+/// Native file picker (Finder, Explorer, the GTK dialog) for a mod's `.zip`. Must run on
+/// the main thread. (None on a phone, which has no such dialog.)
+pub fn pick_mod() -> Option<PathBuf> {
     #[cfg(not(target_os = "android"))]
     {
-        if zip {
-            rfd::FileDialog::new()
-                .set_title("Choose a mod archive")
-                .add_filter("Mod archive", &["zip"])
-                .pick_file()
-        } else {
-            rfd::FileDialog::new()
-                .set_title("Choose the mod folder")
-                .pick_folder()
-        }
+        rfd::FileDialog::new()
+            .set_title("Choose a mod archive")
+            .add_filter("Mod archive", &["zip"])
+            .pick_file()
     }
     #[cfg(target_os = "android")]
     {
-        let _ = zip;
         None
     }
 }
@@ -4814,8 +4922,8 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    /// The inbox takes a .zip file; a folder named like one is no .zip, and on a computer
-    /// a loose folder stays where it is.
+    /// The inbox takes a .zip file; a folder named like one is no .zip, and a loose folder
+    /// stays where it is.
     #[test]
     fn the_inbox_takes_zip_files_not_folders_named_so() {
         let content = std::env::temp_dir().join(format!("depot-inbox-{}", std::process::id()));
@@ -4828,11 +4936,23 @@ mod tests {
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
             .collect();
         let _ = std::fs::remove_dir_all(&content);
-        if super::IN_PROCESS_GAMES {
-            assert!(names.contains(&"Loose".to_string()));
-        } else {
-            assert_eq!(names, ["Map.zip"]);
-        }
+        assert_eq!(names, ["Map.zip"]);
+    }
+
+    /// `only_a_zip`, which guards every install entry point, refuses a folder.
+    #[test]
+    fn only_a_zip_refuses_folders() {
+        let dir = std::env::temp_dir().join(format!("depot-only-zip-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Bus")).unwrap();
+        std::fs::create_dir_all(dir.join("Named.zip")).unwrap();
+        std::fs::write(dir.join("Bus.zip"), b"PK").unwrap();
+        let seen = (
+            super::only_a_zip(&dir.join("Bus")).is_err(),
+            super::only_a_zip(&dir.join("Named.zip")).is_err(),
+            super::only_a_zip(&dir.join("Bus.zip")).is_ok(),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(seen, (true, true, true));
     }
 
     #[test]
@@ -5797,4 +5917,67 @@ fn hof_fix(a: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "file": group.file_name, "results": results }))
+}
+
+#[cfg(test)]
+mod original_keys_tests {
+    use super::*;
+    use omsi_content::input::{KeyBinding, KeyboardCfg};
+
+    /// The original OMSI 2's controls file is read as it is: an action only the Depot knows
+    /// (its gear keys, the chat, VR) is not taken for one of the original's.
+    #[test]
+    fn the_originals_keys_are_only_its_files() {
+        let dir = std::env::temp_dir().join(format!("depot-orig-keys-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("keyboard.cfg");
+        let b = |a: &str, s: i32| KeyBinding {
+            action: a.into(),
+            scan_code: s,
+            modifier: 0,
+        };
+        KeyboardCfg {
+            vehicles: vec![b("horn", 35)],
+            game: vec![b("sim_pause", 25)],
+        }
+        .save(&path)
+        .unwrap();
+        let v = keys_as_they_are(&path).unwrap();
+        let actions: Vec<&str> = ["vehicles", "game"]
+            .iter()
+            .flat_map(|k| {
+                v[*k]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|b| b["action"].as_str().unwrap())
+            })
+            .collect();
+        assert_eq!(actions, ["horn", "sim_pause"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A backup is named after the local date and time and holds what the file held.
+    #[test]
+    fn a_backup_sits_beside_the_file() {
+        let dir = std::env::temp_dir().join(format!("depot-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("gamectrler.cfg");
+        assert!(backup_beside(&file).unwrap().is_none());
+        std::fs::write(&file, "[ctrl]\r\nWheel\r\n").unwrap();
+        let to = backup_beside(&file).unwrap().unwrap();
+        let name = to.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("gamectrler.cfg.backup-"), "{name}");
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        // a second one in the same minute: a name of its own, the first kept as it was
+        std::fs::write(&file, "[ctrl]\r\nPedals\r\n").unwrap();
+        let again = backup_beside(&file).unwrap().unwrap();
+        assert_ne!(again, to);
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        assert_eq!(
+            std::fs::read_to_string(&again).unwrap(),
+            "[ctrl]\r\nPedals\r\n"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
