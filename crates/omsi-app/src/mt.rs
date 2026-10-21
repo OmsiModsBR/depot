@@ -162,9 +162,70 @@ pub fn protect<'a>(texts: impl IntoIterator<Item = &'a str>) {
     }
 }
 
+/// A template of the tables cut at its values: "%{done} von %{total} Kacheln" is
+/// `["", " von ", " Kacheln"]`.
+fn parts(template: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = template;
+    while let Some(i) = rest.find("%{") {
+        let Some(j) = rest[i..].find('}') else { break };
+        out.push(rest[..i].to_string());
+        rest = &rest[i + j + 1..];
+    }
+    out.push(rest.to_string());
+    out
+}
+
+/// Is `text` the template cut into `parts` with its values put in?
+fn fits(parts: &[String], text: &str) -> bool {
+    let (Some(first), Some(last)) = (parts.first(), parts.last()) else {
+        return false;
+    };
+    if parts.len() < 2 || text.len() < first.len() + last.len() || !text.starts_with(first.as_str()) || !text.ends_with(last.as_str()) {
+        return false;
+    }
+    let mut mid = &text[first.len()..text.len() - last.len()];
+    for p in &parts[1..parts.len() - 1] {
+        match mid.find(p.as_str()) {
+            Some(i) => mid = &mid[i + p.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
+/// A language's templates, each cut at its values.
+type Templates = std::sync::Arc<Vec<Vec<String>>>;
+
+/// The tables' templates in `lang` (the ones with words around their values).
+fn templates(lang: &str) -> Templates {
+    static T: OnceLock<parking_lot::RwLock<HashMap<String, Templates>>> = OnceLock::new();
+    let t = T.get_or_init(Default::default);
+    if let Some(v) = t.read().get(lang) {
+        return v.clone();
+    }
+    let list: Vec<Vec<String>> = crate::_RUST_I18N_BACKEND
+        .messages_for_locale(lang)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, v)| v.contains("%{"))
+        .map(|(_, v)| parts(&v))
+        .filter(|p| p.iter().map(|s| s.trim().chars().count()).sum::<usize>() >= 4)
+        .collect();
+    let list = std::sync::Arc::new(list);
+    t.write().insert(lang.to_string(), list.clone());
+    list
+}
+
 /// `omsi_ui::tr`'s fallback: the translation when there is one, else asked for.
 fn lookup(lang: &str, text: &str) -> Option<String> {
     if !ENABLED.load(Ordering::Relaxed) || nllb(lang).is_none() || !worth(text) || names().read().contains(text.trim()) {
+        return None;
+    }
+    // (a template the tables have, already translated and with its values in: drawn as it
+    // is, not taken for English and translated again)
+    if templates(lang).iter().any(|p| fits(p, text)) {
+        names().write().insert(text.trim().to_string());
         return None;
     }
     let (m, cv) = state();
@@ -361,5 +422,22 @@ mod tests {
         assert!(!super::worth("12:05"));
         assert!(!super::worth("Vehicles/MAN_SD200/MAN_SD77.bus"));
         assert!(!super::worth("IBIS"));
+    }
+
+    #[test]
+    fn a_filled_in_template_is_recognised() {
+        let p = super::parts("Kacheln laden (erster Bereich) \u{b7} %{done} von %{total}");
+        assert_eq!(p, ["Kacheln laden (erster Bereich) \u{b7} ", " von ", ""]);
+        assert!(super::fits(&p, "Kacheln laden (erster Bereich) \u{b7} 62 von 100"));
+        assert!(!super::fits(&p, "Kacheln laden (erster Bereich) \u{b7} 62"));
+        assert!(!super::fits(&p, "Loading map tiles (first area) \u{b7} 62 of 100"));
+        let p = super::parts("\u{00ab}%{action}\u{00bb} hinzuf\u{fc}gen");
+        assert!(super::fits(&p, "\u{00ab}ASS_toggle\u{00bb} hinzuf\u{fc}gen"));
+        assert!(!super::fits(&super::parts("no values here"), "no values here"));
+        // the tables' own, in German
+        let de = super::templates("de");
+        assert!(de.iter().any(|p| super::fits(p, "Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100")));
+        assert!(de.iter().any(|p| super::fits(p, "\u{201e}ASS_toggle\u{201c} hinzuf\u{fc}gen und eine Taste zuweisen")));
+        assert!(!de.iter().any(|p| super::fits(p, "Back to my bus")));
     }
 }

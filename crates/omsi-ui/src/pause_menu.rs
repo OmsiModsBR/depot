@@ -139,7 +139,15 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     if let Some((tex, aspect)) = view.logo {
         ui.image(Rect::new(22.0, 22.0, 220.0, 220.0 * aspect), tex, 0.0);
     }
-    text(ui, "GAME MENU", 22.0, 109.0, 12.0, Weight::Regular, MUTED);
+    text(
+        ui,
+        &crate::tr("Game menu").to_uppercase(),
+        22.0,
+        109.0,
+        12.0,
+        Weight::Regular,
+        MUTED,
+    );
     let step = row_height(view, h);
     let mut head = 142.0;
     let mut clicked = None;
@@ -249,7 +257,7 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     );
     right(
         ui,
-        &view.state.to_uppercase(),
+        &crate::tr(view.state).to_uppercase(),
         w - 24.0,
         BAR_H * 0.5,
         13.0,

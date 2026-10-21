@@ -48,7 +48,7 @@ pub(crate) fn heading(map: &str, line: Option<&str>, time: &str) -> String {
     let line = line
         .map(str::trim)
         .filter(|l| !l.is_empty())
-        .map(|l| format!("Line {l}"));
+        .map(|l| omsi_ui::tr("Line %{line}").replace("%{line}", l));
     [
         Some(map.trim().to_string()),
         line,
@@ -97,7 +97,9 @@ pub(crate) fn bus_card(v: &omsi_vehicle::Vehicle, folder: &str, paint: Option<&s
 
 /// "Loading map tiles (first area) · 62 of 100"
 pub(crate) fn stage(done: usize, total: usize) -> String {
-    format!("Loading map tiles (first area) \u{b7} {done} of {total}")
+    omsi_ui::tr("Loading map tiles (first area) · %{done} of %{total}")
+        .replace("%{done}", &done.to_string())
+        .replace("%{total}", &total.to_string())
 }
 
 /// The author's text on one line, cut to `max` characters.

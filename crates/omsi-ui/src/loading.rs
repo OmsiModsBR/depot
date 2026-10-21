@@ -163,8 +163,9 @@ pub struct Card<'a> {
     pub icon: &'a str,
 }
 
-/// What the screen says. All text is the caller's: the interface's own (the stage, the
-/// activity) is translated here, names and the authors' texts are drawn as they are.
+/// What the screen says. All text is the caller's: the activity is translated here; the
+/// heading and the stage come translated (their values are filled in), and names and the
+/// authors' texts are drawn as they are.
 pub struct View<'a> {
     pub version: &'a str,
     /// "Example map · Line 50 · 08:00"
@@ -329,7 +330,7 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
         12.5,
         Weight::Regular,
         SOFT,
-        true,
+        false,
     );
     ui.p().rect(l.bar, TRACK);
     let done = view.progress.clamp(0.0, 1.0);
