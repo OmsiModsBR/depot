@@ -51,6 +51,9 @@ pub const TYPES: [&str; 8] = [
 /// What is in each type's folder beyond this many parts is put together as one.
 const MOST_PARTS: usize = 40;
 
+/// A part of a type's folder while it is read: its name and its bytes by kind of file.
+type Part = (String, Vec<(&'static str, u64)>);
+
 fn type_of(top: &str) -> usize {
     TYPES[..7]
         .iter()
@@ -97,7 +100,7 @@ pub fn scan(folders: &[(String, PathBuf)]) -> Usage {
 
 fn folder(name: &str, dir: &Path, skip: &[PathBuf], counts: &mut Counts) -> Node {
     // (type -> part -> kind -> bytes)
-    let mut types: Vec<Vec<(String, Vec<(&'static str, u64)>)>> = vec![Vec::new(); TYPES.len()];
+    let mut types: Vec<Vec<Part>> = vec![Vec::new(); TYPES.len()];
     for (top, path, is_dir) in entries(dir, skip) {
         let t = type_of(&top);
         if !is_dir {
@@ -298,7 +301,7 @@ pub fn by_type(tree: &Node) -> Vec<(&'static str, u64)> {
         }
     }
     out.retain(|(_, b)| *b > 0);
-    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out.sort_by_key(|t| std::cmp::Reverse(t.1));
     out
 }
 
