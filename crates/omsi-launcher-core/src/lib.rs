@@ -4936,12 +4936,26 @@ pub fn open_folder(folder: &Path) -> bool {
         log_line(&format!("open folder: {} is no folder", folder.display()));
         return false;
     }
+    open_with_system(folder)
+}
+
+/// Open `file` with the program the system has for it (the tray's Open log: the game's
+/// log); false when it is no file or nothing could be started.
+pub fn open_file(file: &Path) -> bool {
+    if !file.is_file() {
+        log_line(&format!("open file: {} is no file", file.display()));
+        return false;
+    }
+    open_with_system(file)
+}
+
+fn open_with_system(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
-    let child = std::process::Command::new("explorer").arg(folder).spawn();
+    let child = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(target_os = "macos")]
-    let child = std::process::Command::new("open").arg(folder).spawn();
+    let child = std::process::Command::new("open").arg(path).spawn();
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
-    let child = std::process::Command::new("xdg-open").arg(folder).spawn();
+    let child = std::process::Command::new("xdg-open").arg(path).spawn();
     #[cfg(target_os = "android")]
     let child: std::io::Result<std::process::Child> =
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
@@ -4952,7 +4966,7 @@ pub fn open_folder(folder: &Path) -> bool {
             true
         }
         Err(e) => {
-            log_line(&format!("open folder: {e}"));
+            log_line(&format!("open {}: {e}", path.display()));
             false
         }
     }

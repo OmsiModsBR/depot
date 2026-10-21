@@ -276,6 +276,9 @@ pub struct State {
     /// game started (its process, once it is known), 15 s at most.
     pub launch_hold: Option<std::time::Instant>,
     launched_pid: Option<u32>,
+    /// The last game started from this launcher (its process), until the launcher has put
+    /// itself away for it: a game that already ran when the launcher opened is not one.
+    pub started_here: Option<u32>,
     /// A game started from here ended on an error: what it said, and the end of its log
     /// (see `crash_of`), for the dialog that asks to report it.
     pub crash: Option<(String, String)>,
@@ -361,6 +364,7 @@ impl State {
             queued_launch: None,
             launch_hold: None,
             launched_pid: None,
+            started_here: None,
             crash: None,
             disconnected: None,
             jobs: Vec::new(),
@@ -1172,6 +1176,7 @@ impl State {
             Msg::Launched(Ok(l)) => {
                 core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
                 self.launched_pid = Some(l.pid);
+                self.started_here = Some(l.pid);
                 self.set_status(format!("Game started (process {}), log {}{}", l.pid, l.log, if l.others > 0 { format!(" - {} other game(s) keep running", l.others) } else { String::new() }), false);
                 self.poll_now();
             }
