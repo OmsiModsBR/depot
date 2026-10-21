@@ -9,6 +9,13 @@ use omsi_launcher_ui::shell::Caption;
 use std::time::{Duration, Instant};
 use winit::window::{CursorIcon, ResizeDirection, Window};
 
+/// Whether the launcher draws its own frame: on a computer, but not on macOS, where a window
+/// without the system's frame cannot be resized (winit has no `drag_resize_window` there), so
+/// the system's title bar stays.
+pub fn own_frame() -> bool {
+    !super::mobile::mobile() && !cfg!(target_os = "macos")
+}
+
 /// How far in from the window's edge a press resizes it (points).
 const EDGE: f32 = 5.0;
 

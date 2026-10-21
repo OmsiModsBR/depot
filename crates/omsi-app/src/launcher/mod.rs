@@ -441,7 +441,7 @@ impl ApplicationHandler for Launcher {
         let mut attrs = Window::default_attributes().with_title("Project Depot").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
         if !mobile::mobile() {
             // (the launcher draws its own title bar, as Windows 11 apps do: see `chrome`)
-            attrs = attrs.with_decorations(false);
+            attrs = attrs.with_decorations(!chrome::own_frame());
             // (no bigger than the window fitted to the screen: a small one at 150 % has less)
             attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(1080.0f64.min(fit.width), 680.0f64.min(fit.height)));
             if let Some(at) = at {
@@ -865,14 +865,14 @@ impl Launcher {
         // --- the interface
         self.preview_rect = None;
         self.map_rect = None;
-        let desktop = !mobile::mobile();
-        if desktop {
+        let own_frame = chrome::own_frame();
+        if own_frame {
             self.chrome.maximized = window.is_maximized();
             self.chrome_before(&window, size);
         }
         self.ui.begin(size, scale, dt);
         self.draw_ui();
-        if desktop && self.chrome_after(&window, size) {
+        if own_frame && self.chrome_after(&window, size) {
             self.pages.pads.cancel_feedback_test();
             event_loop.exit();
         }
@@ -1190,7 +1190,7 @@ impl Launcher {
             self.draw_game_banner();
         }
         // (over everything, dialogs too: the window can always be moved, sized and closed)
-        if !mobile {
+        if chrome::own_frame() {
             let w = self.ui.size.x;
             self.chrome.clicked = omsi_launcher_ui::shell::caption_buttons(&mut self.ui, w, self.chrome.maximized);
         }
