@@ -252,12 +252,23 @@ pub fn buttons_enabled(
     at: glam::Vec2,
     labels: &[(&str, bool)],
 ) -> Option<usize> {
+    row_of_buttons(ui, name, at, labels, true)
+}
+
+/// [`buttons_enabled`], the first button the accent one only when `accent`.
+fn row_of_buttons(
+    ui: &mut Ui,
+    name: &str,
+    at: glam::Vec2,
+    labels: &[(&str, bool)],
+    accent: bool,
+) -> Option<usize> {
     let mut x = at.x;
     let mut clicked = None;
     for (i, (label, enabled)) in labels.iter().enumerate() {
         let w = button_width(ui, label);
         let r = Rect::new(x, at.y, w, BUTTON_H);
-        let kind = if i == 0 {
+        let kind = if i == 0 && accent {
             ButtonKind::Primary
         } else {
             ButtonKind::Normal
@@ -283,6 +294,23 @@ pub fn foot(
     labels: &[(&str, bool)],
     hint: &str,
 ) -> Option<usize> {
+    foot_with(ui, name, r, labels, hint, true)
+}
+
+/// A window's foot with only Close in it, grey (a window that only shows something has no
+/// accent action). Returns whether Close was clicked.
+pub fn foot_close(ui: &mut Ui, name: &str, r: Rect, hint: &str) -> bool {
+    foot_with(ui, name, r, &[("Close", true)], hint, false).is_some()
+}
+
+fn foot_with(
+    ui: &mut Ui,
+    name: &str,
+    r: Rect,
+    labels: &[(&str, bool)],
+    hint: &str,
+    accent: bool,
+) -> Option<usize> {
     ui.p().rect(
         Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
         LINE,
@@ -294,7 +322,7 @@ pub fn foot(
         .sum::<f32>()
         - 8.0;
     let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 12.0);
-    let clicked = buttons_enabled(ui, name, at, labels);
+    let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
     ui.text_in(

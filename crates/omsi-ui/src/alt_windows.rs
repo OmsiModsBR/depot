@@ -9,8 +9,8 @@
 //! behind them.
 
 use crate::ingame::{
-    self, button, check_row, foot, head, list_rows, stepper, text_field, ButtonKind, ListLook,
-    ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, PANEL, ROW_H, TITLE_H,
+    self, button, check_row, foot, foot_close, head, list_rows, stepper, text_field, ButtonKind,
+    ListLook, ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, PANEL, ROW_H, TITLE_H,
 };
 use crate::theme::accent;
 use crate::widgets::Ui;
@@ -483,7 +483,7 @@ fn menu(ui: &mut Ui, r: Rect, v: &Menu) -> Option<Event> {
         }
     }
     // (a menu's entries apply at once: its only button closes it)
-    if foot(ui, "tool", r, &[("Close", true)], &v.hint).is_some() {
+    if foot_close(ui, "tool", r, &v.hint) {
         event = Some(Event::Cancel);
     }
     event
@@ -727,7 +727,7 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
         .collect();
     ingame::key_values(ui, totals, &kv);
     // (it only shows: its one button closes it)
-    if foot(ui, "tool", r, &[("Close", true)], &v.hint).is_some() {
+    if foot_close(ui, "tool", r, &v.hint) {
         event = Some(Event::Cancel);
     }
     event
@@ -838,7 +838,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     let y = r.bottom() - FOOT_H + 12.0;
     let end = "Cancel the timetable";
     let ew = ingame::button_width(ui, end);
-    let er = Rect::new(r.x + 16.0, y, ew, BUTTON_H);
+    let er = Rect::new(r.x + 20.0, y, ew, BUTTON_H);
     let (hover, _, click) = ui.interact(crate::widgets::id_of("tool:run:end"), er);
     ui.p().rounded(
         er,
@@ -865,7 +865,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     if button(
         ui,
         "tool:run:close",
-        Rect::new(r.right() - 16.0 - cw, y, cw, BUTTON_H),
+        Rect::new(r.right() - 20.0 - cw, y, cw, BUTTON_H),
         "Close",
         ButtonKind::Normal,
         true,
