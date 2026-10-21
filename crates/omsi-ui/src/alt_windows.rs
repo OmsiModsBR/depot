@@ -777,13 +777,16 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
             RUN_ROW_H - 4.0,
         );
         if row.state == RunStop::Next {
-            ui.p().rounded(rr, 4.0, accent().alpha(0.18));
-            ui.p().rounded_border(rr, 4.0, 1.0, accent().alpha(0.7));
+            // (mixed over the panel, as the Alt bar's tiles: blended they came out lighter)
+            let panel = Color::hex(0x202124);
+            ui.p().rounded(rr, 4.0, panel.mix(accent(), 0.18));
+            ui.p()
+                .rounded_border(rr, 4.0, 1.0, panel.mix(accent(), 0.7));
         }
         let icon = if row.state == RunStop::Done {
-            "check_circle"
+            "o-check"
         } else {
-            "location_on"
+            "o-pin"
         };
         ui.icon(icon, Vec2::new(rr.x + 18.0, rr.center().y), 18.0, FG);
         let bw = row
@@ -843,15 +846,16 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
     let ew = ingame::button_width(ui, end);
     let er = Rect::new(r.x + 16.0, y, ew, BUTTON_H);
     let (hover, _, click) = ui.interact(crate::widgets::id_of("tool:run:end"), er);
-    ui.p().rect(
+    ui.p().rounded(
         er,
+        4.0,
         if hover {
             DANGER.alpha(0.14)
         } else {
             DANGER.alpha(0.06)
         },
     );
-    ui.p().rounded_border(er, 0.0, 1.0, DANGER);
+    ui.p().rounded_border(er, 4.0, 1.0, DANGER);
     ui.text_in(
         end,
         er,

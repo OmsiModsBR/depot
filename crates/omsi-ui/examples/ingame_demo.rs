@@ -63,7 +63,7 @@ fn main() {
         ),
         Button {
             on: true,
-            ..ic("tour", "alt-tour", "End the tour")
+            ..ic("tour", "alt-tour", "Timetable")
         },
         Button {
             glyph: Glyph::Sign("92E"),

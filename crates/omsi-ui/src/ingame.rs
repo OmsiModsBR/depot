@@ -1,4 +1,4 @@
-//! The in-game windows' building blocks: a window frame with a letter-spaced title and a
+//! The in-game windows' building blocks: a window frame with its title and a
 //! note, a table with a chosen row, a list of label and value, and a row of buttons. The
 //! windows of the concept (vehicles in the session, choose a vehicle, end-of-trip report,
 //! menu, passengers and stop) are made of these by the game, with its own data.
@@ -12,13 +12,20 @@ use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
 
-const PANEL: Color = Color::hex(0x171a1f);
-const LINE: Color = Color::hex(0x2b2f37);
+const PANEL: Color = Color::hex(0x202124);
+const LINE: Color = Color::hex(0x2e2f33);
+/// The window's edge (the Windows 11 concept's thin light stroke, mixed over the panel).
+const EDGE: Color = Color::hex(0x3a3b3f);
+/// A plain button's face.
+const BUTTON: Color = Color::hex(0x2c2d31);
 const ROW_LINE: Color = Color::hex(0x20242b);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const FIELD: Color = Color::hex(0x1b1d22);
-const PANEL_ALPHA: f32 = 0.92;
+const PANEL_ALPHA: f32 = 0.97;
+/// The window's and a button's corners.
+const WINDOW_R: f32 = 8.0;
+const BUTTON_R: f32 = 4.0;
 const TS: f32 = 1.16;
 
 pub const TITLE_H: f32 = 40.0;
@@ -50,48 +57,23 @@ pub(crate) fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight:
     );
 }
 
-/// The space between the letters of a window's title, in points.
-const TRACKING: f32 = 1.6;
-
-/// `s` (already translated) one letter at a time from `at` (its left end, the line's middle),
-/// `track` points between the letters, in the title's weight and colour.
-fn spaced(ui: &mut Ui, s: &str, at: Vec2, px: f32, track: f32) {
-    let base = at.y + ui.fonts.cap_height(px, Weight::Bold) * 0.5;
-    let mut x = at.x;
-    let mut buf = [0u8; 4];
-    for c in s.chars() {
-        let g: &str = c.encode_utf8(&mut buf);
-        // (drawn as it is: one letter of a translated title is no text of its own)
-        let w = ui.fonts.width_as_is(g, px, Weight::Bold);
-        ui.text_as_is(g, Vec2::new(x, base), px, Weight::Bold, FG, Align::Left);
-        x += w + track;
-    }
-}
-
-/// A window: the panel, its title in capitals and a note at the right. Returns the area
-/// under the title bar.
+/// A window, as the Windows 11 concept draws it: the panel with rounded corners and a
+/// shadow, its title at the left and a note at the right. Returns the area under the title.
 pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
     ui.solid(r);
-    ui.p().rect(r, PANEL.alpha(PANEL_ALPHA));
-    ui.p().rounded_border(r, 0.0, 1.0, LINE);
-    spaced(
-        ui,
-        &crate::tr(title).to_uppercase(),
-        Vec2::new(r.x + 16.0, r.y + 20.0),
-        13.0 * TS,
-        TRACKING,
-    );
+    ui.p().shadow(r, WINDOW_R, 24.0, Color::rgba(0, 0, 0, 0.5));
+    ui.p().rounded(r, WINDOW_R, PANEL.alpha(PANEL_ALPHA));
+    ui.p().rounded_border(r, WINDOW_R, 1.0, EDGE);
+    text(ui, title, r.x + 16.0, r.y + 24.0, 15.5, Weight::Bold, FG);
     text_right(
         ui,
         note,
-        r.right() - 16.0,
-        r.y + 20.0,
+        r.right() - 20.0,
+        r.y + 24.0,
         12.0,
         Weight::Regular,
         MUTED,
     );
-    ui.p()
-        .rect(Rect::new(r.x + 1.0, r.y + TITLE_H, r.w - 2.0, 1.0), LINE);
     Rect::new(
         r.x,
         r.y + TITLE_H + 1.0,
@@ -221,10 +203,11 @@ pub fn button(
     let fill = match (primary, enabled) {
         (true, true) => accent(),
         (true, false) => accent().alpha(0.22),
-        (false, _) => FIELD,
+        (false, _) => BUTTON,
     };
-    ui.p().rect(
+    ui.p().rounded(
         r,
+        BUTTON_R,
         if hover && enabled {
             fill.lighten(0.08)
         } else {
@@ -232,7 +215,7 @@ pub fn button(
         },
     );
     if !primary {
-        ui.p().rounded_border(r, 0.0, 1.0, LINE);
+        ui.p().rounded_border(r, BUTTON_R, 1.0, EDGE);
     }
     let fg = match (primary, enabled) {
         (true, true) => on_accent(),
@@ -289,8 +272,8 @@ pub fn buttons_enabled(
 /// The height of a window's foot: a hairline, its buttons and a hint.
 pub const FOOT_H: f32 = 64.0;
 
-/// A window's foot inside `r` (the window): the hairline over it, `labels` from the left (the
-/// first the accent one, see [`buttons_enabled`]) and `hint` at the right. Returns the button
+/// A window's foot inside `r` (the window): the hairline over it, `labels` at the right (the
+/// first the accent one, see [`buttons_enabled`]) and `hint` at the left. Returns the button
 /// clicked.
 pub fn foot(
     ui: &mut Ui,
@@ -303,18 +286,23 @@ pub fn foot(
         Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
         LINE,
     );
-    let at = Vec2::new(r.x + 16.0, r.bottom() - FOOT_H + 12.0);
+    // (the buttons at the right, as the concept's dialogs have them)
+    let used: f32 = labels
+        .iter()
+        .map(|(l, _)| button_width(ui, l) + 8.0)
+        .sum::<f32>()
+        - 8.0;
+    let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 12.0);
     let clicked = buttons_enabled(ui, name, at, labels);
-    let used: f32 = labels.iter().map(|(l, _)| button_width(ui, l) + 8.0).sum();
     // (the hint keeps clear of the buttons: cut, never under them)
-    let room = (r.w - 32.0 - used - 16.0).max(0.0);
+    let room = (r.w - 40.0 - used - 16.0).max(0.0);
     ui.text_in(
         hint,
-        Rect::new(r.right() - 16.0 - room, r.bottom() - FOOT_H, room, FOOT_H),
+        Rect::new(r.x + 20.0, r.bottom() - FOOT_H, room, FOOT_H),
         12.0 * TS,
         Weight::Regular,
         MUTED,
-        Align::Right,
+        Align::Left,
     );
     clicked
 }
