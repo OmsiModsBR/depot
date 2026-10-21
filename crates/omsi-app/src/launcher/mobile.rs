@@ -181,7 +181,7 @@ impl Launcher {
                 }
                 if let (Some(d0), 2) = (self.fingers.pinch, self.fingers.at.len()) {
                     let d = self.fingers.at[0].1.distance(self.fingers.at[1].1).max(1.0);
-                    self.showroom.zoom_by((d0 / d).clamp(0.8, 1.25));
+                    self.preview.zoom_by((d0 / d).clamp(0.8, 1.25));
                     self.fingers.pinch = Some(d);
                     return;
                 }
@@ -195,7 +195,7 @@ impl Launcher {
                 }
                 if let Some(last) = self.dragging {
                     let d = p - last;
-                    self.showroom.orbit(d.x, d.y);
+                    self.preview.orbit(d.x, d.y);
                     self.dragging = Some(p);
                     self.ui.input.mouse = p;
                     return;

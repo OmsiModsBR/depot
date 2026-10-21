@@ -892,6 +892,15 @@ fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
     }
 }
 
+/// Whether a vehicle is a bicycle rather than a motorcycle or another vehicle: it weighs the
+/// stock bicycles' 0.3 t, or it is a light vehicle (up to 0.3 t) whose script has the `vmax`
+/// the bicycles' scripts cut the drive at. The mass alone took every vehicle up to 0.3 t,
+/// motorcycles included; a `vmax` alone would take any car or lorry that names a variable so.
+fn is_bicycle(mass: f32, script_has_vmax: bool) -> bool {
+    let stock = (mass - 0.3).abs() < 1e-3;
+    stock || (script_has_vmax && mass > 0.0 && mass <= 0.3)
+}
+
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
 fn personality(state: &mut AiState, seed: u64, heavy: bool) {
     let r = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
@@ -2828,9 +2837,13 @@ impl Traffic {
             // (a truck keeps to the limit like the cars, up to a truck's own 80-90 km/h: it
             // took 38-47 on every road, crawling along 80 km/h roads, #327)
             80.0 + (seed % 10) as f32
-        } else if kind == LaneKind::Street && ty.def.mass > 0.0 && ty.def.mass <= 0.3 {
-            // a bicycle (stock ones weigh exactly 0.3 t): 15-21 km/h, the `vmax` range their
-            // script cuts the drive at (#327)
+        } else if kind == LaneKind::Street
+            && is_bicycle(
+                ty.def.mass,
+                ty.program.constant("vmax").is_some() || ty.program.var("vmax").is_some(),
+            )
+        {
+            // a bicycle: 15-21 km/h, the `vmax` range their script cuts the drive at (#327)
             15.0 + (seed % 7) as f32
         } else {
             100.0
@@ -8330,3 +8343,32 @@ mod junction_scenarios;
 
 #[cfg(test)]
 mod junction_tests;
+
+#[cfg(test)]
+mod bicycle_cap_tests {
+    use super::is_bicycle;
+
+    #[test]
+    fn a_light_vehicle_is_no_bicycle_without_the_bicycle_script() {
+        // a motorcycle (0.125 t) and other light vehicles follow the road's limit
+        assert!(!is_bicycle(0.125, false));
+        assert!(!is_bicycle(0.2, false));
+        assert!(!is_bicycle(0.0, false));
+        assert!(!is_bicycle(0.95, false));
+    }
+
+    #[test]
+    fn the_stock_weight_or_a_light_vehicle_with_vmax_is_a_bicycle() {
+        assert!(is_bicycle(0.3, false));
+        assert!(is_bicycle(0.3, true));
+        assert!(is_bicycle(0.125, true));
+    }
+
+    #[test]
+    fn a_heavy_vehicle_with_a_vmax_variable_is_no_bicycle() {
+        // a car or a lorry that names a variable `vmax` keeps to the road's limit
+        assert!(!is_bicycle(0.95, true));
+        assert!(!is_bicycle(12.0, true));
+        assert!(!is_bicycle(0.0, true));
+    }
+}

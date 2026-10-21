@@ -16,13 +16,14 @@ mod targets;
 // public comes through `api`; see ARCHITECTURE.md.
 pub use api::{
     atmosphere, catch, catching, clouds, fit_texture, gl_backend, panel_width, poll_gpu,
-    prepare_mesh, prepare_meshes, prepare_texture, wait_gpu, winit_window, AlphaMode, Camera,
-    Corona, GpuMesh, GpuTexture, GpuWaitError, Instance, LightMode, Lighting, Material,
-    MaterialExtra, MaterialId, MeshId, PbrMaps, PointLight, PreparedMesh, PreparedTexture,
-    RenderOptions, RenderPhase, Renderer, Scene, ScreenView, SmokeParticle, SurfaceState,
-    TexAddressing, TextureId, TripleScreen, Vertex, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB,
-    AUTO_SCALE_PIXELS, DEPTH_FORMAT, LAMP_CODE_STRIDE, LM_ATLAS_TILES, LM_TILE_PX,
-    MAX_LAMPS_PER_MESH, MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
+    prepare_mesh, prepare_meshes, prepare_texture, wait_gpu, winit_window, AlphaMode, AssetMirror,
+    Camera, Corona, FramePlan, GpuMesh, GpuTexture, GpuWaitError, Instance, LightMode, Lighting,
+    Material, MaterialExtra, MaterialId, MeshId, MirrorEvent, MirrorTexture, OverlayHook, PbrMaps,
+    PlanBatch, PlanKind, PlanSink, PointLight, PreparedMesh, PreparedTexture, RenderOptions,
+    RenderPhase, Renderer, Scene, ScreenView, SmokeParticle, SurfaceState, TexAddressing,
+    TextureId, TripleScreen, Vertex, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, AUTO_SCALE_PIXELS,
+    DEPTH_FORMAT, LAMP_CODE_STRIDE, LM_ATLAS_TILES, LM_TILE_PX, MAX_LAMPS_PER_MESH, MSAA,
+    SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
 };
 
 // The crate-wide names the tests (`tests.rs`, `tests_units.rs`) see through `use super::*`.
