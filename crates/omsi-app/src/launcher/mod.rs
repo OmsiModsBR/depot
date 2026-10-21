@@ -33,6 +33,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod thumbs;
 mod timetable;
+mod timetable_plan;
 mod ui;
 mod dialogs;
 
@@ -369,8 +370,17 @@ impl Launcher {
             }
         }
         // (timetable:stop=NAME: that stop chosen on the map)
-        if let Some(stop) = p.split_once(':').filter(|x| x.0 == "timetable").and_then(|x| x.1.strip_prefix("stop=")) {
+        let tt_part = |key: &str| p.strip_prefix("timetable:").and_then(|rest| rest.split(':').find_map(|x| x.strip_prefix(key)));
+        if let Some(stop) = tt_part("stop=") {
             app.pages.tt.set_stop(stop);
+        }
+        // (timetable:line=NAME: that line chosen, timetable:find=TEXT: that typed in the
+        // map's search)
+        if let Some(line) = tt_part("line=") {
+            app.pages.tt.set_line(line);
+        }
+        if let Some(q) = tt_part("find=") {
+            app.pages.tt.set_find(q);
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
