@@ -1725,12 +1725,14 @@ impl ApplicationHandler for App {
                 }
                 // --on-foot: the bus the start put down goes, the player stands beside it
                 if self.args.on_foot && self.world.is_some() {
+                    let entry = crate::world_load::spawn_point(&self.args, self.world.as_deref());
                     self.args.on_foot = false;
                     if self.player.is_some() {
                         self.remove_driven_vehicle();
                     } else if let Some(c) = self.camera.as_ref() {
-                        // (no bus came: where the camera stands, on the ground)
-                        let p = c.position;
+                        // (no bus came - the launcher's "Without bus": at the entry point
+                        // chosen, else where the camera stands, on the ground)
+                        let p = entry.unwrap_or(c.position);
                         let z = self.world.as_ref().and_then(|w| w.walk_height(p.x, p.y)).unwrap_or(p.z - 1.7);
                         let yaw = c.yaw as f64;
                         self.start_on_foot(glam::DVec3::new(p.x, p.y, z), yaw);
