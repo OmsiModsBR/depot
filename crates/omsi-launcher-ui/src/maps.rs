@@ -4,7 +4,7 @@
 //! `start_area` - it holds the session's choice. Read like the Vehicles page, on a thread of
 //! its own.
 
-use crate::kit::{self, card, clipped, dot, shorten, text, Status};
+use crate::kit::{self, card, clipped, dot, shorten, Status};
 use crate::look::*;
 use crate::shell::BODY_TOP;
 use omsi_launcher_lib::MapInfo;
