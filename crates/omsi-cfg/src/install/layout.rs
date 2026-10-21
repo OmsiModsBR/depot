@@ -99,15 +99,9 @@ const MARKER_OLD: &str = "This folder holds Project Depot's own content and inst
 /// The inbox's README, as written by versions that installed loose folders anywhere.
 const README_OLD: &str = "Put a mod here (a folder or a .zip) and start the launcher: it works out what the mod is\n(a bus, a map, scenery objects, splines, textures, fonts ...) and sorts it into the folders\nnext to this one. The original OMSI 2 folder is never written to.\n";
 
-/// The marker: a phone (the game runs in the launcher, with no OMSI 2 folder to copy into by
-/// hand) installs a folder too, a computer a .zip only.
-#[cfg(target_os = "android")]
-const MARKER_TEXT: &str = MARKER_OLD;
-#[cfg(not(target_os = "android"))]
+/// The marker: the launcher installs a .zip only, loose folders are copied by hand.
 const MARKER_TEXT: &str = "This folder holds Project Depot's own content and installed mods, laid out like the original game.\nDrop a mod's .zip into Mods/ and the launcher installs it; loose folders are copied here by hand.\n";
-#[cfg(target_os = "android")]
-const README_TEXT: &str = README_OLD;
-#[cfg(not(target_os = "android"))]
+/// The inbox's README: a .zip only, loose folders copied by hand.
 const README_TEXT: &str = "Put a mod's .zip here and start the launcher: it works out what the mod is (a bus, a map,\nscenery objects, splines, textures, fonts ...) and installs it next to this folder, read in\nplace and never unpacked. The original OMSI 2 folder is never written to.\n\nLoose folders (not a .zip) are not installed from here. Copy them yourself: into the original\nOMSI 2 folder (the mod then works in OMSI 2 and in the Depot), or into the folders next to\nthis one (the Depot only). The Mods page has a button that opens each folder.\n";
 
 /// Create the content folder layout at `dir` (idempotent).
@@ -178,8 +172,8 @@ mod tests {
         std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
     }
 
-    /// The inbox's README is written once, and an older version's (which promised folders on
-    /// a computer) is brought up to date; one the player wrote stays.
+    /// The inbox's README is written once, and an older version's (which promised folder
+    /// installs) is brought up to date; one the player wrote stays.
     #[test]
     fn an_older_readme_is_rewritten_a_players_kept() {
         let dir = std::env::temp_dir().join(format!("omsi-readme-{}", std::process::id()));
@@ -194,8 +188,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(first, README_TEXT);
         assert_eq!(kept, "my notes");
-        if cfg!(not(target_os = "android")) {
-            assert!(!README_TEXT.contains("a folder or a .zip"));
-        }
+        assert!(!README_TEXT.contains("a folder or a .zip"));
     }
 }

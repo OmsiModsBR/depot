@@ -1211,13 +1211,13 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         #[cfg(not(feature = "lan"))]
         Page::Multiplayer => {}
         Page::Profile => super::pages::profile(l, content),
-        Page::Settings => super::pages::settings(l, content),
+        Page::Settings => super::settings::settings(l, content),
         Page::Controls => super::pages::controls(l, content),
         Page::Sessions => super::pages::sessions(l, content),
         Page::Mods => super::pages::mods(l, content),
         Page::Tutorials => super::pages::tutorials(l, content),
         Page::Timetable => super::timetable::draw(l, content),
-        Page::Setup => super::pages::setup(l, content),
+        Page::Setup => super::setup::setup(l, content),
     }
     l.ui.pop_clip();
     if back {

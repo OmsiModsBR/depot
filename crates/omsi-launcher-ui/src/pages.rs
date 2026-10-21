@@ -86,9 +86,9 @@ impl Page {
                 "Add a .zip, used in place from Archives. The original OMSI 2 folder is never written to.",
             )),
             Page::Timetable => Some((
-                "Lines & tours",
+                "Plan",
                 "Plan a map's lines and tours",
-                "When each trip leaves, saved as the line's .ttl in the content folder. OMSI 2's own files stay as they are.",
+                "See the lines on the map, see which lines serve a stop, draw them as a diagram, and edit when each trip leaves. Saved in the content folder; OMSI 2's own files stay as they are.",
             )),
             Page::Sessions => Some((
                 "Running games",
@@ -118,12 +118,12 @@ impl Page {
             Page::Settings => Some((
                 "Graphics, sound & driving",
                 "Set up the game",
-                "Every change is saved at once; the game reads them when it starts.",
+                "Pick a section on the left or search every option. A dot marks what you changed; the line under each option says when a change takes effect.",
             )),
             Page::Setup => Some((
                 "Folders",
                 "Find the original game",
-                "Where the original OMSI 2 is, and the program of this game.",
+                "Where the original OMSI 2 is, where this game's program is, and where the Depot keeps its own files.",
             )),
         }
     }

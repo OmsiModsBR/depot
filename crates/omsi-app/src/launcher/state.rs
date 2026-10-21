@@ -28,6 +28,9 @@ pub enum Msg {
     Stopped { pid: u32, result: Result<bool, String> },
     LogTail { pid: u32, lines: Vec<String> },
     Mods(Result<core::ModsStatus, String>),
+    /// What the content takes on disk and how much of it there is (Setup), for the reading
+    /// of that number.
+    Usage(u64, core::disk::Usage),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -285,6 +288,13 @@ pub struct State {
     pub jobs: Vec<core::install::Progress>,
     pub mods: Option<core::ModsStatus>,
     pub mods_asked: bool,
+    /// What the content takes on disk (Setup), read when the page opens; the reading asked
+    /// last (an earlier one that ends after it is not taken).
+    pub usage: Option<core::disk::Usage>,
+    pub usage_asked: bool,
+    usage_gen: u64,
+    /// Counts the readings of the content that brought other files than before.
+    pub content_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
@@ -360,6 +370,10 @@ impl State {
             jobs: Vec::new(),
             mods: None,
             mods_asked: false,
+            usage: None,
+            usage_asked: false,
+            usage_gen: 0,
+            content_gen: 0,
             mod_info: None,
             mod_path: String::new(),
             ibis: None,
@@ -527,6 +541,26 @@ impl State {
         self.spawn(|| Msg::Mods(core::mods_status().map_err(|e| format!("{e:#}"))));
     }
 
+    /// Reads what the OMSI 2 folder and the content folder take on disk (Setup's Content
+    /// card), in the background.
+    pub fn load_usage(&mut self) {
+        self.usage_asked = true;
+        self.usage = None;
+        self.usage_gen += 1;
+        let gen = self.usage_gen;
+        let root = std::path::PathBuf::from(&self.config.root);
+        self.spawn(move || {
+            let mut folders = Vec::new();
+            if !root.as_os_str().is_empty() {
+                folders.push(("OMSI 2 folder".to_string(), root));
+            }
+            if let Some(c) = core::content_dir() {
+                folders.push(("Depot content folder".to_string(), c));
+            }
+            Msg::Usage(gen, core::disk::scan(&folders))
+        });
+    }
+
     #[cfg(feature = "lan")]
     pub fn check_join(&mut self) {
         // (multiplayer is disabled: nothing is looked up)
@@ -665,13 +699,13 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
-        // (on a computer only a .zip: loose files are copied by hand, into the OMSI 2 folder or
-        // the content folder - the Mods page says where)
-        if !core::IN_PROCESS_GAMES && !is_zip(&path) {
+        // (a .zip only: loose files are copied by hand, into the OMSI 2 folder or the content
+        // folder - the Mods page says where)
+        if !is_zip(&path) {
             self.set_status("The launcher installs a .zip only. Copy loose files yourself: the Mods page shows where.", true);
             return;
         }
-        // (a .zip is only ever used in place, from Archives; a folder is copied)
+        // (a .zip is only ever used in place, from Archives)
         let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
@@ -955,6 +989,12 @@ impl State {
                     }
                 }
                 self.set_status(format!("{} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
+                // (other files than before - another content folder chosen under Setup: the
+                // Maps and Vehicles pages take the new lists even when as many came)
+                let same = self.maps.iter().map(|m| &m.file).eq(maps.iter().map(|m| &m.file)) && self.vehicles.iter().map(|v| &v.file).eq(vehicles.iter().map(|v| &v.file));
+                if !same {
+                    self.content_gen += 1;
+                }
                 self.maps = maps;
                 self.vehicles = vehicles;
                 self.weathers = weathers;
@@ -1164,6 +1204,8 @@ impl State {
                 self.mods = Some(m);
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
+            Msg::Usage(gen, u) if gen == self.usage_gen => self.usage = Some(u),
+            Msg::Usage(..) => {}
             Msg::ModInfo(r) => {
                 self.mod_info = Some(r);
             }
@@ -1286,6 +1328,25 @@ impl State {
         self.touched();
     }
 
+    /// The season `season` ("auto": by the date) chosen for the start: the date moves into it
+    /// (its timetable days with it), and a weather preset that does not fit it any more goes.
+    pub fn set_season(&mut self, season: &str) {
+        self.choice.season = season.to_string();
+        let months = [("spring", "04"), ("summer", "07"), ("autumn", "10"), ("winter", "01")];
+        if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
+            let date = self.choice.date.clone();
+            self.choice.date = date_in_month(&date, month);
+            self.load_lines();
+        }
+        let w = self.choice.weather.clone();
+        if let Some(wi) = self.weathers.iter().find(|x| x.file == w).cloned() {
+            if !self.weather_fits(&wi) {
+                self.choice.weather.clear();
+            }
+        }
+        self.touched();
+    }
+
     /// The season the chosen date (or the override) means.
     pub fn season(&self) -> &str {
         if self.choice.season != "auto" {
@@ -1365,6 +1426,25 @@ pub fn hhmm(seconds: f64) -> String {
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
 }
 
+/// `date` (`YYYY-MM-DD`) moved into `month` (`04`, `07`, `10` or `01`, a season's), the day
+/// kept within the month: 31 March into spring is 30 April.
+fn date_in_month(date: &str, month: &str) -> String {
+    let yy = date.get(0..4).unwrap_or("1989");
+    let last = if month == "04" { 30 } else { 31 };
+    let dd = date.get(8..10).and_then(|d| d.parse::<u32>().ok()).unwrap_or(15).clamp(1, last);
+    format!("{yy}-{month}-{dd:02}")
+}
+
+#[cfg(test)]
+mod season_date_tests {
+    #[test]
+    fn a_season_keeps_the_day_within_its_month() {
+        assert_eq!(super::date_in_month("2026-03-31", "04"), "2026-04-30");
+        assert_eq!(super::date_in_month("2026-03-31", "07"), "2026-07-31");
+        assert_eq!(super::date_in_month("2026-11-05", "01"), "2026-01-05");
+    }
+}
+
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
     if b >= (1u64 << 30) as f64 {
@@ -1380,11 +1460,9 @@ pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
-/// Whether `path` is a .zip file (what the Mods page installs on a computer): named .zip and a
-/// file, not a folder named so.
+/// Whether `path` is a .zip file (what the Mods page installs): `core::is_zip`.
 pub fn is_zip(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) && p.is_file()
+    core::is_zip(std::path::Path::new(path))
 }
 
 /// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
@@ -1661,7 +1739,7 @@ fn read_settings_file() -> Option<String> {
 
 #[cfg(test)]
 mod mods_tests {
-    /// On a computer the Mods page installs a .zip only; loose folders are copied by hand.
+    /// The Mods page installs a .zip only; loose folders are copied by hand.
     #[test]
     fn only_a_zip_is_installed_from_the_page() {
         let dir = std::env::temp_dir().join(format!("depot-is-zip-{}", std::process::id()));
