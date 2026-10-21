@@ -10,8 +10,9 @@
 //!    out what goes where: OMSI-style folders (`Vehicles`, `maps`, `Sceneryobjects` ...) are
 //!    merged into the same folders of the content folder, a lone bus / map / object folder is
 //!    put under the right folder, and everything else (read-mes, screenshots) is left out.
-//!    A pack that only adds paints or textures to a bus that is not installed is kept aside
-//!    in `Mods/waiting` and installed by itself once the bus is there. A `.zip` whose folders
+//!    Paints or textures for a bus that is not installed stay in their `.zip`, and are only
+//!    used if that bus is installed (the folder copy, which tests alone reach now, kept such
+//!    a pack aside in `Mods/waiting`). A `.zip` whose folders
 //!    are not where the game looks for them (a lone bus folder, say) is refused: it would
 //!    have to be unpacked.
 //! 2. **Check** - for a folder, the size of the planned files plus a margin must fit on the
@@ -824,7 +825,7 @@ fn plan(entries: &[Entry], source_name: &str, installed: &Installed) -> Plan {
                                         aside: false,
                                     }),
                                     None => {
-                                        plan.warnings.push(format!("{bus}: only paints or textures for a bus that is not installed (Vehicles/{bus}) - kept aside in Mods/{WAITING} and installed by itself once that bus is installed"));
+                                        plan.warnings.push(format!("{bus}: paints or textures for a bus that is not installed (Vehicles/{bus}) - they stay in this .zip and are only used if that bus is installed"));
                                         plan.maps.push(Mapping {
                                             src: bpath,
                                             dest: format!("Vehicles/{bus}"),
@@ -992,16 +993,6 @@ fn list_folder(dir: &Path, job: &Job) -> Result<(Vec<Entry>, Vec<PathBuf>, usize
 /// of contents", 0 of 0 files, for every mod.
 const ZIP_BUFFER: usize = 1 << 13;
 
-/// What to do with an unpacked folder: install it on a phone, copy it by hand on a computer
-/// (whose launcher installs a .zip only).
-fn folder_hint() -> &'static str {
-    if crate::IN_PROCESS_GAMES {
-        "install the folder"
-    } else {
-        "copy the folder by hand (the Mods page shows where)"
-    }
-}
-
 fn list_zip(
     z: &mut zip::ZipArchive<std::io::BufReader<std::fs::File>>,
     job: &Job,
@@ -1054,10 +1045,10 @@ fn list_zip(
     }
     job.files_done.store(0, Ordering::Relaxed);
     if encrypted > 0 {
-        problems.push(format!("{encrypted} file(s) in the archive are password protected - unpack it with the password first and {}", folder_hint()));
+        problems.push(format!("{encrypted} file(s) in the archive are password protected - unpack it with the password first and copy the folder by hand (the Mods page shows where)"));
     }
     for (m, c) in unsupported {
-        problems.push(format!("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and {}", folder_hint()));
+        problems.push(format!("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and copy the folder by hand (the Mods page shows where)"));
     }
     if unsafe_names > 0 {
         problems.push(format!(
@@ -1084,7 +1075,7 @@ fn run(job: &Job, content: &Path, root: Option<&Path>) -> Result<()> {
     let archive = archive_kind(&src);
     let is_zip = archive == Some(ArchiveKind::Zip);
     if archive.is_none() && !src.is_dir() {
-        return Err(anyhow!("{} is neither a folder nor a .zip: only folders and .zip archives (used in place, never unpacked) are supported; .rar and .7z are not", src.display()));
+        return Err(anyhow!("{} is not a .zip: only .zip archives (used in place, never unpacked) are supported; .rar and .7z are not", src.display()));
     }
     if src.starts_with(content) && !job.from_inbox && !src.starts_with(content.join("Mods")) {
         return Err(anyhow!(
@@ -1764,28 +1755,6 @@ fn move_into(from: &Path, to: &Path) -> Result<usize> {
     Ok(replaced)
 }
 
-/// Packs in `Mods/waiting` whose buses are installed now.
-pub fn waiting_ready(content: &Path, root: Option<&Path>) -> Vec<PathBuf> {
-    let installed = Installed { content, root };
-    let Ok(rd) = std::fs::read_dir(content.join("Mods").join(WAITING)) else {
-        return Vec::new();
-    };
-    rd.flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .filter(|p| {
-            let buses: Vec<String> = std::fs::read_dir(p.join("Vehicles"))
-                .map(|rd| {
-                    rd.flatten()
-                        .map(|e| e.file_name().to_string_lossy().to_string())
-                        .collect()
-                })
-                .unwrap_or_default();
-            !buses.is_empty() && buses.iter().all(|b| installed.vehicle(b).is_some())
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1956,7 +1925,7 @@ mod tests {
             std::fs::write(&src, b"not an archive the launcher reads").unwrap();
             let p = run_blocking(content.clone(), None, src, InstallMode::Auto, None, false);
             assert_eq!(p.state, "failed", "{p:?}");
-            assert!(p.message.contains("only folders and .zip"), "{}", p.message);
+            assert!(p.message.contains("only .zip archives"), "{}", p.message);
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

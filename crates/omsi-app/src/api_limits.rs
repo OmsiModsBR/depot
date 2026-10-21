@@ -120,6 +120,11 @@ pub(crate) const D3D9: &[ApiLimit] = &[
         reason: NOT_DRAWN,
     },
     ApiLimit {
+        key: "clouds",
+        limit: Limit::Locked("As OMSI 2"),
+        reason: "the weather's own clouds, nothing added; the sky itself is not drawn by DirectX9 yet",
+    },
+    ApiLimit {
         key: "windy_trees",
         limit: Limit::Locked("Off"),
         reason: NOT_DRAWN,

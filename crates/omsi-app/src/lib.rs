@@ -179,7 +179,7 @@ use offscreen::run_offscreen;
 use services::run_export;
 use situation::apply_situation;
 use startup::{
-    BUILD, CLASSIC, CLOUDS, content_dir, ENHANCED, ENHANCED_PLUS, fatal_dialog, find_root,
+    BUILD, CLASSIC, CLOUDS, content_dir, FAIR_CLOUDS, ENHANCED, ENHANCED_PLUS, fatal_dialog, find_root,
     graphics_instance, is_omsi_root, MIRROR_SIZE, root_memo, SOUND_AI, SOUND_SCENERY, VERSION,
 };
 
@@ -283,6 +283,7 @@ pub(crate) fn launcher_statics() {
     ENHANCED.store(startup::enhanced_wanted(&s, false, false).0, std::sync::atomic::Ordering::Relaxed);
     CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
+    FAIR_CLOUDS.store(s.fair_weather_clouds(), std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Everything before a window: the language, the session's random seed, the original
@@ -435,6 +436,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
     ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
+    FAIR_CLOUDS.store(settings.fair_weather_clouds(), std::sync::atomic::Ordering::Relaxed);
     SOUND_AI.store(settings.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
     SOUND_SCENERY.store(settings.vol_scenery.to_bits(), std::sync::atomic::Ordering::Relaxed);
     MIRROR_SIZE.store(settings.mirror_size, std::sync::atomic::Ordering::Relaxed);

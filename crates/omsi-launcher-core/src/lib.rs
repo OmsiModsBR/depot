@@ -7,6 +7,7 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+pub mod disk;
 pub mod index;
 pub mod install;
 pub mod instances;
@@ -28,6 +29,9 @@ pub struct Config {
     pub game: String,
     /// The current profile name.
     pub profile: String,
+    /// The content folder chosen under Setup (empty: beside the game program).
+    #[serde(default)]
+    pub content: String,
 }
 
 pub fn data_dir() -> PathBuf {
@@ -281,13 +285,13 @@ fn root() -> Result<PathBuf> {
     Ok(r)
 }
 
-/// The game's own content folder: the folder of the game binary, laid out like OMSI 2
-/// (Vehicles, maps, Sceneryobjects ...). Installed mods live here; the game searches it
-/// before the original installation.
+/// The game's own content folder, laid out like OMSI 2 (Vehicles, maps, Sceneryobjects ...).
+/// Installed mods live here; the game searches it before the original installation.
 pub fn content_dir() -> Option<PathBuf> {
-    // the same rules as the game: $OMSI_CONTENT, else the folder of the game binary (beside
-    // the bundle when the binary sits inside a macOS .app)
-    let dir = match omsi_cfg::flags::CONTENT.path() {
+    // the same rules as the game: $OMSI_CONTENT, else the folder chosen under Setup (when it
+    // can be one, `chosen_content`), else the folder of the game binary (beside the bundle
+    // when the binary sits inside a macOS .app)
+    let dir = match omsi_cfg::flags::CONTENT.path().or_else(chosen_content) {
         Some(d) => d,
         None => {
             let c = load_config_raw();
@@ -314,17 +318,167 @@ pub fn content_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
+/// The content folder chosen under Setup, when one is and it can be used: the game started by
+/// the launcher and the one started by itself read it too (`$OMSI_CONTENT` wins over it). A
+/// choice that cannot be one (`content_choice_problem`, a folder that cannot be made or
+/// written to) is left aside with a line in the log, and the folder beside the game is used.
+pub fn chosen_content() -> Option<PathBuf> {
+    static SEEN: std::sync::Mutex<Option<(String, String, Option<PathBuf>)>> =
+        std::sync::Mutex::new(None);
+    let c = load_config_raw();
+    let dir = c.content.trim().to_string();
+    if dir.is_empty() {
+        return None;
+    }
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((d, r, out)) = seen.as_ref() {
+        if *d == dir && *r == c.root {
+            return out.clone();
+        }
+    }
+    let out = usable_choice(&dir, &c.root);
+    *seen = Some((dir, c.root.clone(), out.clone()));
+    out
+}
+
+/// The content folder `dir` chosen under Setup, with the OMSI 2 folder `root`, when it can
+/// be used (see `chosen_content`); said in the log when it cannot.
+fn usable_choice(dir: &str, root: &str) -> Option<PathBuf> {
+    let p = PathBuf::from(dir);
+    match content_folder_problem(&p, Path::new(root.trim())) {
+        Some(why) => {
+            log_to_file(&format!("content folder chosen under Setup not used: {why}; the folder beside the game is used"));
+            None
+        }
+        None => Some(p),
+    }
+}
+
+/// `a` is `b` or inside it, the letters' case aside on Windows.
+fn within(a: &Path, b: &Path) -> bool {
+    let mut b = b.components();
+    let mut a = a.components();
+    loop {
+        match (b.next(), a.next()) {
+            (None, _) => return true,
+            (Some(_), None) => return false,
+            (Some(x), Some(y)) => {
+                let (x, y) = (
+                    x.as_os_str().to_string_lossy(),
+                    y.as_os_str().to_string_lossy(),
+                );
+                let same = if cfg!(windows) {
+                    x.eq_ignore_ascii_case(&y)
+                } else {
+                    x == y
+                };
+                if !same {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
+/// `p` with its links resolved as far as it exists (the rest as typed): a folder not made yet
+/// is still compared where it will be.
+fn resolved(p: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut at = p.to_path_buf();
+    loop {
+        if let Ok(c) = at.canonicalize() {
+            let mut out = c;
+            for r in rest.iter().rev() {
+                out.push(r);
+            }
+            return out;
+        }
+        match (at.file_name().map(|f| f.to_os_string()), at.parent()) {
+            (Some(f), Some(parent)) => {
+                rest.push(f);
+                at = parent.to_path_buf();
+            }
+            _ => return p.to_path_buf(),
+        }
+    }
+}
+
+/// Why `dir` cannot be the content folder, with the OMSI 2 folder `root` (empty when none is
+/// set): the original is never written to, so the content folder is a full path that is
+/// neither in the OMSI 2 folder (nor the folder itself) nor in any OMSI 2 installation, and
+/// is none itself. `None` when it can be; nothing is written to find out.
+pub fn content_choice_problem(dir: &Path, root: &Path) -> Option<String> {
+    if !dir.is_absolute() {
+        return Some(format!(
+            "{} is not a full path (from the drive, or from /)",
+            dir.display()
+        ));
+    }
+    let here = resolved(dir);
+    if !root.as_os_str().is_empty() && within(&here, &resolved(root)) {
+        return Some("it is in the OMSI 2 folder, which the Depot never writes to: choose a folder outside it".into());
+    }
+    // (an installation the launcher was not told of: the folder itself or one it lies in)
+    let install = |d: &Path| {
+        d.is_dir()
+            && (omsi_cfg::missing_original_essentials(d).is_empty()
+                || std::fs::read_dir(d)
+                    .map(|rd| {
+                        rd.flatten().any(|e| {
+                            e.file_name()
+                                .to_string_lossy()
+                                .eq_ignore_ascii_case("Omsi.exe")
+                        })
+                    })
+                    .unwrap_or(false))
+    };
+    if let Some(i) = here.ancestors().find(|d| install(d)) {
+        return Some(format!(
+            "it is in an OMSI 2 installation ({}), which the Depot never writes to",
+            i.display()
+        ));
+    }
+    None
+}
+
+/// Why `dir` cannot be the content folder (`content_choice_problem`), or why it cannot be
+/// made or written to - Save asks this; it makes the folder when it is missing.
+pub fn content_folder_problem(dir: &Path, root: &Path) -> Option<String> {
+    if let Some(why) = content_choice_problem(dir, root) {
+        return Some(why);
+    }
+    if std::fs::create_dir_all(dir).is_err() || !omsi_cfg::is_writable(dir) {
+        return Some(format!("{} cannot be made or written to", dir.display()));
+    }
+    None
+}
+
 /// Tell the OMSI readers about the content folder, the archives used in place in its
 /// `Archives` folder and the OMSI folder (in that order, as the game has them), so that a
 /// path inside one is also looked for in the others (a repaint's `.cti` in the content
 /// folder's copy of a stock bus folder, a map inside an archive).
 fn register_roots(content: &Path) {
-    static DONE: std::sync::Once = std::sync::Once::new();
-    let content = content.to_path_buf();
-    DONE.call_once(|| {
-        omsi_cfg::add_content_root(content.clone());
-        mount_archives(&content);
-    });
+    static NOW: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+    let mut now = NOW.lock().unwrap_or_else(|e| e.into_inner());
+    if now.as_deref() != Some(content) {
+        match now.take() {
+            // (another folder chosen under Setup: the one before and its archives are no
+            // longer searched, the new one is, first)
+            Some(old) => {
+                let archives = old.join(install::ARCHIVES);
+                for r in omsi_cfg::content_roots() {
+                    if r == old || r.starts_with(&archives) {
+                        omsi_cfg::remove_content_root(&r);
+                    }
+                }
+                omsi_cfg::add_content_root_first(content.to_path_buf());
+            }
+            None => omsi_cfg::add_content_root(content.to_path_buf()),
+        }
+        mount_archives(content);
+        *now = Some(content.to_path_buf());
+    }
+    drop(now);
     // the OMSI folder - also one chosen under Setup while the launcher runs (it was only
     // looked for once, at the start, and a folder set later was never a root)
     if let Some(r) = find_root(&load_config_raw().root) {
@@ -351,11 +505,10 @@ fn mount_archives(content: &Path) {
         })
         .collect();
     zips.sort();
-    let mounted: Vec<PathBuf> = omsi_cfg::vfs::mounts()
-        .iter()
-        .map(|m| m.path().to_path_buf())
-        .collect();
-    for z in zips.into_iter().filter(|z| !mounted.contains(z)) {
+    // (one mounted before that is no root any more is made one again: a folder chosen back
+    // under Setup)
+    let roots = omsi_cfg::content_roots();
+    for z in zips.into_iter().filter(|z| !roots.contains(z)) {
         mount_archive(&z);
     }
 }
@@ -508,15 +661,16 @@ pub struct ModsStatus {
     pub jobs: Vec<install::Progress>,
 }
 
-/// Start installing the mod at `src` (a folder, or a .zip) into the content folder in the
-/// background. A folder is copied; a .zip is never unpacked, only put into `Archives` and read
-/// in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
+/// Start installing the mod `.zip` at `src` into the content folder in the background (a
+/// folder is refused, see `only_a_zip`). A .zip is never unpacked, only put into `Archives` and
+/// read in place (`mode` is kept for compatibility and ignored: .rar and .7z are not supported).
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content =
         content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
     if !src.exists() {
         return Err(anyhow!("{} does not exist", src.display()));
     }
+    only_a_zip(src)?;
     let from_inbox = src.starts_with(content.join("Mods"));
     let job = install::start(
         content,
@@ -543,6 +697,7 @@ pub fn install_mod_blocking(
 ) -> Result<install::Progress> {
     let content =
         content_dir().ok_or_else(|| anyhow!("no game binary configured, so no content folder"))?;
+    only_a_zip(src)?;
     Ok(install::run_blocking(
         content,
         root().ok(),
@@ -551,6 +706,27 @@ pub fn install_mod_blocking(
         cancel_after_ms.map(std::time::Duration::from_millis),
         true,
     ))
+}
+
+/// Whether `p` is a `.zip` file (a folder named like one is not).
+pub fn is_zip(p: &Path) -> bool {
+    p.is_file()
+        && p.extension()
+            .map(|x| x.eq_ignore_ascii_case("zip"))
+            .unwrap_or(false)
+}
+
+/// A mod is installed from a `.zip` only, by the page and from the terminal alike: loose
+/// files are copied by hand, into the OMSI 2 folder or the content folder.
+fn only_a_zip(src: &Path) -> Result<()> {
+    if is_zip(src) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "{} is not a .zip: the launcher installs a .zip only, copy loose files by hand into the OMSI 2 folder or the content folder",
+            src.display()
+        ))
+    }
 }
 
 fn inbox_entries(content: &Path) -> Vec<PathBuf> {
@@ -573,13 +749,9 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
                 || name.eq_ignore_ascii_case(install::PLUGINS_HELD)
                 || name.eq_ignore_ascii_case(install::UNINSTALLED)
                 || name.eq_ignore_ascii_case("README.txt"))
-                // (a loose folder only on a phone: on a computer the launcher installs a .zip,
-                // loose files are copied by hand into the OMSI 2 or the content folder)
-                && ((IN_PROCESS_GAMES && p.is_dir())
-                    || (p.is_file()
-                        && p.extension()
-                            .map(|x| x.eq_ignore_ascii_case("zip"))
-                            .unwrap_or(false)))
+                // (a .zip only: loose files are copied by hand into the OMSI 2 or the content
+                // folder, never installed)
+                && is_zip(p)
         })
         .collect();
     v.sort();
@@ -635,9 +807,8 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let mut started = Vec::new();
     let mut guard = SEEN.lock().unwrap_or_else(|e| e.into_inner());
     let seen = guard.get_or_insert_with(Default::default);
-    let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    seen.retain(|p, _| items.contains(p));
     for p in items {
         if install::is_busy(&p) {
             continue;
@@ -684,50 +855,17 @@ fn watch_inbox(content: &Path) -> Vec<String> {
             }
         }
     }
-    let busy = install::jobs().iter().any(|j| j.finished.is_none());
-    if !busy {
-        for p in install::waiting_ready(content, root().ok().as_deref()) {
-            let sig = tree_signature(&p);
-            if seen
-                .get(&p)
-                .map(|s| s.started && s.sig == sig)
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            seen.insert(
-                p.clone(),
-                Seen {
-                    sig,
-                    at: std::time::Instant::now(),
-                    started: true,
-                    checked: std::time::Instant::now(),
-                },
-            );
-            install::start(
-                content.to_path_buf(),
-                root().ok(),
-                p.clone(),
-                install::InstallMode::Extract,
-                true,
-            );
-            started.push(p.to_string_lossy().to_string());
-        }
-    }
     started
 }
 
-/// Install everything in the inbox (and the waiting packs whose bus is there) now, and
-/// wait (the terminal's `mods`).
+/// Install every .zip in the inbox now, and wait (the terminal's `mods`). A pack an older
+/// version kept aside in `Mods/waiting` is a folder: it is not installed (copy it by hand).
 pub fn install_inbox_blocking() -> Vec<install::Progress> {
     let Some(content) = content_dir() else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for p in inbox_entries(&content)
-        .into_iter()
-        .chain(install::waiting_ready(&content, root().ok().as_deref()))
-    {
+    for p in inbox_entries(&content) {
         let job = install::start(
             content.clone(),
             root().ok(),
@@ -1551,9 +1689,14 @@ fn content_language() -> &'static str {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct StopInfo {
+    /// The stop's object on the map (where it stands: the Timetable page's map).
+    pub id: i64,
     pub name: String,
     pub arr: f64,
     pub dep: f64,
+    /// The bus stops here; false for a station the profile has it pass
+    /// (`[profile_otherstopping] 2`: every station of a depot run).
+    pub stops: bool,
 }
 
 /// One trip of a tour, as OMSI's timetable dialog lists it: when it leaves, from where to
@@ -1612,6 +1755,9 @@ pub struct TripPath {
     pub route: Vec<RoadPiece>,
     /// The stop objects the trip calls at, in order.
     pub stops: Vec<i64>,
+    /// How many stretches from one stop to the next the timetable has no road for (no
+    /// station link between them, or one without a step): nothing can be drawn there.
+    pub missing: usize,
 }
 
 /// One spline of the map a trip drives over: its id in its tile, which `[path]` of it the
@@ -1631,6 +1777,12 @@ pub struct RoadPiece {
 /// The trip's own track (`.ttr`) when it names one - trains, ferries, and the type-1 trips
 /// of mod maps - else the station links between its stops, as the game walks them.
 pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
+    Ok(trip_paths(map, date, &[trip])?.pop().unwrap_or_default())
+}
+
+/// The routes of several trips of the map `map` on `date`, in the order asked (a trip the
+/// timetable does not have: an empty one): the timetable is read once for all of them.
+pub fn trip_paths(map: &str, date: &str, trips: &[&str]) -> Result<Vec<TripPath>> {
     let map_dir = resolve_content(map)?
         .parent()
         .map(|p| p.to_path_buf())
@@ -1645,13 +1797,25 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     let chrono = omsi_map::active_chrono_dirs(&map_dir, code);
     let off = omsi_map::chrono_deactivated_lines(&chrono);
     let data = omsi_timetable::TimetableData::load_with_chrono(&map_dir, &chrono, &off);
+    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
+    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
+        .map(|g| g.raw_tiles)
+        .unwrap_or_default();
+    Ok(trips
+        .iter()
+        .map(|trip| path_of(&data, &tiles, trip))
+        .collect())
+}
+
+/// The route of trip `trip` of a map's timetable `data`, whose `[map]` list is `tiles`.
+fn path_of(data: &omsi_timetable::TimetableData, tiles: &[(i32, i32)], trip: &str) -> TripPath {
     let mut out = TripPath::default();
     let Some(t) = data
         .trips
         .iter()
         .find(|x| x.name.eq_ignore_ascii_case(trip.trim()))
     else {
-        return Ok(out);
+        return out;
     };
     // a type-1 trip's stations are its own `[station]` records (all of Novi Sad)
     out.stops = if t.stations.is_empty() {
@@ -1662,10 +1826,6 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     } else {
         t.stations.clone()
     };
-    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
-    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
-        .map(|g| g.raw_tiles)
-        .unwrap_or_default();
     let at = |tile_index: f64| tiles.get(tile_index as usize).copied();
     let track_name = if t.display_name.trim().is_empty() {
         t.name.trim()
@@ -1691,14 +1851,16 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
                 });
             }
         }
-        return Ok(out);
+        return out;
     }
     for w in out.stops.windows(2) {
         let Some(link) = data
             .stn_links
             .iter()
             .find(|l| l.from_id == w[0] && l.to_id == w[1])
+            .filter(|l| !l.entries.is_empty())
         else {
+            out.missing += 1;
             continue;
         };
         for e in &link.entries {
@@ -1720,7 +1882,7 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 /// The lines of a map's timetable on `date` (`YYYY-MM-DD`, the game's default when empty):
@@ -1795,13 +1957,10 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                     continue;
                 };
                 let departure = tt.departure as f64 * 60.0;
-                let duration = trip
+                let profile = trip
                     .profiles
                     .get(tt.profile.max(0) as usize)
-                    .or(trip.profiles.first())
-                    .map(|p| p.factor as f64 * 60.0)
-                    .filter(|d| *d > 0.0)
-                    .unwrap_or(600.0);
+                    .or(trip.profiles.first());
                 // its stations: [station_typ2] objects, or the [station] records of a type-1
                 // trip (all of Novi Sad), which carry their stop's name themselves
                 let legacy: Vec<(i64, String)> = trip
@@ -1819,21 +1978,30 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                 } else {
                     trip.stations.clone()
                 };
-                let mut lens = Vec::new();
-                for w in stations.windows(2) {
-                    lens.push(
+                // the times the game runs the trip by: the profile's own minutes, the rest
+                // shared out by the lengths of the station links
+                let times = omsi_timetable::TripTimes::new(&stations, profile, &|a, b| {
+                    data.stn_links
+                        .iter()
+                        .find(|k| k.from_id == a && k.to_id == b)
+                        .map(|k| k.length)
+                });
+                let duration = times.duration;
+                // (how far it runs: a missing link counts 500 m, as for the times)
+                let total: f64 = stations
+                    .windows(2)
+                    .map(|w| {
                         data.stn_links
                             .iter()
                             .find(|k| k.from_id == w[0] && k.to_id == w[1])
                             .map(|k| k.length.max(1.0))
-                            .unwrap_or(500.0),
-                    );
-                }
-                let total: f64 = lens.iter().sum::<f64>().max(1.0);
-                let mut acc = 0.0;
+                            .unwrap_or(500.0)
+                    })
+                    .sum::<f64>()
+                    .max(1.0);
                 let mut stops = Vec::new();
                 for (i, id) in stations.iter().enumerate() {
-                    let t_at = departure + duration * acc / total;
+                    let (arr, dep) = times.stations.get(i).copied().unwrap_or_default();
                     let name = data
                         .bus_stops
                         .iter()
@@ -1848,13 +2016,12 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                         })
                         .unwrap_or_else(|| format!("stop {id}"));
                     stops.push(StopInfo {
+                        id: *id,
                         name,
-                        arr: t_at,
-                        dep: if i == 0 { departure } else { t_at },
+                        arr: departure + arr,
+                        dep: departure + dep,
+                        stops: times.stops.get(i).copied().unwrap_or(true),
                     });
-                    if i < lens.len() {
-                        acc += lens[i];
-                    }
                 }
                 if !trip.terminus.trim().is_empty()
                     && !termini.iter().any(|x| x == trip.terminus.trim())
@@ -2100,7 +2267,10 @@ pub struct Profile {
     pub rating_driving: f64,
     pub rating_comfort: f64,
     pub rating_tickets: f64,
+    /// The newest drives (at most 40, the list Profile / Sessions shows).
     pub sessions: Vec<Session>,
+    /// How many drives the driver has made, all of them (the Trips tile).
+    pub drives: usize,
     pub exists: bool,
 }
 
@@ -2256,6 +2426,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
         rating_driving: rating[0],
         rating_comfort: rating[1],
         rating_tickets: rating[2],
+        drives: mine.len(),
         sessions: mine.into_iter().take(40).collect(),
         exists: driver.is_some(),
     })
@@ -2448,6 +2619,132 @@ pub fn get_keybindings() -> Result<Value> {
     Ok(
         json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
     )
+}
+
+/// A controls file of the original OMSI 2 as it is (only read: none of the Depot's own
+/// actions added), in the shape `get_keybindings` gives.
+fn keys_as_they_are(path: &Path) -> Result<Value> {
+    let k = omsi_content::input::KeyboardCfg::load(path)?;
+    Ok(
+        json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
+    )
+}
+
+/// The keys of the original OMSI 2 (its own `Inputs/keyboard.cfg`, only read), in the shape
+/// `get_keybindings` gives; `None` when its folder has no such file. Only what the file has:
+/// an action only the Depot knows is not the original's.
+pub fn original_keybindings() -> Result<Option<Value>> {
+    let path = omsi_cfg::original_keyboard_cfg(&root()?);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    keys_as_they_are(&path).map(Some)
+}
+
+/// OMSI 2's keys as it comes (its `Inputs/keyboard_reset.cfg`, only read), as
+/// `original_keybindings`; `None` when its folder has no such file.
+pub fn factory_keybindings() -> Result<Option<Value>> {
+    match omsi_cfg::original_inputs_file(&root()?, "keyboard_reset.cfg") {
+        Some(path) => keys_as_they_are(&path).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// The keys' names in the language `lang` (OMSI 2's `Inputs/<lang>.kyb`, English's where it
+/// has none): scan code and name.
+pub fn key_names(lang: &str) -> Vec<(i32, String)> {
+    let Ok(r) = root() else { return Vec::new() };
+    [lang, "ENG"]
+        .iter()
+        .filter_map(|l| omsi_cfg::original_inputs_file(&r, &format!("{l}.kyb")))
+        // (a table with no names in it is no table: English's then)
+        .find_map(|p| {
+            omsi_content::input::load_key_names(&p)
+                .ok()
+                .filter(|n| !n.is_empty())
+        })
+        .unwrap_or_default()
+}
+
+/// A copy of `file` beside itself, named with the local date and time
+/// (`keyboard.cfg.backup-2026-10-21-0705`, then `-2`, `-3` ... within the same minute: a
+/// backup there is never written over); `None` when there is no such file.
+pub fn backup_beside(file: &Path) -> Result<Option<PathBuf>> {
+    if !file.is_file() {
+        return Ok(None);
+    }
+    let stamp = match local_now() {
+        Some((y, mo, d, h, mi)) => format!("{y:04}-{mo:02}-{d:02}-{h:02}{mi:02}"),
+        None => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+            .to_string(),
+    };
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let bytes = std::fs::read(file)?;
+    for k in 1..1000 {
+        let to = if k == 1 {
+            file.with_file_name(format!("{name}.backup-{stamp}"))
+        } else {
+            file.with_file_name(format!("{name}.backup-{stamp}-{k}"))
+        };
+        // (made new or not at all: an earlier backup of the same minute stays as it is)
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&to)
+        {
+            Ok(mut f) => {
+                std::io::Write::write_all(&mut f, &bytes)?;
+                return Ok(Some(to));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(anyhow!("no free name for a backup of {}", file.display()))
+}
+
+/// When the original OMSI 2's controls file was saved (Unix seconds).
+pub fn original_keys_saved() -> Option<u64> {
+    let path = omsi_cfg::original_keyboard_cfg(&root().ok()?);
+    let t = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
+}
+
+fn keys_reloaded_path() -> PathBuf {
+    data_dir().join("keys-reloaded.txt")
+}
+
+/// When the keys were last reloaded from the original OMSI 2 (Unix seconds), if ever.
+pub fn keys_reloaded_at() -> Option<u64> {
+    std::fs::read_to_string(keys_reloaded_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Save `v`, the keys reloaded from the original OMSI 2, as `save_keybindings` does; with
+/// `backup`, the file in use is copied beside itself first (`keyboard.cfg.backup-<time>`),
+/// whose path is returned. The original's own file is only read.
+pub fn reload_keybindings(v: &Value, backup: bool) -> Result<Option<PathBuf>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let kept = if backup {
+        backup_beside(&keyboard_cfg_write_path()?)?
+    } else {
+        None
+    };
+    save_keybindings(v)?;
+    let _ = std::fs::write(keys_reloaded_path(), now.to_string());
+    Ok(kept)
 }
 
 /// Replace the bindings with the page's list. Written to a temp file and read back through
@@ -4616,25 +4913,18 @@ pub fn cleanup() {
     }
 }
 
-/// Native folder / file picker (Finder, Explorer, the GTK dialog) for a mod. Must run on
-/// the main thread. (None on a phone: the launcher browses the storage itself there.)
-pub fn pick_mod(zip: bool) -> Option<PathBuf> {
+/// Native file picker (Finder, Explorer, the GTK dialog) for a mod's `.zip`. Must run on
+/// the main thread. (None on a phone, which has no such dialog.)
+pub fn pick_mod() -> Option<PathBuf> {
     #[cfg(not(target_os = "android"))]
     {
-        if zip {
-            rfd::FileDialog::new()
-                .set_title("Choose a mod archive")
-                .add_filter("Mod archive", &["zip"])
-                .pick_file()
-        } else {
-            rfd::FileDialog::new()
-                .set_title("Choose the mod folder")
-                .pick_folder()
-        }
+        rfd::FileDialog::new()
+            .set_title("Choose a mod archive")
+            .add_filter("Mod archive", &["zip"])
+            .pick_file()
     }
     #[cfg(target_os = "android")]
     {
-        let _ = zip;
         None
     }
 }
@@ -4646,12 +4936,26 @@ pub fn open_folder(folder: &Path) -> bool {
         log_line(&format!("open folder: {} is no folder", folder.display()));
         return false;
     }
+    open_with_system(folder)
+}
+
+/// Open `file` with the program the system has for it (the tray's Open log: the game's
+/// log); false when it is no file or nothing could be started.
+pub fn open_file(file: &Path) -> bool {
+    if !file.is_file() {
+        log_line(&format!("open file: {} is no file", file.display()));
+        return false;
+    }
+    open_with_system(file)
+}
+
+fn open_with_system(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
-    let child = std::process::Command::new("explorer").arg(folder).spawn();
+    let child = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(target_os = "macos")]
-    let child = std::process::Command::new("open").arg(folder).spawn();
+    let child = std::process::Command::new("open").arg(path).spawn();
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
-    let child = std::process::Command::new("xdg-open").arg(folder).spawn();
+    let child = std::process::Command::new("xdg-open").arg(path).spawn();
     #[cfg(target_os = "android")]
     let child: std::io::Result<std::process::Child> =
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
@@ -4662,7 +4966,7 @@ pub fn open_folder(folder: &Path) -> bool {
             true
         }
         Err(e) => {
-            log_line(&format!("open folder: {e}"));
+            log_line(&format!("open {}: {e}", path.display()));
             false
         }
     }
@@ -4814,8 +5118,8 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    /// The inbox takes a .zip file; a folder named like one is no .zip, and on a computer
-    /// a loose folder stays where it is.
+    /// The inbox takes a .zip file; a folder named like one is no .zip, and a loose folder
+    /// stays where it is.
     #[test]
     fn the_inbox_takes_zip_files_not_folders_named_so() {
         let content = std::env::temp_dir().join(format!("depot-inbox-{}", std::process::id()));
@@ -4828,11 +5132,23 @@ mod tests {
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
             .collect();
         let _ = std::fs::remove_dir_all(&content);
-        if super::IN_PROCESS_GAMES {
-            assert!(names.contains(&"Loose".to_string()));
-        } else {
-            assert_eq!(names, ["Map.zip"]);
-        }
+        assert_eq!(names, ["Map.zip"]);
+    }
+
+    /// `only_a_zip`, which guards every install entry point, refuses a folder.
+    #[test]
+    fn only_a_zip_refuses_folders() {
+        let dir = std::env::temp_dir().join(format!("depot-only-zip-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Bus")).unwrap();
+        std::fs::create_dir_all(dir.join("Named.zip")).unwrap();
+        std::fs::write(dir.join("Bus.zip"), b"PK").unwrap();
+        let seen = (
+            super::only_a_zip(&dir.join("Bus")).is_err(),
+            super::only_a_zip(&dir.join("Named.zip")).is_err(),
+            super::only_a_zip(&dir.join("Bus.zip")).is_ok(),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(seen, (true, true, true));
     }
 
     #[test]
@@ -5797,4 +6113,125 @@ fn hof_fix(a: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "file": group.file_name, "results": results }))
+}
+
+#[cfg(test)]
+mod content_choice_tests {
+    use super::*;
+
+    fn base(name: &str) -> PathBuf {
+        let b = std::env::temp_dir().join(format!("depot-choice-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&b);
+        std::fs::create_dir_all(&b).unwrap();
+        b
+    }
+
+    /// An OMSI 2 installation as far as the check goes: its program.
+    fn install(at: &Path) {
+        std::fs::create_dir_all(at.join("Vehicles")).unwrap();
+        std::fs::write(at.join("Omsi.exe"), b"x").unwrap();
+    }
+
+    #[test]
+    fn the_content_folder_is_never_in_an_omsi_installation() {
+        let b = base("rules");
+        let omsi = b.join("OMSI 2");
+        install(&omsi);
+        let root = omsi.as_path();
+        // the folder itself, a folder in it (made or not), one in its Vehicles
+        assert!(content_choice_problem(&omsi, root).is_some());
+        assert!(content_choice_problem(&omsi.join("depot"), root).is_some());
+        assert!(content_choice_problem(&omsi.join("Vehicles").join("mods"), root).is_some());
+        // with no OMSI 2 folder set: the installation is still seen
+        assert!(content_choice_problem(&omsi, Path::new("")).is_some());
+        assert!(content_choice_problem(&omsi.join("Vehicles"), Path::new("")).is_some());
+        // a relative path
+        assert!(content_choice_problem(Path::new("content"), root).is_some());
+        // a folder of its own beside it
+        assert!(content_choice_problem(&b.join("Depot content"), root).is_none());
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn a_choice_gone_bad_is_left_aside_when_read() {
+        let b = base("read");
+        let omsi = b.join("OMSI 2");
+        install(&omsi);
+        let root = omsi.to_string_lossy().to_string();
+        assert_eq!(
+            usable_choice(&omsi.join("Vehicles").to_string_lossy(), &root),
+            None
+        );
+        assert_eq!(usable_choice("relative/content", &root), None);
+        let own = b.join("content");
+        assert_eq!(
+            usable_choice(&own.to_string_lossy(), &root),
+            Some(own.clone())
+        );
+        assert!(own.is_dir());
+        let _ = std::fs::remove_dir_all(&b);
+    }
+}
+
+#[cfg(test)]
+mod original_keys_tests {
+    use super::*;
+    use omsi_content::input::{KeyBinding, KeyboardCfg};
+
+    /// The original OMSI 2's controls file is read as it is: an action only the Depot knows
+    /// (its gear keys, the chat, VR) is not taken for one of the original's.
+    #[test]
+    fn the_originals_keys_are_only_its_files() {
+        let dir = std::env::temp_dir().join(format!("depot-orig-keys-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("keyboard.cfg");
+        let b = |a: &str, s: i32| KeyBinding {
+            action: a.into(),
+            scan_code: s,
+            modifier: 0,
+        };
+        KeyboardCfg {
+            vehicles: vec![b("horn", 35)],
+            game: vec![b("sim_pause", 25)],
+        }
+        .save(&path)
+        .unwrap();
+        let v = keys_as_they_are(&path).unwrap();
+        let actions: Vec<&str> = ["vehicles", "game"]
+            .iter()
+            .flat_map(|k| {
+                v[*k]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|b| b["action"].as_str().unwrap())
+            })
+            .collect();
+        assert_eq!(actions, ["horn", "sim_pause"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A backup is named after the local date and time and holds what the file held.
+    #[test]
+    fn a_backup_sits_beside_the_file() {
+        let dir = std::env::temp_dir().join(format!("depot-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("gamectrler.cfg");
+        assert!(backup_beside(&file).unwrap().is_none());
+        std::fs::write(&file, "[ctrl]\r\nWheel\r\n").unwrap();
+        let to = backup_beside(&file).unwrap().unwrap();
+        let name = to.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("gamectrler.cfg.backup-"), "{name}");
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        // a second one in the same minute: a name of its own, the first kept as it was
+        std::fs::write(&file, "[ctrl]\r\nPedals\r\n").unwrap();
+        let again = backup_beside(&file).unwrap().unwrap();
+        assert_ne!(again, to);
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        assert_eq!(
+            std::fs::read_to_string(&again).unwrap(),
+            "[ctrl]\r\nPedals\r\n"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

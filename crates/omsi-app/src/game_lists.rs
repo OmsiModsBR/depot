@@ -2253,7 +2253,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "mirror_size" => vec![("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")],
         "texture_memory" => vec![("0", "Automatic"), ("500", "500 MB"), ("1000", "1 GB"), ("1500", "1.5 GB"), ("2000", "2 GB"), ("3000", "3 GB"), ("4000", "4 GB"), ("6000", "6 GB")],
         "drive_keys" => vec![("omsi", "Custom controls (Controls page)"), ("simple", "W A S D + arrows"), ("wasd", "W A S D only"), ("arrows", "Arrow keys only")],
-        "resolution" => crate::launcher::pages::RESOLUTIONS.to_vec(),
+        "resolution" => crate::launcher::settings::RESOLUTIONS.to_vec(),
         "navigator_corner" => vec![("top-left", "Top left"), ("top-right", "Top right"), ("bottom-left", "Bottom left"), ("bottom-right", "Bottom right")],
         "nav_orientation" => vec![("map", "As the map is drawn"), ("north", "North up"), ("heading", "Heading up")],
         "boarding" => vec![("auto", "Pay and take the ticket"), ("pay", "The driver sells the ticket"), ("walk", "Just walk in")],
@@ -2403,7 +2403,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "led_glow", "LED glow", || slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64))),
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
-        switch_row(app, "clouds", "Clouds", later),
+        limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
     ]
         .into_iter()
