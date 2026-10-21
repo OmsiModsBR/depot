@@ -368,6 +368,10 @@ impl Launcher {
                 app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
             }
         }
+        // (timetable:stop=NAME: that stop chosen on the map)
+        if let Some(stop) = p.split_once(':').filter(|x| x.0 == "timetable").and_then(|x| x.1.strip_prefix("stop=")) {
+            app.pages.tt.set_stop(stop);
+        }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
             app.pages.drive_details = true;
@@ -379,6 +383,8 @@ impl Launcher {
             // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
             app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+            // (and the Timetable page's its tab, timetable:1 the schematic)
+            app.pages.tt.tab = step.min(2);
         }
     }
     app

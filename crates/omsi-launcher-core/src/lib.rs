@@ -1704,6 +1704,8 @@ fn content_language() -> &'static str {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct StopInfo {
+    /// The stop's object on the map (where it stands: the Timetable page's map).
+    pub id: i64,
     pub name: String,
     pub arr: f64,
     pub dep: f64,
@@ -2001,6 +2003,7 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                         })
                         .unwrap_or_else(|| format!("stop {id}"));
                     stops.push(StopInfo {
+                        id: *id,
                         name,
                         arr: t_at,
                         dep: if i == 0 { departure } else { t_at },

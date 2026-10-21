@@ -314,6 +314,11 @@ impl MapView {
         Some(self.roads.as_deref()?.entries.get(drawn)?.index)
     }
 
+    /// Where the map's object `id` stands (a stop of the timetable), once the map is read.
+    pub fn place_of(&self, id: i64) -> Option<DVec2> {
+        self.roads.as_deref()?.objects.get(&id).copied()
+    }
+
     /// Where a world point lies in the picture (interface pixels, `rect`'s own coordinates).
     pub fn project(&self, p: DVec2) -> Vec2 {
         let a = self.anchor();
