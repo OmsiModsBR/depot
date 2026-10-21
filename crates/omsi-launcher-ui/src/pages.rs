@@ -1,8 +1,10 @@
 //! The launcher's pages, in the order of the sidebar.
 
-/// A page of the launcher. The first nine sit in the sidebar's list, `Settings` and `Setup`
+/// A page of the launcher. The first eight sit in the sidebar's list, `Settings` and `Setup`
 /// at its foot. `Drive` is no longer listed: a session starts from Maps (the bus and the
 /// line are chosen inside the game, as in OMSI 2); the phone's launcher still has it.
+/// Neither is `Sessions`: the games open now are on Profile / Sessions, as they belong to
+/// the driver (the phone's launcher still has it as a page of its own).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Drive,
@@ -26,7 +28,6 @@ impl Page {
         Page::Vehicles,
         Page::Mods,
         Page::Timetable,
-        Page::Sessions,
         Page::Profile,
         Page::Controls,
         Page::Tutorials,
@@ -34,16 +35,17 @@ impl Page {
         Page::Settings,
         Page::Setup,
         Page::Drive,
+        Page::Sessions,
     ];
 
     /// The pages of the sidebar's list.
     pub fn listed() -> &'static [Page] {
-        &Page::ALL[..9]
+        &Page::ALL[..8]
     }
 
     /// The pages at the sidebar's foot.
     pub fn foot() -> &'static [Page] {
-        &Page::ALL[9..11]
+        &Page::ALL[8..10]
     }
 
     pub fn title(self) -> &'static str {
@@ -54,7 +56,7 @@ impl Page {
             Page::Mods => "Mods",
             Page::Timetable => "Timetable",
             Page::Sessions => "Sessions",
-            Page::Profile => "Profile",
+            Page::Profile => "Profile / Sessions",
             Page::Controls => "Controls",
             Page::Tutorials => "Tutorials",
             Page::Diagnostics => "Diagnostics",
@@ -95,8 +97,8 @@ impl Page {
             )),
             Page::Profile => Some((
                 "Personnel file",
-                "Your driver and their record",
-                "The driver whose personnel file the game writes: hours, kilometres, punctuality, tickets.",
+                "Your driver, their record and your open sessions",
+                "The driver whose personnel file the game keeps: level, hours, kilometres, punctuality, the drives already finished, and the sessions open right now.",
             )),
             Page::Controls => Some((
                 "Keyboard",
@@ -144,11 +146,17 @@ impl Page {
         }
     }
 
-    /// The page called `name` (as `--page` and the sidebar's ids spell it), any case.
+    /// The page called `name` (as `--page` and the sidebar's ids spell it), any case; a page
+    /// of two names ("Profile / Sessions") by its first too.
     pub fn named(name: &str) -> Option<Page> {
-        Page::ALL
-            .into_iter()
-            .find(|p| p.title().eq_ignore_ascii_case(name.trim()))
+        let name = name.trim();
+        Page::ALL.into_iter().find(|p| {
+            p.title().eq_ignore_ascii_case(name)
+                || p.title()
+                    .split(" / ")
+                    .next()
+                    .is_some_and(|first| first.eq_ignore_ascii_case(name))
+        })
     }
 }
 
@@ -182,13 +190,14 @@ mod tests {
         }
     }
 
-    /// Every page is in the list or at the foot once, Drive aside (sessions start from Maps).
+    /// Every page is in the list or at the foot once, Drive (sessions start from Maps) and
+    /// Sessions (on Profile / Sessions) aside.
     #[test]
     fn the_list_and_the_foot_cover_every_page_once() {
         let mut all: Vec<_> = Page::listed()
             .iter()
             .chain(Page::foot())
-            .chain([&Page::Drive])
+            .chain([&Page::Drive, &Page::Sessions])
             .copied()
             .collect();
         assert_eq!(all.len(), Page::ALL.len());
@@ -196,5 +205,8 @@ mod tests {
         assert_eq!(all.len(), Page::ALL.len());
         assert_eq!(Page::listed()[0], Page::Maps);
         assert!(!Page::listed().contains(&Page::Drive));
+        assert!(!Page::listed().contains(&Page::Sessions));
+        assert_eq!(Page::named("profile"), Some(Page::Profile));
+        assert_eq!(Page::named("sessions"), Some(Page::Sessions));
     }
 }
