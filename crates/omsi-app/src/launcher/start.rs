@@ -84,7 +84,7 @@ fn weather_label(l: &Launcher) -> String {
         return "Natural weather".into();
     }
     if let Some(code) = w.strip_prefix("metar:") {
-        return if code.is_empty() { "Current weather".into() } else { format!("Current weather ({code})") };
+        return if code.is_empty() { "Current weather".into() } else { omsi_ui::tr("Current weather (%{code})").replace("%{code}", &code) };
     }
     if w == "cycle" {
         return "Weather cycle".into();
@@ -101,7 +101,7 @@ fn entry_label(l: &Launcher) -> String {
     let Some(m) = l.state.map() else { return "Automatic".into() };
     match usize::try_from(e).ok().and_then(|i| m.entry_points.get(i)) {
         Some(p) if !p.name.is_empty() => p.name.clone(),
-        Some(p) => format!("Start point {}", p.index + 1),
+        Some(p) => omsi_ui::tr("Start point %{n}").replace("%{n}", &(p.index + 1).to_string()),
         None => "Automatic (the map's first)".into(),
     }
 }
@@ -255,7 +255,7 @@ pub fn card(l: &mut Launcher, r: Rect) {
             l.ui.icon("o-bus", Vec2::new(x + 8.0, foot + 9.0), 15.0, TEXT_DIM);
             let clear_w = 44.0;
             let room = w - 22.0 - clear_w - 8.0;
-            let line = omsi_launcher_ui::kit::fit_text(&mut l.ui, &format!("Bus preselected in Vehicles: {name}"), 12.5, room);
+            let line = omsi_launcher_ui::kit::fit_text(&mut l.ui, &omsi_ui::tr("Bus preselected in Vehicles: %{name}").replace("%{name}", &name), 12.5, room);
             l.ui.text_in(&line, Rect::new(x + 22.0, foot, room, 18.0), 12.5, Weight::Regular, TEXT_SOFT, Align::Left);
             let clear = Rect::new(x + w - clear_w, foot - 4.0, clear_w, 26.0);
             let (h, _, clicked) = l.ui.interact_key(id_of("start-clear-bus"), clear);
@@ -397,7 +397,7 @@ fn start_point(l: &mut Launcher) {
     let entries: Vec<(i32, String)> = l
         .state
         .map()
-        .map(|m| m.entry_points.iter().enumerate().map(|(i, e)| (i as i32, if e.name.is_empty() { format!("Start point {}", e.index + 1) } else { e.name.clone() })).collect())
+        .map(|m| m.entry_points.iter().enumerate().map(|(i, e)| (i as i32, if e.name.is_empty() { omsi_ui::tr("Start point %{n}").replace("%{n}", &(e.index + 1).to_string()) } else { e.name.clone() })).collect())
         .unwrap_or_default();
     let rows: Vec<(i32, String)> = std::iter::once((-1, "Automatic (the map's first)".to_string()))
         .chain(entries.into_iter().filter(|(_, n)| search.trim().is_empty() || super::ui::matches(n, &search)))
@@ -471,7 +471,7 @@ fn weather(l: &mut Launcher) {
 fn explore(l: &mut Launcher) {
     let name = l.state.map().map(|m| if m.friendly.trim().is_empty() { m.name.clone() } else { m.friendly.clone() }).unwrap_or_default();
     let size = l.ui.size;
-    let inside = dialog(l, (size.x - 120.0).min(1240.0), size.y - 96.0, "Explore the map", &format!("{name} · the map's own radar view, read from its files"));
+    let inside = dialog(l, (size.x - 120.0).min(1240.0), size.y - 96.0, "Explore the map", &omsi_ui::tr("%{name} · the map's own radar view, read from its files").replace("%{name}", &name));
     let (buttons, body) = dialog_foot(l, inside);
     let side_w = 240.0;
     let map = Rect::new(body.x, body.y, body.w - side_w - 16.0, body.h);
