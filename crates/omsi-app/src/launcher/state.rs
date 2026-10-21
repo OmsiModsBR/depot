@@ -661,13 +661,13 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
-        // (on a computer only a .zip: loose files are copied by hand, into the OMSI 2 folder or
-        // the content folder - the Mods page says where)
-        if !core::IN_PROCESS_GAMES && !is_zip(&path) {
+        // (a .zip only: loose files are copied by hand, into the OMSI 2 folder or the content
+        // folder - the Mods page says where)
+        if !is_zip(&path) {
             self.set_status("The launcher installs a .zip only. Copy loose files yourself: the Mods page shows where.", true);
             return;
         }
-        // (a .zip is only ever used in place, from Archives; a folder is copied)
+        // (a .zip is only ever used in place, from Archives)
         let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
@@ -1375,11 +1375,9 @@ pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
-/// Whether `path` is a .zip file (what the Mods page installs on a computer): named .zip and a
-/// file, not a folder named so.
+/// Whether `path` is a .zip file (what the Mods page installs): `core::is_zip`.
 pub fn is_zip(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) && p.is_file()
+    core::is_zip(std::path::Path::new(path))
 }
 
 /// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
@@ -1656,7 +1654,7 @@ fn read_settings_file() -> Option<String> {
 
 #[cfg(test)]
 mod mods_tests {
-    /// On a computer the Mods page installs a .zip only; loose folders are copied by hand.
+    /// The Mods page installs a .zip only; loose folders are copied by hand.
     #[test]
     fn only_a_zip_is_installed_from_the_page() {
         let dir = std::env::temp_dir().join(format!("depot-is-zip-{}", std::process::id()));
