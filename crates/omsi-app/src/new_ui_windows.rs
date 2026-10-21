@@ -278,6 +278,8 @@ pub(crate) enum ToolWindow {
     /// Game controller, mouse, keyboard only, head tracking: each applies at once.
     Controls,
     Tour(TourForm),
+    /// The tour running: its trip's stops, each to come with a button to skip it.
+    Running,
     /// The tour running: end it?
     EndTour,
     Destination(DestForm),
@@ -303,7 +305,7 @@ impl ToolWindow {
             ToolWindow::Time(_) => "time",
             ToolWindow::Weather { .. } => "weather",
             ToolWindow::Controls => "controls",
-            ToolWindow::Tour(_) | ToolWindow::EndTour => "tour",
+            ToolWindow::Tour(_) | ToolWindow::Running | ToolWindow::EndTour => "tour",
             ToolWindow::Destination(_) => "destination",
             ToolWindow::Service => "service",
             ToolWindow::DriverMenu | ToolWindow::Evaluation { .. } | ToolWindow::Driver { .. } => {
@@ -410,6 +412,18 @@ enum KeyAnswer {
 /// Why the timetable evaluation cannot be opened.
 const NO_TOUR: &str = "No tour running";
 
+/// The stops of the duty's current trip the timetable window lists (a depot run's stations
+/// the bus passes are none), by their place in the trip.
+fn running_stops(d: &crate::schedule::PlayerDuty) -> Vec<usize> {
+    d.trip()
+        .stops
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.stops)
+        .map(|(k, _)| k)
+        .collect()
+}
+
 /// Seconds of the day as "hh:mm".
 fn hm(secs: f64) -> String {
     let m = (secs.max(0.0) / 60.0) as i64;
@@ -481,7 +495,7 @@ impl App {
                 }
             }
             "controls" => ToolWindow::Controls,
-            "tour" if self.duty.is_some() => ToolWindow::EndTour,
+            "tour" if self.duty.is_some() => ToolWindow::Running,
             "tour" => ToolWindow::Tour(TourForm {
                 lines: rows_of(self, &ListKind::Lines, "line"),
                 ..Default::default()
@@ -559,11 +573,15 @@ impl App {
             }),
             ToolWindow::Controls => View::Menu(self.controls_menu()),
             ToolWindow::Tour(f) => View::Tour(f.view()),
+            ToolWindow::Running => View::Running(self.running()),
             ToolWindow::EndTour => View::Confirm(aw::Confirm {
-                title: "End the tour".into(),
-                text: "End the tour you are driving? The bus drives on without a timetable.".into(),
-                ok: "End the tour".into(),
-                cancel: "Keep driving it".into(),
+                title: "Cancel the timetable?".into(),
+                // (one text with the line in its place, so every language can put it where
+                // its own word order wants it)
+                text: omsi_ui::tr("The bus stops following line {}. This does not change the saved timetable.")
+                    .replacen("{}", self.duty.as_ref().map(|d| d.line.trim()).unwrap_or_default(), 1),
+                ok: "Yes, cancel it".into(),
+                cancel: "Keep it".into(),
             }),
             ToolWindow::Destination(d) => View::Destination(aw::Destination {
                 line: d.line.clone(),
@@ -631,6 +649,68 @@ impl App {
             title: "Wash and refuel".into(),
             entries: vec![entry("wash", "Wash"), entry("refuel", "Refuel")],
             hint: "Each runs until it is done or the bus drives off".into(),
+        }
+    }
+
+    /// The timetable running: the current trip's stops with how each went, the one due now,
+    /// and a button to skip each still to come.
+    fn running(&self) -> aw::Running {
+        let Some(d) = self.duty.as_ref() else {
+            return aw::Running::default();
+        };
+        let trip = d.trip();
+        let done = d.trip_done();
+        let rows = running_stops(d)
+            .into_iter()
+            .map(|k| {
+                let s = &trip.stops[k];
+                let t = hm(if k == 0 { s.dep } else { s.arr });
+                let marked = d.skip_marked(k);
+                let state = if done || k < d.next_stop {
+                    aw::RunStop::Done
+                } else if k == d.next_stop {
+                    aw::RunStop::Next
+                } else {
+                    aw::RunStop::Ahead
+                };
+                let detail = match state {
+                    aw::RunStop::Done => {
+                        let how = self
+                            .journey
+                            .as_ref()
+                            .and_then(|j| j.how((d.trip_index, k)))
+                            .unwrap_or_else(|| "not served".into());
+                        format!("{t}  \u{b7}  {}", omsi_ui::tr(&how))
+                    }
+                    aw::RunStop::Next => format!("{t}  \u{b7}  {}", omsi_ui::tr("next stop")),
+                    aw::RunStop::Ahead if marked => {
+                        format!("{t}  \u{b7}  {}", omsi_ui::tr("to be skipped"))
+                    }
+                    aw::RunStop::Ahead => t,
+                };
+                let skip = match state {
+                    aw::RunStop::Done => None,
+                    aw::RunStop::Ahead if marked => Some("Keep this stop".to_string()),
+                    _ => Some("Skip this stop".to_string()),
+                };
+                aw::RunRow {
+                    stop: s.name.trim().to_string(),
+                    detail,
+                    state,
+                    skip,
+                }
+            })
+            .collect();
+        aw::Running {
+            sub: format!(
+                "{} {}  \u{b7}  {} {}",
+                omsi_ui::tr("Line"),
+                d.line.trim(),
+                omsi_ui::tr("trip"),
+                hm(trip.departure)
+            ),
+            rows,
+            hint: "Skipping a stop tells the timetable you did not stop there for a reason on the trip. In the evaluation it counts with no mark: neither missed nor late.".into(),
         }
     }
 
@@ -790,9 +870,13 @@ impl App {
 
     /// Apply what the clicks in the window asked for (before each frame).
     pub(crate) fn tool_events(&mut self) {
-        // (the timetable evaluation is the running tour's: it closes with the tour)
+        // (the timetable evaluation, the running timetable and its "Cancel the timetable?"
+        // are the running tour's: they close with the tour, however it ended)
         if self.duty.is_none()
-            && matches!(self.new_ui.tool.window, Some(ToolWindow::Evaluation { .. }))
+            && matches!(
+                self.new_ui.tool.window,
+                Some(ToolWindow::Evaluation { .. } | ToolWindow::Running | ToolWindow::EndTour)
+            )
         {
             self.new_ui.close_tool();
         }
@@ -868,6 +952,15 @@ impl App {
                 }
             }
             ToolWindow::Tour(_) => self.tour_event(e),
+            ToolWindow::Running => match e {
+                Event::Row(_, i) => {
+                    if let Some(k) = self.duty.as_ref().and_then(|d| running_stops(d).get(i).copied()) {
+                        self.skip_stop_at(k);
+                    }
+                }
+                Event::Check(_) => self.new_ui.tool.open(ToolWindow::EndTour),
+                _ => {}
+            },
             ToolWindow::EndTour => {
                 if e == Event::Ok {
                     self.new_ui.close_tool();

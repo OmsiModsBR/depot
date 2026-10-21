@@ -1,38 +1,54 @@
-//! The Alt icon bar: a panel of square icon buttons in rows of five, with the name of the
-//! hovered (or last chosen) button above them, and the bar over the top of the screen that
-//! says where the bus is. The caller supplies the buttons; what they do is the game's.
+//! The Alt icon bar: a panel of square tiles in rows of five, with the name of the hovered
+//! (or keyboard-chosen) tile in a tip over it and an arrow that folds the bar down to a small
+//! tab in the corner; and the bar over the top of the screen that says where the bus is. The
+//! caller supplies the buttons; what they do is the game's.
 
 use crate::paint::Align;
-use crate::theme::v5::{BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, TS};
-use crate::theme::{accent, accent_soft};
+use crate::theme::v5::{BAR, FG, MUTED, OK, TS};
+use crate::theme::{accent, on as on_color};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
 
-const PANEL_ALPHA: f32 = 0.92;
-
 pub const COLUMNS: usize = 5;
-pub const CELL_W: f32 = 50.0;
-pub const CELL_H: f32 = 45.0;
-pub const GAP: f32 = 5.6;
-pub const HEADER_H: f32 = 34.0;
+pub const CELL_W: f32 = 76.0;
+pub const CELL_H: f32 = 76.0;
+pub const GAP: f32 = 8.0;
+/// The panel's padding round the tiles.
+pub const PAD: f32 = 12.0;
+/// The column at the right of the tiles with the arrow that folds the bar.
+pub const ARROW_W: f32 = 26.0;
 pub const BAR_H: f32 = 40.0;
+/// The folded bar's tab.
+pub const TAB: Vec2 = Vec2::new(30.0, 40.0);
 
-/// What a button shows: a Material icon, or a short word (the "AI" button).
+/// The panel behind the tiles.
+const PANEL: Color = Color::rgba(14, 15, 17, 0.92);
+const EDGE: Color = Color::rgba(255, 255, 255, 0.12);
+/// A tile that cannot be used now, and its icon.
+/// (the tiles' tints are mixed here, over the panel's own colour, as the concept's page
+/// mixes them: blended by the GPU they came out much lighter)
+const DIM_FILL: Color = Color::hex(0x26272a);
+/// The panel's colour, for the tints.
+const BASE: Color = Color::hex(0x0e0f11);
+const DIM_ICON: Color = Color::hex(0x6f747e);
+
+/// What a button shows: an icon, or a word on a destination sign (the "Line and
+/// destination" button).
 #[derive(Debug, Clone, Copy)]
 pub enum Glyph<'a> {
     Icon(&'a str),
-    Text(&'a str),
+    Sign(&'a str),
 }
 
 pub struct Button<'a> {
     pub id: &'a str,
     pub glyph: Glyph<'a>,
-    /// What the button does, shown above the grid while the mouse is over it.
+    /// What the button does, shown over the bar while the mouse is over it.
     pub title: &'a str,
     /// Why it cannot be used now (drawn dim, the reason shows instead of the title).
     pub disabled: Option<&'a str>,
-    /// What it switches is on now (a tour is running): drawn pressed.
+    /// What it switches is on now (a tour is running): drawn filled.
     pub on: bool,
 }
 
@@ -44,23 +60,43 @@ pub struct State {
     pub focus: Option<String>,
 }
 
+/// What a click on the bar asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hit {
+    /// Button `.0`.
+    Button(usize),
+    /// The arrow: fold the bar, or unfold it.
+    Arrow,
+}
+
 /// The panel's size for `n` buttons.
 pub fn panel_size(n: usize) -> Vec2 {
     let rows = n.div_ceil(COLUMNS).max(1) as f32;
     Vec2::new(
-        18.0 + COLUMNS as f32 * CELL_W + (COLUMNS - 1) as f32 * GAP,
-        HEADER_H + 9.0 + rows * (CELL_H + 6.0) + 4.0,
+        2.0 * PAD + COLUMNS as f32 * CELL_W + (COLUMNS - 1) as f32 * GAP + ARROW_W,
+        2.0 * PAD + rows * CELL_H + (rows - 1.0) * GAP,
     )
 }
 
 /// Where button `i` is, for a bar whose top left corner is `at`.
-fn cell_rect(at: Vec2, i: usize) -> Rect {
+pub fn cell_rect(at: Vec2, i: usize) -> Rect {
     let (col, row) = ((i % COLUMNS) as f32, (i / COLUMNS) as f32);
     Rect::new(
-        at.x + 9.0 + col * (CELL_W + GAP),
-        at.y + HEADER_H + 9.0 + row * (CELL_H + 6.0),
+        at.x + PAD + col * (CELL_W + GAP),
+        at.y + PAD + row * (CELL_H + GAP),
         CELL_W,
         CELL_H,
+    )
+}
+
+/// The arrow that folds the bar, in its bottom right corner.
+pub fn arrow_rect(at: Vec2, n: usize) -> Rect {
+    let size = panel_size(n);
+    Rect::new(
+        at.x + size.x - PAD - ARROW_W + 4.0,
+        at.y + size.y - PAD - 30.0,
+        ARROW_W - 4.0,
+        30.0,
     )
 }
 
@@ -70,13 +106,26 @@ pub fn panel_rect(at: Vec2, n: usize) -> Rect {
     Rect::new(at.x, at.y, size.x, size.y)
 }
 
-/// The button under `point` (`None` over the gaps, the header and outside the panel). A
-/// disabled button is found too: the caller knows which can be used.
+/// The folded bar's tab, whose bottom right corner is `corner`.
+pub fn tab_rect(corner: Vec2) -> Rect {
+    Rect::new(corner.x - TAB.x, corner.y - TAB.y, TAB.x, TAB.y)
+}
+
+fn inside(r: Rect, p: Vec2) -> bool {
+    p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
+}
+
+/// The button under `point` (`None` over the gaps and outside the panel). A disabled button
+/// is found too: the caller knows which can be used.
 pub fn hit(at: Vec2, n: usize, point: Vec2) -> Option<usize> {
-    (0..n).find(|&i| {
-        let r = cell_rect(at, i);
-        point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h
-    })
+    (0..n).find(|&i| inside(cell_rect(at, i), point))
+}
+
+/// What is under `point`: a button or the arrow.
+pub fn hit_any(at: Vec2, n: usize, point: Vec2) -> Option<Hit> {
+    hit(at, n, point)
+        .map(Hit::Button)
+        .or_else(|| inside(arrow_rect(at, n), point).then_some(Hit::Arrow))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -90,6 +139,20 @@ fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color
     ui.text_in(s, r, px, weight, c, a);
 }
 
+/// The tip over the bar: what the tile under the mouse (or the keyboard) does, or why it
+/// cannot be used; centred over the tile, kept inside the picture.
+fn tip(ui: &mut Ui, s: &str, over: Rect, panel: Rect) {
+    let px = 12.0 * TS;
+    let w = ui.width(s, px, Weight::Regular) + 20.0;
+    // (over the bar, not out past its left edge, where a window may stand)
+    let lo = panel.x.min(ui.size.x - w - 8.0).max(8.0);
+    let x = (over.center().x - w * 0.5).clamp(lo, (ui.size.x - w - 8.0).max(lo));
+    let r = Rect::new(x, panel.y - 30.0, w, 24.0);
+    ui.p().rounded(r, 4.0, Color::rgba(14, 15, 17, 0.95));
+    ui.p().rounded_border(r, 4.0, 1.0, EDGE);
+    ui.text_in(s, r, px, Weight::Regular, FG, Align::Center);
+}
+
 /// Draw the bar at `at` (its top left corner) and return the button clicked this frame.
 pub fn draw<'a>(
     ui: &mut Ui,
@@ -100,87 +163,121 @@ pub fn draw<'a>(
     let size = panel_size(buttons.len());
     let p = Rect::new(at.x, at.y, size.x, size.y);
     ui.solid(p);
-    ui.p().rect(p, PANEL.alpha(PANEL_ALPHA));
-    ui.p().rounded_border(p, 0.0, 1.0, LINE);
+    ui.p().shadow(p, 8.0, 24.0, Color::rgba(0, 0, 0, 0.55));
+    ui.p().rounded(p, 8.0, PANEL);
+    ui.p().rounded_border(p, 8.0, 1.0, EDGE);
     let mut clicked = None;
-    let mut hovered = None;
+    let mut shown: Option<(&Button, Rect)> = None;
     for (i, b) in buttons.iter().enumerate() {
         let r = cell_rect(at, i);
         let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
         let enabled = b.disabled.is_none();
+        let a = accent();
+        let focus = state.focus.as_deref() == Some(b.id);
         let chosen = state.chosen.as_deref() == Some(b.id);
-        let fill = if b.on { accent_soft() } else { CELL };
-        ui.p().rect(
-            r,
-            if hover && enabled {
-                fill.lighten(0.08)
-            } else {
-                fill
-            },
-        );
-        ui.p()
-            .rounded_border(r, 0.0, 1.0, if chosen || b.on { accent() } else { LINE });
-        if state.focus.as_deref() == Some(b.id) {
-            ui.p().rounded_border(r, 0.0, 2.0, FG);
-        }
-        // a pressed button stays lit even while it waits for its own window
-        let c = if enabled || b.on {
-            accent()
+        // a tile on is filled; one that can be used is tinted; one that cannot is grey
+        let (fill, edge, ink) = if b.on {
+            (BASE.mix(a, 0.85), Color::rgba(0, 0, 0, 0.0), on_color(a))
+        } else if !enabled {
+            (DIM_FILL, Color::rgba(0, 0, 0, 0.0), DIM_ICON)
+        } else if hover {
+            (BASE.mix(a, 0.38), BASE.mix(a, 0.7), a)
         } else {
-            accent().alpha(0.3)
+            (BASE.mix(a, 0.22), BASE.mix(a, 0.4), a)
         };
+        ui.p().rounded(r, 6.0, fill);
+        ui.p().rounded_border(r, 6.0, 1.0, edge);
+        if focus || (chosen && b.on) {
+            ui.p().rounded_border(
+                Rect::new(r.x - 3.0, r.y - 3.0, r.w + 6.0, r.h + 6.0),
+                8.0,
+                2.0,
+                a,
+            );
+        }
         match b.glyph {
-            Glyph::Icon(name) => ui.icon(name, r.center(), 20.0, c),
-            Glyph::Text(t) => {
-                let px = 17.0 * TS;
-                let w = ui.width(t, px, Weight::Bold);
-                ui.text_in(
-                    t,
-                    Rect::new(r.center().x - w * 0.5, r.y, w + 2.0, r.h),
-                    px,
-                    Weight::Bold,
-                    c,
-                    Align::Left,
-                );
+            Glyph::Icon(name) => ui.icon(name, r.center(), 28.0, ink),
+            Glyph::Sign(t) => {
+                let sign = Rect::new(r.center().x - 17.0, r.center().y - 11.0, 34.0, 22.0);
+                ui.p().rounded_border(sign, 3.0, 1.5, ink);
+                ui.text_in(t, sign, 12.0 * TS, Weight::Bold, ink, Align::Center);
             }
         }
-        if hover || state.focus.as_deref() == Some(b.id) {
-            hovered = Some(b);
+        if hover || focus {
+            shown = Some((b, r));
         }
         if click && enabled {
             state.chosen = Some(b.id.to_string());
             clicked = Some(b.id);
         }
     }
-    // the header: the hovered button's name or reason, else the last chosen one's
-    let shown = hovered.or_else(|| {
+    // the arrow that folds the bar
+    let ar = arrow_rect(at, buttons.len());
+    let (hover, _, _) = ui.interact(id_of("alt:fold"), ar);
+    ui.icon(
+        "chevron_right",
+        ar.center(),
+        18.0,
+        if hover { FG } else { MUTED },
+    );
+    // the tip: the hovered tile's name or reason, else the open window's
+    let shown = shown.or_else(|| {
         buttons
             .iter()
-            .find(|b| state.chosen.as_deref() == Some(b.id))
+            .enumerate()
+            .find(|(_, b)| b.on && state.chosen.as_deref() == Some(b.id))
+            .map(|(i, b)| (b, cell_rect(at, i)))
     });
-    if let Some(b) = shown {
-        ui.icon(
-            "play_arrow",
-            Vec2::new(p.x + 15.0, p.y + 17.0),
-            9.0,
-            accent(),
-        );
-        text(
+    if let Some((b, r)) = shown {
+        // (a tile on names what it opened; one that cannot be used, why)
+        tip(
             ui,
-            b.disabled.unwrap_or(b.title),
-            p.x + 27.0,
-            p.y + 17.0,
-            13.0,
-            Weight::Regular,
-            FG,
-            Align::Left,
+            if b.on {
+                b.title
+            } else {
+                b.disabled.unwrap_or(b.title)
+            },
+            r,
+            p,
         );
+    } else if hover {
+        tip(ui, "Fold the bar", ar, p);
     }
-    ui.p().rect(
-        Rect::new(p.x + 1.0, p.y + HEADER_H, p.w - 2.0, 1.0),
-        ROW_LINE,
-    );
     clicked
+}
+
+/// The folded bar: a small tab with an arrow, its bottom right corner at `corner`.
+pub fn draw_folded(ui: &mut Ui, corner: Vec2) {
+    let r = tab_rect(corner);
+    ui.solid(r);
+    let (hover, _, _) = ui.interact(id_of("alt:unfold"), r);
+    ui.p().rounded(r, 6.0, PANEL);
+    ui.p().rounded_border(r, 6.0, 1.0, EDGE);
+    ui.icon(
+        "chevron_left",
+        r.center(),
+        18.0,
+        if hover { FG } else { MUTED },
+    );
+    if hover {
+        let px = 12.0 * TS;
+        let s = "Unfold the bar";
+        let w = ui.width(s, px, Weight::Regular) + 20.0;
+        let t = Rect::new(r.right() - w, r.y - 30.0, w, 24.0);
+        ui.p().rounded(t, 4.0, Color::rgba(14, 15, 17, 0.95));
+        ui.p().rounded_border(t, 4.0, 1.0, EDGE);
+        ui.text_in(s, t, px, Weight::Regular, FG, Align::Center);
+    }
+}
+
+/// The line at the bottom left while the bar is shown: how it closes, and that the game
+/// goes on.
+pub fn hint(ui: &mut Ui, s: &str) {
+    let px = 12.0 * TS;
+    let w = ui.width(s, px, Weight::Regular) + 20.0;
+    let r = Rect::new(20.0, ui.size.y - 18.0 - 24.0, w, 24.0);
+    ui.p().rounded(r, 4.0, Color::rgba(14, 15, 17, 0.6));
+    ui.text_in(s, r, px, Weight::Regular, FG, Align::Center);
 }
 
 /// What the top bar says.
@@ -317,8 +414,16 @@ mod tests {
             assert_eq!(hit(at, bs.len(), c), Some(i));
         }
         assert_eq!(hit(at, bs.len(), Vec2::new(0.0, 0.0)), None);
-        // the header and the gap between two buttons are no button
-        assert_eq!(hit(at, bs.len(), at + Vec2::new(20.0, 10.0)), None);
+        // the padding and the gap between two buttons are no button, the arrow is the arrow
+        assert_eq!(hit(at, bs.len(), at + Vec2::new(6.0, 6.0)), None);
+        let gap = cell_rect(at, 0).right() + GAP * 0.5;
+        assert_eq!(hit(at, bs.len(), Vec2::new(gap, at.y + PAD + 10.0)), None);
+        let arrow = arrow_rect(at, bs.len()).center();
+        assert_eq!(hit_any(at, bs.len(), arrow), Some(Hit::Arrow));
+        assert_eq!(
+            hit_any(at, bs.len(), cell_rect(at, 1).center()),
+            Some(Hit::Button(1))
+        );
         let r = panel_rect(at, bs.len());
         assert!(r.w > 0.0 && r.h > 0.0);
     }
@@ -340,6 +445,6 @@ mod tests {
         let one = panel_size(1);
         assert_eq!(panel_size(5), one);
         assert!(panel_size(6).y > one.y);
-        assert_eq!(panel_size(15).y - one.y, 2.0 * (CELL_H + 6.0));
+        assert_eq!(panel_size(15).y - one.y, 2.0 * (CELL_H + GAP));
     }
 }

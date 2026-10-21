@@ -741,6 +741,8 @@ pub enum StopState {
     LateLeftEarly,
     /// Passed without being served, with a later stop served.
     Missed,
+    /// Skipped on purpose by the driver: no mark, neither missed nor late.
+    Skipped,
     /// Not reached (the trip ended before it, or it is not known).
     None,
 }
@@ -817,6 +819,7 @@ pub fn stops_table(ui: &mut Ui, scroll: &str, area: Rect, rows: &[ReportRow]) ->
                 StopState::LeftEarly => ("left early", Some(SOON)),
                 StopState::LateLeftEarly => ("late, left early", Some(BAD)),
                 StopState::Missed => ("missed", Some(BAD)),
+                StopState::Skipped => ("skipped", None),
                 StopState::None => ("", None),
             };
             let cells = [

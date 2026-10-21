@@ -1657,6 +1657,12 @@ impl ApplicationHandler for App {
                         }
                     }
                     d.learn_loaded(&w.object_positions.lock());
+                    // (a stop marked in the timetable window is skipped once it is the next)
+                    while let Some(name) = d.skip_marked_next() {
+                        log::info!("duty: stop '{name}' skipped as marked, next stop {}", d.next_stop);
+                        let (trip, k) = d.trip_for_ibis();
+                        p.ibis_to_stop(trip, k);
+                    }
                     let due = (d.trip_index, d.next_stop);
                     let served = d.update(&mut p.vehicle, self.clock.time);
                     if let Some((arrival, departure)) = served {
