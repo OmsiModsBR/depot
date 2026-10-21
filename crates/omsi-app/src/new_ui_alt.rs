@@ -125,7 +125,7 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
         ),
         b("ai", Icon("alt-ai"), "AI drives my vehicle", Some(NOT_YET)),
         OwnedButton {
-            title: if ctx.on_tour { "End the tour" } else { "Line and tour" }.to_string(),
+            title: if ctx.on_tour { "Timetable" } else { "Line and tour" }.to_string(),
             on: ctx.on_tour,
             // (a tour running can always be ended)
             ..b(
@@ -837,7 +837,7 @@ mod tests {
         };
         let running = tour(&on);
         assert!(running.on && running.disabled.is_none());
-        assert_eq!(running.title, "End the tour");
+        assert_eq!(running.title, "Timetable");
         // (a tour running can be ended whatever else holds)
         let anyway = tour(&AltCtx {
             timetable: false,

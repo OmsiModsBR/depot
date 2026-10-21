@@ -63,7 +63,7 @@ fn main() {
         ),
         Button {
             on: true,
-            ..ic("tour", "alt-tour", "End the tour")
+            ..ic("tour", "alt-tour", "Timetable")
         },
         Button {
             glyph: Glyph::Sign("92E"),
@@ -575,7 +575,7 @@ fn main() {
                     };
                     vec![
                         row("Depot", "08:27  \u{b7}  served", RunStop::Done, None),
-                        row("Main Street", "08:31  \u{b7}  skipped", RunStop::Done, None),
+                        row("Main Street", "08:31  \u{b7}  skipped", RunStop::Passed, None),
                         row("Market", "08:36  \u{b7}  next stop", RunStop::Next, Some("Skip this stop")),
                         row("Town Hall", "08:40  \u{b7}  to be skipped", RunStop::Ahead, Some("Keep this stop")),
                         row("Central Station", "08:47", RunStop::Ahead, Some("Skip this stop")),

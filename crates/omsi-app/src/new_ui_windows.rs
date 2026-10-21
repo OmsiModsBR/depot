@@ -666,15 +666,20 @@ impl App {
                 let s = &trip.stops[k];
                 let t = hm(if k == 0 { s.dep } else { s.arr });
                 let marked = d.skip_marked(k);
+                let served = || self.journey.as_ref().is_some_and(|j| j.served((d.trip_index, k)));
                 let state = if done || k < d.next_stop {
-                    aw::RunStop::Done
+                    if served() {
+                        aw::RunStop::Done
+                    } else {
+                        aw::RunStop::Passed
+                    }
                 } else if k == d.next_stop {
                     aw::RunStop::Next
                 } else {
                     aw::RunStop::Ahead
                 };
                 let detail = match state {
-                    aw::RunStop::Done => {
+                    aw::RunStop::Done | aw::RunStop::Passed => {
                         let how = self
                             .journey
                             .as_ref()
@@ -689,7 +694,7 @@ impl App {
                     aw::RunStop::Ahead => t,
                 };
                 let skip = match state {
-                    aw::RunStop::Done => None,
+                    aw::RunStop::Done | aw::RunStop::Passed => None,
                     aw::RunStop::Ahead if marked => Some("Keep this stop".to_string()),
                     _ => Some("Skip this stop".to_string()),
                 };
