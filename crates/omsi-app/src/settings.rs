@@ -799,6 +799,17 @@ impl Settings {
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
+        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
+        self.msaa = 1;
+        self.render_scale = 0.0;
+        self.anisotropy = 1;
+        self.post_aa = "off".into();
+        self.reflections = false;
+        self.mirror_size = 0;
+        self.mirror_refresh = "off".into();
+        self.clouds = false;
+        self.windy_trees = false;
+        self.shadow_blobs = false;
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
@@ -894,6 +905,14 @@ mod tests {
                 let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
                 assert_eq!((loaded.shadows, loaded.ssao, loaded.detail_textures), (file.shadows, file.ssao, file.detail_textures));
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
+                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
+                let saved = Settings::from_text(&format!(
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nreflections=1\nmirror_size=512\nmirror_refresh=full\nclouds=1\nwindy_trees=1\nshadow_blobs=1\npost_aa=fxaa\n"
+                ))
+                .locked_for_api();
+                assert_eq!((saved.msaa, saved.anisotropy, saved.render_scale), (1, 1, 0.0));
+                assert_eq!((saved.reflections, saved.mirror_size, saved.mirror_refresh.as_str()), (false, 0, "off"));
+                assert_eq!((saved.clouds, saved.windy_trees, saved.shadow_blobs, saved.post_aa.as_str()), (false, false, false, "off"));
                 // VR takes DirectX 12 instead, with the graphics as chosen
                 let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
                 assert_eq!(vr.graphics, g);

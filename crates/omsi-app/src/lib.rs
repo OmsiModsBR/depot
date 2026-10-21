@@ -19,6 +19,7 @@ mod head_idle;
 mod headtrack;
 #[cfg(windows)]
 mod openxr;
+mod api_limits;
 #[cfg(windows)]
 mod d3d9_output;
 #[cfg(target_os = "macos")]

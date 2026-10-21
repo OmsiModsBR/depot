@@ -1071,6 +1071,17 @@ pub(crate) fn switch_row(app: &App, id: &str, name: &str, desc: &str) -> Option<
     Some((row(name, 's', if on { "on" } else { "off" }, desc, None), id.to_string()))
 }
 
+/// The row of an option, unless "DirectX9 (D3D9Ex)" limits it (`api_limits`): then a locked one is
+/// an info line with its fixed value and the reason, and a hidden one has no row.
+fn limit_or(app: &App, key: &str, name: &str, normal: impl FnOnce() -> Option<(String, String)>) -> Option<(String, String)> {
+    if app.d3d9_active() {
+        if let Some(l) = crate::api_limits::d3d9(key) {
+            return l.shown().map(|v| (row(name, 'i', &omsi_ui::tr(v), &omsi_ui::tr(l.reason), None), "noop".to_string()));
+        }
+    }
+    normal()
+}
+
 /// A slider row for the setting `id` ("verb" or "verb arg"); `fmt` writes its value.
 pub(crate) fn slider_row(app: &App, id: &str, name: &str, desc: &str, fmt: &dyn Fn(f32) -> String) -> Option<(String, String)> {
     let (verb, arg) = id.split_once(' ').unwrap_or((id, ""));
@@ -2367,29 +2378,24 @@ fn options_pages(app: &App) -> Vec<Page> {
         .flatten()
         .collect();
     let graphics: Vec<(String, String)> = vec![
-        preset_row(&file, "Quality preset", "Sets most of the graphics options at once"),
-        // ("DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: Vanilla, and nothing to choose)
-        if app.d3d9_active() {
-            Some((row("Graphics", 'i', &omsi_ui::tr("Vanilla (as OMSI 2)"), "Fixed with DirectX9 (D3D9Ex)", None), "noop".to_string()))
-        } else {
-            pick("graphics", "Graphics", later)
-        },
-        pick("msaa", "Anti-aliasing", later),
-        pick("render_scale", "Render scale", later),
-        pick("anisotropy", "Anisotropic", later),
+        limit_or(app, "preset", "Quality preset", || preset_row(&file, "Quality preset", "Sets most of the graphics options at once")),
+        limit_or(app, "graphics", "Graphics", || pick("graphics", "Graphics", later)),
+        limit_or(app, "msaa", "Anti-aliasing", || pick("msaa", "Anti-aliasing", later)),
+        limit_or(app, "render_scale", "Render scale", || pick("render_scale", "Render scale", later)),
+        limit_or(app, "anisotropy", "Anisotropic", || pick("anisotropy", "Anisotropic", later)),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
-        // (the "as OMSI 2" DirectX9 renderer has no graphics improvements to choose: these stay hidden)
-        switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows").filter(|_| !app.settings.ray_tracing() && !app.d3d9_active()),
-        pick("shadow_size", "Shadow map", later).filter(|_| !app.d3d9_active()),
-        switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| !app.settings.ray_tracing() && !app.d3d9_active()),
-        pick("shadow_casters", "Shadows cast by", later).filter(|_| !app.d3d9_active()),
-        switch_row(app, "detail_textures", "Detail texturing up close", "The ground and large walls get fine grain when close").filter(|_| !app.d3d9_active()),
-        slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") }).filter(|_| !app.d3d9_active()),
-        slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| !app.d3d9_active()),
-        slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}")),
-        switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
-        switch_row(app, "clouds", "Clouds", later),
-        switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"),
+        // (under "DirectX9 (D3D9Ex)" the `api_limits` table hides or locks these: `limit_or`)
+        limit_or(app, "shadows", "Sun shadows", || switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows").filter(|_| !app.settings.ray_tracing())),
+        limit_or(app, "shadow_size", "Shadow map", || pick("shadow_size", "Shadow map", later)),
+        limit_or(app, "ssao", "Ambient occlusion", || switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| !app.settings.ray_tracing())),
+        limit_or(app, "shadow_casters", "Shadows cast by", || pick("shadow_casters", "Shadows cast by", later)),
+        limit_or(app, "detail_textures", "Detail texturing up close", || switch_row(app, "detail_textures", "Detail texturing up close", "The ground and large walls get fine grain when close")),
+        limit_or(app, "night_brightness", "Night brightness", || slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") })),
+        limit_or(app, "led_glow", "LED glow", || slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64))),
+        limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
+        limit_or(app, "reflections", "Reflection maps (paint, chrome, glass)", || switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing())),
+        limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
+        limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
     ]
         .into_iter()
         .flatten()
@@ -2471,7 +2477,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         pick("view_distance", "View distance", later),
         pick("max_obj_dist", "Object distance", later),
         pick("min_obj_size", "Small objects", later),
-        pick("mirror_size", "Mirrors", later),
+        limit_or(app, "mirror_size", "Mirrors", || pick("mirror_size", "Mirrors", later)),
         pick("texture_memory", "Texture memory", later),
         switch_row(app, "texture_compression", "Compress textures on loading", later),
         (!omsi_launcher_lib::graphics_profiles().is_empty()).then(|| opens("Load graphics profile", "Applies a graphics profile saved in the launcher", "gfxprofile")),
