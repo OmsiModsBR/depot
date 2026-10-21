@@ -2454,6 +2454,132 @@ pub fn get_keybindings() -> Result<Value> {
     )
 }
 
+/// A controls file of the original OMSI 2 as it is (only read: none of the Depot's own
+/// actions added), in the shape `get_keybindings` gives.
+fn keys_as_they_are(path: &Path) -> Result<Value> {
+    let k = omsi_content::input::KeyboardCfg::load(path)?;
+    Ok(
+        json!({ "game": k.game.iter().map(binding_to_json).collect::<Vec<_>>(), "vehicles": k.vehicles.iter().map(binding_to_json).collect::<Vec<_>>() }),
+    )
+}
+
+/// The keys of the original OMSI 2 (its own `Inputs/keyboard.cfg`, only read), in the shape
+/// `get_keybindings` gives; `None` when its folder has no such file. Only what the file has:
+/// an action only the Depot knows is not the original's.
+pub fn original_keybindings() -> Result<Option<Value>> {
+    let path = omsi_cfg::original_keyboard_cfg(&root()?);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    keys_as_they_are(&path).map(Some)
+}
+
+/// OMSI 2's keys as it comes (its `Inputs/keyboard_reset.cfg`, only read), as
+/// `original_keybindings`; `None` when its folder has no such file.
+pub fn factory_keybindings() -> Result<Option<Value>> {
+    match omsi_cfg::original_inputs_file(&root()?, "keyboard_reset.cfg") {
+        Some(path) => keys_as_they_are(&path).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// The keys' names in the language `lang` (OMSI 2's `Inputs/<lang>.kyb`, English's where it
+/// has none): scan code and name.
+pub fn key_names(lang: &str) -> Vec<(i32, String)> {
+    let Ok(r) = root() else { return Vec::new() };
+    [lang, "ENG"]
+        .iter()
+        .filter_map(|l| omsi_cfg::original_inputs_file(&r, &format!("{l}.kyb")))
+        // (a table with no names in it is no table: English's then)
+        .find_map(|p| {
+            omsi_content::input::load_key_names(&p)
+                .ok()
+                .filter(|n| !n.is_empty())
+        })
+        .unwrap_or_default()
+}
+
+/// A copy of `file` beside itself, named with the local date and time
+/// (`keyboard.cfg.backup-2026-10-21-0705`, then `-2`, `-3` ... within the same minute: a
+/// backup there is never written over); `None` when there is no such file.
+pub fn backup_beside(file: &Path) -> Result<Option<PathBuf>> {
+    if !file.is_file() {
+        return Ok(None);
+    }
+    let stamp = match local_now() {
+        Some((y, mo, d, h, mi)) => format!("{y:04}-{mo:02}-{d:02}-{h:02}{mi:02}"),
+        None => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+            .to_string(),
+    };
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let bytes = std::fs::read(file)?;
+    for k in 1..1000 {
+        let to = if k == 1 {
+            file.with_file_name(format!("{name}.backup-{stamp}"))
+        } else {
+            file.with_file_name(format!("{name}.backup-{stamp}-{k}"))
+        };
+        // (made new or not at all: an earlier backup of the same minute stays as it is)
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&to)
+        {
+            Ok(mut f) => {
+                std::io::Write::write_all(&mut f, &bytes)?;
+                return Ok(Some(to));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(anyhow!("no free name for a backup of {}", file.display()))
+}
+
+/// When the original OMSI 2's controls file was saved (Unix seconds).
+pub fn original_keys_saved() -> Option<u64> {
+    let path = omsi_cfg::original_keyboard_cfg(&root().ok()?);
+    let t = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
+}
+
+fn keys_reloaded_path() -> PathBuf {
+    data_dir().join("keys-reloaded.txt")
+}
+
+/// When the keys were last reloaded from the original OMSI 2 (Unix seconds), if ever.
+pub fn keys_reloaded_at() -> Option<u64> {
+    std::fs::read_to_string(keys_reloaded_path())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Save `v`, the keys reloaded from the original OMSI 2, as `save_keybindings` does; with
+/// `backup`, the file in use is copied beside itself first (`keyboard.cfg.backup-<time>`),
+/// whose path is returned. The original's own file is only read.
+pub fn reload_keybindings(v: &Value, backup: bool) -> Result<Option<PathBuf>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let kept = if backup {
+        backup_beside(&keyboard_cfg_write_path()?)?
+    } else {
+        None
+    };
+    save_keybindings(v)?;
+    let _ = std::fs::write(keys_reloaded_path(), now.to_string());
+    Ok(kept)
+}
+
 /// Replace the bindings with the page's list. Written to a temp file and read back through
 /// the same loader the game uses before it replaces the real file, so a page bug never
 /// leaves the player with a `keyboard.cfg` the game itself cannot parse.
@@ -5801,4 +5927,67 @@ fn hof_fix(a: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "file": group.file_name, "results": results }))
+}
+
+#[cfg(test)]
+mod original_keys_tests {
+    use super::*;
+    use omsi_content::input::{KeyBinding, KeyboardCfg};
+
+    /// The original OMSI 2's controls file is read as it is: an action only the Depot knows
+    /// (its gear keys, the chat, VR) is not taken for one of the original's.
+    #[test]
+    fn the_originals_keys_are_only_its_files() {
+        let dir = std::env::temp_dir().join(format!("depot-orig-keys-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("keyboard.cfg");
+        let b = |a: &str, s: i32| KeyBinding {
+            action: a.into(),
+            scan_code: s,
+            modifier: 0,
+        };
+        KeyboardCfg {
+            vehicles: vec![b("horn", 35)],
+            game: vec![b("sim_pause", 25)],
+        }
+        .save(&path)
+        .unwrap();
+        let v = keys_as_they_are(&path).unwrap();
+        let actions: Vec<&str> = ["vehicles", "game"]
+            .iter()
+            .flat_map(|k| {
+                v[*k]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|b| b["action"].as_str().unwrap())
+            })
+            .collect();
+        assert_eq!(actions, ["horn", "sim_pause"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A backup is named after the local date and time and holds what the file held.
+    #[test]
+    fn a_backup_sits_beside_the_file() {
+        let dir = std::env::temp_dir().join(format!("depot-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("gamectrler.cfg");
+        assert!(backup_beside(&file).unwrap().is_none());
+        std::fs::write(&file, "[ctrl]\r\nWheel\r\n").unwrap();
+        let to = backup_beside(&file).unwrap().unwrap();
+        let name = to.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("gamectrler.cfg.backup-"), "{name}");
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        // a second one in the same minute: a name of its own, the first kept as it was
+        std::fs::write(&file, "[ctrl]\r\nPedals\r\n").unwrap();
+        let again = backup_beside(&file).unwrap().unwrap();
+        assert_ne!(again, to);
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "[ctrl]\r\nWheel\r\n");
+        assert_eq!(
+            std::fs::read_to_string(&again).unwrap(),
+            "[ctrl]\r\nPedals\r\n"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

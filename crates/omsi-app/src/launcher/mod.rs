@@ -14,6 +14,7 @@ mod backdrop;
 mod chrome;
 mod diagnostics;
 mod gfx;
+mod keyboard;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -337,6 +338,18 @@ impl Launcher {
         };
         if let Some(popup) = popup {
             start::open(&mut app, popup);
+        }
+        // (controls:reload, controls:add: the keyboard's windows)
+        match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
+            Some("reload") => app.pages.kb.dialog = Some(keyboard::Dialog::Reload { backup: true, pads: true }),
+            Some("add") => app.pages.kb.dialog = Some(keyboard::Dialog::Add { query: String::new(), chosen: None, key: None, waiting: false }),
+            // (controls:action=NAME: that action chosen, in the game's keys when it is one of them)
+            Some(a) if a.starts_with("action=") => {
+                let a = a["action=".len()..].to_string();
+                let game = app.state.keybindings.get("game").and_then(|x| x.as_array()).is_some_and(|x| x.iter().any(|b| b.get("action").and_then(|v| v.as_str()) == Some(a.as_str())));
+                app.pages.kb.chosen = Some((game as usize, a));
+            }
+            _ => {}
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
@@ -1139,10 +1152,12 @@ impl Launcher {
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         // (and a drive's details over Profile / Sessions)
         let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
+        // (and the keyboard's Reload and Add a control over Controls)
+        let keys = !mobile && self.page == Page::Controls && self.pages.controls_tab == 0 && self.pages.kb.dialog.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive || keys).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1226,6 +1241,8 @@ impl Launcher {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
                 pages::drive_dialog(self);
+            } else if self.browser.is_none() && keys {
+                keyboard::dialog(self);
             } else {
                 self.draw_browser();
             }
