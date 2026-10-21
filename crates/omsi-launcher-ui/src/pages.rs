@@ -118,7 +118,7 @@ impl Page {
             Page::Settings => Some((
                 "Graphics, sound & driving",
                 "Set up the game",
-                "Every change is saved at once; the game reads them when it starts.",
+                "Pick a section on the left or search every option. A dot marks what you changed; the line under each option says when a change takes effect.",
             )),
             Page::Setup => Some((
                 "Folders",
