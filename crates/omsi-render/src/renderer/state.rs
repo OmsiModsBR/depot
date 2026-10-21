@@ -15,6 +15,19 @@ use crate::scene::{CullHistory, Layouts};
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
 
+/// What is drawn over the window's finished picture: the device, the queue, the frame's
+/// command encoder, the window's picture and its size in pixels. It runs on the render
+/// thread, inside the frame: it must not block.
+pub type OverlayHook = Box<
+    dyn FnMut(
+            &wgpu::Device,
+            &wgpu::Queue,
+            &mut wgpu::CommandEncoder,
+            &wgpu::TextureView,
+            (u32, u32),
+        ) + Send,
+>;
+
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -61,6 +74,12 @@ pub struct Renderer {
     pub shadow_blobs: bool,
     /// Seconds spent per stage of `render_inner` since start (OMSI_PROFILE).
     pub stats: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
+    /// Drawn over the window's finished picture, before it is delivered (see `OverlayHook`).
+    pub(crate) overlay_hook: Option<OverlayHook>,
+    /// A second renderer's copy of the assets and of each window picture's plan (see
+    /// `mirror.rs`).
+    pub(crate) asset_mirror: super::MirrorSlot,
+    pub(crate) plan_sink: Option<super::PlanSink>,
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
