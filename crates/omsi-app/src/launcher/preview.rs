@@ -910,6 +910,11 @@ impl Preview {
         self.frame.take()
     }
 
+    /// Which bus and paint (`tag`) the picture shown is of, if any.
+    pub fn showing(&self) -> Option<u64> {
+        self.showing
+    }
+
     /// A picture of the bus wanted is there to show (live, or kept from an earlier time).
     pub fn has_picture(&self) -> bool {
         self.showing.is_some() && self.showing == self.wanted.as_ref().map(tag)

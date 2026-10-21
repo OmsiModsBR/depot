@@ -36,6 +36,11 @@ pub const NAV_TOP: f32 = 78.0;
 pub const FOOT_ROW: f32 = 42.0;
 /// The driver's line at the sidebar's foot.
 pub const WHO_H: f32 = 42.0;
+/// The bar along the top that lists the pages instead of the sidebar (Settings > Interface >
+/// Navigation: Top bar).
+pub const TOPBAR_H: f32 = 56.0;
+/// An entry of the top bar that shows only its icon.
+pub const TOPBAR_ICON_W: f32 = 44.0;
 /// The window's own caption buttons (minimise, maximise, close), top right.
 pub const CAPTION_W: f32 = 46.0;
 pub const CAPTION_H: f32 = 32.0;

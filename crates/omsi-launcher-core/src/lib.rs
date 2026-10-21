@@ -2734,6 +2734,36 @@ pub fn corners_name(name: &str) -> &'static str {
     }
 }
 
+/// Where the launcher lists its pages (`ui_nav=`): "top" (a bar along the top), or
+/// "sidebar" for anything else.
+pub fn nav_name(name: &str) -> &'static str {
+    if name.trim().eq_ignore_ascii_case("top") {
+        "top"
+    } else {
+        "sidebar"
+    }
+}
+
+/// What lies behind the launcher's pages (`ui_background=`): "scene" (a blurred picture),
+/// or "plain" (dark) for anything else.
+pub fn background_name(name: &str) -> &'static str {
+    if name.trim().eq_ignore_ascii_case("scene") {
+        "scene"
+    } else {
+        "plain"
+    }
+}
+
+/// How much the scene behind the pages is darkened (`ui_dimming=`, percent): 30 to 90, 62
+/// unless set.
+pub fn dimming_of(v: &Value) -> i64 {
+    v.as_i64()
+        .or_else(|| v.as_f64().map(|f| f.round() as i64))
+        .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+        .unwrap_or(62)
+        .clamp(30, 90)
+}
+
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
@@ -2767,6 +2797,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["ui_accent"] = json!(ACCENTS[0]);
     // the launcher's corners: "rounded" (the default) or "square"
     v["ui_corners"] = json!("rounded");
+    // the launcher's pages in a sidebar ("sidebar", the default) or a bar along the top ("top")
+    v["ui_nav"] = json!("sidebar");
+    // behind the launcher's pages: "plain" dark (the default) or a blurred "scene", darkened
+    // by `ui_dimming` percent
+    v["ui_background"] = json!("plain");
+    v["ui_dimming"] = json!(62);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
     // outside sounds heard from a cab go through a low-pass
@@ -3419,6 +3455,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             "ui_accent" => v[&k] = json!(accent_name(val)),
             "ui_corners" => v[&k] = json!(corners_name(val)),
+            "ui_nav" => v[&k] = json!(nav_name(val)),
+            "ui_background" => v[&k] = json!(background_name(val)),
+            "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
@@ -3983,6 +4022,16 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!(
         "ui_corners={}\n",
         corners_name(v.get("ui_corners").and_then(|x| x.as_str()).unwrap_or(""))
+    ));
+    text.push_str(&format!(
+        "ui_nav={}\nui_background={}\nui_dimming={}\n",
+        nav_name(v.get("ui_nav").and_then(|x| x.as_str()).unwrap_or("")),
+        background_name(
+            v.get("ui_background")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+        ),
+        dimming_of(v.get("ui_dimming").unwrap_or(&Value::Null))
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
@@ -5159,6 +5208,22 @@ mod tests {
         assert!(settings_to_text(&sq, None)
             .lines()
             .any(|l| l == "ui_corners=square"));
+        // (the layout: a sidebar on plain dark unless chosen, the dimming kept within bounds)
+        let d = settings_from_text(None);
+        assert_eq!(
+            (&d["ui_nav"], &d["ui_background"], &d["ui_dimming"]),
+            (&json!("sidebar"), &json!("plain"), &json!(62))
+        );
+        let top = settings_from_text(Some("ui_nav=Top\nui_background=SCENE\nui_dimming=75\n"));
+        let text = settings_to_text(&top, None);
+        for l in ["ui_nav=top", "ui_background=scene", "ui_dimming=75"] {
+            assert!(text.lines().any(|x| x == l), "{l}");
+        }
+        let odd = settings_from_text(Some("ui_nav=left\nui_background=red\nui_dimming=5\n"));
+        assert_eq!(
+            (&odd["ui_nav"], &odd["ui_background"], &odd["ui_dimming"]),
+            (&json!("sidebar"), &json!("plain"), &json!(30))
+        );
         // (the minutes between automatic saves: five unless set, 0 for off, and kept)
         assert_eq!(settings_from_text(None)["autosave_minutes"], json!(5));
         let off = settings_from_text(Some("autosave_minutes=0\n"));

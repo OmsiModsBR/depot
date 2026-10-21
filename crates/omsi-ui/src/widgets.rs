@@ -502,6 +502,11 @@ impl Ui {
         }
     }
 
+    /// Where `anim` of widget `id` stands, without moving it (0 before its first frame).
+    pub fn anim_now(&self, id: Id) -> f32 {
+        self.anims.get(&id).copied().unwrap_or(0.0)
+    }
+
     /// Eased value towards `to` for widget `id` (time constant in seconds).
     pub fn anim(&mut self, id: Id, to: f32, tau: f32) -> f32 {
         let k = 1.0 - (-self.dt / tau.max(1e-3)).exp();
@@ -805,7 +810,7 @@ impl Ui {
     pub fn panel(&mut self, r: Rect) {
         self.solid(r);
         let p = self.p();
-        p.rounded(r, RADIUS, PANEL);
+        p.rounded(r, RADIUS, crate::theme::surface(PANEL));
         p.rounded_border(r, RADIUS, 1.0, EDGE);
     }
 

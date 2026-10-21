@@ -32,7 +32,8 @@ impl Status {
 /// A card: a panel with a letter-spaced title and an optional note at its right.
 pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     ui.solid(r);
-    ui.p().rounded(r, omsi_ui::theme::RADIUS, PANEL);
+    ui.p()
+        .rounded(r, omsi_ui::theme::RADIUS, omsi_ui::theme::surface(PANEL));
     ui.p().rounded_border(r, omsi_ui::theme::RADIUS, 1.0, LINE);
     spaced_by(
         ui,
