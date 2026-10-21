@@ -67,10 +67,10 @@ impl Accent {
         match self {
             Accent::Amber => 0xf0a30a,
             Accent::Orange => 0xff7a29,
-            Accent::Red => 0xef5a55,
-            Accent::Pink => 0xe65c9c,
-            Accent::Purple => 0xa07af2,
-            Accent::Blue => 0x3b8cf5,
+            Accent::Red => 0xf06a62,
+            Accent::Pink => 0xea6aa6,
+            Accent::Purple => 0xa888f5,
+            Accent::Blue => 0x4f9cf7,
             Accent::Teal => 0x22b5b0,
             Accent::Green => 0x4cc16a,
         }
