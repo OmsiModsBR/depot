@@ -199,7 +199,7 @@ fn record_tiles(p: &core::Profile) -> [(&'static str, String, &'static str); 12]
         ("speed", format!("{:.0} %", p.rating_driving), "driving"),
         ("airport_shuttle", format!("{:.0} %", p.rating_comfort), "comfort"),
         ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket sales"),
-        ("history", p.sessions.len().to_string(), "trips"),
+        ("history", p.drives.to_string(), "trips"),
     ]
 }
 
@@ -434,7 +434,7 @@ pub fn drive_dialog(l: &mut Launcher) {
         return;
     }
     let rows = drive_rows(&s);
-    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "from the personnel file");
+    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "as saved after the drive");
     let (buttons, body) = super::start::dialog_foot(l, inside);
     for (k, (what, value)) in rows.iter().enumerate() {
         let y = body.y + k as f32 * 26.0;

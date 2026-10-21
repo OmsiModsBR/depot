@@ -48,6 +48,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - With "DirectX9 (D3D9Ex)" selected, Graphics is Vanilla and fixed: the Vanilla/Vanilla+/Enhanced choice is not offered (Settings → Graphics in the launcher, the Graphics page in the game), since this mode draws the picture as OMSI 2 does. The saved choice stays in `settings.cfg` and is back when another graphics API is picked.
 
 ### Fixed
+- Profile / Sessions: the Trips tile counts every drive of the driver, not only the 40 newest the list shows, and a drive's details window says it shows the drive as saved after it (the per-drive record), not the personnel file.
 - The launcher's bus preview starts on Vulkan on Windows even when the game's graphics setting names DirectX 12 (whose shader compiler overflowed the helper's stack on an Intel UHD 630), then on the interface chosen. A helper that crashes ends at once, with no "stopped working" window; one that goes four minutes without a word before its first picture is stopped and started on the next interface; and every helper ends with the launcher, however the launcher ends, so none is left running after it closes.
 - The city map's view turns smoothly (the short way round) when the compass changes how it is turned, or
   the vehicle's heading changes, instead of jumping.
