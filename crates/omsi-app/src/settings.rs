@@ -798,6 +798,12 @@ impl Settings {
         cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
     }
 
+    /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
+    /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
+    pub fn fair_weather_clouds(&self) -> bool {
+        !self.d3d9_selected()
+    }
+
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
     fn locked_for_api(mut self) -> Self {
         if self.d3d9_selected() {
@@ -823,6 +829,9 @@ impl Settings {
         self.mirror_size = 0;
         self.mirror_refresh = "off".into();
         self.windy_trees = false;
+        // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
+        // `fair_weather_clouds`)
+        self.clouds = true;
         // (the sun's own light only: Enhanced's brighter night is an improvement)
         self.night_brightness = 0.0;
     }
@@ -935,6 +944,7 @@ mod tests {
         s.mirror_refresh = "full".into();
         s.windy_trees = true;
         s.night_brightness = 1.0;
+        s.clouds = false;
         s.lock_vanilla();
         for l in crate::api_limits::D3D9 {
             let ok = match l.key {
@@ -945,6 +955,7 @@ mod tests {
                 "mirror_size" => s.mirror_size == 0,
                 "mirror_refresh" => s.mirror_refresh == "off",
                 "windy_trees" => !s.windy_trees,
+                "clouds" => s.clouds,
                 "shadows" => !s.shadows,
                 "ssao" => !s.ssao,
                 "detail_textures" => !s.detail_textures,
@@ -974,7 +985,7 @@ mod tests {
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
                 // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
                 let saved = Settings::from_text(&format!(
-                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\n"
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!((saved.msaa, saved.anisotropy, saved.render_scale), (1, 1, 0.0));
@@ -982,7 +993,7 @@ mod tests {
                 // (what it does draw stays as saved: env maps and shadow meshes)
                 assert!(saved.reflections && saved.shadow_blobs);
                 assert_eq!((saved.windy_trees, saved.post_aa.as_str()), (false, "off"));
-                // (clouds also set the weather's light: they stay as chosen)
+                // (clouds are on, as OMSI 2 has the weather's own: a saved "off" is not taken)
                 assert!(saved.clouds);
                 // VR takes DirectX 12 instead, with the graphics as chosen
                 let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
