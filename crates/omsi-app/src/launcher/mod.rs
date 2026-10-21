@@ -10,6 +10,7 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+mod chrome;
 mod diagnostics;
 mod gfx;
 pub(crate) mod drive;
@@ -209,6 +210,10 @@ pub struct Launcher {
     /// Whether the OMSI 2 folder chosen has what the game needs, for that folder (looked at
     /// again when the window gets the focus back: the status bar asks for it every frame).
     root_ok: Option<(String, bool)>,
+    /// The window's own title bar and edges (see `chrome`).
+    chrome: chrome::Chrome,
+    /// The accent the sidebar's logo was coloured in.
+    logo_accent: omsi_ui::theme::Accent,
 }
 
 /// Run the launcher window until it is closed.
@@ -285,6 +290,8 @@ impl Launcher {
         gpu_rest_drop: None,
         shown_once: false,
         root_ok: None,
+        chrome: Default::default(),
+        logo_accent: omsi_ui::theme::current_accent(),
     };
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
@@ -369,6 +376,7 @@ impl Launcher {
     fn new_gpu(&mut self, gfx: &gfx::Gfx) -> omsi_ui::Gpu {
         let mut gpu = omsi_ui::Gpu::new(&gfx.device, gfx.format(), 4, self.ui.atlas.size);
         self.logo = omsi_launcher_ui::offscreen::load_logo(&mut gpu, &gfx.device, &gfx.queue);
+        self.logo_accent = omsi_ui::theme::current_accent();
         self.adapter = gfx.adapter_name.clone();
         gpu
     }
@@ -427,6 +435,8 @@ impl ApplicationHandler for Launcher {
         };
         let mut attrs = Window::default_attributes().with_title("Project Depot").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
         if !mobile::mobile() {
+            // (the launcher draws its own title bar, as Windows 11 apps do: see `chrome`)
+            attrs = attrs.with_decorations(false);
             // (no bigger than the window fitted to the screen: a small one at 150 % has less)
             attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(1080.0f64.min(fit.width), 680.0f64.min(fit.height)));
             if let Some(at) = at {
@@ -850,8 +860,17 @@ impl Launcher {
         // --- the interface
         self.preview_rect = None;
         self.map_rect = None;
+        let desktop = !mobile::mobile();
+        if desktop {
+            self.chrome.maximized = window.is_maximized();
+            self.chrome_before(&window, size);
+        }
         self.ui.begin(size, scale, dt);
         self.draw_ui();
+        if desktop && self.chrome_after(&window, size) {
+            self.pages.pads.cancel_feedback_test();
+            event_loop.exit();
+        }
         if mobile::mobile() {
             // what no list took of a finger's drag scrolls the page
             if !self.ui.wheel_taken() && self.browser.is_none() {
@@ -886,6 +905,12 @@ impl Launcher {
         }
         if let Some(gpu) = self.gpu.as_mut() {
             self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
+            // (the logo's coloured part wears the accent: drawn again when another is chosen)
+            let accent = omsi_ui::theme::current_accent();
+            if let (Some((tex, _)), true) = (self.logo, accent != self.logo_accent) {
+                omsi_launcher_ui::offscreen::tint_logo(gpu, &renderer.device, &renderer.queue, tex);
+                self.logo_accent = accent;
+            }
         }
         // the map picture, drawn again when what it shows, where it looks or the zoom's own
         // thinness changed
@@ -1058,6 +1083,8 @@ impl Launcher {
         // after "Reset all settings")
         let accent = self.state.settings.get("ui_accent").and_then(|v| v.as_str()).unwrap_or("");
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(accent).unwrap_or_default());
+        // (and its corners: square ones are flatter, closer to Content Manager)
+        omsi_ui::theme::set_square(self.state.settings.get("ui_corners").and_then(|v| v.as_str()) == Some("square"));
         if self.page != Page::Controls || self.pages.controls_tab != 1 {
             self.pages.pads.cancel_feedback_test();
         }
@@ -1142,6 +1169,11 @@ impl Launcher {
         // (see `frame`), which stays in the window until the game ends
         if !mobile && self.state.in_game() && !self.awake() {
             self.draw_game_banner();
+        }
+        // (over everything, dialogs too: the window can always be moved, sized and closed)
+        if !mobile {
+            let w = self.ui.size.x;
+            self.chrome.clicked = omsi_launcher_ui::shell::caption_buttons(&mut self.ui, w, self.chrome.maximized);
         }
     }
 
@@ -1452,6 +1484,7 @@ impl Launcher {
             let dot = if lit { 12.0 } else { 0.0 };
             let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
             let r = Rect::new(at, cy - 12.0, w, 24.0);
+            self.ui.p().rounded(r, 12.0, PANEL);
             self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
             if lit {
                 self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);

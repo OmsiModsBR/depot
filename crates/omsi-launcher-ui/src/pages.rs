@@ -125,21 +125,21 @@ impl Page {
         }
     }
 
-    /// The icon, by its name in `omsi-ui`.
+    /// The icon, by its name in `omsi-ui` (thin outlines, as Windows 11 draws them).
     pub fn icon(self) -> &'static str {
         match self {
-            Page::Drive => "home",
-            Page::Vehicles => "airport_shuttle",
-            Page::Maps => "map",
-            Page::Mods => "extension",
-            Page::Timetable => "schedule",
-            Page::Sessions => "play_arrow",
-            Page::Profile => "person",
-            Page::Controls => "sports_esports",
-            Page::Tutorials => "help",
-            Page::Diagnostics => "monitor",
-            Page::Settings => "settings",
-            Page::Setup => "folder_open",
+            Page::Drive => "o-home",
+            Page::Vehicles => "o-bus",
+            Page::Maps => "o-map",
+            Page::Mods => "o-package",
+            Page::Timetable => "o-clock",
+            Page::Sessions => "o-play",
+            Page::Profile => "o-user",
+            Page::Controls => "o-gamepad",
+            Page::Tutorials => "o-help",
+            Page::Diagnostics => "o-pulse",
+            Page::Settings => "o-gear",
+            Page::Setup => "o-folder",
         }
     }
 

@@ -2726,6 +2726,15 @@ pub fn accent_name(name: &str) -> &'static str {
         .unwrap_or(ACCENTS[0])
 }
 
+/// The launcher's corners (`ui_corners=`): "square", or "rounded" for anything else.
+pub fn corners_name(name: &str) -> &'static str {
+    if name.trim().eq_ignore_ascii_case("square") {
+        "square"
+    } else {
+        "rounded"
+    }
+}
+
 pub fn settings_from_text(text: Option<&str>) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["triple_screen"] = json!(false);
@@ -2756,6 +2765,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["autosave_minutes"] = json!(5);
     // the interface's accent colour, one of `ACCENTS` (the launcher and the game's menus)
     v["ui_accent"] = json!(ACCENTS[0]);
+    // the launcher's corners: "rounded" (the default) or "square"
+    v["ui_corners"] = json!("rounded");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
     // outside sounds heard from a cab go through a low-pass
@@ -3407,6 +3418,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5))
             }
             "ui_accent" => v[&k] = json!(accent_name(val)),
+            "ui_corners" => v[&k] = json!(corners_name(val)),
             "windy_trees" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
@@ -3967,6 +3979,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!(
         "ui_accent={}\n",
         accent_name(v.get("ui_accent").and_then(|x| x.as_str()).unwrap_or(""))
+    ));
+    text.push_str(&format!(
+        "ui_corners={}\n",
+        corners_name(v.get("ui_corners").and_then(|x| x.as_str()).unwrap_or(""))
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
@@ -5136,6 +5152,13 @@ mod tests {
             .any(|l| l == "ui_accent=Blue"));
         let odd = settings_from_text(Some("ui_accent=magenta\n"));
         assert_eq!(odd["ui_accent"], json!("Amber"));
+        // (the corners: rounded unless square is chosen)
+        assert_eq!(settings_from_text(None)["ui_corners"], json!("rounded"));
+        let sq = settings_from_text(Some("ui_corners=Square\n"));
+        assert_eq!(sq["ui_corners"], json!("square"));
+        assert!(settings_to_text(&sq, None)
+            .lines()
+            .any(|l| l == "ui_corners=square"));
         // (the minutes between automatic saves: five unless set, 0 for off, and kept)
         assert_eq!(settings_from_text(None)["autosave_minutes"], json!(5));
         let off = settings_from_text(Some("autosave_minutes=0\n"));
