@@ -196,6 +196,8 @@ pub struct Launcher {
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
+    /// The content reading the Maps and Vehicles pages' lists are of (`State::content_gen`).
+    catalog_gen: u64,
     /// The window has the keyboard / is hidden: without focus it is drawn ten times a
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
@@ -293,6 +295,7 @@ impl Launcher {
         map_rect: None,
         map_tex: None,
         map_gen: 0,
+        catalog_gen: 0,
         focused: true,
         occluded: false,
         awake_in_game: false,
@@ -1429,6 +1432,8 @@ impl Launcher {
                 }
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
+                // (counted again each time the page opens: a mod installed meanwhile counts)
+                Page::Setup => self.state.usage_asked = false,
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();
@@ -1532,12 +1537,15 @@ impl Launcher {
     /// pages show (the host reads them again after Setup or an install, and fills them as its
     /// scan goes on).
     fn refresh_catalogs(&mut self) {
+        // (as many as before, but other ones: another content folder chosen under Setup)
+        let other = self.catalog_gen != self.state.content_gen;
+        self.catalog_gen = self.state.content_gen;
         let host = self.state.vehicles.len();
-        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+        if host > 0 && (other || self.vehicles.catalog_len() != Some(host)) {
             self.vehicles.set_catalog(self.state.vehicles.clone());
         }
         let host = self.state.maps.len();
-        if host > 0 && self.maps.catalog_len() != Some(host) {
+        if host > 0 && (other || self.maps.catalog_len() != Some(host)) {
             self.maps.set_catalog(self.state.maps.clone());
         }
     }

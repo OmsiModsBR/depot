@@ -195,7 +195,7 @@ fn folder(name: &str, dir: &Path, skip: &[PathBuf], counts: &mut Counts) -> Node
             for r in rest {
                 more.bytes += r.bytes;
                 for k in r.kids {
-                    add(&mut kinds, leak_kind(&k.name), k.bytes);
+                    add(&mut kinds, static_kind(&k.name), k.bytes);
                 }
             }
             more.kids = kinds
@@ -219,7 +219,7 @@ fn folder(name: &str, dir: &Path, skip: &[PathBuf], counts: &mut Counts) -> Node
 }
 
 /// The `&'static` name of a kind `kind_of` gave.
-fn leak_kind(name: &str) -> &'static str {
+fn static_kind(name: &str) -> &'static str {
     [
         "Textures",
         "Models",
@@ -257,12 +257,22 @@ fn entries(dir: &Path, skip: &[PathBuf]) -> Vec<(String, PathBuf, bool)> {
             continue;
         }
         let p = e.path();
-        if ft.is_dir() && skip.iter().any(|s| s == &p) {
+        if ft.is_dir() && skip.iter().any(|s| same_path(s, &p)) {
             continue;
         }
         out.push((e.file_name().to_string_lossy().to_string(), p, ft.is_dir()));
     }
     out
+}
+
+/// The same folder, the letters' case aside on Windows.
+fn same_path(a: &Path, b: &Path) -> bool {
+    if cfg!(windows) {
+        a.to_string_lossy()
+            .eq_ignore_ascii_case(&b.to_string_lossy())
+    } else {
+        a == b
+    }
 }
 
 /// Every file under `dir`, added by kind; `count` sees each file's name.

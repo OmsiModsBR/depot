@@ -62,19 +62,12 @@ fn check(field: usize, value: &str, root: &str) -> (Status, String) {
         // (`OMSI_CONTENT` wins over what is chosen here)
         _ if omsi_cfg::flags::CONTENT.os().is_some() => (Status::Warning, "Set by OMSI_CONTENT: what is chosen here is used once it is no longer set.".into()),
         _ if v.is_empty() => (Status::Found, "Beside the game program. Mods put here are not available in OMSI 2.".into()),
-        _ if !root.trim().is_empty() && same_folder(p, std::path::Path::new(root.trim())) => {
-            (Status::Error, "This is the OMSI 2 folder itself, which the Depot never writes to.".into())
-        }
         _ if p.is_file() => (Status::Error, "This is a file, not a folder.".into()),
-        _ if !p.exists() => (Status::Warning, "It does not exist yet: it is made when you save.".into()),
-        _ => (Status::Found, "Mods put here are not available in OMSI 2.".into()),
-    }
-}
-
-fn same_folder(a: &std::path::Path, b: &std::path::Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => a == b,
+        _ => match core::content_choice_problem(p, std::path::Path::new(root.trim())) {
+            Some(why) => (Status::Error, format!("Cannot be used: {why}.")),
+            None if !p.exists() => (Status::Warning, "It does not exist yet: it is made when you save.".into()),
+            None => (Status::Found, "Mods put here are not available in OMSI 2.".into()),
+        },
     }
 }
 
@@ -151,9 +144,11 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
         l.pages.setup.content.clone().unwrap_or_else(|| saved[2].clone()),
     ];
     for f in 0..3 {
-        if l.pages.setup.checks[f].1.is_none() || l.pages.setup.checks[f].0 != values[f] {
+        // (the content folder is checked again when the OMSI 2 folder changes too)
+        let key = if f == 2 { format!("{}\u{0}{}", values[2], values[0]) } else { values[f].clone() };
+        if l.pages.setup.checks[f].1.is_none() || l.pages.setup.checks[f].0 != key {
             let out = check(f, &values[f], &values[0]);
-            l.pages.setup.checks[f] = (values[f].clone(), Some(out));
+            l.pages.setup.checks[f] = (key, Some(out));
         }
     }
     let status = |v: &SetupView, f: usize| v.checks[f].1.clone().unwrap_or((Status::Unverified, String::new()));
@@ -290,7 +285,7 @@ fn content(l: &mut Launcher, r: Rect) {
             l.ui.text_in(&n.to_string(), Rect::new(inner.x, ry + 5.0, inner.w, 24.0), 13.5, Weight::Regular, TEXT_DIM, Align::Right);
             ry += 35.0;
         }
-        let note = "Counted when the page opens. The folder is any complete OMSI 2 installation, the one with Maps and Vehicles in it.";
+        let note = "Counted each time the page opens, in the OMSI 2 folder and the content folder.";
         let h = l.ui.paragraph_height(note, inner.w, 12.0, Weight::Regular);
         l.ui.paragraph(note, Vec2::new(inner.x, inner.bottom() - h), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
         return;
@@ -459,8 +454,16 @@ fn foot(l: &mut Launcher, r: Rect) {
     l.ui.panel(r);
     let v = &l.pages.setup;
     let cfg = &l.state.config;
-    let edited = v.root.as_ref().is_some_and(|s| *s != cfg.root) || v.game.as_ref().is_some_and(|s| *s != cfg.game) || v.content.as_ref().is_some_and(|s| *s != cfg.content);
-    l.ui.text_in("Changes apply to the next game you start.", Rect::new(r.x + 18.0, r.y, r.w - 300.0, r.h), 13.5, Weight::Regular, TEXT_SOFT, Align::Left);
+    let moving = v.content.as_ref().is_some_and(|s| s.trim() != cfg.content.trim());
+    let edited = v.root.as_ref().is_some_and(|s| *s != cfg.root) || v.game.as_ref().is_some_and(|s| *s != cfg.game) || moving;
+    // (another content folder: what the one before holds is not taken along)
+    let (text, c) = if moving {
+        ("Another content folder: the mods, your controls, saved situations and screenshots of the one before stay there; nothing is moved.", WARN)
+    } else {
+        ("Changes apply to the next game you start.", TEXT_SOFT)
+    };
+    let text = omsi_launcher_ui::kit::fit_text(&mut l.ui, text, 13.5, r.w - 300.0);
+    l.ui.text_in(&text, Rect::new(r.x + 18.0, r.y, r.w - 300.0, r.h), 13.5, Weight::Regular, c, Align::Left);
     let save = Rect::new(r.right() - 18.0 - 104.0, r.center().y - 17.0, 104.0, 34.0);
     let revert = Rect::new(save.x - 10.0 - 92.0, save.y, 92.0, 34.0);
     if edited {
@@ -492,9 +495,10 @@ fn save_folders(l: &mut Launcher) {
         l.state.set_status(format!("Not saved: {chosen} is not a complete OMSI 2 installation - it lacks {}{more}", shown.join(", ")), true);
         return;
     }
-    if !content.is_empty() && content != cfg.content {
+    // (checked at each Save, against the OMSI 2 folder saved with it)
+    if !content.is_empty() {
         if let Some(why) = core::content_folder_problem(std::path::Path::new(&content), std::path::Path::new(&chosen)) {
-            l.state.set_status(format!("Not saved: the content folder can not be used - {why}"), true);
+            l.state.set_status(format!("Not saved: the content folder cannot be used - {why}"), true);
             return;
         }
     }
@@ -510,7 +514,9 @@ fn save_folders(l: &mut Launcher) {
             l.state.config = core::load_config();
             l.pages.setup = SetupView { tab: l.pages.setup.tab, ..SetupView::default() };
             let same = chosen.is_empty() || std::path::Path::new(&chosen) == std::path::Path::new(&l.state.config.root);
-            if same {
+            if same && content_moved {
+                l.state.set_status("Saved. What is in the content folder used before (mods, your controls, saved situations, screenshots) stays there; nothing is moved.", false);
+            } else if same {
                 l.state.set_status("Saved. Reading the content again…", false);
             } else {
                 l.state.set_status(format!("Saved, but the OMSI 2 folder used is {}", l.state.config.root), true);
@@ -560,7 +566,9 @@ mod tests {
         std::fs::create_dir_all(&base).unwrap();
         let root = base.to_string_lossy().to_string();
         assert_eq!(check(2, &root, &root).0, Status::Error);
-        assert_eq!(check(2, &base.join("depot").to_string_lossy(), &root).0, Status::Warning);
+        assert_eq!(check(2, &base.join("depot").to_string_lossy(), &root).0, Status::Error);
+        let beside = base.with_extension("content");
+        assert_eq!(check(2, &beside.to_string_lossy(), &root).0, Status::Warning);
         assert_eq!(check(2, "", &root).0, Status::Found);
         assert!(core::content_folder_problem(&base, &base).is_some());
         let _ = std::fs::remove_dir_all(&base);
