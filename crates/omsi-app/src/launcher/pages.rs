@@ -1497,7 +1497,7 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         let status = if running {
             if l.state.stopping.contains(&i.pid) || i.stopping.is_some() { omsi_ui::tr("stopping - saving the run…").into_owned() } else { omsi_ui::tr("running for %{time}").replace("%{time}", &ago(i.started)) }
         } else {
-            let how = if i.exit_code == Some(0) { String::new() } else if i.killed { omsi_ui::tr(" (killed - it did not end by itself, the drive is not saved)").into_owned() } else { i.exit_code.map(|c| omsi_ui::tr(" (exit code %{code})").replace("%{code}", &c.to_string())).unwrap_or_default() };
+            let how = if i.exit_code == Some(0) { String::new() } else if i.killed { omsi_ui::tr(" (killed - it did not end by itself, the run is not saved)").into_owned() } else { i.exit_code.map(|c| omsi_ui::tr(" (exit code %{code})").replace("%{code}", &c.to_string())).unwrap_or_default() };
             omsi_ui::tr("ended%{how}").replace("%{how}", &how)
         };
         l.ui.text_in(&omsi_ui::tr("%{status} · driver %{name}").replace("%{status}", &status).replace("%{name}", &i.profile), Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
