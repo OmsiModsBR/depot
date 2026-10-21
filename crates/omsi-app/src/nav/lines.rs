@@ -15,7 +15,6 @@ pub(super) struct LinesText {
     pub(super) trip: &'static str,
     pub(super) route: &'static str,
     pub(super) vehicles: &'static str,
-    pub(super) you_are_on: &'static str,
     pub(super) circular: &'static str,
     pub(super) out_back: &'static str,
     pub(super) minutes: &'static str,
@@ -41,6 +40,24 @@ pub(super) struct LinesText {
     /// Monday to Friday, Saturday, Sunday.
     pub(super) days: [&'static str; 3],
     pub(super) predicted: &'static str,
+    /// The map's header: what it is, the next stop, the button that follows the bus.
+    pub(super) city_map: &'static str,
+    pub(super) next_stop: &'static str,
+    pub(super) follow: &'static str,
+    /// The card of where the bus is, and its rows.
+    pub(super) you_are_here: &'static str,
+    pub(super) city: &'static str,
+    pub(super) street: &'static str,
+    /// The trip's card, and its rows (the next stop's above).
+    pub(super) trip_card: &'static str,
+    pub(super) distance: &'static str,
+    pub(super) arrival: &'static str,
+    pub(super) stops_left: &'static str,
+    /// The legend: the route ahead, the part driven, the traffic, the bus; and the keys.
+    pub(super) driven: &'static str,
+    pub(super) traffic: &'static str,
+    pub(super) you: &'static str,
+    pub(super) keys: &'static str,
 }
 
 /// The texts as English keys: the painter looks them up in the catalog when it draws or measures them. A text
@@ -60,7 +77,6 @@ pub(super) fn lines_text() -> LinesText {
         trip: "Trip time",
         route: "Route",
         vehicles: "Vehicles now",
-        you_are_on: "You are on",
         circular: "Circular",
         out_back: "Out and back",
         minutes: "min",
@@ -78,6 +94,20 @@ pub(super) fn lines_text() -> LinesText {
         terrain: "Terrain",
         orient: ["Map", "North", "Heading"],
         elev: "elev.",
+        city_map: "City map",
+        next_stop: "Next stop",
+        follow: "Follow bus",
+        you_are_here: "You are here",
+        city: "City",
+        street: "Street",
+        trip_card: "Trip",
+        distance: "Distance",
+        arrival: "Arrival",
+        stops_left: "Stops left",
+        driven: "Driven",
+        traffic: "Traffic",
+        you: "You",
+        keys: "Wheel: zoom · Drag: pan · Esc: close",
     }
 }
 
@@ -112,8 +142,9 @@ mod tests {
         let t = lines_text();
         let mut keys = vec![
             t.lines, t.line_data, t.map_lines, t.all, t.express, t.feeders, t.length, t.stops, t.trip, t.route, t.vehicles,
-            t.you_are_on, t.circular, t.out_back, t.minutes, t.count, t.timetable, t.loading, t.tick_all, t.tick_none, t.towards,
-            t.predicted, t.heavy, t.terrain, t.elev,
+            t.circular, t.out_back, t.minutes, t.count, t.timetable, t.loading, t.tick_all, t.tick_none, t.towards,
+            t.predicted, t.heavy, t.terrain, t.elev, t.next_stop, t.follow, t.you_are_here, t.city, t.street, t.distance, t.arrival,
+            t.stops_left, t.driven, t.you, t.keys,
         ];
         keys.extend(t.hint);
         keys.extend(t.modals);

@@ -58,8 +58,10 @@ rayon.workspace = true
 omsi-net = { path = "../omsi-net", optional = true }
 omsi-ui = { path = "../omsi-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
+omsi-launcher-ui = { path = "../omsi-launcher-ui" }
 serde.workspace = true
 hashbrown.workspace = true
+bytemuck.workspace = true
 parking_lot.workspace = true
 image.workspace = true
 serde_json.workspace = true
@@ -87,9 +89,11 @@ libc.workspace = true
 
 # Windows: the game controllers through DirectInput, as OMSI reads them (see `dinput`)
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true, features = ["Win32_Devices_HumanInterfaceDevice", "Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows = { workspace = true, features = ["Win32_Devices_HumanInterfaceDevice", "Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_Debug", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 openxr = { version = "0.22", default-features = false, features = ["static"] }
 wgpu-hal = { workspace = true, features = ["dx12"] }
+# the "DirectX9 (D3D9Ex)" render option (see `d3d9_output`)
+omsi-render-d3d9 = { path = "../omsi-render-d3d9" }
 
 # macOS: the axes of wheels and pedals straight from their HID elements (see `mac_hid`), and
 # Xbox-type controllers through the GameController framework (see `mac_game_controller`):
