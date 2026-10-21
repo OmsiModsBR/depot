@@ -33,6 +33,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod thumbs;
 mod timetable;
+mod timetable_plan;
 mod ui;
 mod dialogs;
 
@@ -368,6 +369,19 @@ impl Launcher {
                 app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
             }
         }
+        // (timetable:stop=NAME: that stop chosen on the map)
+        let tt_part = |key: &str| p.strip_prefix("timetable:").and_then(|rest| rest.split(':').find_map(|x| x.strip_prefix(key)));
+        if let Some(stop) = tt_part("stop=") {
+            app.pages.tt.set_stop(stop);
+        }
+        // (timetable:line=NAME: that line chosen, timetable:find=TEXT: that typed in the
+        // map's search)
+        if let Some(line) = tt_part("line=") {
+            app.pages.tt.set_line(line);
+        }
+        if let Some(q) = tt_part("find=") {
+            app.pages.tt.set_find(q);
+        }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
             app.pages.drive_details = true;
@@ -379,6 +393,8 @@ impl Launcher {
             // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
             app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+            // (and the Timetable page's its tab, timetable:1 the schematic)
+            app.pages.tt.tab = step.min(2);
         }
     }
     app

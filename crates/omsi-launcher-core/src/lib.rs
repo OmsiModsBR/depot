@@ -1689,9 +1689,14 @@ fn content_language() -> &'static str {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct StopInfo {
+    /// The stop's object on the map (where it stands: the Timetable page's map).
+    pub id: i64,
     pub name: String,
     pub arr: f64,
     pub dep: f64,
+    /// The bus stops here; false for a station the profile has it pass
+    /// (`[profile_otherstopping] 2`: every station of a depot run).
+    pub stops: bool,
 }
 
 /// One trip of a tour, as OMSI's timetable dialog lists it: when it leaves, from where to
@@ -1750,6 +1755,9 @@ pub struct TripPath {
     pub route: Vec<RoadPiece>,
     /// The stop objects the trip calls at, in order.
     pub stops: Vec<i64>,
+    /// How many stretches from one stop to the next the timetable has no road for (no
+    /// station link between them, or one without a step): nothing can be drawn there.
+    pub missing: usize,
 }
 
 /// One spline of the map a trip drives over: its id in its tile, which `[path]` of it the
@@ -1769,6 +1777,12 @@ pub struct RoadPiece {
 /// The trip's own track (`.ttr`) when it names one - trains, ferries, and the type-1 trips
 /// of mod maps - else the station links between its stops, as the game walks them.
 pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
+    Ok(trip_paths(map, date, &[trip])?.pop().unwrap_or_default())
+}
+
+/// The routes of several trips of the map `map` on `date`, in the order asked (a trip the
+/// timetable does not have: an empty one): the timetable is read once for all of them.
+pub fn trip_paths(map: &str, date: &str, trips: &[&str]) -> Result<Vec<TripPath>> {
     let map_dir = resolve_content(map)?
         .parent()
         .map(|p| p.to_path_buf())
@@ -1783,13 +1797,25 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     let chrono = omsi_map::active_chrono_dirs(&map_dir, code);
     let off = omsi_map::chrono_deactivated_lines(&chrono);
     let data = omsi_timetable::TimetableData::load_with_chrono(&map_dir, &chrono, &off);
+    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
+    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
+        .map(|g| g.raw_tiles)
+        .unwrap_or_default();
+    Ok(trips
+        .iter()
+        .map(|trip| path_of(&data, &tiles, trip))
+        .collect())
+}
+
+/// The route of trip `trip` of a map's timetable `data`, whose `[map]` list is `tiles`.
+fn path_of(data: &omsi_timetable::TimetableData, tiles: &[(i32, i32)], trip: &str) -> TripPath {
     let mut out = TripPath::default();
     let Some(t) = data
         .trips
         .iter()
         .find(|x| x.name.eq_ignore_ascii_case(trip.trim()))
     else {
-        return Ok(out);
+        return out;
     };
     // a type-1 trip's stations are its own `[station]` records (all of Novi Sad)
     out.stops = if t.stations.is_empty() {
@@ -1800,10 +1826,6 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     } else {
         t.stations.clone()
     };
-    // the tile of a path step is the index of its entry in `[map]`, as the game reads it
-    let tiles = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg"))
-        .map(|g| g.raw_tiles)
-        .unwrap_or_default();
     let at = |tile_index: f64| tiles.get(tile_index as usize).copied();
     let track_name = if t.display_name.trim().is_empty() {
         t.name.trim()
@@ -1829,14 +1851,16 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
                 });
             }
         }
-        return Ok(out);
+        return out;
     }
     for w in out.stops.windows(2) {
         let Some(link) = data
             .stn_links
             .iter()
             .find(|l| l.from_id == w[0] && l.to_id == w[1])
+            .filter(|l| !l.entries.is_empty())
         else {
+            out.missing += 1;
             continue;
         };
         for e in &link.entries {
@@ -1858,7 +1882,7 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 /// The lines of a map's timetable on `date` (`YYYY-MM-DD`, the game's default when empty):
@@ -1933,13 +1957,10 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                     continue;
                 };
                 let departure = tt.departure as f64 * 60.0;
-                let duration = trip
+                let profile = trip
                     .profiles
                     .get(tt.profile.max(0) as usize)
-                    .or(trip.profiles.first())
-                    .map(|p| p.factor as f64 * 60.0)
-                    .filter(|d| *d > 0.0)
-                    .unwrap_or(600.0);
+                    .or(trip.profiles.first());
                 // its stations: [station_typ2] objects, or the [station] records of a type-1
                 // trip (all of Novi Sad), which carry their stop's name themselves
                 let legacy: Vec<(i64, String)> = trip
@@ -1957,21 +1978,30 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                 } else {
                     trip.stations.clone()
                 };
-                let mut lens = Vec::new();
-                for w in stations.windows(2) {
-                    lens.push(
+                // the times the game runs the trip by: the profile's own minutes, the rest
+                // shared out by the lengths of the station links
+                let times = omsi_timetable::TripTimes::new(&stations, profile, &|a, b| {
+                    data.stn_links
+                        .iter()
+                        .find(|k| k.from_id == a && k.to_id == b)
+                        .map(|k| k.length)
+                });
+                let duration = times.duration;
+                // (how far it runs: a missing link counts 500 m, as for the times)
+                let total: f64 = stations
+                    .windows(2)
+                    .map(|w| {
                         data.stn_links
                             .iter()
                             .find(|k| k.from_id == w[0] && k.to_id == w[1])
                             .map(|k| k.length.max(1.0))
-                            .unwrap_or(500.0),
-                    );
-                }
-                let total: f64 = lens.iter().sum::<f64>().max(1.0);
-                let mut acc = 0.0;
+                            .unwrap_or(500.0)
+                    })
+                    .sum::<f64>()
+                    .max(1.0);
                 let mut stops = Vec::new();
                 for (i, id) in stations.iter().enumerate() {
-                    let t_at = departure + duration * acc / total;
+                    let (arr, dep) = times.stations.get(i).copied().unwrap_or_default();
                     let name = data
                         .bus_stops
                         .iter()
@@ -1986,13 +2016,12 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
                         })
                         .unwrap_or_else(|| format!("stop {id}"));
                     stops.push(StopInfo {
+                        id: *id,
                         name,
-                        arr: t_at,
-                        dep: if i == 0 { departure } else { t_at },
+                        arr: departure + arr,
+                        dep: departure + dep,
+                        stops: times.stops.get(i).copied().unwrap_or(true),
                     });
-                    if i < lens.len() {
-                        acc += lens[i];
-                    }
                 }
                 if !trip.terminus.trim().is_empty()
                     && !termini.iter().any(|x| x == trip.terminus.trim())
