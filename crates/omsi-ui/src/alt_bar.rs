@@ -3,7 +3,8 @@
 //! says where the bus is. The caller supplies the buttons; what they do is the game's.
 
 use crate::paint::Align;
-use crate::theme::v5::{ACCENT, BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, SELECTED, TS};
+use crate::theme::v5::{BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, TS};
+use crate::theme::{accent, accent_soft};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -108,7 +109,7 @@ pub fn draw<'a>(
         let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
         let enabled = b.disabled.is_none();
         let chosen = state.chosen.as_deref() == Some(b.id);
-        let fill = if b.on { SELECTED } else { CELL };
+        let fill = if b.on { accent_soft() } else { CELL };
         ui.p().rect(
             r,
             if hover && enabled {
@@ -118,15 +119,15 @@ pub fn draw<'a>(
             },
         );
         ui.p()
-            .rounded_border(r, 0.0, 1.0, if chosen || b.on { ACCENT } else { LINE });
+            .rounded_border(r, 0.0, 1.0, if chosen || b.on { accent() } else { LINE });
         if state.focus.as_deref() == Some(b.id) {
             ui.p().rounded_border(r, 0.0, 2.0, FG);
         }
         // a pressed button stays lit even while it waits for its own window
         let c = if enabled || b.on {
-            ACCENT
+            accent()
         } else {
-            ACCENT.alpha(0.3)
+            accent().alpha(0.3)
         };
         match b.glyph {
             Glyph::Icon(name) => ui.icon(name, r.center(), 20.0, c),
@@ -158,7 +159,12 @@ pub fn draw<'a>(
             .find(|b| state.chosen.as_deref() == Some(b.id))
     });
     if let Some(b) = shown {
-        ui.icon("play_arrow", Vec2::new(p.x + 15.0, p.y + 17.0), 9.0, ACCENT);
+        ui.icon(
+            "play_arrow",
+            Vec2::new(p.x + 15.0, p.y + 17.0),
+            9.0,
+            accent(),
+        );
         text(
             ui,
             b.disabled.unwrap_or(b.title),
@@ -220,7 +226,7 @@ pub fn top_bar(ui: &mut Ui, bar: &TopBar) {
     text(ui, bar.clock, x, cy, 14.0, Weight::Bold, FG, Align::Left);
     x += ui.width(bar.clock, 14.0 * TS, Weight::Bold) + 29.0;
     if let Some((state, open)) = bar.doors {
-        let c = if open { ACCENT } else { OK };
+        let c = if open { accent() } else { OK };
         text(
             ui,
             &format!("Doors: {state}"),

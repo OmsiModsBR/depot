@@ -106,7 +106,7 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
         Vec2::new(x, top + 46.0),
         13.0 * TEXT_SCALE,
         Weight::Medium,
-        ACCENT,
+        accent(),
         Align::Left,
     );
     ui.text(
@@ -150,7 +150,7 @@ pub fn heading_beside(
         top + 42.0,
         px,
         Weight::Bold,
-        ACCENT,
+        accent(),
     );
     at += 12.0;
     ui.text_in(
@@ -293,11 +293,11 @@ impl Sidebar<'_> {
         let on = page == self.page;
         let (hover, _, clicked) = ui.interact_key(nav_id(page), r);
         if on {
-            ui.p().rect(r, ACCENT);
+            ui.p().rect(r, accent());
         } else if hover {
             ui.p().rect(r, omsi_ui::Color::WHITE.alpha(0.05));
         }
-        let c = if on { ON_ACCENT } else { NAV_TEXT };
+        let c = if on { on_accent() } else { NAV_TEXT };
         ui.icon(page.icon(), Vec2::new(39.0, r.y + r.h * 0.5), 22.0, c);
         let weight = if on { Weight::Medium } else { Weight::Regular };
         ui.text(
@@ -314,7 +314,7 @@ impl Sidebar<'_> {
                 Vec2::new(r.right() - 22.0, r.y + r.h * 0.5 + 5.0),
                 13.0,
                 Weight::Bold,
-                if on { ON_ACCENT } else { *color },
+                if on { on_accent() } else { *color },
                 Align::Right,
             );
         }

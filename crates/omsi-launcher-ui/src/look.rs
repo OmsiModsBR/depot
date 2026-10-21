@@ -2,6 +2,8 @@
 //! launcher concept, in design units (the concept is
 //! 1672x941; the window scales it uniformly).
 
+/// The accent (the player's choice, see `omsi_ui::theme::Accent`) and the text on it.
+pub use omsi_ui::theme::{accent, on_accent};
 use omsi_ui::Color;
 
 pub const DESIGN_W: f32 = 1672.0;
@@ -16,11 +18,9 @@ pub const PANEL_2: Color = omsi_ui::theme::FIELD;
 pub const LINE: Color = omsi_ui::theme::EDGE;
 pub const FG: Color = omsi_ui::theme::TEXT;
 pub const MUTED: Color = omsi_ui::theme::TEXT_DIM;
-pub const ACCENT: Color = omsi_ui::theme::ACCENT;
 pub const NAV_TEXT: Color = omsi_ui::theme::TEXT_SOFT;
 pub const OK: Color = omsi_ui::theme::OK;
 pub const WARN: Color = omsi_ui::theme::WARN;
-pub const ON_ACCENT: Color = omsi_ui::theme::ON_ACCENT;
 
 pub const SIDEBAR_W: f32 = 264.0;
 pub const NAV_ROW: f32 = 56.0;

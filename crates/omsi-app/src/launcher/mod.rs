@@ -1054,6 +1054,10 @@ impl Launcher {
     }
 
     fn draw_ui(&mut self) {
+        // (the accent the settings hold: chosen on Settings > Interface, or back to amber
+        // after "Reset all settings")
+        let accent = self.state.settings.get("ui_accent").and_then(|v| v.as_str()).unwrap_or("");
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(accent).unwrap_or_default());
         if self.page != Page::Controls || self.pages.controls_tab != 1 {
             self.pages.pads.cancel_feedback_test();
         }
@@ -1154,7 +1158,7 @@ impl Launcher {
         let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
         self.ui.panel(r);
         let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
-        self.ui.icon("directions_bus", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, ACCENT);
+        self.ui.icon("directions_bus", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, accent());
         self.ui.text_in("The game is running", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
         self.ui.paragraph(text, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     }
@@ -1320,7 +1324,7 @@ impl Launcher {
             badges.push((UiPage::Sessions, running.to_string(), OK));
         }
         if jobs > 0 {
-            badges.push((UiPage::Mods, jobs.to_string(), ACCENT));
+            badges.push((UiPage::Mods, jobs.to_string(), accent()));
         }
         let (level, name) = match &self.state.profile {
             Some(p) => (p.level, p.name.clone()),

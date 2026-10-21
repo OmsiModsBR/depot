@@ -7,6 +7,7 @@
 //! them (for example the end-of-trip report's note) is the caller's business.
 
 use crate::paint::Align;
+use crate::theme::{accent, accent_soft, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -16,10 +17,7 @@ const LINE: Color = Color::hex(0x2b2f37);
 const ROW_LINE: Color = Color::hex(0x20242b);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
-const ON_ACCENT: Color = Color::hex(0x14120a);
 const FIELD: Color = Color::hex(0x1b1d22);
-const SELECTED: Color = Color::hex(0x2a2316);
 const PANEL_ALPHA: f32 = 0.92;
 const TS: f32 = 1.16;
 
@@ -135,8 +133,8 @@ pub fn table(
         );
         let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
         if selected == Some(i) {
-            ui.p().rect(r, SELECTED);
-            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+            ui.p().rect(r, accent_soft());
+            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
         } else {
             if hover {
                 ui.p().rect(r, Color::WHITE.alpha(0.04));
@@ -221,8 +219,8 @@ pub fn button(
     let (hover, _, click) = ui.interact(id_of(id), r);
     let primary = kind == ButtonKind::Primary;
     let fill = match (primary, enabled) {
-        (true, true) => ACCENT,
-        (true, false) => ACCENT.alpha(0.22),
+        (true, true) => accent(),
+        (true, false) => accent().alpha(0.22),
         (false, _) => FIELD,
     };
     ui.p().rect(
@@ -237,7 +235,7 @@ pub fn button(
         ui.p().rounded_border(r, 0.0, 1.0, LINE);
     }
     let fg = match (primary, enabled) {
-        (true, true) => ON_ACCENT,
+        (true, true) => on_accent(),
         (true, false) => FG.alpha(0.45),
         (false, true) => FG,
         (false, false) => FG.alpha(0.35),
@@ -354,8 +352,8 @@ pub fn check_row(
     let b = Rect::new(r.x + 16.0, (r.center().y - 9.0).round(), 18.0, 18.0);
     let a = if enabled { 1.0 } else { 0.35 };
     if on {
-        ui.p().rect(b, ACCENT.alpha(a));
-        ui.icon("check", b.center(), 16.0, ON_ACCENT);
+        ui.p().rect(b, accent().alpha(a));
+        ui.icon("check", b.center(), 16.0, on_accent());
     } else {
         ui.p().rect(b, FIELD);
         let edge = if hover && enabled { MUTED } else { LINE };
@@ -410,7 +408,7 @@ pub fn stepper(ui: &mut Ui, id: &str, r: Rect, value: &str, enabled: bool) -> i3
         }
         let c = match (enabled, hover) {
             (false, _) => MUTED.alpha(0.3),
-            (true, true) => ACCENT,
+            (true, true) => accent(),
             (true, false) => MUTED,
         };
         ui.icon(icon, part.center(), 20.0, c);
@@ -450,7 +448,7 @@ pub fn text_field(
     let (hover, _, click) = ui.interact(id_of(id), r);
     ui.p().rect(r, FIELD);
     let edge = if focused {
-        ACCENT
+        accent()
     } else if hover {
         MUTED
     } else {
@@ -574,9 +572,9 @@ pub fn list_rows(
             let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
             let chosen = selected == Some(i);
             if chosen {
-                ui.p().rect(r, SELECTED.alpha(alpha));
+                ui.p().rect(r, accent_soft().alpha(alpha));
                 ui.p()
-                    .rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT.alpha(alpha));
+                    .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(alpha));
             } else {
                 if hover && look.enabled {
                     ui.p().rect(r, Color::WHITE.alpha(0.04));
