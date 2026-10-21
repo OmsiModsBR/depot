@@ -14,6 +14,9 @@ mod backdrop;
 mod chrome;
 mod diagnostics;
 mod gfx;
+mod keyboard;
+pub(crate) mod settings;
+pub(crate) mod setup;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -30,6 +33,7 @@ pub(crate) use state::crash_of;
 mod theme;
 mod thumbs;
 mod timetable;
+mod timetable_plan;
 mod ui;
 mod dialogs;
 
@@ -193,6 +197,8 @@ pub struct Launcher {
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
+    /// The content reading the Maps and Vehicles pages' lists are of (`State::content_gen`).
+    catalog_gen: u64,
     /// The window has the keyboard / is hidden: without focus it is drawn ten times a
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
@@ -290,6 +296,7 @@ impl Launcher {
         map_rect: None,
         map_tex: None,
         map_gen: 0,
+        catalog_gen: 0,
         focused: true,
         occluded: false,
         awake_in_game: false,
@@ -327,16 +334,53 @@ impl Launcher {
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
         }
-        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore, maps:traffic)
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
         let popup = match p.split(':').nth(1) {
             Some("start-point") => Some(start::Popup::StartPoint),
             Some("weather") => Some(start::Popup::Weather),
             Some("explore") => Some(start::Popup::Explore),
-            Some("traffic") => Some(start::Popup::Traffic),
             _ => None,
         };
         if let Some(popup) = popup {
             start::open(&mut app, popup);
+        }
+        // (controls:reload, controls:add: the keyboard's windows)
+        match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
+            Some("reload") => app.pages.kb.dialog = Some(keyboard::Dialog::Reload { backup: true, pads: true }),
+            Some("add") => app.pages.kb.dialog = Some(keyboard::Dialog::Add { query: String::new(), chosen: None, key: None, waiting: false }),
+            // (controls:action=NAME: that action chosen, in the game's keys when it is one of them)
+            Some(a) if a.starts_with("action=") => {
+                let a = a["action=".len()..].to_string();
+                let game = app.state.keybindings.get("game").and_then(|x| x.as_array()).is_some_and(|x| x.iter().any(|b| b.get("action").and_then(|v| v.as_str()) == Some(a.as_str())));
+                app.pages.kb.chosen = Some((game as usize, a));
+            }
+            _ => {}
+        }
+        // (settings:q=TEXT: the settings searched for TEXT; settings:changed: the changed ones)
+        match p.split(':').nth(1) {
+            Some(q) if q.starts_with("q=") => app.pages.set.query = q["q=".len()..].to_string(),
+            Some("changed") => app.pages.set.changed_only = true,
+            _ => {}
+        }
+        // (setup:usage: the Content card's disk usage; setup:usage=0,1 a part of it looked into)
+        if let Some(u) = p.split_once(':').filter(|x| x.0 == "setup").map(|x| x.1) {
+            if let Some(rest) = u.strip_prefix("usage") {
+                app.pages.setup.tab = 1;
+                app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
+            }
+        }
+        // (timetable:stop=NAME: that stop chosen on the map)
+        let tt_part = |key: &str| p.strip_prefix("timetable:").and_then(|rest| rest.split(':').find_map(|x| x.strip_prefix(key)));
+        if let Some(stop) = tt_part("stop=") {
+            app.pages.tt.set_stop(stop);
+        }
+        // (timetable:line=NAME: that line chosen, timetable:find=TEXT: that typed in the
+        // map's search)
+        if let Some(line) = tt_part("line=") {
+            app.pages.tt.set_line(line);
+        }
+        if let Some(q) = tt_part("find=") {
+            app.pages.tt.set_find(q);
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
@@ -345,10 +389,12 @@ impl Launcher {
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
-            // (the Controls and Settings pages' second part is their tab: controls:1 the game
-            // controllers, settings:3 Sound)
+            // (the Controls page's second part is its tab, controls:1 the game controllers; the
+            // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
-            app.pages.settings_tab = step.min(pages::SETTINGS_TABS.len() - 1);
+            app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+            // (and the Timetable page's its tab, timetable:1 the schematic)
+            app.pages.tt.tab = step.min(2);
         }
     }
     app
@@ -643,8 +689,8 @@ impl ApplicationHandler for Launcher {
                 }
             }
             WindowEvent::DroppedFile(path) => {
-                // a .zip dropped on the window is installed (a folder too where the game runs in
-                // the launcher's process; `State::install` says why one is refused)
+                // a .zip dropped on the window is installed (a folder is refused:
+                // `State::install` says why)
                 self.page = Page::Mods;
                 self.state.install(path.to_string_lossy().to_string());
             }
@@ -1139,10 +1185,12 @@ impl Launcher {
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         // (and a drive's details over Profile / Sessions)
         let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
+        // (and the keyboard's Reload and Add a control over Controls)
+        let keys = !mobile && self.page == Page::Controls && self.pages.controls_tab == 0 && self.pages.kb.dialog.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive || keys).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1200,13 +1248,13 @@ impl Launcher {
             #[cfg(not(feature = "lan"))]
             Page::Multiplayer => {}
             Page::Profile => pages::profile(self, content),
-            Page::Settings => pages::settings(self, content),
+            Page::Settings => settings::settings(self, content),
             Page::Controls => pages::controls(self, content),
             Page::Sessions => pages::sessions(self, content),
             Page::Mods => pages::mods(self, content),
             Page::Tutorials => pages::tutorials(self, content),
             Page::Timetable => timetable::draw(self, content),
-            Page::Setup => pages::setup(self, content),
+            Page::Setup => setup::setup(self, content),
         }
         // the rail over the page (a scrolled page passes under it)
         self.rail();
@@ -1221,11 +1269,13 @@ impl Launcher {
             } else if crash {
                 self.draw_crash_dialog();
             } else if reset {
-                pages::reset_dialog(self);
+                settings::reset_dialog(self);
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
                 pages::drive_dialog(self);
+            } else if self.browser.is_none() && keys {
+                keyboard::dialog(self);
             } else {
                 self.draw_browser();
             }
@@ -1398,6 +1448,8 @@ impl Launcher {
                 }
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
+                // (counted again each time the page opens: a mod installed meanwhile counts)
+                Page::Setup => self.state.usage_asked = false,
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();
@@ -1501,12 +1553,15 @@ impl Launcher {
     /// pages show (the host reads them again after Setup or an install, and fills them as its
     /// scan goes on).
     fn refresh_catalogs(&mut self) {
+        // (as many as before, but other ones: another content folder chosen under Setup)
+        let other = self.catalog_gen != self.state.content_gen;
+        self.catalog_gen = self.state.content_gen;
         let host = self.state.vehicles.len();
-        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+        if host > 0 && (other || self.vehicles.catalog_len() != Some(host)) {
             self.vehicles.set_catalog(self.state.vehicles.clone());
         }
         let host = self.state.maps.len();
-        if host > 0 && self.maps.catalog_len() != Some(host) {
+        if host > 0 && (other || self.maps.catalog_len() != Some(host)) {
             self.maps.set_catalog(self.state.maps.clone());
         }
     }
