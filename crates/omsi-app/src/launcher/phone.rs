@@ -820,7 +820,7 @@ fn tour_sheet(l: &mut Launcher, r: Rect) -> bool {
         .iter()
         .map(|t| {
             let when = format!("{} – {}", super::state::hhmm(t.first), super::state::hhmm(t.last));
-            let sub = if t.runs { format!("{when} · {} trips · {}", t.trips.len(), t.days) } else { format!("{when} · {} · runs {}", t.days, t.next_run.clone().unwrap_or_else(|| "never".into())) };
+            let sub = if t.runs { format!("{when} · {}", omsi_ui::tr("%{trips} trips · %{days}").replace("%{trips}", &t.trips.len().to_string()).replace("%{days}", &super::days_text(&t.days))) } else { format!("{when} · {} · {}", super::days_text(&t.days), omsi_ui::tr("runs %{date}").replace("%{date}", &t.next_run.clone().unwrap_or_else(|| omsi_ui::tr("never").into_owned()))) };
             (t.number.clone(), sub, t.runs, t.next_run.clone())
         })
         .collect();

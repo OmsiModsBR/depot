@@ -780,6 +780,39 @@ fn run_time(t: u64) -> String {
     }
 }
 
+/// A tour's days as the core puts them ("Mon-Fri & holidays, school days"), in the
+/// player's language, piece by piece.
+pub(crate) fn days_text(d: &str) -> String {
+    let (head, school) = match (d.strip_suffix(", school holidays"), d.strip_suffix(", school days")) {
+        (Some(h), _) => (h, Some("school holidays")),
+        (_, Some(h)) => (h, Some("school days")),
+        _ => (d, None),
+    };
+    let (week, holidays) = match head.strip_suffix(" & holidays") {
+        Some(w) => (w, true),
+        None if head == "holidays" => ("", true),
+        None => (head, false),
+    };
+    let mut out = week.split(", ").filter(|x| !x.is_empty()).map(|x| omsi_ui::tr(x).into_owned()).collect::<Vec<_>>().join(", ");
+    if holidays {
+        out = if out.is_empty() { omsi_ui::tr("holidays").into_owned() } else { format!("{out} & {}", omsi_ui::tr("holidays")) };
+    }
+    if let Some(x) = school {
+        out = format!("{out}, {}", omsi_ui::tr(x));
+    }
+    out
+}
+
+/// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
+/// player's language.
+pub(crate) fn precip_text(p: &str) -> String {
+    match (p.strip_prefix("rain "), p.strip_prefix("snow ")) {
+        (Some(n), _) => omsi_ui::tr("rain %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        (_, Some(n)) => omsi_ui::tr("snow %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        _ => omsi_ui::tr(p).into_owned(),
+    }
+}
+
 /// Whether the program can bring its window back from the taskbar by itself (not on
 /// Wayland, where only the player can).
 fn can_restore(w: &Window) -> bool {

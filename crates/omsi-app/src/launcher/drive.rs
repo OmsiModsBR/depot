@@ -418,17 +418,17 @@ fn duty_panel(l: &mut Launcher, body: Rect) {
                 _ => format!("{from} → {terminus}"),
             };
             ui.text_in(&route, Rect::new(rr.x + 10.0, rr.y + 26.0, rr.w - 20.0, 16.0), 11.5, Weight::Medium, if live { TEXT_SOFT } else { TEXT_FAINT }, Align::Left);
-            let mut sub = format!("{trips} trips · {days}");
+            let mut sub = omsi_ui::tr("%{trips} trips · %{days}").replace("%{trips}", &trips.to_string()).replace("%{days}", &super::days_text(days));
             if let Some(x) = trip {
                 sub = format!("{sub} · {} {}", trip_duration(x.departure, x.arrival), omsi_ui::tr("a trip"));
             }
             if *ended {
-                sub = format!("{trips} trips · {days} · ended");
+                sub = omsi_ui::tr("%{trips} trips · %{days} · ended").replace("%{trips}", &trips.to_string()).replace("%{days}", &super::days_text(days));
             }
             if !*runs {
                 sub = match next {
-                    Some(n) => format!("{trips} trips · {days} · runs {n}"),
-                    None => format!("{trips} trips · never within a year"),
+                    Some(n) => omsi_ui::tr("%{trips} trips · %{days} · runs %{date}").replace("%{trips}", &trips.to_string()).replace("%{days}", &super::days_text(days)).replace("%{date}", &n.to_string()),
+                    None => omsi_ui::tr("%{trips} trips · never within a year").replace("%{trips}", &trips.to_string()),
                 };
             }
             ui.text_in(&sub, Rect::new(rr.x + 10.0, rr.y + 45.0, rr.w - 20.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
@@ -480,7 +480,7 @@ fn tour_trip(t: &omsi_launcher_lib::TourInfo, now: f64, q: &str) -> (bool, Optio
 fn entry_select(l: &mut Launcher, body: Rect, y: f32, free: bool) {
     let Some(m) = l.state.map().cloned() else { return };
     let mut labels = vec![if free { "Automatic (the map's first)".to_string() } else { "Automatic (nearest to the first stop)".to_string() }];
-    labels.extend(m.entry_points.iter().map(|e| if e.name.is_empty() { format!("entry {}", e.index + 1) } else { e.name.clone() }));
+    labels.extend(m.entry_points.iter().map(|e| if e.name.is_empty() { omsi_ui::tr("entry %{n}").replace("%{n}", &(e.index + 1).to_string()) } else { e.name.clone() }));
     // (the choice is the entry's place in the list; 0 = automatic here)
     let mut es = if l.state.choice.entry < 0 { 0 } else { (l.state.choice.entry as usize + 1).min(labels.len() - 1) };
     l.ui.p().rect(Rect::new(body.x, y - 14.0, body.w, 1.0), EDGE);
@@ -599,7 +599,7 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
     if let Some(w) = warn {
         l.ui.text_in(&w, Rect::new(tx, y0 + 38.0, tw, 18.0), 11.5, Weight::Medium, WARN, Align::Left);
     } else if running > 0 {
-        let note = format!("{running} game{} running - see Sessions", if running > 1 { "s" } else { "" });
+        let note = if running > 1 { omsi_ui::tr("%{n} games running - see Sessions").replace("%{n}", &running.to_string()) } else { omsi_ui::tr("1 game running - see Sessions").into_owned() };
         let nr = Rect::new(tx, y0 + 38.0, l.ui.width(&note, 11.5, Weight::Medium).min(tw), 18.0);
         let (h, _, clicked) = l.ui.interact(id_of("running-note"), nr);
         if clicked {
@@ -631,7 +631,7 @@ fn start_line(l: &Launcher) -> String {
         return format!("{} {} · {weather}", i.time, omsi_ui::tr("(the server's clock)"));
     }
     let weather = match l.state.choice.weather.strip_prefix("metar:") {
-        Some(code) => format!("at {code}"),
+        Some(code) => omsi_ui::tr("at %{code}").replace("%{code}", &code),
         None if l.state.choice.weather == "cycle" => omsi_ui::tr("Weather cycle").into_owned(),
         None if crate::weather_model::is_natural(Some(&l.state.choice.weather)) || l.state.choice.weather.is_empty() => omsi_ui::tr("Natural weather").into_owned(),
         None if crate::weather_setup::custom_weather(Some(&l.state.choice.weather)).is_some() => {
@@ -648,26 +648,26 @@ fn start_line(l: &Launcher) -> String {
 fn duty_of(l: &Launcher) -> (String, String) {
     let map = l.state.map().map(|m| if m.friendly.is_empty() { m.name.clone() } else { m.friendly.clone() }).unwrap_or_else(|| "-".into());
     match (&l.state.choice.line, &l.state.choice.tour, l.state.choice.free) {
-        (_, _, true) | (None, _, _) => (format!("Free drive · {map}"), String::new()),
+        (_, _, true) | (None, _, _) => (omsi_ui::tr("Free drive · %{map}").replace("%{map}", &map), String::new()),
         (Some(line), Some(t), _) => {
             let trip = l.state.tour().and_then(|t| t.trips.get(l.state.first_trip().unwrap_or(0)));
             let when = trip.map(|x| format!("{} - {} · {:.1} km · {} → {}", hhmm(x.departure), hhmm(x.arrival), x.km, if x.from.is_empty() { "?" } else { &x.from }, x.terminus)).unwrap_or_default();
-            (format!("Line {line} · tour {t} · {map}"), when)
+            (omsi_ui::tr("Line %{line} · tour %{tour} · %{map}").replace("%{line}", &line).replace("%{tour}", &t).replace("%{map}", &map), when)
         }
-        (Some(line), None, _) => (format!("Line {line} · choose a tour · {map}"), String::new()),
+        (Some(line), None, _) => (omsi_ui::tr("Line %{line} · choose a tour · %{map}").replace("%{line}", &line).replace("%{map}", &map), String::new()),
     }
 }
 
 /// Where the bus is put down.
 fn duty_place(l: &Launcher) -> String {
     match l.state.choice.entry {
-        e if e < 0 => "starting point: automatic".to_string(),
+        e if e < 0 => omsi_ui::tr("starting point: automatic").into_owned(),
         e => l
             .state
             .map()
             .and_then(|m| m.entry_points.get(e as usize))
-            .map(|x| format!("starting at {}", if x.name.is_empty() { format!("entry {}", x.index + 1) } else { x.name.clone() }))
-            .unwrap_or_else(|| "starting point: automatic".into()),
+            .map(|x| omsi_ui::tr("starting at %{place}").replace("%{place}", &if x.name.is_empty() { omsi_ui::tr("entry %{n}").replace("%{n}", &(x.index + 1).to_string()) } else { x.name.clone() }))
+            .unwrap_or_else(|| omsi_ui::tr("starting point: automatic").into_owned()),
     }
 }
 
@@ -1025,7 +1025,7 @@ fn step_bus(l: &mut Launcher, r: Rect) {
             let mut number_sel = vehicle.numbers.iter().position(|(number, _)| *number == l.state.choice.number).unwrap_or(0);
             let mut plate = l.state.choice.plate.clone();
             let auto = l.state.default_hof();
-            let mut hof_options = vec![format!("Automatic ({auto})")];
+            let mut hof_options = vec![omsi_ui::tr("Automatic (%{name})").replace("%{name}", &auto)];
             hof_options.extend(vehicle.hofs.iter().cloned());
             let mut hof_sel = if l.state.choice.hof_manual { vehicle.hofs.iter().position(|h| h.eq_ignore_ascii_case(&l.state.choice.hof)).map(|i| i + 1).unwrap_or(0) } else { 0 };
             let mut plate_changed = false;
@@ -1104,7 +1104,7 @@ fn step_time(l: &mut Launcher, r: Rect) {
     if let Some(name) = joined_server_name(l) {
         // the server's world: nothing to choose here
         let info = l.state.joined_server.as_ref().and_then(|a| l.state.server_info.get(a)).and_then(|x| x.1.as_ref().ok()).cloned();
-        l.ui.heading(Rect::new(r.x, y, r.w, 28.0), &format!("Set by {name}"), Some("lock"));
+        l.ui.heading(Rect::new(r.x, y, r.w, 28.0), &omsi_ui::tr("Set by %{name}").replace("%{name}", &name), Some("lock"));
         y += 36.0;
         let rows = [("Time", info.as_ref().map(|i| i.time.clone()).unwrap_or_default()), ("Weather", info.as_ref().map(|i| if i.weather.is_empty() { "the map's".to_string() } else { i.weather.clone() }).unwrap_or_default())];
         for (k, v) in rows {
@@ -1236,15 +1236,15 @@ pub(super) fn weather_picker(l: &mut Launcher, r: Rect) {
     let metar = l.state.choice.weather.strip_prefix("metar:").map(str::to_string);
     // (the airport nearest the map, not Berlin's for every map: Novi Sad got Berlin's rain)
     let home = nearest_airport(&l.state.config.root, &l.state.choice.map);
-    items.push((format!("metar:{}", metar.clone().unwrap_or_else(|| home.clone())), "Current weather".into(), format!("METAR of {} (fetched at the start)", metar.clone().unwrap_or_else(|| home.clone())), "public".into(), false));
+    items.push((format!("metar:{}", metar.clone().unwrap_or_else(|| home.clone())), "Current weather".into(), omsi_ui::tr("METAR of %{code} (fetched at the start)").replace("%{code}", &metar.clone().unwrap_or_else(|| home.clone())), "public".into(), false));
     // the weather going on from one to another through the day
     items.push(("cycle".into(), "Weather cycle".into(), "Changes every 25-60 minutes, as the month allows".into(), "autorenew".into(), false));
     for w in l.state.weathers.clone() {
         if !l.state.weather_fits(&w) {
             continue;
         }
-        let vis = if w.fog_m >= 20000.0 { "clear air".to_string() } else { format!("{:.0} m", w.fog_m) };
-        items.push((w.file.clone(), w.name.clone(), format!("{:.0} °C · {} · {vis}", w.temp, w.precip), weather_icon_of(&w).into(), l.state.fresh.contains_key(&w.file)));
+        let vis = if w.fog_m >= 20000.0 { omsi_ui::tr("clear air").into_owned() } else { format!("{:.0} m", w.fog_m) };
+        items.push((w.file.clone(), w.name.clone(), format!("{:.0} °C · {} · {vis}", w.temp, super::precip_text(&w.precip)), weather_icon_of(&w).into(), l.state.fresh.contains_key(&w.file)));
     }
     if let Some(code) = metar.as_ref() {
         let root = std::path::PathBuf::from(&l.state.config.root);
@@ -1324,7 +1324,7 @@ pub(super) fn weather_picker(l: &mut Launcher, r: Rect) {
             changed |= ui.slider("custom-temp", Rect::new(v.x + 4.0, yy, v.w - 12.0, 34.0), &mut custom.temp_c, -30.0, 45.0, 1.0, "Temperature", &|x| format!("{x:.0} °C"));
             yy += 40.0;
             let temp_for_dew = custom.temp_c;
-            changed |= ui.slider("custom-hum", Rect::new(v.x + 4.0, yy, v.w - 12.0, 34.0), &mut custom.humidity, 0.0, 100.0, 1.0, "Humidity", &|x| format!("{x:.0} % · dew {:.0} °C", crate::weather_setup::dew_point_c(temp_for_dew, x)));
+            changed |= ui.slider("custom-hum", Rect::new(v.x + 4.0, yy, v.w - 12.0, 34.0), &mut custom.humidity, 0.0, 100.0, 1.0, "Humidity", &|x| omsi_ui::tr("%{x} % · dew %{dew} °C").replace("%{x}", &format!("{x:.0}")).replace("%{dew}", &format!("{:.0}", crate::weather_setup::dew_point_c(temp_for_dew, x))));
             yy += 44.0;
 
             ui.label(Rect::new(v.x + 4.0, yy, 130.0, 32.0), "Cloud type");
@@ -1409,12 +1409,12 @@ pub(super) fn weather_picker(l: &mut Launcher, r: Rect) {
 fn step_roadbook(l: &mut Launcher, r: Rect) {
     let (Some(line), Some(tour), false) = (l.state.line().cloned(), l.state.tour().cloned(), l.state.choice.free) else {
         let map = l.state.map().map(|m| if m.friendly.is_empty() { m.name.clone() } else { m.friendly.clone() }).unwrap_or_default();
-        l.ui.paragraph(&format!("No duty chosen: free driving on {map}. Pick a line and a tour under Route to see the roadbook here."), Vec2::new(r.x, r.y), r.w, 13.0, Weight::Regular, TEXT_DIM);
+        l.ui.paragraph(&omsi_ui::tr("No duty chosen: free driving on %{map}. Pick a line and a tour under Route to see the roadbook here.").replace("%{map}", &map), Vec2::new(r.x, r.y), r.w, 13.0, Weight::Regular, TEXT_DIM);
         ibis_box(l, Rect::new(r.x, r.y + 60.0, r.w, 160.0));
         return;
     };
     let from = l.state.first_trip().unwrap_or(0);
-    l.ui.text_in(&format!("Line {} · tour {} · from {}", line.name, tour.number, hhmm(l.state.choice.time as f64 * 60.0)), Rect::new(r.x, r.y, r.w, 22.0), 14.0, Weight::Bold, TEXT, Align::Left);
+    l.ui.text_in(&omsi_ui::tr("Line %{line} · tour %{tour} · from %{time}").replace("%{line}", &line.name).replace("%{tour}", &tour.number).replace("%{time}", &hhmm(l.state.choice.time as f64 * 60.0)), Rect::new(r.x, r.y, r.w, 22.0), 14.0, Weight::Bold, TEXT, Align::Left);
     l.ui.text_in("Click a trip to start the tour there.", Rect::new(r.x, r.y + 20.0, r.w, 16.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
     let trips: Vec<omsi_launcher_lib::TripInfo> = tour.trips.clone();
     let ibis_h = 150.0;
@@ -1435,7 +1435,7 @@ fn step_roadbook(l: &mut Launcher, r: Rect) {
                     start_at = Some((t.index, t.departure));
                 }
                 ui.text_in(&format!("{} · {} → {}", omsi_ui::tr("Earlier"), if t.from.is_empty() { "?" } else { &t.from }, t.terminus), Rect::new(head.x + 10.0, head.y + 4.0, head.w - 20.0, 20.0), 13.0, Weight::Bold, TEXT_FAINT, Align::Left);
-                ui.text_in(&format!("{} - {} · {}", hhmm(t.departure), hhmm(t.arrival), if t.line.is_empty() { "depot run".to_string() } else { format!("line {}", t.line) }), Rect::new(head.x + 10.0, head.y + 24.0, head.w - 20.0, 18.0), 11.0, Weight::Regular, TEXT_FAINT, Align::Left);
+                ui.text_in(&format!("{} - {} · {}", hhmm(t.departure), hhmm(t.arrival), if t.line.is_empty() { omsi_ui::tr("depot run").into_owned() } else { omsi_ui::tr("line %{line}").replace("%{line}", &t.line) }), Rect::new(head.x + 10.0, head.y + 24.0, head.w - 20.0, 18.0), 11.0, Weight::Regular, TEXT_FAINT, Align::Left);
                 y += 52.0;
                 continue;
             }
@@ -1446,7 +1446,7 @@ fn step_roadbook(l: &mut Launcher, r: Rect) {
                 start_at = Some((t.index, t.departure));
             }
             ui.text_in(&format!("{} · {} → {}", if k == 0 { "Your first trip" } else { "Then" }, if t.from.is_empty() { "?" } else { &t.from }, t.terminus), Rect::new(head.x + 10.0, head.y + 4.0, head.w - 20.0, 20.0), 13.0, Weight::Bold, TEXT, Align::Left);
-            ui.text_in(&format!("{} - {} · {:.1} km · {}{}", hhmm(t.departure), hhmm(t.arrival), t.km, if t.line.is_empty() { "depot run".to_string() } else { format!("line {}", t.line) }, format!(" · {}", t.name)), Rect::new(head.x + 10.0, head.y + 24.0, head.w - 20.0, 18.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in(&format!("{} - {} · {:.1} km · {}{}", hhmm(t.departure), hhmm(t.arrival), t.km, if t.line.is_empty() { omsi_ui::tr("depot run").into_owned() } else { omsi_ui::tr("line %{line}").replace("%{line}", &t.line) }, format!(" · {}", t.name)), Rect::new(head.x + 10.0, head.y + 24.0, head.w - 20.0, 18.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
             y += 52.0;
             let n = t.stops.len();
             for (s, st) in t.stops.iter().enumerate() {
@@ -1461,7 +1461,7 @@ fn step_roadbook(l: &mut Launcher, r: Rect) {
                 ui.text_in(&hhmm(st.arr), Rect::new(rr.x + 6.0, rr.y, 42.0, rr.h), 12.0, Weight::Condensed, if end { TEXT } else { TEXT_SOFT }, Align::Left);
                 ui.text_in(&st.name, Rect::new(cx + 14.0, rr.y, rr.w - 140.0, rr.h), 12.5, if end { Weight::Bold } else { Weight::Regular }, TEXT, Align::Left);
                 if s == 0 {
-                    ui.text_in(&format!("dep {}", hhmm(st.dep)), Rect::new(rr.right() - 80.0, rr.y, 76.0, rr.h), 11.0, Weight::Medium, TEXT_DIM, Align::Right);
+                    ui.text_in(&omsi_ui::tr("dep %{time}").replace("%{time}", &hhmm(st.dep)), Rect::new(rr.right() - 80.0, rr.y, 76.0, rr.h), 11.0, Weight::Medium, TEXT_DIM, Align::Right);
                 }
                 y += 24.0;
             }
@@ -1487,7 +1487,7 @@ pub(super) fn ibis_box(l: &mut Launcher, r: Rect) {
             l.ui.paragraph(&e, Vec2::new(inner.x, inner.y - 4.0), inner.w, 12.0, Weight::Regular, DANGER);
         }
         Ok(i) if i.routes.is_empty() => {
-            l.ui.paragraph(&format!("Depot file {} has no entries for this line. Type line {} and the terminus code by hand, or press Shift+U.", i.hof, i.line_code), Vec2::new(inner.x, inner.y - 4.0), inner.w, 12.0, Weight::Regular, TEXT_DIM);
+            l.ui.paragraph(&omsi_ui::tr("Depot file %{file} has no entries for this line. Type line %{line} and the terminus code by hand, or press Shift+U.").replace("%{file}", &i.hof).replace("%{line}", &i.line_code), Vec2::new(inner.x, inner.y - 4.0), inner.w, 12.0, Weight::Regular, TEXT_DIM);
         }
         Ok(i) => {
             let mut y = inner.y - 2.0;
@@ -1507,7 +1507,7 @@ pub(super) fn ibis_box(l: &mut Launcher, r: Rect) {
                 }
                 y += 26.0;
             }
-            l.ui.text_in(&format!("Depot file {} · Shift+U in the game types it for you", i.hof), Rect::new(inner.x, y + 2.0, inner.w, 18.0), 11.0, Weight::Regular, TEXT_FAINT, Align::Left);
+            l.ui.text_in(&omsi_ui::tr("Depot file %{file} · Shift+U in the game types it for you").replace("%{file}", &i.hof), Rect::new(inner.x, y + 2.0, inner.w, 18.0), 11.0, Weight::Regular, TEXT_FAINT, Align::Left);
         }
     }
 }
@@ -1561,18 +1561,18 @@ fn start(l: &mut Launcher) {
 /// (its `timezone.txt`), else Berlin's; read once per map.
 pub(super) fn custom_weather_summary(c:&crate::weather_setup::CustomWeather)->String{
     let precip=match c.precip{
-        1=>format!("rain {:.0}%",c.precip_intensity/255.0*100.0),
-        2=>format!("snow {:.0}%",c.precip_intensity/255.0*100.0),
-        _=>"dry".to_string(),
+        1=>omsi_ui::tr("rain %{n}%").replace("%{n}", &format!("{:.0}",c.precip_intensity/255.0*100.0)),
+        2=>omsi_ui::tr("snow %{n}%").replace("%{n}", &format!("{:.0}",c.precip_intensity/255.0*100.0)),
+        _=>omsi_ui::tr("dry").into_owned(),
     };
     let vis=if c.visibility_m>=49_950.0{
-        "clear visibility".to_string()
+        omsi_ui::tr("clear visibility").into_owned()
     }else if c.visibility_m>=1000.0{
         format!("{:.1} km",c.visibility_m/1000.0)
     }else{
         format!("{:.0} m",c.visibility_m)
     };
-    format!("{:.0} °C · {:.0}% RH · {precip} · {vis}",c.temp_c,c.humidity)
+    omsi_ui::tr("%{temp} °C · %{rh}% RH · %{precip} · %{vis}").replace("%{temp}", &format!("{:.0}",c.temp_c)).replace("%{rh}", &format!("{:.0}",c.humidity)).replace("%{precip}", &precip).replace("%{vis}", &vis)
 }
 
 pub(super) fn selected_weather_as_custom(root:&str,file:&str)->Option<String>{
