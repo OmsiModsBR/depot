@@ -446,25 +446,37 @@ Depot files can also be placed in a top-level `HOFs/` folder. Every vehicle can 
 vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy takes
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
-Installing a mod: the launcher's **Mods** page opens the system's folder / file picker
-(Finder, Explorer, GTK) for a mod folder or a `.zip` archive and sorts it
-into place (OMSI-style folders anywhere inside are merged; a lone bus, map, object or
-spline folder is recognised by its `.bus` / `global.cfg` / `.sco` / `.sli` files and put
-under the right folder), or drop it into `Mods/` next to the binary and open the page.
-`openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` and `--cli mods` do the same
-from a shell. **`.rar` and `.7z` archives are not supported** (unpack them with your own tool
-and install the folder), and **a `.zip` is never unpacked by the launcher**. An installation is
-a background job: a folder's listing (or a `.zip`'s table of contents) becomes a plan, the disk
-is checked for room, a folder is copied into a staging folder on the content volume and moved
-into place in one step, and it can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is kept aside and installed when the
-bus arrives.
+Installing a mod: on a computer the launcher's **Mods** page installs a mod's **`.zip`**: its
+**Choose a .zip file** button opens the system's file picker (Finder, Explorer, GTK), a
+`.zip` can be dropped on the window, or put into `Mods/` in the content folder (the page
+lists what is in it). The launcher works out what is in it and installs it in place (see
+below). **Loose folders are not installed by the launcher on a computer**: the page's
+*Loose files* part opens the two folders to copy them into by hand, the original OMSI 2
+folder (the mod then works in OMSI 2 and in the Depot) or the Depot's content folder (the
+Depot only). A folder in `Mods/`, or one dropped on the window, is left where it is. On a
+phone, whose game has no OMSI 2 folder to copy into by hand, the page and `Mods/` still take
+a mod folder too, and sort it into place (OMSI-style folders anywhere inside are merged; a
+lone bus, map, object or spline folder is recognised by its `.bus` / `global.cfg` / `.sco` /
+`.sli` files and put under the right folder).
+
+From a shell, `openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` installs a
+`.zip`, and `--cli mods` installs what is in `Mods/` (on a computer the `.zip` files only,
+as the page does; `--cli poll` with `watch` likewise). `--cli install` still takes a folder
+on a computer too: a developer and tooling path, not offered on the page, that copies into
+the content folder and never writes to the OMSI 2 folder. **`.rar` and `.7z` archives are
+not supported** (unpack them with your own tool and copy the folder by hand), and **a `.zip`
+is never unpacked by the launcher**. An installation is a background job: a folder's listing
+(or a `.zip`'s table of contents) becomes a plan, the disk is checked for room, a folder is
+copied into a staging folder on the content volume and moved into place in one step, and it
+can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is
+kept aside and installed when the bus arrives.
 
 A `.zip` is **used in place**, and only that way: a `.zip` laid out like OMSI 2 is put into the
 content folder's `Archives/` (hard-linked when it is on the same disk, moved from the
 `Mods/` inbox, else copied after a free-space check) and read by the game without
 unpacking (`omsi_cfg::vfs` mounts every archive there, as well as `--content-zip` and
 `OMSI_CONTENT_ZIP`). A `.zip` whose folders are not where the game looks for them (a lone bus
-folder, say) is refused; unpack it yourself and install the folder. The `mode` of
+folder, say) is refused; unpack it yourself and copy the folder by hand. The `mode` of
 `--cli install '{"path":…,"mode":…}'` is accepted but no longer changes anything, and
 `--cli modinfo '{"path":…}'` shows what the launcher would do. The launcher's lists see the maps
 and buses inside the archives.
