@@ -19,11 +19,24 @@ fn main() {
     }
     let game = omsi_launcher_lib::load_config().game;
     let game = if game.trim().is_empty() {
-        std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "depot.exe" } else { "depot" }))).unwrap_or_default()
+        std::env::current_exe()
+            .ok()
+            .and_then(|e| {
+                e.parent()
+                    .map(|d| d.join(if cfg!(windows) { "depot.exe" } else { "depot" }))
+            })
+            .unwrap_or_default()
     } else {
         std::path::PathBuf::from(game)
     };
-    match std::process::Command::new(&game).arg("--launcher").args(&args[1..]).status() {
+    match std::process::Command::new(&game)
+        .arg("--launcher")
+        // (the launcher ends with this program, stopped by hand included)
+        .arg("--parent-pid")
+        .arg(std::process::id().to_string())
+        .args(&args[1..])
+        .status()
+    {
         Ok(s) => std::process::exit(s.code().unwrap_or(0)),
         Err(e) => {
             eprintln!("starting {}: {e}", game.display());

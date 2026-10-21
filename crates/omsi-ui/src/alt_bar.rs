@@ -1,0 +1,339 @@
+//! The Alt icon bar: a panel of square icon buttons in rows of five, with the name of the
+//! hovered (or last chosen) button above them, and the bar over the top of the screen that
+//! says where the bus is. The caller supplies the buttons; what they do is the game's.
+
+use crate::paint::Align;
+use crate::theme::v5::{ACCENT, BAR, CELL, FG, LINE, MUTED, OK, PANEL, ROW_LINE, SELECTED, TS};
+use crate::widgets::{id_of, Ui};
+use crate::{Color, Rect, Weight};
+use glam::Vec2;
+
+const PANEL_ALPHA: f32 = 0.92;
+
+pub const COLUMNS: usize = 5;
+pub const CELL_W: f32 = 50.0;
+pub const CELL_H: f32 = 45.0;
+pub const GAP: f32 = 5.6;
+pub const HEADER_H: f32 = 34.0;
+pub const BAR_H: f32 = 40.0;
+
+/// What a button shows: a Material icon, or a short word (the "AI" button).
+#[derive(Debug, Clone, Copy)]
+pub enum Glyph<'a> {
+    Icon(&'a str),
+    Text(&'a str),
+}
+
+pub struct Button<'a> {
+    pub id: &'a str,
+    pub glyph: Glyph<'a>,
+    /// What the button does, shown above the grid while the mouse is over it.
+    pub title: &'a str,
+    /// Why it cannot be used now (drawn dim, the reason shows instead of the title).
+    pub disabled: Option<&'a str>,
+    /// What it switches is on now (a tour is running): drawn pressed.
+    pub on: bool,
+}
+
+/// The state the game keeps between frames: which button was chosen last.
+#[derive(Default, Debug, Clone)]
+pub struct State {
+    pub chosen: Option<String>,
+    /// The button the keyboard is on (a ring round it), if the game drives the bar by keys.
+    pub focus: Option<String>,
+}
+
+/// The panel's size for `n` buttons.
+pub fn panel_size(n: usize) -> Vec2 {
+    let rows = n.div_ceil(COLUMNS).max(1) as f32;
+    Vec2::new(
+        18.0 + COLUMNS as f32 * CELL_W + (COLUMNS - 1) as f32 * GAP,
+        HEADER_H + 9.0 + rows * (CELL_H + 6.0) + 4.0,
+    )
+}
+
+/// Where button `i` is, for a bar whose top left corner is `at`.
+fn cell_rect(at: Vec2, i: usize) -> Rect {
+    let (col, row) = ((i % COLUMNS) as f32, (i / COLUMNS) as f32);
+    Rect::new(
+        at.x + 9.0 + col * (CELL_W + GAP),
+        at.y + HEADER_H + 9.0 + row * (CELL_H + 6.0),
+        CELL_W,
+        CELL_H,
+    )
+}
+
+/// The panel's rectangle for `n` buttons with its top left corner at `at`.
+pub fn panel_rect(at: Vec2, n: usize) -> Rect {
+    let size = panel_size(n);
+    Rect::new(at.x, at.y, size.x, size.y)
+}
+
+/// The button under `point` (`None` over the gaps, the header and outside the panel). A
+/// disabled button is found too: the caller knows which can be used.
+pub fn hit(at: Vec2, n: usize, point: Vec2) -> Option<usize> {
+    (0..n).find(|&i| {
+        let r = cell_rect(at, i);
+        point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color, a: Align) {
+    let px = px * TS;
+    let w = ui.width(s, px, weight);
+    let r = match a {
+        Align::Right => Rect::new(x - w - 2.0, cy - px, w + 2.0, px * 2.0),
+        _ => Rect::new(x, cy - px, w + 2.0, px * 2.0),
+    };
+    ui.text_in(s, r, px, weight, c, a);
+}
+
+/// Draw the bar at `at` (its top left corner) and return the button clicked this frame.
+pub fn draw<'a>(
+    ui: &mut Ui,
+    at: Vec2,
+    buttons: &'a [Button<'a>],
+    state: &mut State,
+) -> Option<&'a str> {
+    let size = panel_size(buttons.len());
+    let p = Rect::new(at.x, at.y, size.x, size.y);
+    ui.solid(p);
+    ui.p().rect(p, PANEL.alpha(PANEL_ALPHA));
+    ui.p().rounded_border(p, 0.0, 1.0, LINE);
+    let mut clicked = None;
+    let mut hovered = None;
+    for (i, b) in buttons.iter().enumerate() {
+        let r = cell_rect(at, i);
+        let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
+        let enabled = b.disabled.is_none();
+        let chosen = state.chosen.as_deref() == Some(b.id);
+        let fill = if b.on { SELECTED } else { CELL };
+        ui.p().rect(
+            r,
+            if hover && enabled {
+                fill.lighten(0.08)
+            } else {
+                fill
+            },
+        );
+        ui.p()
+            .rounded_border(r, 0.0, 1.0, if chosen || b.on { ACCENT } else { LINE });
+        if state.focus.as_deref() == Some(b.id) {
+            ui.p().rounded_border(r, 0.0, 2.0, FG);
+        }
+        // a pressed button stays lit even while it waits for its own window
+        let c = if enabled || b.on {
+            ACCENT
+        } else {
+            ACCENT.alpha(0.3)
+        };
+        match b.glyph {
+            Glyph::Icon(name) => ui.icon(name, r.center(), 20.0, c),
+            Glyph::Text(t) => {
+                let px = 17.0 * TS;
+                let w = ui.width(t, px, Weight::Bold);
+                ui.text_in(
+                    t,
+                    Rect::new(r.center().x - w * 0.5, r.y, w + 2.0, r.h),
+                    px,
+                    Weight::Bold,
+                    c,
+                    Align::Left,
+                );
+            }
+        }
+        if hover || state.focus.as_deref() == Some(b.id) {
+            hovered = Some(b);
+        }
+        if click && enabled {
+            state.chosen = Some(b.id.to_string());
+            clicked = Some(b.id);
+        }
+    }
+    // the header: the hovered button's name or reason, else the last chosen one's
+    let shown = hovered.or_else(|| {
+        buttons
+            .iter()
+            .find(|b| state.chosen.as_deref() == Some(b.id))
+    });
+    if let Some(b) = shown {
+        ui.icon("play_arrow", Vec2::new(p.x + 15.0, p.y + 17.0), 9.0, ACCENT);
+        text(
+            ui,
+            b.disabled.unwrap_or(b.title),
+            p.x + 27.0,
+            p.y + 17.0,
+            13.0,
+            Weight::Regular,
+            FG,
+            Align::Left,
+        );
+    }
+    ui.p().rect(
+        Rect::new(p.x + 1.0, p.y + HEADER_H, p.w - 2.0, 1.0),
+        ROW_LINE,
+    );
+    clicked
+}
+
+/// What the top bar says.
+pub struct TopBar<'a> {
+    /// "Line 50 · Example route"
+    pub route: &'a str,
+    /// "Central Station"
+    pub next_stop: Option<&'a str>,
+    /// "08:42"
+    pub clock: &'a str,
+    /// "open" or "closed", when a door state is to be shown.
+    pub doors: Option<(&'a str, bool)>,
+    /// The key hints at the right.
+    pub hint: &'a str,
+}
+
+/// The bar over the top of the screen.
+pub fn top_bar(ui: &mut Ui, bar: &TopBar) {
+    let w = ui.size.x;
+    ui.p().rect(Rect::new(0.0, 0.0, w, BAR_H), BAR.alpha(0.96));
+    let cy = BAR_H * 0.5;
+    let mut x = 20.0;
+    let route = bar.route.to_string();
+    text(ui, &route, x, cy, 14.0, Weight::Bold, FG, Align::Left);
+    x += ui.width(&route, 14.0 * TS, Weight::Bold) + 29.0;
+    if let Some(stop) = bar.next_stop {
+        text(
+            ui,
+            "Next stop:",
+            x,
+            cy,
+            14.0,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+        x += ui.width("Next stop: ", 14.0 * TS, Weight::Regular);
+        text(ui, stop, x, cy, 14.0, Weight::Bold, FG, Align::Left);
+        x += ui.width(stop, 14.0 * TS, Weight::Bold) + 29.0;
+    }
+    text(ui, "Time", x, cy, 14.0, Weight::Regular, MUTED, Align::Left);
+    x += ui.width("Time ", 14.0 * TS, Weight::Regular);
+    text(ui, bar.clock, x, cy, 14.0, Weight::Bold, FG, Align::Left);
+    x += ui.width(bar.clock, 14.0 * TS, Weight::Bold) + 29.0;
+    if let Some((state, open)) = bar.doors {
+        let c = if open { ACCENT } else { OK };
+        text(
+            ui,
+            &format!("Doors: {state}"),
+            x,
+            cy,
+            14.0,
+            Weight::Regular,
+            c,
+            Align::Left,
+        );
+    }
+    text(
+        ui,
+        bar.hint,
+        w - 20.0,
+        cy,
+        13.0,
+        Weight::Regular,
+        MUTED,
+        Align::Right,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn buttons() -> Vec<Button<'static>> {
+        let b = |id, icon, disabled| Button {
+            id,
+            glyph: Glyph::Icon(icon),
+            title: id,
+            disabled,
+            on: false,
+        };
+        vec![
+            b("add", "add", None),
+            b("swap", "sync_alt", None),
+            b("warn", "warning", Some("not available now")),
+        ]
+    }
+
+    fn frame(ui: &mut Ui, bs: &[Button], state: &mut State, click: Option<Vec2>) -> Option<String> {
+        let run = |ui: &mut Ui, state: &mut State| {
+            ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.016);
+            let out = draw(ui, Vec2::new(1366.0, 723.0), bs, state).map(String::from);
+            ui.finish();
+            out
+        };
+        if let Some(p) = click {
+            ui.input.mouse = p;
+            ui.input.pressed = true;
+            ui.input.down = true;
+            run(ui, state);
+            ui.input.released = true;
+            ui.input.down = false;
+        }
+        run(ui, state)
+    }
+
+    #[test]
+    fn a_click_chooses_a_button_and_a_disabled_one_cannot_be_chosen() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State::default();
+        frame(&mut ui, &bs, &mut st, None);
+        let centre = |ui: &Ui, id: &str| ui.drawn[&id_of(&format!("alt:{id}"))].center();
+        let swap = centre(&ui, "swap");
+        assert_eq!(
+            frame(&mut ui, &bs, &mut st, Some(swap)).as_deref(),
+            Some("swap")
+        );
+        assert_eq!(st.chosen.as_deref(), Some("swap"));
+        let warn = centre(&ui, "warn");
+        assert_eq!(frame(&mut ui, &bs, &mut st, Some(warn)), None);
+        assert_eq!(st.chosen.as_deref(), Some("swap"));
+    }
+
+    #[test]
+    fn hit_finds_the_buttons_where_draw_puts_them() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State::default();
+        frame(&mut ui, &bs, &mut st, None);
+        let at = Vec2::new(1366.0, 723.0);
+        for (i, b) in bs.iter().enumerate() {
+            let c = ui.drawn[&id_of(&format!("alt:{}", b.id))].center();
+            assert_eq!(hit(at, bs.len(), c), Some(i));
+        }
+        assert_eq!(hit(at, bs.len(), Vec2::new(0.0, 0.0)), None);
+        // the header and the gap between two buttons are no button
+        assert_eq!(hit(at, bs.len(), at + Vec2::new(20.0, 10.0)), None);
+        let r = panel_rect(at, bs.len());
+        assert!(r.w > 0.0 && r.h > 0.0);
+    }
+
+    #[test]
+    fn a_focused_button_is_not_a_choice() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State {
+            focus: Some("swap".into()),
+            ..Default::default()
+        };
+        assert_eq!(frame(&mut ui, &bs, &mut st, None), None);
+        assert!(st.chosen.is_none());
+    }
+
+    #[test]
+    fn the_panel_has_a_row_for_every_five_buttons() {
+        let one = panel_size(1);
+        assert_eq!(panel_size(5), one);
+        assert!(panel_size(6).y > one.y);
+        assert_eq!(panel_size(15).y - one.y, 2.0 * (CELL_H + 6.0));
+    }
+}

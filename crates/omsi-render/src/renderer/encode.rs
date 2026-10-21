@@ -24,6 +24,7 @@ impl Renderer {
         let projection = f.projection;
         let ro = f.ro;
         let full_w = f.full_w;
+        let full_h = f.full_h;
         let width = f.width;
         let height = f.height;
         let vanilla_fxaa = f.vanilla_fxaa;
@@ -284,6 +285,19 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
+        // (the window's picture only: whoever holds the hook draws over it, at full size; a
+        // triple screen's panels are not covered)
+        if f.window_picture {
+            if let Some(hook) = self.overlay_hook.as_mut() {
+                hook(
+                    &self.device,
+                    &self.queue,
+                    &mut encoder,
+                    target,
+                    (full_w, full_h),
+                );
+            }
+        }
         clock.stage(self, "encode", "mirror.encode");
         FrameEncoders {
             shadow_encoder,
