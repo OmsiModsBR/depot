@@ -1510,6 +1510,11 @@ impl Launcher {
         let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
         self.vehicles.set_picture(has_bus.then_some(picture));
         self.vehicles.draw(&mut self.ui, body);
+        // (the bus the next start uses: its card shows what is chosen for it)
+        if let Some(file) = self.vehicles.fresh_bus().filter(|f| f.eq_ignore_ascii_case(&self.state.choice.bus)) {
+            let c = &self.state.choice;
+            self.vehicles.prepare(&file, c.hof_manual.then_some(c.hof.as_str()), &c.number, &c.plate);
+        }
         if let (Some((bus, paint)), false) = (self.vehicles.current().cloned(), self.state.in_game()) {
             let c = &self.state.choice;
             if !c.map.is_empty() {
@@ -1526,10 +1531,8 @@ impl Launcher {
                 }
             }
         }
-        if let Some((file, paint)) = self.vehicles.take_use() {
-            self.state.select_bus(&file);
-            self.state.choice.paint = paint;
-            self.state.touched();
+        if let Some(u) = self.vehicles.take_use() {
+            self.state.use_bus(u);
             self.go(Page::Maps);
         }
     }

@@ -69,9 +69,9 @@ impl Page {
         match self {
             Page::Drive => None,
             Page::Vehicles => Some((
-                "Preview",
+                "Library",
                 "Choose and check your bus",
-                "Inspect the bus with its paint and the author's description before starting the map.",
+                "Look at a bus with its paint and the author's description. Pick one to have it ready when you start from Maps.",
             )),
             Page::Maps => Some((
                 "Start",
