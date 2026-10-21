@@ -32,6 +32,7 @@ mod platform;
 mod touch;
 mod placing;
 mod mt;
+mod tr_fill;
 mod about;
 mod screenshot_name;
 mod actions;
@@ -159,7 +160,7 @@ const _LOCALES: &str = include_str!("../locales/app.yml");
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
 pub(crate) fn ui_language(code: &str) {
-    omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()));
+    omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()).or_else(|| tr_fill::fill(lang, text)));
     let iso = omsi_launcher_lib::language_iso(code);
     omsi_ui::i18n::set_language(iso);
     omsi_sim::vehicle_api::set_locale(iso);

@@ -424,7 +424,7 @@ impl App {
         p.vehicle.attach_trailer_ex(ty.clone(), false);
         p.trailer_renders.push(w.add_vehicle_part(r, scene, &ty, None, &p.render));
         p.hand_coupled += 1;
-        self.service_msg = Some((format!("Coupled: {} {}", ty.def.manufacturer, ty.def.type_name), 3.0));
+        self.service_msg = Some((omsi_ui::tr("Coupled: %{bus}").replace("%{bus}", &format!("{} {}", ty.def.manufacturer, ty.def.type_name)), 3.0));
     }
 
     /// Uncouple the last part coupled by hand: it stays where it is, a vehicle of its own.
@@ -822,7 +822,7 @@ impl App {
         if matches!(kind, "refuel" | "wash") && at_petrol_station(&w, &p.vehicle) {
             let name = if kind == "refuel" { "veh_tank" } else { "veh_wash" };
             if !p.vehicle.service(name, 0.0) {
-                self.service_msg = Some((format!("this vehicle has no {} handling ({name})", if kind == "refuel" { "fuel pump" } else { "bus wash" }), 6.0));
+                self.service_msg = Some((if kind == "refuel" { format!("this vehicle has no fuel pump handling ({name})") } else { format!("this vehicle has no bus wash handling ({name})") }, 6.0));
                 return;
             }
             if kind == "wash" {
@@ -1071,7 +1071,7 @@ impl App {
                     let n = *c + 1;
                     // (the camera left keeps its look, the one taken finds its own again)
                     self.sync_view_look();
-                    self.service_msg = Some((format!("{} camera {n} of {count}", if pax { "Passenger" } else { "Driver" }), 2.0));
+                    self.service_msg = Some((if pax { format!("Passenger camera {n} of {count}") } else { format!("Driver camera {n} of {count}") }, 2.0));
                 }
             }
             "toggel_mouse_ctrl" => {
@@ -1107,7 +1107,7 @@ impl App {
             if !p.shift_gate_to(to) {
                 return false;
             }
-            self.service_msg = Some((format!("Gear {}", match to { 0 => "N".to_string(), -1 => "R".to_string(), n => n.to_string() }), 1.5));
+            self.service_msg = Some((omsi_ui::tr("Gear %{gear}").replace("%{gear}", &match to { 0 => "N".to_string(), -1 => "R".to_string(), n => n.to_string() }), 1.5));
             return true;
         }
         let Some(n) = names.iter().find(|n| p.vehicle.ty.program.trigger(n).is_some()) else {

@@ -168,7 +168,7 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
                     app.weather_cycle = Some(c);
                 }
                 let on = app.weather_cycle.is_some();
-                app.service_msg = Some((format!("Weather cycle {}", if on { "on" } else { "off" }), 3.0));
+                app.service_msg = Some((if on { "Weather cycle on" } else { "Weather cycle off" }.into(), 3.0));
             }
             // (only an installed weather file: the name comes from the admin's game)
             ("set", file) if !file.contains("..") && file.to_ascii_lowercase().starts_with("weather/") && file.to_ascii_lowercase().ends_with(".owt") => {
@@ -230,7 +230,7 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             if let Some(t) = app.traffic.as_mut() {
                 t.target = crate::game_lists::next_step(&crate::game_lists::TRAFFIC, t.target);
                 app.args.traffic = t.target;
-                app.service_msg = Some((format!("Traffic: {}", t.target), 3.0));
+                app.service_msg = Some((omsi_ui::tr("Traffic: %{n}").replace("%{n}", &t.target.to_string()), 3.0));
             }
         }
         _ => log::info!("admin: unknown action '{action}'"),
@@ -332,7 +332,7 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
             let kind = arg.trim();
             if matches!(kind, "repair" | "refuel" | "wash") {
                 app.run_service(kind);
-                app.service_msg = Some((format!("The host: {kind}"), 3.0));
+                app.service_msg = Some((match kind { "repair" => "The host: repair", "refuel" => "The host: refuel", _ => "The host: wash" }.into(), 3.0));
             }
         }
         "unstick" if from == 1 => {

@@ -1708,7 +1708,7 @@ impl ApplicationHandler for App {
                     }
                     if crash > 0.0 {
                         self.career.crashed(crash, p.vehicle.motion().velocity_kmh() / 3.6);
-                        self.service_msg = Some((format!("Crash: {:.0} kJ", crash / 1000.0), 6.0));
+                        self.service_msg = Some((omsi_ui::tr("Crash: %{energy} kJ").replace("%{energy}", &format!("{:.0}", crash / 1000.0)), 6.0));
                         #[cfg(feature = "plugins")]
                         {
                             use omsi_plugin::InfoValue::Num;
