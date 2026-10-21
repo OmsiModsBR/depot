@@ -2,7 +2,7 @@
 //! textures, the light map's tiles and the classic sky's textures.
 use crate::assets::upload_texture;
 use crate::lighting::{PointLight, LM_TILE_PX};
-use crate::renderer::{Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH};
+use crate::renderer::{MirrorEvent, Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH};
 use crate::scene::{mark_changed, Scene, TextureId};
 
 impl Renderer {
@@ -118,6 +118,9 @@ impl Renderer {
                     px[(y * n + x) * 4..(y * n + x) * 4 + 4].copy_from_slice(&img.rgba[o..o + 4]);
                 }
             }
+        }
+        if self.mirroring() {
+            self.mirror(MirrorEvent::LightMapTile { slot, rgba: &px });
         }
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {

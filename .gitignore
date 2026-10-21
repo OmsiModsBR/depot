@@ -15,3 +15,4 @@ node_modules/
 /android/debug.keystore.pass
 /android/build
 tools/greenteaspeak-plugin/*.zip
+__pycache__/
