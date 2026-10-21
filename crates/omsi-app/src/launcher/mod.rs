@@ -340,11 +340,15 @@ impl Launcher {
             start::open(&mut app, popup);
         }
         // (controls:reload, controls:add: the keyboard's windows)
-        match p.split(':').nth(1) {
+        match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
             Some("reload") => app.pages.kb.dialog = Some(keyboard::Dialog::Reload { backup: true, pads: true }),
             Some("add") => app.pages.kb.dialog = Some(keyboard::Dialog::Add { query: String::new(), chosen: None, key: None, waiting: false }),
-            // (controls:action=NAME: that action of the bus's keys chosen)
-            Some(a) if a.starts_with("action=") => app.pages.kb.chosen = Some((0, a["action=".len()..].to_string())),
+            // (controls:action=NAME: that action chosen, in the game's keys when it is one of them)
+            Some(a) if a.starts_with("action=") => {
+                let a = a["action=".len()..].to_string();
+                let game = app.state.keybindings.get("game").and_then(|x| x.as_array()).is_some_and(|x| x.iter().any(|b| b.get("action").and_then(|v| v.as_str()) == Some(a.as_str())));
+                app.pages.kb.chosen = Some((game as usize, a));
+            }
             _ => {}
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)

@@ -2,6 +2,7 @@
 //! in groups on the left, the group's actions with their key and second key in the middle,
 //! the chosen action on the right; above them, how the keys compare with the original OMSI 2's
 //! and its Reload. A key used twice is flagged, never refused: both actions fire, as in OMSI 2.
+//! The keys are named as OMSI 2 names them in the game's language (`Inputs/<lang>.kyb`).
 
 use super::pages::{action_text, control_names, save_keys};
 use super::theme::*;
@@ -64,6 +65,14 @@ fn keys_of(kb: &Value, key: &str, action: &str) -> Vec<Chord> {
         .unwrap_or_default()
 }
 
+/// The keys of `action` as the file has them, the held bit included (unbound ones left out).
+fn entries_of(kb: &Value, key: &str, action: &str) -> Vec<Chord> {
+    kb.get(key)
+        .and_then(|a| a.as_array())
+        .map(|a| a.iter().filter(|b| b.get("action").and_then(|x| x.as_str()) == Some(action)).map(|b| (b.get("scan_code").and_then(|x| x.as_i64()).unwrap_or(0), b.get("modifier").and_then(|x| x.as_i64()).unwrap_or(0))).filter(|c| c.0 != 0).collect())
+        .unwrap_or_default()
+}
+
 fn has_action(kb: &Value, key: &str, action: &str) -> bool {
     kb.get(key).and_then(|a| a.as_array()).is_some_and(|a| a.iter().any(|b| b.get("action").and_then(|x| x.as_str()) == Some(action)))
 }
@@ -87,8 +96,10 @@ pub struct Row {
     /// Their keys, the same order (scan 0: none).
     pub keys: Vec<Chord>,
     pub group: usize,
-    /// Its keys differ from the original OMSI 2's.
+    /// Its keys differ from the ones in the original OMSI 2's controls file.
     pub changed: bool,
+    /// Its keys differ from OMSI 2's as it comes, which has the action ("Back to original").
+    pub off_factory: bool,
     /// One of its keys is another action's too.
     pub shared: bool,
 }
@@ -112,7 +123,9 @@ impl Row {
 
 /// The page's actions from `kb` (as `get_keybindings` gives it), compared with the original
 /// OMSI 2's keys `original` when there are any; `label` names an action.
-pub fn rows(kb: &Value, original: Option<&Value>, label: &dyn Fn(&str) -> String) -> Vec<Row> {
+/// The keys of OMSI 2 as it comes are `factory` (its `keyboard_reset.cfg`; the built-in table
+/// where there is none).
+pub fn rows(kb: &Value, original: Option<&Value>, factory: Option<&Value>, label: &dyn Fn(&str) -> String) -> Vec<Row> {
     let mut out: Vec<Row> = Vec::new();
     for (sec, key) in SECTIONS.iter().enumerate() {
         let Some(list) = kb.get(*key).and_then(|a| a.as_array()) else { continue };
@@ -123,7 +136,7 @@ pub fn rows(kb: &Value, original: Option<&Value>, label: &dyn Fn(&str) -> String
                     r.entries.push(i);
                     r.keys.push(chord_of(b));
                 }
-                None => out.push(Row { sec, label: label(&action), group: group_of(sec, &action), entries: vec![i], keys: vec![chord_of(b)], changed: false, shared: false, action }),
+                None => out.push(Row { sec, label: label(&action), group: group_of(sec, &action), entries: vec![i], keys: vec![chord_of(b)], changed: false, off_factory: false, shared: false, action }),
             }
         }
     }
@@ -139,9 +152,12 @@ pub fn rows(kb: &Value, original: Option<&Value>, label: &dyn Fn(&str) -> String
             on.entry(k).or_default().push(&r.action);
         }
     }
-    let clash: std::collections::HashSet<Chord> = on.iter().filter(|(k, actions)| actions.len() > 1 && actions.iter().any(|a| !factory_keys(a).contains(k))).map(|(k, _)| *k).collect();
+    let clash: std::collections::HashSet<Chord> = on.iter().filter(|(k, actions)| actions.len() > 1 && actions.iter().any(|a| !factory_keys(factory, a).contains(k))).map(|(k, _)| *k).collect();
     for r in &mut out {
         r.shared = r.keys.iter().any(|k| clash.contains(k));
+        let now: Vec<Chord> = r.keys.iter().copied().filter(|k| k.0 != 0).collect();
+        let fk = factory_keys(factory, &r.action);
+        r.off_factory = !factory_entries(factory, SECTIONS[r.sec], &r.action).is_empty() && !same_keys(&now, &fk);
         if let Some(o) = original {
             let key = SECTIONS[r.sec];
             if has_action(o, key, &r.action) {
@@ -158,16 +174,36 @@ pub fn rows(kb: &Value, original: Option<&Value>, label: &dyn Fn(&str) -> String
 /// the keys after it.
 pub struct Reload {
     pub identical: usize,
-    pub changes: Vec<(String, String, String)>,
+    pub changes: Vec<(String, Vec<Chord>, Vec<Chord>)>,
     pub depot_only: usize,
     pub merged: Value,
 }
 
-fn names_of(keys: &[Chord]) -> String {
-    if keys.is_empty() {
-        return "none".into();
+/// The keys' names as OMSI 2 spells them in the game's language (`Inputs/<lang>.kyb`); the
+/// Depot's own for a key the table does not name.
+#[derive(Default, Clone)]
+pub struct KeyNames(pub Vec<(i32, String)>);
+
+impl KeyNames {
+    pub fn name(&self, k: Chord) -> String {
+        let Some((_, n)) = self.0.iter().find(|(c, _)| *c as i64 == k.0 && k.0 != 0) else {
+            return crate::keys::key_name(k.0, k.1);
+        };
+        let mut out = String::new();
+        for (bit, m) in [(omsi_content::input::KEY_SHIFT, "Shift+"), (omsi_content::input::KEY_CTRL, "Ctrl+"), (omsi_content::input::KEY_ALT, "Alt+")] {
+            if k.1 & bit as i64 != 0 {
+                out.push_str(m);
+            }
+        }
+        out + n
     }
-    keys.iter().map(|k| crate::keys::key_name(k.0, k.1)).collect::<Vec<_>>().join(", ")
+
+    fn list(&self, keys: &[Chord]) -> String {
+        if keys.is_empty() {
+            return "none".into();
+        }
+        keys.iter().map(|k| self.name(*k)).collect::<Vec<_>>().join(", ")
+    }
 }
 
 /// Every action the original OMSI 2 has gets its keys (its entries in place of the current
@@ -192,12 +228,12 @@ pub fn reload_plan(current: &Value, original: &Value, label: &dyn Fn(&str) -> St
                 depot_only += 1;
                 continue;
             }
-            let (k_now, k_orig) = (keys_of(current, key, a), keys_of(original, key, a));
-            if same_keys(&k_now, &k_orig) {
+            // (the held bit too: the files are the same after it)
+            if same_keys(&entries_of(current, key, a), &entries_of(original, key, a)) {
                 identical += 1;
                 continue;
             }
-            changes.push((label(a), names_of(&k_now), names_of(&k_orig)));
+            changes.push((label(a), keys_of(current, key, a), keys_of(original, key, a)));
             let at = out.iter().position(|b| b.get("action").and_then(|x| x.as_str()) == Some(a.as_str())).unwrap_or(out.len());
             out.retain(|b| b.get("action").and_then(|x| x.as_str()) != Some(a.as_str()));
             let at = at.min(out.len());
@@ -210,13 +246,24 @@ pub fn reload_plan(current: &Value, original: &Value, label: &dyn Fn(&str) -> St
     Reload { identical, changes, depot_only, merged }
 }
 
-/// OMSI 2's own keys for `action`, as it comes (the factory assignment).
-pub fn factory_keys(action: &str) -> Vec<Chord> {
-    omsi_content::input::stock_keys::STOCK_KEYS
-        .iter()
-        .filter(|(a, _, _)| a.eq_ignore_ascii_case(action))
-        .map(|(_, scan, m)| (*scan as i64, (*m & !omsi_content::input::KEY_HOLD) as i64))
-        .collect()
+/// The entries of `action` in OMSI 2 as it comes, in the section `key`: its `keyboard_reset.cfg`
+/// (`factory`), or the built-in table of it where there is none.
+fn factory_entries(factory: Option<&Value>, key: &str, action: &str) -> Vec<Value> {
+    match factory {
+        Some(f) => f.get(key).and_then(|a| a.as_array()).map(|a| a.iter().filter(|b| b.get("action").and_then(|x| x.as_str()) == Some(action)).cloned().collect()).unwrap_or_default(),
+        None => omsi_content::input::stock_keys::STOCK_KEYS
+            .iter()
+            .filter(|(a, _, _)| a.eq_ignore_ascii_case(action))
+            .map(|(_, scan, m)| json!({ "action": action, "scan_code": scan, "modifier": m }))
+            .collect(),
+    }
+}
+
+/// OMSI 2's own keys for `action`, as it comes (the factory assignment), in either section.
+pub fn factory_keys(factory: Option<&Value>, action: &str) -> Vec<Chord> {
+    // (the built-in table has no sections: once)
+    let keys: &[&str] = if factory.is_some() { &SECTIONS } else { &SECTIONS[..1] };
+    keys.iter().flat_map(|key| factory_entries(factory, key, action)).map(|b| chord_of(&b)).filter(|c| c.0 != 0).collect()
 }
 
 /// A window over the keyboard page.
@@ -236,19 +283,39 @@ pub struct KeyboardView {
     /// The action chosen (its section and name).
     pub chosen: Option<(usize, String)>,
     pub dialog: Option<Dialog>,
-    /// The original OMSI 2's keys, once read (`None` inside: it has none).
+    /// The original OMSI 2's keys, once read (`None` inside: it has none), and why they could
+    /// not be read.
     pub original: Option<Option<Value>>,
+    pub original_error: Option<String>,
+    /// OMSI 2's keys as it comes (`keyboard_reset.cfg`; `None`: the built-in table).
+    pub factory: Option<Value>,
+    /// The keys' names, and the language they were read for.
+    pub names: KeyNames,
+    names_lang: String,
+    /// The entry added for a second key, while it waits for its key (Esc takes it away).
+    added: Option<(usize, usize)>,
     /// When its controls file was saved, and when the keys were last reloaded from it.
     pub saved: Option<u64>,
     pub reloaded: Option<u64>,
 }
 
 impl KeyboardView {
-    fn load(&mut self) {
+    fn load(&mut self, lang: &str) {
         if self.original.is_none() {
-            self.original = Some(core::original_keybindings().ok().flatten());
+            // (a file that cannot be read is said so, not taken for a missing one)
+            let (original, error) = match core::original_keybindings() {
+                Ok(v) => (v, None),
+                Err(e) => (None, Some(format!("{e:#}"))),
+            };
+            self.original = Some(original);
+            self.original_error = error;
+            self.factory = core::factory_keybindings().ok().flatten();
             self.saved = core::original_keys_saved();
             self.reloaded = core::keys_reloaded_at();
+        }
+        if self.names_lang != lang {
+            self.names = KeyNames(core::key_names(lang));
+            self.names_lang = lang.to_string();
         }
     }
 }
@@ -290,7 +357,8 @@ fn pill(l: &mut Launcher, x: f32, cy: f32, text: &str, c: Color) -> f32 {
 
 /// The keyboard tab on a computer, in `body` (under the page's tabs).
 pub fn draw(l: &mut Launcher, body: Rect) {
-    l.pages.kb.load();
+    let lang = l.state.settings.get("language").and_then(|x| x.as_str()).unwrap_or("ENG").to_string();
+    l.pages.kb.load(&lang);
     // (with a window open, the key goes to it: see `dialog`)
     if l.pages.kb.dialog.is_none() {
         capture(l);
@@ -298,8 +366,10 @@ pub fn draw(l: &mut Launcher, body: Rect) {
     let names = control_names(l);
     let label = |a: &str| action_text(names, a);
     let original = l.pages.kb.original.clone().flatten();
-    let all = rows(&l.state.keybindings, original.as_ref(), &label);
-    let changed = all.iter().filter(|r| r.changed).count();
+    let factory = l.pages.kb.factory.clone();
+    let all = rows(&l.state.keybindings, original.as_ref(), factory.as_ref(), &label);
+    // (as many as a reload would change: the original's actions the Depot lacks count too)
+    let changed = original.as_ref().map(|o| reload_plan(&l.state.keybindings, o, &|a| a.to_string()).changes.len()).unwrap_or(0);
     // (the chip at the tabs' right: how far the layout is from the original)
     let chip = if original.is_none() { "Your layout".to_string() } else if changed == 0 { "Your layout · same as your OMSI 2".into() } else { format!("Your layout · {changed} changed from your OMSI 2") };
     let cw = l.ui.width(&chip, 12.0, Weight::Regular) + 24.0;
@@ -338,6 +408,7 @@ fn capture(l: &mut Launcher) {
     }
     l.ui.input.raw_key = None;
     if code == K::Escape {
+        drop_added(l);
         l.pages.capturing = None;
         if let Some(Dialog::Add { waiting, .. }) = &mut l.pages.kb.dialog {
             *waiting = false;
@@ -358,6 +429,7 @@ fn capture(l: &mut Launcher) {
         return;
     }
     let Some((sec, idx)) = l.pages.capturing.take() else { return };
+    l.pages.kb.added = None;
     let section = SECTIONS[sec];
     let vr = l.state.keybindings.get(section).and_then(|a| a.as_array()).and_then(|a| a.get(idx)).and_then(|b| b.get("action")).and_then(|a| a.as_str()).is_some_and(|a| a.starts_with("vr_"));
     if let Some(b) = l.state.keybindings.get_mut(section).and_then(|a| a.as_array_mut()).and_then(|a| a.get_mut(idx)) {
@@ -400,7 +472,9 @@ fn import_bar(l: &mut Launcher, r: Rect, found: bool, changed: usize) -> f32 {
     l.ui.p().rounded(r, 6.0, accent().alpha(0.08));
     l.ui.p().rounded_border(r, 6.0, 1.0, accent().alpha(0.45));
     l.ui.icon("o-folder", Vec2::new(r.x + 20.0, r.center().y), 16.0, TEXT_SOFT);
-    let (lead, rest) = if !found {
+    let (lead, rest) = if let Some(e) = &l.pages.kb.original_error {
+        ("Your OMSI 2 controls file could not be read".to_string(), format!(" · {e}"))
+    } else if !found {
         ("No controls file in your OMSI 2 folder".to_string(), " · the keys are the Depot's own.".to_string())
     } else {
         let lead = if changed == 0 { "Same keys as your original OMSI 2".to_string() } else if changed == 1 { "1 key differs from your original OMSI 2".to_string() } else { format!("{changed} keys differ from your original OMSI 2") };
@@ -472,7 +546,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
     // (a search looks through every action, whatever the group)
     let shown: Vec<&Row> = all
         .iter()
-        .filter(|x| if q.is_empty() { x.in_list(l.pages.kb.list) } else { matches(&x.label, &q) || x.action.to_lowercase().contains(&q) || x.keys.iter().any(|k| k.0 != 0 && crate::keys::key_name(k.0, k.1).to_lowercase().contains(&q)) })
+        .filter(|x| if q.is_empty() { x.in_list(l.pages.kb.list) } else { matches(&x.label, &q) || x.action.to_lowercase().contains(&q) || x.keys.iter().any(|k| k.0 != 0 && l.pages.kb.names.name(*k).to_lowercase().contains(&q)) })
         .collect();
     let title = if q.is_empty() { list_name(l.pages.kb.list) } else { "Search" };
     let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 16.0, r.y + 14.0, r.w - 32.0, r.h - 28.0), title);
@@ -496,6 +570,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
     let chosen = l.pages.kb.chosen.clone();
     let capturing = l.pages.capturing;
     let time = l.ui.time;
+    let names = l.pages.kb.names.clone();
     // (what was clicked: the row, a key cell (row, which key), back to the original)
     let mut pick: Option<(usize, String)> = None;
     let mut key_click: Option<(usize, usize)> = None;
@@ -538,7 +613,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
                 let entry = row.entries.get(k).copied();
                 let waiting = entry.is_some_and(|e| capturing == Some((row.sec, e)));
                 let key = row.keys.get(k).filter(|c| c.0 != 0);
-                let text = if waiting { "press a key…".to_string() } else { key.map(|c| crate::keys::key_name(c.0, c.1)).unwrap_or_else(|| "–".into()) };
+                let text = if waiting { "press a key…".to_string() } else { key.map(|c| names.name(*c)).unwrap_or_else(|| "–".into()) };
                 let w = if key.is_some() || waiting { ui.width(&text, 12.0, Weight::Medium) + 16.0 } else { 26.0 };
                 let cr = Rect::new(x, cy - 11.0, w.max(26.0), 22.0);
                 let (h, _, c) = ui.interact(id_of(&format!("kb-cap-{}-{}-{k}", row.sec, row.action)), cr);
@@ -554,7 +629,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
                     key_click = Some((n, k));
                 }
             }
-            if row.changed {
+            if row.off_factory {
                 let xr = Rect::new(rr.right() - 30.0, cy - 12.0, 24.0, 24.0);
                 let (hx, _, cx) = ui.interact(id_of(&format!("kb-reset-{}-{}", row.sec, row.action)), xr);
                 ui.icon("restart_alt", xr.center(), 15.0, if hx { accent() } else { TEXT_DIM });
@@ -581,6 +656,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
 /// The `k`-th key of `row` waits to be pressed (a second key's entry is added for it when the
 /// action has one key only).
 fn wait_for_key(l: &mut Launcher, row: &Row, k: usize) {
+    drop_added(l);
     if let Some(&e) = row.entries.get(k) {
         l.pages.capturing = Some((row.sec, e));
         return;
@@ -592,16 +668,33 @@ fn wait_for_key(l: &mut Launcher, row: &Row, k: usize) {
             let hold = b.get("modifier").and_then(|x| x.as_i64()).unwrap_or(0) & omsi_content::input::KEY_HOLD as i64;
             a.insert(last + 1, json!({ "action": row.action, "scan_code": 0, "modifier": hold }));
             l.pages.capturing = Some((row.sec, last + 1));
+            l.pages.kb.added = Some((row.sec, last + 1));
         }
     }
 }
 
-/// `row`'s keys as the original OMSI 2 has them.
+/// The entry added for a second key goes again when it got no key (Esc, or another key clicked).
+fn drop_added(l: &mut Launcher) {
+    let Some((sec, idx)) = l.pages.kb.added.take() else { return };
+    if let Some(a) = l.state.keybindings.get_mut(SECTIONS[sec]).and_then(|a| a.as_array_mut()) {
+        if a.get(idx).is_some_and(|b| b.get("scan_code").and_then(|x| x.as_i64()).unwrap_or(0) == 0) {
+            a.remove(idx);
+        }
+    }
+    if l.pages.capturing == Some((sec, idx)) {
+        l.pages.capturing = None;
+    }
+}
+
+/// `row`'s keys as OMSI 2 has them as it comes (its `keyboard_reset.cfg`).
 fn back_to_original(l: &mut Launcher, row: &Row) {
-    let Some(orig) = l.pages.kb.original.clone().flatten() else { return };
     let key = SECTIONS[row.sec];
+    let from = factory_entries(l.pages.kb.factory.as_ref(), key, &row.action);
+    if from.is_empty() {
+        return;
+    }
     let mut only = json!({ "vehicles": [], "game": [] });
-    only[key] = json!(orig.get(key).and_then(|a| a.as_array()).map(|a| a.iter().filter(|b| b.get("action").and_then(|x| x.as_str()) == Some(row.action.as_str())).cloned().collect::<Vec<_>>()).unwrap_or_default());
+    only[key] = json!(from);
     // (the reload of one action: every other one as it is)
     let plan = reload_plan(&l.state.keybindings, &only, &|a| a.to_string());
     l.state.keybindings = plan.merged;
@@ -627,7 +720,7 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
         y += 20.0;
         let f = Rect::new(inner.x, y, inner.w, 34.0);
         let waiting = row.entries.get(k).is_some_and(|e| l.pages.capturing == Some((row.sec, *e)));
-        let key = row.keys.get(k).filter(|c| c.0 != 0).map(|c| crate::keys::key_name(c.0, c.1));
+        let key = row.keys.get(k).filter(|c| c.0 != 0).map(|c| l.pages.kb.names.name(*c));
         let (h, _, c) = l.ui.interact_key(id_of(&format!("kb-field-{k}")), f);
         l.ui.p().rounded(f, 4.0, FIELD);
         l.ui.p().rounded_border(f, 4.0, 1.0, if waiting { accent() } else if h { TEXT_DIM } else { EDGE });
@@ -654,10 +747,11 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
             x += 44.0;
         }
         for k in keys {
-            x = cap(l, x, *y + 11.0, &crate::keys::key_name(k.0, k.1), EDGE).right() + 6.0;
+            let n = l.pages.kb.names.name(*k);
+            x = cap(l, x, *y + 11.0, &n, EDGE).right() + 6.0;
         }
         if differs {
-            let now = if mine.is_empty() { "none".to_string() } else { names_of(&mine) };
+            let now = l.pages.kb.names.list(&mine);
             let t = omsi_launcher_ui::kit::fit_text(&mut l.ui, &format!("you changed it to {now}"), 12.0, inner.right() - x - 6.0);
             l.ui.text_in(&t, Rect::new(x + 4.0, *y, inner.right() - x, 22.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         }
@@ -665,16 +759,16 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
     };
     let in_omsi = original.filter(|o| has_action(o, SECTIONS[row.sec], &row.action)).map(|o| keys_of(o, SECTIONS[row.sec], &row.action));
     match &in_omsi {
-        Some(k) => line(l, &mut y, "In your original OMSI 2", k, row.changed),
+        Some(k) => line(l, &mut y, "In your OMSI 2 controls file", k, row.changed),
         None => {
-            l.ui.text_in("In your original OMSI 2", Rect::new(inner.x, y, inner.w, 16.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            l.ui.text_in("In your OMSI 2 controls file", Rect::new(inner.x, y, inner.w, 16.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
             l.ui.text_in("Not there: a Depot key, kept as it is.", Rect::new(inner.x, y + 20.0, inner.w, 22.0), 12.5, Weight::Regular, TEXT_FAINT, Align::Left);
             y += 54.0;
         }
     }
-    let factory = factory_keys(&row.action);
+    let factory = factory_keys(l.pages.kb.factory.as_ref(), &row.action);
     if !factory.is_empty() {
-        line(l, &mut y, "Factory key (OMSI 2 as it comes)", &factory, false);
+        line(l, &mut y, "Original (OMSI 2 as it comes)", &factory, false);
     }
     let _ = y;
     // the foot: back to the original, clear; and why a shared key is fine
@@ -683,7 +777,7 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
     let by = inner.bottom() - nh - 46.0;
     let cw = 80.0;
     let back = Rect::new(inner.x, by, inner.w - cw - 10.0, 34.0);
-    if row.changed && in_omsi.is_some() {
+    if row.off_factory {
         if l.ui.button("kb-back", back, "Back to original", Some("restart_alt"), ButtonKind::Normal) {
             back_to_original(l, &row);
         }
@@ -743,7 +837,8 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
     for (s, x) in [("Action", cols[0]), ("Your key now", cols[1]), ("OMSI 2 key", cols[2])] {
         l.ui.text_in(s, Rect::new(x, t.y, 200.0, 32.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
     }
-    let changes = plan.changes.clone();
+    let names = l.pages.kb.names.clone();
+    let changes: Vec<(String, String, String)> = plan.changes.iter().map(|(a, now, omsi)| (a.clone(), names.list(now), names.list(omsi))).collect();
     l.ui.scroll_area("kb-reload-list", Rect::new(t.x, t.y + 34.0, t.w, t.h - 34.0), &mut |ui, v| {
         if changes.is_empty() {
             ui.text_in("Nothing to change: every key is already the original OMSI 2's.", Rect::new(v.x + 12.0, v.y, v.w, 32.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
@@ -760,11 +855,11 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
         changes.len() as f32 * 36.0
     });
     let mut y = t.bottom() + 12.0;
-    l.ui.toggle("kb-reload-backup", Rect::new(body.x, y, body.w, 30.0), &mut backup, "Keep a backup of my current layout first");
+    l.ui.toggle("kb-reload-backup", Rect::new(body.x, y, body.w, 30.0), &mut backup, "Keep a backup of my current layout (and controllers) first");
     y += 34.0;
     l.ui.toggle("kb-reload-pads", Rect::new(body.x, y, body.w, 30.0), &mut pads, "Also read the game controller assignments");
     y += 38.0;
-    l.ui.paragraph("After reloading, every key the original OMSI 2 has matches its keyboard (and, with the switch above, controller) files; keys only the Depot has are kept. The original files are only read, never written to.", Vec2::new(body.x, y), body.w, 12.0, Weight::Regular, TEXT_DIM);
+    l.ui.paragraph("After reloading, every key the original OMSI 2 has matches its keyboard file, and each controller it has is set up as there (matched by its name); keys and controllers only the Depot has are kept. The original files are only read, never written to.", Vec2::new(body.x, y), body.w, 12.0, Weight::Regular, TEXT_DIM);
     let apply = Rect::new(buttons.right() - 170.0, buttons.y, 170.0, 34.0);
     if l.ui.button("kb-reload-apply", apply, "Reload and apply", None, ButtonKind::Primary) {
         match core::reload_keybindings(&plan.merged, backup) {
@@ -773,14 +868,16 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
                 if let Ok(k) = core::get_keybindings() {
                     l.state.keybindings = k;
                 }
+                // (as any key changed here: the game uses these keys, not a ready-made layout)
+                super::pages::use_custom_keys(l);
                 let mut said = format!("Keys reloaded from OMSI 2 ({} changed).", plan.changes.len());
                 if let Some(p) = kept {
                     said.push_str(&format!(" Your layout before is kept as {}.", p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default()));
                 }
                 if pads {
-                    match reload_pads(l) {
-                        Ok(true) => said.push_str(" Game controllers read too."),
-                        Ok(false) => {}
+                    match reload_pads(l, backup) {
+                        Ok(Some(n)) => said.push_str(&format!(" Game controllers read too ({n} from OMSI 2; the Depot's others kept).")),
+                        Ok(None) => {}
                         Err(e) => said.push_str(&format!(" The game controllers were not read: {e}")),
                     }
                 }
@@ -797,23 +894,46 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
     l.pages.kb.dialog = Some(Dialog::Reload { backup, pads });
 }
 
-/// The original OMSI 2's controller assignments (`Inputs/gamectrler.cfg`) as the Depot's own;
-/// false when it has none.
-fn reload_pads(l: &mut Launcher) -> Result<bool, String> {
-    let file = std::path::Path::new(&l.state.config.root).join("Inputs").join("gamectrler.cfg");
-    if !file.is_file() {
-        return Ok(false);
-    }
-    let mut devices = omsi_content::input::gamectrler::read(&file).map_err(|e| e.to_string())?;
+/// The original OMSI 2's controller assignments (`Inputs/gamectrler.cfg`): each of its devices
+/// in place of the Depot's of that name (or added), the Depot's others kept; with `backup`, the
+/// Depot's file is copied beside itself first. The number of devices read; `None` when it has
+/// no such file.
+fn reload_pads(l: &mut Launcher, backup: bool) -> Result<Option<usize>, String> {
+    let root = std::path::PathBuf::from(&l.state.config.root);
+    let Some(file) = omsi_cfg::original_inputs_file(&root, "gamectrler.cfg") else { return Ok(None) };
+    let mut theirs = omsi_content::input::gamectrler::read(&file).map_err(|e| e.to_string())?;
     // (as reading it in place does: a wheel's 0/0 force feedback scale is the Depot's default)
-    for d in &mut devices {
+    for d in &mut theirs {
         if d.ff_scale == Some((0.0, 0.0)) {
             d.ff_scale = None;
         }
     }
+    let own_file = crate::startup::content_dir().map(|d| d.join("Inputs").join("gamectrler.cfg"));
+    let mut devices = match &own_file {
+        Some(f) if f.is_file() => omsi_content::input::gamectrler::read(f).map_err(|e| e.to_string())?,
+        _ => Vec::new(),
+    };
+    if backup {
+        if let Some(f) = &own_file {
+            core::backup_beside(f).map_err(|e| format!("{e:#}"))?;
+        }
+    }
+    let n = theirs.len();
+    merge_devices(&mut devices, theirs);
     crate::controllers::save_cfg(&devices)?;
     l.pages.pads = Default::default();
-    Ok(true)
+    Ok(Some(n))
+}
+
+/// The devices `theirs` in `own`: each in place of the one of its name (whatever the case), or
+/// added at the end.
+fn merge_devices(own: &mut Vec<crate::controllers::DeviceCfg>, theirs: Vec<crate::controllers::DeviceCfg>) {
+    for d in theirs {
+        match own.iter_mut().find(|o| o.name.eq_ignore_ascii_case(&d.name)) {
+            Some(o) => *o = d,
+            None => own.push(d),
+        }
+    }
 }
 
 fn add_dialog(l: &mut Launcher, mut query: String, mut chosen: Option<String>, mut key: Option<Chord>, mut waiting: bool) {
@@ -881,24 +1001,24 @@ fn add_dialog(l: &mut Launcher, mut query: String, mut chosen: Option<String>, m
             let (h, _, c) = l.ui.interact_key(id_of("kb-add-key"), f);
             l.ui.p().rounded(f, 4.0, FIELD);
             l.ui.p().rounded_border(f, 4.0, 1.0, if waiting { accent() } else if h { TEXT_DIM } else { EDGE });
-            let text = if waiting { "Press a key now...".to_string() } else { key.map(|k| crate::keys::key_name(k.0, k.1)).unwrap_or_else(|| "Click, then press a key".into()) };
+            let text = if waiting { "Press a key now...".to_string() } else { key.map(|k| l.pages.kb.names.name(k)).unwrap_or_else(|| "Click, then press a key".into()) };
             l.ui.text_in(&text, Rect::new(f.x + 12.0, f.y, f.w - 24.0, f.h), 13.0, Weight::Regular, if waiting || key.is_some() { TEXT } else { TEXT_FAINT }, Align::Left);
             if c {
                 waiting = true;
             }
             y += 46.0;
             if let Some(k) = key {
-                let rows = rows(&l.state.keybindings, None, &|a| action_text(names, a));
+                let rows = rows(&l.state.keybindings, None, None, &|a| action_text(names, a));
                 let others: Vec<String> = rows.iter().filter(|r| r.keys.contains(&k)).map(|r| r.label.clone()).collect();
                 if !others.is_empty() {
-                    let t = format!("{} is also used by {}. Both will fire together. You can still add it.", crate::keys::key_name(k.0, k.1), others.join(", "));
+                    let t = format!("{} is also used by {}. Both will fire together. You can still add it.", l.pages.kb.names.name(k), others.join(", "));
                     y += l.ui.paragraph(&t, Vec2::new(right.x, y), right.w, 12.0, Weight::Regular, WARN) + 10.0;
                 }
             }
             l.ui.paragraph("Only actions the game knows are listed, so you cannot create one that does nothing; a bus's own trigger is added when its whole name is typed.", Vec2::new(right.x, y), right.w, 12.0, Weight::Regular, TEXT_FAINT);
         }
     }
-    let shared = key.is_some_and(|k| rows(&l.state.keybindings, None, &|a| a.to_string()).iter().any(|r| r.keys.contains(&k)));
+    let shared = key.is_some_and(|k| rows(&l.state.keybindings, None, None, &|a| a.to_string()).iter().any(|r| r.keys.contains(&k)));
     let add = Rect::new(buttons.right() - 140.0, buttons.y, 140.0, 34.0);
     let ready = chosen.is_some() && key.is_some();
     if ready && l.ui.button("kb-add-apply", add, if shared { "Add anyway" } else { "Add" }, None, ButtonKind::Primary) {
@@ -964,7 +1084,7 @@ mod tests {
             json!([{"action":"sim_pause","scan_code":36,"modifier":0},{"action":"vr_recenter","scan_code":0,"modifier":0}]),
         );
         let orig = kb(json!([{"action":"horn","scan_code":35,"modifier":1},{"action":"parking_brake_toggle","scan_code":83,"modifier":0}]), json!([{"action":"sim_pause","scan_code":36,"modifier":0}]));
-        let r = rows(&now, Some(&orig), &|a| a.to_string());
+        let r = rows(&now, Some(&orig), None, &|a| a.to_string());
         let get = |a: &str| r.iter().find(|x| x.action == a).unwrap();
         assert_eq!(get("horn").entries, vec![0, 1]);
         assert!(get("horn").shared && get("sim_pause").shared);
@@ -976,7 +1096,13 @@ mod tests {
         assert!(get("vr_recenter").in_list(10) && get("horn").in_list(8) && get("parking_brake_toggle").in_list(9));
         // (OMSI 2's own layout shares keys on purpose: the manual and the automatic R)
         let stock = kb(json!([{"action":"kw_s_R","scan_code":19,"modifier":0},{"action":"automatic_R","scan_code":19,"modifier":0}]), json!([]));
-        assert!(rows(&stock, None, &|a| a.to_string()).iter().all(|r| !r.shared));
+        assert!(rows(&stock, None, None, &|a| a.to_string()).iter().all(|r| !r.shared));
+        // (the factory's own keys: `keyboard_reset.cfg` when OMSI 2 has one)
+        let factory = kb(json!([{"action":"parking_brake_toggle","scan_code":52,"modifier":0}]), json!([]));
+        let r = rows(&now, Some(&orig), Some(&factory), &|a| a.to_string());
+        let get = |a: &str| r.iter().find(|x| x.action == a).unwrap();
+        assert!(!get("parking_brake_toggle").off_factory);
+        assert!(!get("horn").off_factory, "the factory file has no horn: nothing to go back to");
     }
 
     /// Reloading gives every action the original has its keys (the held bit with them) and
@@ -993,12 +1119,60 @@ mod tests {
         assert_eq!(v[2]["modifier"], 4);
         assert_eq!(plan.merged["game"][0]["action"], "vr_recenter");
         assert_eq!(plan.changes[0].0, "parking_brake_toggle");
+        assert_eq!(plan.changes[0].2, vec![(83, 0), (25, 4)]);
+    }
+
+    /// The Depot's own actions (its gear keys, VR) are not in the original's file: a reload
+    /// counts them as the Depot's and leaves their keys as the player set them.
+    #[test]
+    fn a_reload_keeps_the_depots_own_actions_as_they_are() {
+        let now = kb(json!([{"action":"horn","scan_code":35,"modifier":0},{"action":"gear_up","scan_code":30,"modifier":0}]), json!([{"action":"vr_recenter","scan_code":30,"modifier":0},{"action":"sim_pause","scan_code":25,"modifier":0}]));
+        // (as `original_keybindings` reads it: the file's actions only)
+        let orig = kb(json!([{"action":"horn","scan_code":35,"modifier":0}]), json!([{"action":"sim_pause","scan_code":25,"modifier":0}]));
+        let plan = reload_plan(&now, &orig, &|a| a.to_string());
+        assert_eq!((plan.identical, plan.changes.len(), plan.depot_only), (2, 0, 2));
+        assert_eq!(plan.merged, now);
+        let r = rows(&now, Some(&orig), None, &|a| a.to_string());
+        assert!(r.iter().all(|x| !x.changed));
+    }
+
+    /// The held bit is part of what a reload makes the same.
+    #[test]
+    fn a_reload_takes_the_held_bit_too() {
+        let now = kb(json!([{"action":"throttle","scan_code":72,"modifier":0}]), json!([]));
+        let orig = kb(json!([{"action":"throttle","scan_code":72,"modifier":1}]), json!([]));
+        let plan = reload_plan(&now, &orig, &|a| a.to_string());
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.merged["vehicles"][0]["modifier"], 1);
+    }
+
+    /// The original's controllers replace the Depot's of their name; the Depot's others stay.
+    #[test]
+    fn the_originals_controllers_go_in_by_name() {
+        let dev = |name: &str| crate::controllers::DeviceCfg { name: name.into(), ..Default::default() };
+        let mut own = vec![dev("Logitech G29"), dev("Thrustmaster pedals")];
+        own[0].ff_scale = Some((50.0, 50.0));
+        merge_devices(&mut own, vec![dev("LOGITECH G29"), dev("Saitek panel")]);
+        let names: Vec<&str> = own.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, ["LOGITECH G29", "Thrustmaster pedals", "Saitek panel"]);
+        assert_eq!(own[0].ff_scale, None);
+    }
+
+    /// The game's key names (`.kyb`) name a key, with its Shift / Ctrl / Alt; a key the table
+    /// lacks keeps the Depot's name.
+    #[test]
+    fn keys_are_named_from_the_language_table() {
+        let names = KeyNames(vec![(72, "Num 8".into()), (42, "Shift (left)".into())]);
+        assert_eq!(names.name((72, 0)), "Num 8");
+        assert_eq!(names.name((72, omsi_content::input::KEY_CTRL as i64)), "Ctrl+Num 8");
+        assert_eq!(names.name((17, 0)), "W");
+        assert_eq!(names.list(&[]), "none");
     }
 
     #[test]
     fn the_factory_keys_are_omsi_2s_own() {
-        assert_eq!(factory_keys("parking_brake_toggle"), vec![(52, 0)]);
-        assert!(factory_keys("no_such_action").is_empty());
+        assert_eq!(factory_keys(None, "parking_brake_toggle"), vec![(52, 0)]);
+        assert!(factory_keys(None, "no_such_action").is_empty());
         assert_eq!(day(0), "01/01/1970");
         assert_eq!(day(1_717_200_000), "01/06/2024");
     }
