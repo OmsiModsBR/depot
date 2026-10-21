@@ -1,0 +1,38 @@
+//! The colours (`omsi_ui::theme`'s, named as the concept names them) and measures of the v5
+//! launcher concept, in design units (the concept is
+//! 1672x941; the window scales it uniformly).
+
+use omsi_ui::Color;
+
+pub const DESIGN_W: f32 = 1672.0;
+pub const DESIGN_H: f32 = 941.0;
+/// The window is never drawn smaller than this fraction of the design.
+pub const MIN_SCALE: f32 = 0.75;
+
+pub const BG: Color = omsi_ui::theme::BG;
+pub const SIDE: Color = omsi_ui::theme::RAIL;
+pub const PANEL: Color = omsi_ui::theme::PANEL;
+pub const PANEL_2: Color = omsi_ui::theme::FIELD;
+pub const LINE: Color = omsi_ui::theme::EDGE;
+pub const FG: Color = omsi_ui::theme::TEXT;
+pub const MUTED: Color = omsi_ui::theme::TEXT_DIM;
+pub const ACCENT: Color = omsi_ui::theme::ACCENT;
+pub const NAV_TEXT: Color = omsi_ui::theme::TEXT_SOFT;
+pub const OK: Color = omsi_ui::theme::OK;
+pub const WARN: Color = omsi_ui::theme::WARN;
+pub const ON_ACCENT: Color = omsi_ui::theme::ON_ACCENT;
+
+pub const SIDEBAR_W: f32 = 264.0;
+pub const NAV_ROW: f32 = 56.0;
+/// Where the sidebar's list starts (under the logo).
+pub const NAV_TOP: f32 = 119.0;
+pub const FOOT_ROW: f32 = 48.0;
+/// The concept's face is wider than ours at the same size: text is drawn this much larger.
+pub const TEXT_SCALE: f32 = 1.16;
+
+/// The scale from design units to pixels for a window of `w` x `h` pixels.
+pub fn scale_for(w: u32, h: u32) -> f32 {
+    (w as f32 / DESIGN_W)
+        .min(h as f32 / DESIGN_H)
+        .max(MIN_SCALE)
+}

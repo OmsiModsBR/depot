@@ -22,7 +22,6 @@
 
 use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
 use hashbrown::HashMap;
-use omsi_render::Renderer;
 use omsi_sim::traffic::Network;
 use omsi_ui::{Color, Draw, Gpu, Layer, Painter, Rect, Vertex};
 use std::path::{Path, PathBuf};
@@ -559,7 +558,7 @@ impl MapView {
     }
 
     /// The picture, drawn again when what it shows or how coarse it is changed.
-    pub fn picture(&mut self, renderer: &Renderer) -> Option<wgpu::TextureView> {
+    pub fn picture(&mut self, renderer: &super::gfx::Gfx) -> Option<wgpu::TextureView> {
         let (w, h) = self.size();
         let (w, h) = (w as u32, h as u32);
         if self.target.as_ref().map(|t| (t.2, t.3) != (w, h)).unwrap_or(true) {

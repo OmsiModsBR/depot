@@ -112,6 +112,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // (a mouse button of any kind makes Alt a modifier, not a tap, for the Alt bar)
+        if matches!(event, WindowEvent::MouseInput { state: ElementState::Pressed, .. }) {
+            self.new_ui.alt.other_down();
+        }
         match event {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();
@@ -121,6 +125,10 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     s.resize(r, size.width, size.height);
+                }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.resize(size.width, size.height);
                 }
                 // (minimised, Windows makes the window 0 x 0)
                 let hidden = size.width == 0 || size.height == 0;
@@ -167,6 +175,19 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { is_synthetic, ref event, .. } if self.input_away || (is_synthetic && event.state == ElementState::Pressed) => {}
             WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } if self.input_away => {}
             WindowEvent::KeyboardInput { event, .. } => {
+                // what is typed while a field of the Alt bar's window has the keyboard is the
+                // field's (the key itself does not reach the game either)
+                if event.state == ElementState::Pressed {
+                    let code = match event.physical_key {
+                        PhysicalKey::Code(c) => Some(c),
+                        _ => None,
+                    };
+                    if let Some(text) = event.text.as_deref() {
+                        if self.tool_text(text, code) {
+                            return;
+                        }
+                    }
+                }
                 if event.state == ElementState::Pressed && self.menu_edit_icao {
                     if let Some(text)=event.text.as_deref(){ self.icao_edit_text(text); }
                 }
@@ -400,6 +421,10 @@ impl ApplicationHandler for App {
                 if let (Some(surface), Some(renderer)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     surface.set_vsync(renderer, desktop_vsync);
                 }
+                #[cfg(windows)]
+                if let Some(d) = self.d3d9.as_ref() {
+                    d.set_vsync(desktop_vsync);
+                }
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
@@ -533,11 +558,25 @@ impl ApplicationHandler for App {
                         self.window.as_ref(),
                     ) {
                         hud.update(r, scene, &lines);
-                        if let wgpu::CurrentSurfaceTexture::Success(frame)
-                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
-                            s.surface.get_current_texture()
-                        {
-                            let view = frame.texture.create_view(&Default::default());
+                        let (frame, view) = match s.acquire() {
+                            wgpu::CurrentSurfaceTexture::Success(frame)
+                            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                                let view = frame.texture.create_view(&Default::default());
+                                (Some(frame), Some(view))
+                            }
+                            // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
+                            wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
+                                None,
+                                Some(crate::app::stand_in_view(
+                                    &mut self.stand_in,
+                                    r,
+                                    s.config.width,
+                                    s.config.height,
+                                )),
+                            ),
+                            _ => (None, None),
+                        };
+                        if let Some(view) = view {
                             let cam = Camera {
                                 position: DVec3::ZERO,
                                 yaw: 0.0,
@@ -559,10 +598,13 @@ impl ApplicationHandler for App {
                                 &cam,
                                 &lighting,
                             );
-                            win.pre_present_notify();
-                            frame.present();
+                            if let Some(frame) = frame {
+                                win.pre_present_notify();
+                                frame.present();
+                            }
                         }
                     }
+                    self.d3d9_present();
                     return;
                 }
                 if !self.drive_start(event_loop) {
@@ -1601,6 +1643,7 @@ impl ApplicationHandler for App {
                 if !self.paused {
                     self.tick_service(dt);
                 }
+                let mut finished = None;
                 if let (Some(d), Some(p), Some(w), false) = (
                     self.duty.as_mut(),
                     self.player.as_mut(),
@@ -1620,6 +1663,12 @@ impl ApplicationHandler for App {
                         self.career.stop_served(arrival, departure);
                     }
                     crate::journey::note(&mut self.journey, d, due, served, &self.args.root, || crate::journey::head(&self.career, &w.global.name, &p.vehicle, &self.clock));
+                    // (the trip at its last stop: its report once the doors open there, even
+                    // if the duty has moved on to the next trip by then)
+                    let done = d.trip_done().then(|| d.trip().stops.last().and_then(|s| s.position)).flatten();
+                    let candidate = done.map(|at| ((d.line.clone(), d.tour.clone(), d.first_trip + d.trip_index), d.trip_index, at));
+                    let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36 && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
+                    finished = Some((candidate, p.vehicle.position, doors));
                     #[cfg(feature = "plugins")]
                     if let Some((count, due_at, at)) = d.take_skipped() {
                         use omsi_plugin::InfoValue::Num;
@@ -1637,6 +1686,9 @@ impl ApplicationHandler for App {
                     ) {
                         log::warn!("driver timetable paper: {e:#}");
                     }
+                }
+                if let Some((candidate, bus, doors)) = finished {
+                    self.trip_watch(candidate, bus, doors);
                 }
                 if let Some(p) = self.player.as_mut() {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
@@ -2260,8 +2312,12 @@ impl ApplicationHandler for App {
                     );
                 }
                 *self.profile.entry("scripted").or_default() += __t.elapsed().as_secs_f64();
-                // (the game menu's lines, for the interface below)
-                let menu_lines = if self.game_menu.is_some() { self.game_menu_items() } else { Vec::new() };
+                // (an open list is drawn by the new interface beside the Esc menu's column: made
+                // below from the HUD's frame, `new_ui_pages`; the menu's top level is the new
+                // interface's own)
+                let mut page_column = self.new_pages_active().then(|| self.new_menu_frame());
+                let menu_area = self.new_ui_area();
+                let mut new_page = None;
                 // (the mirror editor's keys and the panel under the cursor, while it is on)
                 let mirror_help = match (self.player.as_ref(), self.mirror_hud_size()) {
                     (Some(p), Some(size)) => self.mirror_hud.help_lines(p, self.hud_cursor(), size),
@@ -2594,10 +2650,8 @@ impl ApplicationHandler for App {
                             }
                             None => (Vec::new(), None),
                         };
-                        // (the game menu's greyed-out lines: the timetable needs an active route)
-                        let menu_disabled: &[&str] = &[];
                         let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(self.list_kind.as_ref(), self.admin_list.as_deref(), chooser_sel, self.schedule.as_ref(), self.clock.time);
-                        let frame = ui::Frame {
+                        let mut frame = ui::Frame {
                             scale,
                             ui_scale: ui::size_factor(h, scale, self.settings.ui_scale, self.settings.ui_scale_window),
                             opacity: ui::backdrop(self.settings.ui_opacity),
@@ -2614,11 +2668,8 @@ impl ApplicationHandler for App {
                             notes: if self.settings.notes && !map_open && self.game_menu.is_none() { &notes } else { &[] },
                             fps: self.settings.show_fps.then_some(self.fps),
                             paused: self.paused,
-                            menu: match chooser_sel {
-                                Some(k) => Some((k, &chooser_items[..])),
-                                None => self.game_menu.map(|k| (k, &menu_lines[..])),
-                            },
-                            menu_disabled,
+                            // (an open list; the new menu draws the top level itself)
+                            menu: chooser_sel.map(|k| (k, &chooser_items[..])),
                             menu_kind,
                             menu_head,
                             menu_preview,
@@ -2639,10 +2690,21 @@ impl ApplicationHandler for App {
                             notices: &self.notices,
                             notice_anchor: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
+                        // (the new interface draws the open list: the HUD draws none, and the
+                        // rectangles its mouse code hit-tests are the new page's)
+                        let page = page_column.take().and_then(|c| crate::new_ui_pages::page_frame(&frame, self.list_kind.as_ref(), c));
+                        if page.is_some() {
+                            frame.menu = None;
+                        }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
+                        if let (Some(p), Some(area)) = (page.as_ref(), menu_area) {
+                            p.write_hits(ui, area);
+                        }
+                        new_page = page;
                     }
                     *self.profile.entry("hud").or_default() += __t.elapsed().as_secs_f64();
                 }
+                self.new_ui.page = new_page;
 
                 let mut lighting = match self.weather.as_ref() {
                     Some(w) => {
@@ -2694,6 +2756,8 @@ impl ApplicationHandler for App {
                 let mut finish = false;
                 let mut reconfigure = false;
                 let shot = self.shot.take();
+                // the new interface's overlay and the frame it draws (when it is on)
+                self.new_ui_update();
                 if let Some(s) = self.surface.as_ref() {
                     let (w, h) = (s.config.width, s.config.height);
                     self.touch_prepare(w, h);
@@ -2760,7 +2824,7 @@ impl ApplicationHandler for App {
                     let hidden_now = hide_test
                         .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
                         .unwrap_or(false);
-                    let acquired = match s.surface.get_current_texture() {
+                    let acquired = match s.acquire() {
                         wgpu::CurrentSurfaceTexture::Success(_)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(_)
                         if hidden_now =>
@@ -2772,37 +2836,19 @@ impl ApplicationHandler for App {
                     let (frame, stand_in) = match acquired {
                         wgpu::CurrentSurfaceTexture::Success(frame)
                         | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
+                        // ("DirectX9 (D3D9Ex)": the picture is drawn into a stand-in, and its
+                        // frame plan by the Direct3D 9Ex device into the window)
                         wgpu::CurrentSurfaceTexture::Occluded
-                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() =>
+                        if omsi_cfg::flags::RENDER_OCCLUDED.is_set() || s.is_shown_elsewhere() =>
                             {
-                                let (w, h) = (s.config.width, s.config.height);
-                                if self
-                                    .stand_in
-                                    .as_ref()
-                                    .map(|t| (t.width(), t.height()) != (w, h))
-                                    .unwrap_or(true)
-                                {
-                                    self.stand_in =
-                                        Some(r.device.create_texture(&wgpu::TextureDescriptor {
-                                            label: Some("hidden window"),
-                                            size: wgpu::Extent3d {
-                                                width: w,
-                                                height: h,
-                                                depth_or_array_layers: 1,
-                                            },
-                                            mip_level_count: 1,
-                                            sample_count: 1,
-                                            dimension: wgpu::TextureDimension::D2,
-                                            format: r.format(),
-                                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                                            view_formats: &[],
-                                        }));
-                                }
                                 (
                                     None,
-                                    self.stand_in
-                                        .as_ref()
-                                        .map(|t| t.create_view(&Default::default())),
+                                    Some(crate::app::stand_in_view(
+                                        &mut self.stand_in,
+                                        r,
+                                        s.config.width,
+                                        s.config.height,
+                                    )),
                                 )
                             }
                         wgpu::CurrentSurfaceTexture::Outdated
@@ -2813,7 +2859,7 @@ impl ApplicationHandler for App {
                         _ => (None, None),
                     };
                     *self.profile.entry("acquire").or_default() += __t.elapsed().as_secs_f64();
-                    if frame.is_none() {
+                    if frame.is_none() && !s.is_shown_elsewhere() {
                         self.hidden_frames += 1;
                     }
                     let shown_nothing = frame.is_none() && stand_in.is_none();
@@ -2933,7 +2979,10 @@ impl ApplicationHandler for App {
                         let mirrored = false;
                         #[cfg(windows)]
                         if let Some(vr) = self.vr.as_mut() {
-                            let menu_range = self.ui.as_ref().map(|u| u.menu_overlay_range.clone()).unwrap_or(0..0);
+                            // (the new Esc menu and its pages on the menu plane, where the HUD's
+                            // menu was; a list opened with no Esc menu is still the HUD's)
+                            let headset_menu = self.new_ui.headset_surface(r, scene, (s.config.width, s.config.height));
+                            let menu_range = headset_menu.clone().or_else(|| self.ui.as_ref().map(|u| u.menu_overlay_range.clone())).unwrap_or(0..0);
                             let cursor_overlay = self.ui.as_ref().and_then(|u| u.vr_cursor_overlay).filter(|_| self.vr_nav_edit.is_none());
                             let tooltip_overlay = self.ui.as_ref().and_then(|u| u.vr_tooltip_overlay).filter(|_| self.vr_nav_edit.is_none());
                             match vr.render(
@@ -2961,6 +3010,10 @@ impl ApplicationHandler for App {
                                     log::error!("OpenXR rendering stopped: {e:#}");
                                     self.vr = None;
                                 }
+                            }
+                            // (the window, when it is drawn, has the menu from the overlay hook)
+                            if let Some(range) = headset_menu {
+                                scene.overlays.truncate(range.start);
                             }
                         }
                         if self.in_cab {
@@ -3032,6 +3085,11 @@ impl ApplicationHandler for App {
                                 // session in order, #48 - now it only marks the loss)
                                 let _ = r.wait_gpu(None);
                             }
+                        }
+                        // ("DirectX9 (D3D9Ex)": its device shows the picture)
+                        #[cfg(windows)]
+                        if let Some(d) = self.d3d9.as_ref() {
+                            d.present();
                         }
                         *self.profile.entry("present").or_default() += __t.elapsed().as_secs_f64();
                     } else {
@@ -3295,6 +3353,8 @@ impl App {
     /// The mouse wheel (or a pinch of two fingers): `amount` notches, up positive.
     pub(crate) fn wheel(&mut self, amount: f32) {
         if self.vr_nav_edit.is_some() { self.vr_nav_scroll(amount); return; }
+        // over the new interface's "Add vehicle" window the wheel scrolls its list
+        if self.report_wheel(amount) || self.add_wheel(amount) || self.tool_wheel(amount) { return; }
         // over a mirror panel the wheel resizes it (Shift: wider or narrower)
         if let Some(size) = self.mirror_hud_size() {
             let shift =
@@ -3383,14 +3443,32 @@ impl App {
     /// The left mouse button (or a finger's tap) where the cursor is.
     pub(crate) fn left_button(&mut self, event_loop: &ActiveEventLoop, pressed: bool) {
         if let Some(edit) = self.vr_nav_edit.as_mut() { edit.moving = pressed; return; }
-        // a mirror panel is dragged with the left button (a release always ends a drag)
+        // a mirror panel is dragged with the left button (a release always ends a drag; no
+        // drag starts under the end-of-trip report, which takes the press)
         if let Some(size) = self
             .mirror_hud_size()
+            .filter(|_| !self.report_active())
             .or_else(|| (!pressed).then(|| self.hud_size()))
         {
             if self.mirror_hud.press(pressed, self.hud_cursor(), size) {
                 return;
             }
+        }
+        // the new interface's end-of-trip report takes every click while it shows
+        if self.report_click(pressed) {
+            return;
+        }
+        // the new interface's "Add vehicle" window takes the clicks on it
+        if self.add_click(pressed) {
+            return;
+        }
+        // and so do the Alt bar's other windows
+        if self.tool_click(pressed) {
+            return;
+        }
+        // the Alt bar of the new interface takes the clicks on it (never the game's)
+        if self.alt_click(pressed) {
+            return;
         }
         let state = if pressed { ElementState::Pressed } else { ElementState::Released };
         // placing a vehicle: a click sets it down
@@ -3402,6 +3480,10 @@ impl App {
         }
         // the game menu takes the clicks while it is open
         if self.game_menu.is_some() {
+            // (the new menu, when it is the one showing, takes the press; a release ends a drag as before)
+            if state == ElementState::Pressed && self.new_menu_click(event_loop) {
+                return;
+            }
             if state == ElementState::Pressed {
                 // (a tap or a click: only what is under the finger or the mouse is lit)
                 self.menu_kbd = false;

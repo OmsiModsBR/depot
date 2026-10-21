@@ -179,10 +179,14 @@ fn next_number(tours: &[Tour]) -> String {
 }
 
 pub fn draw(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, "Timetable", "A map's lines: their tours and when each trip leaves. Saved as the line's .ttl (in the content folder; OMSI 2's own files stay as they are).");
+    let body = l.page_title(area, omsi_launcher_ui::Page::Timetable);
     let maps: Vec<(String, String)> = l.state.maps.iter().map(|m| (m.friendly.clone(), m.file.clone())).collect();
     if maps.is_empty() {
-        l.ui.paragraph("No maps found.", glam::Vec2::new(body.x, body.y), body.w, 14.0, Weight::Regular, TEXT_DIM);
+        // (a card, as Sessions says it has none)
+        let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
+        l.ui.panel(r);
+        l.ui.icon("schedule", glam::Vec2::new(r.x + 40.0, r.center().y), 36.0, TEXT_FAINT);
+        l.ui.paragraph("No maps found.", glam::Vec2::new(r.x + 76.0, r.y + 52.0), r.w - 100.0, 13.5, Weight::Regular, TEXT_DIM);
         return;
     }
     let tv = &mut l.pages.tt;
@@ -224,7 +228,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     // --- the map and its lines
     let ui: &mut Ui = &mut l.ui;
     ui.panel(left);
-    let inner = ui.heading(Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0), "Lines", Some("route"));
+    let inner = Launcher::card_title(ui, Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0), "Lines");
     let names: Vec<String> = maps.iter().map(|m| m.0.clone()).collect();
     let mut m = tv.map;
     if ui.select("tt-map", Rect::new(inner.x, inner.y, inner.w, ROW), &mut m, &names) {
@@ -331,7 +335,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
 
     // --- its tours
     ui.panel(mid);
-    let inner = ui.heading(Rect::new(mid.x + 18.0, mid.y + 14.0, mid.w - 36.0, mid.h - 28.0), &format!("Line {line_name}"), Some("directions_bus"));
+    let inner = Launcher::card_title(ui, Rect::new(mid.x + 18.0, mid.y + 14.0, mid.w - 36.0, mid.h - 28.0), &format!("Line {line_name}"));
     let mut pick_tour = None;
     let tours: Vec<(String, String, usize)> = line.tours.iter().map(|t| (t.number.clone(), t.trips.first().map(|x| fmt_time(x.departure)).unwrap_or_default(), t.trips.len())).collect();
     let sel_tour = tv.tour;
@@ -412,7 +416,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         }
         return;
     };
-    let inner = ui.heading(Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), &format!("Tour {} - {}", tour.number, tour.ai_group), Some("schedule"));
+    let inner = Launcher::card_title(ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), &format!("Tour {} - {}", tour.number, tour.ai_group));
     if tv.times_for != Some((tv.line, tv.tour)) || tv.times.len() != tour.trips.len() {
         tv.times = tour.trips.iter().map(|t| fmt_time(t.departure)).collect();
         tv.times_for = Some((tv.line, tv.tour));
