@@ -280,6 +280,8 @@ fn sel_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, name: &str, r: Rect,
         Value::Number(n) => n.to_string(),
         _ => String::new(),
     };
+    // anisotropy 0 is off, the same entry as 1
+    let cur = if key == "anisotropy" && cur == "0" { "1".to_string() } else { cur };
     let mut labels: Vec<String> = options.iter().map(|o| o.1.to_string()).collect();
     let mut values: Vec<String> = options.iter().map(|o| o.0.to_string()).collect();
     let mut sel = values.iter().position(|v| *v == cur || v.parse::<f64>().ok().zip(cur.parse::<f64>().ok()).map(|(a, b)| (a - b).abs() < 1e-6).unwrap_or(false));
@@ -596,6 +598,23 @@ fn d3d9_fixes_vanilla(s: &Value) -> bool {
     cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9") && !vr
 }
 
+/// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
+fn api_limit(s: &Value, key: &str) -> Option<&'static crate::api_limits::ApiLimit> {
+    if d3d9_fixes_vanilla(s) { crate::api_limits::d3d9(key) } else { None }
+}
+
+/// The row of an option the API limits: a locked one is a line with its fixed value and why,
+/// a hidden one has no row. False when the option is not limited (the caller draws it).
+fn limited_row(ui: &mut Ui, c: &mut Col, s: &Value, key: &str, label: &str) -> bool {
+    let Some(l) = api_limit(s, key) else { return false };
+    if let Some(text) = l.text() {
+        let r = c.row();
+        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), label);
+        ui.label(Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &text);
+    }
+    true
+}
+
 /// How the game looks and how fast it runs.
 fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
     let mut c = Col::new(ui, cols[0], "Graphics");
@@ -608,7 +627,7 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
         ("High", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 2048, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "auto", "min_obj_size": 0.013, "max_obj_dist": "auto", "mirror_size": 256, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
         ("Ultra", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 4096, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "2000", "min_obj_size": 0.005, "max_obj_dist": "1500", "mirror_size": 512, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
     ];
-    {
+    if api_limit(s, "preset").is_none() {
         // the preset the settings match now, else "Custom"
         let matches = |p: &serde_json::Value| p.as_object().map(|o| o.iter().all(|(k, v)| {
             let cur = get(s, k);
@@ -631,19 +650,21 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     // "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no graphics improvements to choose,
     // Vanilla and fixed (the saved choice comes back with another graphics API)
     let fixed = d3d9_fixes_vanilla(s);
-    if fixed {
-        let r = c.row();
-        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Graphics");
-        ui.label(Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), "Vanilla (as OMSI 2), fixed with DirectX9 (D3D9Ex)");
-    } else {
-        sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+    if !limited_row(ui, &mut c, s, "graphics", "Graphics") {
+            sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
     }
     // Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain
     let classic = fixed || get(s, "graphics").as_str() == Some("vanilla");
     let traced = !fixed && get(s, "graphics").as_str() == Some("enhanced_plus");
-    sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
-    sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
-    sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
+    if !limited_row(ui, &mut c, s, "msaa", "Anti-aliasing") {
+        sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
+    }
+    if !limited_row(ui, &mut c, s, "render_scale", "Render scale") {
+        sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
+    }
+    if !limited_row(ui, &mut c, s, "anisotropy", "Anisotropic") {
+        sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
+    }
     if !classic {
         sel_setting(ui, s, dirty, "s-shadow", c.row(), "Shadow map", "shadow_size", &[("1024", "1024"), ("2048", "2048"), ("4096", "4096")]);
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
@@ -680,7 +701,9 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
         toggle_setting(ui, s, dirty, c.row(), "Reflection maps (paint, chrome, glass)", "reflections");
     }
     toggle_setting(ui, s, dirty, c.row(), "Clouds", "clouds");
-    toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
+    if !limited_row(ui, &mut c, s, "windy_trees", "Windy trees") {
+        toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
+    }
     let left = c.used();
     let mut c = Col::new(ui, cols[1], "Display");
     toggle_setting(ui, s, dirty, c.row(), "Fullscreen", "fullscreen");
@@ -701,8 +724,12 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     sel_setting(ui, s, dirty, "s-view", c.row(), "View distance", "view_distance", &[("auto", "Default (1200 m)"), ("600", "600 m - fastest"), ("900", "900 m"), ("1200", "1200 m"), ("1500", "1500 m"), ("2000", "2000 m"), ("2500", "2500 m")]);
     sel_setting(ui, s, dirty, "s-maxobj", c.row(), "Object distance", "max_obj_dist", &[("auto", "Automatic"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]);
     sel_setting(ui, s, dirty, "s-minobj", c.row(), "Small objects", "min_obj_size", &[("0.005", "All"), ("0.013", "Normal"), ("0.02", "Fewer (faster)"), ("0.03", "Few (fastest)")]);
-    sel_setting(ui, s, dirty, "s-mirror", c.row(), "Mirrors", "mirror_size", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]);
-    sel_setting(ui, s, dirty, "s-mirror-refresh", c.row(), "Real-time reflections", "mirror_refresh", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]);
+    if !limited_row(ui, &mut c, s, "mirror_size", "Mirrors") {
+        sel_setting(ui, s, dirty, "s-mirror", c.row(), "Mirrors", "mirror_size", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]);
+    }
+    if !limited_row(ui, &mut c, s, "mirror_refresh", "Real-time reflections") {
+        sel_setting(ui, s, dirty, "s-mirror-refresh", c.row(), "Real-time reflections", "mirror_refresh", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]);
+    }
     // (the game takes the smaller of an eighth of the memory and what the graphics
     // adapter is taken to hold, see `memory::texture_budget`)
     let adapter_mb = omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64;
@@ -2985,6 +3012,52 @@ mod settings_tests {
         click(tab, "accent-default", &mut s);
         assert_eq!(s["ui_accent"], json!("Amber"));
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
+    }
+
+    /// Every option of the "DirectX9 (D3D9Ex)" table (`api_limits`) has no control on the
+    /// Graphics tab under that API, and has one under another API.
+    #[test]
+    fn d3d9_limits_each_option_of_the_table() {
+        // (the Graphics tab's control of each option; a new table entry needs its control here)
+        let control = |key: &str| match key {
+            "preset" => "s-preset",
+            "graphics" => "s-graphics",
+            "shadows" => "set-shadows",
+            "shadow_size" => "s-shadow",
+            "shadow_casters" => "s-casters",
+            "ssao" => "set-ssao",
+            "detail_textures" => "set-detail_textures",
+            "night_brightness" => "s-night",
+            "led_glow" => "s-led",
+            "led_mips" => "s-led-mip",
+            "msaa" => "s-msaa",
+            "render_scale" => "s-scale",
+            "anisotropy" => "s-af",
+            "mirror_size" => "s-mirror",
+            "mirror_refresh" => "s-mirror-refresh",
+            "windy_trees" => "set-windy_trees",
+            other => panic!("{other} has no control named for the test"),
+        };
+        let drawn = |s: &mut Value| {
+            let mut ui = Ui::new();
+            frame(&mut ui, 0, s, &mut outside());
+            ui
+        };
+        let mut s = all_rows();
+        s["vr"] = json!(false);
+        s["graphics_api"] = json!("vulkan");
+        let ui = drawn(&mut s);
+        for l in crate::api_limits::D3D9 {
+            assert!(ui.drawn.contains_key(&id_of(control(l.key))), "{} is not on the tab under Vulkan", l.key);
+        }
+        s["graphics_api"] = json!("d3d9");
+        let before = s.clone();
+        let ui = drawn(&mut s);
+        for l in crate::api_limits::D3D9 {
+            assert_eq!(ui.drawn.contains_key(&id_of(control(l.key))), !cfg!(windows), "{} under DirectX9", l.key);
+        }
+        // (nothing saved is rewritten by looking at the page)
+        assert_eq!(s, before);
     }
 
     #[test]
