@@ -1211,7 +1211,7 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         #[cfg(not(feature = "lan"))]
         Page::Multiplayer => {}
         Page::Profile => super::pages::profile(l, content),
-        Page::Settings => super::pages::settings(l, content),
+        Page::Settings => super::settings::settings(l, content),
         Page::Controls => super::pages::controls(l, content),
         Page::Sessions => super::pages::sessions(l, content),
         Page::Mods => super::pages::mods(l, content),
