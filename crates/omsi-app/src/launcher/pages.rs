@@ -303,6 +303,33 @@ fn sel_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, name: &str, r: Rect,
     }
 }
 
+/// A choice of a few words, side by side as a segmented control (Windows 11's): each one
+/// clickable as `{key}-{value}`.
+fn seg_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &str, key: &str, options: &[(&str, &str)]) {
+    ui.label(Rect::new(r.x, r.y, r.w * 0.38, r.h), label);
+    let cur = get(s, key).as_str().unwrap_or("").to_string();
+    let bar = Rect::new(r.x + r.w * 0.38, r.y, r.w * 0.62, r.h);
+    ui.p().rounded(bar, 6.0, FIELD);
+    ui.p().rounded_border(bar, 6.0, 1.0, EDGE);
+    let w = bar.w / options.len().max(1) as f32;
+    for (k, (value, text)) in options.iter().enumerate() {
+        let cell = Rect::new(bar.x + w * k as f32, bar.y, w, bar.h);
+        let (hover, _, clicked) = ui.interact_key(id_of(&format!("{key}-{value}")), cell);
+        let on = cur == *value || (cur.is_empty() && k == 0);
+        if on {
+            let knob = cell.inset(3.0);
+            ui.p().rounded(knob, 4.0, SELECTED);
+            ui.p().rounded(Rect::new(knob.x + 1.0, knob.bottom() - 2.0, knob.w - 2.0, 2.0), 1.0, accent());
+        }
+        let c = if on { TEXT } else if hover { TEXT_SOFT } else { TEXT_DIM };
+        ui.text_in(text, cell, 12.5, Weight::Medium, c, Align::Center);
+        if clicked && !on {
+            s[key] = json!(value);
+            *dirty = 0.3;
+        }
+    }
+}
+
 fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &str, key: &str) {
     let mut v = get(s, key).as_bool().unwrap_or(false);
     if ui.toggle(&format!("set-{key}"), r, &mut v, label) {
@@ -489,7 +516,11 @@ fn interface_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -
         omsi_ui::theme::set_accent(Accent::default());
         *dirty = 0.3;
     }
-    c.y += 34.0;
+    c.y += 34.0 + 12.0;
+    c.section(ui, "Layout");
+    seg_setting(ui, s, dirty, c.row(), "Corners", "ui_corners", &[("rounded", "Rounded"), ("square", "Square")]);
+    let note = "Square is flatter, closer to Content Manager. Only the launcher's corners change.";
+    c.y += ui.paragraph(note, Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, omsi_ui::Weight::Regular, TEXT_DIM) + 4.0;
     let left = c.used();
     // (what wears the accent, drawn and not clickable: the page's own widgets are the real ones)
     let mut p = Col::new(ui, cols[1], "Preview");
@@ -2900,6 +2931,7 @@ mod settings_tests {
         ];
         let interface = vec![
             "accent-amber", "accent-orange", "accent-red", "accent-pink", "accent-purple", "accent-blue", "accent-teal", "accent-green", "accent-default",
+            "ui_corners-rounded", "ui_corners-square",
         ];
         vec![graphics, driving, camera, sound, gameplay, general, interface]
     }

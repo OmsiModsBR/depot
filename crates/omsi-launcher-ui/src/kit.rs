@@ -32,23 +32,24 @@ impl Status {
 /// A card: a panel with a letter-spaced title and an optional note at its right.
 pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     ui.solid(r);
-    ui.p().rounded(r, 8.0, PANEL);
-    ui.p().rounded_border(r, 8.0, 1.0, LINE);
-    spaced(
+    ui.p().rounded(r, omsi_ui::theme::RADIUS, PANEL);
+    ui.p().rounded_border(r, omsi_ui::theme::RADIUS, 1.0, LINE);
+    spaced_by(
         ui,
         &omsi_ui::tr(title).to_uppercase(),
-        r.x + 19.0,
-        r.y + 23.0,
-        13.0 * TEXT_SCALE,
+        r.x + 17.0,
+        r.y + 22.0,
+        CARD_TITLE_PX,
         Weight::Bold,
-        FG,
+        CARD_TITLE,
+        CARD_TITLE_EM,
     );
     if let Some(n) = note {
         right(
             ui,
             n,
-            r.right() - 19.0,
-            r.y + 23.0,
+            r.right() - 17.0,
+            r.y + 22.0,
             12.0,
             Weight::Regular,
             MUTED,
@@ -56,12 +57,26 @@ pub fn card(ui: &mut Ui, r: Rect, title: &str, note: Option<&str>) {
     }
 }
 
+/// A card's title: small capitals, letter-spaced, a little softer than the text.
+const CARD_TITLE_PX: f32 = 12.5;
+const CARD_TITLE_EM: f32 = 0.08;
+const CARD_TITLE: Color = Color::hex(0xe6e8ec);
+
 /// A card's title, letter-spaced as `card` draws it, at the top of `r` (the panel less its
 /// padding, as `omsi_ui`'s `Ui::heading` takes it); returns the rest of `r` under it.
 pub fn heading(ui: &mut Ui, r: Rect, title: &str) -> Rect {
-    let px = 13.0 * TEXT_SCALE;
+    let px = CARD_TITLE_PX;
     let s = fit_spaced(ui, title, px, r.w - 1.0);
-    spaced(ui, &s, r.x + 1.0, r.y + 9.0, px, Weight::Bold, FG);
+    spaced_by(
+        ui,
+        &s,
+        r.x + 1.0,
+        r.y + 9.0,
+        px,
+        Weight::Bold,
+        CARD_TITLE,
+        CARD_TITLE_EM,
+    );
     Rect::new(r.x, r.y + 26.0, r.w, (r.h - 26.0).max(0.0))
 }
 
@@ -113,7 +128,22 @@ pub fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: C
 /// Text letter-spaced (as the concept's card titles and headings), left-aligned at `x` and
 /// centred on the line `cy`, `px` already scaled; returns its width.
 pub fn spaced(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) -> f32 {
-    let gap = px * 0.14;
+    spaced_by(ui, s, x, cy, px, weight, c, 0.14)
+}
+
+/// `spaced` with `em` of `px` between the letters.
+#[allow(clippy::too_many_arguments)]
+pub fn spaced_by(
+    ui: &mut Ui,
+    s: &str,
+    x: f32,
+    cy: f32,
+    px: f32,
+    weight: Weight,
+    c: Color,
+    em: f32,
+) -> f32 {
+    let gap = px * em;
     let mut at = x;
     let mut buf = [0u8; 4];
     for ch in s.chars() {
@@ -200,7 +230,7 @@ pub fn action(ui: &mut Ui, id: &str, b: Rect, label: &str, note: &str, enabled: 
         (true, false) => accent(),
     };
     ui.solid(b);
-    ui.p().rounded(b, 6.0, fill);
+    ui.p().rounded(b, CONTROL_RADIUS, fill);
     ui.text_in(
         label,
         b,

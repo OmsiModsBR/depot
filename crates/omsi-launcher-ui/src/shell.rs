@@ -101,18 +101,11 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
         heading(ui, page.title(), h, x, top, f32::INFINITY);
         return;
     }
-    ui.text(
-        &page.title().to_uppercase(),
-        Vec2::new(x, top + 46.0),
-        13.0 * TEXT_SCALE,
-        Weight::Medium,
-        accent(),
-        Align::Left,
-    );
+    crumb(ui, page.title(), "", x, top);
     ui.text(
         page.title(),
-        Vec2::new(x, top + 82.0),
-        40.0,
+        Vec2::new(x, top + 80.0),
+        30.0,
         Weight::Bold,
         FG,
         Align::Left,
@@ -120,13 +113,53 @@ pub fn page_heading(ui: &mut Ui, page: Page, x: f32, top: f32) {
 }
 
 /// Where a page's body starts under the top of its heading.
-pub const BODY_TOP: f32 = 137.0;
+pub const BODY_TOP: f32 = 120.0;
 
-/// A heading as the concept draws one: `name › place` small and letter-spaced, the title large
-/// and one line under it, left at `x`, from `top` down. The title and the line are cut to `w`
-/// points.
+/// A heading as Windows 11 pages have one: `NAME › PLACE` small and letter-spaced (the name in
+/// the accent), the title large and one line under it, left at `x`, from `top` down. The title
+/// and the line are cut to `w` points.
 pub fn heading(ui: &mut Ui, name: &str, parts: (&str, &str, &str), x: f32, top: f32, w: f32) {
     heading_beside(ui, name, parts, x, top, w, w);
+}
+
+/// `NAME › PLACE` at `x`, its middle on `top + 38`.
+fn crumb(ui: &mut Ui, name: &str, place: &str, x: f32, top: f32) {
+    let px = 12.0;
+    let cy = top + 38.0;
+    let mut at = x;
+    at += kit::spaced_by(
+        ui,
+        &omsi_ui::tr(name).to_uppercase(),
+        at,
+        cy,
+        px,
+        Weight::Bold,
+        accent(),
+        0.08,
+    );
+    if place.is_empty() {
+        return;
+    }
+    at += 6.0;
+    ui.text_in(
+        "\u{203a}",
+        Rect::new(at, cy - px, px, px * 2.0),
+        px + 2.0,
+        Weight::Regular,
+        MUTED,
+        Align::Left,
+    );
+    at += 12.0;
+    kit::spaced_by(
+        ui,
+        &omsi_ui::tr(place).to_uppercase(),
+        at,
+        cy,
+        px,
+        Weight::Medium,
+        MUTED,
+        0.08,
+    );
 }
 
 /// `heading` with its title cut to `title_w` points, the line to `w` (a page with tabs at the
@@ -140,53 +173,23 @@ pub fn heading_beside(
     w: f32,
     title_w: f32,
 ) {
-    // (as the concept: "VEHICLES › PREVIEW" letter-spaced, the question large, a line)
-    let px = 13.0 * TEXT_SCALE;
-    let mut at = x;
-    at += kit::spaced(
-        ui,
-        &omsi_ui::tr(name).to_uppercase(),
-        at,
-        top + 42.0,
-        px,
-        Weight::Bold,
-        accent(),
-    );
-    at += 12.0;
-    ui.text_in(
-        "\u{203a}",
-        Rect::new(at, top + 42.0 - px, px, px * 2.0),
-        px,
-        Weight::Regular,
-        MUTED,
-        Align::Left,
-    );
-    at += 14.0;
-    kit::spaced(
-        ui,
-        &omsi_ui::tr(place).to_uppercase(),
-        at,
-        top + 42.0,
-        px,
-        Weight::Medium,
-        MUTED,
-    );
+    crumb(ui, name, place, x, top);
     // (translated once, cut at the weight it is drawn in, drawn as it is)
     let title = omsi_ui::tr(title);
     let title = if title_w.is_finite() {
-        kit::fit_text_as_is(ui, &title, 38.0, Weight::Bold, title_w)
+        kit::fit_text_as_is(ui, &title, 30.0, Weight::Bold, title_w)
     } else {
         title.to_string()
     };
     ui.text_as_is(
         &title,
-        Vec2::new(x, top + 80.0),
-        38.0,
+        Vec2::new(x, top + 79.0),
+        30.0,
         Weight::Bold,
         FG,
         Align::Left,
     );
-    let px = 16.5 * TEXT_SCALE;
+    let px = 14.5;
     let line = omsi_ui::tr(line);
     let line = if w.is_finite() {
         kit::fit_text_as_is(ui, &line, px, Weight::Regular, w)
@@ -195,12 +198,75 @@ pub fn heading_beside(
     };
     ui.text_as_is(
         &line,
-        Vec2::new(x, top + 112.0),
+        Vec2::new(x, top + 103.0),
         px,
         Weight::Regular,
         MUTED,
         Align::Left,
     );
+}
+
+/// A caption button of the window, top right (the launcher draws its own title bar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Caption {
+    Minimize,
+    Maximize,
+    Close,
+}
+
+/// The id a caption button is clickable under.
+pub fn caption_id(c: Caption) -> u64 {
+    id_of(&format!("caption:{c:?}"))
+}
+
+/// The window's minimise, maximise (restore when `maximized`) and close buttons at the top
+/// right of a window `w` points wide; which one was clicked. Close turns red under the mouse,
+/// as Windows' does.
+pub fn caption_buttons(ui: &mut Ui, w: f32, maximized: bool) -> Option<Caption> {
+    let mut out = None;
+    for (k, c) in [Caption::Minimize, Caption::Maximize, Caption::Close]
+        .into_iter()
+        .enumerate()
+    {
+        let r = Rect::new(w - CAPTION_W * (3 - k) as f32, 0.0, CAPTION_W, CAPTION_H);
+        ui.solid(r);
+        let (hover, down, clicked) = ui.interact(caption_id(c), r);
+        let close = c == Caption::Close;
+        if hover || down {
+            let fill = if close {
+                omsi_ui::Color::hex(0xc42b1c)
+            } else {
+                omsi_ui::Color::WHITE.alpha(if down { 0.04 } else { 0.07 })
+            };
+            ui.p().rect(r, fill);
+        }
+        let ink = if close && (hover || down) {
+            omsi_ui::Color::WHITE
+        } else {
+            MUTED
+        };
+        let m = r.center();
+        let p = ui.p();
+        match c {
+            Caption::Minimize => p.rect(Rect::new(m.x - 5.0, m.y, 10.0, 1.0), ink),
+            Caption::Maximize if maximized => {
+                p.rounded_border(Rect::new(m.x - 5.0, m.y - 3.0, 8.0, 8.0), 1.0, 1.0, ink);
+                p.rect(Rect::new(m.x - 3.0, m.y - 5.0, 8.0, 1.0), ink);
+                p.rect(Rect::new(m.x + 4.0, m.y - 5.0, 1.0, 8.0), ink);
+            }
+            Caption::Maximize => {
+                p.rounded_border(Rect::new(m.x - 5.0, m.y - 5.0, 10.0, 10.0), 1.0, 1.0, ink)
+            }
+            Caption::Close => {
+                p.line(m - Vec2::new(5.0, 5.0), m + Vec2::new(5.0, 5.0), 1.0, ink);
+                p.line(m + Vec2::new(-5.0, 5.0), m + Vec2::new(5.0, -5.0), 1.0, ink);
+            }
+        }
+        if clicked {
+            out = Some(c);
+        }
+    }
+    out
 }
 
 /// What a click on the sidebar asks for.
@@ -237,51 +303,62 @@ impl Sidebar<'_> {
         ui.p().rect(side, SIDE);
         ui.p().rect(Rect::new(SIDEBAR_W - 1.0, 0.0, 1.0, h), LINE);
         if let Some((tex, aspect)) = self.logo {
-            let lw = SIDEBAR_W - 40.0;
-            ui.image(Rect::new(20.0, 24.0, lw, lw * aspect), tex, 0.0);
+            // (the wordmark 27 points high, as the concept's lettering)
+            let lh = 27.0;
+            let lw = (lh / aspect.max(0.01)).min(SIDEBAR_W - 40.0);
+            ui.image(Rect::new(18.0, 26.0, lw, lw * aspect), tex, 0.0);
         }
         let mut nav = None;
         let row = nav_row(h);
         for (i, &page) in Page::listed().iter().enumerate() {
             let top = NAV_TOP + i as f32 * row;
-            if self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, row)) {
+            if self.entry(ui, page, Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0)) {
                 nav = Some(Nav::Page(page));
             }
         }
         let foot = Page::foot();
         for (i, &page) in foot.iter().enumerate() {
-            let top = h - 45.0 - (foot.len() - i) as f32 * FOOT_ROW;
-            if self.entry(ui, page, Rect::new(0.0, top, SIDEBAR_W - 1.0, FOOT_ROW)) {
+            let top = h - WHO_H - 8.0 - (foot.len() - i) as f32 * FOOT_ROW;
+            if self.entry(
+                ui,
+                page,
+                Rect::new(8.0, top, SIDEBAR_W - 17.0, FOOT_ROW - 2.0),
+            ) {
                 nav = Some(Nav::Page(page));
             }
         }
         ui.p()
-            .rect(Rect::new(0.0, h - 45.0, SIDEBAR_W - 1.0, 1.0), LINE);
-        let line = Rect::new(0.0, h - 44.0, SIDEBAR_W - 1.0, 44.0);
+            .rect(Rect::new(8.0, h - WHO_H - 1.0, SIDEBAR_W - 17.0, 1.0), LINE);
+        let line = Rect::new(8.0, h - WHO_H, SIDEBAR_W - 17.0, WHO_H);
         let (hover, _, clicked) = ui.interact_key(footer_id(), line);
         if hover {
-            ui.p().rect(line, omsi_ui::Color::WHITE.alpha(0.05));
+            ui.p().rounded(line.inset(2.0), 4.0, HOVER_LAYER);
         }
         let (name, what) = self.footer;
         let what_w = ui.width(what, 12.0, Weight::Regular);
-        crate::kit::clipped(
+        let cy = line.center().y;
+        let name = kit::fit_text_as_is(
             ui,
             name,
-            28.0,
-            h - 22.0,
-            (SIDEBAR_W - 56.0 - what_w - 12.0).max(0.0),
-            13.0 * TEXT_SCALE,
-            Weight::Medium,
-            NAV_TEXT,
+            12.5,
+            Weight::Bold,
+            (line.w - 28.0 - what_w - 12.0).max(0.0),
         );
-        crate::kit::right(
-            ui,
+        ui.text_in(
+            &name,
+            Rect::new(line.x + 12.0, cy - 12.0, line.w, 24.0),
+            12.5,
+            Weight::Bold,
+            FG,
+            Align::Left,
+        );
+        ui.text_in(
             what,
-            SIDEBAR_W - 22.0,
-            h - 22.0,
+            Rect::new(line.x, cy - 12.0, line.w - 12.0, 24.0),
             12.0,
             Weight::Regular,
             MUTED,
+            Align::Right,
         );
         if clicked {
             nav = Some(Nav::Footer);
@@ -291,30 +368,40 @@ impl Sidebar<'_> {
 
     fn entry(&self, ui: &mut Ui, page: Page, r: Rect) -> bool {
         let on = page == self.page;
-        let (hover, _, clicked) = ui.interact_key(nav_id(page), r);
+        let id = nav_id(page);
+        let (hover, down, clicked) = ui.interact_key(id, r);
+        let r = Rect::new(r.x, r.y, r.w, NAV_ITEM_H.min(r.h));
+        let lit = ui.anim(id, if on { 1.0 } else { 0.0 }, 0.08);
+        // (Windows 11's navigation view: the chosen entry a layer lighter with a short accent
+        // bar at its left, the others lit faintly under the mouse)
         if on {
-            ui.p().rect(r, accent());
-        } else if hover {
-            ui.p().rect(r, omsi_ui::Color::WHITE.alpha(0.05));
+            ui.p().rounded(r, CONTROL_RADIUS, SELECTED_LAYER);
+            let bar = 18.0 * lit;
+            ui.p().rounded(
+                Rect::new(r.x, r.center().y - bar * 0.5, 3.0, bar),
+                1.5,
+                accent(),
+            );
+        } else if hover || down {
+            ui.p().rounded(r, CONTROL_RADIUS, HOVER_LAYER);
         }
-        let c = if on { on_accent() } else { NAV_TEXT };
-        ui.icon(page.icon(), Vec2::new(39.0, r.y + r.h * 0.5), 22.0, c);
-        let weight = if on { Weight::Medium } else { Weight::Regular };
-        ui.text(
+        let ic = if on { accent() } else { NAV_TEXT };
+        ui.icon(page.icon(), Vec2::new(r.x + 22.0, r.center().y), 20.0, ic);
+        ui.text_in(
             page.title(),
-            Vec2::new(68.0, r.y + r.h * 0.5 + 6.0),
-            17.0 * TEXT_SCALE,
-            weight,
-            c,
+            Rect::new(r.x + 46.0, r.y, r.w - 46.0 - 34.0, r.h),
+            14.5,
+            Weight::Regular,
+            if on { FG } else { NAV_TEXT },
             Align::Left,
         );
         if let Some((_, n, color)) = self.badges.iter().find(|b| b.0 == page) {
-            ui.text(
+            ui.text_in(
                 n,
-                Vec2::new(r.right() - 22.0, r.y + r.h * 0.5 + 5.0),
-                13.0,
+                Rect::new(r.x, r.y, r.w - 12.0, r.h),
+                12.5,
                 Weight::Bold,
-                if on { on_accent() } else { *color },
+                *color,
                 Align::Right,
             );
         }
@@ -325,7 +412,7 @@ impl Sidebar<'_> {
 /// The height of a listed page's row in a window `h` design points high: the design's, or less
 /// when the foot entries would otherwise cover the last pages.
 fn nav_row(h: f32) -> f32 {
-    let foot_top = h - 45.0 - Page::foot().len() as f32 * FOOT_ROW;
+    let foot_top = h - WHO_H - 8.0 - Page::foot().len() as f32 * FOOT_ROW;
     NAV_ROW.min((foot_top - NAV_TOP) / Page::listed().len() as f32)
 }
 
@@ -338,7 +425,7 @@ mod nav_tests {
         for h in [540.0_f32, 720.0, 941.0, 2160.0] {
             let row = nav_row(h);
             let end = NAV_TOP + Page::listed().len() as f32 * row;
-            let foot_top = h - 45.0 - Page::foot().len() as f32 * FOOT_ROW;
+            let foot_top = h - WHO_H - 8.0 - Page::foot().len() as f32 * FOOT_ROW;
             assert!(
                 end <= foot_top + 0.01,
                 "h={h}: pages end at {end}, foot starts at {foot_top}"

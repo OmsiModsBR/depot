@@ -7,7 +7,7 @@
 //! a change at once.
 
 use crate::paint::Color;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 /// The accent colours the player can choose from: a short fixed palette, each readable on
 /// the dark surfaces.
@@ -120,30 +120,59 @@ pub fn accent_soft() -> Color {
     v5::CARD.mix(accent(), 0.11)
 }
 pub const ACCENT_2: Color = Color::rgba(96, 160, 232, 1.0);
-pub const DANGER: Color = Color::rgba(222, 78, 68, 1.0);
-pub const OK: Color = Color::hex(0x4fc27a);
-pub const WARN: Color = Color::hex(0xe0a030);
+pub const DANGER: Color = Color::hex(0xee6a5f);
+pub const OK: Color = Color::hex(0x5fcf8a);
+pub const WARN: Color = Color::hex(0xe8ab3a);
 
-pub const TEXT: Color = Color::hex(0xe9eaec);
-pub const TEXT_SOFT: Color = Color::hex(0xc9ccd2);
-pub const TEXT_DIM: Color = Color::hex(0x9aa0aa);
-pub const TEXT_FAINT: Color = Color::hex(0x6b717b);
+// The launcher's surfaces and text: Windows 11 (Fluent) greys, dark, with the cards a layer
+// lighter than the window and hairline strokes round them.
+pub const TEXT: Color = Color::hex(0xf3f4f6);
+pub const TEXT_SOFT: Color = Color::hex(0xd9dce2);
+pub const TEXT_DIM: Color = Color::hex(0xa3a8b2);
+pub const TEXT_FAINT: Color = Color::hex(0x767c87);
 
 /// The window behind the pages.
-pub const BG: Color = Color::hex(0x101215);
+pub const BG: Color = Color::hex(0x1b1c1f);
 /// Rail (the sidebar), panels, fields.
-pub const RAIL: Color = Color::hex(0x0c0d10);
-pub const PANEL: Color = Color::hex(0x171a1f);
-pub const FIELD: Color = Color::hex(0x1e2229);
-pub const HOVER: Color = Color::hex(0x252a32);
-pub const SELECTED: Color = Color::hex(0x2b313a);
+pub const RAIL: Color = Color::hex(0x202225);
+pub const PANEL: Color = Color::hex(0x242528);
+pub const FIELD: Color = Color::hex(0x2a2b2e);
+pub const HOVER: Color = Color::hex(0x303135);
+pub const SELECTED: Color = Color::hex(0x36383c);
 /// Panel borders and dividers.
-pub const EDGE: Color = Color::hex(0x2b2f37);
+pub const EDGE: Color = Color::hex(0x333438);
+/// The lower edge of a text field (Fluent marks fields with a lighter line under them).
+pub const FIELD_LINE: Color = Color::hex(0x5c5e63);
 
+/// A card's corners.
 pub const RADIUS: f32 = 8.0;
+/// A control's corners (buttons, fields, list rows).
+pub const CONTROL_RADIUS: f32 = 4.0;
 /// Height of a control row.
 pub const ROW: f32 = 36.0;
 pub const GAP: f32 = 12.0;
+
+/// Square corners (Settings > Interface > Corners: flatter, closer to Content Manager): every
+/// rounded box is drawn with corners of at most one point; circles stay round.
+static SQUARE: AtomicBool = AtomicBool::new(false);
+
+/// Draw square corners from now on (or rounded again).
+pub fn set_square(on: bool) {
+    SQUARE.store(on, Ordering::Relaxed);
+}
+
+pub fn square() -> bool {
+    SQUARE.load(Ordering::Relaxed)
+}
+
+/// `radius` as the corners are drawn now (see `set_square`).
+pub fn corner(radius: f32) -> f32 {
+    if square() {
+        radius.min(1.0)
+    } else {
+        radius
+    }
+}
 
 /// The in-game look of the new interface (the Esc menu and its pages, the Alt bar, the city
 /// map): darker than the launcher's, with a cooler grey and a stronger amber. Shared so the
@@ -217,7 +246,7 @@ mod tests {
     fn every_accent_reads_on_the_surfaces_and_under_its_label() {
         for a in Accent::ALL {
             let c = a.color();
-            for surface in [RAIL, PANEL, FIELD, v5::CARD, v5::SIDE] {
+            for surface in [BG, RAIL, PANEL, FIELD, v5::CARD, v5::SIDE] {
                 assert!(contrast(c, surface) >= 4.5, "{a:?} on {surface:?}");
             }
             assert!(contrast(on(c), c) >= 4.5, "label on {a:?}");
