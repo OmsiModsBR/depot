@@ -168,6 +168,11 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
     if let Some(d) = omsi_cfg::flags::CONTENT.os() {
         return Some(PathBuf::from(d));
     }
+    // (the folder chosen under Setup, as the launcher installs mods into it)
+    if let Some(d) = omsi_launcher_lib::chosen_content() {
+        let _ = omsi_cfg::ensure_content_layout(&d);
+        return Some(d);
+    }
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.to_path_buf();
     // inside an .app bundle the binary sits in Contents/MacOS: use the folder beside the bundle

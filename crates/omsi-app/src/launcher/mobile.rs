@@ -358,7 +358,7 @@ impl Launcher {
         let s = p.to_string_lossy().to_string();
         match purpose {
             Purpose::Root => {
-                self.pages.setup_root = Some(s);
+                self.pages.setup.root = Some(s);
                 self.state.set_status("Folder chosen: press Save.", false);
             }
             Purpose::ModFolder | Purpose::ModZip => {

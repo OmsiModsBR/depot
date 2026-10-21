@@ -16,6 +16,7 @@ mod diagnostics;
 mod gfx;
 mod keyboard;
 pub(crate) mod settings;
+pub(crate) mod setup;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -356,6 +357,13 @@ impl Launcher {
             Some(q) if q.starts_with("q=") => app.pages.set.query = q["q=".len()..].to_string(),
             Some("changed") => app.pages.set.changed_only = true,
             _ => {}
+        }
+        // (setup:usage: the Content card's disk usage; setup:usage=0,1 a part of it looked into)
+        if let Some(u) = p.split_once(':').filter(|x| x.0 == "setup").map(|x| x.1) {
+            if let Some(rest) = u.strip_prefix("usage") {
+                app.pages.setup.tab = 1;
+                app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
+            }
         }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
@@ -1227,7 +1235,7 @@ impl Launcher {
             Page::Mods => pages::mods(self, content),
             Page::Tutorials => pages::tutorials(self, content),
             Page::Timetable => timetable::draw(self, content),
-            Page::Setup => pages::setup(self, content),
+            Page::Setup => setup::setup(self, content),
         }
         // the rail over the page (a scrolled page passes under it)
         self.rail();

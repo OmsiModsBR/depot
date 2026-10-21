@@ -28,8 +28,8 @@ pub struct PagesView {
     /// (section, index) of the binding waiting for a key.
     pub capturing: Option<(usize, usize)>,
     pub drop_hover: bool,
-    pub setup_root: Option<String>,
-    pub setup_game: Option<String>,
+    /// The Setup page's folders as edited, and its Content card (`setup`).
+    pub setup: super::setup::SetupView,
     /// The Controls page's tab: 0 the keyboard, 1 the game controllers.
     pub controls_tab: usize,
     /// The Settings page's section and search (`settings`).
@@ -1815,86 +1815,6 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         y - v.y
     });
 }
-
-// --- setup -----------------------------------------------------------------------------------------
-
-pub fn setup(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, UiPage::Setup);
-    let r = Rect::new(body.x, body.y, body.w.min(820.0), 300.0);
-    l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Folders");
-    let mut root = l.pages.setup_root.clone().unwrap_or_else(|| l.state.config.root.clone());
-    let mut game = l.pages.setup_game.clone().unwrap_or_else(|| l.state.config.game.clone());
-    let mut y = inner.y;
-    l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "OMSI 2 folder");
-    if l.ui.text_input("cfg-root", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut root, "/path/to/OMSI 2", Some("folder_open")) {
-        l.pages.setup_root = Some(root.clone());
-    }
-    if l.ui.button("browse-root", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-        if super::mobile::mobile() {
-            let start = root.clone();
-            l.browse(super::mobile::Purpose::Root, &start);
-        } else if let Some(p) = core::pick_folder("The OMSI 2 folder (with maps and Vehicles in it)") {
-            l.pages.setup_root = Some(p.to_string_lossy().to_string());
-        }
-    }
-    y += ROW + 10.0;
-    if core::IN_PROCESS_GAMES {
-        // (a phone: the game is this app itself)
-        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into depot/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
-    } else {
-        l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "Game binary");
-        if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "depot", Some("terminal")) {
-            l.pages.setup_game = Some(game.clone());
-        }
-        if l.ui.button("browse-game", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-            if let Some(p) = core::pick_file("The depot program") {
-                l.pages.setup_game = Some(p.to_string_lossy().to_string());
-            }
-        }
-        y += ROW + 16.0;
-        y += l.ui.paragraph("The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation). The game binary is the depot program; it is found by itself when it sits next to the launcher.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
-    }
-    y += 12.0;
-    if l.ui.button("cfg-save", Rect::new(inner.x, y, 180.0, 42.0), "Save", Some("save"), ButtonKind::Primary) {
-        let chosen = root.trim().to_string();
-        // A folder that is no complete installation is said so, with what it lacks, and
-        // nothing is saved: it was saved, then quietly replaced by the installation found
-        // before, while the page said "Saved" (#1656).
-        let missing = if chosen.is_empty() { Vec::new() } else { omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen)) };
-        if !missing.is_empty() {
-            let shown: Vec<&str> = missing.iter().map(String::as_str).take(6).collect();
-            let more = if missing.len() > shown.len() { format!(" and {} more", missing.len() - shown.len()) } else { String::new() };
-            l.state.set_status(format!("Not saved: {chosen} is not a complete OMSI 2 installation - it lacks {}{more}", shown.join(", ")), true);
-        } else {
-            l.state.config.root = chosen.clone();
-            l.state.config.game = game.trim().to_string();
-            match core::save_config(&l.state.config) {
-                Ok(()) => {
-                    // (what was read of the folders before is forgotten: a folder copied or
-                    // changed while the launcher ran is read as it is now)
-                    omsi_cfg::content_changed();
-                    l.state.config = core::load_config();
-                    l.pages.setup_root = None;
-                    l.pages.setup_game = None;
-                    let same = chosen.is_empty() || std::path::Path::new(&chosen) == std::path::Path::new(&l.state.config.root);
-                    if same {
-                        l.state.set_status("Saved. Reading the content again…", false);
-                    } else {
-                        l.state.set_status(format!("Saved, but the OMSI 2 folder used is {}", l.state.config.root), true);
-                    }
-                    // (a phone: the gallery is kept out of the folder chosen at once, before
-                    // its media scanner lists its textures as photos, #1632)
-                    #[cfg(target_os = "android")]
-                    crate::android::hide_content_from_gallery();
-                    l.state.load_content();
-                }
-                Err(e) => l.state.set_status(format!("{e:#}"), true),
-            }
-        }
-    }
-}
-
 
 // --- tutorials --------------------------------------------------------------------------------
 

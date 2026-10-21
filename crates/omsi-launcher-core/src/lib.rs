@@ -7,6 +7,7 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+pub mod disk;
 pub mod index;
 pub mod install;
 pub mod instances;
@@ -28,6 +29,9 @@ pub struct Config {
     pub game: String,
     /// The current profile name.
     pub profile: String,
+    /// The content folder chosen under Setup (empty: beside the game program).
+    #[serde(default)]
+    pub content: String,
 }
 
 pub fn data_dir() -> PathBuf {
@@ -287,7 +291,7 @@ fn root() -> Result<PathBuf> {
 pub fn content_dir() -> Option<PathBuf> {
     // the same rules as the game: $OMSI_CONTENT, else the folder of the game binary (beside
     // the bundle when the binary sits inside a macOS .app)
-    let dir = match omsi_cfg::flags::CONTENT.path() {
+    let dir = match omsi_cfg::flags::CONTENT.path().or_else(chosen_content) {
         Some(d) => d,
         None => {
             let c = load_config_raw();
@@ -312,6 +316,32 @@ pub fn content_dir() -> Option<PathBuf> {
     let _ = omsi_cfg::ensure_content_layout(&dir);
     register_roots(&dir);
     Some(dir)
+}
+
+/// The content folder chosen under Setup, when one is: the game started by the launcher and
+/// the one started by itself read it too (`$OMSI_CONTENT` wins over it).
+pub fn chosen_content() -> Option<PathBuf> {
+    let c = load_config_raw();
+    let dir = c.content.trim();
+    (!dir.is_empty()).then(|| PathBuf::from(dir))
+}
+
+/// Why `dir` cannot be the content folder, with the OMSI 2 folder `root`: the original is
+/// never written to, so the content folder is never the OMSI 2 folder itself (a folder in it,
+/// as the `depot` one beside a game inside it, is fine). `None` when it can be; the folder is
+/// made when it is missing.
+pub fn content_folder_problem(dir: &Path, root: &Path) -> Option<String> {
+    let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    };
+    if !root.as_os_str().is_empty() && same(dir, root) {
+        return Some("this is the OMSI 2 folder itself, which the Depot never writes to: choose another folder (a new folder inside it is fine)".into());
+    }
+    if std::fs::create_dir_all(dir).is_err() || !omsi_cfg::is_writable(dir) {
+        return Some(format!("{} cannot be written to", dir.display()));
+    }
+    None
 }
 
 /// Tell the OMSI readers about the content folder, the archives used in place in its

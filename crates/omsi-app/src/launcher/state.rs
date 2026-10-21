@@ -28,6 +28,8 @@ pub enum Msg {
     Stopped { pid: u32, result: Result<bool, String> },
     LogTail { pid: u32, lines: Vec<String> },
     Mods(Result<core::ModsStatus, String>),
+    /// What the content takes on disk and how much of it there is (Setup).
+    Usage(core::disk::Usage),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -282,6 +284,9 @@ pub struct State {
     pub jobs: Vec<core::install::Progress>,
     pub mods: Option<core::ModsStatus>,
     pub mods_asked: bool,
+    /// What the content takes on disk (Setup), once read; asked when the page opens.
+    pub usage: Option<core::disk::Usage>,
+    pub usage_asked: bool,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
@@ -356,6 +361,8 @@ impl State {
             jobs: Vec::new(),
             mods: None,
             mods_asked: false,
+            usage: None,
+            usage_asked: false,
             mod_info: None,
             mod_path: String::new(),
             ibis: None,
@@ -521,6 +528,24 @@ impl State {
     pub fn load_mods(&mut self) {
         self.mods_asked = true;
         self.spawn(|| Msg::Mods(core::mods_status().map_err(|e| format!("{e:#}"))));
+    }
+
+    /// Reads what the OMSI 2 folder and the content folder take on disk (Setup's Content
+    /// card), in the background.
+    pub fn load_usage(&mut self) {
+        self.usage_asked = true;
+        self.usage = None;
+        let root = std::path::PathBuf::from(&self.config.root);
+        self.spawn(move || {
+            let mut folders = Vec::new();
+            if !root.as_os_str().is_empty() {
+                folders.push(("OMSI 2 folder".to_string(), root));
+            }
+            if let Some(c) = core::content_dir() {
+                folders.push(("Depot content folder".to_string(), c));
+            }
+            Msg::Usage(core::disk::scan(&folders))
+        });
     }
 
     #[cfg(feature = "lan")]
@@ -1159,6 +1184,7 @@ impl State {
                 self.mods = Some(m);
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
+            Msg::Usage(u) => self.usage = Some(u),
             Msg::ModInfo(r) => {
                 self.mod_info = Some(r);
             }
