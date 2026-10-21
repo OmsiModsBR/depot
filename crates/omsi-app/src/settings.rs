@@ -439,9 +439,11 @@ impl Settings {
         resolution_of(&text)
     }
 
-    /// The accent the settings choose, for every menu drawn from now on.
+    /// The accent the settings choose, for every menu drawn from now on; the game's menus keep
+    /// their rounded corners (on Android the launcher, square or not, ran in this same process).
     pub fn apply_accent(&self) {
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(&self.ui_accent).unwrap_or_default());
+        omsi_ui::theme::set_square(false);
     }
 
     pub fn load() -> Settings {
@@ -891,6 +893,15 @@ mod tests {
         let game: Vec<&str> = omsi_ui::theme::Accent::ALL.iter().map(|a| a.name()).collect();
         assert_eq!(game, omsi_launcher_lib::ACCENTS);
         assert_eq!(omsi_launcher_lib::ACCENTS[0], omsi_ui::theme::Accent::default().name());
+    }
+
+    /// Square corners are the launcher's only: the game's menus are rounded again when its
+    /// settings are applied (on Android the launcher ran in the same process just before).
+    #[test]
+    fn the_game_menus_keep_rounded_corners_after_a_square_launcher() {
+        omsi_ui::theme::set_square(true);
+        super::Settings::from_text("ui_corners=square\n").apply_accent();
+        assert!(!omsi_ui::theme::square());
     }
 
     /// The information bar is as the last session left it (#1164); off at first.
