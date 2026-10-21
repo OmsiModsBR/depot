@@ -15,6 +15,7 @@ mod chrome;
 mod diagnostics;
 mod gfx;
 mod keyboard;
+pub(crate) mod settings;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -328,12 +329,11 @@ impl Launcher {
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
         }
-        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore, maps:traffic)
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
         let popup = match p.split(':').nth(1) {
             Some("start-point") => Some(start::Popup::StartPoint),
             Some("weather") => Some(start::Popup::Weather),
             Some("explore") => Some(start::Popup::Explore),
-            Some("traffic") => Some(start::Popup::Traffic),
             _ => None,
         };
         if let Some(popup) = popup {
@@ -351,6 +351,12 @@ impl Launcher {
             }
             _ => {}
         }
+        // (settings:q=TEXT: the settings searched for TEXT; settings:changed: the changed ones)
+        match p.split(':').nth(1) {
+            Some(q) if q.starts_with("q=") => app.pages.set.query = q["q=".len()..].to_string(),
+            Some("changed") => app.pages.set.changed_only = true,
+            _ => {}
+        }
         // (profile:drive: the chosen drive's details over Profile / Sessions)
         if p.split(':').nth(1) == Some("drive") {
             app.pages.drive_details = true;
@@ -358,10 +364,10 @@ impl Launcher {
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
-            // (the Controls and Settings pages' second part is their tab: controls:1 the game
-            // controllers, settings:3 Sound)
+            // (the Controls page's second part is its tab, controls:1 the game controllers; the
+            // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
-            app.pages.settings_tab = step.min(pages::SETTINGS_TABS.len() - 1);
+            app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
         }
     }
     app
@@ -1215,7 +1221,7 @@ impl Launcher {
             #[cfg(not(feature = "lan"))]
             Page::Multiplayer => {}
             Page::Profile => pages::profile(self, content),
-            Page::Settings => pages::settings(self, content),
+            Page::Settings => settings::settings(self, content),
             Page::Controls => pages::controls(self, content),
             Page::Sessions => pages::sessions(self, content),
             Page::Mods => pages::mods(self, content),
@@ -1236,7 +1242,7 @@ impl Launcher {
             } else if crash {
                 self.draw_crash_dialog();
             } else if reset {
-                pages::reset_dialog(self);
+                settings::reset_dialog(self);
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {

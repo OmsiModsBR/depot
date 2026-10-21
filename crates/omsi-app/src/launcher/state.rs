@@ -1281,6 +1281,26 @@ impl State {
         self.touched();
     }
 
+    /// The season `season` ("auto": by the date) chosen for the start: the date moves into it
+    /// (its timetable days with it), and a weather preset that does not fit it any more goes.
+    pub fn set_season(&mut self, season: &str) {
+        self.choice.season = season.to_string();
+        let months = [("spring", "04"), ("summer", "07"), ("autumn", "10"), ("winter", "01")];
+        if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
+            let date = self.choice.date.clone();
+            let (yy, dd) = (date.get(0..4).unwrap_or("1989").to_string(), date.get(8..10).unwrap_or("15").to_string());
+            self.choice.date = format!("{yy}-{month}-{dd}");
+            self.load_lines();
+        }
+        let w = self.choice.weather.clone();
+        if let Some(wi) = self.weathers.iter().find(|x| x.file == w).cloned() {
+            if !self.weather_fits(&wi) {
+                self.choice.weather.clear();
+            }
+        }
+        self.touched();
+    }
+
     /// The season the chosen date (or the override) means.
     pub fn season(&self) -> &str {
         if self.choice.season != "auto" {
