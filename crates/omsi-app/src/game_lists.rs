@@ -2274,7 +2274,11 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
 
 fn select_state(file: &serde_json::Value, key: &str) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let options = select_options(key);
-    let cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
+    let mut cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
+    // anisotropy 0 is off, the same entry as 1
+    if key == "anisotropy" && cur == "0" {
+        cur = "1".to_string();
+    }
     let at = options.iter().position(|o| same_value(o.0, &cur));
     (options, at, cur)
 }
@@ -3145,6 +3149,13 @@ mod tests {
     }
     /// The game menu offers the 16x anisotropic filtering the launcher does (#669): set
     /// there, it showed as a bare "16" here and could not be chosen again.
+    #[test]
+    fn anisotropy_zero_shows_as_off() {
+        let file = serde_json::json!({ "anisotropy": 0 });
+        let (options, at, _) = super::select_state(&file, "anisotropy");
+        assert_eq!(at.map(|i| options[i].1), Some("Off"));
+    }
+
     #[test]
     fn sixteen_x_anisotropy_can_be_chosen_in_the_game_menu() {
         let file = serde_json::json!({ "anisotropy": 16 });

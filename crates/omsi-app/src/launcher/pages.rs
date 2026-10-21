@@ -280,6 +280,8 @@ fn sel_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, name: &str, r: Rect,
         Value::Number(n) => n.to_string(),
         _ => String::new(),
     };
+    // anisotropy 0 is off, the same entry as 1
+    let cur = if key == "anisotropy" && cur == "0" { "1".to_string() } else { cur };
     let mut labels: Vec<String> = options.iter().map(|o| o.1.to_string()).collect();
     let mut values: Vec<String> = options.iter().map(|o| o.0.to_string()).collect();
     let mut sel = values.iter().position(|v| *v == cur || v.parse::<f64>().ok().zip(cur.parse::<f64>().ok()).map(|(a, b)| (a - b).abs() < 1e-6).unwrap_or(false));
