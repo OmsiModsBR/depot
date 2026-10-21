@@ -377,7 +377,7 @@ pub fn draw(l: &mut Launcher, body: Rect) {
     // (as many as a reload would change: the original's actions the Depot lacks count too)
     let changed = original.as_ref().map(|o| reload_plan(&l.state.keybindings, o, &|a| a.to_string()).changes.len()).unwrap_or(0);
     // (the chip at the tabs' right: how far the layout is from the original)
-    let chip = if original.is_none() { "Your layout".to_string() } else if changed == 0 { "Your layout · same as your OMSI 2".into() } else { format!("Your layout · {changed} changed from your OMSI 2") };
+    let chip = if original.is_none() { "Your layout".to_string() } else if changed == 0 { "Your layout · same as your OMSI 2".into() } else { omsi_ui::tr("Your layout · %{n} changed from your OMSI 2").replace("%{n}", &changed.to_string()) };
     let cw = l.ui.width(&chip, 12.0, Weight::Regular) + 24.0;
     let cr = Rect::new(body.right() - cw, body.y - 44.0, cw, 26.0);
     l.ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
@@ -424,7 +424,7 @@ fn capture(l: &mut Launcher) {
         return;
     }
     let Some(scan) = crate::keys::dik_code(code) else {
-        l.state.set_status(format!("{code:?} has no DirectInput scan code the game understands."), true);
+        l.state.set_status(omsi_ui::tr("%{key} has no DirectInput scan code the game understands.").replace("%{key}", &format!("{code:?}")), true);
         l.pages.capturing = None;
         return;
     };
@@ -464,7 +464,7 @@ fn preset_bar(l: &mut Launcher, r: Rect) -> f32 {
     l.ui.p().rounded_border(bar, 6.0, 1.0, EDGE);
     l.ui.icon("info", Vec2::new(bar.x + 18.0, bar.center().y), 16.0, accent());
     let bw = 150.0;
-    let text = format!("Driving keys: {name} (Settings) drive the bus and win over the list below; any key changed here switches to your own layout.");
+    let text = omsi_ui::tr("Driving keys: %{name} (Settings) drive the bus and win over the list below; any key changed here switches to your own layout.").replace("%{name}", &omsi_ui::tr(&name));
     let text = omsi_launcher_ui::kit::fit_text(&mut l.ui, &text, 12.5, bar.w - bw - 60.0);
     l.ui.text_in(&text, Rect::new(bar.x + 36.0, bar.y, bar.w - bw - 50.0, bar.h), 12.5, Weight::Regular, TEXT_SOFT, Align::Left);
     if l.ui.button("kb-use-custom", Rect::new(bar.right() - bw - 6.0, bar.y + 5.0, bw, 30.0), "Use these keys", None, ButtonKind::Normal) {
@@ -483,10 +483,13 @@ fn import_bar(l: &mut Launcher, r: Rect, found: bool, changed: usize) -> f32 {
     } else if !found {
         ("No controls file in your OMSI 2 folder".to_string(), " · the keys are the Depot's own.".to_string())
     } else {
-        let lead = if changed == 0 { "Same keys as your original OMSI 2".to_string() } else if changed == 1 { "1 key differs from your original OMSI 2".to_string() } else { format!("{changed} keys differ from your original OMSI 2") };
-        let saved = l.pages.kb.saved.map(|t| format!(", saved {}", day(t))).unwrap_or_default();
-        let reloaded = l.pages.kb.reloaded.map(day).unwrap_or_else(|| "never".into());
-        (lead, format!(" · Controls file found in your OMSI 2 folder{saved}. Last reloaded: {reloaded}."))
+        let lead = if changed == 0 { "Same keys as your original OMSI 2".to_string() } else if changed == 1 { "1 key differs from your original OMSI 2".to_string() } else { omsi_ui::tr("%{n} keys differ from your original OMSI 2").replace("%{n}", &changed.to_string()) };
+        let reloaded = l.pages.kb.reloaded.map(day).unwrap_or_else(|| omsi_ui::tr("never").into_owned());
+        let rest = match l.pages.kb.saved {
+            Some(t) => omsi_ui::tr(" · Controls file found in your OMSI 2 folder, saved %{day}. Last reloaded: %{reloaded}.").replace("%{day}", &day(t)),
+            None => omsi_ui::tr(" · Controls file found in your OMSI 2 folder. Last reloaded: %{reloaded}.").into_owned(),
+        };
+        (lead, rest.replace("%{reloaded}", &reloaded))
     };
     let bw = [l.ui.width("Preview changes", 13.0, Weight::Medium) + 32.0, l.ui.width("Reload from OMSI 2", 13.0, Weight::Bold) + 50.0];
     let room = r.w - 44.0 - bw[0] - bw[1] - 36.0;
@@ -556,7 +559,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
         .collect();
     let title = if q.is_empty() { list_name(l.pages.kb.list) } else { "Search" };
     let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 16.0, r.y + 14.0, r.w - 32.0, r.h - 28.0), title);
-    let note = if shown.len() == 1 { "1 action".to_string() } else { format!("{} actions", shown.len()) };
+    let note = if shown.len() == 1 { "1 action".to_string() } else { omsi_ui::tr("%{n} actions").replace("%{n}", &shown.len().to_string()) };
     l.ui.text_in(&note, Rect::new(inner.x, r.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
     let aw = l.ui.width("Add a control", 13.0, Weight::Bold) + 48.0;
     let mut query = std::mem::take(&mut l.pages.kb.query);
@@ -706,7 +709,7 @@ fn back_to_original(l: &mut Launcher, row: &Row) {
     l.state.keybindings = plan.merged;
     save_keys(l, row.action.starts_with("vr_"));
     if let Some(e) = l.pages.kb.factory_error.clone() {
-        l.state.set_status(format!("OMSI 2's keyboard_reset.cfg could not be read ({e}): the keys came from the Depot's built-in table"), true);
+        l.state.set_status(omsi_ui::tr("OMSI 2's keyboard_reset.cfg could not be read (%{error}): the keys came from the Depot's built-in table").replace("%{error}", &e), true);
     }
 }
 
@@ -722,7 +725,7 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
     let group = GROUPS[row.group];
     l.ui.text_in(group, Rect::new(inner.x, r.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
     let mut y = inner.y;
-    l.ui.text_in(&format!("In the controls file: {}", row.action), Rect::new(inner.x, y, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    l.ui.text_in(&omsi_ui::tr("In the controls file: %{action}").replace("%{action}", &row.action), Rect::new(inner.x, y, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
     y += 30.0;
     for (k, what) in [(0usize, "Key"), (1, "Second key")] {
         l.ui.text_in(what, Rect::new(inner.x, y, inner.w, 16.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
@@ -761,7 +764,7 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
         }
         if differs {
             let now = l.pages.kb.names.list(&mine);
-            let t = omsi_launcher_ui::kit::fit_text(&mut l.ui, &format!("you changed it to {now}"), 12.0, inner.right() - x - 6.0);
+            let t = omsi_launcher_ui::kit::fit_text(&mut l.ui, &omsi_ui::tr("you changed it to %{key}").replace("%{key}", &now), 12.0, inner.right() - x - 6.0);
             l.ui.text_in(&t, Rect::new(x + 4.0, *y, inner.right() - x, 22.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         }
         *y += 34.0;
@@ -837,7 +840,7 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
     let inside = super::start::dialog(l, 880.0, 56.0 + 40.0 + rows_h + 120.0 + 76.0, "Reload controls from OMSI 2", "your original OMSI 2 folder · read only");
     let (buttons, body) = super::start::dialog_foot(l, inside);
     let mut x = body.x;
-    for (text, c) in [(format!("{} already identical", plan.identical), OK), (format!("{} will change", plan.changes.len()), accent()), (format!("{} only in the Depot, kept as they are", plan.depot_only), TEXT_SOFT)] {
+    for (text, c) in [(omsi_ui::tr("%{n} already identical").replace("%{n}", &plan.identical.to_string()), OK), (omsi_ui::tr("%{n} will change").replace("%{n}", &plan.changes.len().to_string()), accent()), (omsi_ui::tr("%{n} only in the Depot, kept as they are").replace("%{n}", &plan.depot_only.to_string()), TEXT_SOFT)] {
         x += pill(l, x, body.y + 10.0, &text, c) + 8.0;
     }
     let t = Rect::new(body.x, body.y + 34.0, body.w, rows_h);
@@ -879,15 +882,15 @@ fn reload_dialog(l: &mut Launcher, mut backup: bool, mut pads: bool) {
                 }
                 // (as any key changed here: the game uses these keys, not a ready-made layout)
                 super::pages::use_custom_keys(l);
-                let mut said = format!("Keys reloaded from OMSI 2 ({} changed).", plan.changes.len());
+                let mut said = omsi_ui::tr("Keys reloaded from OMSI 2 (%{n} changed).").replace("%{n}", &plan.changes.len().to_string());
                 if let Some(p) = kept {
-                    said.push_str(&format!(" Your layout before is kept as {}.", p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default()));
+                    said.push_str(&omsi_ui::tr(" Your layout before is kept as %{file}.").replace("%{file}", &p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default()));
                 }
                 if pads {
                     match reload_pads(l, backup) {
-                        Ok(Some(n)) => said.push_str(&format!(" Game controllers read too ({n} from OMSI 2; the Depot's others kept).")),
+                        Ok(Some(n)) => said.push_str(&omsi_ui::tr(" Game controllers read too (%{n} from OMSI 2; the Depot's others kept).").replace("%{n}", &n.to_string())),
                         Ok(None) => {}
-                        Err(e) => said.push_str(&format!(" The game controllers were not read: {e}")),
+                        Err(e) => said.push_str(&omsi_ui::tr(" The game controllers were not read: %{error}").replace("%{error}", &e.to_string())),
                     }
                 }
                 l.state.set_status(said, false);
@@ -966,7 +969,7 @@ fn add_dialog(l: &mut Launcher, mut query: String, mut chosen: Option<String>, m
     let typed = query.trim().to_string();
     let custom = list.is_empty() && typed.len() > 1 && typed.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
     if custom {
-        list.push((typed.clone(), format!("\"{typed}\": a bus's own trigger (from a mod's readme)")));
+        list.push((typed.clone(), omsi_ui::tr("\"%{name}\": a bus's own trigger (from a mod's readme)").replace("%{name}", &typed)));
     }
     let mut picked = None;
     let sel = chosen.clone();
@@ -984,7 +987,7 @@ fn add_dialog(l: &mut Launcher, mut query: String, mut chosen: Option<String>, m
             }
             ui.text_in(label, Rect::new(rr.x + 10.0, rr.y + 4.0, rr.w - 20.0, 20.0), 13.5, Weight::Medium, TEXT, Align::Left);
             let g = GROUPS[group_of(0, a)];
-            ui.text_in(&format!("{g} · no key yet"), Rect::new(rr.x + 10.0, rr.y + 24.0, rr.w - 20.0, 16.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in(&omsi_ui::tr("%{group} · no key yet").replace("%{group}", &omsi_ui::tr(g)), Rect::new(rr.x + 10.0, rr.y + 24.0, rr.w - 20.0, 16.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
             if clicked {
                 picked = Some(a.clone());
             }
@@ -1020,7 +1023,7 @@ fn add_dialog(l: &mut Launcher, mut query: String, mut chosen: Option<String>, m
                 let rows = rows(&l.state.keybindings, None, None, &|a| action_text(names, a));
                 let others: Vec<String> = rows.iter().filter(|r| r.keys.contains(&k)).map(|r| r.label.clone()).collect();
                 if !others.is_empty() {
-                    let t = format!("{} is also used by {}. Both will fire together. You can still add it.", l.pages.kb.names.name(k), others.join(", "));
+                    let t = omsi_ui::tr("%{key} is also used by %{actions}. Both will fire together. You can still add it.").replace("%{key}", &l.pages.kb.names.name(k)).replace("%{actions}", &others.join(", "));
                     y += l.ui.paragraph(&t, Vec2::new(right.x, y), right.w, 12.0, Weight::Regular, WARN) + 10.0;
                 }
             }
