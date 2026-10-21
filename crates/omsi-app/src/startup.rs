@@ -579,6 +579,8 @@ pub(crate) fn sound_gain(which: &std::sync::atomic::AtomicU32) -> f32 {
 
 /// The `clouds` setting: clouds in the sky (off: a clear sky whatever the weather says).
 pub(crate) static CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// `Settings::fair_weather_clouds`: a clear default sky gets a few clouds.
+pub(crate) static FAIR_CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// macOS's allocator keeps freed large blocks for reuse, and they count as the game's
 /// memory: after loading and unloading tiles it held more than half a gigabyte of them, and

@@ -798,6 +798,12 @@ impl Settings {
         cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
     }
 
+    /// Whether a clear sky with no weather chosen gets a few fair-weather clouds: an addition
+    /// OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)", whose sky is OMSI 2's.
+    pub fn fair_weather_clouds(&self) -> bool {
+        self.clouds && !self.d3d9_selected()
+    }
+
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
     fn locked_for_api(mut self) -> Self {
         if self.d3d9_selected() {
@@ -823,6 +829,9 @@ impl Settings {
         self.mirror_size = 0;
         self.mirror_refresh = "off".into();
         self.windy_trees = false;
+        // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
+        // `fair_weather_clouds`)
+        self.clouds = true;
         // (the sun's own light only: Enhanced's brighter night is an improvement)
         self.night_brightness = 0.0;
     }
@@ -935,6 +944,7 @@ mod tests {
         s.mirror_refresh = "full".into();
         s.windy_trees = true;
         s.night_brightness = 1.0;
+        s.clouds = false;
         s.lock_vanilla();
         for l in crate::api_limits::D3D9 {
             let ok = match l.key {
@@ -945,6 +955,7 @@ mod tests {
                 "mirror_size" => s.mirror_size == 0,
                 "mirror_refresh" => s.mirror_refresh == "off",
                 "windy_trees" => !s.windy_trees,
+                "clouds" => s.clouds,
                 "shadows" => !s.shadows,
                 "ssao" => !s.ssao,
                 "detail_textures" => !s.detail_textures,

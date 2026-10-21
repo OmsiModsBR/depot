@@ -958,7 +958,9 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     if !traced {
         toggle_setting(ui, s, dirty, c.row(), "Reflection maps (paint, chrome, glass)", "reflections");
     }
-    toggle_setting(ui, s, dirty, c.row(), "Clouds", "clouds");
+    if !limited_row(ui, &mut c, s, "clouds", "Clouds") {
+        toggle_setting(ui, s, dirty, c.row(), "Clouds", "clouds");
+    }
     if !limited_row(ui, &mut c, s, "windy_trees", "Windy trees") {
         toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
     }
@@ -3340,6 +3342,7 @@ mod settings_tests {
             "mirror_size" => "s-mirror",
             "mirror_refresh" => "s-mirror-refresh",
             "windy_trees" => "set-windy_trees",
+            "clouds" => "set-clouds",
             other => panic!("{other} has no control named for the test"),
         };
         let drawn = |s: &mut Value| {

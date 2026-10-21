@@ -2403,7 +2403,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "led_glow", "LED glow", || slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64))),
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
-        switch_row(app, "clouds", "Clouds", later),
+        limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
     ]
         .into_iter()
