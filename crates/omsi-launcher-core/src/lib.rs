@@ -573,7 +573,9 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
                 || name.eq_ignore_ascii_case(install::PLUGINS_HELD)
                 || name.eq_ignore_ascii_case(install::UNINSTALLED)
                 || name.eq_ignore_ascii_case("README.txt"))
-                && (p.is_dir()
+                // (a loose folder only on a phone: on a computer the launcher installs a .zip,
+                // loose files are copied by hand into the OMSI 2 or the content folder)
+                && ((IN_PROCESS_GAMES && p.is_dir())
                     || p.extension()
                         .map(|x| x.eq_ignore_ascii_case("zip"))
                         .unwrap_or(false))
@@ -4625,6 +4627,20 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
         let _ = zip;
         None
     }
+}
+
+/// Show `folder` in the system's file manager (Mods: where loose files are copied by hand).
+pub fn open_folder(folder: &Path) {
+    if !folder.is_dir() {
+        log_line(&format!("open folder: {} is no folder", folder.display()));
+        return;
+    }
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("explorer").arg(folder).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(folder).spawn();
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    let _ = std::process::Command::new("xdg-open").arg(folder).spawn();
 }
 
 /// Folder picker (Setup: the OMSI 2 folder).

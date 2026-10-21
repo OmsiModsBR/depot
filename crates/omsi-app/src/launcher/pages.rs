@@ -2465,53 +2465,61 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.state.load_mods();
     }
     let body = l.page_title(area, UiPage::Mods);
-    let cols = 3;
-    let cw = (body.w - GAP * 2.0 * (cols as f32 - 1.0)) / cols as f32;
-    let colr = |k: usize| Rect::new(body.x + k as f32 * (cw + GAP * 2.0), body.y, cw, body.h);
+    let phone = super::mobile::mobile();
+    // (three columns: installing, the installs, the content folder - on a phone of one width)
+    let (w0, w2) = if phone {
+        let cw = (body.w - GAP * 4.0) / 3.0;
+        (cw, cw)
+    } else {
+        (420.0f32.min(body.w * 0.36), 340.0f32.min(body.w * 0.28))
+    };
+    let c0 = Rect::new(body.x, body.y, w0, body.h);
+    let c2 = Rect::new(body.right() - w2, body.y, w2, body.h);
+    let c1 = Rect::new(c0.right() + GAP * 2.0, body.y, c2.x - GAP * 2.0 - (c0.right() + GAP * 2.0), body.h);
     // install
-    let c0 = colr(0);
     l.ui.panel(c0);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod");
     let mut y = inner.y;
-    let half = (inner.w - GAP) * 0.5;
-    if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
-        if super::mobile::mobile() {
+    if phone {
+        // (a phone has no OMSI 2 folder of its own to copy into: a folder is installed too)
+        let half = (inner.w - GAP) * 0.5;
+        if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
             l.browse(super::mobile::Purpose::ModFolder, "");
-        } else if let Some(p) = core::pick_mod(false) {
-            l.state.install(p.to_string_lossy().to_string());
         }
-    }
-    if l.ui.button("mod-zip", Rect::new(inner.x + half + GAP, y, half, 40.0), "Choose archive", Some("inventory_2"), ButtonKind::Normal) {
-        if super::mobile::mobile() {
+        if l.ui.button("mod-zip", Rect::new(inner.x + half + GAP, y, half, 40.0), "Choose archive", Some("inventory_2"), ButtonKind::Normal) {
             l.browse(super::mobile::Purpose::ModZip, "");
-        } else if let Some(p) = core::pick_mod(true) {
+        }
+    } else if l.ui.button("mod-zip", Rect::new(inner.x, y, inner.w, 42.0), "Choose a .zip file", Some("o-package"), ButtonKind::Primary) {
+        if let Some(p) = core::pick_mod(true) {
             l.state.install(p.to_string_lossy().to_string());
         }
     }
-    y += 52.0;
-    let drop = Rect::new(inner.x, y, inner.w, 110.0);
+    y += 54.0;
+    let drop = Rect::new(inner.x, y, inner.w, 130.0);
     let hot = l.pages.drop_hover;
     let t = l.ui.anim(id_of("drop"), if hot { 1.0 } else { 0.0 }, 0.1);
-    l.ui.p().rounded(drop, 12.0, accent().alpha(0.05 + 0.12 * t));
+    l.ui.p().rounded(drop, 8.0, accent().alpha(0.08 + 0.12 * t));
     // a dashed edge
     let per = 2.0 * (drop.w + drop.h);
-    let n = (per / 14.0) as usize;
+    let n = (per / 9.0) as usize;
     for k in 0..n {
         let s = k as f32 * per / n as f32;
-        let p = if s < drop.w {
-            Vec2::new(drop.x + s, drop.y)
+        let (p, horizontal) = if s < drop.w {
+            (Vec2::new(drop.x + s, drop.y), true)
         } else if s < drop.w + drop.h {
-            Vec2::new(drop.right(), drop.y + s - drop.w)
+            (Vec2::new(drop.right(), drop.y + s - drop.w), false)
         } else if s < 2.0 * drop.w + drop.h {
-            Vec2::new(drop.right() - (s - drop.w - drop.h), drop.bottom())
+            (Vec2::new(drop.right() - (s - drop.w - drop.h), drop.bottom()), true)
         } else {
-            Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h))
+            (Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h)), false)
         };
-        l.ui.p().circle(p, 1.3, accent().alpha(0.35 + 0.5 * t));
+        let dash = if horizontal { Rect::new(p.x - 2.5, p.y - 0.75, 5.0, 1.5) } else { Rect::new(p.x - 0.75, p.y - 2.5, 1.5, 5.0) };
+        l.ui.p().rect(dash, accent().alpha(0.45 + 0.45 * t));
     }
-    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, accent().alpha(0.6 + 0.4 * t));
-    l.ui.text_in("…or drop a mod folder or .zip onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
-    y += 122.0;
+    l.ui.icon("o-plus", Vec2::new(drop.center().x, drop.center().y - 12.0), 20.0, TEXT_SOFT);
+    let drop_text = if phone { "…or drop a mod folder or .zip onto this window" } else { "…or drop a .zip onto this window" };
+    l.ui.text_in(drop_text, Rect::new(drop.x, drop.center().y + 4.0, drop.w, 24.0), 13.0, Weight::Regular, TEXT_SOFT, Align::Center);
+    y += 142.0;
     if !l.state.mod_path.is_empty() {
         let p = l.state.mod_path.clone();
         y += l.ui.paragraph(&p, Vec2::new(inner.x, y), inner.w, 11.5, Weight::Regular, TEXT_FAINT);
@@ -2525,21 +2533,48 @@ pub fn mods(l: &mut Launcher, area: Rect) {
             }
             _ => {}
         }
+        y += 6.0;
     }
-    y += 10.0;
-    if let Some(m) = l.state.mods.clone() {
-        Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "The Mods folder");
-        y += 30.0;
-        y += l.ui.paragraph(&format!("Anything put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM);
+    y += l.ui.paragraph("The .zip is kept as it is in the Archives folder and read in place; nothing is unpacked.", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+    let mods = l.state.mods.clone();
+    if let Some(m) = &mods {
+        let what = if phone { "Anything" } else { "A .zip" };
+        y += 4.0 + l.ui.paragraph(&format!("{what} put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
         if !m.inbox_items.is_empty() {
-            l.ui.paragraph(&format!("In it now: {}", m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
+            y += 4.0 + l.ui.paragraph(&format!("In it now: {}", m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
+        }
+    }
+    if !phone {
+        y += 18.0;
+        Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "Loose files (not a .zip)");
+        y += 32.0;
+        y += l.ui.paragraph("The launcher does not install loose folders. If you want to install them, copy them yourself:", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_SOFT) + 10.0;
+        let content = mods.as_ref().map(|m| m.content_dir.clone()).unwrap_or_default();
+        let places = [
+            ("mods-open-root", "In your original OMSI 2 folder", "The mod works in OMSI 2 and in the Depot.", TEXT_DIM, l.state.config.root.clone()),
+            ("mods-open-content", "In the Depot content folder", "The mod will not be available in OMSI 2.", WARN, content),
+        ];
+        for (id, title, note, note_c, folder) in places {
+            let r = Rect::new(inner.x, y, inner.w, 50.0);
+            l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
+            l.ui.icon("o-folder", Vec2::new(r.x + 20.0, r.center().y), 18.0, TEXT_SOFT);
+            let bw = 104.0;
+            let tw = r.w - 40.0 - bw - 20.0;
+            let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, title, 13.5, tw);
+            l.ui.text_in(&title, Rect::new(r.x + 40.0, r.y + 7.0, tw, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+            let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, note, 12.0, tw);
+            l.ui.text_in(&note, Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0), 12.0, Weight::Regular, note_c, Align::Left);
+            let b = Rect::new(r.right() - 10.0 - bw, r.y + 11.0, bw, 28.0);
+            if l.ui.button(id, b, "Open folder", None, ButtonKind::Normal) {
+                core::open_folder(std::path::Path::new(&folder));
+            }
+            y += 60.0;
         }
     }
     // installs
-    let c1 = colr(1);
     l.ui.panel(c1);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c1.x + 18.0, c1.y + 14.0, c1.w - 36.0, c1.h - 28.0), "Installs");
-    if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 130.0, c1.y + 12.0, 130.0, 30.0), "Clear finished", None, ButtonKind::Ghost) {
+    if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 120.0, c1.y + 12.0, 120.0, 28.0), "Clear finished", None, ButtonKind::Normal) {
         core::install::clear_finished();
         l.state.poll_now();
     }
@@ -2547,7 +2582,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     let mut cancel = None;
     l.ui.scroll_area("jobs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
         if jobs.is_empty() {
-            ui.paragraph("Nothing installed since the launcher started. Big archives are checked against the free disk space before anything is unpacked; a cancelled or failed install leaves nothing behind.", Vec2::new(v.x + 6.0, v.y), v.w - 12.0, 12.5, Weight::Regular, TEXT_DIM);
+            ui.paragraph("Nothing installed since the launcher started. A .zip is checked before it is used; a cancelled or failed install leaves nothing behind.", Vec2::new(v.x + 6.0, v.y), v.w - 12.0, 12.5, Weight::Regular, TEXT_DIM);
             return 60.0;
         }
         let mut y = v.y;
@@ -2589,26 +2624,26 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.state.poll_now();
     }
     // content folder
-    let c2 = colr(2);
     l.ui.panel(c2);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, c2.h - 28.0), "Content folder");
-    let Some(m) = l.state.mods.clone() else {
+    let Some(m) = mods else {
         l.ui.text_in("Reading…", Rect::new(inner.x, inner.y, inner.w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
         return;
     };
+    // (the free space beside the title, warm: what installs are checked against)
+    l.ui.text_in(&format!("{} free", fmt_bytes(m.free_bytes)), Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, 24.0), 13.0, Weight::Medium, WARN, Align::Right);
     // (scrolled: a long list of archives or buses waiting would run past the card)
     l.ui.scroll_area("mods-content", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
         let (x, w) = (v.x + 6.0, v.w - 16.0);
         let mut y = v.y;
-        y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 12.0, Weight::Medium, TEXT_SOFT);
-        y += 6.0;
-        ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(x, y, w, 20.0), 13.0, Weight::Bold, accent(), Align::Left);
-        y += 30.0;
+        y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 11.5, Weight::Regular, TEXT_FAINT);
+        y += 8.0;
         for (f, n) in &m.folders {
-            ui.icon("folder_open", Vec2::new(x + 9.0, y + 10.0), 16.0, TEXT_DIM);
-            ui.text_in(f, Rect::new(x + 26.0, y, w * 0.6, 20.0), 12.5, Weight::Medium, TEXT, Align::Left);
-            ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
-            y += 24.0;
+            ui.p().rect(Rect::new(x, y, w, 1.0), EDGE);
+            ui.icon("o-folder", Vec2::new(x + 9.0, y + 16.0), 16.0, TEXT_SOFT);
+            ui.text_in(f, Rect::new(x + 26.0, y + 5.0, w * 0.6, 22.0), 13.0, Weight::Regular, TEXT, Align::Left);
+            ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(x, y + 5.0, w, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Right);
+            y += 31.0;
         }
         if !m.archives.is_empty() {
             y += 8.0;

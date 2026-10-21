@@ -625,6 +625,12 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
+        // (on a computer only a .zip: loose files are copied by hand, into the OMSI 2 folder or
+        // the content folder - the Mods page says where)
+        if !core::IN_PROCESS_GAMES && !is_zip(&path) {
+            self.set_status("The launcher installs a .zip only. Copy loose files yourself: the Mods page shows where.", true);
+            return;
+        }
         // (a .zip is only ever used in place, from Archives; a folder is copied)
         let mode = "inplace".to_string();
         self.mod_path = path.clone();
@@ -1299,6 +1305,11 @@ pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
+/// Whether `path` is a .zip (by its name: what the Mods page installs on a computer).
+pub fn is_zip(path: &str) -> bool {
+    std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+}
+
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
 pub fn root_problem(root: &str) -> String {
     let root = root.trim();
@@ -1525,4 +1536,16 @@ mod crash_tests {
 
 fn read_settings_file() -> Option<String> {
     std::fs::read_to_string(core::data_dir().join("settings.cfg")).ok()
+}
+
+#[cfg(test)]
+mod mods_tests {
+    /// On a computer the Mods page installs a .zip only; loose folders are copied by hand.
+    #[test]
+    fn only_a_zip_is_installed_from_the_page() {
+        assert!(super::is_zip("C:/Downloads/Example bus.zip"));
+        assert!(super::is_zip("/home/x/Map.ZIP"));
+        assert!(!super::is_zip("/home/x/Example bus"));
+        assert!(!super::is_zip("/home/x/pack.rar"));
+    }
 }

@@ -81,7 +81,7 @@ impl Page {
             Page::Mods => Some((
                 "Install & content",
                 "Add buses, maps and scenery",
-                "A folder or a .zip, read in place from Archives. The original OMSI 2 folder is never written to.",
+                "Add a .zip, used in place from Archives. The original OMSI 2 folder is never written to.",
             )),
             Page::Timetable => Some((
                 "Lines & tours",
