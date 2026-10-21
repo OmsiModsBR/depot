@@ -1375,9 +1375,11 @@ pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
-/// Whether `path` is a .zip (by its name: what the Mods page installs on a computer).
+/// Whether `path` is a .zip file (what the Mods page installs on a computer): named .zip and a
+/// file, not a folder named so.
 pub fn is_zip(path: &str) -> bool {
-    std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+    let p = std::path::Path::new(path);
+    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) && p.is_file()
 }
 
 /// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
@@ -1657,9 +1659,15 @@ mod mods_tests {
     /// On a computer the Mods page installs a .zip only; loose folders are copied by hand.
     #[test]
     fn only_a_zip_is_installed_from_the_page() {
-        assert!(super::is_zip("C:/Downloads/Example bus.zip"));
-        assert!(super::is_zip("/home/x/Map.ZIP"));
-        assert!(!super::is_zip("/home/x/Example bus"));
-        assert!(!super::is_zip("/home/x/pack.rar"));
+        let dir = std::env::temp_dir().join(format!("depot-is-zip-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Folder.zip")).unwrap();
+        std::fs::create_dir_all(dir.join("Example bus")).unwrap();
+        for f in ["Example bus.zip", "Map.ZIP", "pack.rar"] {
+            std::fs::write(dir.join(f), b"PK").unwrap();
+        }
+        let is = |name: &str| super::is_zip(&dir.join(name).to_string_lossy());
+        let seen = (is("Example bus.zip"), is("Map.ZIP"), is("Example bus"), is("pack.rar"), is("Folder.zip"), is("Missing.zip"));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(seen, (true, true, false, false, false, false));
     }
 }

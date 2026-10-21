@@ -2466,6 +2466,10 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     }
     let body = l.page_title(area, UiPage::Mods);
     let phone = super::mobile::mobile();
+    // (what is installed follows the platform as `State::install` and the inbox do: a folder too
+    // where the game runs in the launcher's process, a .zip only on a computer - the layout
+    // follows `phone`, which a computer can preview)
+    let folders_too = core::IN_PROCESS_GAMES;
     // (three columns: installing, the installs, the content folder - on a phone of one width)
     let (w0, w2) = if phone {
         let cw = (body.w - GAP * 4.0) / 3.0;
@@ -2480,7 +2484,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     l.ui.panel(c0);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod");
     let mut y = inner.y;
-    if phone {
+    if folders_too {
         // (a phone has no OMSI 2 folder of its own to copy into: a folder is installed too)
         let half = (inner.w - GAP) * 0.5;
         if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
@@ -2517,7 +2521,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.ui.p().rect(dash, accent().alpha(0.45 + 0.45 * t));
     }
     l.ui.icon("o-plus", Vec2::new(drop.center().x, drop.center().y - 12.0), 20.0, TEXT_SOFT);
-    let drop_text = if phone { "…or drop a mod folder or .zip onto this window" } else { "…or drop a .zip onto this window" };
+    let drop_text = if folders_too { "…or drop a mod folder or .zip onto this window" } else { "…or drop a .zip onto this window" };
     l.ui.text_in(drop_text, Rect::new(drop.x, drop.center().y + 4.0, drop.w, 24.0), 13.0, Weight::Regular, TEXT_SOFT, Align::Center);
     y += 142.0;
     if !l.state.mod_path.is_empty() {
@@ -2538,13 +2542,16 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     y += l.ui.paragraph("The .zip is kept as it is in the Archives folder and read in place; nothing is unpacked.", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     let mods = l.state.mods.clone();
     if let Some(m) = &mods {
-        let what = if phone { "Anything" } else { "A .zip" };
+        let what = if folders_too { "Anything" } else { "A .zip" };
         y += 4.0 + l.ui.paragraph(&format!("{what} put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
         if !m.inbox_items.is_empty() {
-            y += 4.0 + l.ui.paragraph(&format!("In it now: {}", m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
+            // (a long name with no spaces is cut to the card, not run past it)
+            let now: Vec<String> = m.inbox_items.iter().map(|n| omsi_launcher_ui::kit::fit_text(&mut l.ui, n, 12.0, inner.w - 80.0)).collect();
+            let now = now.join(", ");
+            y += 4.0 + l.ui.paragraph(&format!("In it now: {now}"), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
         }
     }
-    if !phone {
+    if !folders_too {
         y += 18.0;
         Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "Loose files (not a .zip)");
         y += 32.0;
@@ -2566,7 +2573,10 @@ pub fn mods(l: &mut Launcher, area: Rect) {
             l.ui.text_in(&note, Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0), 12.0, Weight::Regular, note_c, Align::Left);
             let b = Rect::new(r.right() - 10.0 - bw, r.y + 11.0, bw, 28.0);
             if l.ui.button(id, b, "Open folder", None, ButtonKind::Normal) {
-                core::open_folder(std::path::Path::new(&folder));
+                if folder.trim().is_empty() || !core::open_folder(std::path::Path::new(&folder)) {
+                    let msg = if id == "mods-open-root" { "Choose the OMSI 2 folder under Setup first." } else { "The content folder is not there yet." };
+                    l.state.set_status(msg, true);
+                }
             }
             y += 60.0;
         }

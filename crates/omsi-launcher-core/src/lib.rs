@@ -576,9 +576,10 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
                 // (a loose folder only on a phone: on a computer the launcher installs a .zip,
                 // loose files are copied by hand into the OMSI 2 or the content folder)
                 && ((IN_PROCESS_GAMES && p.is_dir())
-                    || p.extension()
-                        .map(|x| x.eq_ignore_ascii_case("zip"))
-                        .unwrap_or(false))
+                    || (p.is_file()
+                        && p.extension()
+                            .map(|x| x.eq_ignore_ascii_case("zip"))
+                            .unwrap_or(false)))
         })
         .collect();
     v.sort();
@@ -4629,18 +4630,33 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
     }
 }
 
-/// Show `folder` in the system's file manager (Mods: where loose files are copied by hand).
-pub fn open_folder(folder: &Path) {
+/// Show `folder` in the system's file manager (Mods: where loose files are copied by hand);
+/// false when it is no folder or no file manager could be started.
+pub fn open_folder(folder: &Path) -> bool {
     if !folder.is_dir() {
         log_line(&format!("open folder: {} is no folder", folder.display()));
-        return;
+        return false;
     }
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("explorer").arg(folder).spawn();
+    let child = std::process::Command::new("explorer").arg(folder).spawn();
     #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(folder).spawn();
+    let child = std::process::Command::new("open").arg(folder).spawn();
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
-    let _ = std::process::Command::new("xdg-open").arg(folder).spawn();
+    let child = std::process::Command::new("xdg-open").arg(folder).spawn();
+    #[cfg(target_os = "android")]
+    let child: std::io::Result<std::process::Child> =
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
+    match child {
+        Ok(mut c) => {
+            // (waited for on a thread: an opener that ends is not left behind as a zombie)
+            std::thread::spawn(move || c.wait());
+            true
+        }
+        Err(e) => {
+            log_line(&format!("open folder: {e}"));
+            false
+        }
+    }
 }
 
 /// Folder picker (Setup: the OMSI 2 folder).
@@ -4789,6 +4805,27 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    /// The inbox takes a .zip file; a folder named like one is no .zip, and on a computer
+    /// a loose folder stays where it is.
+    #[test]
+    fn the_inbox_takes_zip_files_not_folders_named_so() {
+        let content = std::env::temp_dir().join(format!("depot-inbox-{}", std::process::id()));
+        let inbox = content.join("Mods");
+        std::fs::create_dir_all(inbox.join("Bus.zip")).unwrap();
+        std::fs::create_dir_all(inbox.join("Loose")).unwrap();
+        std::fs::write(inbox.join("Map.zip"), b"PK").unwrap();
+        let names: Vec<String> = super::inbox_entries(&content)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        let _ = std::fs::remove_dir_all(&content);
+        if super::IN_PROCESS_GAMES {
+            assert!(names.contains(&"Loose".to_string()));
+        } else {
+            assert_eq!(names, ["Map.zip"]);
+        }
+    }
+
     #[test]
     fn vehicle_type_label_falls_back_to_the_file_name() {
         let path = std::path::Path::new("Vehicles/Pack/NL_202.bus");

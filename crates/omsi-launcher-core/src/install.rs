@@ -992,6 +992,16 @@ fn list_folder(dir: &Path, job: &Job) -> Result<(Vec<Entry>, Vec<PathBuf>, usize
 /// of contents", 0 of 0 files, for every mod.
 const ZIP_BUFFER: usize = 1 << 13;
 
+/// What to do with an unpacked folder: install it on a phone, copy it by hand on a computer
+/// (whose launcher installs a .zip only).
+fn folder_hint() -> &'static str {
+    if crate::IN_PROCESS_GAMES {
+        "install the folder"
+    } else {
+        "copy the folder by hand (the Mods page shows where)"
+    }
+}
+
 fn list_zip(
     z: &mut zip::ZipArchive<std::io::BufReader<std::fs::File>>,
     job: &Job,
@@ -1044,10 +1054,10 @@ fn list_zip(
     }
     job.files_done.store(0, Ordering::Relaxed);
     if encrypted > 0 {
-        problems.push(format!("{encrypted} file(s) in the archive are password protected - unpack it with the password first and install the folder"));
+        problems.push(format!("{encrypted} file(s) in the archive are password protected - unpack it with the password first and {}", folder_hint()));
     }
     for (m, c) in unsupported {
-        problems.push(format!("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and install the folder"));
+        problems.push(format!("{c} file(s) are packed with {m}, which the launcher cannot unpack - unpack the archive with the system's tool and {}", folder_hint()));
     }
     if unsafe_names > 0 {
         problems.push(format!(
