@@ -1074,7 +1074,12 @@ pub(crate) fn switch_row(app: &App, id: &str, name: &str, desc: &str) -> Option<
 /// The row of an option, unless "DirectX9 (D3D9Ex)" limits it (`api_limits`): then a locked one is
 /// an info line with its fixed value and the reason, and a hidden one has no row.
 fn limit_or(app: &App, key: &str, name: &str, normal: impl FnOnce() -> Option<(String, String)>) -> Option<(String, String)> {
-    if app.d3d9_active() {
+    limit_row(app.d3d9_active(), key, name, normal)
+}
+
+/// `limit_or` with the API given (so a test can ask without a running game).
+fn limit_row(d3d9: bool, key: &str, name: &str, normal: impl FnOnce() -> Option<(String, String)>) -> Option<(String, String)> {
+    if d3d9 {
         if let Some(l) = crate::api_limits::d3d9(key) {
             return l.shown().map(|v| (row(name, 'i', &omsi_ui::tr(v), &omsi_ui::tr(l.reason), None), "noop".to_string()));
         }
@@ -2393,8 +2398,8 @@ fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "night_brightness", "Night brightness", || slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") })),
         limit_or(app, "led_glow", "LED glow", || slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64))),
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
-        limit_or(app, "reflections", "Reflection maps (paint, chrome, glass)", || switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing())),
-        limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
+        switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
+        switch_row(app, "clouds", "Clouds", later),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
     ]
         .into_iter()
@@ -3067,6 +3072,26 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
 
 #[cfg(test)]
 mod tests {
+    /// "DirectX9 (D3D9Ex)": a hidden option has no row, a locked one an info line with its fixed
+    /// value and the reason, an unlimited one its own row; other APIs leave every row alone.
+    #[test]
+    fn the_menu_rows_follow_the_directx9_limit_table() {
+        let own = || Some(("own".to_string(), "id".to_string()));
+        for l in crate::api_limits::D3D9 {
+            let row = super::limit_row(true, l.key, "Name", own);
+            match l.shown() {
+                None => assert!(row.is_none(), "{} is hidden", l.key),
+                Some(v) => {
+                    let (text, action) = row.unwrap();
+                    assert_eq!(action, "noop");
+                    assert!(text.contains("Name") && text.contains(v), "{text}");
+                }
+            }
+            assert_eq!(super::limit_row(false, l.key, "Name", own), own());
+        }
+        assert_eq!(super::limit_row(true, "view_distance", "Name", own), own());
+    }
+
     /// A destination picked from the list keeps the route number the bus shows, its letter
     /// too (92E, IBIS 92 and suffix 10).
     #[test]

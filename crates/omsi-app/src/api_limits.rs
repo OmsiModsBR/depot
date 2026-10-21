@@ -110,11 +110,6 @@ pub(crate) const D3D9: &[ApiLimit] = &[
         reason: NOT_DRAWN,
     },
     ApiLimit {
-        key: "reflections",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
-    },
-    ApiLimit {
         key: "mirror_size",
         limit: Limit::Locked("Off"),
         reason: NOT_DRAWN,
@@ -125,17 +120,7 @@ pub(crate) const D3D9: &[ApiLimit] = &[
         reason: NOT_DRAWN,
     },
     ApiLimit {
-        key: "clouds",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
-    },
-    ApiLimit {
         key: "windy_trees",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
-    },
-    ApiLimit {
-        key: "shadow_blobs",
         limit: Limit::Locked("Off"),
         reason: NOT_DRAWN,
     },

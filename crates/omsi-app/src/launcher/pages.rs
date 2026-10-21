@@ -579,19 +579,19 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     // Vanilla and fixed (the saved choice comes back with another graphics API)
     let fixed = d3d9_fixes_vanilla(s);
     if !limited_row(ui, &mut c, s, "graphics", "Graphics") {
-        sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
+            sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
     }
     // Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain
     let classic = fixed || get(s, "graphics").as_str() == Some("vanilla");
     let traced = !fixed && get(s, "graphics").as_str() == Some("enhanced_plus");
     if !limited_row(ui, &mut c, s, "msaa", "Anti-aliasing") {
-    sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
+        sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
     }
     if !limited_row(ui, &mut c, s, "render_scale", "Render scale") {
-    sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
+        sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
     }
     if !limited_row(ui, &mut c, s, "anisotropy", "Anisotropic") {
-    sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
+        sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
     }
     if !classic {
         sel_setting(ui, s, dirty, "s-shadow", c.row(), "Shadow map", "shadow_size", &[("1024", "1024"), ("2048", "2048"), ("4096", "4096")]);
@@ -624,17 +624,13 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     }
     // (the models' `[isshadow]` blob is what OMSI draws under a vehicle in every graphics
     // mode, the vanilla one included, so its switch is not part of the extras above)
-    if !limited_row(ui, &mut c, s, "shadow_blobs", "OMSI's shadow meshes (under vehicles)") {
     toggle_setting(ui, s, dirty, c.row(), "OMSI's shadow meshes (under vehicles)", "shadow_blobs");
-    }
-    if !traced && !limited_row(ui, &mut c, s, "reflections", "Reflection maps (paint, chrome, glass)") {
+    if !traced {
         toggle_setting(ui, s, dirty, c.row(), "Reflection maps (paint, chrome, glass)", "reflections");
     }
-    if !limited_row(ui, &mut c, s, "clouds", "Clouds") {
     toggle_setting(ui, s, dirty, c.row(), "Clouds", "clouds");
-    }
     if !limited_row(ui, &mut c, s, "windy_trees", "Windy trees") {
-    toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
+        toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
     }
     let left = c.used();
     let mut c = Col::new(ui, cols[1], "Display");
@@ -657,10 +653,10 @@ fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) ->
     sel_setting(ui, s, dirty, "s-maxobj", c.row(), "Object distance", "max_obj_dist", &[("auto", "Automatic"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]);
     sel_setting(ui, s, dirty, "s-minobj", c.row(), "Small objects", "min_obj_size", &[("0.005", "All"), ("0.013", "Normal"), ("0.02", "Fewer (faster)"), ("0.03", "Few (fastest)")]);
     if !limited_row(ui, &mut c, s, "mirror_size", "Mirrors") {
-    sel_setting(ui, s, dirty, "s-mirror", c.row(), "Mirrors", "mirror_size", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]);
+        sel_setting(ui, s, dirty, "s-mirror", c.row(), "Mirrors", "mirror_size", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]);
     }
     if !limited_row(ui, &mut c, s, "mirror_refresh", "Real-time reflections") {
-    sel_setting(ui, s, dirty, "s-mirror-refresh", c.row(), "Real-time reflections", "mirror_refresh", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]);
+        sel_setting(ui, s, dirty, "s-mirror-refresh", c.row(), "Real-time reflections", "mirror_refresh", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]);
     }
     // (the game takes the smaller of an eighth of the memory and what the graphics
     // adapter is taken to hold, see `memory::texture_budget`)
@@ -2946,12 +2942,9 @@ mod settings_tests {
             "msaa" => "s-msaa",
             "render_scale" => "s-scale",
             "anisotropy" => "s-af",
-            "reflections" => "set-reflections",
             "mirror_size" => "s-mirror",
             "mirror_refresh" => "s-mirror-refresh",
-            "clouds" => "set-clouds",
             "windy_trees" => "set-windy_trees",
-            "shadow_blobs" => "set-shadow_blobs",
             other => panic!("{other} has no control named for the test"),
         };
         let drawn = |s: &mut Value| {
