@@ -774,9 +774,9 @@ fn now_secs() -> u64 {
 fn run_time(t: u64) -> String {
     let m = now_secs().saturating_sub(t) / 60;
     if m < 60 {
-        format!("{m} min")
+        omsi_ui::tr("%{m} min").replace("%{m}", &m.to_string())
     } else {
-        format!("{} h {} min", m / 60, m % 60)
+        omsi_ui::tr("%{h} h %{m} min").replace("%{h}", &(m / 60).to_string()).replace("%{m}", &(m % 60).to_string())
     }
 }
 
@@ -1652,7 +1652,7 @@ impl Launcher {
             None => (1, self.state.config.profile.clone()),
         };
         let name = if name.is_empty() { "No driver".to_string() } else { name };
-        let level = format!("Level {level}");
+        let level = omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string());
         let page = self.page.shown().unwrap_or(UiPage::Drive);
         let nav = if self.top_nav() {
             omsi_launcher_ui::shell::TopBar { page, logo: self.logo, badges: &badges }.draw(&mut self.ui, size.x)
@@ -1778,7 +1778,7 @@ impl Launcher {
         let games = self.state.instances.len();
         let root_ok = self.root_ok();
         let chips = [
-            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { format!("Games: {games} running") }, games > 0),
+            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { omsi_ui::tr("Games: %{games} running").replace("%{games}", &games.to_string()) }, games > 0),
             ((if root_ok { "OMSI 2 folder: read" } else { "OMSI 2 folder: not chosen" }).to_string(), false),
             ((if self.preview.live { "Preview helper: running, stops when the page closes" } else { "Preview helper: stopped" }).to_string(), self.preview.live),
         ];
