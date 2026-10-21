@@ -11,6 +11,7 @@
 
 #[cfg(feature = "lan")]
 mod admin;
+mod api_limits;
 #[cfg(steam)]
 mod steam;
 #[cfg(feature = "lan")]
