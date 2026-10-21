@@ -285,7 +285,7 @@ pub(crate) fn d3d9_requested() -> bool {
     is_d3d9(&wanted) && !settings.vr_requested()
 }
 
-fn is_d3d9(name: &str) -> bool {
+pub(crate) fn is_d3d9(name: &str) -> bool {
     matches!(name.trim().to_ascii_lowercase().as_str(), "d3d9" | "d3d9ex" | "dx9")
 }
 
@@ -541,6 +541,20 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
     let img = image::load_from_memory(PNG).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
+}
+
+/// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
+/// is the "as OMSI 2" renderer: it ignores all of them.
+pub(crate) fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool, flag_plus: bool) -> (bool, bool) {
+    let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
+    let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
+    if settings.d3d9_selected() {
+        if enhanced || plus {
+            log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
+        }
+        return (false, false);
+    }
+    (enhanced, plus)
 }
 
 /// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).

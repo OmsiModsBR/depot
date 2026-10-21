@@ -2368,18 +2368,24 @@ fn options_pages(app: &App) -> Vec<Page> {
         .collect();
     let graphics: Vec<(String, String)> = vec![
         preset_row(&file, "Quality preset", "Sets most of the graphics options at once"),
-        pick("graphics", "Graphics", later),
+        // ("DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: Vanilla, and nothing to choose)
+        if app.d3d9_active() {
+            Some((row("Graphics", 'i', &omsi_ui::tr("Vanilla (as OMSI 2)"), "Fixed with DirectX9 (D3D9Ex)", None), "noop".to_string()))
+        } else {
+            pick("graphics", "Graphics", later)
+        },
         pick("msaa", "Anti-aliasing", later),
         pick("render_scale", "Render scale", later),
         pick("anisotropy", "Anisotropic", later),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
-        switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows").filter(|_| !app.settings.ray_tracing()),
-        pick("shadow_size", "Shadow map", later),
-        switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| !app.settings.ray_tracing()),
-        pick("shadow_casters", "Shadows cast by", later),
-        switch_row(app, "detail_textures", "Detail texturing up close", "The ground and large walls get fine grain when close"),
-        slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") }),
-        slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)),
+        // (the "as OMSI 2" DirectX9 renderer has no graphics improvements to choose: these stay hidden)
+        switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows").filter(|_| !app.settings.ray_tracing() && !app.d3d9_active()),
+        pick("shadow_size", "Shadow map", later).filter(|_| !app.d3d9_active()),
+        switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| !app.settings.ray_tracing() && !app.d3d9_active()),
+        pick("shadow_casters", "Shadows cast by", later).filter(|_| !app.d3d9_active()),
+        switch_row(app, "detail_textures", "Detail texturing up close", "The ground and large walls get fine grain when close").filter(|_| !app.d3d9_active()),
+        slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") }).filter(|_| !app.d3d9_active()),
+        slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64)).filter(|_| !app.d3d9_active()),
         slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}")),
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
         switch_row(app, "clouds", "Clouds", later),
