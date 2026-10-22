@@ -31,7 +31,8 @@ use props::PropsPlan;
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
 pub use trailer::{
-    body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart,
+    body_heading, body_reversed, body_rotation, coupling_offsets, coupling_placement,
+    coupling_points, joint_angles, TrailerPart,
 };
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};

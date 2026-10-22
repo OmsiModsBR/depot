@@ -181,6 +181,48 @@ pub fn body_rotation(heading: f64, pitch: f32, bank: f32, reversed: bool) -> Mat
     )
 }
 
+/// `articulation_<n>_alpha` and `_beta` (degrees) of a joint, from the rotations of the part
+/// in front (`lead_rot`) and of the part behind (`own_rot`), each travelling along its
+/// `*_heading` (a model turned round points the other way). The part in front's forward axis
+/// is read in the frame of the part behind: alpha is its angle in that part's floor plane,
+/// clockwise, the part in front's heading less this one's on level ground; beta is how far it
+/// rises out of that plane, the part in front's pitch less this one's (it grows as the rear
+/// axle sinks: taken the other way round, the Agora L's joint arch and bellows - `anim_rot
+/// articulation_0_beta` - tilted away from the rear section instead of towards it).
+///
+/// Measured against the world instead, as headings and pitches each against the horizon,
+/// the two sections lying on one sloping plane made a beta out of the bend alone: 2° on a 6%
+/// grade at 35°, 0.8° on a 2.5% crossfall, with nothing bent up or down - and the bellows
+/// opened a gap at their far ring on any crowned road through a curve.
+pub fn joint_angles(
+    lead_rot: Mat4,
+    lead_heading: f64,
+    own_rot: Mat4,
+    own_heading: f64,
+) -> (f64, f64) {
+    // (+1 when the model's forward axis points the way the part travels)
+    let along = |rot: Mat4, heading: f64| {
+        let f = rot.transform_vector3(Vec3::Y).as_dvec3();
+        let h = heading.to_radians();
+        if f.x * h.sin() + f.y * h.cos() < 0.0 {
+            -1.0
+        } else {
+            1.0
+        }
+    };
+    let front = lead_rot.transform_vector3(Vec3::Y).as_dvec3() * along(lead_rot, lead_heading);
+    let s = along(own_rot, own_heading);
+    let right = own_rot.transform_vector3(Vec3::X).as_dvec3() * s;
+    let forward = own_rot.transform_vector3(Vec3::Y).as_dvec3() * s;
+    let up = own_rot.transform_vector3(Vec3::Z).as_dvec3();
+    let (x, y, z) = (front.dot(right), front.dot(forward), front.dot(up));
+    let flat = x.hypot(y).max(1e-9);
+    (
+        x.atan2(y).to_degrees(),
+        (z / flat).clamp(-1.0, 1.0).asin().to_degrees(),
+    )
+}
+
 fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
     let coupling = if front {
         &def.coupling_front
