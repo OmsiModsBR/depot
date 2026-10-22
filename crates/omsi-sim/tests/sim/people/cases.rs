@@ -1,7 +1,7 @@
 use glam::{DVec2, DVec3, Vec2, Vec3};
 use omsi_content::Human;
 use omsi_geometry::util::angle_diff;
-use omsi_sim::testing::human::*;
+use omsi_sim::testing::people::*;
 
 #[test]
 fn standard_bone_names_have_engine_ids() {

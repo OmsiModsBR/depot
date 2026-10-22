@@ -1,6 +1,6 @@
 use glam::{DVec2, Vec3};
 use omsi_geometry::util::angle_diff;
-use omsi_sim::testing::crowd::*;
+use omsi_sim::testing::people::crowd::*;
 
 fn walker(x: f64, y: f64, want: DVec2) -> Walker {
     Walker {
