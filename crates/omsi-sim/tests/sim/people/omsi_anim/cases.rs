@@ -1,6 +1,6 @@
 use glam::Vec3;
 use omsi_content::Human;
-use omsi_sim::testing::human_omsi::*;
+use omsi_sim::testing::people::omsi_anim::*;
 
 fn rig() -> OmsiRig {
     let def = Human {
