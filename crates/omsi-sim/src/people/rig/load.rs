@@ -15,7 +15,7 @@ use crate::people::rig::{
 
 pub struct HumanType {
     pub def: Human,
-    /// The skeleton as OMSI animates it (see [`crate::human_omsi`]).
+    /// The skeleton as OMSI animates it (see [`crate::people::omsi_anim`]).
     pub omsi: crate::people::omsi_anim::OmsiRig,
     pub model: Model,
     pub model_dir: PathBuf,

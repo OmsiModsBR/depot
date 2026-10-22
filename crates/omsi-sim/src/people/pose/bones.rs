@@ -1,6 +1,6 @@
 //! [`Pose::bones`]: the bone transforms of the pose.
 
-use glam::{Affine3A, DVec3, Mat3A, Quat, Vec3, Vec3A};
+use glam::{Affine3A, DVec3, Mat3A, Quat, Vec2, Vec3, Vec3A};
 use omsi_geometry::util::{angle_diff, smoothstep};
 use std::f32::consts::{PI, TAU};
 
@@ -11,10 +11,109 @@ use crate::people::rig::{
     Rig, FOOT, FORE, HAND, HEAD, HIP, MAIN, SHIN, SIDE, SLOTS, THIGH, TOE, UPPER,
 };
 
+/// The values of the whole pose: how far it walks, sits and breathes.
+#[derive(Clone, Copy)]
+struct Blend {
+    walk: f32,
+    beta: f32,
+    ph: f32,
+    sit: f32,
+    s_ease: f32,
+    s_back: f32,
+    s_down: f32,
+    bump: f32,
+    breath: f32,
+    intensity: f32,
+    still: f32,
+    run: f32,
+}
+
+/// Feet targets (model frame): ankle positions, foot yaw and pitch.
+struct FeetTargets {
+    ankle_t: [Vec3; 2],
+    foot_rot: [Mat3A; 2],
+    toe_bend: [f32; 2],
+    foot_fwd: [Vec3; 2],
+    foot_yaw: [f32; 2],
+    swing: [Option<(f32, f32, f32)>; 2],
+    swing_floor: [f32; 2],
+}
+
+/// How the body leans: into the walk, towards a reach or the wheel, with the bus.
+#[derive(Clone, Copy)]
+struct Lean {
+    lean_acc: f32,
+    reach_lean: f32,
+    reach_twist: f32,
+    grip_lean: f32,
+    lean_bus: Vec2,
+}
+
+/// The pelvis transform and the turns the trunk answers.
+#[derive(Clone, Copy)]
+struct Pelvis {
+    pelvis_m: Affine3A,
+    pelvis_q: Quat,
+    pelvis_yaw: f32,
+    pelvis_roll: f32,
+}
+
+/// The trunk and head transforms.
+#[derive(Clone, Copy)]
+struct Trunk {
+    trunk_m: Affine3A,
+    trunk_rot: Quat,
+    head_m: Affine3A,
+}
+
 impl Pose {
     /// Bone transforms for the current state.
     pub fn bones(&mut self, rig: &Rig) -> Posed {
-        let d = |deg: f32| deg.to_radians();
+        let b = self.blend();
+        let feet = self.feet_targets(rig, &b);
+        let lean = self.lean(rig, &b);
+        let pelvis = self.pelvis(rig, &b, &lean, &feet.ankle_t);
+        let trunk = self.trunk_and_head(rig, &b, &lean, &pelvis);
+        let Pelvis { pelvis_m, .. } = pelvis;
+        let Trunk {
+            trunk_m, head_m, ..
+        } = trunk;
+
+        let mut out_bones = [Affine3A::IDENTITY; SLOTS];
+        out_bones[HIP] = pelvis_m;
+        out_bones[MAIN] = trunk_m;
+        out_bones[HEAD] = head_m;
+        let mut posed = Posed {
+            bones: [Affine3A::IDENTITY; SLOTS],
+            hip: [Vec3::ZERO; 2],
+            knee: [Vec3::ZERO; 2],
+            ankle: [Vec3::ZERO; 2],
+            elbow: [Vec3::ZERO; 2],
+            wrist: [Vec3::ZERO; 2],
+            sole: [0.0; 2],
+            knee_flex: [0.0; 2],
+            ankle_flex: [0.0; 2],
+            leg_miss: [0.0; 2],
+            neck: head_m.transform_point3(rig.neck),
+            ok: true,
+        };
+        self.legs(rig, &b, feet, &pelvis, &mut out_bones, &mut posed);
+        self.arms(rig, &b, &pelvis, &trunk, &mut out_bones, &mut posed);
+        posed.ok = out_bones.iter().all(|b| b.is_finite());
+        posed.bones = if posed.ok {
+            out_bones
+        } else {
+            [Affine3A::IDENTITY; SLOTS]
+        };
+        if !posed.ok {
+            // start over from standing rather than carry the bad state on
+            let seed = self.rng;
+            *self = Pose::new(seed);
+        }
+        posed
+    }
+
+    fn blend(&self) -> Blend {
         let walk = self.walk;
         let speed = self.speed.max(0.08);
         let beta = stance_fraction(speed);
@@ -28,8 +127,28 @@ impl Pose {
         let breath = self.breath.sin();
         let intensity = ((speed - 0.15) / 1.1).clamp(0.0, 1.0) * walk;
         let still = 1.0 - walk;
+        let run = run_factor(self.speed);
+        Blend {
+            walk,
+            beta,
+            ph,
+            sit,
+            s_ease,
+            s_back,
+            s_down,
+            bump,
+            breath,
+            intensity,
+            still,
+            run,
+        }
+    }
 
-        // --- feet targets (model frame): ankle positions, foot yaw and pitch ---
+    /// Where each ankle goes and how each foot turns; a foot in the air takes its pitch from
+    /// the shin once the leg is solved.
+    fn feet_targets(&self, rig: &Rig, b: &Blend) -> FeetTargets {
+        let d = |deg: f32| deg.to_radians();
+        let Blend { walk, beta, .. } = *b;
         let mut ankle_t = [Vec3::ZERO; 2];
         let mut foot_rot = [Mat3A::IDENTITY; 2];
         // the toes bend up against the foot while the heel is up, and straighten in the air
@@ -96,23 +215,21 @@ impl Pose {
             foot_fwd[side] = yaw_quat(yaw_l) * Vec3::Y;
             foot_yaw[side] = yaw_l;
         }
+        FeetTargets {
+            ankle_t,
+            foot_rot,
+            toe_bend,
+            foot_fwd,
+            foot_yaw,
+            swing,
+            swing_floor,
+        }
+    }
 
-        // --- pelvis ---
-        let sway = rig.hip_sway.sqrt();
-        // towards the leg that carries the weight, dipping on the swinging side
-        let lat_walk = -0.022 * rig.scale * sway.min(1.3) * (ph - 0.25).sin() * intensity;
-        let lat_idle = self.shift * still * (1.0 - s_ease);
-        let run = run_factor(self.speed);
-        let bob = -0.018
-            * rig.scale
-            * intensity
-            * (1.0 + 1.8 * run)
-            * (0.5 + 0.5 * (2.0 * ph - 0.35).cos());
+    fn lean(&self, rig: &Rig, b: &Blend) -> Lean {
+        let d = |deg: f32| deg.to_radians();
+        let Blend { walk, s_ease, .. } = *b;
         let lean_acc = (self.accel * 1.8).clamp(-6.0, 7.0) * walk;
-        let pelvis_roll = d(3.5) * sway * intensity * (ph - 0.35).sin()
-            - d(2.2) * (self.shift / (0.03 * rig.scale)) * still * (1.0 - s_ease);
-        // the hip of the leg in front leads (about z, counter-clockwise positive)
-        let pelvis_yaw = -d(5.0) * intensity * ph.cos();
         // reaching for something far: bend at the hips and bring the right shoulder round
         let (reach_lean, reach_twist) = if self.reach > 0.0 {
             let v = self.reach_at - rig.shoulder[1];
@@ -129,12 +246,58 @@ impl Pose {
         // a driver sits up, leaning towards the wheel
         let grip_lean =
             d(16.0 + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
-        // forward tilt walking, backwards on a seat
-        let pelvis_tilt =
-            d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease + reach_lean * 0.5 + grip_lean * 0.7;
         // swaying with the bus: the body goes with the pull (forwards when it brakes, outwards
         // in a bend), less when holding on or sitting
         let lean_bus = self.lean * (1.0 - 0.4 * self.hold) * (1.0 - 0.4 * s_ease);
+        Lean {
+            lean_acc,
+            reach_lean,
+            reach_twist,
+            grip_lean,
+            lean_bus,
+        }
+    }
+
+    /// The pelvis: swaying in the walk, sitting down, never higher than the planted feet let
+    /// the legs reach.
+    fn pelvis(&mut self, rig: &Rig, b: &Blend, lean: &Lean, ankle_t: &[Vec3; 2]) -> Pelvis {
+        let d = |deg: f32| deg.to_radians();
+        let Blend {
+            walk,
+            ph,
+            sit,
+            s_ease,
+            s_back,
+            s_down,
+            bump,
+            breath,
+            intensity,
+            still,
+            run,
+            ..
+        } = *b;
+        let Lean {
+            reach_lean,
+            grip_lean,
+            lean_bus,
+            ..
+        } = *lean;
+        let sway = rig.hip_sway.sqrt();
+        // towards the leg that carries the weight, dipping on the swinging side
+        let lat_walk = -0.022 * rig.scale * sway.min(1.3) * (ph - 0.25).sin() * intensity;
+        let lat_idle = self.shift * still * (1.0 - s_ease);
+        let bob = -0.018
+            * rig.scale
+            * intensity
+            * (1.0 + 1.8 * run)
+            * (0.5 + 0.5 * (2.0 * ph - 0.35).cos());
+        let pelvis_roll = d(3.5) * sway * intensity * (ph - 0.35).sin()
+            - d(2.2) * (self.shift / (0.03 * rig.scale)) * still * (1.0 - s_ease);
+        // the hip of the leg in front leads (about z, counter-clockwise positive)
+        let pelvis_yaw = -d(5.0) * intensity * ph.cos();
+        // forward tilt walking, backwards on a seat
+        let pelvis_tilt =
+            d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease + reach_lean * 0.5 + grip_lean * 0.7;
         let bus_shift = Vec3::new(lean_bus.x * 0.012, lean_bus.y * 0.012, 0.0) * (1.0 - s_ease);
         let stand_z = rig.pelvis.z - 0.004 * rig.scale - 0.012 * walk - 0.035 * rig.scale * run
             + 0.002 * breath * still;
@@ -185,8 +348,36 @@ impl Pose {
         self.drop = drop;
         pc.z -= drop * (1.0 - s_ease);
         let pelvis_m = Affine3A::from_translation(pc - rig.pelvis) * about(rig.pelvis, pelvis_q);
+        Pelvis {
+            pelvis_m,
+            pelvis_q,
+            pelvis_yaw,
+            pelvis_roll,
+        }
+    }
 
-        // --- trunk and head ---
+    fn trunk_and_head(&self, rig: &Rig, b: &Blend, lean: &Lean, pelvis: &Pelvis) -> Trunk {
+        let d = |deg: f32| deg.to_radians();
+        let Blend {
+            walk,
+            s_ease,
+            bump,
+            breath,
+            ..
+        } = *b;
+        let Lean {
+            lean_acc,
+            reach_lean,
+            reach_twist,
+            grip_lean,
+            lean_bus,
+        } = *lean;
+        let Pelvis {
+            pelvis_m,
+            pelvis_q,
+            pelvis_yaw,
+            pelvis_roll,
+        } = *pelvis;
         // shoulders against the hips, and a little towards what the head looks at
         // (the shoulders take a good part of a look to the side - up to 30 degrees - so that
         // the head turns no further on the trunk than a neck can: the people of OMSI have
@@ -219,26 +410,37 @@ impl Pose {
             yaw_quat(self.head.x.clamp(-72.0, 72.0)) * Quat::from_rotation_x(d(head_pitch));
         let head_rel = limit_quat(trunk_rot.inverse() * head_world, d(45.0));
         let head_m = trunk_m * about(rig.head_pivot, head_rel);
+        Trunk {
+            trunk_m,
+            trunk_rot,
+            head_m,
+        }
+    }
 
-        // --- legs ---
-        let mut out_bones = [Affine3A::IDENTITY; SLOTS];
-        out_bones[HIP] = pelvis_m;
-        out_bones[MAIN] = trunk_m;
-        out_bones[HEAD] = head_m;
-        let mut posed = Posed {
-            bones: [Affine3A::IDENTITY; SLOTS],
-            hip: [Vec3::ZERO; 2],
-            knee: [Vec3::ZERO; 2],
-            ankle: [Vec3::ZERO; 2],
-            elbow: [Vec3::ZERO; 2],
-            wrist: [Vec3::ZERO; 2],
-            sole: [0.0; 2],
-            knee_flex: [0.0; 2],
-            ankle_flex: [0.0; 2],
-            leg_miss: [0.0; 2],
-            neck: head_m.transform_point3(rig.neck),
-            ok: true,
-        };
+    /// The legs solved to the feet targets, the swinging foot pitched against the shin.
+    fn legs(
+        &self,
+        rig: &Rig,
+        b: &Blend,
+        feet: FeetTargets,
+        pelvis: &Pelvis,
+        out_bones: &mut [Affine3A; SLOTS],
+        posed: &mut Posed,
+    ) {
+        let d = |deg: f32| deg.to_radians();
+        let Blend { sit, .. } = *b;
+        let FeetTargets {
+            mut ankle_t,
+            mut foot_rot,
+            toe_bend,
+            foot_fwd,
+            foot_yaw,
+            swing,
+            swing_floor,
+        } = feet;
+        let Pelvis {
+            pelvis_m, pelvis_q, ..
+        } = *pelvis;
         let pelvis_fwd = pelvis_q * Vec3::Y;
         for side in 0..2 {
             let hip_at = pelvis_m.transform_point3(rig.hip[side]);
@@ -327,9 +529,35 @@ impl Pose {
                 ball_at + Vec3::from(toe_rot * Vec3A::new(0.0, rig.toe - rig.ball, -rig.ball_h));
             posed.sole[side] = heel.z.min(toe.z).min(ball.z);
         }
+    }
 
-        // --- arms ---
-        let run = run_factor(self.speed);
+    /// The arms: swinging, on the lap, reaching, holding on or on the wheel.
+    fn arms(
+        &self,
+        rig: &Rig,
+        b: &Blend,
+        pelvis: &Pelvis,
+        trunk: &Trunk,
+        out_bones: &mut [Affine3A; SLOTS],
+        posed: &mut Posed,
+    ) {
+        let d = |deg: f32| deg.to_radians();
+        let Blend {
+            walk,
+            ph,
+            sit,
+            s_down,
+            bump,
+            breath,
+            intensity,
+            still,
+            run,
+            ..
+        } = *b;
+        let Pelvis { pelvis_q, .. } = *pelvis;
+        let Trunk {
+            trunk_m, trunk_rot, ..
+        } = *trunk;
         let arm_amp = d(17.0) * rig.arm_swing.powf(0.7) * intensity * (1.0 + 1.1 * run);
         for side in 0..2 {
             let s = SIDE[side];
@@ -451,17 +679,5 @@ impl Pose {
             posed.elbow[side] = el_at;
             posed.wrist[side] = wr_at;
         }
-        posed.ok = out_bones.iter().all(|b| b.is_finite());
-        posed.bones = if posed.ok {
-            out_bones
-        } else {
-            [Affine3A::IDENTITY; SLOTS]
-        };
-        if !posed.ok {
-            // start over from standing rather than carry the bad state on
-            let seed = self.rng;
-            *self = Pose::new(seed);
-        }
-        posed
     }
 }
