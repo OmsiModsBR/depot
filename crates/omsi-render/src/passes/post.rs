@@ -1,6 +1,6 @@
 //! The enhanced post passes: glow, exposure metering and tone mapping.
 
-use super::draw::post_pass;
+use super::draw::PostPass;
 use crate::assets::GpuTexture;
 use crate::gpu::{
     float_tex, fullscreen_pipeline, pass_timer, sampler_entry, target_2d, uniform_entry,
@@ -226,40 +226,34 @@ pub(crate) fn encode_enhanced_post(
             let puddles = h.puddles.as_ref().filter(|_| puddles_on);
             let levels = h.down.len();
             for i in 0..levels {
-                post_pass(
+                PostPass::new("post", &h.down[i]).draw(
                     encoder,
-                    &h.down[i],
-                    None,
                     if i == 0 {
                         &ctx.post.down_first
                     } else {
                         &ctx.post.down
                     },
-                    if i == 0 {
+                    &[if i == 0 {
                         puddles.map(|p| &p.down_bg).unwrap_or(&h.down_bg[i])
                     } else {
                         &h.down_bg[i]
-                    },
+                    }],
                 );
             }
             // the exposure: meter the smallest level, move the adapted value towards it
             // (the window's picture only: a mirror is graded with the window's exposure,
             // as the eye that looks into it is adapted to the street)
             if lead_view {
-                post_pass(
+                PostPass::new("post", &ctx.adaptation.meter_view).draw(
                     encoder,
-                    &ctx.adaptation.meter_view,
-                    None,
                     &ctx.post.meter,
-                    &h.meter_bg,
+                    &[&h.meter_bg],
                 );
                 let front = ctx.adaptation.adapt_front;
-                post_pass(
+                PostPass::new("post", &ctx.adaptation.adapt_views[1 - front]).draw(
                     encoder,
-                    &ctx.adaptation.adapt_views[1 - front],
-                    None,
                     &ctx.post.adapt,
-                    &ctx.adaptation.adapt_bg[front],
+                    &[&ctx.adaptation.adapt_bg[front]],
                 );
                 ctx.adaptation.adapt_front = 1 - front;
             }
@@ -279,27 +273,18 @@ pub(crate) fn encode_enhanced_post(
                 } else {
                     None
                 };
-                post_pass(encoder, &h.up[i], timer, &ctx.post.up, &h.up_bg[i]);
+                PostPass::new("post", &h.up[i]).timer(timer).draw(
+                    encoder,
+                    &ctx.post.up,
+                    &[&h.up_bg[i]],
+                );
             }
             let final_view = if fxaa { &h.ldr } else { scene_view };
             let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)
                 [ctx.adaptation.adapt_front];
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("tone map"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: final_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: pass_timer(tset.as_ref(), timed, "tone map"),
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let mut pass = PostPass::new("tone map", final_view)
+                .timer(pass_timer(tset.as_ref(), timed, "tone map"))
+                .begin(encoder);
             pass.set_pipeline(if fxaa {
                 &ctx.post.tonemap_encoded
             } else {
@@ -309,22 +294,9 @@ pub(crate) fn encode_enhanced_post(
             pass.draw(0..3, 0..1);
             if fxaa {
                 drop(pass);
-                pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("fxaa"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: scene_view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: pass_timer(tset.as_ref(), timed, "fxaa"),
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
+                pass = PostPass::new("fxaa", scene_view)
+                    .timer(pass_timer(tset.as_ref(), timed, "fxaa"))
+                    .begin(encoder);
                 pass.set_pipeline(&ctx.post.fxaa);
                 pass.set_bind_group(0, &h.fxaa_bg, &[]);
                 pass.draw(0..3, 0..1);

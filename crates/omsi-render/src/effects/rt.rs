@@ -18,6 +18,7 @@ use crate::assets::AssetStore;
 use crate::gpu::{pass_timer, HDR_FORMAT};
 use crate::gpu::{target_2d, Samplers};
 use crate::lighting::Lighting;
+use crate::passes::PostPass;
 use crate::scene::{bounding_sphere, instance_scale, Camera, Instance, MeshId, Scene, Vertex};
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
@@ -1229,25 +1230,10 @@ impl RayTracer {
             pass.set_bind_group(0, &trace_bg, &[]);
             pass.dispatch_workgroups(gx, gy, 1);
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("rt reflections composite"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &hdr.view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: pass_timer(queries, timed, "rt composite"),
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&rt.composite);
-        pass.set_bind_group(0, &composite_bg, &[]);
-        pass.draw(0..3, 0..1);
+        PostPass::new("rt reflections composite", &hdr.view)
+            .load(wgpu::LoadOp::Load)
+            .timer(pass_timer(queries, timed, "rt composite"))
+            .draw(encoder, &rt.composite, &[&composite_bg]);
     }
 }
 
