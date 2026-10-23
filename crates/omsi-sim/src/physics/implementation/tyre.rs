@@ -383,8 +383,18 @@ impl RigidBody {
             .dot(rot.mul_vec3(Vec3::X))
             .abs()
             > GRIPPED_ACROSS;
-        if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne || knocked)
-        {
+        // (what the tyres take across: the bend's pull, towards the side the body turns to,
+        // less what a joint pushes it with - the rear section of an articulated bus pushes
+        // the front one sideways at its back, and the tyres let go when they cannot take
+        // that too)
+        let right = rot.mul_vec3(Vec3::X);
+        let inward = rot
+            .mul_vec3(self.omega)
+            .cross(self.velocity)
+            .dot(right)
+            .signum();
+        let across = m * v_fwd * v_fwd * kappa * inward - self.joint_across;
+        if self.holding && (across.abs() > grip_all || slipping || airborne || knocked) {
             self.holding = false;
         }
         // (holding, the tyres take whatever keeps them rolling where they point: the body
@@ -473,5 +483,10 @@ impl RigidBody {
             s.force += l.joint_p / h;
             s.torque += l.joint_l / h;
         }
+        self.joint_across = if l.jointed {
+            (l.joint_p / h).dot(rot.mul_vec3(Vec3::X))
+        } else {
+            0.0
+        };
     }
 }

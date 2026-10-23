@@ -523,3 +523,30 @@ fn a_pusher_thrown_into_a_bend_does_not_fold() {
         assert!(worst < 30.0, "{kmh} km/h: the joint folded to {worst}°");
     }
 }
+
+/// The front section's tyres let go when the rear one pushes them sideways harder than they
+/// grip, not only when the bend's own pull is too much: a pusher at full lock from 10 km/h,
+/// its rear axle driving hard, slides at the front before the speed alone would make it
+/// (some 26 km/h, counting the bend alone).
+#[test]
+fn a_pusher_pushing_hard_in_a_bend_slides_at_the_front() {
+    let (front, rear) = gn92(false);
+    let mass = 15_200.0;
+    let flat = road(1e9, 0.0);
+    let mut t = Train::new(&front, &rear);
+    t.run(1.0, &none, [5000.0; 2], &none, &flat);
+    t.run(6.0, &cruise(10.0 / 3.6, mass), [0.0; 2], &none, &flat);
+    t.run(3.0, &cruise(10.0 / 3.6, mass), [0.0; 2], &|_| 1.0, &flat);
+    assert!(t.front().holding());
+    let mut let_go = None;
+    for _ in 0..120 {
+        t.run(1.0 / 60.0, &|_| 40_000.0, [0.0; 2], &|_| 1.0, &flat);
+        if !t.front().holding() {
+            let_go = Some(t.front().forward_speed() * 3.6);
+            break;
+        }
+    }
+    let kmh = let_go.expect("the front section never let go");
+    eprintln!("the front section let go at {kmh:.1} km/h");
+    assert!(kmh < 24.0, "the front section held until {kmh} km/h");
+}
