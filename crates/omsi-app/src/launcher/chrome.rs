@@ -76,7 +76,9 @@ impl Launcher {
         if window.is_maximized() || window.fullscreen().is_some() {
             return;
         }
-        let Some(d) = edge_at(self.ui.input.mouse, size) else { return };
+        let Some(d) = edge_at(self.ui.input.mouse, size) else {
+            return;
+        };
         if self.ui.input.pressed {
             let _ = window.drag_resize_window(d);
             self.ui.input.pressed = false;
@@ -98,9 +100,16 @@ impl Launcher {
         let p = self.ui.input.mouse;
         // (the top bar's free part moves the window too, as a title bar's)
         let strip = if self.top_nav() { TOPBAR_H } else { CAPTION_H };
-        if self.ui.input.pressed && self.ui.hot.is_none() && self.ui.active.is_none() && on_title_strip(p, size.x, strip) {
+        if self.ui.input.pressed
+            && self.ui.hot.is_none()
+            && self.ui.active.is_none()
+            && on_title_strip(p, size.x, strip)
+        {
             let now = Instant::now();
-            let double = self.chrome.last_press.is_some_and(|t| now.duration_since(t) < Duration::from_millis(400));
+            let double = self
+                .chrome
+                .last_press
+                .is_some_and(|t| now.duration_since(t) < Duration::from_millis(400));
             if double {
                 self.chrome.last_press = None;
                 window.set_maximized(!maximized);
@@ -128,12 +137,30 @@ mod tests {
     #[test]
     fn edges_and_corners_resize_and_the_inside_does_not() {
         let size = Vec2::new(1440.0, 880.0);
-        assert_eq!(edge_at(Vec2::new(1.0, 400.0), size), Some(ResizeDirection::West));
-        assert_eq!(edge_at(Vec2::new(1438.0, 400.0), size), Some(ResizeDirection::East));
-        assert_eq!(edge_at(Vec2::new(700.0, 1.0), size), Some(ResizeDirection::North));
-        assert_eq!(edge_at(Vec2::new(700.0, 878.0), size), Some(ResizeDirection::South));
-        assert_eq!(edge_at(Vec2::new(2.0, 2.0), size), Some(ResizeDirection::NorthWest));
-        assert_eq!(edge_at(Vec2::new(1438.0, 878.0), size), Some(ResizeDirection::SouthEast));
+        assert_eq!(
+            edge_at(Vec2::new(1.0, 400.0), size),
+            Some(ResizeDirection::West)
+        );
+        assert_eq!(
+            edge_at(Vec2::new(1438.0, 400.0), size),
+            Some(ResizeDirection::East)
+        );
+        assert_eq!(
+            edge_at(Vec2::new(700.0, 1.0), size),
+            Some(ResizeDirection::North)
+        );
+        assert_eq!(
+            edge_at(Vec2::new(700.0, 878.0), size),
+            Some(ResizeDirection::South)
+        );
+        assert_eq!(
+            edge_at(Vec2::new(2.0, 2.0), size),
+            Some(ResizeDirection::NorthWest)
+        );
+        assert_eq!(
+            edge_at(Vec2::new(1438.0, 878.0), size),
+            Some(ResizeDirection::SouthEast)
+        );
         assert_eq!(edge_at(Vec2::new(700.0, 400.0), size), None);
         assert_eq!(edge_at(Vec2::new(-10.0, 400.0), size), None);
     }
@@ -143,6 +170,10 @@ mod tests {
         assert!(on_title_strip(Vec2::new(600.0, 10.0), 1440.0, CAPTION_H));
         assert!(!on_title_strip(Vec2::new(600.0, 40.0), 1440.0, CAPTION_H));
         assert!(on_title_strip(Vec2::new(600.0, 40.0), 1440.0, TOPBAR_H));
-        assert!(!on_title_strip(Vec2::new(1440.0 - 60.0, 10.0), 1440.0, TOPBAR_H));
+        assert!(!on_title_strip(
+            Vec2::new(1440.0 - 60.0, 10.0),
+            1440.0,
+            TOPBAR_H
+        ));
     }
 }

@@ -14,7 +14,9 @@
 
 /// Whether `env.txt` may set the variable `key`: the register marks it so.
 fn settable(key: &str) -> bool {
-    omsi_cfg::flags::ALL.iter().any(|f| f.env_txt && f.name == key)
+    omsi_cfg::flags::ALL
+        .iter()
+        .any(|f| f.env_txt && f.name == key)
 }
 
 /// Longest value taken (the allowed ones are numbers and short words).
@@ -22,7 +24,11 @@ const MAX_VALUE: usize = 32;
 
 /// Whether `key=value` may be set from `env.txt`.
 pub(crate) fn allowed(key: &str, value: &str) -> bool {
-    settable(key) && value.len() <= MAX_VALUE && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' || c == ',')
+    settable(key)
+        && value.len() <= MAX_VALUE
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' || c == ',')
 }
 
 /// The `(name, value)` pairs of `env.txt`'s text that may be set, in order; `skipped` gets the
@@ -34,7 +40,9 @@ pub(crate) fn parse(text: &str, skipped: &mut Vec<String>) -> Vec<(String, Strin
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let Some((k, v)) = line.split_once('=') else { continue };
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
         let (k, v) = (k.trim(), v.trim());
         if allowed(k, v) {
             out.push((k.to_string(), v.to_string()));
@@ -51,16 +59,46 @@ mod tests {
 
     #[test]
     fn the_settable_switches_are_the_reviewed_ones() {
-        let mut got: Vec<&str> = omsi_cfg::flags::ALL.iter().filter(|f| f.env_txt).map(|f| f.name).collect();
+        let mut got: Vec<&str> = omsi_cfg::flags::ALL
+            .iter()
+            .filter(|f| f.env_txt)
+            .map(|f| f.name)
+            .collect();
         got.sort_unstable();
         let mut want = vec![
-            "OMSI_TOUCH", "OMSI_MOBILE", "OMSI_LAUNCHER_SIZE",
-            "OMSI_BACKEND", "OMSI_SAFE_GPU", "OMSI_FULL_GPU", "OMSI_GPU_LIMITS", "OMSI_BASIC_PIPELINES", "OMSI_GRAPHICS",
-            "OMSI_NO_SHADOWS", "OMSI_NO_CORONAS", "OMSI_NO_ENVMAP", "OMSI_NO_BUMP", "OMSI_NO_CULL", "OMSI_NO_SURF",
-            "OMSI_NO_BC", "OMSI_NO_TEXCOMPRESS", "OMSI_NO_FXAA", "OMSI_NO_AO", "OMSI_NO_RT", "OMSI_NO_RT_GRADE",
-            "OMSI_NO_CLOUDS", "OMSI_NO_ENHANCED", "OMSI_NO_PLUGINS",
-            "OMSI_MAX_FPS", "OMSI_TEXTURE_MEMORY", "OMSI_MUTE", "OMSI_SEED",
-            "OMSI_PROFILE", "OMSI_GPU_TIMERS", "OMSI_DEBUG_NAV", "OMSI_DEBUG_STARTUP", "OMSI_DEBUG_MISSING",
+            "OMSI_TOUCH",
+            "OMSI_MOBILE",
+            "OMSI_LAUNCHER_SIZE",
+            "OMSI_BACKEND",
+            "OMSI_SAFE_GPU",
+            "OMSI_FULL_GPU",
+            "OMSI_GPU_LIMITS",
+            "OMSI_BASIC_PIPELINES",
+            "OMSI_GRAPHICS",
+            "OMSI_NO_SHADOWS",
+            "OMSI_NO_CORONAS",
+            "OMSI_NO_ENVMAP",
+            "OMSI_NO_BUMP",
+            "OMSI_NO_CULL",
+            "OMSI_NO_SURF",
+            "OMSI_NO_BC",
+            "OMSI_NO_TEXCOMPRESS",
+            "OMSI_NO_FXAA",
+            "OMSI_NO_AO",
+            "OMSI_NO_RT",
+            "OMSI_NO_RT_GRADE",
+            "OMSI_NO_CLOUDS",
+            "OMSI_NO_ENHANCED",
+            "OMSI_NO_PLUGINS",
+            "OMSI_MAX_FPS",
+            "OMSI_TEXTURE_MEMORY",
+            "OMSI_MUTE",
+            "OMSI_SEED",
+            "OMSI_PROFILE",
+            "OMSI_GPU_TIMERS",
+            "OMSI_DEBUG_NAV",
+            "OMSI_DEBUG_STARTUP",
+            "OMSI_DEBUG_MISSING",
         ];
         want.sort_unstable();
         // (a variable marked `env_txt` in the register, or unmarked, changes what a file other
@@ -71,8 +109,18 @@ mod tests {
     #[test]
     fn only_harmless_switches_are_taken() {
         let mut skipped = Vec::new();
-        let got = parse("OMSI_NO_SHADOWS=1\n# a comment\nOMSI_MAX_FPS = 30 \nOMSI_BACKEND=gl\n", &mut skipped);
-        assert_eq!(got, vec![("OMSI_NO_SHADOWS".into(), "1".into()), ("OMSI_MAX_FPS".into(), "30".into()), ("OMSI_BACKEND".into(), "gl".into())]);
+        let got = parse(
+            "OMSI_NO_SHADOWS=1\n# a comment\nOMSI_MAX_FPS = 30 \nOMSI_BACKEND=gl\n",
+            &mut skipped,
+        );
+        assert_eq!(
+            got,
+            vec![
+                ("OMSI_NO_SHADOWS".into(), "1".into()),
+                ("OMSI_MAX_FPS".into(), "30".into()),
+                ("OMSI_BACKEND".into(), "gl".into())
+            ]
+        );
         assert!(skipped.is_empty());
     }
 
