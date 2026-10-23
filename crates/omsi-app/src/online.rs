@@ -29,7 +29,10 @@ impl App {
     /// Whether this game joined another's LAN session (the host then decides the weather,
     /// the clock and the map's edits).
     pub(crate) fn is_lan_client(&self) -> bool {
-        self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+        self.online
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Client)
     }
 
     /// Whether this game is in a LAN session at all (hosting or joined).
@@ -39,7 +42,12 @@ impl App {
 
     /// The weather `spec` for the players, when this game hosts a session.
     pub(crate) fn share_weather_as_host(&mut self, spec: &str) {
-        if let Some(l) = self.online.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
+        if let Some(l) = self
+            .online
+            .lan
+            .as_mut()
+            .filter(|l| l.role == omsi_net::Role::Host)
+        {
             l.set_weather(spec);
         }
     }
@@ -51,7 +59,10 @@ impl App {
 
     /// Whether this game hosts a LAN session.
     pub(crate) fn is_lan_host(&self) -> bool {
-        self.online.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host)
+        self.online
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Host)
     }
 
     /// LAN play, once a frame: send our bus, take in the others', and keep a drawn
@@ -97,7 +108,12 @@ impl App {
         for u in updates {
             self.apply_world_update(u);
         }
-        let cmds = self.online.lan.as_mut().map(|l| l.take_commands()).unwrap_or_default();
+        let cmds = self
+            .online
+            .lan
+            .as_mut()
+            .map(|l| l.take_commands())
+            .unwrap_or_default();
         for (from, text) in cmds {
             self.lan_command(from, &text);
         }
@@ -106,13 +122,23 @@ impl App {
 
     /// A command another player's game sent ours (`LanSession::command`).
     pub(crate) fn lan_command(&mut self, from: u32, text: &str) {
-        let Some(lan) = self.online.lan.as_ref() else { return };
+        let Some(lan) = self.online.lan.as_ref() else {
+            return;
+        };
         let my_id = lan.my_id;
         if let Some(ev) = text.strip_prefix("trigger ") {
             // a switch worked by a passenger of ours: only by one who is in our bus
-            let aboard = lan.peers().find(|p| p.pose.id == from).and_then(|p| p.pose.walker).and_then(|w| w.aboard).map(|a| a.owner == my_id).unwrap_or(false);
+            let aboard = lan
+                .peers()
+                .find(|p| p.pose.id == from)
+                .and_then(|p| p.pose.walker)
+                .and_then(|w| w.aboard)
+                .map(|a| a.owner == my_id)
+                .unwrap_or(false);
             if !aboard {
-                log::info!("LAN: player {from} asked for switch {ev} of our bus from outside it: ignored");
+                log::info!(
+                    "LAN: player {from} asked for switch {ev} of our bus from outside it: ignored"
+                );
                 return;
             }
             if let Some(p) = self.player.as_mut() {
@@ -133,7 +159,10 @@ impl App {
         }
         if text.starts_with("voice ") {
             if from == 1 {
-                if let (Some(v), Some(server)) = (self.online.voice.as_mut(), crate::voice::VoiceServer::parse_command(text)) {
+                if let (Some(v), Some(server)) = (
+                    self.online.voice.as_mut(),
+                    crate::voice::VoiceServer::parse_command(text),
+                ) {
                     v.set_server(server);
                 }
             }
@@ -155,7 +184,10 @@ impl App {
             self.online.voice = None;
             return;
         }
-        let v = self.online.voice.get_or_insert_with(|| crate::voice::Voice::new(crate::voice::DEFAULT_PORT));
+        let v = self
+            .online
+            .voice
+            .get_or_insert_with(|| crate::voice::Voice::new(crate::voice::DEFAULT_PORT));
         match lan.role {
             omsi_net::Role::Host => {
                 // (once: hosted() reads voice.cfg)
@@ -172,7 +204,11 @@ impl App {
         let lan = self.online.lan.as_ref().unwrap();
         let my_bus = self.player.as_ref().map(|p| p.vehicle.position);
         let others = crate::voice::speakers(lan, &self.online.remotes, my_bus);
-        let inside = if self.in_cab { Some(lan.my_id) } else { self.online.inside_remote };
+        let inside = if self.in_cab {
+            Some(lan.my_id)
+        } else {
+            self.online.inside_remote
+        };
         // driving a bus (not on foot): on the company radio automatically
         let on_radio = self.player.is_some() && !self.ego;
         let radio_keyed = on_radio && self.voice_radio_held();
@@ -205,7 +241,10 @@ impl App {
             b.action.eq_ignore_ascii_case("voice_radio")
                 && b.scan_code != 0
                 && b.matches(chord)
-                && self.keys.iter().any(|k| crate::keys::dik_code(*k) == Some(b.scan_code))
+                && self
+                    .keys
+                    .iter()
+                    .any(|k| crate::keys::dik_code(*k) == Some(b.scan_code))
         })
     }
 

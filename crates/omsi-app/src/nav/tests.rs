@@ -34,7 +34,11 @@ fn a_turned_city_map_reads_points_and_drags_through_the_turn() {
     // dragging the picture up by 10 px moves the centre 20 m to the west
     n.city.drag = Some((500.0, 400.0));
     n.map_move(500.0, 390.0);
-    assert!((n.city.center - DVec2::new(80.0, 200.0)).length() < 1e-6, "{:?}", n.city.center);
+    assert!(
+        (n.city.center - DVec2::new(80.0, 200.0)).length() < 1e-6,
+        "{:?}",
+        n.city.center
+    );
     // the compass cycles map, north, heading
     n.city.buttons.push((Rect::new(10.0, 10.0, 20.0, 20.0), 6));
     for want in [1, 2, 0] {
@@ -58,7 +62,10 @@ fn the_navigator_is_dragged_by_the_mouse() {
     assert!(n.panel_move(100.0 + 610.0, 700.0 - 295.0));
     assert_eq!(n.panel_release(), Some(true));
     let at = n.at.unwrap();
-    assert!((at[0] - 0.5).abs() < 1e-3 && (at[1] - 0.5).abs() < 1e-3, "{at:?}");
+    assert!(
+        (at[0] - 0.5).abs() < 1e-3 && (at[1] - 0.5).abs() < 1e-3,
+        "{at:?}"
+    );
     let back = placed_at(&n.placement()).unwrap();
     assert!((back[0] - 0.5).abs() < 1e-3 && (back[1] - 0.5).abs() < 1e-3);
     // (dragged past the window's edge: held inside it)
@@ -77,11 +84,23 @@ fn the_navigator_keeps_where_it_was_dragged_on_a_phone_and_clear_of_the_informat
     let mut n = Navigator::new(true, 0.85, "bottom-left");
     let (screen, size) = ((1280.0, 720.0), (300.0, 250.0));
     assert_eq!(n.panel_origin(screen, size, true, None), (490.0, 13.0));
-    assert_eq!(n.panel_origin(screen, size, true, Some([311.0, 20.0, 898.0, 69.0])), (490.0, 76.0));
-    assert_eq!(n.panel_origin(screen, size, false, Some([311.0, 20.0, 898.0, 69.0])), (13.0, 457.0));
+    assert_eq!(
+        n.panel_origin(screen, size, true, Some([311.0, 20.0, 898.0, 69.0])),
+        (490.0, 76.0)
+    );
+    assert_eq!(
+        n.panel_origin(screen, size, false, Some([311.0, 20.0, 898.0, 69.0])),
+        (13.0, 457.0)
+    );
     n.corner = "top-left".into();
-    assert_eq!(n.panel_origin(screen, size, false, Some([330.0, 20.0, 950.0, 69.0])), (13.0, 13.0));
-    assert_eq!(n.panel_origin(screen, size, false, Some([300.0, 20.0, 980.0, 69.0])), (13.0, 76.0));
+    assert_eq!(
+        n.panel_origin(screen, size, false, Some([330.0, 20.0, 950.0, 69.0])),
+        (13.0, 13.0)
+    );
+    assert_eq!(
+        n.panel_origin(screen, size, false, Some([300.0, 20.0, 980.0, 69.0])),
+        (13.0, 76.0)
+    );
     // a finger's drag: there, on the phone as on the computer
     n.panel_rect = [490.0, 13.0, 790.0, 263.0];
     n.panel_press(600.0, 100.0);
@@ -91,7 +110,10 @@ fn the_navigator_keeps_where_it_was_dragged_on_a_phone_and_clear_of_the_informat
     assert_eq!(n.panel_origin(screen, size, false, None), (0.0, 470.0));
 }
 
-use super::draw::{rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon, Icon, STOP_REQUEST};
+use super::draw::{
+    rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon, Icon,
+    STOP_REQUEST,
+};
 use super::geometry::{confirm_road_surfaces, road_geometry, visible_road_lanes};
 use super::*;
 use omsi_sim::traffic::{Lane, LaneKey, LaneKind};
@@ -111,7 +133,10 @@ fn stop_request_icon_reserves_space_only_while_active() {
                 if requested {
                     assert!(!ui.verts.is_empty(), "the stop sign must render");
                     assert!(ui.verts.iter().all(|v| v.color == STOP_REQUEST.0));
-                    assert!(ui.verts.iter().all(|v| v.pos[0] > text.right() && v.pos[0] <= row.right()));
+                    assert!(ui
+                        .verts
+                        .iter()
+                        .all(|v| v.pos[0] > text.right() && v.pos[0] <= row.right()));
                     assert!((text.w - (row.w - 38.0 * scale)).abs() < 0.01);
                 } else {
                     assert!(ui.verts.is_empty());
@@ -123,7 +148,11 @@ fn stop_request_icon_reserves_space_only_while_active() {
 }
 
 fn straight(a: (f64, f64), b: (f64, f64)) -> Lane {
-    omsi_sim::traffic::LaneBuilder::polyline(vec![DVec3::new(a.0, a.1, 0.0), DVec3::new(b.0, b.1, 0.0)], LaneKind::Street, 3.0)
+    omsi_sim::traffic::LaneBuilder::polyline(
+        vec![DVec3::new(a.0, a.1, 0.0), DVec3::new(b.0, b.1, 0.0)],
+        LaneKind::Street,
+        3.0,
+    )
 }
 
 #[test]
@@ -137,7 +166,12 @@ fn projection_puts_the_look_at_point_in_the_middle() {
     let l = Layer::world(view, 0.7, [0.0, 0.0, 400.0, 300.0], [0.0; 4], 0.0, 1.0);
     let p = project(l.view_proj, [0.0, 0.0, 400.0, 300.0], Vec3::ZERO).unwrap();
     assert!((p - Vec2::new(200.0, 150.0)).length() < 0.5, "{p}");
-    let ahead = project(l.view_proj, [0.0, 0.0, 400.0, 300.0], Vec3::new(0.0, 30.0, 0.0)).unwrap();
+    let ahead = project(
+        l.view_proj,
+        [0.0, 0.0, 400.0, 300.0],
+        Vec3::new(0.0, 30.0, 0.0),
+    )
+    .unwrap();
     assert!(ahead.y < 150.0, "ahead is up the picture: {ahead}");
 }
 
@@ -146,7 +180,10 @@ fn editor_only_lanes_do_not_become_gps_roads() {
     let visible = straight((0.0, 0.0), (100.0, 0.0));
     let mut hidden = straight((0.0, 30.0), (100.0, 30.0));
     hidden.invisible = true;
-    let net = Network { lanes: vec![visible.clone(), hidden], ..Default::default() };
+    let net = Network {
+        lanes: vec![visible.clone(), hidden],
+        ..Default::default()
+    };
     let drawn = visible_road_lanes(&net);
     assert_eq!(drawn.len(), 1);
     assert_eq!(drawn[0].1.points, visible.points);
@@ -161,13 +198,23 @@ fn separate_asphalt_meshes_corroborate_invisible_traffic_splines() {
     let mut bridge = straight((0.0, 0.0), (100.0, 0.0));
     bridge.points.iter_mut().for_each(|p| p.z = 8.0);
     bridge.invisible = true;
-    let mut net = Network { lanes: vec![on_road, helper, bridge], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![on_road, helper, bridge],
+        ..Default::default()
+    };
     let surface = (vec![DVec3::ZERO, DVec3::new(100.0, 0.0, 0.0)], 8.0);
     confirm_road_surfaces(&mut net, &[surface.clone()]);
     assert!(!net.lanes[0].invisible);
     assert!(net.lanes[1].invisible);
-    assert!(net.lanes[2].invisible, "asphalt below a bridge must not corroborate its paths");
-    assert_eq!(road_geometry(&net).len(), 1, "surface evidence must not draw a second road");
+    assert!(
+        net.lanes[2].invisible,
+        "asphalt below a bridge must not corroborate its paths"
+    );
+    assert_eq!(
+        road_geometry(&net).len(),
+        1,
+        "surface evidence must not draw a second road"
+    );
 }
 
 #[test]
@@ -176,17 +223,30 @@ fn adjacent_spline_lanes_form_carriageways_without_filling_the_median() {
     for (path, offset) in [-10.0f32, -7.0, 7.0, 10.0].into_iter().enumerate() {
         let mut lane = straight((offset as f64, 0.0), (offset as f64, 100.0));
         lane.source = 1;
-        lane.key = Some(LaneKey { tile: (0, 0), id: 42, path: path as u16 });
+        lane.key = Some(LaneKey {
+            tile: (0, 0),
+            id: 42,
+            path: path as u16,
+        });
         lane.offset = offset;
-        if offset < 0.0 { lane.points.reverse(); lane.reversed = true; }
+        if offset < 0.0 {
+            lane.points.reverse();
+            lane.reversed = true;
+        }
         lanes.push(lane);
     }
-    let net = Network { lanes, ..Default::default() };
+    let net = Network {
+        lanes,
+        ..Default::default()
+    };
     let roads = road_geometry(&net);
     assert_eq!(roads.len(), 2);
     assert_eq!(roads[0].width, 6.0);
     assert_eq!(roads[1].width, 6.0);
-    assert_eq!(roads[0].points, vec![DVec3::new(-8.5, 0.0, 0.0), DVec3::new(-8.5, 100.0, 0.0)]);
+    assert_eq!(
+        roads[0].points,
+        vec![DVec3::new(-8.5, 0.0, 0.0), DVec3::new(-8.5, 100.0, 0.0)]
+    );
     assert_eq!(roads[1].points[0].x, 8.5);
     // Display geometry must not replace or move the graph used by routing.
     assert_eq!(net.lanes.len(), 4);
@@ -196,20 +256,40 @@ fn adjacent_spline_lanes_form_carriageways_without_filling_the_median() {
 #[test]
 fn opposite_directions_draw_once_even_when_reverse_is_first() {
     let mut a = straight((0.0, 0.0), (0.0, 100.0));
-    a.key = Some(LaneKey { tile: (0, 0), id: 42, path: 0 });
+    a.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 42,
+        path: 0,
+    });
     let mut b = a.clone();
     b.points.reverse();
     b.reversed = true;
-    let net = Network { lanes: vec![b, a], ..Default::default() };
+    let net = Network {
+        lanes: vec![b, a],
+        ..Default::default()
+    };
     assert_eq!(visible_road_lanes(&net).len(), 1);
 }
 
 #[test]
 fn junction_helpers_between_roads_remain_connected() {
-    let mut lanes = vec![straight((0.0, 0.0), (0.0, 40.0)), straight((0.0, 40.0), (0.0, 50.0)), straight((0.0, 50.0), (0.0, 60.0)), straight((0.0, 60.0), (0.0, 100.0)), straight((30.0, 0.0), (30.0, 100.0))];
-    lanes[0].next = vec![1]; lanes[1].next = vec![2]; lanes[2].next = vec![3];
-    for i in [1, 2, 4] { lanes[i].invisible = true; }
-    let mut net = Network { lanes, ..Default::default() };
+    let mut lanes = vec![
+        straight((0.0, 0.0), (0.0, 40.0)),
+        straight((0.0, 40.0), (0.0, 50.0)),
+        straight((0.0, 50.0), (0.0, 60.0)),
+        straight((0.0, 60.0), (0.0, 100.0)),
+        straight((30.0, 0.0), (30.0, 100.0)),
+    ];
+    lanes[0].next = vec![1];
+    lanes[1].next = vec![2];
+    lanes[2].next = vec![3];
+    for i in [1, 2, 4] {
+        lanes[i].invisible = true;
+    }
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
     confirm_road_surfaces(&mut net, &[]);
     assert!(!net.lanes[1].invisible && !net.lanes[2].invisible);
     assert!(net.lanes[4].invisible);
@@ -218,17 +298,30 @@ fn junction_helpers_between_roads_remain_connected() {
 
 #[test]
 fn placement_gaps_are_bridged_only_where_the_graph_connects() {
-    let mut lanes = vec![straight((0.0, 0.0), (0.0, 40.0)), straight((0.0, 41.0), (0.0, 80.0)), straight((2.0, 41.0), (2.0, 80.0))];
+    let mut lanes = vec![
+        straight((0.0, 0.0), (0.0, 40.0)),
+        straight((0.0, 41.0), (0.0, 80.0)),
+        straight((2.0, 41.0), (2.0, 80.0)),
+    ];
     lanes[0].next = vec![1];
-    let roads = road_geometry(&Network { lanes, ..Default::default() });
+    let roads = road_geometry(&Network {
+        lanes,
+        ..Default::default()
+    });
     assert_eq!(roads.len(), 4);
-    assert_eq!(roads[3].points, vec![DVec3::new(0.0, 40.0, 0.0), DVec3::new(0.0, 41.0, 0.0)]);
+    assert_eq!(
+        roads[3].points,
+        vec![DVec3::new(0.0, 40.0, 0.0), DVec3::new(0.0, 41.0, 0.0)]
+    );
 }
 
 #[test]
 fn paved_areas_without_driving_paths_do_not_draw_streets() {
     let mut net = Network::default();
-    confirm_road_surfaces(&mut net, &[(vec![DVec3::ZERO, DVec3::new(100.0, 0.0, 0.0)], 20.0)]);
+    confirm_road_surfaces(
+        &mut net,
+        &[(vec![DVec3::ZERO, DVec3::new(100.0, 0.0, 0.0)], 20.0)],
+    );
     assert!(road_geometry(&net).is_empty());
 }
 
@@ -236,11 +329,18 @@ fn paved_areas_without_driving_paths_do_not_draw_streets() {
 fn stacked_paths_on_one_spline_are_not_merged() {
     let mut a = straight((0.0, 0.0), (0.0, 100.0));
     a.source = 1;
-    a.key = Some(LaneKey { tile: (0, 0), id: 42, path: 0 });
+    a.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 42,
+        path: 0,
+    });
     let mut b = a.clone();
     b.key.as_mut().unwrap().path = 1;
     b.points.iter_mut().for_each(|p| p.z = 8.0);
-    let roads = road_geometry(&Network { lanes: vec![a, b], ..Default::default() });
+    let roads = road_geometry(&Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    });
     assert_eq!(roads.len(), 2);
     assert_eq!(roads[0].points[0].z, 0.0);
     assert_eq!(roads[1].points[0].z, 8.0);
@@ -249,7 +349,10 @@ fn stacked_paths_on_one_spline_are_not_merged() {
 #[test]
 fn crowded_stop_markers_and_labels_do_not_overlap() {
     let p = Vec2::new(200.0, 200.0);
-    let markers = spaced_markers([(0, p), (1, p + Vec2::X * 5.0), (2, p + Vec2::X * 35.0)], 20.0);
+    let markers = spaced_markers(
+        [(0, p), (1, p + Vec2::X * 5.0), (2, p + Vec2::X * 35.0)],
+        20.0,
+    );
     assert_eq!(markers.iter().map(|m| m.0).collect::<Vec<_>>(), vec![0, 2]);
     let win = Rect::new(0.0, 0.0, 600.0, 400.0);
     let first = stop_label_rect(p, 150.0, 1.0, win, &[]).unwrap();
@@ -282,7 +385,19 @@ fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn the_city_map_draws_over_the_picture() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), omsi_render::RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() })) else {
+    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        omsi_render::RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    )) else {
         eprintln!("no graphics adapter: skipped");
         return;
     };
@@ -307,12 +422,29 @@ fn the_city_map_draws_over_the_picture() {
             lanes.push(straight((c - 4.0, b), (c - 4.0, a)));
         }
     }
-    let signs = vec![(DVec3::new(-375.0, 6.0, 0.0), 0.0, "Main Street".to_string()), (DVec3::new(606.0, 225.0, 0.0), 90.0, "Station Road".to_string())];
+    let signs = vec![
+        (DVec3::new(-375.0, 6.0, 0.0), 0.0, "Main Street".to_string()),
+        (
+            DVec3::new(606.0, 225.0, 0.0),
+            90.0,
+            "Station Road".to_string(),
+        ),
+    ];
     let mut nav = Navigator::new(false, 0.85, "bottom-left");
-    nav.set_map(crate::scene::NavigationMap { lanes, road_surfaces: Vec::new(), places: HashMap::new(), signs });
+    nav.set_map(crate::scene::NavigationMap {
+        lanes,
+        road_surfaces: Vec::new(),
+        places: HashMap::new(),
+        signs,
+    });
     nav.set_route("50/1", route, true, nav.global_version + (1 << 40));
     nav.toggle_map();
-    let stop = |id: i64, x: f64, y: f64, name: &str, min: f64| NavStop { object_id: id, position: DVec3::new(x, y, 0.0), name: name.into(), arrival: 8.0 * 3600.0 + min * 60.0 };
+    let stop = |id: i64, x: f64, y: f64, name: &str, min: f64| NavStop {
+        object_id: id,
+        position: DVec3::new(x, y, 0.0),
+        name: name.into(),
+        arrival: 8.0 * 3600.0 + min * 60.0,
+    };
     let frame = NavFrame {
         traffic: None,
         players: Vec::new(),
@@ -323,7 +455,12 @@ fn the_city_map_draws_over_the_picture() {
         inside_temp: 21.0,
         line: Some("50".into()),
         terminus: Some("Central Station".into()),
-        stops: vec![stop(1, -300.0, -2.0, "Depot", 44.0), stop(2, 0.0, -2.0, "Market", 47.0), stop(3, 450.0, -2.0, "Main Street", 50.0), stop(4, 602.0, 300.0, "Central Station", 54.0)],
+        stops: vec![
+            stop(1, -300.0, -2.0, "Depot", 44.0),
+            stop(2, 0.0, -2.0, "Market", 47.0),
+            stop(3, 450.0, -2.0, "Main Street", 50.0),
+            stop(4, 602.0, 300.0, "Central Station", 54.0),
+        ],
         delay: Some(30.0),
         passengers: Some(12),
         stop_requested: false,
@@ -346,16 +483,38 @@ fn the_city_map_draws_over_the_picture() {
     assert!(nav.map_open() && !scene.overlays.is_empty());
     let r = nav.city.rect;
     // the close button is in the header, at its right end
-    let close = nav.city.buttons.iter().find(|b| b.1 == 3).map(|b| b.0).expect("the close button");
+    let close = nav
+        .city
+        .buttons
+        .iter()
+        .find(|b| b.1 == 3)
+        .map(|b| b.0)
+        .expect("the close button");
     assert!(close.right() <= r[2] - r[0] && close.y < 60.0, "{close:?}");
-    let camera = omsi_render::Camera { position: DVec3::new(0.0, 0.0, 2.0), yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 2000.0 };
-    let lighting = omsi_render::Lighting { shadows: false, ..Default::default() };
-    let pixels = renderer.render_to_image(&mut scene, 1672, 941, &camera, &lighting).unwrap();
+    let camera = omsi_render::Camera {
+        position: DVec3::new(0.0, 0.0, 2.0),
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 60.0,
+        near: 0.1,
+        far: 2000.0,
+    };
+    let lighting = omsi_render::Lighting {
+        shadows: false,
+        ..Default::default()
+    };
+    let pixels = renderer
+        .render_to_image(&mut scene, 1672, 941, &camera, &lighting)
+        .unwrap();
     if let Ok(path) = std::env::var("DEPOT_CITY_MAP_PNG") {
         image::save_buffer(&path, &pixels, 1672, 941, image::ExtendedColorType::Rgba8).unwrap();
     }
     // the map covers the middle of the picture: dark ground, not the sky
-    let at = |x: u32, y: u32| { let i = ((y * 1672 + x) * 4) as usize; [pixels[i], pixels[i + 1], pixels[i + 2]] };
+    let at = |x: u32, y: u32| {
+        let i = ((y * 1672 + x) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
     let mid = at(((r[0] + r[2]) * 0.5) as u32, (r[3] - 40.0) as u32);
     assert!(mid.iter().all(|&c| c < 90), "{mid:?}");
 }

@@ -722,10 +722,10 @@ O crate tem hoje 144,3 mil linhas em 155 arquivos, 109 deles na raiz de `src/`, 
 
 Em duas fases:
 
-1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `interface/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
+1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `ui/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
 2. **Áreas quentes.** A Trilha 4, com o mesmo conteúdo e as mesmas janelas.
 
-Cada pasta de domínio criada na fase 1 já sai como pacote com `domain/`, `interface/` (entrada e saída) e `implementation/`. Decidido pelo mantenedor em 23/10/2026: os testes saem de `src/` (padrão do projeto), a trilha começa já pela AP1, o launcher vai para `omsi-launcher-ui` e `omsi-launcher-core`, e a pasta da nova interface se chama `interface/`.
+Cada pasta de domínio criada na fase 1 já sai como pacote com `domain/`, `interface/` (entrada e saída) e `implementation/`. Decidido pelo mantenedor em 23/10/2026: os testes saem de `src/` (padrão do projeto), a trilha começa já pela AP1, o launcher vai para `omsi-launcher-ui` e `omsi-launcher-core`, e a pasta da nova interface se chama `ui/`.
 
 Aposentar o desenho em CPU do HUD (o passo 1 da C6, reescrito, porque o menu do jogo já é desenhado pelo `omsi-ui`) muda o que aparece na tela e fica com a trilha da nova interface, fora desta.
 

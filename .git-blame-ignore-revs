@@ -1,0 +1,6 @@
+# Commits that only reformat code. `git blame` skips them with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub's blame view reads this file by itself).
+
+# rustfmt: omsi-app
+9ad7ad0c0d9772e9a3c355129ab0a4d03f53b47d

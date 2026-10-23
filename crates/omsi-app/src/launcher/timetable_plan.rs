@@ -78,12 +78,16 @@ impl Plan {
             plan.dirs.push(dirs);
             for tour in &line.tours {
                 for trip in &tour.trips {
-                    plan.trip_from.entry(trip.name.to_lowercase()).or_insert_with(|| trip.from.clone());
+                    plan.trip_from
+                        .entry(trip.name.to_lowercase())
+                        .or_insert_with(|| trip.from.clone());
                     for st in calls(trip) {
                         let i = plan.entry(&st.name, st.id);
                         let e = &mut plan.stops[i];
                         match e.serving.iter_mut().find(|x| x.0 == k) {
-                            Some((_, to)) if !to.contains(&trip.terminus) => to.push(trip.terminus.clone()),
+                            Some((_, to)) if !to.contains(&trip.terminus) => {
+                                to.push(trip.terminus.clone())
+                            }
                             Some(_) => {}
                             None => e.serving.push((k, vec![trip.terminus.clone()])),
                         }
@@ -112,7 +116,10 @@ impl Plan {
         let i = match self.by_name.get(&key) {
             Some(i) => *i,
             None => {
-                self.stops.push(StopEntry { name: name.trim().to_string(), ..Default::default() });
+                self.stops.push(StopEntry {
+                    name: name.trim().to_string(),
+                    ..Default::default()
+                });
                 self.by_name.insert(key, self.stops.len() - 1);
                 self.stops.len() - 1
             }
@@ -125,12 +132,17 @@ impl Plan {
 
     /// The line called `name` (any case): its place.
     pub fn line(&self, name: &str) -> Option<usize> {
-        self.lines.iter().position(|x| x.name.eq_ignore_ascii_case(name))
+        self.lines
+            .iter()
+            .position(|x| x.name.eq_ignore_ascii_case(name))
     }
 
     /// The ways line `k` runs: where it goes.
     pub fn directions(&self, k: usize) -> Vec<&str> {
-        self.dirs.get(k).map(|d| d.iter().map(|x| x.0.as_str()).collect()).unwrap_or_default()
+        self.dirs
+            .get(k)
+            .map(|d| d.iter().map(|x| x.0.as_str()).collect())
+            .unwrap_or_default()
     }
 
     /// The trip drawn for line `k` going its `dir`-th way (the ways go round).
@@ -146,20 +158,36 @@ impl Plan {
     }
 
     pub fn stop(&self, name: &str) -> Option<&StopEntry> {
-        self.by_name.get(&name.trim().to_lowercase()).map(|i| &self.stops[*i])
+        self.by_name
+            .get(&name.trim().to_lowercase())
+            .map(|i| &self.stops[*i])
     }
 
     /// The lines that call at `stop`, each with where it goes from there.
     pub fn serving(&self, stop: &str) -> &[(usize, Vec<String>)] {
-        self.stop(stop).map(|e| e.serving.as_slice()).unwrap_or_default()
+        self.stop(stop)
+            .map(|e| e.serving.as_slice())
+            .unwrap_or_default()
     }
 
     /// What leaves from `stop` at `from` (seconds of the day) or later, of line `only` when
     /// one is given: the first `n`.
-    pub fn departures(&self, stop: &str, from: f64, n: usize, only: Option<usize>) -> Vec<&(f64, usize, String)> {
-        let Some(e) = self.stop(stop) else { return Vec::new() };
+    pub fn departures(
+        &self,
+        stop: &str,
+        from: f64,
+        n: usize,
+        only: Option<usize>,
+    ) -> Vec<&(f64, usize, String)> {
+        let Some(e) = self.stop(stop) else {
+            return Vec::new();
+        };
         let at = e.departures.partition_point(|d| d.0 < from);
-        e.departures[at..].iter().filter(|d| only.is_none_or(|k| d.1 == k)).take(n).collect()
+        e.departures[at..]
+            .iter()
+            .filter(|d| only.is_none_or(|k| d.1 == k))
+            .take(n)
+            .collect()
     }
 
     /// The stops whose name holds `q` (any case), the ones it begins first; at most `n`.
@@ -173,7 +201,8 @@ impl Plan {
             .iter()
             .filter_map(|e| {
                 let low = e.name.to_lowercase();
-                low.contains(&q).then_some((!low.starts_with(&q), e.name.as_str()))
+                low.contains(&q)
+                    .then_some((!low.starts_with(&q), e.name.as_str()))
             })
             .collect();
         hits.sort();
@@ -185,7 +214,10 @@ impl Plan {
         let mut out: Vec<String> = Vec::new();
         for k in 0..self.lines.len() {
             for dir in 0..self.dirs[k].len() {
-                if let Some(t) = self.route(k, dir).filter(|t| !out.iter().any(|x| x.eq_ignore_ascii_case(&t.name))) {
+                if let Some(t) = self
+                    .route(k, dir)
+                    .filter(|t| !out.iter().any(|x| x.eq_ignore_ascii_case(&t.name)))
+                {
                     out.push(t.name.clone());
                 }
             }
@@ -219,7 +251,13 @@ mod tests {
         let stops: Vec<core::StopInfo> = stops
             .iter()
             .enumerate()
-            .map(|(i, s)| core::StopInfo { id: i as i64, name: s.trim_start_matches('~').to_string(), arr: dep + i as f64 * 120.0, dep: dep + i as f64 * 120.0, stops: !s.starts_with('~') })
+            .map(|(i, s)| core::StopInfo {
+                id: i as i64,
+                name: s.trim_start_matches('~').to_string(),
+                arr: dep + i as f64 * 120.0,
+                dep: dep + i as f64 * 120.0,
+                stops: !s.starts_with('~'),
+            })
             .collect();
         core::TripInfo {
             name: name.into(),
@@ -235,16 +273,50 @@ mod tests {
     }
 
     fn line(name: &str, runs: bool, trips: Vec<core::TripInfo>) -> core::LineInfo {
-        let tour = core::TourInfo { number: "1".into(), ai_group: "Busses".into(), first: 0.0, last: 0.0, days: "daily".into(), runs, next_run: None, trips };
-        core::LineInfo { name: name.into(), user_allowed: true, termini: Vec::new(), tours: vec![tour] }
+        let tour = core::TourInfo {
+            number: "1".into(),
+            ai_group: "Busses".into(),
+            first: 0.0,
+            last: 0.0,
+            days: "daily".into(),
+            runs,
+            next_run: None,
+            trips,
+        };
+        core::LineInfo {
+            name: name.into(),
+            user_allowed: true,
+            termini: Vec::new(),
+            tours: vec![tour],
+        }
     }
 
     fn town() -> Plan {
         Plan::new(vec![
-            line("12", true, vec![trip("out", 3600.0, &["North", "Market", "Hall", "East"]), trip("back", 4200.0, &["East", "Hall", "North"]), trip("short", 4800.0, &["North", "Market"])]),
-            line("7", true, vec![trip("a", 3700.0, &["Station", "Hall", "Uni"])]),
-            line("N3", false, vec![trip("n", 3650.0, &["North", "Hall", "Park"])]),
-            line("X1", true, vec![trip("x", 3500.0, &["North", "~Market", "~Hall", "Uni"])]),
+            line(
+                "12",
+                true,
+                vec![
+                    trip("out", 3600.0, &["North", "Market", "Hall", "East"]),
+                    trip("back", 4200.0, &["East", "Hall", "North"]),
+                    trip("short", 4800.0, &["North", "Market"]),
+                ],
+            ),
+            line(
+                "7",
+                true,
+                vec![trip("a", 3700.0, &["Station", "Hall", "Uni"])],
+            ),
+            line(
+                "N3",
+                false,
+                vec![trip("n", 3650.0, &["North", "Hall", "Park"])],
+            ),
+            line(
+                "X1",
+                true,
+                vec![trip("x", 3500.0, &["North", "~Market", "~Hall", "Uni"])],
+            ),
         ])
     }
 
@@ -271,10 +343,16 @@ mod tests {
         let (l12, l7) = (p.line("12").unwrap(), p.line("7").unwrap());
         let d = p.departures("hall", 0.0, 10, None);
         // 12 out at 3840, 7 at 3820, 12 back at 4320; N3 does not run that day, X1 passes
-        assert_eq!(d.iter().map(|x| (x.0 as i64, x.1)).collect::<Vec<_>>(), vec![(3820, l7), (3840, l12), (4320, l12)]);
+        assert_eq!(
+            d.iter().map(|x| (x.0 as i64, x.1)).collect::<Vec<_>>(),
+            vec![(3820, l7), (3840, l12), (4320, l12)]
+        );
         assert_eq!(d[0].2, "Uni");
         // nothing leaves from where the trip ends, and the earlier ones are gone
-        assert!(p.departures("East", 4000.0, 10, None).iter().all(|x| x.2 == "North"));
+        assert!(p
+            .departures("East", 4000.0, 10, None)
+            .iter()
+            .all(|x| x.2 == "North"));
         assert_eq!(p.departures("Hall", 4000.0, 10, None).len(), 1);
         assert_eq!(p.departures("Hall", 0.0, 2, None).len(), 2);
         assert_eq!(p.departures("Hall", 0.0, 10, Some(l7)).len(), 1);
@@ -284,16 +362,27 @@ mod tests {
     #[test]
     fn a_stop_is_served_by_the_lines_that_call_there() {
         let p = town();
-        let names = |s: &[(usize, Vec<String>)]| s.iter().map(|x| p.lines[x.0].name.clone()).collect::<Vec<_>>();
+        let names = |s: &[(usize, Vec<String>)]| {
+            s.iter()
+                .map(|x| p.lines[x.0].name.clone())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(p.serving("Hall")), vec!["12", "7", "N3"]);
-        let l12 = p.serving("Hall").iter().find(|x| p.lines[x.0].name == "12").unwrap();
+        let l12 = p
+            .serving("Hall")
+            .iter()
+            .find(|x| p.lines[x.0].name == "12")
+            .unwrap();
         assert_eq!(l12.1, vec!["East".to_string(), "North".to_string()]);
         // (a line that only ends there, or passes it, does not serve it)
         assert!(p.serving("Uni").is_empty());
         assert_eq!(names(p.serving("market")), vec!["12"]);
         // every stop is known by name, for the search, the ends of the lines too
         assert!(p.stop("uni").is_some() && p.stop("Park").is_some());
-        assert_eq!(p.find("a", 10), vec!["East", "Hall", "Market", "Park", "Station"]);
+        assert_eq!(
+            p.find("a", 10),
+            vec!["East", "Hall", "Market", "Park", "Station"]
+        );
         assert_eq!(p.find("ma", 10), vec!["Market"]);
         assert!(p.find("  ", 10).is_empty());
     }

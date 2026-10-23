@@ -91,7 +91,7 @@ jobs:
       # Crates formatted so far (macro-refactor plan, track 1): their check blocks. The rest of
       # the workspace is formatted crate by crate and stays informational until then.
       - name: rustfmt (formatted crates)
-        run: cargo fmt -p omsi-cfg -p omsi-o3d -p omsi-model -p omsi-map -p omsi-vehicle -p omsi-scenery -p omsi-texture -p omsi-timetable -p omsi-content -p omsi-script -p omsi-audio -p omsi-ui -p omsi-geometry -p omsi-check -p omsi-render -p omsi-sim -- --check
+        run: cargo fmt -p omsi-cfg -p omsi-o3d -p omsi-model -p omsi-map -p omsi-vehicle -p omsi-scenery -p omsi-texture -p omsi-timetable -p omsi-content -p omsi-script -p omsi-audio -p omsi-ui -p omsi-geometry -p omsi-check -p omsi-render -p omsi-sim -p omsi-render-d3d9 -p omsi-launcher-core -p omsi-launcher-ui -p omsi-app -- --check
       - name: rustfmt (informational)
         continue-on-error: true
         run: cargo fmt --all -- --check

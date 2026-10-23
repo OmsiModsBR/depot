@@ -739,7 +739,8 @@ impl DirectInput {
                 None => {
                     log::warn!("{name}: DirectInput device could not be reopened; asking Windows to enumerate controllers again");
                     if !self.pending_open.iter().any(|(g, ..)| *g == guid) {
-                        self.pending_open.push((guid, name, Instant::now() + retry_delay(0), 1));
+                        self.pending_open
+                            .push((guid, name, Instant::now() + retry_delay(0), 1));
                     }
                     rescan = true;
                 }
@@ -758,7 +759,11 @@ impl DirectInput {
     /// `retry`: a delayed attempt after a failed one, whose failure was already reported (its
     /// messages go to the debug log).
     fn open(&self, guid: &GUID, name: &str, retry: bool) -> Option<Device> {
-        let warn = if retry { log::Level::Debug } else { log::Level::Warn };
+        let warn = if retry {
+            log::Level::Debug
+        } else {
+            log::Level::Warn
+        };
         unsafe {
             let mut dev: Option<IDirectInputDevice8W> = None;
             self.di.CreateDevice(guid, &mut dev, None).ok()?;
@@ -796,16 +801,26 @@ impl DirectInput {
                 .map(|(vid, pid)| format!("{vid:04X}/{pid:04X}"))
                 .unwrap_or_else(|| "unknown".into());
             log::log!(
-                if retry { log::Level::Debug } else { log::Level::Info },
+                if retry {
+                    log::Level::Debug
+                } else {
+                    log::Level::Info
+                },
                 "{name}: DirectInput identity VID/PID {id}, instance {guid:?}, HID path {path:?}"
             );
             let Some((mut objs, mut fmt, has_axis, ff_axis)) = data_format(&dev) else {
-                log::log!(warn, "{name}: DirectInput could not list the device's controls");
+                log::log!(
+                    warn,
+                    "{name}: DirectInput could not list the device's controls"
+                );
                 return None;
             };
             fmt.rgodf = objs.as_mut_ptr();
             if let Err(e) = dev.SetDataFormat(&mut fmt) {
-                log::log!(warn, "{name}: DirectInput rejected the device's data format ({e})");
+                log::log!(
+                    warn,
+                    "{name}: DirectInput rejected the device's data format ({e})"
+                );
                 return None;
             }
             let mut caps = DIDEVCAPS {
@@ -996,12 +1011,13 @@ impl DirectInput {
                             log::debug!(
                                 "DirectInput device {name}: could not be opened; delaying retry"
                             );
-                            if !self
-                                .pending_open
-                                .iter()
-                                .any(|(pending, ..)| *pending == g)
-                            {
-                                self.pending_open.push((g, name, Instant::now() + retry_delay(0), 1));
+                            if !self.pending_open.iter().any(|(pending, ..)| *pending == g) {
+                                self.pending_open.push((
+                                    g,
+                                    name,
+                                    Instant::now() + retry_delay(0),
+                                    1,
+                                ));
                             }
                         }
                     }
@@ -1022,8 +1038,12 @@ impl DirectInput {
                 self.devices.push(d);
             } else {
                 // 1 s, 2 s, 4 s ... up to 30 s; a device plugged in or out starts over
-                self.pending_open
-                    .push((guid, name, Instant::now() + retry_delay(tries), tries + 1));
+                self.pending_open.push((
+                    guid,
+                    name,
+                    Instant::now() + retry_delay(tries),
+                    tries + 1,
+                ));
             }
         }
         let mut reopen = Vec::new();
