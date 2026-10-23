@@ -1,7 +1,7 @@
+use super::angle_diff;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKind, Network};
-use super::angle_diff;
 
 /// The street names of the map: per lane of its network the street it belongs to, and
 /// where to write each name on the city map. OMSI maps have no street names of their own,
@@ -35,7 +35,10 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
             }
         }
     }
-    let straight = |l: &omsi_sim::traffic::Lane| l.kind == LaneKind::Street && omsi_sim::traffic::wrap_deg(l.end_heading() - l.start_heading()).abs() < 30.0;
+    let straight = |l: &omsi_sim::traffic::Lane| {
+        l.kind == LaneKind::Street
+            && omsi_sim::traffic::wrap_deg(l.end_heading() - l.start_heading()).abs() < 30.0
+    };
     let debug = omsi_cfg::flags::DEBUG_NAV.is_set();
     let mut hist = [0u32; 12];
     let mut seeds: Vec<(usize, u32)> = Vec::new();
@@ -51,7 +54,9 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
             if !straight(l) || l.length() < 12.0 {
                 continue;
             }
-            let Some((s, d)) = l.nearest_point(DVec3::new(pos.x, pos.y, l.start().z)) else { continue };
+            let Some((s, d)) = l.nearest_point(DVec3::new(pos.x, pos.y, l.start().z)) else {
+                continue;
+            };
             if d > 22.0 {
                 continue;
             }
@@ -75,7 +80,14 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
     if debug {
         if let Some((pos, rot, name)) = signs.first() {
             let near = net.lanes_near(pos.truncate(), 30.0);
-            let best = near.iter().filter_map(|&i| net.lanes[i].nearest_point(*pos).map(|p| (i, p.1, net.lanes[i].kind, net.lanes[i].length()))).min_by(|a, b| a.1.total_cmp(&b.1));
+            let best = near
+                .iter()
+                .filter_map(|&i| {
+                    net.lanes[i]
+                        .nearest_point(*pos)
+                        .map(|p| (i, p.1, net.lanes[i].kind, net.lanes[i].length()))
+                })
+                .min_by(|a, b| a.1.total_cmp(&b.1));
             log::info!("navigator: first sign '{name}' at {pos:?} heading {rot}: {} lanes near, nearest {best:?}", near.len());
         }
         // which way a plate runs: two signs of one name far apart lie along their street
@@ -91,7 +103,9 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
             }
         }
         log::info!("navigator: sign heading minus the line to another sign of its name (mod 180): {along:?}");
-        log::info!("navigator: sign heading minus road heading (mod 180, 15-degree bins): {hist:?}");
+        log::info!(
+            "navigator: sign heading minus road heading (mod 180, 15-degree bins): {hist:?}"
+        );
     }
     // carry each name along its road: the seed lane, its other direction, and on through
     // straight continuations for up to 1.5 km each way
@@ -118,33 +132,58 @@ pub(super) fn build_streets(net: &Network, signs: &[(DVec3, f64, String)]) -> St
             }
             for &j in l.next.iter() {
                 let m = &net.lanes[j];
-                if of_lane[j] == u32::MAX && straight(m) && omsi_sim::traffic::wrap_deg(m.start_heading() - l.end_heading()).abs() < 20.0 {
+                if of_lane[j] == u32::MAX
+                    && straight(m)
+                    && omsi_sim::traffic::wrap_deg(m.start_heading() - l.end_heading()).abs() < 20.0
+                {
                     queue.push((j, far + m.length()));
                 }
             }
             for &j in &prev[i] {
                 let m = &net.lanes[j];
-                if of_lane[j] == u32::MAX && straight(m) && omsi_sim::traffic::wrap_deg(l.start_heading() - m.end_heading()).abs() < 20.0 {
+                if of_lane[j] == u32::MAX
+                    && straight(m)
+                    && omsi_sim::traffic::wrap_deg(l.start_heading() - m.end_heading()).abs() < 20.0
+                {
                     queue.push((j, far + m.length()));
                 }
             }
         }
     }
     // where to write them: the middle of long named lanes, a name every 350 m at most
-    let mut order: Vec<usize> = (0..n).filter(|&i| of_lane[i] != u32::MAX && !net.lanes[i].reversed && net.lanes[i].length() > 30.0).collect();
+    let mut order: Vec<usize> = (0..n)
+        .filter(|&i| {
+            of_lane[i] != u32::MAX && !net.lanes[i].reversed && net.lanes[i].length() > 30.0
+        })
+        .collect();
     order.sort_by(|a, b| net.lanes[*b].length().total_cmp(&net.lanes[*a].length()));
     let mut labels: Vec<(DVec2, f32, u32)> = Vec::new();
     for i in order {
         let l = &net.lanes[i];
         let (q, h) = l.at(l.length() * 0.5);
         let q = q.truncate();
-        if labels.iter().any(|(p, _, id)| *id == of_lane[i] && (*p - q).length() < 350.0) {
+        if labels
+            .iter()
+            .any(|(p, _, id)| *id == of_lane[i] && (*p - q).length() < 350.0)
+        {
             continue;
         }
         let hr = (h as f64).to_radians();
         labels.push((q, (hr.cos()).atan2(hr.sin()) as f32, of_lane[i]));
     }
     let named = of_lane.iter().filter(|&&x| x != u32::MAX).count();
-    log::info!("navigator: {} street name signs, {} names, {} of {} lanes named, {} labels, {:.0} ms", signs.len(), names.len(), named, n, labels.len(), t0.elapsed().as_secs_f64() * 1000.0);
-    Streets { names, of_lane, labels }
+    log::info!(
+        "navigator: {} street name signs, {} names, {} of {} lanes named, {} labels, {:.0} ms",
+        signs.len(),
+        names.len(),
+        named,
+        n,
+        labels.len(),
+        t0.elapsed().as_secs_f64() * 1000.0
+    );
+    Streets {
+        names,
+        of_lane,
+        labels,
+    }
 }
