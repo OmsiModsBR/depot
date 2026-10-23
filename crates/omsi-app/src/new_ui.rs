@@ -438,7 +438,11 @@ struct Overlay {
 }
 
 impl Overlay {
-    fn new(shared: Shared, format: wgpu::TextureFormat, mirror: Option<omsi_ui::UiMirror>) -> Overlay {
+    fn new(
+        shared: Shared,
+        format: wgpu::TextureFormat,
+        mirror: Option<omsi_ui::UiMirror>,
+    ) -> Overlay {
         Overlay {
             shared,
             format,
@@ -964,7 +968,9 @@ impl App {
 
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
-        let mirror = (!self.new_ui.installed()).then(|| self.d3d9_ui_mirror()).flatten();
+        let mirror = (!self.new_ui.installed())
+            .then(|| self.d3d9_ui_mirror())
+            .flatten();
         if let Some(r) = self.renderer.as_mut() {
             self.new_ui.install(r, mirror);
         }
@@ -1417,7 +1423,10 @@ mod tests {
         );
         assert!(atlas < render && vertices < render, "{events:?}");
         drop(overlay);
-        assert_eq!(seen.lock().unwrap().last().map(String::as_str), Some("gone"));
+        assert_eq!(
+            seen.lock().unwrap().last().map(String::as_str),
+            Some("gone")
+        );
     }
 
     /// The overlay itself, on a real adapter: the column is drawn over a picture and nothing
@@ -2387,7 +2396,15 @@ mod tests {
         };
         ui.set(None, None, None, None, None, away, Some(area));
         let world = shoot(&mut scene);
-        ui.set(Some(test_column(true)), None, None, None, None, away, Some(area));
+        ui.set(
+            Some(test_column(true)),
+            None,
+            None,
+            None,
+            None,
+            away,
+            Some(area),
+        );
         let menu = shoot(&mut scene);
         save("triple-5760x1080-menu", &menu, size);
         ui.page = Some(page.clone());

@@ -55,20 +55,29 @@ pub struct Backdrop {
 /// `img` made small and blurred.
 pub fn blur(img: &image::DynamicImage) -> image::RgbaImage {
     // (WIDTH wide, keeping the shape; a tall picture no taller than twice that)
-    let small = img.resize(WIDTH, WIDTH * 2, image::imageops::FilterType::Triangle).to_rgba8();
+    let small = img
+        .resize(WIDTH, WIDTH * 2, image::imageops::FilterType::Triangle)
+        .to_rgba8();
     image::imageops::blur(&small, SIGMA)
 }
 
 /// The picture of a map: its own "picture" file, else the latest screenshot of it, else any;
 /// and whether it is (or would have been) a screenshot.
 fn map_picture(root: &std::path::Path, file: &str) -> (Option<image::RgbaImage>, bool) {
-    let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
-    let own = global.parent().and_then(super::MapPicture::find).and_then(|f| super::MapPicture::read(&f));
+    let global = omsi_cfg::find_in_roots(file)
+        .map(|(_, p)| p)
+        .unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
+    let own = global
+        .parent()
+        .and_then(super::MapPicture::find)
+        .and_then(|f| super::MapPicture::read(&f));
     if own.is_some() {
         return (own, false);
     }
     let folder = crate::screenshot_name::folder_of(file).unwrap_or_default();
-    let shot = omsi_launcher_lib::screenshots::for_map(&folder).pop().or_else(omsi_launcher_lib::screenshots::latest);
+    let shot = omsi_launcher_lib::screenshots::for_map(&folder)
+        .pop()
+        .or_else(omsi_launcher_lib::screenshots::latest);
     (shot.and_then(|p| super::MapPicture::read(&p)), true)
 }
 
@@ -90,13 +99,22 @@ impl Backdrop {
                     (img.map(|i| blur(&image::DynamicImage::ImageRgba8(i))), shot)
                 })
             }
-            Want::Latest => Box::new(|| (omsi_launcher_lib::screenshots::latest().and_then(|p| super::MapPicture::read(&p)).map(|i| blur(&image::DynamicImage::ImageRgba8(i))), true)),
+            Want::Latest => Box::new(|| {
+                (
+                    omsi_launcher_lib::screenshots::latest()
+                        .and_then(|p| super::MapPicture::read(&p))
+                        .map(|i| blur(&image::DynamicImage::ImageRgba8(i))),
+                    true,
+                )
+            }),
             Want::Bus(_) => return,
         };
         let (tx, rx) = channel();
-        let _ = std::thread::Builder::new().name("launcher-backdrop".into()).spawn(move || {
-            let _ = tx.send(job());
-        });
+        let _ = std::thread::Builder::new()
+            .name("launcher-backdrop".into())
+            .spawn(move || {
+                let _ = tx.send(job());
+            });
         self.reading.push((want, rx));
     }
 
@@ -106,11 +124,15 @@ impl Backdrop {
         if self.kept.contains_key(&want) || self.reading.iter().any(|(k, _)| *k == want) {
             return;
         }
-        let Some(img) = image::RgbaImage::from_raw(w, h, rgba.to_vec()) else { return };
+        let Some(img) = image::RgbaImage::from_raw(w, h, rgba.to_vec()) else {
+            return;
+        };
         let (tx, rx) = channel();
-        let _ = std::thread::Builder::new().name("launcher-backdrop".into()).spawn(move || {
-            let _ = tx.send((Some(blur(&image::DynamicImage::ImageRgba8(img))), false));
-        });
+        let _ = std::thread::Builder::new()
+            .name("launcher-backdrop".into())
+            .spawn(move || {
+                let _ = tx.send((Some(blur(&image::DynamicImage::ImageRgba8(img))), false));
+            });
         self.reading.push((want, rx));
     }
 
@@ -128,8 +150,12 @@ impl Backdrop {
         for (w, img) in done {
             self.keep(w, img);
         }
-        let Some(want) = self.want.clone() else { return };
-        if (self.shown.as_ref() == Some(&want) && !self.shown_stale) || self.pending.as_ref().is_some_and(|p| p.0 == want) {
+        let Some(want) = self.want.clone() else {
+            return;
+        };
+        if (self.shown.as_ref() == Some(&want) && !self.shown_stale)
+            || self.pending.as_ref().is_some_and(|p| p.0 == want)
+        {
             return;
         }
         match self.kept.get(&want) {
@@ -153,13 +179,22 @@ impl Backdrop {
     /// again (the player may have taken newer ones); the one shown stays until then.
     pub fn game_running(&mut self, on: bool) {
         if std::mem::replace(&mut self.playing, on) && !on {
-            let shots: Vec<Want> = self.kept.iter().filter(|(_, (_, shot))| *shot).map(|(w, _)| w.clone()).collect();
+            let shots: Vec<Want> = self
+                .kept
+                .iter()
+                .filter(|(_, (_, shot))| *shot)
+                .map(|(w, _)| w.clone())
+                .collect();
             for w in shots {
                 self.kept.remove(&w);
                 self.order.retain(|k| *k != w);
             }
             // (shown again once read: not the same picture by name)
-            if self.shown.as_ref().is_some_and(|w| !matches!(w, Want::Bus(_))) {
+            if self
+                .shown
+                .as_ref()
+                .is_some_and(|w| !matches!(w, Want::Bus(_)))
+            {
                 self.shown_stale = true;
             }
         }
@@ -176,7 +211,9 @@ impl Backdrop {
     }
 
     pub fn upload(&mut self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let Some((want, img)) = self.pending.take() else { return };
+        let Some((want, img)) = self.pending.take() else {
+            return;
+        };
         let (w, h) = img.dimensions();
         match self.texture {
             Some(id) => gpu.update_image(device, queue, id, w, h, img.as_raw()),
@@ -213,12 +250,18 @@ mod tests {
     fn a_picture_is_blurred_small_keeping_its_shape() {
         let mut img = image::RgbaImage::new(1600, 900);
         for (x, _, p) in img.enumerate_pixels_mut() {
-            *p = if x % 2 == 0 { image::Rgba([255, 255, 255, 255]) } else { image::Rgba([0, 0, 0, 255]) };
+            *p = if x % 2 == 0 {
+                image::Rgba([255, 255, 255, 255])
+            } else {
+                image::Rgba([0, 0, 0, 255])
+            };
         }
         let b = blur(&image::DynamicImage::ImageRgba8(img));
         assert_eq!(b.dimensions(), (WIDTH, 180));
         // (a tall one keeps its shape)
-        let tall = blur(&image::DynamicImage::ImageRgba8(image::RgbaImage::new(100, 1000)));
+        let tall = blur(&image::DynamicImage::ImageRgba8(image::RgbaImage::new(
+            100, 1000,
+        )));
         assert_eq!(tall.dimensions(), (64, 640));
         // (the stripes are gone: one grey)
         let p = b.get_pixel(160, 90).0;

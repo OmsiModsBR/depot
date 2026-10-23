@@ -621,7 +621,12 @@ impl VehiclesView {
     fn paints(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
         // the bus's own livery and its repaints, as the chips show them
         let n = v.map(|v| v.paints.len() + 1).unwrap_or(0);
-        card(ui, r, "Paints", Some(&omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string())));
+        card(
+            ui,
+            r,
+            "Paints",
+            Some(&omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string())),
+        );
         let Some(v) = v else { return };
         let area = Rect::new(r.x + 12.0, r.y + 44.0, r.w - 24.0, r.h - 52.0);
         let mut picked = None;
