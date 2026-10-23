@@ -219,7 +219,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("seat_y", "launcher>game", "NaN leaves the key empty"),
     ("seat_z", "launcher>game", "NaN leaves the key empty"),
     // and the other way: the game takes NaN, the launcher saves the default over it
-    ("volume", "launcher>game", "NaN leaves the key empty"),
     // the launcher keeps whole numbers where the game keeps fractions
     (
         "max_obj_dist",
