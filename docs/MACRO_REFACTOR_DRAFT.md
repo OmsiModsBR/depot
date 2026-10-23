@@ -1,6 +1,6 @@
 # Macro-refatoração do depot (rascunho)
 
-Rascunho de 10/10/2026, fechado para as trilhas 0 e 1 em 11/10/2026. Revisto em 16/10/2026 com a auditoria estática do código (seção [Auditoria de 16/10/2026](#auditoria-de-16102026)).
+Rascunho de 10/10/2026, fechado para as trilhas 0 e 1 em 11/10/2026. Revisto em 16/10/2026 com a auditoria estática do código (seção [Auditoria de 16/10/2026](#auditoria-de-16102026)). Em 23/10/2026 ganhou a [Trilha App](#trilha-app-omsi-app-por-domínio), que junta tudo o que mexe no `omsi-app`, inclusive o código novo da interface, do launcher e da saída Direct3D 9.
 
 ## Revisão de 16/10/2026
 
@@ -199,6 +199,8 @@ O ganho é que o binário do jogo deixa de compilar cerca de 23 mil linhas, o cl
 4. Tirar o `continue-on-error` do passo de fmt em `depot-ci.yml` e atualizar a linha em `docs/QUALITY.md`.
 
 O risco é baixo: rustfmt não muda semântica, e os traços da física e o golden confirmam isso.
+
+O `omsi-app`, junto com o `scripts/fmt-merge.sh`, o `.git-blame-ignore-revs` e os crates que entraram depois (`omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9`), é o passo AP1 da [Trilha App](#trilha-app-omsi-app-por-domínio).
 
 ### A3. Clippy por crate
 
@@ -568,6 +570,7 @@ Situação em 16/10/2026:
 | 3, frios e mornos da auditoria | Nova, depois da F |
 | 4, áreas quentes | A antiga trilha 3, ampliada com os itens da auditoria, depois da F |
 | S, `omsi-sim` por domínio | Nova (18/10/2026), em paralelo à 3. Detalhe em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md) |
+| App, `omsi-app` por domínio | Nova (23/10/2026). A fase 1 (formatação, testes, nova interface, saída gráfica, HUD, launcher e pastas por domínio) pode correr em paralelo; a fase 2 é a Trilha 4. Detalhe em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md) |
 
 Os bugs B1 a B7 não esperam nenhuma trilha.
 
@@ -636,7 +639,7 @@ Portão: nenhum caminho `~/.depot` ou gravação atômica fora do `omsi-cfg`, `g
 
 ### Trilha 4: áreas quentes, por janelas
 
-A antiga trilha 3, com o mesmo método de janelas curtas e anunciadas, agora com esta ordem:
+A antiga trilha 3, com o mesmo método de janelas curtas e anunciadas, agora com esta ordem. Desde 23/10/2026 ela é a fase 2 da [Trilha App](#trilha-app-omsi-app-por-domínio): o conteúdo não muda, e a linha `omsi-launcher` da E2 dá lugar ao passo AP6 de lá.
 
 1. **Perfil por escopo** (`enum Stage` e a guarda única de C2), porque a fase de performance do mapa depende dele.
 2. **Frente B** (fix-11), com a montagem e o passo compartilhados e as três divergências resolvidas em B6. Ela sobe para o começo porque, até terminar, o golden e o B0 não cobrem a janela, e as outras frentes desta trilha dependem deles como prova.
@@ -656,6 +659,21 @@ Pedida pelo mantenedor em 18/10/2026, com três objetivos: testes e auxílios de
 Em resumo, cinco PRs: rustfmt do crate, as quatro funções sem uso removidas e as cópias de `angle_diff`, do xorshift e do smoothstep trocadas (S1); todos os testes de `src/` para `tests/`, um apoio de testes só (`tests/support/`), o que é interno alcançado pela feature `test-support` e traços novos do motorista da IA e da pose das pessoas (S2); `traffic/` (S3); `people/` (S4); e `host/`, `automation/`, `collision/`, `textures/` e `vehicle/coupled/` (S5), cada um já com os imports do app nos caminhos novos. Ela não tem arquivo em comum com a Trilha 3 e prepara o `omsi-gameplay` da Trilha 4.
 
 Portão: nenhum teste em `src/`, nenhum auxílio de teste copiado, nenhuma API só de teste no jogo, nenhum arquivo funcional do `omsi-sim` acima de 800 linhas, e os traços da física, da IA, do tráfego e das pessoas idênticos em todos os PRs.
+
+### Trilha App: `omsi-app` por domínio
+
+Pedida pelo mantenedor em 23/10/2026: uma trilha só para o `omsi-app`, que cubra o código que entrou depois da revisão de 16/10/2026 e inclua a formatação do crate, que ainda é informativa. O plano completo, com o diagnóstico por domínio, a árvore alvo e a sequência de PRs, está em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md).
+
+O crate tem hoje 144,3 mil linhas em 155 arquivos, 109 deles na raiz de `src/`, cerca de 19,6 mil linhas de testes dentro do código, e três partes que nenhuma frente deste plano cobria: a nova interface (`new_ui*.rs`, 6,8 mil linhas), o launcher (`launcher/`, 19,2 mil, que já roda como processo próprio) e a saída pelo Direct3D 9Ex (`d3d9_output.rs`, com a escolha do backend espalhada por uma dúzia de arquivos).
+
+Em duas fases:
+
+1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `interface/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
+2. **Áreas quentes.** A Trilha 4, com o mesmo conteúdo e as mesmas janelas.
+
+Aposentar o desenho em CPU do HUD (o passo 1 da C6, reescrito, porque o menu do jogo já é desenhado pelo `omsi-ui`) muda o que aparece na tela e fica com a trilha da nova interface, fora desta.
+
+Portão da fase 1: `fmt --check` bloqueante no `omsi-app` e nos três crates, nenhum arquivo de código na raiz além de `lib.rs` e `main.rs`, a nova interface sem dependência do desenho em CPU do HUD, o backend gráfico escolhido num ponto e o launcher fora do app, a não ser a ligação com o processo do jogo. O portão da fase 2 é o da Trilha 4.
 
 ## Preparação para implementação: trilhas 0 e 1
 
