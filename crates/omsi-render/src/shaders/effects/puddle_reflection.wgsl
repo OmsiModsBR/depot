@@ -48,8 +48,7 @@ fn clip_uv(c: vec4<f32>) -> vec2<f32> {
     return vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
 }
 fn finite_colour(c: vec3<f32>) -> vec3<f32> {
-    let exponent = bitcast<vec3<u32>>(c) & vec3<u32>(0x7f800000u);
-    return select(vec3<f32>(0.0), clamp(c, vec3<f32>(0.0), vec3<f32>(65000.0)), all(exponent != vec3<u32>(0x7f800000u)));
+    return finite_clamped(c, 65000.0);
 }
 fn reflection_colour(c: vec3<f32>) -> vec3<f32> {
     return select(c, srgb_encode(c), abs(p.vehicle_info.w) < 0.5);

@@ -42,8 +42,7 @@ fn sky_probe(d: vec3<f32>, rough: f32) -> vec3<f32> {
 }
 
 fn finite(c: vec3<f32>) -> vec3<f32> {
-    let e = bitcast<vec3<u32>>(c) & vec3<u32>(0x7f800000u);
-    return select(vec3<f32>(0.0), clamp(c, vec3<f32>(0.0), vec3<f32>(6.0e4)), all(e != vec3<u32>(0x7f800000u)));
+    return finite_clamped(c, 6.0e4);
 }
 
 // The roughness a reflection is spread by (0: a mirror). OMSI's materials say little about
