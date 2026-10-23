@@ -5,6 +5,23 @@
 
 use crate::gpu::{array_path, basic_pipelines, rt_gbuf, ArrayPath, ARRAY_TEX_WIDTH};
 
+/// A full-screen pass's shader with the shared triangle (`common/fullscreen.wgsl`) ahead
+/// of it.
+pub(crate) fn with_fullscreen(src: &str) -> String {
+    [include_str!("common/fullscreen.wgsl"), src].join("\n")
+}
+
+/// The post passes' shader (`post/post.wgsl`), with the sRGB curves of `common/colour.wgsl`.
+pub(crate) fn post_shader_source() -> String {
+    with_fullscreen(
+        &[
+            include_str!("common/colour.wgsl"),
+            include_str!("post/post.wgsl"),
+        ]
+        .join("\n"),
+    )
+}
+
 /// The scene shader: the vanilla path and the enhanced fragment shader in one module.
 ///
 /// On OpenGL a texture has one sampler (GLSL's combined sampler2D), so there the tile
@@ -111,6 +128,8 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
 
 pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
+        include_str!("common/math.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("scene/shader.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
@@ -165,9 +184,18 @@ pub(crate) fn lean_scene(src: String) -> String {
     out
 }
 
+/// How far the cloud field reaches before it repeats (m): a cumulus is then half a kilometre
+/// to two across. Written into the sky shaders by `sky_shader_source`.
+pub(crate) const CLOUD_FIELD_TILE: f32 = 14000.0;
+
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
+    let cloud_tile = format!("const CLOUD_FIELD_TILE: f32 = {CLOUD_FIELD_TILE:?};");
     [
+        cloud_tile.as_str(),
+        include_str!("common/camera.wgsl"),
+        include_str!("common/math.wgsl"),
+        include_str!("common/fullscreen.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("sky/sky.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
@@ -180,6 +208,8 @@ pub(crate) fn sky_shader_source() -> String {
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
+        include_str!("common/math.wgsl"),
         include_str!("sky/snow.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
@@ -226,6 +256,9 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
+        include_str!("common/camera.wgsl"),
+        include_str!("common/math.wgsl"),
+        include_str!("common/fullscreen.wgsl"),
         include_str!("lights/fog_lamps.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
@@ -235,21 +268,17 @@ pub(crate) fn fog_lamps_shader_source() -> String {
 }
 
 /// The scene's point lights and their grid as the fog pass reads them (`lamp_air.wgsl`):
-/// the scene shader's declarations.
-pub(crate) const FOG_LAMP_LIGHTS: &str = "struct PointLight {
-    pos: vec4<f32>,
-    color: vec4<f32>,
-    dir: vec4<f32>,
-    extra: vec4<f32>,
-};
-@group(0) @binding(3) var<storage, read> lights: array<PointLight>;
+/// the scene shader's bindings (the types are in `common/camera.wgsl`).
+pub(crate) const FOG_LAMP_LIGHTS: &str =
+    "@group(0) @binding(3) var<storage, read> lights: array<PointLight>;
 @group(0) @binding(4) var<storage, read> grid: array<u32>;
-const CELL_CAP: u32 = 32u;
 ";
 
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
+        include_str!("common/math.wgsl"),
         include_str!("lights/corona.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,

@@ -1,6 +1,6 @@
 //! Where a human's right hand lies in its T-pose: the vertices that follow the hand bone,
 //! binned along the arm, with their spread across (y) and up (z) - `hand_dump <file.hum>`.
-use omsi_sim::human::HumanType;
+use omsi_sim::people::HumanType;
 fn main() {
     let p = std::env::args().nth(1).unwrap();
     let t = HumanType::load(std::path::Path::new(&p)).unwrap();

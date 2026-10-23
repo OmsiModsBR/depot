@@ -2,8 +2,10 @@
 //! a [`RigidBody`] of its own `.bus` file on the same wheel physics, as OMSI 2 runs them.
 //! A joint holds the two bodies together at the ball - and, at a pusher's joint, at the hinge
 //! ahead of it the joint pitches about -, keeps an articulated bus's sections from rolling
-//! against each other (`[coupling_front_character]` type other than 0), and stops at the
-//! file's angles: alpha about the vertical axis, beta about the transverse one.
+//! against each other (`[coupling_front_character]` type other than 0) and stops it at the
+//! file's angles: alpha about the vertical axis, beta about the transverse one. A type-0
+//! joint (a lorry's hitch, and any joint whose file has no `[coupling_front_character]`)
+//! turns freely about every axis.
 //!
 //! The joint is solved with the tyres' hold across, as one more set of constraints on the
 //! velocities each body would have at the end of the substep: whatever acts on one section -
@@ -25,13 +27,14 @@ use std::borrow::Cow;
 
 impl Joint {
     /// The joint of `follow` behind `lead`, `back` and `front` where they meet (see
-    /// [`Joint::anchor_lead`]). Without a `[coupling_front_character]`: 55° either way, 15°
-    /// up and down, an articulated bus's turntable.
+    /// [`Joint::anchor_lead`]). `[coupling_front_character]`'s angles as the file gives them;
+    /// a file without one gives zeros and type 0, a ball with no limits (a file's error shows
+    /// as it is: its sections roll against each other and fold as far as they go).
     pub fn new(lead: usize, follow: usize, follow_def: &Vehicle, back: Vec3, front: Vec3) -> Joint {
         let [alpha, beta_min, beta_max, kind] = follow_def
             .coupling_front_character
-            .filter(|c| c.iter().all(|x| x.is_finite()) && c[0] > 0.0 && c[1] < c[2])
-            .unwrap_or([55.0, -15.0, 15.0, 1.0]);
+            .filter(|c| c.iter().all(|x| x.is_finite()))
+            .unwrap_or([0.0; 4]);
         Joint {
             lead,
             follow,
@@ -326,12 +329,13 @@ impl JointRows {
                 );
             }
         };
+        // (a ball, type 0, has none)
         if j.kind == JointKind::Articulation {
             limit(j.alpha_max - alpha, yaw_axis);
             limit(j.alpha_max + alpha, -yaw_axis);
+            limit(j.beta_max - beta, -pitch_axis);
+            limit(beta - j.beta_min, pitch_axis);
         }
-        limit(j.beta_max - beta, -pitch_axis);
-        limit(beta - j.beta_min, pitch_axis);
         JointRows {
             sides,
             point,

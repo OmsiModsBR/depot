@@ -26,7 +26,7 @@ pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str)
         let m = key("kw_m_enginestart").unwrap_or_else(|| "M".into());
         // (the electrics' key named as the player set it too, not always E - #461)
         let e = key("cp_batterietrennschalter_toggle").unwrap_or_else(|| "E".into());
-        lines.push(format!("The engine is off  ({e} electrics, {m} starter; mod buses with an ignition key turn it with {e}: press again and hold. Shift+U does it all)"));
+        lines.push(omsi_ui::tr("The engine is off  (%{electrics} electrics, %{starter} starter; mod buses with an ignition key turn it with %{electrics}: press again and hold. Shift+U does it all)").replace("%{electrics}", &e).replace("%{starter}", &m));
     } else if v
         .var("antrieb_getr_gangwahl")
         .map(|g| (g - 1.0).abs() < 0.1)
@@ -34,8 +34,8 @@ pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str)
         .unwrap_or(false)
     {
         // gear position 1 is N in the stock gearboxes and the mods built on them
-        let d = key("automatic_D").unwrap_or_else(|| "D (Shift+D when W A S D drive)".into());
-        lines.push(format!("The gearbox is in N: press {d}, or click it. Buses like the Citaro take D only with the brake held"));
+        let d = key("automatic_D").unwrap_or_else(|| omsi_ui::tr("D (Shift+D when W A S D drive)").into_owned());
+        lines.push(omsi_ui::tr("The gearbox is in N: press %{key}, or click it. Buses like the Citaro take D only with the brake held").replace("%{key}", &d));
     } else if v.var("antrieb_getr_gangwahl").is_none()
         && v.var("cockpit_gangwahltaster").is_none()
         && v.var("antrieb_getr_gang").map(|g| g.abs() < 0.1).unwrap_or(false)
@@ -47,7 +47,7 @@ pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str)
     let parking = v.var("bremse_feststell").or_else(|| v.var("parking_brake")).unwrap_or(0.0) > 0.5;
     if parking {
         let k = key("parking_brake_toggle").unwrap_or_else(|| ".".into());
-        lines.push(format!("Parking brake is on  ({k} releases it)"));
+        lines.push(omsi_ui::tr("Parking brake is on  (%{key} releases it)").replace("%{key}", &k));
     }
     // a bus that stood long enough to lose its air (the stock scripts start with 4-9 bar):
     // the spring brake is released by air (`bremse_p_Brzyl_FBA`, absolute; the stock
@@ -63,13 +63,15 @@ pub(crate) fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str)
             // (with the tanks full the spring brake is held by the bus's own parking brake,
             // whatever its script calls it, not by a want of air)
             let full = !tanks.is_empty() && low >= 6.0e5;
-            let tank = if tanks.is_empty() {
-                String::new()
-            } else {
-                format!("{:.1} bar in the tanks, ", low / 1e5)
-            };
             if !full {
-                lines.push(format!("Air pressure is low ({tank}spring brake {:.1} bar): the spring brake holds until the compressor has filled the tanks - keep the engine running", fba / 1e5));
+                let spring = format!("{:.1}", fba / 1e5);
+                lines.push(if tanks.is_empty() {
+                    omsi_ui::tr("Air pressure is low (spring brake %{spring} bar): the spring brake holds until the compressor has filled the tanks - keep the engine running").replace("%{spring}", &spring)
+                } else {
+                    omsi_ui::tr("Air pressure is low (%{tanks} bar in the tanks, spring brake %{spring} bar): the spring brake holds until the compressor has filled the tanks - keep the engine running")
+                        .replace("%{tanks}", &format!("{:.1}", low / 1e5))
+                        .replace("%{spring}", &spring)
+                });
             }
         }
     }
