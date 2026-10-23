@@ -12,19 +12,11 @@ struct Params {
 @group(0) @binding(1) var t_src: texture_2d<f32>;
 @group(0) @binding(2) var s_src: sampler;
 
-struct VsOut {
-    @builtin(position) clip: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
+alias VsOut = FullscreenVertex;
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: VsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    return out;
+    return fullscreen_vertex(i);
 }
 
 fn tap(uv: vec2<f32>) -> vec3<f32> {

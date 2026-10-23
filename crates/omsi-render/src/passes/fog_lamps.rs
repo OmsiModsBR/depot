@@ -1,5 +1,6 @@
 //! The lamps' light in the fog: worked out at half size and added onto the picture.
 
+use super::draw::PostPass;
 use crate::gpu::{
     array_path, basic_pipelines, depth_texture_entry, fullscreen_pipeline, pass_timer,
     uniform_entry, ArrayPath,
@@ -177,30 +178,14 @@ impl FogLampsPass {
                     .into_iter()
                     .enumerate()
                     {
-                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("fog lamps"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: target,
-                                depth_slice: None,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: if k == 1 {
+                        PostPass::new("fog lamps", target)
+                            .load(load)
+                            .timer(if k == 1 {
                                 pass_timer(tset.as_ref(), timed, "fog lamps")
                             } else {
                                 None
-                            },
-                            occlusion_query_set: None,
-                            multiview_mask: None,
-                        });
-                        pass.set_pipeline(&pipes[k]);
-                        pass.set_bind_group(0, cam_bg, &[]);
-                        pass.set_bind_group(1, &fog_bg[k], &[]);
-                        pass.draw(0..3, 0..1);
+                            })
+                            .draw(encoder, &pipes[k], &[cam_bg, &fog_bg[k]]);
                     }
                 }
             }

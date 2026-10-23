@@ -10,9 +10,8 @@
 //! hit-tests the rectangles of the layout, the same ones `draw` used.
 
 use crate::paint::Align;
-use crate::theme::v5::{
-    ACCENT, CARD, FG, FIELD, KNOB, LINE, MUTED, ON_ACCENT, ROW_LINE, SELECTED, TRACK_OFF, TS,
-};
+use crate::theme::v5::{CARD, FG, FIELD, KNOB, LINE, MUTED, ROW_LINE, TRACK_OFF, TS};
+use crate::theme::{accent, accent_soft, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -510,7 +509,8 @@ fn lit_row(ui: &mut Ui, r: Rect, t: f32) {
         return;
     }
     ui.p().rect(r, Color::WHITE.alpha(0.05 * t));
-    ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT.alpha(t));
+    ui.p()
+        .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(t));
 }
 
 /// A field's box (a select, a stepper, a value being typed): `edge` round it.
@@ -528,7 +528,8 @@ fn back_row(ui: &mut Ui, r: Rect, lit: bool) {
     );
     ui.p().rect(r, Color::WHITE.alpha(0.03 + 0.04 * t));
     if t > 0.01 {
-        ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT.alpha(t));
+        ui.p()
+            .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(t));
     }
     let cy = r.y + r.h * 0.5;
     ui.icon(
@@ -572,8 +573,8 @@ pub fn draw(ui: &mut Ui, page: &Page, area: Rect) -> Layout {
             let hov = ui.hover(r) && page.dropdown.is_none();
             let t = ui.anim(id_of(&format!("page:tab:{title}")), hov as u8 as f32, 0.06);
             if on {
-                ui.p().rect(r, SELECTED);
-                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+                ui.p().rect(r, accent_soft());
+                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
             } else if t > 0.01 {
                 ui.p().rect(r, Color::WHITE.alpha(0.05 * t));
             }
@@ -647,8 +648,8 @@ pub fn draw(ui: &mut Ui, page: &Page, area: Rect) -> Layout {
             0.06,
         );
         if page.active == Some(k) {
-            ui.p().rect(r, SELECTED);
-            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+            ui.p().rect(r, accent_soft());
+            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
         }
         lit_row(ui, r, t);
         let cy = r.y + r.h * 0.5;
@@ -697,8 +698,8 @@ pub fn draw(ui: &mut Ui, page: &Page, area: Rect) -> Layout {
             match row.lead {
                 Lead::Sign(s) => {
                     let tile = Rect::new(x, cy - 14.0, sign_w, 28.0);
-                    ui.p().rect(tile, ACCENT.lighten(0.1 * t));
-                    put_center(ui, s, tile, px, Weight::Bold, ON_ACCENT);
+                    ui.p().rect(tile, accent().lighten(0.1 * t));
+                    put_center(ui, s, tile, px, Weight::Bold, on_accent());
                     tx = tile.right() + 14.0;
                 }
                 Lead::Code(s) => {
@@ -710,7 +711,7 @@ pub fn draw(ui: &mut Ui, page: &Page, area: Rect) -> Layout {
                         code_w,
                         px,
                         Weight::Medium,
-                        MUTED.mix(ACCENT, t),
+                        MUTED.mix(accent(), t),
                     );
                     tx = x + code_w + 14.0;
                 }
@@ -752,8 +753,8 @@ pub fn draw(ui: &mut Ui, page: &Page, area: Rect) -> Layout {
             let cur = dd.current == Some(idx);
             let hot = ui.hover(r) || (idx == dd.sel && page.kbd && !over);
             if cur {
-                ui.p().rect(r, SELECTED);
-                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), ACCENT);
+                ui.p().rect(r, accent_soft());
+                ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
             }
             if hot {
                 ui.p().rect(r, Color::WHITE.alpha(0.07));
@@ -800,7 +801,7 @@ fn draw_control(
                 on as u8 as f32,
                 0.07,
             );
-            ui.p().rounded(track, th * 0.5, TRACK_OFF.mix(ACCENT, a));
+            ui.p().rounded(track, th * 0.5, TRACK_OFF.mix(accent(), a));
             let kx = track.x + th * 0.5 + (tw - th) * a;
             ui.p().circle(Vec2::new(kx, cy), th * 0.5 - 3.0, KNOB);
             track.x
@@ -820,7 +821,7 @@ fn draw_control(
                 ui.p().rounded(
                     Rect::new(track.x, track.y, track.w * f, th),
                     th * 0.5,
-                    ACCENT,
+                    accent(),
                 );
             }
             ui.p()
@@ -830,7 +831,7 @@ fn draw_control(
         Control::Stepper(v) => {
             let b = ctl.unwrap_or(r);
             let bx = Rect::new(b.x, cy - 15.0, b.w, 30.0);
-            field_box(ui, bx, if t > 0.5 { ACCENT.alpha(0.6) } else { LINE });
+            field_box(ui, bx, if t > 0.5 { accent().alpha(0.6) } else { LINE });
             ui.icon(
                 "chevron_left",
                 Vec2::new(bx.x + 15.0, cy),
@@ -867,9 +868,9 @@ fn draw_control(
             let w = (ui.width(v, 13.0 * TS, Weight::Regular) + 50.0).clamp(130.0, 280.0);
             let bx = Rect::new(rx - w, cy - 15.0, w, 30.0);
             let edge = if open {
-                ACCENT
+                accent()
             } else if t > 0.5 {
-                ACCENT.alpha(0.6)
+                accent().alpha(0.6)
             } else {
                 LINE
             };
@@ -888,7 +889,7 @@ fn draw_control(
                 if open { "expand_less" } else { "expand_more" },
                 Vec2::new(bx.right() - 16.0, cy),
                 18.0,
-                if open { ACCENT } else { MUTED },
+                if open { accent() } else { MUTED },
             );
             bx.x
         }
@@ -896,7 +897,7 @@ fn draw_control(
         Control::Editing(v) => {
             let w = (ui.width(v, 13.0 * TS, Weight::Medium) + 36.0).clamp(120.0, 280.0);
             let bx = Rect::new(rx - w, cy - 15.0, w, 30.0);
-            field_box(ui, bx, ACCENT);
+            field_box(ui, bx, accent());
             let tw = put(
                 ui,
                 v,
@@ -909,7 +910,7 @@ fn draw_control(
             );
             if (ui.time * 1.6).fract() < 0.6 {
                 ui.p()
-                    .rect(Rect::new(bx.x + 13.0 + tw, cy - 8.0, 1.5, 16.0), ACCENT);
+                    .rect(Rect::new(bx.x + 13.0 + tw, cy - 8.0, 1.5, 16.0), accent());
             }
             bx.x
         }
@@ -926,7 +927,7 @@ fn draw_control(
             // (a key cap: the binding, or what the button does)
             let w = (ui.width(v, 12.5 * TS, Weight::Medium) + 28.0).clamp(64.0, 300.0);
             let bx = Rect::new(rx - w, cy - 14.0, w, 28.0);
-            field_box(ui, bx, if t > 0.5 { ACCENT.alpha(0.6) } else { LINE });
+            field_box(ui, bx, if t > 0.5 { accent().alpha(0.6) } else { LINE });
             put_center(ui, v, bx.pad(-10.0, 0.0), 12.5, Weight::Medium, FG);
             bx.x
         }
@@ -954,9 +955,9 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
     if let Some(time) = p.time {
         for (j, &r) in l.time.iter().enumerate() {
             let hov = ui.hover(r);
-            ui.p().rect(r, if hov { ACCENT } else { FIELD });
+            ui.p().rect(r, if hov { accent() } else { FIELD });
             ui.p()
-                .rounded_border(r, 0.0, 1.0, if hov { ACCENT } else { LINE });
+                .rounded_border(r, 0.0, 1.0, if hov { accent() } else { LINE });
             ui.icon(
                 if j == 0 {
                     "chevron_left"
@@ -965,7 +966,7 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
                 },
                 r.center(),
                 20.0,
-                if hov { ON_ACCENT } else { ACCENT },
+                if hov { on_accent() } else { accent() },
             );
         }
         if let (Some(a), Some(b)) = (l.time.first(), l.time.get(1)) {
@@ -975,7 +976,7 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
                 Rect::new(a.right() + 8.0, a.y, b.x - a.right() - 16.0, a.h),
                 18.0,
                 Weight::Bold,
-                ACCENT,
+                accent(),
             );
             y = a.bottom() + 10.0;
         }
@@ -987,9 +988,9 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
             let (what, when) = p.rows[idx];
             let on = idx == chosen;
             if on {
-                ui.p().rect(r, SELECTED);
+                ui.p().rect(r, accent_soft());
                 ui.p()
-                    .rect(Rect::new(r.x, r.y + 4.0, 3.0, r.h - 8.0), ACCENT);
+                    .rect(Rect::new(r.x, r.y + 4.0, 3.0, r.h - 8.0), accent());
             } else if ui.hover(r) {
                 ui.p().rect(r, Color::WHITE.alpha(0.05));
             }
@@ -1002,7 +1003,7 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
                 70.0,
                 12.5,
                 Weight::Medium,
-                ACCENT,
+                accent(),
             );
             put(
                 ui,
@@ -1027,8 +1028,8 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
         if let Some(go) = l.pane_go {
             let hov = ui.hover(go);
             ui.p()
-                .rect(go, if hov { ACCENT.lighten(0.1) } else { ACCENT });
-            put_center(ui, button, go, 14.0, Weight::Bold, ON_ACCENT);
+                .rect(go, if hov { accent().lighten(0.1) } else { accent() });
+            put_center(ui, button, go, 14.0, Weight::Bold, on_accent());
         }
     } else {
         // (only to read: the tours of a line, their first stop's time)
@@ -1057,14 +1058,14 @@ fn draw_pane(ui: &mut Ui, p: &Pane, pc: Rect, l: &Layout) {
                 70.0,
                 12.5,
                 Weight::Medium,
-                ACCENT,
+                accent(),
             );
             match what.strip_prefix(tour.as_str()) {
                 Some(rest) => {
                     let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                     let tile = Rect::new(r.x + 12.0, cy - 10.0, tile_w, 20.0);
-                    ui.p().rect(tile, ACCENT.alpha(0.16));
-                    put_center(ui, num.trim(), tile, 12.5, Weight::Bold, ACCENT);
+                    ui.p().rect(tile, accent().alpha(0.16));
+                    put_center(ui, num.trim(), tile, 12.5, Weight::Bold, accent());
                     let dx = tile.right() + 10.0;
                     put(
                         ui,

@@ -168,6 +168,11 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
     if let Some(d) = omsi_cfg::flags::CONTENT.os() {
         return Some(PathBuf::from(d));
     }
+    // (the folder chosen under Setup, as the launcher installs mods into it)
+    if let Some(d) = omsi_launcher_lib::chosen_content() {
+        let _ = omsi_cfg::ensure_content_layout(&d);
+        return Some(d);
+    }
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.to_path_buf();
     // inside an .app bundle the binary sits in Contents/MacOS: use the folder beside the bundle
@@ -579,6 +584,8 @@ pub(crate) fn sound_gain(which: &std::sync::atomic::AtomicU32) -> f32 {
 
 /// The `clouds` setting: clouds in the sky (off: a clear sky whatever the weather says).
 pub(crate) static CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// `Settings::fair_weather_clouds`: a clear default sky gets a few clouds.
+pub(crate) static FAIR_CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// macOS's allocator keeps freed large blocks for reuse, and they count as the game's
 /// memory: after loading and unloading tiles it held more than half a gigabyte of them, and

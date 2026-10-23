@@ -1,36 +1,3 @@
-struct Camera {
-    view_proj: mat4x4<f32>,
-    cam_pos: vec4<f32>,
-    world_origin: vec4<f32>, // world-space origin removed from render coordinates
-    sun_dir: vec4<f32>,      // xyz direction to the sun, w intensity
-    ambient: vec4<f32>,      // rgb ambient (envir light C)
-    fog: vec4<f32>,          // rgb, density
-    sun_color: vec4<f32>,    // rgb (envir light A), w night factor 0..1 (nightmap strength)
-    sky_color: vec4<f32>,    // rgb secondary light from above (envir light B), w 1 = vanilla (as OMSI 2), 0 = Vanilla+
-    light_grid: vec4<f32>,   // x,y grid origin (render-origin relative), z cell size, w cells per side
-    sky: vec4<f32>,
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    clouds: vec4<f32>,
-    light_view_proj: mat4x4<f32>,
-    light_view_proj_far: mat4x4<f32>,
-    shadow: vec4<f32>,       // x enabled, y texel size, z near cascade half range
-    post: vec4<f32>,         // x enhanced, y time, zw sun ndc
-    inside_a: vec4<f32>,     // player vehicle box: origin xyz, sin(heading)
-    inside_b: vec4<f32>,     // cos(heading), half extents xyz
-    inside_c: vec4<f32>,     // box centre offset xyz, w = 1 when there is a box
-    flags: vec4<f32>,        // x detail texturing, y enhanced graphics, z never set (see fs_main's end), w close cascade half range
-    light_view_proj_close: mat4x4<f32>,
-    wind: vec4<f32>,         // the player's vehicle's velocity (m/s, world): the airstream on its glass
-    // Enhanced: the street lamps' shadow maps (the tiles under the far map), and the
-    // lights they belong to (-1: none)
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
-    // Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
-    // the air has carried the gusts since the start (m, modulo PATTERN_PERIOD)
-    tree_wind: vec4<f32>,
-};
-
 // 1 when the point lies inside the player's vehicle (its [boundingbox], shrunk a little so
 // that the outer skin, the glass and the roof stay outside): weather stays out of the cab.
 // The side/front/back shrink was a bare 0.12 m, which left an interior fixture close to the
@@ -312,16 +279,9 @@ fn model_matrix(e: u32) -> mat4x4<f32> {
 // the frame's draw list: the per-draw entry of each drawn instance. Draws of the same mesh
 // and material are batched, so the instance index points into this list, not at an entry.
 @group(0) @binding(10) var<storage, read> draw_list: array<u32>;
-struct PointLight {
-    pos: vec4<f32>,   // xyz relative to the render origin, w radius (0: an enhanced-only light)
-    color: vec4<f32>, // rgb, w intensity
-    dir: vec4<f32>,   // spot direction, w cosine of the outer cone (< -1.5: a point light)
-    extra: vec4<f32>, // enhanced path: cosine of the inner cone, core radius, beam gain, radius
-};
 @group(0) @binding(3) var<storage, read> lights: array<PointLight>;
 // per cell CELL_CAP light indices, 0xffffffff = empty
 @group(0) @binding(4) var<storage, read> grid: array<u32>;
-const CELL_CAP: u32 = 32u;
 // The cutout of `[matl_alpha] 1`: Omsi.exe sets ALPHAREF 0x80 with ALPHAFUNC GREATER, so a
 // texel of alpha 128 is thrown away. Painters' window layers (a bus's glass unwrapped on its
 // own texture to draw on) mark the clear glass with exactly 128: cut below one half, those
@@ -1238,14 +1198,6 @@ fn world_pattern_xy(p: vec3<f32>) -> vec2<f32> {
     // coordinate itself (892 km at Spandau) has a 6 cm step in 32 bits, a fifth of the
     // finest noise cell.
     return p.xy + camera.world_origin.xy;
-}
-
-// Whether every component is a finite number, tested on the bits: Metal's fast maths takes
-// `x != x` and comparisons with a NaN as it likes (a NaN colour happened to come out as
-// something on the Mac), Direct3D 12 keeps the NaN and draws it black.
-fn all_finite(v: vec3<f32>) -> bool {
-    let e = bitcast<vec3<u32>>(v) & vec3<u32>(0x7f800000u);
-    return all(e != vec3<u32>(0x7f800000u));
 }
 
 fn finite_or(v: vec3<f32>, fallback: vec3<f32>) -> vec3<f32> {
