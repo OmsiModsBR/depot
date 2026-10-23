@@ -165,6 +165,8 @@ impl Renderer {
         }
         let encoders = self.encode_frame(scene, &f, &mut clock, &lists);
         self.submit_frame(&f, clock, &lists, encoders);
+        // the draw list's capacity serves the next picture
+        self.scratch.list = lists.list;
     }
 
     /// test hooks for a device the driver loses (`OMSI_FAKE_GPU_ERROR=lost`, `lost-poll`)
