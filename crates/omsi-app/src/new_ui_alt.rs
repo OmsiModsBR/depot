@@ -119,13 +119,21 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             "Reposition at an entry point",
             first(&[
                 (ctx.player, "No vehicle to reposition"),
-                (!ctx.lan_client, "In a LAN session only the host moves vehicles"),
+                (
+                    !ctx.lan_client,
+                    "In a LAN session only the host moves vehicles",
+                ),
                 (ctx.entry_points, "This map has no entry points"),
             ]),
         ),
         b("ai", Icon("alt-ai"), "AI drives my vehicle", Some(NOT_YET)),
         OwnedButton {
-            title: if ctx.on_tour { "Timetable" } else { "Line and tour" }.to_string(),
+            title: if ctx.on_tour {
+                "Timetable"
+            } else {
+                "Line and tour"
+            }
+            .to_string(),
             on: ctx.on_tour,
             // (a tour running can always be ended)
             ..b(
@@ -186,7 +194,10 @@ pub(crate) fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             "weather",
             Icon("alt-weather"),
             "Weather",
-            need(!ctx.lan_client, "In a LAN session the host sets the weather"),
+            need(
+                !ctx.lan_client,
+                "In a LAN session the host sets the weather",
+            ),
         ),
         b(
             "controls",
@@ -792,7 +803,10 @@ mod tests {
             server: true,
             ..all_on()
         });
-        assert_eq!(by_id(&bs, "tour").disabled.as_deref(), Some("Not on a server"));
+        assert_eq!(
+            by_id(&bs, "tour").disabled.as_deref(),
+            Some("Not on a server")
+        );
         // what is not in the game yet stays dim whatever the state
         let bs = buttons(&all_on());
         for id in ["ai", "accident", "help"] {
@@ -857,10 +871,7 @@ mod tests {
             controls: "o-gamepad",
             ..all_on()
         });
-        assert_eq!(
-            by_id(&pad, "controls").glyph,
-            OwnedGlyph::Icon("o-gamepad")
-        );
+        assert_eq!(by_id(&pad, "controls").glyph, OwnedGlyph::Icon("o-gamepad"));
     }
 
     #[test]
@@ -909,7 +920,8 @@ mod tests {
             ..Default::default()
         };
         let size = (1672, 941);
-        let at = alt_bar::cell_rect(origin(Vec2::new(1672.0, 941.0), frame.buttons.len()), 0).center();
+        let at =
+            alt_bar::cell_rect(origin(Vec2::new(1672.0, 941.0), frame.buttons.len()), 0).center();
         let hit = frame.hit(at, size).and_then(|i| frame.buttons.get(i));
         assert!(hit.is_some_and(|b| b.disabled.is_some()));
     }
@@ -1030,7 +1042,11 @@ mod tests {
             assert!(r.x >= 0.0 && r.y >= 0.0 && r.x + r.w <= pts.x && r.y + r.h <= pts.y);
             // the arrow folds it; folded, only the tab in the corner is the bar's
             let arrow = alt_bar::arrow_rect(at, frame.buttons.len()).center();
-            assert_eq!(frame.hit_any(arrow * scale, size), Some(Hit::Arrow), "{size:?}");
+            assert_eq!(
+                frame.hit_any(arrow * scale, size),
+                Some(Hit::Arrow),
+                "{size:?}"
+            );
             frame.folded = true;
             let mid = alt_bar::cell_rect(at, 7).center();
             assert!(!frame.over(mid * scale, size));

@@ -11,8 +11,8 @@
 //! feet on the ground, turning, sitting down on a seat and getting up are the passengers'
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
-use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::app::App;
+use crate::humans::{AvatarCmd, BusId, Humans};
 use glam::{DVec2, DVec3};
 use omsi_sim::collision::Obb;
 use winit::keyboard::KeyCode;
@@ -113,13 +113,27 @@ impl Transit {
     /// At walking pace, but never a jump nor a crawl.
     fn walk(from: DVec3, to: DVec3, after: Option<(BusId, glam::Vec3)>) -> Transit {
         let d = (to - from).length() as f32;
-        Transit { from, to, t: 0.0, dur: (d / WALK as f32).clamp(0.35, 2.0), after, then: Then::Nothing }
+        Transit {
+            from,
+            to,
+            t: 0.0,
+            dur: (d / WALK as f32).clamp(0.35, 2.0),
+            after,
+            then: Then::Nothing,
+        }
     }
 
     /// A walk in to the driver's place, then `then` (getting in is walked, not jumped).
     fn walk_in(from: DVec3, to: DVec3, then: Then) -> Transit {
         let d = (to - from).length() as f32;
-        Transit { from, to, t: 0.0, dur: (d / WALK as f32).clamp(0.6, 2.5), after: None, then }
+        Transit {
+            from,
+            to,
+            t: 0.0,
+            dur: (d / WALK as f32).clamp(0.6, 2.5),
+            after: None,
+            then,
+        }
     }
 }
 
@@ -140,7 +154,11 @@ impl OnFoot {
 
     /// The eyes on their way down or up, over about a third of a second.
     fn ease_crouch(&mut self, dt: f32) {
-        let want = if self.kneel && self.seat.is_none() { 1.0 } else { 0.0 };
+        let want = if self.kneel && self.seat.is_none() {
+            1.0
+        } else {
+            0.0
+        };
         self.crouch += (want - self.crouch) * (1.0 - (-dt * 9.0).exp());
         if (want - self.crouch).abs() < 1e-3 {
             self.crouch = want;
@@ -194,10 +212,24 @@ fn push_out(p: DVec2, o: &Obb, r: f64) -> DVec2 {
 /// that side nearest `near` (within reach of it: out through a door, never through the
 /// wall beside the seat); None where there is no such door, or a wall or another vehicle is
 /// in the way.
-fn outside_spot(h: &mut Humans, world: Option<&crate::scene::World>, v: &omsi_sim::VehicleInstance, others: &[Obb], side: f64, near: DVec3) -> Option<DVec3> {
+fn outside_spot(
+    h: &mut Humans,
+    world: Option<&crate::scene::World>,
+    v: &omsi_sim::VehicleInstance,
+    others: &[Obb],
+    side: f64,
+    near: DVec3,
+) -> Option<DVec3> {
     let hd = v.heading.to_radians();
-    let (fwd, right) = (DVec2::new(hd.sin(), hd.cos()), DVec2::new(hd.cos(), -hd.sin()));
-    let half_w = v.ty.def.bounding_box.map(|b| b[0] as f64 * 0.5).unwrap_or(1.25);
+    let (fwd, right) = (
+        DVec2::new(hd.sin(), hd.cos()),
+        DVec2::new(hd.cos(), -hd.sin()),
+    );
+    let half_w =
+        v.ty.def
+            .bounding_box
+            .map(|b| b[0] as f64 * 0.5)
+            .unwrap_or(1.25);
     let door = h
         .vehicle_doors(v)
         .into_iter()
@@ -210,23 +242,47 @@ fn outside_spot(h: &mut Humans, world: Option<&crate::scene::World>, v: &omsi_si
 
 /// Where one stands outside vehicle `v` by its door (outside point) `door`: clear of the
 /// body, on the ground; None where a wall or another vehicle is in the way.
-fn outside_at(world: Option<&crate::scene::World>, v: &omsi_sim::VehicleInstance, others: &[Obb], door: DVec3) -> Option<DVec3> {
-    let own = v.ty.def.bounding_box.map(|bb| Obb::from_box(bb, v.position, v.heading));
+fn outside_at(
+    world: Option<&crate::scene::World>,
+    v: &omsi_sim::VehicleInstance,
+    others: &[Obb],
+    door: DVec3,
+) -> Option<DVec3> {
+    let own =
+        v.ty.def
+            .bounding_box
+            .map(|bb| Obb::from_box(bb, v.position, v.heading));
     let mut p = door.truncate();
     // clear of the own bus's body
     if let Some(o) = own.as_ref() {
         p = push_out(p, o, RADIUS + 0.15);
     }
-    let z = world.and_then(|w| w.walk_height_near(p.x, p.y, v.position.z)).unwrap_or(v.position.z);
+    let z = world
+        .and_then(|w| w.walk_height_near(p.x, p.y, v.position.z))
+        .unwrap_or(v.position.z);
     // room: no wall, no other vehicle
     let blocked = |q: DVec2| -> bool {
         let walls = world
             .map(|w| {
-                let probe = Obb { center: q, half: DVec2::splat(1.0), heading: 0.0, z0: z - 1.0, z1: z + 2.5, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 };
+                let probe = Obb {
+                    center: q,
+                    half: DVec2::splat(1.0),
+                    heading: 0.0,
+                    z0: z - 1.0,
+                    z1: z + 2.5,
+                    velocity: DVec2::ZERO,
+                    mass: 0.0,
+                    pole: None,
+                    id: -1,
+                };
                 w.collision.lock().obstacles_near(&probe)
             })
             .unwrap_or_default();
-        walls.iter().filter(|o| o.z0 < z + 1.6 && o.z1 > z + 0.45).chain(others.iter()).any(|o| (push_out(q, o, RADIUS) - q).length() > 0.05)
+        walls
+            .iter()
+            .filter(|o| o.z0 < z + 1.6 && o.z1 > z + 0.45)
+            .chain(others.iter())
+            .any(|o| (push_out(q, o, RADIUS) - q).length() > 0.05)
     };
     if blocked(p) {
         return None;
@@ -276,16 +332,37 @@ impl App {
             return;
         }
         if !self.settings.get_up {
-            self.service_msg = Some(("Getting up is off: turn on \"Ability to get up\" in the settings".into(), 5.0));
+            self.service_msg = Some((
+                "Getting up is off: turn on \"Ability to get up\" in the settings".into(),
+                5.0,
+            ));
             return;
         }
         // the other vehicles round the own bus (room to step out)
         let others: Vec<Obb> = {
-            let at = self.player.as_ref().map(|p| p.vehicle.position.truncate()).unwrap_or_default();
-            let own = self.player.as_ref().and_then(|p| p.vehicle.ty.def.bounding_box.map(|bb| Obb::from_box(bb, p.vehicle.position, p.vehicle.heading)));
-            self.vehicle_boxes(at, 30.0).into_iter().filter(|o| own.map(|w| (w.center - o.center).length() > 0.01).unwrap_or(true)).collect()
+            let at = self
+                .player
+                .as_ref()
+                .map(|p| p.vehicle.position.truncate())
+                .unwrap_or_default();
+            let own = self.player.as_ref().and_then(|p| {
+                p.vehicle
+                    .ty
+                    .def
+                    .bounding_box
+                    .map(|bb| Obb::from_box(bb, p.vehicle.position, p.vehicle.heading))
+            });
+            self.vehicle_boxes(at, 30.0)
+                .into_iter()
+                .filter(|o| {
+                    own.map(|w| (w.center - o.center).length() > 0.01)
+                        .unwrap_or(true)
+                })
+                .collect()
         };
-        let Some(p) = self.player.as_mut() else { return };
+        let Some(p) = self.player.as_mut() else {
+            return;
+        };
         p.axes.release_all();
         // the people's animation carries the walker: without passengers, a crowd of one
         if self.humans.is_none() {
@@ -298,15 +375,28 @@ impl App {
         // the driver's own figure walks off, not a passenger's
         let driver_ty = p.driver.as_ref().map(|d| d.human_type());
         // out by the door by the driver's seat, else beside the seat
-        let doors: Vec<DVec3> = self.humans.as_mut().and_then(|h| h.vehicle_driver_door(v)).into_iter().collect();
+        let doors: Vec<DVec3> = self
+            .humans
+            .as_mut()
+            .and_then(|h| h.vehicle_driver_door(v))
+            .into_iter()
+            .collect();
         let h = v.heading.to_radians();
         let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
-        let half = v.ty.def.bounding_box.map(|b| (b[0] as f64 * 0.5, b[1] as f64 * 0.5 + b[4] as f64)).unwrap_or((1.25, 5.5));
+        let half =
+            v.ty.def
+                .bounding_box
+                .map(|b| (b[0] as f64 * 0.5, b[1] as f64 * 0.5 + b[4] as f64))
+                .unwrap_or((1.25, 5.5));
         let pos = doors.first().copied().unwrap_or_else(|| {
             let xy = v.position.truncate() + fwd * (half.1 - 1.8) + right * (half.0 + 0.6);
             DVec3::new(xy.x, xy.y, v.position.z)
         });
-        let pos = match self.world.as_ref().and_then(|w| w.walk_height_near(pos.x, pos.y, v.position.z)) {
+        let pos = match self
+            .world
+            .as_ref()
+            .and_then(|w| w.walk_height_near(pos.x, pos.y, v.position.z))
+        {
             Some(z) if (z - pos.z).abs() < 2.0 => DVec3::new(pos.x, pos.y, z),
             _ => pos,
         };
@@ -321,26 +411,47 @@ impl App {
         // Ctrl+Shift+G steps out (`step_out`). Only a bus with no standing place by the seat
         // puts the driver out of the side looked at (by a door there, else beside the cab):
         // with the camera turned, getting up pushed the driver out of the door (#1725).
-        let look_yaw = self.camera.as_ref().map(|c| c.yaw as f64).unwrap_or(v.heading);
+        let look_yaw = self
+            .camera
+            .as_ref()
+            .map(|c| c.yaw as f64)
+            .unwrap_or(v.heading);
         let ly = look_yaw.to_radians();
         let look = DVec2::new(ly.sin(), ly.cos());
         let stand = self.humans.as_mut().and_then(|h| h.driver_stand(v));
-        let seat_w = stand.and_then(|l| self.humans.as_mut().and_then(|h| h.vehicle_cabin_world(v, l))).unwrap_or(v.position);
+        let seat_w = stand
+            .and_then(|l| {
+                self.humans
+                    .as_mut()
+                    .and_then(|h| h.vehicle_cabin_world(v, l))
+            })
+            .unwrap_or(v.position);
         let side = look.dot(right);
         // a van's cab door by the seat (the W906): out of it, as a van driver gets out -
         // there is no standing room in such a cab, the driver who got up stood with their
         // head in the roof over the windscreen
         let cab_door = self.humans.as_mut().and_then(|h| h.vehicle_cab_door(v));
-        let outside = match (cab_door, stand.is_none() && side.abs() > 0.45, self.humans.as_mut()) {
+        let outside = match (
+            cab_door,
+            stand.is_none() && side.abs() > 0.45,
+            self.humans.as_mut(),
+        ) {
             (Some(d), _, Some(_)) => outside_at(self.world.as_deref(), v, &others, d),
-            (None, true, Some(h)) => outside_spot(h, self.world.as_deref(), v, &others, side.signum(), seat_w),
+            (None, true, Some(h)) => {
+                outside_spot(h, self.world.as_deref(), v, &others, side.signum(), seat_w)
+            }
             _ => None,
         };
         let _ = face;
         // up from the seat where one stands beside it, and out (where there is room) on
         // foot: walked, not put down outside at once
         let (pos, face, inside, transit) = match (outside, stand) {
-            (Some(o), Some(l)) => (seat_w, look_yaw, Some((BusId::Player, l)), Some(Transit::walk(seat_w, o, None))),
+            (Some(o), Some(l)) => (
+                seat_w,
+                look_yaw,
+                Some((BusId::Player, l)),
+                Some(Transit::walk(seat_w, o, None)),
+            ),
             (Some(o), None) => (pos, look_yaw, None, Some(Transit::walk(pos, o, None))),
             (None, Some(l)) => (seat_w, look_yaw, Some((BusId::Player, l)), None),
             (None, None) => (pos, look_yaw, None, None),
@@ -361,8 +472,20 @@ impl App {
             eye_yaw: self.camera.as_ref().map(|c| c.yaw).unwrap_or(face as f32),
             lag: DVec3::ZERO,
             // (only with the bus standing: at speed the eyes have to stay with it)
-            settle: if self.player.as_ref().is_some_and(|p| p.vehicle.motion().velocity_kmh().abs() < 3.0) { 1.0 } else { 0.0 },
-            view_before: if self.view == "foot" { "driver".into() } else { self.view.clone() },
+            settle: if self
+                .player
+                .as_ref()
+                .is_some_and(|p| p.vehicle.motion().velocity_kmh().abs() < 3.0)
+            {
+                1.0
+            } else {
+                0.0
+            },
+            view_before: if self.view == "foot" {
+                "driver".into()
+            } else {
+                self.view.clone()
+            },
             kind,
             face_seat: false,
             transit,
@@ -377,14 +500,28 @@ impl App {
     /// Ctrl+Shift+G inside a bus: out by its nearest door, open or shut (getting up now
     /// stands the driver up inside, and a shut door kept them in).
     fn step_out(&mut self) {
-        let Some(f) = self.on_foot.as_ref() else { return };
+        let Some(f) = self.on_foot.as_ref() else {
+            return;
+        };
         let Some((bus, _)) = f.inside else { return };
         let (pos, yaw) = (f.pos, f.yaw as f64);
         let spot = if bus == BusId::Player {
             // out of the side the walker looks at (else the side of the nearest door)
             let others: Vec<Obb> = {
-                let own = self.player.as_ref().and_then(|p| p.vehicle.ty.def.bounding_box.map(|bb| Obb::from_box(bb, p.vehicle.position, p.vehicle.heading)));
-                self.vehicle_boxes(pos.truncate(), 30.0).into_iter().filter(|o| own.map(|w| (w.center - o.center).length() > 0.01).unwrap_or(true)).collect()
+                let own = self.player.as_ref().and_then(|p| {
+                    p.vehicle
+                        .ty
+                        .def
+                        .bounding_box
+                        .map(|bb| Obb::from_box(bb, p.vehicle.position, p.vehicle.heading))
+                });
+                self.vehicle_boxes(pos.truncate(), 30.0)
+                    .into_iter()
+                    .filter(|o| {
+                        own.map(|w| (w.center - o.center).length() > 0.01)
+                            .unwrap_or(true)
+                    })
+                    .collect()
             };
             match (self.player.as_ref(), self.humans.as_mut()) {
                 (Some(p), Some(h)) => {
@@ -393,23 +530,46 @@ impl App {
                     let right = DVec2::new(hd.cos(), -hd.sin());
                     let ly = yaw.to_radians();
                     let look_side = DVec2::new(ly.sin(), ly.cos()).dot(right);
-                    let near_side = h.vehicle_doors(v).into_iter().min_by(|a, b| (*a - pos).length().total_cmp(&(*b - pos).length())).map(|d| (d - v.position).truncate().dot(right).signum()).unwrap_or(1.0);
-                    let first = if look_side.abs() > 0.3 { look_side.signum() } else { near_side };
-                    outside_spot(h, self.world.as_deref(), v, &others, first, pos).or_else(|| outside_spot(h, self.world.as_deref(), v, &others, -first, pos))
+                    let near_side = h
+                        .vehicle_doors(v)
+                        .into_iter()
+                        .min_by(|a, b| (*a - pos).length().total_cmp(&(*b - pos).length()))
+                        .map(|d| (d - v.position).truncate().dot(right).signum())
+                        .unwrap_or(1.0);
+                    let first = if look_side.abs() > 0.3 {
+                        look_side.signum()
+                    } else {
+                        near_side
+                    };
+                    outside_spot(h, self.world.as_deref(), v, &others, first, pos)
+                        .or_else(|| outside_spot(h, self.world.as_deref(), v, &others, -first, pos))
                 }
                 _ => None,
             }
         } else {
-            self.humans.as_ref().and_then(|h| h.cabin_doors(bus).into_iter().map(|d| d.1).filter(|d| (*d - pos).truncate().length() < DOOR_OUT_REACH).min_by(|a, b| (*a - pos).length().total_cmp(&(*b - pos).length())))
+            self.humans.as_ref().and_then(|h| {
+                h.cabin_doors(bus)
+                    .into_iter()
+                    .map(|d| d.1)
+                    .filter(|d| (*d - pos).truncate().length() < DOOR_OUT_REACH)
+                    .min_by(|a, b| (*a - pos).length().total_cmp(&(*b - pos).length()))
+            })
         };
         if let Some(d) = spot {
-            let z = self.world.as_ref().and_then(|w| w.walk_height_near(d.x, d.y, d.z)).unwrap_or(d.z);
+            let z = self
+                .world
+                .as_ref()
+                .and_then(|w| w.walk_height_near(d.x, d.y, d.z))
+                .unwrap_or(d.z);
             let f = self.on_foot.as_mut().unwrap();
             // (walked out, not put down outside)
             f.transit = Some(Transit::walk(f.pos, DVec3::new(d.x, d.y, z), None));
             f.vel = DVec2::ZERO;
         } else {
-            self.service_msg = Some(("No door within reach here (or no room outside it): walk to a door first".into(), 3.0));
+            self.service_msg = Some((
+                "No door within reach here (or no room outside it): walk to a door first".into(),
+                3.0,
+            ));
         }
     }
 
@@ -433,12 +593,20 @@ impl App {
             let door = self.humans.as_mut().and_then(|h| h.vehicle_driver_door(v));
             let h = v.heading.to_radians();
             let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
-            let half = v.ty.def.bounding_box.map(|b| (b[0] as f64 * 0.5, b[1] as f64 * 0.5 + b[4] as f64)).unwrap_or((1.25, 5.5));
+            let half =
+                v.ty.def
+                    .bounding_box
+                    .map(|b| (b[0] as f64 * 0.5, b[1] as f64 * 0.5 + b[4] as f64))
+                    .unwrap_or((1.25, 5.5));
             let p = door.unwrap_or_else(|| {
                 let xy = v.position.truncate() + fwd * (half.1 - 1.8) - right * (half.0 + 0.8);
                 DVec3::new(xy.x, xy.y, v.position.z)
             });
-            let z = self.world.as_ref().and_then(|w| w.walk_height_near(p.x, p.y, p.z)).unwrap_or(p.z);
+            let z = self
+                .world
+                .as_ref()
+                .and_then(|w| w.walk_height_near(p.x, p.y, p.z))
+                .unwrap_or(p.z);
             (DVec3::new(p.x, p.y, z), v.heading)
         };
         if let Some(f) = self.on_foot.take() {
@@ -451,7 +619,11 @@ impl App {
         if let (Some(a), Some(mut ss)) = (self.audio.as_ref(), p.sounds.take()) {
             ss.stop_all(a);
         }
-        if let (Some(w), Some(r), Some(scene)) = (self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) {
+        if let (Some(w), Some(r), Some(scene)) = (
+            self.world.clone(),
+            self.renderer.as_ref(),
+            self.scene.as_mut(),
+        ) {
             if let Some(mut d) = p.driver.take() {
                 d.hide(r, scene);
             }
@@ -463,7 +635,10 @@ impl App {
                 w.release_vehicle(r, scene, t);
             }
         }
-        let name = format!("{} {}", p.vehicle.ty.def.manufacturer, p.vehicle.ty.def.type_name);
+        let name = format!(
+            "{} {}",
+            p.vehicle.ty.def.manufacturer, p.vehicle.ty.def.type_name
+        );
         self.start_on_foot(stand.0, stand.1);
         self.service_msg = Some((format!("{} removed: you are on foot (Esc menu: Place a vehicle, or G at a bus's driver's door)", name.trim()), 6.0));
     }
@@ -508,7 +683,9 @@ impl App {
         let mut best: Option<(usize, f64)> = None;
         for (k, q) in self.placed.iter().enumerate() {
             let v = &q.vehicle;
-            let door = h.vehicle_driver_door(v).or_else(|| h.driver_stand(v).and_then(|l| h.vehicle_cabin_world(v, l)));
+            let door = h
+                .vehicle_driver_door(v)
+                .or_else(|| h.driver_stand(v).and_then(|l| h.vehicle_cabin_world(v, l)));
             if let Some(d) = door {
                 let dist = (d - pos).truncate().length();
                 if dist < DOOR_REACH + 0.6 && best.map(|b| dist < b.1).unwrap_or(true) {
@@ -542,7 +719,10 @@ impl App {
             // (no bus driven before: whoever rides in this one is the player's bus's now)
             h.player_bus_swapped(0, next.uid, &mut next.vehicle);
         }
-        let name = format!("{} {}", next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name);
+        let name = format!(
+            "{} {}",
+            next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name
+        );
         self.player = Some(next);
         if let Some(f) = self.on_foot.take() {
             if let Some(h) = self.humans.as_mut() {
@@ -596,7 +776,11 @@ impl App {
         if let Some(h) = self.humans.as_mut() {
             h.avatar_remove(AVATAR_KEY);
         }
-        self.view = if f.view_before == "outside" || f.view_before == "driver" { f.view_before } else { "driver".into() };
+        self.view = if f.view_before == "outside" || f.view_before == "driver" {
+            f.view_before
+        } else {
+            "driver".into()
+        };
         // (the eyes glide from where the walker's were into the cab camera)
         if self.view == "driver" {
             self.cam_blend.entering = true;
@@ -604,7 +788,11 @@ impl App {
         self.sync_view_look();
         self.look = (0.0, 0.0);
         // (the walking keys' help goes with the walking: it stood over the cab view)
-        if self.service_msg.as_ref().is_some_and(|m| m.0.starts_with("On foot")) {
+        if self
+            .service_msg
+            .as_ref()
+            .is_some_and(|m| m.0.starts_with("On foot"))
+        {
             self.service_msg = None;
         }
     }
@@ -612,8 +800,12 @@ impl App {
     /// G on foot: into a seat by the nearest door (the own bus's front door: the wheel),
     /// or up from the seat and out.
     fn use_seat(&mut self) {
-        let Some(f) = self.on_foot.as_ref() else { return };
-        let Some(h) = self.humans.as_ref() else { return };
+        let Some(f) = self.on_foot.as_ref() else {
+            return;
+        };
+        let Some(h) = self.humans.as_ref() else {
+            return;
+        };
         if let Some((bus, k)) = f.seat {
             // up beside the seat, inside the bus (out of it through a door, as the
             // passengers go)
@@ -630,11 +822,21 @@ impl App {
             }
             // up, and out by the door nearest the seat
             let at = h.avatar_body(AVATAR_KEY).map(|b| b.0).unwrap_or(f.pos);
-            let door = h.bus_doors(bus).into_iter().min_by(|a, b| (*a - at).length().total_cmp(&(*b - at).length()));
+            let door = h
+                .bus_doors(bus)
+                .into_iter()
+                .min_by(|a, b| (*a - at).length().total_cmp(&(*b - at).length()));
             let Some(door) = door else { return };
-            let z = self.world.as_ref().and_then(|w| w.walk_height_near(door.x, door.y, door.z)).unwrap_or(door.z);
+            let z = self
+                .world
+                .as_ref()
+                .and_then(|w| w.walk_height_near(door.x, door.y, door.z))
+                .unwrap_or(door.z);
             // out of the door, facing away from the bus
-            let away = h.bus_center(bus).map(|c| door.truncate() - c.truncate()).unwrap_or(DVec2::Y);
+            let away = h
+                .bus_center(bus)
+                .map(|c| door.truncate() - c.truncate())
+                .unwrap_or(DVec2::Y);
             let face = away.x.atan2(away.y).to_degrees();
             let f = self.on_foot.as_mut().unwrap();
             f.transit = Some(Transit::walk(at, DVec3::new(door.x, door.y, z), None));
@@ -650,13 +852,23 @@ impl App {
         // nearest by
         if let Some((bus, _)) = f.inside {
             if bus == BusId::Player {
-                let stand = self.player.as_ref().and_then(|p| self.humans.as_mut().and_then(|h| h.driver_stand(&p.vehicle).and_then(|l| h.vehicle_cabin_world(&p.vehicle, l))));
-                if stand.map(|s| (s - pos).truncate().length() < 2.5).unwrap_or(true) {
+                let stand = self.player.as_ref().and_then(|p| {
+                    self.humans.as_mut().and_then(|h| {
+                        h.driver_stand(&p.vehicle)
+                            .and_then(|l| h.vehicle_cabin_world(&p.vehicle, l))
+                    })
+                });
+                if stand
+                    .map(|s| (s - pos).truncate().length() < 2.5)
+                    .unwrap_or(true)
+                {
                     self.sit_at_the_wheel();
                     return;
                 }
             }
-            let Some(h) = self.humans.as_ref() else { return };
+            let Some(h) = self.humans.as_ref() else {
+                return;
+            };
             // (any bus: the own, a timetable bus, another player's)
             match h.seat_nearest(bus, pos, 2.5) {
                 Some(k) => {
@@ -673,12 +885,23 @@ impl App {
         }
         // at the cab of a vehicle one placed (or with no bus of one's own): its wheel
         if let Some(k) = self.placed_cab_near(pos) {
-            let own_near = self.player.as_ref().and_then(|p| self.humans.as_mut().and_then(|h| h.vehicle_driver_door(&p.vehicle))).map(|d| (d - pos).truncate().length() < DOOR_REACH).unwrap_or(false);
+            let own_near = self
+                .player
+                .as_ref()
+                .and_then(|p| {
+                    self.humans
+                        .as_mut()
+                        .and_then(|h| h.vehicle_driver_door(&p.vehicle))
+                })
+                .map(|d| (d - pos).truncate().length() < DOOR_REACH)
+                .unwrap_or(false);
             if !own_near {
                 let uid = self.placed[k].uid;
                 let seat = {
                     let v = &self.placed[k].vehicle;
-                    self.humans.as_mut().and_then(|h| h.driver_stand(v).and_then(|l| h.vehicle_cabin_world(v, l)))
+                    self.humans
+                        .as_mut()
+                        .and_then(|h| h.driver_stand(v).and_then(|l| h.vehicle_cabin_world(v, l)))
                 };
                 match seat {
                     Some(to) => self.walk_in(to, Then::Placed(uid)),
@@ -689,9 +912,26 @@ impl App {
         }
         // (the door by the driver's seat, not the first door of the list: next to it the
         // walker was put in the seat behind the driver)
-        let own_front = self.player.as_ref().and_then(|p| self.humans.as_mut().and_then(|h| h.vehicle_driver_door(&p.vehicle)));
-        let Some(h) = self.humans.as_ref() else { return };
-        if omsi_cfg::flags::DEBUG_FOOT.is_set() { log::info!("on foot at ({:.1}, {:.1}): G - own bus doors {:?}, a seat near: {:?}", pos.x, pos.y, h.bus_doors(BusId::Player).iter().map(|d| ((d.x * 10.0).round() / 10.0, (d.y * 10.0).round() / 10.0)).collect::<Vec<_>>(), h.seat_near(pos, DOOR_REACH, None).map(|s| (s.bus, s.seat))); }
+        let own_front = self.player.as_ref().and_then(|p| {
+            self.humans
+                .as_mut()
+                .and_then(|h| h.vehicle_driver_door(&p.vehicle))
+        });
+        let Some(h) = self.humans.as_ref() else {
+            return;
+        };
+        if omsi_cfg::flags::DEBUG_FOOT.is_set() {
+            log::info!(
+                "on foot at ({:.1}, {:.1}): G - own bus doors {:?}, a seat near: {:?}",
+                pos.x,
+                pos.y,
+                h.bus_doors(BusId::Player)
+                    .iter()
+                    .map(|d| ((d.x * 10.0).round() / 10.0, (d.y * 10.0).round() / 10.0))
+                    .collect::<Vec<_>>(),
+                h.seat_near(pos, DOOR_REACH, None).map(|s| (s.bus, s.seat))
+            );
+        }
         if let Some(d) = own_front {
             if (d - pos).truncate().length() < DOOR_REACH {
                 self.walk_to_wheel();
@@ -705,13 +945,18 @@ impl App {
             let h = self.humans.as_mut()?;
             h.driver_stand(v).and_then(|l| h.vehicle_cabin_world(v, l))
         });
-        if cab.map(|c| (c - pos).truncate().length() < 3.8).unwrap_or(false) {
+        if cab
+            .map(|c| (c - pos).truncate().length() < 3.8)
+            .unwrap_or(false)
+        {
             self.walk_to_wheel();
             return;
         }
         // Another bus is got into through one of its open doors, on foot (G at an open door
         // steps in): never into a seat straight from the pavement, through its side.
-        let Some(h) = self.humans.as_ref() else { return };
+        let Some(h) = self.humans.as_ref() else {
+            return;
+        };
         let mut door: Option<(BusId, glam::Vec3, f64)> = None;
         for bus in h.bus_ids_near(pos, 25.0) {
             for (inside, outside, _, open) in h.cabin_doors(bus) {
@@ -721,7 +966,9 @@ impl App {
                 }
             }
         }
-        match door.and_then(|(bus, inside, _)| h.cabin_world(bus, inside).map(|w| (bus, inside, w.0))) {
+        match door
+            .and_then(|(bus, inside, _)| h.cabin_world(bus, inside).map(|w| (bus, inside, w.0)))
+        {
             Some((bus, inside, w)) => {
                 let f = self.on_foot.as_mut().unwrap();
                 f.transit = Some(Transit::walk(f.pos, w, Some((bus, inside))));
@@ -730,15 +977,26 @@ impl App {
                 f.vz = 0.0;
             }
             None => {
-                self.service_msg = Some(("Get in through an open door of the bus, then G by a seat sits down".into(), 4.0));
+                self.service_msg = Some((
+                    "Get in through an open door of the bus, then G by a seat sits down".into(),
+                    4.0,
+                ));
             }
         }
     }
 
     /// The keys on foot (and Ctrl+Shift+G at the wheel); true when the key was taken.
-    pub(crate) fn foot_key(&mut self, code: KeyCode, pressed: bool, repeat: bool, ctrl: bool, shift: bool) -> bool {
+    pub(crate) fn foot_key(
+        &mut self,
+        code: KeyCode,
+        pressed: bool,
+        repeat: bool,
+        ctrl: bool,
+        shift: bool,
+    ) -> bool {
         if self.on_foot.is_none() {
-            if pressed && !repeat && code == KeyCode::KeyG && ctrl && shift && self.player.is_some() {
+            if pressed && !repeat && code == KeyCode::KeyG && ctrl && shift && self.player.is_some()
+            {
                 self.get_up();
                 return true;
             }
@@ -746,7 +1004,9 @@ impl App {
         }
         match code {
             // the game's own keys stay (menu, pause, screenshots, chat)
-            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyP | KeyCode::KeyV | KeyCode::Slash => false,
+            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyP | KeyCode::KeyV | KeyCode::Slash => {
+                false
+            }
             KeyCode::F1 => {
                 if pressed && !repeat {
                     if let Some(f) = self.on_foot.as_mut() {
@@ -786,10 +1046,24 @@ impl App {
                 true
             }
             // the free camera's keys are its own
-            _ if self.on_foot.as_ref().map(|f| f.cam == FootCam::Free).unwrap_or(false) => false,
+            _ if self
+                .on_foot
+                .as_ref()
+                .map(|f| f.cam == FootCam::Free)
+                .unwrap_or(false) =>
+            {
+                false
+            }
             KeyCode::KeyG => {
                 if pressed && !repeat {
-                    if ctrl && shift && self.on_foot.as_ref().map(|f| f.inside.is_some()).unwrap_or(false) {
+                    if ctrl
+                        && shift
+                        && self
+                            .on_foot
+                            .as_ref()
+                            .map(|f| f.inside.is_some())
+                            .unwrap_or(false)
+                    {
                         self.step_out();
                     } else {
                         self.use_seat();
@@ -823,7 +1097,9 @@ impl App {
     /// C on foot (or the screen's button): down on the knees for a picture from low down, or
     /// up again (#1148).
     pub(crate) fn kneel(&mut self) {
-        let Some(f) = self.on_foot.as_mut() else { return };
+        let Some(f) = self.on_foot.as_mut() else {
+            return;
+        };
         if f.toggle_kneel() {
             let msg = match (f.kneel, crate::platform::touch_controls()) {
                 (true, false) => "Kneeling: C (or Space) stands up again",
@@ -859,7 +1135,9 @@ impl App {
             }
             _ => {}
         }
-        let Some(mut f) = self.on_foot.take() else { return };
+        let Some(mut f) = self.on_foot.take() else {
+            return;
+        };
         let dt64 = dt as f64;
         f.ease_crouch(dt);
         let key = |k: KeyCode| self.keys.contains(&k);
@@ -951,22 +1229,40 @@ impl App {
             // inside a bus: along its cabin, with it as it drives, out through an open door
             let mut stepped_in = false;
             if let (Some((bus, local)), Some(h)) = (f.inside, self.humans.as_ref()) {
-                let hd = h.cabin_world(bus, local).map(|x| x.1).unwrap_or(0.0).to_radians();
-                let (bf, br) = (DVec2::new(hd.sin(), hd.cos()), DVec2::new(hd.cos(), -hd.sin()));
-                let step = glam::Vec2::new((f.vel.dot(br) * dt64) as f32, (f.vel.dot(bf) * dt64) as f32);
+                let hd = h
+                    .cabin_world(bus, local)
+                    .map(|x| x.1)
+                    .unwrap_or(0.0)
+                    .to_radians();
+                let (bf, br) = (
+                    DVec2::new(hd.sin(), hd.cos()),
+                    DVec2::new(hd.cos(), -hd.sin()),
+                );
+                let step =
+                    glam::Vec2::new((f.vel.dot(br) * dt64) as f32, (f.vel.dot(bf) * dt64) as f32);
                 if let Some((l, w)) = h.cabin_walk(bus, local, step) {
                     f.pos = w;
                     f.inside = Some((bus, l));
                     f.lift = 0.0;
                     f.vz = 0.0;
                     // at an open door, heading out of it: down onto the pavement
-                    let out = h.cabin_doors(bus).into_iter().find(|(inside, _, side, open)| {
-                        *open && (inside.truncate() - l.truncate()).length() < 1.0 && step.x * side > 0.0005
-                    });
+                    let out = h
+                        .cabin_doors(bus)
+                        .into_iter()
+                        .find(|(inside, _, side, open)| {
+                            *open
+                                && (inside.truncate() - l.truncate()).length() < 1.0
+                                && step.x * side > 0.0005
+                        });
                     if let Some((_, outside, _, _)) = out {
-                        let z = self.world.as_ref().and_then(|w| w.walk_height_near(outside.x, outside.y, outside.z)).unwrap_or(outside.z);
+                        let z = self
+                            .world
+                            .as_ref()
+                            .and_then(|w| w.walk_height_near(outside.x, outside.y, outside.z))
+                            .unwrap_or(outside.z);
                         // down the step onto the pavement, walked (it was a jump of a metre)
-                        f.transit = Some(Transit::walk(w, DVec3::new(outside.x, outside.y, z), None));
+                        f.transit =
+                            Some(Transit::walk(w, DVec3::new(outside.x, outside.y, z), None));
                     }
                 }
                 stepped_in = true;
@@ -980,7 +1276,9 @@ impl App {
                             if !open || (outside.truncate() - f.pos.truncate()).length() > 0.9 {
                                 continue;
                             }
-                            let Some((wi, _)) = h.cabin_world(bus, inside) else { continue };
+                            let Some((wi, _)) = h.cabin_world(bus, inside) else {
+                                continue;
+                            };
                             if (wi.truncate() - outside.truncate()).dot(f.vel) > 0.0 {
                                 // up the step into the bus, walked
                                 f.transit = Some(Transit::walk(f.pos, wi, Some((bus, inside))));
@@ -995,14 +1293,31 @@ impl App {
             }
             // on: the ground where the feet come, a step up to 45 cm, never through walls
             // or vehicles
-            let mut next = if stepped_in { f.pos.truncate() } else { f.pos.truncate() + f.vel * dt64 };
+            let mut next = if stepped_in {
+                f.pos.truncate()
+            } else {
+                f.pos.truncate() + f.vel * dt64
+            };
             if stepped_in {
                 // (inside: the cabin said where)
             } else if let Some(w) = self.world.as_ref() {
                 let z = f.pos.z;
-                let probe = Obb { center: next, half: DVec2::splat(3.0), heading: 0.0, z0: z - 1.0, z1: z + 2.5, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 };
+                let probe = Obb {
+                    center: next,
+                    half: DVec2::splat(3.0),
+                    heading: 0.0,
+                    z0: z - 1.0,
+                    z1: z + 2.5,
+                    velocity: DVec2::ZERO,
+                    mass: 0.0,
+                    pole: None,
+                    id: -1,
+                };
                 let walls = w.collision.lock().obstacles_near(&probe);
-                let mut boxes: Vec<Obb> = walls.into_iter().filter(|o| o.z0 < z + 1.6 + f.lift && o.z1 > z + 0.45 + f.lift).collect();
+                let mut boxes: Vec<Obb> = walls
+                    .into_iter()
+                    .filter(|o| o.z0 < z + 1.6 + f.lift && o.z1 > z + 0.45 + f.lift)
+                    .collect();
                 boxes.extend(self.vehicle_boxes(next, 20.0));
                 for _ in 0..2 {
                     for o in &boxes {
@@ -1052,9 +1367,22 @@ impl App {
         }
         // the avatar
         let show = free;
-        if let (Some(h), Some(w), Some(r), Some(scene)) = (self.humans.as_mut(), self.world.as_ref(), self.renderer.as_ref(), self.scene.as_mut()) {
+        if let (Some(h), Some(w), Some(r), Some(scene)) = (
+            self.humans.as_mut(),
+            self.world.as_ref(),
+            self.renderer.as_ref(),
+            self.scene.as_mut(),
+        ) {
             // (stepping through a door the feet keep to the step, not to the road under it)
-            let cmd = AvatarCmd { pos: f.pos, heading: f.heading, vel: f.vel, lift: f.lift, seat: f.seat, floor: f.inside.map(|_| f.pos.z).or(f.transit.map(|_| f.pos.z)), aboard: f.inside };
+            let cmd = AvatarCmd {
+                pos: f.pos,
+                heading: f.heading,
+                vel: f.vel,
+                lift: f.lift,
+                seat: f.seat,
+                floor: f.inside.map(|_| f.pos.z).or(f.transit.map(|_| f.pos.z)),
+                aboard: f.inside,
+            };
             h.avatar(AVATAR_KEY, w, r, scene, cmd, f.kind);
             h.avatar_show(AVATAR_KEY, show);
         }
@@ -1074,9 +1402,16 @@ impl App {
         }
         // the camera, out of the eyes (the free camera moves by itself)
         if let (Some(cam), false) = (self.camera.as_mut(), free) {
-            let eye = body.map(|b| b.2).unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62 + f.lift)) + f.eye_drop();
+            let eye = body
+                .map(|b| b.2)
+                .unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62 + f.lift))
+                + f.eye_drop();
             let y = (f.yaw as f64).to_radians();
-            let (want, want_yaw, want_pitch) = (eye + DVec3::new(y.sin(), y.cos(), 0.0) * 0.08, f.yaw, f.pitch);
+            let (want, want_yaw, want_pitch) = (
+                eye + DVec3::new(y.sin(), y.cos(), 0.0) * 0.08,
+                f.yaw,
+                f.pitch,
+            );
             // just got up: 4 per second at first (a glide out of the cab's camera), then up to
             // the walk's 18 over the second
             let settling = f.settle > 0.0;
@@ -1121,17 +1456,25 @@ impl App {
     /// before, and the camera eased after that: at speed the saloon trembled round the
     /// eyes and every stop jerked them forwards.
     pub(crate) fn foot_after_humans(&mut self) {
-        let Some(f) = self.on_foot.as_mut() else { return };
+        let Some(f) = self.on_foot.as_mut() else {
+            return;
+        };
         if f.settle > 0.0 || f.cam != FootCam::First || (f.seat.is_none() && f.inside.is_none()) {
             return;
         }
-        let Some(h) = self.humans.as_ref() else { return };
+        let Some(h) = self.humans.as_ref() else {
+            return;
+        };
         if let Some((bus, l)) = f.inside {
             if let Some((w, _)) = h.cabin_world(bus, l) {
                 f.pos = w;
             }
         }
-        let eye = h.avatar_body(AVATAR_KEY).map(|b| b.2).unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62)) + f.eye_drop();
+        let eye = h
+            .avatar_body(AVATAR_KEY)
+            .map(|b| b.2)
+            .unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62))
+            + f.eye_drop();
         let y = (f.eye_yaw as f64).to_radians();
         let at = eye + DVec3::new(y.sin(), y.cos(), 0.0) * 0.08 + f.lag;
         f.eye = Some(at);
@@ -1152,7 +1495,12 @@ impl App {
         let f = self.on_foot.as_ref()?;
         // aboard a player's bus (ours or another's): where in it, so that the others draw
         // us in that bus as it drives
-        let my_id = self.online.lan.as_ref().map(|l| l.my_id).filter(|i| *i != 0);
+        let my_id = self
+            .online
+            .lan
+            .as_ref()
+            .map(|l| l.my_id)
+            .filter(|i| *i != 0);
         let owner = |b: BusId| match b {
             BusId::Player => my_id,
             BusId::Ai(x) => crate::humans::remote_bus_player(x),
@@ -1160,21 +1508,49 @@ impl App {
         let aboard = match (f.seat, f.inside) {
             (Some((b, k)), _) => owner(b).map(|o| omsi_net::Aboard {
                 owner: o,
-                local: self.humans.as_ref().and_then(|h| h.seat_stand(b, k)).map(|l| l.to_array()).unwrap_or_default(),
+                local: self
+                    .humans
+                    .as_ref()
+                    .and_then(|h| h.seat_stand(b, k))
+                    .map(|l| l.to_array())
+                    .unwrap_or_default(),
                 seat: Some(k as u16),
             }),
-            (None, Some((b, l))) => owner(b).map(|o| omsi_net::Aboard { owner: o, local: l.to_array(), seat: None }),
+            (None, Some((b, l))) => owner(b).map(|o| omsi_net::Aboard {
+                owner: o,
+                local: l.to_array(),
+                seat: None,
+            }),
             _ => None,
         };
         // (the way it goes, which is not where the body faces when it steps sideways)
-        let course = if f.vel.length() > 0.05 { f.vel.x.atan2(f.vel.y).to_degrees() as f32 } else { f.heading as f32 };
-        Some(omsi_net::Walker { x: f.pos.x, y: f.pos.y, z: f.pos.z + f.lift, heading: f.heading as f32, speed: f.vel.length() as f32, course, seated: f.seat.is_some(), aboard })
+        let course = if f.vel.length() > 0.05 {
+            f.vel.x.atan2(f.vel.y).to_degrees() as f32
+        } else {
+            f.heading as f32
+        };
+        Some(omsi_net::Walker {
+            x: f.pos.x,
+            y: f.pos.y,
+            z: f.pos.z + f.lift,
+            heading: f.heading as f32,
+            speed: f.vel.length() as f32,
+            course,
+            seated: f.seat.is_some(),
+            aboard,
+        })
     }
 
     /// Other players on foot: their avatars.
     #[cfg(feature = "lan")]
     pub(crate) fn sync_remote_walkers(&mut self) {
-        let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self.online.remotes.remotes.iter().map(|(id, r)| (*id, r.last.walker, r.last.figure.clone())).collect();
+        let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self
+            .online
+            .remotes
+            .remotes
+            .iter()
+            .map(|(id, r)| (*id, r.last.walker, r.last.figure.clone()))
+            .collect();
         if walkers.iter().all(|w| w.1.is_none()) && self.online.remote_walkers.is_empty() {
             return;
         }
@@ -1183,13 +1559,25 @@ impl App {
             h.avatar_only = true;
             self.humans = Some(h);
         }
-        let (Some(h), Some(w), Some(r), Some(scene)) = (self.humans.as_mut(), self.world.as_ref(), self.renderer.as_ref(), self.scene.as_mut()) else { return };
+        let (Some(h), Some(w), Some(r), Some(scene)) = (
+            self.humans.as_mut(),
+            self.world.as_ref(),
+            self.renderer.as_ref(),
+            self.scene.as_mut(),
+        ) else {
+            return;
+        };
         let my_id = self.online.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
         let mut now = Vec::new();
         for (id, wk, figure) in walkers {
             let Some(wk) = wk else { continue };
             // (the way it goes: an older game sends none, then its facing)
-            let hh = (if wk.course.is_finite() { wk.course } else { wk.heading } as f64).to_radians();
+            let hh = (if wk.course.is_finite() {
+                wk.course
+            } else {
+                wk.heading
+            } as f64)
+                .to_radians();
             // the player's own figure, as their game draws them (a random passenger's
             // otherwise), else one fixed by their id
             let kind = omsi_content::remote_path::human_path(&figure)
@@ -1201,20 +1589,55 @@ impl App {
             // aboard a player's bus (ours, or a third player's): in that bus's frame as it
             // is drawn here, on its seat or its floor
             let aboard = wk.aboard.and_then(|a| {
-                let bus = if a.owner == my_id { BusId::Player } else { BusId::Ai(crate::humans::remote_bus_id(a.owner)) };
+                let bus = if a.owner == my_id {
+                    BusId::Player
+                } else {
+                    BusId::Ai(crate::humans::remote_bus_id(a.owner))
+                };
                 let (at, bh) = h.cabin_world(bus, glam::Vec3::from(a.local))?;
                 Some((bus, a.seat, at, bh))
             });
             let cmd = match aboard {
-                Some((bus, Some(k), at, _)) => AvatarCmd { pos: at, heading: wk.heading as f64, vel: DVec2::ZERO, lift: 0.0, seat: Some((bus, k as usize)), floor: Some(at.z), aboard: None },
-                Some((bus, None, at, _)) => AvatarCmd { pos: at, heading: wk.heading as f64, vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64, lift: 0.0, seat: None, floor: Some(at.z), aboard: wk.aboard.map(|a| (bus, glam::Vec3::from(a.local))) },
+                Some((bus, Some(k), at, _)) => AvatarCmd {
+                    pos: at,
+                    heading: wk.heading as f64,
+                    vel: DVec2::ZERO,
+                    lift: 0.0,
+                    seat: Some((bus, k as usize)),
+                    floor: Some(at.z),
+                    aboard: None,
+                },
+                Some((bus, None, at, _)) => AvatarCmd {
+                    pos: at,
+                    heading: wk.heading as f64,
+                    vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64,
+                    lift: 0.0,
+                    seat: None,
+                    floor: Some(at.z),
+                    aboard: wk.aboard.map(|a| (bus, glam::Vec3::from(a.local))),
+                },
                 // (sitting in a bus that is not a player's: not drawn - its seat is not known)
                 None if wk.seated => continue,
-                None => AvatarCmd { pos: DVec3::new(wk.x, wk.y, wk.z), heading: wk.heading as f64, vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64, lift: 0.0, seat: None, floor: w.walk_height(wk.x, wk.y).filter(|g| wk.z > g + 0.25).map(|_| wk.z), aboard: None },
+                None => AvatarCmd {
+                    pos: DVec3::new(wk.x, wk.y, wk.z),
+                    heading: wk.heading as f64,
+                    vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64,
+                    lift: 0.0,
+                    seat: None,
+                    floor: w
+                        .walk_height(wk.x, wk.y)
+                        .filter(|g| wk.z > g + 0.25)
+                        .map(|_| wk.z),
+                    aboard: None,
+                },
             };
             h.avatar(REMOTE_KEY + id, w, r, scene, cmd, kind);
             if !self.online.remote_walkers.contains(&id) {
-                log::info!("LAN: player {id} got up and walks at ({:.1}, {:.1})", wk.x, wk.y);
+                log::info!(
+                    "LAN: player {id} got up and walks at ({:.1}, {:.1})",
+                    wk.x,
+                    wk.y
+                );
             }
             now.push(id);
         }

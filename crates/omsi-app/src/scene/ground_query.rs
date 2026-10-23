@@ -64,7 +64,11 @@ pub(super) fn probe_tile(
             if n > zs.len() {
                 s.drive.probe(lx, ly, lim)
             } else {
-                zs[..n].iter().fold(omsi_geometry::Probe::default(), |p, &z| p.merge(omsi_geometry::Probe::of(z, lim)))
+                zs[..n]
+                    .iter()
+                    .fold(omsi_geometry::Probe::default(), |p, &z| {
+                        p.merge(omsi_geometry::Probe::of(z, lim))
+                    })
             }
         };
         probe = below(top as f32);
@@ -116,7 +120,11 @@ pub(super) fn probe_tile(
     // it is probed from; nearer the ground than that the wheel rolls on the road beside it
     // (where the wall's top met the road the wheels went up onto it and rode along it)
     if let Some(s) = surface {
-        let walls = if n > zs.len() { s.drive.probe_walls(lx, ly, f32::MAX).below } else { walls };
+        let walls = if n > zs.len() {
+            s.drive.probe_walls(lx, ly, f32::MAX).below
+        } else {
+            walls
+        };
         if let (Some(zw), Some(g)) = (walls, probe.below) {
             if zw > g + WALL_TOP_STEP {
                 probe.above = Some(probe.above.map_or(zw, |a| a.min(zw)));
@@ -153,7 +161,9 @@ pub fn drawn_ground(
     }
     if let Some(t) = terrain.as_deref() {
         let h = omsi_geometry::terrain_height(t, lx, ly);
-        let cut = surface.as_deref().is_some_and(|s| s.cut_at(lx, ly, h, surface_flush()));
+        let cut = surface
+            .as_deref()
+            .is_some_and(|s| s.cut_at(lx, ly, h, surface_flush()));
         if !cut && h <= top as f32 {
             best = Some(best.map_or(h, |b| b.max(h)));
         }
@@ -226,7 +236,9 @@ impl World {
     /// and a bus put down beside a wall (an entry point on a pavement, London) stood on the
     /// wall's top and floated there.
     pub fn stand_height(&self, x: f64, y: f64, near: f64) -> Option<f64> {
-        drive_probe(&self.terrains, &self.surfaces, x, y, near + 1.5).below.filter(|g| near - g < 3.0)
+        drive_probe(&self.terrains, &self.surfaces, x, y, near + 1.5)
+            .below
+            .filter(|g| near - g < 3.0)
     }
 
     /// Where entry point `ep` stands (position, heading): its object, found on the tile
@@ -234,19 +246,36 @@ impl World {
     /// tile in the `[map]` list, and the place within that tile). An object of that id on
     /// another tile (a map joined from two, whose ids repeat) is not it: the record's own
     /// place is taken then.
-    pub fn entry_point_place(&self, ep: &omsi_map::global::EntryPoint) -> Option<(DVec3, [f64; 3])> {
+    pub fn entry_point_place(
+        &self,
+        ep: &omsi_map::global::EntryPoint,
+    ) -> Option<(DVec3, [f64; 3])> {
         let s = tile_size();
-        let tile = usize::try_from(ep.group).ok().and_then(|i| self.global.raw_tiles.get(i)).copied();
+        let tile = usize::try_from(ep.group)
+            .ok()
+            .and_then(|i| self.global.raw_tiles.get(i))
+            .copied();
         if let Some(t) = tile {
             if let Some(p) = self.object_dups.lock().get(&(t, ep.object_id)) {
                 return Some(*p);
             }
         }
         let found = self.object_positions.lock().get(&ep.object_id).copied();
-        let recorded = tile.filter(|_| ep.pos.iter().chain(ep.quat.iter()).all(|v| v.is_finite())).map(|(tx, ty)| {
-            let heading = (2.0 * ep.quat[1].atan2(ep.quat[3])).to_degrees().rem_euclid(360.0);
-            (DVec3::new(tx as f64 * s + ep.pos[0], ty as f64 * s + ep.pos[1], ep.pos[2]), [heading, 0.0, 0.0])
-        });
+        let recorded = tile
+            .filter(|_| ep.pos.iter().chain(ep.quat.iter()).all(|v| v.is_finite()))
+            .map(|(tx, ty)| {
+                let heading = (2.0 * ep.quat[1].atan2(ep.quat[3]))
+                    .to_degrees()
+                    .rem_euclid(360.0);
+                (
+                    DVec3::new(
+                        tx as f64 * s + ep.pos[0],
+                        ty as f64 * s + ep.pos[1],
+                        ep.pos[2],
+                    ),
+                    [heading, 0.0, 0.0],
+                )
+            });
         match (found, recorded) {
             // (an object may stand a little outside its tile's square: far off only is another)
             (Some(f), Some(r)) if (f.0.truncate() - r.0.truncate()).length() > 50.0 => {
@@ -312,10 +341,14 @@ impl World {
         let key = tile_key(position.x, position.y);
         let x = (position.x - key.0 as f64 * tile_size()) as f32;
         let y = (position.y - key.1 as f64 * tile_size()) as f32;
-        let normal = self.surfaces.read().get(&key)
+        let normal = self
+            .surfaces
+            .read()
+            .get(&key)
             .and_then(|s| s.drive.surface_below(x, y, height as f32 + 0.002))
             .filter(|(z, _)| (*z as f64 - height).abs() < 0.005)
-            .map(|(_, n)| n).unwrap_or(glam::Vec3::Z);
+            .map(|(_, n)| n)
+            .unwrap_or(glam::Vec3::Z);
         Some((height, normal))
     }
 
@@ -375,7 +408,9 @@ impl World {
         let probe = drive_probe(&self.terrains, &self.surfaces, x, y, near + reach);
         match probe.below {
             Some(b) if near - b < 3.0 => Some(b),
-            _ => self.walk_height(x, y).filter(|z| *z < near + reach.max(0.5)),
+            _ => self
+                .walk_height(x, y)
+                .filter(|z| *z < near + reach.max(0.5)),
         }
     }
 }

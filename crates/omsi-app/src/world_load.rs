@@ -1,11 +1,11 @@
 //! Opening a map: the season, the world, the spawn point.
 
-use anyhow::Result;
 use crate::camera_util::default_camera;
-use crate::cli::{Args, parse_cam};
+use crate::cli::{parse_cam, Args};
 use crate::scene::World;
 use crate::situation::start_clock;
 use crate::weather_setup::weather_snow;
+use anyhow::Result;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};
 use std::time::Instant;
@@ -16,12 +16,24 @@ use std::time::Instant;
 /// roads of `WinterSnowfall` too (see `omsi_texture::season_chain`).
 pub(crate) fn season_folder(args: &Args, global: &omsi_map::GlobalCfg) -> (i32, Option<String>) {
     let (snow, snow_on_road) = weather_snow(args);
-    season_folder_on(args, global, start_clock(args).day_of_year, snow, snow_on_road)
+    season_folder_on(
+        args,
+        global,
+        start_clock(args).day_of_year,
+        snow,
+        snow_on_road,
+    )
 }
 
 /// [`season_folder`] on day `day_of_year` in weather that is snowy or not (the date moves on
 /// at midnight, the weather changes).
-pub(crate) fn season_folder_on(args: &Args, global: &omsi_map::GlobalCfg, day_of_year: i32, snow: bool, snow_on_road: bool) -> (i32, Option<String>) {
+pub(crate) fn season_folder_on(
+    args: &Args,
+    global: &omsi_map::GlobalCfg,
+    day_of_year: i32,
+    snow: bool,
+    snow_on_road: bool,
+) -> (i32, Option<String>) {
     let mut kind = global.season_kind(day_of_year);
     if let Some(sn) = args.season.as_deref() {
         kind = match sn.to_ascii_lowercase().as_str() {
@@ -34,7 +46,14 @@ pub(crate) fn season_folder_on(args: &Args, global: &omsi_map::GlobalCfg, day_of
     }
     let mut folder = omsi_map::global::Season::folder(kind).map(|f| f.to_string());
     if snow {
-        folder = Some(if snow_on_road { "WinterSnowfall" } else { "WinterSnow" }.to_string());
+        folder = Some(
+            if snow_on_road {
+                "WinterSnowfall"
+            } else {
+                "WinterSnow"
+            }
+            .to_string(),
+        );
     }
     (kind, folder)
 }
@@ -115,7 +134,11 @@ pub(crate) fn spawn_point(args: &Args, world: Option<&World>) -> Option<DVec3> {
     world.entry_point_place(ep).map(|p| p.0)
 }
 
-pub(crate) fn load_world(args: &Args, renderer: &Renderer, scene: &mut Scene) -> Result<(World, Camera)> {
+pub(crate) fn load_world(
+    args: &Args,
+    renderer: &Renderer,
+    scene: &mut Scene,
+) -> Result<(World, Camera)> {
     let t0 = Instant::now();
     let (world, camera, center) = open_world(args)?;
     let tile_of = |p: DVec3| {
@@ -239,7 +262,10 @@ mod tests {
         assert_eq!(spawn_point(&args, Some(&world)), None);
         args.on_foot = true;
         let p = spawn_point(&args, Some(&world)).expect("the entry point's place");
-        assert!((p.x - 148.25).abs() < 1e-6 && (p.y - 70.0).abs() < 1e-6, "{p:?}");
+        assert!(
+            (p.x - 148.25).abs() < 1e-6 && (p.y - 70.0).abs() < 1e-6,
+            "{p:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
