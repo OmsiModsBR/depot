@@ -38,7 +38,11 @@ pub const SHARED: &str = "/storage/emulated/0/depot";
 fn android_main(app: AndroidApp) {
     // an error is also written where a person finds it without a computer:
     // depot/crash.log (or Android/data/org.openomsi.game/files/crash.log)
-    let crash_files: Vec<PathBuf> = [Some(PathBuf::from(SHARED)), app.external_data_path()].into_iter().flatten().map(|d| d.join("crash.log")).collect();
+    let crash_files: Vec<PathBuf> = [Some(PathBuf::from(SHARED)), app.external_data_path()]
+        .into_iter()
+        .flatten()
+        .map(|d| d.join("crash.log"))
+        .collect();
     std::panic::set_hook(Box::new(move |info| {
         // (one the renderer catches - a graphics interface it cannot open, the next one is
         // tried - is no end of the game, as on a computer: logged and written as one, it
@@ -47,14 +51,23 @@ fn android_main(app: AndroidApp) {
             log::warn!("caught by the renderer: {info}");
             return;
         }
-        let text = format!("the game stopped on an error (build {BUILD}): {info}\n{}", std::backtrace::Backtrace::force_capture());
+        let text = format!(
+            "the game stopped on an error (build {BUILD}): {info}\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
         log::error!("{text}");
         for f in &crash_files {
             let _ = std::fs::write(f, &text);
         }
     }));
     log::info!("Project Depot {VERSION} for Android, build {BUILD}");
-    log::info!("device: {} {} (Android {}, API {})", prop("ro.product.manufacturer"), prop("ro.product.model"), prop("ro.build.version.release"), prop("ro.build.version.sdk"));
+    log::info!(
+        "device: {} {} (Android {}, API {})",
+        prop("ro.product.manufacturer"),
+        prop("ro.product.model"),
+        prop("ro.build.version.release"),
+        prop("ro.build.version.sdk")
+    );
     // the Java activity (OmsiActivity) for the calls into it: ndk_context's context is the
     // Application, which has none of the activity's methods
     ACTIVITY.store(app.activity_as_ptr(), Ordering::Relaxed);
@@ -67,7 +80,10 @@ fn android_main(app: AndroidApp) {
         // the shaders are built again; every other chip keeps its cache.
         if let Some(parent) = home.parent() {
             let prev = std::fs::read_to_string(home.join("game-prev.log")).unwrap_or_default();
-            if prev.contains("Adreno (TM) 7") || prev.contains("Adreno (TM) 8") || prev.contains("Adreno (TM) 6") {
+            if prev.contains("Adreno (TM) 7")
+                || prev.contains("Adreno (TM) 8")
+                || prev.contains("Adreno (TM) 6")
+            {
                 let _ = std::fs::remove_dir_all(parent.join("code_cache"));
             }
         }
@@ -80,7 +96,8 @@ fn android_main(app: AndroidApp) {
         shared
     } else {
         log::warn!("{SHARED} cannot be written (no access to the storage yet): the content folder is the app's own");
-        app.external_data_path().unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()))
+        app.external_data_path()
+            .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()))
     };
     std::env::set_var(omsi_cfg::flags::CONTENT.name, &content);
     let _ = std::fs::write(content.join("README.txt"), README);
@@ -99,9 +116,17 @@ fn android_main(app: AndroidApp) {
             log::warn!("env.txt: not allowed, ignored: {}", skipped.join(", "));
         }
     }
-    log::info!("home {:?}, content {}", std::env::var_os("HOME"), content.display());
+    log::info!(
+        "home {:?}, content {}",
+        std::env::var_os("HOME"),
+        content.display()
+    );
     omsi_cfg::migrate_legacy_data_dir();
-    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1) % 1_000_000_000;
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1)
+        % 1_000_000_000;
     omsi_script::set_session_seed(seed);
 
     let event_loop = match EventLoop::builder().with_android_app(app).build() {
@@ -111,7 +136,11 @@ fn android_main(app: AndroidApp) {
             return;
         }
     };
-    let mut shell = Shell { launcher: None, game: None, instance: None };
+    let mut shell = Shell {
+        launcher: None,
+        game: None,
+        instance: None,
+    };
     if let Err(e) = event_loop.run_app(&mut shell) {
         log::error!("{e}");
     }
@@ -132,7 +161,11 @@ fn init_log() {
     let _ = std::fs::rename(&now, &prev);
     let file = std::fs::File::create(&now).ok();
     let logger = TeeLogger {
-        system: android_logger::AndroidLogger::new(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("Project Depot")),
+        system: android_logger::AndroidLogger::new(
+            android_logger::Config::default()
+                .with_max_level(log::LevelFilter::Info)
+                .with_tag("Project Depot"),
+        ),
         file: std::sync::Mutex::new(file),
     };
     if log::set_boxed_logger(Box::new(logger)).is_ok() {
@@ -156,10 +189,19 @@ impl log::Log for TeeLogger {
         }
         self.system.log(r);
         use std::io::Write;
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
         if let Some(f) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
-            let _ = writeln!(f, "[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
+            let _ = writeln!(
+                f,
+                "[{secs:.3} {:<5} {}] {}",
+                r.level(),
+                r.target(),
+                r.args()
+            );
         }
     }
 
@@ -174,14 +216,21 @@ impl log::Log for TeeLogger {
 /// A system property (`ro.product.model` ...), for the log's first lines.
 fn prop(name: &str) -> String {
     extern "C" {
-        fn __system_property_get(name: *const std::ffi::c_char, value: *mut std::ffi::c_char) -> i32;
+        fn __system_property_get(
+            name: *const std::ffi::c_char,
+            value: *mut std::ffi::c_char,
+        ) -> i32;
     }
-    let (Ok(n), mut buf) = (std::ffi::CString::new(name), [0 as std::ffi::c_char; 92]) else { return String::new() };
+    let (Ok(n), mut buf) = (std::ffi::CString::new(name), [0 as std::ffi::c_char; 92]) else {
+        return String::new();
+    };
     let len = unsafe { __system_property_get(n.as_ptr(), buf.as_mut_ptr()) };
     if len <= 0 {
         return String::new();
     }
-    unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
+    unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// When the app's previous run closed while a drive was going (a game started from the
@@ -191,23 +240,38 @@ pub(crate) fn previous_run_crash() -> Option<(String, String)> {
     let p = omsi_launcher_lib::data_dir().join("game-prev.log");
     let text = std::fs::read_to_string(&p).ok()?;
     let lines: Vec<&str> = text.lines().collect();
-    let start = lines.iter().rposition(|l| l.contains("starting the game:"))?;
-    if lines[start..].iter().any(|l| l.contains("game ends") || l.contains("session ended")) {
+    let start = lines
+        .iter()
+        .rposition(|l| l.contains("starting the game:"))?;
+    if lines[start..]
+        .iter()
+        .any(|l| l.contains("game ends") || l.contains("session ended"))
+    {
         return None;
     }
     // sent to the background and not brought back: the system ended the app there (or the
     // player swiped it away) - no crash, whatever the game was doing
-    let back = lines[start..].iter().rposition(|l| l.contains("app in the background"));
-    let front = lines[start..].iter().rposition(|l| l.contains("app in front"));
+    let back = lines[start..]
+        .iter()
+        .rposition(|l| l.contains("app in the background"));
+    let front = lines[start..]
+        .iter()
+        .rposition(|l| l.contains("app in front"));
     if back.is_some() && back > front {
         return None;
     }
     if let Some(c) = launcher::crash_of(&p) {
         return Some(c);
     }
-    let last = lines.last().map(|l| l.split_once("] ").map(|x| x.1).unwrap_or(l)).unwrap_or("");
+    let last = lines
+        .last()
+        .map(|l| l.split_once("] ").map(|x| x.1).unwrap_or(l))
+        .unwrap_or("");
     let tail = lines[lines.len().saturating_sub(150)..].join("\n");
-    Some((format!("the game closed without a word while it was running (the last it said: {last})"), tail))
+    Some((
+        format!("the game closed without a word while it was running (the last it said: {last})"),
+        tail,
+    ))
 }
 
 /// Android's media scanner hands every picture it finds to the gallery apps: the thousands
@@ -224,7 +288,10 @@ fn hide_from_gallery(content: &Path) {
         .flatten()
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .map(|e| e.path())
-        .filter(|p| !p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Screenshots")))
+        .filter(|p| {
+            !p.file_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case("Screenshots"))
+        })
         .collect();
     if let Some(root) = crate::startup::root_memo().and_then(|f| std::fs::read_to_string(f).ok()) {
         let root = PathBuf::from(root.trim());
@@ -316,21 +383,36 @@ impl Shell {
             l.resumed(event_loop);
             return;
         }
-        let Some(line) = omsi_launcher_lib::take_in_process_launch() else { return };
+        let Some(line) = omsi_launcher_lib::take_in_process_launch() else {
+            return;
+        };
         // the first drive after a run that closed in the middle of one (a graphics driver
         // that took the process down) starts with safer graphics, and on OpenGL when that
         // run drew with Vulkan: a phone whose Vulkan driver fails on the game still plays
         if !SAFER_TRIED.swap(true, Ordering::Relaxed) && previous_run_crash().is_some() {
-            let prev = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("game-prev.log")).unwrap_or_default();
-            let vulkan = prev.lines().any(|l| l.contains("renderer: ") && l.contains("(Vulkan)")) || prev.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
+            let prev = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("game-prev.log"))
+                .unwrap_or_default();
+            let vulkan = prev
+                .lines()
+                .any(|l| l.contains("renderer: ") && l.contains("(Vulkan)"))
+                || prev
+                    .lines()
+                    .any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
             std::env::set_var(omsi_cfg::flags::SAFE_GPU.name, "1");
             // It went down while the graphics driver compiled the shaders (the last it said
             // was a stage of that): the phone's Vulkan driver cannot take them, and will not
             // next time either (the Maleoon and several Mali drivers after the cloud noise,
             // #229, #278). OpenGL from now on, in the settings - Settings → Graphics API
             // takes it back.
-            let last = prev.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
-            let compiling = last.contains("renderer: compiling") || last.contains("cloud noise made") || last.contains("opening graphics device") || last.contains("compiling renderer pipelines");
+            let last = prev
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("");
+            let compiling = last.contains("renderer: compiling")
+                || last.contains("cloud noise made")
+                || last.contains("opening graphics device")
+                || last.contains("compiling renderer pipelines");
             if vulkan && compiling {
                 if let Ok(mut v) = omsi_launcher_lib::get_settings() {
                     v["graphics_api"] = serde_json::json!("gl");
@@ -400,7 +482,12 @@ impl ApplicationHandler for Shell {
         self.switch(event_loop);
     }
 
-    fn device_event(&mut self, event_loop: &ActiveEventLoop, id: winit::event::DeviceId, event: DeviceEvent) {
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
         if let Some(g) = self.game.as_mut() {
             g.device_event(event_loop, id, event);
         }
@@ -438,14 +525,17 @@ static TILT_SEEN: AtomicBool = AtomicBool::new(false);
 static TILT_THREAD: std::sync::Once = std::sync::Once::new();
 
 pub(crate) fn tilt() -> Option<f32> {
-    (TILT_ON.load(Ordering::Relaxed) && TILT_SEEN.load(Ordering::Relaxed)).then(|| f32::from_bits(TILT.load(Ordering::Relaxed)))
+    (TILT_ON.load(Ordering::Relaxed) && TILT_SEEN.load(Ordering::Relaxed))
+        .then(|| f32::from_bits(TILT.load(Ordering::Relaxed)))
 }
 
 pub(crate) fn set_tilt(on: bool) {
     TILT_ON.store(on, Ordering::Relaxed);
     if on {
         TILT_THREAD.call_once(|| {
-            let _ = std::thread::Builder::new().name("tilt".into()).spawn(tilt_thread);
+            let _ = std::thread::Builder::new()
+                .name("tilt".into())
+                .spawn(tilt_thread);
         });
     }
 }
@@ -464,15 +554,45 @@ struct SensorEvent {
 
 #[link(name = "android")]
 extern "C" {
-    fn ASensorManager_getInstanceForPackage(package: *const std::ffi::c_char) -> *mut std::ffi::c_void;
-    fn ASensorManager_getDefaultSensor(manager: *mut std::ffi::c_void, kind: i32) -> *const std::ffi::c_void;
-    fn ASensorManager_createEventQueue(manager: *mut std::ffi::c_void, looper: *mut std::ffi::c_void, ident: i32, callback: *const std::ffi::c_void, data: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn ASensorEventQueue_enableSensor(queue: *mut std::ffi::c_void, sensor: *const std::ffi::c_void) -> i32;
-    fn ASensorEventQueue_disableSensor(queue: *mut std::ffi::c_void, sensor: *const std::ffi::c_void) -> i32;
-    fn ASensorEventQueue_setEventRate(queue: *mut std::ffi::c_void, sensor: *const std::ffi::c_void, usec: i32) -> i32;
-    fn ASensorEventQueue_getEvents(queue: *mut std::ffi::c_void, events: *mut SensorEvent, count: usize) -> isize;
+    fn ASensorManager_getInstanceForPackage(
+        package: *const std::ffi::c_char,
+    ) -> *mut std::ffi::c_void;
+    fn ASensorManager_getDefaultSensor(
+        manager: *mut std::ffi::c_void,
+        kind: i32,
+    ) -> *const std::ffi::c_void;
+    fn ASensorManager_createEventQueue(
+        manager: *mut std::ffi::c_void,
+        looper: *mut std::ffi::c_void,
+        ident: i32,
+        callback: *const std::ffi::c_void,
+        data: *mut std::ffi::c_void,
+    ) -> *mut std::ffi::c_void;
+    fn ASensorEventQueue_enableSensor(
+        queue: *mut std::ffi::c_void,
+        sensor: *const std::ffi::c_void,
+    ) -> i32;
+    fn ASensorEventQueue_disableSensor(
+        queue: *mut std::ffi::c_void,
+        sensor: *const std::ffi::c_void,
+    ) -> i32;
+    fn ASensorEventQueue_setEventRate(
+        queue: *mut std::ffi::c_void,
+        sensor: *const std::ffi::c_void,
+        usec: i32,
+    ) -> i32;
+    fn ASensorEventQueue_getEvents(
+        queue: *mut std::ffi::c_void,
+        events: *mut SensorEvent,
+        count: usize,
+    ) -> isize;
     fn ALooper_prepare(opts: i32) -> *mut std::ffi::c_void;
-    fn ALooper_pollOnce(timeout_ms: i32, fd: *mut i32, events: *mut i32, data: *mut *mut std::ffi::c_void) -> i32;
+    fn ALooper_pollOnce(
+        timeout_ms: i32,
+        fd: *mut i32,
+        events: *mut i32,
+        data: *mut *mut std::ffi::c_void,
+    ) -> i32;
 }
 
 /// Reads the accelerometer while tilt steering is on (a looper of its own, so the
@@ -493,7 +613,13 @@ fn tilt_thread() {
             log::warn!("tilt steering: this device has no accelerometer");
             return;
         }
-        let queue = ASensorManager_createEventQueue(manager, looper, 3, std::ptr::null(), std::ptr::null_mut());
+        let queue = ASensorManager_createEventQueue(
+            manager,
+            looper,
+            3,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+        );
         if queue.is_null() {
             log::warn!("tilt steering: no sensor queue");
             return;
@@ -517,7 +643,12 @@ fn tilt_thread() {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 continue;
             }
-            ALooper_pollOnce(100, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut());
+            ALooper_pollOnce(
+                100,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
             loop {
                 let n = ASensorEventQueue_getEvents(queue, events.as_mut_ptr(), events.len());
                 if n <= 0 {
@@ -529,7 +660,11 @@ fn tilt_thread() {
                     let (ax, ay) = (e.data[0], e.data[1]);
                     let angle = (ay * ax.signum()).atan2(ax.abs()).to_degrees();
                     let dead = 2.5;
-                    let a = if angle.abs() < dead { 0.0 } else { angle - dead * angle.signum() };
+                    let a = if angle.abs() < dead {
+                        0.0
+                    } else {
+                        angle - dead * angle.signum()
+                    };
                     let turn = (a / 45.0).clamp(-1.0, 1.0);
                     smooth += (turn - smooth) * 0.35;
                     TILT.store(smooth.to_bits(), Ordering::Relaxed);
@@ -544,7 +679,8 @@ fn tilt_thread() {
 
 /// Call a `void name(int)` method of the activity (OmsiActivity.java).
 /// The NativeActivity (`OmsiActivity`) instance, set in `android_main`.
-static ACTIVITY: std::sync::atomic::AtomicPtr<std::ffi::c_void> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+static ACTIVITY: std::sync::atomic::AtomicPtr<std::ffi::c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// The activity as a JNI object (the context ndk_context gives when it was not set).
 fn activity_ptr() -> *mut std::ffi::c_void {
@@ -584,7 +720,9 @@ pub(crate) fn vibrate(ms: u32) {
 
 /// Run `f` with the Java environment and the activity (None when Java is out of reach or
 /// the call threw).
-fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JObject) -> jni::errors::Result<R>) -> Option<R> {
+fn with_activity<R>(
+    f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JObject) -> jni::errors::Result<R>,
+) -> Option<R> {
     let ctx = ndk_context::android_context();
     // SAFETY: as in `call_activity_int`
     let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
