@@ -31,10 +31,10 @@ impl Renderer {
         let with_overlays = f.with_overlays;
         let exclude_texture = f.exclude_texture;
         let ro = f.ro;
-        let glass_on = f.glass_on;
-        let prepass_on = f.prepass_on;
+        let glass_on = f.features.glass_on;
+        let prepass_on = f.features.prepass_on;
         let cam_rel = f.cam_rel;
-        let rt_frame = f.rt_frame;
+        let rt_frame = f.features.rt_frame;
         let moon_shadows = f.moon_shadows;
         let shadows = f.shadows;
         let draw_shadows = f.draw_shadows;
@@ -800,8 +800,8 @@ impl Renderer {
         let projection = f.projection;
         let aspect = f.aspect;
         let cam_rel = f.cam_rel;
-        let xr_view = f.xr_view;
-        let enhanced_frame = f.enhanced_frame;
+        let xr_view = f.features.xr_view;
+        let enhanced_frame = f.features.enhanced_frame;
         // Frustum culling by bounding sphere in view space. OpenXR projections
         // are asymmetric; the desktop field of view must not clip an eye's
         // wider side as the head turns.

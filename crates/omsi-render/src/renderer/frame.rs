@@ -11,6 +11,33 @@ use crate::scene::{point_in_vehicle_box, Camera, CameraUniform, Scene, TextureId
 use crate::sky::CLOUD_ORIGIN_PERIOD;
 use glam::{DVec3, Mat4, Vec3};
 
+/// What a picture draws, decided at its start (`begin_frame`): the passes and paths the
+/// draw lists and the encoders branch on.
+#[derive(Clone, Copy)]
+pub(crate) struct FrameFeatures {
+    /// The FXAA on the plain graphics, the picture drawn into a texture of the window's size.
+    pub(crate) vanilla_fxaa: bool,
+    /// The rain's glass picture (what is behind the glass is drawn first).
+    pub(crate) glass_on: bool,
+    /// The picture goes through a scaled target (`scene_view`).
+    pub(crate) scaled: bool,
+    /// A headset's eye, the window's lead view (the one that moves the clocks), Enhanced.
+    pub(crate) xr_view: bool,
+    pub(crate) lead_view: bool,
+    pub(crate) enhanced_frame: bool,
+    pub(crate) enhanced: bool,
+    /// The puddles and their reflections (`reflection_frame` when drawn by their own pass).
+    pub(crate) puddles_wanted: bool,
+    pub(crate) reflection_frame: bool,
+    /// The scene drawn into the masked targets (Enhanced or the reflections).
+    pub(crate) masked_frame: bool,
+    /// The traced sun shadow and ray-traced reflections; the ambient occlusion pass.
+    pub(crate) rt_frame: bool,
+    pub(crate) ao_on: bool,
+    /// The depth prepass before the shading.
+    pub(crate) prepass_on: bool,
+}
+
 /// One picture on its way through the stages of `Renderer::render_inner`: where it goes and
 /// what its start decided (its size and targets, what it draws, the shadows' schedule, the
 /// camera uniform).
@@ -38,23 +65,10 @@ pub(crate) struct FrameContext<'a> {
     pub(crate) full_h: u32,
     pub(crate) width: u32,
     pub(crate) height: u32,
-    pub(crate) vanilla_fxaa: bool,
-    pub(crate) glass_on: bool,
-    pub(crate) scaled: bool,
+    pub(crate) features: FrameFeatures,
     pub(crate) aspect: f32,
     /// The camera relative to the render origin.
     pub(crate) cam_rel: Vec3,
-    /// What the picture draws (see `begin_frame`).
-    pub(crate) xr_view: bool,
-    pub(crate) lead_view: bool,
-    pub(crate) enhanced_frame: bool,
-    pub(crate) enhanced: bool,
-    pub(crate) puddles_wanted: bool,
-    pub(crate) reflection_frame: bool,
-    pub(crate) masked_frame: bool,
-    pub(crate) rt_frame: bool,
-    pub(crate) ao_on: bool,
-    pub(crate) prepass_on: bool,
     /// Seconds since the leading view's last frame.
     pub(crate) dt: f32,
     /// The shadows' schedule (`ShadowResources::schedule`).
@@ -671,21 +685,23 @@ impl Renderer {
                 full_h,
                 width,
                 height,
-                vanilla_fxaa,
-                glass_on,
-                scaled,
+                features: FrameFeatures {
+                    vanilla_fxaa,
+                    glass_on,
+                    scaled,
+                    xr_view,
+                    lead_view,
+                    enhanced_frame,
+                    enhanced,
+                    puddles_wanted,
+                    reflection_frame,
+                    masked_frame,
+                    rt_frame,
+                    ao_on,
+                    prepass_on,
+                },
                 aspect,
                 cam_rel,
-                xr_view,
-                lead_view,
-                enhanced_frame,
-                enhanced,
-                puddles_wanted,
-                reflection_frame,
-                masked_frame,
-                rt_frame,
-                ao_on,
-                prepass_on,
                 dt,
                 moon_shadows,
                 shadows,
