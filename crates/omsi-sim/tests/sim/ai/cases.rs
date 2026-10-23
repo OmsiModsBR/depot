@@ -379,3 +379,42 @@ fn aircraft_keep_their_height() {
         body.pitch_deg
     );
 }
+
+/// The line the car turns about is the file's `[rot_pnt_long]`, wherever it is: no swap to
+/// the rear axle for one at (or close to) the front axle, and 0 for a file without one.
+#[test]
+fn the_rotation_point_is_the_files() {
+    let def = golf();
+    assert_eq!(rotation_point(&def), (-1.304, 1.21 + 1.304));
+    let near_front = Vehicle {
+        rot_pnt_long: 0.9,
+        ..golf()
+    };
+    assert_eq!(rotation_point(&near_front).0, 0.9);
+    let without = Vehicle {
+        rot_pnt_long: 0.0,
+        ..golf()
+    };
+    assert_eq!(rotation_point(&without), (0.0, 1.21));
+}
+
+/// At speed the AI car turns no tighter than 20/v² (1/m), whatever the way and the lock
+/// ask for: at 20 m/s on a 12 m bend (33 m/s² sideways if it kept to it) it runs wide at
+/// 20 m/s² at most.
+#[test]
+fn the_curvature_is_held_to_twenty_over_v_squared() {
+    let def = golf();
+    let mut body = AiBody::new(&def, MotionKind::Road);
+    let speed = 20.0f32;
+    let dt = 1.0 / 60.0;
+    let mut s = 0.0f64;
+    body.place(&|d| bend(12.0, s + d as f64), None, None, speed);
+    let mut most = 0.0f32;
+    for _ in 0..(4.0 / dt) as usize {
+        s += (speed * dt) as f64;
+        let at = s;
+        body.step(dt, speed, &|d| bend(12.0, at + d as f64), None, None);
+        most = most.max(body.a_lat.abs());
+    }
+    assert!(most > 15.0 && most <= 20.0 * 1.001, "{most} m/s²");
+}

@@ -147,6 +147,12 @@ pub fn for_map(map: &str) -> Vec<PathBuf> {
     of_map(&shots, &crate::sessions(), map)
 }
 
+/// The player's latest screenshot in the content folder's `Screenshots`, of any map.
+pub fn latest() -> Option<PathBuf> {
+    let content = crate::content_dir()?;
+    list(&content.join("Screenshots")).pop().map(|s| s.path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

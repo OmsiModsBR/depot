@@ -55,6 +55,128 @@ pub struct Trip {
     pub profiles: Vec<TripProfile>,
 }
 
+/// When a trip's bus is at each of its stations, as OMSI's timetable has it: the profile
+/// gives the trip's duration and, for some stations, the minute the bus arrives or leaves
+/// (`[profile_man_arr_time]`, `[profile_man_dep_time]`, minutes after the trip's start);
+/// the stations in between are timed by the lengths of the station links (Spandau's line 5
+/// gives nearly every station its minute; these used to be ignored for the whole duration
+/// split by the link lengths, and the tours ran their first profile whatever `[addtrip]`
+/// said). A station marked `[profile_otherstopping] 2` is passed without a stop (every
+/// station of a depot run).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TripTimes {
+    /// Seconds after the trip's departure: (arrival, departure) per station.
+    pub stations: Vec<(f64, f64)>,
+    /// Whether the bus stops at the station.
+    pub stops: Vec<bool>,
+    /// `[profile_otherstopping]` per station (0 when not given): 1 and 4 stop whoever
+    /// wants to get on or off, 2 is passed, 3 is served when the bus would be more than 20 s
+    /// early (as in OMSI; see `bus_service::BusService::must_serve`).
+    pub kinds: Vec<u8>,
+    /// Seconds from the departure to the arrival at the last station.
+    pub duration: f64,
+}
+
+impl TripTimes {
+    pub fn new(
+        stations: &[i64],
+        profile: Option<&TripProfile>,
+        link_length: &dyn Fn(i64, i64) -> Option<f64>,
+    ) -> TripTimes {
+        let n = stations.len();
+        let duration = profile
+            .map(|p| p.factor as f64 * 60.0)
+            .filter(|d| *d > 0.0)
+            .unwrap_or(600.0);
+        let mut arr: Vec<Option<f64>> = vec![None; n];
+        let mut dep: Vec<Option<f64>> = vec![None; n];
+        let mut stops = vec![true; n];
+        let mut kinds = vec![0u8; n];
+        if let Some(p) = profile {
+            let at = |i: i32| usize::try_from(i).ok().filter(|i| *i < n);
+            for (i, m) in &p.man_arr_time {
+                if let Some(i) = at(*i) {
+                    arr[i] = Some(*m as f64 * 60.0);
+                }
+            }
+            for (i, m) in &p.man_dep_time {
+                if let Some(i) = at(*i) {
+                    dep[i] = Some(*m as f64 * 60.0);
+                }
+            }
+            for (i, v) in &p.other_stopping {
+                if let Some(i) = at(*i) {
+                    kinds[i] = (*v).clamp(0, 255) as u8;
+                    if *v == 2 {
+                        stops[i] = false;
+                    }
+                }
+            }
+        }
+        // the trip leaves its first station at its departure and reaches the last one after
+        // the profile's duration, unless the profile times them itself
+        if n > 0 && arr[0].is_none() && dep[0].is_none() {
+            dep[0] = Some(0.0);
+        }
+        if n > 1 && arr[n - 1].is_none() && dep[n - 1].is_none() {
+            arr[n - 1] = Some(duration);
+        }
+        // the distance to every station along the links (a missing link counts 500 m)
+        let mut along = vec![0.0f64; n];
+        for i in 1..n {
+            along[i] = along[i - 1]
+                + link_length(stations[i - 1], stations[i])
+                    .unwrap_or(500.0)
+                    .max(1.0);
+        }
+        let timed: Vec<usize> = (0..n)
+            .filter(|&i| arr[i].is_some() || dep[i].is_some())
+            .collect();
+        let mut out = Vec::with_capacity(n);
+        let mut last = 0.0f64;
+        for i in 0..n {
+            let (a, d) = match (arr[i], dep[i]) {
+                (Some(a), Some(d)) => (a, d.max(a)),
+                (Some(a), None) => (a, a),
+                (None, Some(d)) => (d, d),
+                (None, None) => {
+                    let p = timed.iter().rev().find(|&&k| k < i).copied();
+                    let q = timed.iter().find(|&&k| k > i).copied();
+                    let t = match (p, q) {
+                        (Some(p), Some(q)) => {
+                            let t0 = dep[p].or(arr[p]).unwrap_or(0.0);
+                            let t1 = arr[q].or(dep[q]).unwrap_or(t0);
+                            let span = along[q] - along[p];
+                            if span > 0.0 {
+                                t0 + (t1 - t0) * (along[i] - along[p]) / span
+                            } else {
+                                t0
+                            }
+                        }
+                        (Some(p), None) => dep[p].or(arr[p]).unwrap_or(0.0),
+                        (None, Some(q)) => arr[q].or(dep[q]).unwrap_or(0.0),
+                        (None, None) => 0.0,
+                    };
+                    (t, t)
+                }
+            };
+            // never back in time
+            let a = a.max(last);
+            let d = d.max(a);
+            last = d;
+            out.push((a, d));
+        }
+        // a trip with a route of stations lasts until it reaches the last one
+        let duration = if n > 1 { out[n - 1].0 } else { duration };
+        TripTimes {
+            stations: out,
+            stops,
+            kinds,
+            duration: duration.max(1.0),
+        }
+    }
+}
+
 /// `*.ttr` `[track_entry]`
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TrackEntry {

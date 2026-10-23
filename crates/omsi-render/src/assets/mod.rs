@@ -9,7 +9,7 @@ mod store;
 mod texture;
 
 pub use ids::{MaterialId, MeshId, TextureId, Vertex};
-pub use material::{AlphaMode, Material, MaterialExtra, PbrMaps, TexAddressing};
+pub use material::{AlphaMode, Material, MaterialDesc, MaterialExtra, PbrMaps, TexAddressing};
 pub use mesh::{prepare_mesh, prepare_meshes, GpuMesh, PreparedMesh};
 pub use texture::{fit_texture, prepare_texture, GpuTexture, PreparedTexture};
 

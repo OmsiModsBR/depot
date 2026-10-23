@@ -424,7 +424,7 @@ impl App {
         p.vehicle.attach_trailer_ex(ty.clone(), false);
         p.trailer_renders.push(w.add_vehicle_part(r, scene, &ty, None, &p.render));
         p.hand_coupled += 1;
-        self.service_msg = Some((format!("Coupled: {} {}", ty.def.manufacturer, ty.def.type_name), 3.0));
+        self.service_msg = Some((omsi_ui::tr("Coupled: %{bus}").replace("%{bus}", &format!("{} {}", ty.def.manufacturer, ty.def.type_name)), 3.0));
     }
 
     /// Uncouple the last part coupled by hand: it stays where it is, a vehicle of its own.
@@ -561,6 +561,27 @@ impl App {
             p.ibis_to_stop(trip, k);
         }
         self.service_msg = Some((format!("Stop skipped: {name}"), 3.0));
+    }
+
+    /// The timetable window's "Skip this stop" (or "Keep this stop") on stop `k` of the
+    /// current trip: the stop due now is skipped at once, one still to come is marked to be
+    /// skipped as soon as it is the next stop, or unmarked (see `PlayerDuty::toggle_skip`).
+    pub(crate) fn skip_stop_at(&mut self, k: usize) {
+        let Some(d) = self.duty.as_mut() else { return };
+        let Some((name, now)) = d.toggle_skip(k) else { return };
+        if now {
+            log::info!("duty: stop '{name}' skipped, next stop {}", d.next_stop);
+            if let Some(p) = self.player.as_mut() {
+                let (trip, k) = d.trip_for_ibis();
+                p.ibis_to_stop(trip, k);
+            }
+            self.service_msg = Some((format!("Stop skipped: {name}"), 3.0));
+        } else if d.skip_marked(k) {
+            log::info!("duty: stop '{name}' to be skipped");
+            self.service_msg = Some((format!("Will be skipped: {name}"), 3.0));
+        } else {
+            self.service_msg = Some((format!("Stop kept: {name}"), 3.0));
+        }
     }
 
     /// Read the vehicles that can be placed, once (the place list and the "Add vehicle" window).
@@ -780,13 +801,14 @@ impl App {
         let idle = if (now - before).abs() > 1e-4 { 0.0 } else { idle + dt };
         if idle > SERVICE_SETTLE {
             self.pumping = None;
-            let line = if kind == "refuel" { format!("refuelled: {now:.0} l in the tank") } else { format!("washed: dirt {:.0}%", now * 100.0) };
-            log::info!("{line}");
-            self.service_msg = Some((line, 6.0));
+            let (text, value) = if kind == "refuel" { ("refuelled: %{litres} l in the tank", format!("{now:.0}")) } else { ("washed: dirt %{dirt}%", format!("{:.0}", now * 100.0)) };
+            let fill = |t: &str| t.replace("%{litres}", &value).replace("%{dirt}", &value);
+            log::info!("{}", fill(text));
+            self.service_msg = Some((fill(&omsi_ui::tr(text)), 6.0));
         } else {
             self.pumping = Some((kind, idle));
             if kind == "refuel" {
-                self.service_msg = Some((format!("Refuelling: {now:.0} l"), 1.0));
+                self.service_msg = Some((omsi_ui::tr("Refuelling: %{litres} l").replace("%{litres}", &format!("{now:.0}")), 1.0));
             }
         }
     }
@@ -801,7 +823,7 @@ impl App {
         if matches!(kind, "refuel" | "wash") && at_petrol_station(&w, &p.vehicle) {
             let name = if kind == "refuel" { "veh_tank" } else { "veh_wash" };
             if !p.vehicle.service(name, 0.0) {
-                self.service_msg = Some((format!("this vehicle has no {} handling ({name})", if kind == "refuel" { "fuel pump" } else { "bus wash" }), 6.0));
+                self.service_msg = Some((if kind == "refuel" { format!("this vehicle has no fuel pump handling ({name})") } else { format!("this vehicle has no bus wash handling ({name})") }, 6.0));
                 return;
             }
             if kind == "wash" {
@@ -1050,7 +1072,7 @@ impl App {
                     let n = *c + 1;
                     // (the camera left keeps its look, the one taken finds its own again)
                     self.sync_view_look();
-                    self.service_msg = Some((format!("{} camera {n} of {count}", if pax { "Passenger" } else { "Driver" }), 2.0));
+                    self.service_msg = Some((if pax { format!("Passenger camera {n} of {count}") } else { format!("Driver camera {n} of {count}") }, 2.0));
                 }
             }
             "toggel_mouse_ctrl" => {
@@ -1086,7 +1108,7 @@ impl App {
             if !p.shift_gate_to(to) {
                 return false;
             }
-            self.service_msg = Some((format!("Gear {}", match to { 0 => "N".to_string(), -1 => "R".to_string(), n => n.to_string() }), 1.5));
+            self.service_msg = Some((omsi_ui::tr("Gear %{gear}").replace("%{gear}", &match to { 0 => "N".to_string(), -1 => "R".to_string(), n => n.to_string() }), 1.5));
             return true;
         }
         let Some(n) = names.iter().find(|n| p.vehicle.ty.program.trigger(n).is_some()) else {

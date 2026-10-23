@@ -4,7 +4,7 @@
 use super::Renderer;
 use crate::effects::puddles::PuddleParts;
 use crate::lighting::Lighting;
-use crate::passes::Batch;
+use crate::passes::{Batch, PostPass};
 use crate::scene::{Camera, CameraUniform, Scene, TextureId};
 use glam::{DVec3, Mat4};
 
@@ -31,22 +31,7 @@ impl Renderer {
                 .as_ref()
                 .filter(|_| puddles_on)
                 .map_or(&h.classic_bg, |p| &p.classic_bg);
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("classic reflections present"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: scene_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let mut pass = PostPass::new("classic reflections present", scene_view).begin(encoder);
             pass.set_pipeline(&self.presenter.copy_pipeline);
             pass.set_bind_group(0, bg, &[]);
             pass.draw(0..3, 0..1);

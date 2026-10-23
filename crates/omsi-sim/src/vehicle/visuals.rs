@@ -13,10 +13,26 @@ impl VehicleInstance {
         // coupled vehicles come first, because they write the joint's angles this vehicle's
         // plates and bellows turn with (a frame late, the joint lagged behind the rear section)
         self.update_trailers(dt);
+        self.animate_meshes(dt);
+        self.log_animation_debug();
+        self.props_plan.refresh(&self.ty, &self.var_index);
+        self.props_plan
+            .apply(&self.state.vars, &mut self.mesh_props);
+        self.apply_dirt_overlays();
+        self.fade_lamps(dt);
+        self.update_particles(dt);
+    }
+
+    /// The meshes' transforms for this frame, with each mesh's parent's applied.
+    fn animate_meshes(&mut self, dt: f32) {
         for (i, a) in self.animators.iter_mut().enumerate() {
             self.mesh_transforms[i] = a.update(dt, &self.state.vars);
         }
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
+    }
+
+    /// Logs the animated transforms of the meshes named by the `OMSI_DEBUG_ANIM` flag.
+    fn log_animation_debug(&self) {
         static DEBUG_ANIM: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
         if let Some(want) = DEBUG_ANIM.get_or_init(|| omsi_cfg::flags::DEBUG_ANIM.text()) {
             for (i, m) in self.ty.meshes.iter().enumerate() {
@@ -50,13 +66,13 @@ impl VehicleInstance {
                 }
             }
         }
-        self.props_plan.refresh(&self.ty, &self.var_index);
-        self.props_plan
-            .apply(&self.state.vars, &mut self.mesh_props);
-        // Dirt overlays are engine-owned layers. A model may declare Dirt_Norm or
-        // Dirt_Wiped in its cfg without putting the name in the script varlist; the
-        // generic alphascale fallback is 1.0 in that case, which makes Dreck.tga an
-        // opaque full-body decal. Resolve these values explicitly for every vehicle.
+    }
+
+    /// Dirt overlays are engine-owned layers. A model may declare Dirt_Norm or
+    /// Dirt_Wiped in its cfg without putting the name in the script varlist; the
+    /// generic alphascale fallback is 1.0 in that case, which makes Dreck.tga an
+    /// opaque full-body decal. Resolve these values explicitly for every vehicle.
+    fn apply_dirt_overlays(&mut self) {
         for (i, vm) in self.ty.meshes.iter().enumerate() {
             let def = &self.ty.model.meshes[vm.def_index];
             for m in &def.materials {
@@ -80,7 +96,10 @@ impl VehicleInstance {
                 }
             }
         }
-        // the lamps come on and go out with their `timeconst`
+    }
+
+    /// The lamps' glow fades in and out with their `timeconst`.
+    fn fade_lamps(&mut self, dt: f32) {
         let mut lf = std::mem::take(&mut self.light_fade);
         let mut part_fades: Vec<Vec<f32>> = self
             .trailers
@@ -127,7 +146,10 @@ impl VehicleInstance {
         for (t, f) in self.trailers.iter_mut().zip(part_fades) {
             t.light_fade = f;
         }
-        // the particle systems ([smoke]: exhaust, boiling coolant, wheel spray) of the
+    }
+
+    /// The particle systems of the vehicle and its coupled parts.
+    fn update_particles(&mut self, dt: f32) {
         // vehicle and its coupled parts, which read the same scripts' variables
         if !self.particles.is_empty() || self.trailers.iter().any(|t| !t.particles.is_empty()) {
             let mut ps = std::mem::take(&mut self.particles);

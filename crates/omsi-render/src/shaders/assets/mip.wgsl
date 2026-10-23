@@ -4,15 +4,10 @@
 // is often only the envmap mask, and 0 there (lamps, wheels) must not turn the colour black.
 @group(0) @binding(0) var t_src: texture_2d<f32>;
 @group(0) @binding(1) var s_src: sampler;
-struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
+alias VsOut = FullscreenVertex;
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: VsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    return out;
+    return fullscreen_vertex(i);
 }
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {

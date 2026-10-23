@@ -37,6 +37,12 @@ pub fn original_keyboard_cfg(root: &Path) -> PathBuf {
         .unwrap_or_else(|| root.join("Inputs").join("keyboard.cfg"))
 }
 
+/// The file `name` of the `Inputs` folder of the OMSI installation at `root`, whatever the case
+/// of its letters (`keyboard_reset.cfg`, `gamectrler.cfg`, a language's `.kyb`).
+pub fn original_inputs_file(root: &Path, name: &str) -> Option<PathBuf> {
+    resolve_existing(root, &["Inputs", name])
+}
+
 /// The essentials (see [`ORIGINAL_ESSENTIALS`]) that `root` lacks; empty for a complete
 /// original installation. openOMSI's content folder never counts as one.
 pub fn missing_original_essentials(root: &Path) -> Vec<String> {

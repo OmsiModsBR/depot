@@ -3,6 +3,7 @@
 
 use super::window::Presenter;
 use crate::gpu::{buffer_init, target_2d};
+use crate::passes::PostPass;
 use crate::scene::{CullHistory, ScreenView, TextureId};
 
 /// Swap in a panel's own culling history (and the last one's back out).
@@ -100,22 +101,7 @@ impl Presenter {
             label: Some("triple screen composite"),
         });
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("triple screen composite"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let mut pass = PostPass::new("triple screen composite", target).begin(&mut encoder);
             pass.set_pipeline(&self.panel_pipeline);
             for (i, v) in views.iter().enumerate() {
                 // (the right panel loses its last pixel or two at the window's edge)
