@@ -100,6 +100,8 @@ pub struct Renderer {
     pub(crate) culling: CullHistory,
     pub(crate) presenter: Presenter,
     pub(crate) diagnostics: Diagnostics,
+    /// Vectors a picture reuses from the one before (their capacity, never their contents).
+    pub(crate) scratch: FrameScratch,
     /// Last: it holds the device's poller, which must be dropped after everything else.
     pub(crate) gpu: GpuContext,
 }
@@ -113,3 +115,11 @@ pub const SHADOW_SIZE: u32 = 2048;
 pub const MAX_LAMPS_PER_MESH: u32 = 63;
 
 pub const LAMP_CODE_STRIDE: u32 = 64;
+
+/// The vectors kept from one picture to the next, so that a picture reuses their capacity
+/// instead of allocating again. Each is cleared before it is used.
+#[derive(Default)]
+pub(crate) struct FrameScratch {
+    /// The draw list: the instances' indices in draw order.
+    pub(crate) list: Vec<u32>,
+}

@@ -79,7 +79,8 @@ impl Renderer {
         let with_overlays = f.with_overlays;
         let prepass_on = f.features.prepass_on;
         let glass_on = f.features.glass_on;
-        let mut list: Vec<u32> = Vec::new();
+        let mut list = std::mem::take(&mut self.scratch.list);
+        list.clear();
         clock.stage(self, "setup", "mirror.setup");
         let shadow_batches = self.shadow_casters(scene, f, &mut list);
         clock.stage(self, "shadow items", "mirror.shadow items");
