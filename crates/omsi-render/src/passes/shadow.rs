@@ -6,6 +6,7 @@ use crate::gpu::{
 };
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::scene::Scene;
+use crate::shaders::with_fullscreen;
 use glam::{DVec3, Mat4, Vec3};
 
 /// Half size of the area around the camera covered by the near shadow cascade (m).
@@ -24,6 +25,15 @@ pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
 /// setting: 3 cm texels. At the 4096 setting it had been 1.6 cm, and drawing it was a third
 /// of the shadow pass's 4.6 ms.
 pub(crate) const SHADOW_CLOSE_MAX: u32 = 2048;
+
+/// The first cascade of the street lamps' maps: the sun's are 0 (near), 1 (far) and 2 (close).
+pub(crate) const LAMP_CASCADE: usize = 3;
+
+/// The shadow pipelines' index: two per cascade, opaque then alpha-tested (`PIPE_OPAQUE`,
+/// `PIPE_ALPHA_TEST`), the cascades in order, the street lamps' tiles after the sun's.
+pub(crate) const fn shadow_pipe(cascade: usize, pipe: u8) -> usize {
+    cascade * 2 + pipe as usize
+}
 
 /// The sun's shadow maps (near and far), their sampler, and the pipelines drawn into them:
 /// the clearing one and one per kind and cascade.
@@ -138,11 +148,13 @@ pub(crate) fn shadow_pipelines(
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shadow clear"),
             source: wgpu::ShaderSource::Wgsl(
-                "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-                    let x = f32(i32(i & 1u) * 4 - 1);
-                    let y = f32(i32(i >> 1u) * 4 - 1);
-                    return vec4<f32>(x, y, 1.0, 1.0);
-                }"
+                with_fullscreen(
+                    "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+                    var clip = fullscreen_vertex(i).clip;
+                    clip.z = 1.0;
+                    return clip;
+                }",
+                )
                 .into(),
             ),
         });
@@ -183,9 +195,8 @@ pub(crate) fn shadow_pipelines(
         make_shadow(PIPE_ALPHA_TEST, 2),
     ];
     if !basic_pipelines() {
-        // (the street lamps' tiles, 6 + 2 k + kind)
         log::info!("renderer: compiling the street lamps' shadow shaders");
-        for cascade in 3..=6 {
+        for cascade in LAMP_CASCADE as u8..(LAMP_CASCADE + LAMP_SHADOWS) as u8 {
             shadow_pipelines.push(make_shadow(PIPE_OPAQUE, cascade));
             shadow_pipelines.push(make_shadow(PIPE_ALPHA_TEST, cascade));
         }
@@ -259,7 +270,7 @@ impl ShadowResources {
                 let sz = shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[0], |pipe| {
-                    &self.shadow_pipelines[pipe as usize]
+                    &self.shadow_pipelines[shadow_pipe(0, pipe)]
                 });
                 let csz = shadow_size.min(SHADOW_CLOSE_MAX) as f32;
                 pass.set_viewport(sz, 0.0, csz, csz, 0.0, 1.0);
@@ -270,13 +281,13 @@ impl ShadowResources {
                     pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[2], |pipe| {
-                    &self.shadow_pipelines[4 + pipe as usize]
+                    &self.shadow_pipelines[shadow_pipe(2, pipe)]
                 });
             } else {
                 let sz = shadow_size as f32;
                 pass.set_viewport(0.0, 0.0, sz, sz, 0.0, 1.0);
                 encode_batches(&mut pass, scene, &shadow_batches[cascade], |pipe| {
-                    &self.shadow_pipelines[cascade * 2 + pipe as usize]
+                    &self.shadow_pipelines[shadow_pipe(cascade, pipe)]
                 });
             }
         }
@@ -306,7 +317,7 @@ impl ShadowResources {
                 pass.draw(0..3, 0..1);
                 pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
                 encode_batches(&mut pass, scene, &shadow_batches[3], |pipe| {
-                    &self.shadow_pipelines[6 + 2 * k + pipe as usize]
+                    &self.shadow_pipelines[shadow_pipe(LAMP_CASCADE + k, pipe)]
                 });
             }
         }

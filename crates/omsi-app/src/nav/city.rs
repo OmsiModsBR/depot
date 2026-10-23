@@ -303,7 +303,7 @@ impl Navigator {
         ui.rounded_border(card, 4.0 * s, 1.0, v5::LINE);
         ui.text(&mut self.atlas, &self.fonts, lt.line_data, 10.5 * s, Weight::Bold, Vec2::new(x0 + pad + 4.0 * s, top + 20.0 * s), Align::Left, v5::MUTED);
         if focus.is_none() {
-            ui.icon(&mut self.atlas, "touch_app", Vec2::new(x0 + pad + 14.0 * s, top + 54.0 * s), 26.0 * s, v5::ACCENT);
+            ui.icon(&mut self.atlas, "touch_app", Vec2::new(x0 + pad + 14.0 * s, top + 54.0 * s), 26.0 * s, omsi_ui::theme::accent());
             for (k, t) in lt.hint.iter().enumerate() {
                 ui.text(&mut self.atlas, &self.fonts, &self.fonts.fit(t, 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, pw - 2.0 * pad - 40.0 * s), 13.0 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, Vec2::new(x0 + pad + 36.0 * s, top + (50.0 + 18.0 * k as f32) * s), Align::Left, if k == 0 { TEXT } else { TEXT_DIM });
             }
@@ -1141,7 +1141,7 @@ impl Navigator {
             if self.city.mpp < 4.0 || next || k + 1 == n_stops {
                 let badge = if next { 7.0 } else { 5.5 } * s;
                 ui.circle(p, badge + 1.5 * s, Color::rgba(8, 8, 8, 0.95));
-                let (fill, ink) = if next { (v5::ACCENT, v5::ON_ACCENT) } else if k + 1 == n_stops { (ROUTE, TEXT) } else { (v5::LINE, v5::FG) };
+                let (fill, ink) = if next { (omsi_ui::theme::accent(), omsi_ui::theme::on_accent()) } else if k + 1 == n_stops { (ROUTE, TEXT) } else { (v5::LINE, v5::FG) };
                 ui.circle(p, badge, fill);
                 ui.icon(&mut self.atlas, "directions_bus", p, if next { 11.5 } else { 9.5 } * s, ink);
             } else {
@@ -1152,7 +1152,7 @@ impl Navigator {
         // (pills: the name, and the time in a quieter ink)
         for (k, name, time, r) in stop_labels {
             ui.rounded(r, r.h * 0.5, v5::CARD.alpha(0.94));
-            ui.rounded_border(r, r.h * 0.5, 1.0, if k == 0 { v5::ACCENT } else { v5::LINE });
+            ui.rounded_border(r, r.h * 0.5, 1.0, if k == 0 { omsi_ui::theme::accent() } else { v5::LINE });
             let inner = r.pad(10.0 * s, 0.0);
             ui.text_in(&mut self.atlas, &self.fonts, &name, 12.5 * s, if k == 0 { Weight::Bold } else { Weight::Medium }, inner, Align::Left, v5::FG);
             ui.text_in(&mut self.atlas, &self.fonts, &time, 11.5 * s, Weight::Medium, inner, Align::Right, v5::MUTED);
@@ -1237,7 +1237,7 @@ impl Navigator {
         // (the texts keep clear of the buttons)
         let right = bx + bs - 16.0 * s;
         let mut tx = pad;
-        tx += spaced(&mut ui, &mut self.atlas, &self.fonts, &tr(lt.city_map).to_uppercase(), 10.5 * s, tx, head.center().y, v5::ACCENT, 1.8 * s) + 22.0 * s;
+        tx += spaced(&mut ui, &mut self.atlas, &self.fonts, &tr(lt.city_map).to_uppercase(), 10.5 * s, tx, head.center().y, omsi_ui::theme::accent(), 1.8 * s) + 22.0 * s;
         let wd = words(f.language);
         let title = match (&f.line, &f.terminus) {
             (Some(l), Some(t)) => format!("{}  ›  {}", l.trim(), t.trim()),
@@ -1296,7 +1296,7 @@ impl Navigator {
                 let tw = self.fonts.width(&t, 11.5 * s, Weight::Bold) + 20.0 * s;
                 let r = Rect::new(pad, y, tw, 24.0 * s);
                 ui.rounded(r, 4.0 * s, v5::CARD.alpha(0.94));
-                ui.rounded_border(r, 4.0 * s, 1.0, v5::ACCENT.alpha(0.8));
+                ui.rounded_border(r, 4.0 * s, 1.0, omsi_ui::theme::accent().alpha(0.8));
                 ui.text_in(&mut self.atlas, &self.fonts, &t, 11.5 * s, Weight::Bold, r, Align::Center, v5::FG);
             }
         }
@@ -1425,10 +1425,10 @@ fn distance_text(d: f64) -> String {
 /// A button of the map in the new look: dark and outlined, or (`on`) outlined in the accent
 /// on its faint shade. Returns the ink for what is written on it.
 fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
-    ui.rounded(r, 4.0 * s, if on { v5::SELECTED } else { v5::CARD });
-    ui.rounded_border(r, 4.0 * s, 1.0, if on { v5::ACCENT } else { v5::LINE });
+    ui.rounded(r, 4.0 * s, if on { omsi_ui::theme::accent_soft() } else { v5::CARD });
+    ui.rounded_border(r, 4.0 * s, 1.0, if on { omsi_ui::theme::accent() } else { v5::LINE });
     if on {
-        v5::ACCENT
+        omsi_ui::theme::accent()
     } else {
         v5::FG
     }
@@ -1437,9 +1437,9 @@ fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
 /// A tab or a toggle of the lines panel: the field's grey, or (`on`) the accent's shade
 /// outlined in the accent.
 fn chip(ui: &mut Painter, r: Rect, radius: f32, on: bool) {
-    ui.rounded(r, radius, if on { v5::SELECTED } else { v5::FIELD });
+    ui.rounded(r, radius, if on { omsi_ui::theme::accent_soft() } else { v5::FIELD });
     if on {
-        ui.rounded_border(r, radius, 1.0, v5::ACCENT);
+        ui.rounded_border(r, radius, 1.0, omsi_ui::theme::accent());
     }
 }
 

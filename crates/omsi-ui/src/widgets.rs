@@ -502,6 +502,11 @@ impl Ui {
         }
     }
 
+    /// Where `anim` of widget `id` stands, without moving it (0 before its first frame).
+    pub fn anim_now(&self, id: Id) -> f32 {
+        self.anims.get(&id).copied().unwrap_or(0.0)
+    }
+
     /// Eased value towards `to` for widget `id` (time constant in seconds).
     pub fn anim(&mut self, id: Id, to: f32, tau: f32) -> f32 {
         let k = 1.0 - (-self.dt / tau.max(1e-3)).exp();
@@ -805,7 +810,7 @@ impl Ui {
     pub fn panel(&mut self, r: Rect) {
         self.solid(r);
         let p = self.p();
-        p.rounded(r, RADIUS, PANEL);
+        p.rounded(r, RADIUS, crate::theme::surface(PANEL));
         p.rounded_border(r, RADIUS, 1.0, EDGE);
     }
 
@@ -844,12 +849,8 @@ impl Ui {
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
         let rr = if held { r.inset(0.5) } else { r };
         let (fill, text_c, edge) = match kind {
-            ButtonKind::Primary => (
-                ACCENT.lighten(0.08 * t),
-                Color::rgba(18, 14, 8, 1.0),
-                Color::CLEAR,
-            ),
-            ButtonKind::Danger => (FIELD.mix(HOVER, t), DANGER, DANGER.alpha(0.35 + 0.3 * t)),
+            ButtonKind::Primary => (accent().lighten(0.08 * t), on_accent(), Color::CLEAR),
+            ButtonKind::Danger => (FIELD.mix(HOVER, t), DANGER, DANGER.alpha(0.4 + 0.3 * t)),
             ButtonKind::Normal => (FIELD.mix(HOVER, t), TEXT, EDGE),
             ButtonKind::Ghost => (
                 Color::WHITE.alpha(0.05 * t),
@@ -857,7 +858,7 @@ impl Ui {
                 Color::CLEAR,
             ),
         };
-        let rad = 6.0;
+        let rad = CONTROL_RADIUS;
         self.p().rounded(rr, rad, fill);
         if edge.0[3] > 0.0 {
             self.p().rounded_border(rr, rad, 1.0, edge);
@@ -917,20 +918,21 @@ impl Ui {
             *value = !*value;
         }
         let on = self.anim(id, if *value { 1.0 } else { 0.0 }, 0.07);
-        let tw = 34.0;
-        let th = 18.0;
+        // (a Windows 11 switch: an outlined track with a grey knob when off, the accent with
+        // a knob in the text colour on it when on)
+        let tw = 40.0;
+        let th = 20.0;
         let track = Rect::new(r.right() - tw, r.y + (r.h - th) * 0.5, tw, th);
-        self.p().rounded(
-            track,
-            th * 0.5,
-            Color::rgba(62, 62, 62, 1.0).mix(ACCENT, on),
-        );
+        self.p().rounded(track, th * 0.5, accent().alpha(on));
+        if on < 1.0 {
+            self.p()
+                .rounded_border(track, th * 0.5, 1.0, TRACK_LINE.alpha(1.0 - on));
+        }
         let kx = track.x + th * 0.5 + (tw - th) * on;
-        self.p().circle(
-            Vec2::new(kx, track.center().y),
-            th * 0.5 - 3.0,
-            Color::rgba(240, 240, 240, 1.0),
-        );
+        let knob = Rect::new(kx - 5.0, track.center().y - 5.0, 10.0, 10.0);
+        let grow = if h { 1.0 } else { 0.0 };
+        self.p()
+            .rounded(knob.inset(-grow), 5.0 + grow, KNOB_OFF.mix(on_accent(), on));
         self.text_in(
             label,
             Rect::new(r.x, r.y, r.w - tw - 10.0, r.h),
@@ -993,18 +995,26 @@ impl Ui {
         let cy = track_r.center().y;
         let th = 4.0;
         let track = Rect::new(track_r.x, cy - th * 0.5, track_r.w, th);
-        self.p()
-            .rounded(track, th * 0.5, Color::rgba(58, 58, 58, 1.0));
+        self.p().rounded(track, th * 0.5, TRACK_LINE);
         self.p().rounded(
             Rect::new(track.x, track.y, track.w * shown, th),
             th * 0.5,
-            ACCENT,
+            accent(),
         );
+        // (a Windows 11 thumb: a light ring round an accent dot that grows under the mouse)
         let kc = Vec2::new(track.x + track.w * shown, cy);
+        self.p().circle(kc, 9.0, Color::hex(0x45474c));
+        self.p().circle(kc, 8.0, TEXT);
         self.p().circle(
             kc,
-            if h || held { 7.5 } else { 6.5 },
-            Color::rgba(240, 240, 240, 1.0),
+            if held {
+                4.0
+            } else if h {
+                5.5
+            } else {
+                4.5
+            },
+            accent(),
         );
         let txt = fmt(*value);
         self.text_in(
@@ -1029,10 +1039,17 @@ impl Ui {
         let n = labels.len().max(1);
         let id = id_of(name);
         self.p().rounded(r, 6.0, FIELD);
+        self.p().rounded_border(r, 6.0, 1.0, EDGE);
         let w = r.w / n as f32;
         let at = self.anim(id, *selected as f32, 0.07);
+        // (the chosen one lifted a layer, an accent line along its foot)
         let knob = Rect::new(r.x + 3.0 + w * at, r.y + 3.0, w - 6.0, r.h - 6.0);
-        self.p().rounded(knob, 4.0, Color::rgba(62, 62, 62, 1.0));
+        self.p().rounded(knob, CONTROL_RADIUS, SELECTED);
+        self.p().rounded(
+            Rect::new(knob.x + 1.0, knob.bottom() - 2.0, knob.w - 2.0, 2.0),
+            1.0,
+            accent(),
+        );
         let mut changed = false;
         for (k, l) in labels.iter().enumerate() {
             let cell = Rect::new(r.x + w * k as f32, r.y, w, r.h);
@@ -1082,9 +1099,9 @@ impl Ui {
         let (h, _, clicked) = self.interact_key(id, r);
         let open = self.popup.as_ref().map(|p| p.id == id).unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
-        self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
-        self.p()
-            .rounded_border(r, 6.0, 1.0, if open { ACCENT.alpha(0.7) } else { EDGE });
+        self.p().rounded(r, CONTROL_RADIUS, FIELD.mix(HOVER, t));
+        self.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
+        field_line(self, r, open);
         let txt = options.get(*selected).cloned().unwrap_or_default();
         self.text_in(
             &txt,
@@ -1282,9 +1299,10 @@ impl Ui {
             },
             0.08,
         );
-        self.p().rounded(r, 6.0, FIELD.mix(HOVER, t * 0.5));
         self.p()
-            .rounded_border(r, 6.0, 1.0, if focused { ACCENT.alpha(0.7) } else { EDGE });
+            .rounded(r, CONTROL_RADIUS, FIELD.mix(HOVER, t * 0.5));
+        self.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
+        field_line(self, r, focused);
         let mut x = r.x + 12.0;
         if let Some(i) = icon {
             self.icon(i, Vec2::new(x + 8.0, r.center().y), 18.0, TEXT_DIM);
@@ -1363,7 +1381,7 @@ impl Ui {
 
                     self.p().rect(
                         Rect::new(inner.x + sx, r.y + 5.0, sw, r.h - 10.0),
-                        ACCENT.alpha(0.35),
+                        accent().alpha(0.35),
                     );
                 }
             }
@@ -1383,7 +1401,7 @@ impl Ui {
             {
                 self.p().rect(
                     Rect::new(inner.x - shift + cw + 0.5, r.center().y - 8.5, 1.5, 17.0),
-                    ACCENT,
+                    accent(),
                 );
             }
         }
@@ -1470,6 +1488,16 @@ impl Ui {
 
     /// A date field (YYYY-MM-DD) with a calendar that opens under it.
     pub fn date_field(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, true)
+    }
+
+    /// Only the calendar's button, for a date typed beside it (YYYY-MM-DD): the calendar opens
+    /// under `r`.
+    pub fn calendar_button(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
+        self.date_control(name, r, date, false)
+    }
+
+    fn date_control(&mut self, name: &str, r: Rect, date: &mut String, field: bool) -> bool {
         let id = id_of(name);
         let mut changed = false;
         if let Some(p) = self.date_popup.as_mut().filter(|p| p.id == id) {
@@ -1486,31 +1514,40 @@ impl Ui {
             .map(|p| p.id == id)
             .unwrap_or(false);
         let t = self.anim(id, if h || open { 1.0 } else { 0.0 }, 0.08);
-        self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
-        self.p()
-            .rounded_border(r, 6.0, 1.0, if open { ACCENT.alpha(0.7) } else { EDGE });
-        self.icon(
-            "calendar_month",
-            Vec2::new(r.x + 20.0, r.center().y),
-            17.0,
-            TEXT_DIM,
-        );
         let (y, m, d) = parse_date(date);
-        let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
-        self.text_in(
-            &shown,
-            Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
-            13.0,
-            Weight::Regular,
-            TEXT,
-            Align::Left,
-        );
-        self.icon(
-            "expand_more",
-            Vec2::new(r.right() - 18.0, r.center().y),
-            20.0,
-            TEXT_DIM,
-        );
+        if !field {
+            if t > 0.01 {
+                self.p().rounded(r, CONTROL_RADIUS, HOVER.alpha(t));
+            }
+            let c = if open { accent() } else { TEXT_DIM };
+            self.icon("o-calendar", r.center(), 16.0, c);
+        }
+        if field {
+            self.p().rounded(r, 6.0, FIELD.mix(HOVER, t));
+            self.p()
+                .rounded_border(r, 6.0, 1.0, if open { accent().alpha(0.7) } else { EDGE });
+            self.icon(
+                "calendar_month",
+                Vec2::new(r.x + 20.0, r.center().y),
+                17.0,
+                TEXT_DIM,
+            );
+            let shown = format!("{} {} {}", d, MONTHS[(m as usize).clamp(1, 12) - 1], y);
+            self.text_in(
+                &shown,
+                Rect::new(r.x + 38.0, r.y, r.w - 60.0, r.h),
+                13.0,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            self.icon(
+                "expand_more",
+                Vec2::new(r.right() - 18.0, r.center().y),
+                20.0,
+                TEXT_DIM,
+            );
+        }
         if clicked {
             if open {
                 self.date_popup = None;
@@ -1535,7 +1572,7 @@ impl Ui {
         self.p().rounded(r, r.h * 0.5, Color::rgba(50, 50, 50, 1.0));
         let w = (r.w * frac.clamp(0.0, 1.0)).max(r.h);
         self.p()
-            .rounded(Rect::new(r.x, r.y, w, r.h), r.h * 0.5, ACCENT);
+            .rounded(Rect::new(r.x, r.y, w, r.h), r.h * 0.5, accent());
         if busy {
             let x = r.x + ((self.time * 0.6) % 1.0) * (w + 60.0) - 60.0;
             self.push_clip(Rect::new(r.x, r.y, w, r.h), r.h * 0.5);
@@ -1635,7 +1672,7 @@ impl Ui {
             self.p().rounded(
                 Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0),
                 1.0,
-                ACCENT.alpha(s),
+                accent().alpha(s),
             );
         } else if t > 0.01 {
             self.p().rounded(r, 6.0, HOVER.alpha(t));
@@ -1683,7 +1720,7 @@ impl Ui {
             );
         }
         if let Some(r) = self.nav.ring() {
-            self.p().rounded_border(r, 8.0, 2.0, ACCENT);
+            self.p().rounded_border(r, 8.0, 2.0, accent());
         }
         let mut layers = Vec::new();
         let mut verts = Vec::new();
@@ -1831,7 +1868,7 @@ impl Ui {
                     "check",
                     Vec2::new(cell.right() - 16.0, cell.center().y),
                     15.0,
-                    ACCENT,
+                    accent(),
                 );
             } else if h {
                 self.p().rounded(cell, 5.0, HOVER);
@@ -1905,7 +1942,7 @@ impl Ui {
                 self.p().rounded(b, 6.0, Color::WHITE.alpha(0.08));
                 self.cursor = winit::window::CursorIcon::Pointer;
             }
-            self.icon(icon, b.center(), 20.0, if h { ACCENT } else { TEXT_DIM });
+            self.icon(icon, b.center(), 20.0, if h { accent() } else { TEXT_DIM });
         }
         if click && prev.contains(m) {
             if p.month == 1 {
@@ -1940,7 +1977,7 @@ impl Ui {
                 11.0,
                 Weight::Bold,
                 if k >= 5 {
-                    ACCENT.alpha(0.8)
+                    accent().alpha(0.8)
                 } else {
                     TEXT_FAINT
                 },
@@ -1963,7 +2000,7 @@ impl Ui {
             let h = cell.contains(m);
             let is_chosen = chosen == Some((p.year, p.month, d));
             if is_chosen {
-                self.p().rounded(cell, 7.0, ACCENT);
+                self.p().rounded(cell, 7.0, accent());
             } else if h {
                 self.p().rounded(cell, 7.0, Color::WHITE.alpha(0.09));
             }
@@ -1992,6 +2029,23 @@ impl Ui {
         self.date_popup = Some(p);
     }
 }
+
+/// The line under a text field or a dropdown, as Windows 11 draws them: a light hairline, the
+/// accent and thicker while it has the keyboard or is open.
+fn field_line(ui: &mut Ui, r: Rect, lit: bool) {
+    let rad = corner(CONTROL_RADIUS);
+    let (h, c) = if lit {
+        (2.0, accent())
+    } else {
+        (1.0, FIELD_LINE)
+    };
+    ui.p()
+        .rect(Rect::new(r.x + rad, r.bottom() - h, r.w - rad * 2.0, h), c);
+}
+
+/// A switch's outline when off, and its knob.
+const TRACK_LINE: Color = Color::hex(0x8b909a);
+const KNOB_OFF: Color = Color::hex(0xc5c9d1);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonKind {
@@ -2030,7 +2084,13 @@ fn date_rect(p: &DatePopup, size: Vec2) -> Rect {
     } else {
         below
     };
-    Rect::new(p.anchor.x, y, w, h)
+    // (right-aligned to its control when it would run past the window's right edge)
+    let x = if p.anchor.x + w > size.x - 10.0 {
+        (p.anchor.right() - w).max(10.0)
+    } else {
+        p.anchor.x
+    };
+    Rect::new(x, y, w, h)
 }
 
 pub const MONTHS: [&str; 12] = [
@@ -2088,6 +2148,28 @@ pub fn weekday(y: i32, m: u32, d: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The calendar of a control at the window's right edge opens inside the window.
+    #[test]
+    fn the_calendar_stays_inside_the_window() {
+        let at = |anchor: Rect| {
+            let p = DatePopup {
+                id: 1,
+                anchor,
+                year: 2026,
+                month: 10,
+                current: (2026, 10, 21),
+                picked: None,
+                opened: 0.0,
+            };
+            date_rect(&p, Vec2::new(1200.0, 800.0))
+        };
+        let r = at(Rect::new(1150.0, 100.0, 34.0, 34.0));
+        assert!(r.right() <= 1190.0 && r.x >= 10.0, "{r:?}");
+        assert_eq!(r.right(), 1184.0);
+        // (one with room keeps its left edge on its control's)
+        assert_eq!(at(Rect::new(100.0, 100.0, 200.0, 34.0)).x, 100.0);
+    }
 
     #[test]
     fn list_visibility_respects_nested_clips_and_partial_rows() {
