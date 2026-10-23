@@ -208,6 +208,26 @@ fn gate_values(p: &Program, block: BlockId, var: VarId) -> Vec<f32> {
         .collect()
 }
 
+/// The (variables, string variables) a key stores or reads.
+type Sets = (HashSet<VarId>, HashSet<u32>);
+
+/// A key that does not drive: its name says it cancels or clears.
+fn refused(n: &str) -> bool {
+    [
+        "cancel", "loesch", "lösch", "clear", "storno", "korr", "back", "rueck", "zurueck",
+    ]
+    .iter()
+    .any(|w| n.contains(w))
+}
+
+/// Where a name sits in a list of words (the end of the list when none matches).
+fn rank(n: &str, words: &[&str]) -> usize {
+    words
+        .iter()
+        .position(|w| n.contains(w))
+        .unwrap_or(words.len())
+}
+
 impl Unit {
     fn learn(p: &Program, operable: &dyn Fn(&str) -> bool) -> Unit {
         let mut u = Unit {
@@ -230,9 +250,39 @@ impl Unit {
             .iter()
             .filter(|n| !n.ends_with("_off") && !n.ends_with("_drag") && !n.starts_with("ai_"))
             .collect();
+        Self::number_keys(p, operable, &press_keys, &mut u);
+        let digit_keys: HashSet<String> =
+            u.keypads.iter().flat_map(|k| k.1.iter().cloned()).collect();
+        let (typed, digit_reads) = Self::typed_inputs(p, u.mode, &digit_keys);
+        let driver = |n: &str| operable(n) || !press_keys.iter().any(|k| operable(k));
+        Self::entry_keys(
+            p,
+            &mut u,
+            &press_keys,
+            &digit_keys,
+            &typed,
+            &digit_reads,
+            &driver,
+        );
+        Self::mode_keys(p, &mut u, &press_keys, &digit_keys, &driver);
+        let states = Self::state_variables(p);
+        Self::watch_keys(p, &mut u, &states);
+        Self::toggle_keys(p, &mut u, &press_keys, &driver);
+        Self::busstop_keys(p, &mut u, &press_keys, &digit_keys, &driver);
+        Self::session_keys(p, &mut u, &press_keys, &digit_keys, &driver);
+        Self::home_keys(p, &mut u, &press_keys, &digit_keys, &driver, &states);
+        u
+    }
+
+    fn number_keys(
+        p: &Program,
+        operable: &dyn Fn(&str) -> bool,
+        press_keys: &[&String],
+        u: &mut Unit,
+    ) {
         // number keys: ten triggers <prefix>0 … <prefix>9; a driver's first
         for driver_only in [true, false] {
-            for n in &press_keys {
+            for n in press_keys {
                 let Some(prefix) = n.strip_suffix('0') else {
                     continue;
                 };
@@ -251,14 +301,19 @@ impl Unit {
                 break;
             }
         }
-        let digit_keys: HashSet<String> =
-            u.keypads.iter().flat_map(|k| k.1.iter().cloned()).collect();
+    }
+
+    fn typed_inputs(
+        p: &Program,
+        mode: Option<VarId>,
+        digit_keys: &HashSet<String>,
+    ) -> (Sets, Sets) {
         // what the number keys type into: written by them (not by letting go) and read by
         // an entry key - or by the number keys themselves, like the count of digits typed
         // (a leading 0 changes nothing else)
         let mut typed = (HashSet::new(), HashSet::new());
         let mut digit_reads = (HashSet::new(), HashSet::new());
-        for k in &digit_keys {
+        for k in digit_keys {
             let b = p.trigger(k).unwrap();
             let (f, s) = stores(p, b);
             let (of, os) = p
@@ -267,22 +322,39 @@ impl Unit {
                 .unwrap_or_default();
             typed
                 .0
-                .extend(f.difference(&of).copied().filter(|v| Some(*v) != u.mode));
+                .extend(f.difference(&of).copied().filter(|v| Some(*v) != mode));
             typed.1.extend(s.difference(&os).copied());
             let (lf, ls) = loads(p, b);
             digit_reads.0.extend(lf);
             digit_reads.1.extend(ls);
         }
-        let refused = |n: &str| {
-            [
-                "cancel", "loesch", "lösch", "clear", "storno", "korr", "back", "rueck", "zurueck",
-            ]
-            .iter()
-            .any(|w| n.contains(w))
-        };
-        let driver = |n: &str| operable(n) || !press_keys.iter().any(|k| operable(k));
+        (typed, digit_reads)
+    }
+
+    fn state_variables(p: &Program) -> HashSet<VarId> {
+        // variables that hold a state (compared with numbers somewhere)
+        let mut states: HashSet<VarId> = HashSet::new();
+        for b in &p.blocks {
+            for w in b.ops.windows(3) {
+                if let (Op::Load(v), Op::Push(_), Op::Eq) = (&w[0], &w[1], &w[2]) {
+                    states.insert(*v);
+                }
+            }
+        }
+        states
+    }
+
+    fn entry_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        digit_keys: &HashSet<String>,
+        typed: &Sets,
+        digit_reads: &Sets,
+        driver: &dyn Fn(&str) -> bool,
+    ) {
         // entry keys: read what was typed and move the mode
-        for n in &press_keys {
+        for n in press_keys {
             if digit_keys.contains(n.as_str()) || refused(n) || !driver(n) {
                 continue;
             }
@@ -307,7 +379,7 @@ impl Unit {
             let pad_file = p
                 .trigger(&u.keypads[0].1[1])
                 .map(|b| p.blocks[b as usize].file.clone());
-            for n in &press_keys {
+            for n in press_keys {
                 let low = n.to_ascii_lowercase();
                 let same_file = p.trigger(n).map(|b| p.blocks[b as usize].file.clone()) == pad_file;
                 if digit_keys.contains(n.as_str()) || refused(&low) || !driver(n) || !same_file {
@@ -352,9 +424,18 @@ impl Unit {
         u.input.dedup();
         u.input_str.sort_unstable();
         u.input_str.dedup();
+    }
+
+    fn mode_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        digit_keys: &HashSet<String>,
+        driver: &dyn Fn(&str) -> bool,
+    ) {
         // mode keys: store a mode other than 0
         if let Some(m) = u.mode {
-            for n in &press_keys {
+            for n in press_keys {
                 if digit_keys.contains(n.as_str())
                     || u.enters.contains(n)
                     || refused(n)
@@ -385,7 +466,7 @@ impl Unit {
                     .first()
                     .and_then(|k| p.trigger(&k.1[1]))
                     .map(|b| p.blocks[b as usize].file.clone());
-                for n in &press_keys {
+                for n in press_keys {
                     let same_file =
                         p.trigger(n).map(|b| p.blocks[b as usize].file.clone()) == pad_file;
                     if same_file
@@ -399,15 +480,9 @@ impl Unit {
                 u.dynamic = true;
             }
         }
-        // variables that hold a state (compared with numbers somewhere)
-        let mut states: HashSet<VarId> = HashSet::new();
-        for b in &p.blocks {
-            for w in b.ops.windows(3) {
-                if let (Op::Load(v), Op::Push(_), Op::Eq) = (&w[0], &w[1], &w[2]) {
-                    states.insert(*v);
-                }
-            }
-        }
+    }
+
+    fn watch_keys(p: &Program, u: &mut Unit, states: &HashSet<VarId>) {
         for e in &u.enters {
             let b = p.trigger(e).unwrap();
             let (f, s) = stores(p, b);
@@ -435,6 +510,14 @@ impl Unit {
         u.watch.dedup();
         u.watch_str.sort_unstable();
         u.watch_str.dedup();
+    }
+
+    fn toggle_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        driver: &dyn Fn(&str) -> bool,
+    ) {
         // a card or switch of the unit: a pure toggle its script compares with 1
         let unit_files: HashSet<&std::path::Path> = u
             .keypads
@@ -443,7 +526,7 @@ impl Unit {
             .filter_map(|k| p.trigger(k))
             .map(|b| p.blocks[b as usize].file.as_path())
             .collect();
-        for n in &press_keys {
+        for n in press_keys {
             if !driver(n) {
                 continue;
             }
@@ -464,9 +547,18 @@ impl Unit {
                 u.toggles.push((n.to_string(), *a));
             }
         }
+    }
+
+    fn busstop_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        digit_keys: &HashSet<String>,
+        driver: &dyn Fn(&str) -> bool,
+    ) {
         // keys that move the IBIS on by a stop: `(L.L.IBIS_busstop) 1 + (S.L.IBIS_busstop)`
         if let Some(bs) = u.busstop {
-            for n in &press_keys {
+            for n in press_keys {
                 if !driver(n) || digit_keys.contains(n.as_str()) {
                     continue;
                 }
@@ -488,6 +580,15 @@ impl Unit {
             u.next_stop
                 .sort_by_key(|n| rank(n, &["stumm", "mute", "silent", "quiet"]));
         }
+    }
+
+    fn session_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        digit_keys: &HashSet<String>,
+        driver: &dyn Fn(&str) -> bool,
+    ) {
         // the variable the number keys test before they type (the ALMEX's screen), the keys
         // that set it, and the screen a driver drives with: where the entry and stop keys
         // work but the number keys do not
@@ -535,6 +636,16 @@ impl Unit {
                 u.session = Some((g, setters, driving.first().map(|v| *v as f32)));
             }
         }
+    }
+
+    fn home_keys(
+        p: &Program,
+        u: &mut Unit,
+        press_keys: &[&String],
+        digit_keys: &HashSet<String>,
+        driver: &dyn Fn(&str) -> bool,
+        states: &HashSet<VarId>,
+    ) {
         if let (None, Some(m)) = (&u.session, u.mode) {
             let goal = [u.line, u.route, u.terminus, u.busstop];
             let mut entry_screens: Vec<(VarId, f32)> = Vec::new();
@@ -578,7 +689,6 @@ impl Unit {
                 }
             }
         }
-        u
     }
 
     fn describe(&self, p: &Program) -> String {
