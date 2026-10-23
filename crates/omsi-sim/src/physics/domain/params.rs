@@ -100,12 +100,10 @@ pub const STANDING: f32 = 0.15;
 /// the road takes. *tuned*
 pub const SLIP_MARGIN: f32 = 1.02;
 /// The body follows its wheels while its speed across is under the first (m/s) and its speed
-/// along over the second: holding, the tyres then take no roll. *tuned*
+/// along over the second: holding, the tyres then take no roll. Holding, more than the first
+/// across at the `[rot_pnt_long]` line is a knock from outside, which lets the tyres go. *tuned*
 pub const GRIPPED_ACROSS: f32 = 0.5;
 pub const GRIPPED_ALONG: f32 = 1.0;
-/// While the tyres hold, each may pass this many times its grip for the moment it takes the
-/// body to follow a quick turn of the wheel (OMSI sets the yaw rate outright). *tuned*
-pub const HOLD_REACH: f32 = 8.0;
 /// The tyres hold again once the sideways speed at every tyre is under this (m/s). *OMSI*
 pub const REHOLD_SPEED: f32 = 0.1;
 
