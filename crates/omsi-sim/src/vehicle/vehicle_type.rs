@@ -208,6 +208,14 @@ pub fn ai_couplings(def: &mut Vehicle) {
         });
 }
 
+/// What [`VehicleType::load_lod_meshes`] reads from the model's first LOD.
+struct LodMeshes {
+    meshes: Vec<VehicleMesh>,
+    missing_packs: Vec<(String, usize)>,
+    turned: Vec<(usize, String)>,
+    votes: std::collections::HashMap<String, WindingVotes>,
+}
+
 impl VehicleType {
     pub fn load(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, true)
@@ -279,6 +287,44 @@ impl VehicleType {
         for e in &program.errors {
             log::warn!("{e}");
         }
+        let LodMeshes {
+            mut meshes,
+            missing_packs,
+            turned,
+            votes,
+        } = Self::load_lod_meshes(root, &dir, &model_dir, &model);
+        Self::keep_authored_windings(&mut meshes, &turned, &votes, bus_file);
+        Self::warn_missing_packs(bus_file, &missing_packs);
+        let paint_schemes = Self::paint_schemes(&dir, &model);
+        let texchanges = omsi_model::load_texchanges(&dir, &model.texchanges);
+        let (wheel_meshes, suspension_axles) = wheel_meshes(&model, &meshes);
+        let mesh_boxes = Self::mesh_boxes(&meshes);
+        let mesh_bounds = Self::mesh_bounds(&meshes, keep_meshes);
+        if ai_copy {
+            Self::trim_bounding_box(&mut def, &meshes, bus_file);
+        }
+        if !keep_meshes {
+            Self::release_rigid_vertices(&mut meshes);
+        }
+        Ok(VehicleType {
+            def,
+            model,
+            model_dir,
+            program: Arc::new(program),
+            meshes,
+            paint_schemes,
+            texchanges,
+            wheel_meshes,
+            suspension_axles,
+            missing_packs,
+            mesh_bounds,
+            mesh_boxes,
+        })
+    }
+
+    /// The meshes of the model's first LOD, with what the winding pass needs: the meshes
+    /// turned round, their packs' votes, and the packs that are not installed.
+    fn load_lod_meshes(root: &Path, dir: &Path, model_dir: &Path, model: &Model) -> LodMeshes {
         let mut meshes = Vec::new();
         let mut missing_packs: Vec<(String, usize)> = Vec::new();
         // (by the vehicle pack each mesh comes from, see `winding_pack`)
@@ -361,13 +407,28 @@ impl VehicleType {
                 }
             }
         }
+        LodMeshes {
+            meshes,
+            missing_packs,
+            turned,
+            votes,
+        }
+    }
+
+    /// The meshes whose packs mostly face along their normals keep their winding.
+    fn keep_authored_windings(
+        meshes: &mut [VehicleMesh],
+        turned: &[(usize, String)],
+        votes: &std::collections::HashMap<String, WindingVotes>,
+        bus_file: &Path,
+    ) {
         // A pack whose meshes with a positive determinant mostly face along their normals
         // keeps the winding of its backwards ones (see bb0c32b: the Citelis' buttons). Asked
         // of the whole vehicle, a part borrowed from another pack - a ticket machine, a
         // display - was turned in one bus and kept in the next, whatever its own pack's
         // exporter does: the same Atron machine inside out in some buses only (#977, #1054).
         let mut kept = 0;
-        for (i, pack) in &turned {
+        for (i, pack) in turned {
             if votes.get(pack).is_some_and(WindingVotes::keep_authored) {
                 omsi_geometry::reverse_winding(&mut meshes[*i].data);
                 meshes[*i].keep_winding = true;
@@ -377,12 +438,19 @@ impl VehicleType {
         if kept > 0 {
             log::info!("{}: {kept} meshes keep their winding (their packs' meshes with a positive determinant face along their normals: {votes:?})", bus_file.display());
         }
-        for (pack, n) in &missing_packs {
+    }
+
+    fn warn_missing_packs(bus_file: &Path, missing_packs: &[(String, usize)]) {
+        for (pack, n) in missing_packs {
             log::warn!(
                 "{}: {n} meshes come from the vehicle pack 'Vehicles/{pack}', which is not installed - install it for the parts this bus borrows from it (displays, ticket machine, dashboard)",
                 bus_file.display()
             );
         }
+    }
+
+    /// The paint schemes of the model's `.cti` files, then of its own items.
+    fn paint_schemes(dir: &Path, model: &Model) -> Vec<PaintScheme> {
         let mut paint_schemes = Vec::new();
         for c in &model.ctc {
             let d = omsi_cfg::resolve_path(&dir, &c.path);
@@ -394,7 +462,7 @@ impl VehicleType {
             .ctc
             .first()
             .map(|c| omsi_cfg::resolve_path(&dir, &c.path))
-            .unwrap_or_else(|| dir.clone());
+            .unwrap_or_else(|| dir.to_path_buf());
         for it in &model.items {
             match paint_schemes.last_mut().filter(|s: &&mut PaintScheme| {
                 s.name.eq_ignore_ascii_case(&it.name) && s.dir == item_dir
@@ -411,9 +479,12 @@ impl VehicleType {
                 }),
             }
         }
-        let texchanges = omsi_model::load_texchanges(&dir, &model.texchanges);
-        let (wheel_meshes, suspension_axles) = wheel_meshes(&model, &meshes);
-        let mesh_boxes: Vec<(Vec3, Vec3)> = meshes
+        paint_schemes
+    }
+
+    /// The corners of each mesh's bounding box (zero for an empty mesh).
+    fn mesh_boxes(meshes: &[VehicleMesh]) -> Vec<(Vec3, Vec3)> {
+        meshes
             .iter()
             .map(|m| {
                 let lo = m
@@ -432,24 +503,31 @@ impl VehicleType {
                     (Vec3::ZERO, Vec3::ZERO)
                 }
             })
-            .collect();
-        let mesh_bounds = if keep_meshes {
+            .collect()
+    }
+
+    /// The bounding sphere of each mesh, kept only for the player's vehicle.
+    fn mesh_bounds(meshes: &[VehicleMesh], keep_meshes: bool) -> Vec<(Vec3, f32)> {
+        if keep_meshes {
             meshes
                 .iter()
                 .map(|m| omsi_geometry::bounding_sphere(&m.data.positions))
                 .collect()
         } else {
             vec![(Vec3::ZERO, 0.0); meshes.len()]
-        };
+        }
+    }
+
+    fn trim_bounding_box(def: &mut Vehicle, meshes: &[VehicleMesh], bus_file: &Path) {
         // A `[boundingbox]` much longer or wider than the model itself: the W906 Sprinter mod
         // declares 12 m for a 7 m van (copied from a bus), and the walkers ran into an
         // invisible wall metres ahead of its nose and behind its tail, the traffic kept its
         // distance from nothing. An AI copy's box is cut down to the model (never made
         // bigger); the player's vehicle keeps the box its file declares, as OMSI does - a
         // box that does not fit the model is the model's to fix.
-        if let Some(bb) = def.bounding_box.as_mut().filter(|_| ai_copy) {
+        if let Some(bb) = def.bounding_box.as_mut() {
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-            for m in &meshes {
+            for m in meshes {
                 for p in &m.data.positions {
                     lo = lo.min(*p);
                     hi = hi.max(*p);
@@ -469,36 +547,23 @@ impl VehicleType {
                 }
             }
         }
-        if !keep_meshes {
-            // a `[smoothskin]` mesh (the bellows of an articulated bus, `[setbone]`-bound to
-            // the joint's dummies) keeps its vertices and its bones even for an AI copy: it
-            // is reshaped as the joint turns (`scene::own_skinned_meshes`), which needs the
-            // rest pose and the bone weights this would otherwise throw away - an AI-loaded
-            // GN92 or O530G kept its bellows perfectly straight through every bend because
-            // there was nothing left to skin it from. There are only ever one or two such
-            // meshes in a model, so keeping them costs nothing like the half gigabyte this
-            // was written to save.
-            for m in meshes.iter_mut().filter(|m| m.skin.is_empty()) {
-                m.data = MeshData {
-                    ranges: std::mem::take(&mut m.data.ranges),
-                    ..Default::default()
-                };
-            }
+    }
+
+    fn release_rigid_vertices(meshes: &mut [VehicleMesh]) {
+        // a `[smoothskin]` mesh (the bellows of an articulated bus, `[setbone]`-bound to
+        // the joint's dummies) keeps its vertices and its bones even for an AI copy: it
+        // is reshaped as the joint turns (`scene::own_skinned_meshes`), which needs the
+        // rest pose and the bone weights this would otherwise throw away - an AI-loaded
+        // GN92 or O530G kept its bellows perfectly straight through every bend because
+        // there was nothing left to skin it from. There are only ever one or two such
+        // meshes in a model, so keeping them costs nothing like the half gigabyte this
+        // was written to save.
+        for m in meshes.iter_mut().filter(|m| m.skin.is_empty()) {
+            m.data = MeshData {
+                ranges: std::mem::take(&mut m.data.ranges),
+                ..Default::default()
+            };
         }
-        Ok(VehicleType {
-            def,
-            model,
-            model_dir,
-            program: Arc::new(program),
-            meshes,
-            paint_schemes,
-            texchanges,
-            wheel_meshes,
-            suspension_axles,
-            missing_packs,
-            mesh_bounds,
-            mesh_boxes,
-        })
     }
 
     /// Per axle of the `.bus` (whose first axle is number `first_axle` of the whole train):
