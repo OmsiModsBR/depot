@@ -51,9 +51,6 @@ fn cloud_fbm(p: vec2<f32>) -> f32 {
 @group(1) @binding(4) var t_clouds: texture_2d<f32>;
 @group(1) @binding(5) var s_repeat: sampler;
 
-/// How far the cloud field reaches before it repeats (m): a cumulus is then half a
-/// kilometre to two across.
-const CLOUD_FIELD_TILE: f32 = 14000.0;
 
 // The ground point under the sky at distance `t` along the view ray `d`, in the clouds' own
 // frame (world coordinates modulo 70 km, lib.rs `CLOUD_ORIGIN_PERIOD`), so that the cloud

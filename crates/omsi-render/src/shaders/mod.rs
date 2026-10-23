@@ -184,9 +184,15 @@ pub(crate) fn lean_scene(src: String) -> String {
     out
 }
 
+/// How far the cloud field reaches before it repeats (m): a cumulus is then half a kilometre
+/// to two across. Written into the sky shaders by `sky_shader_source`.
+pub(crate) const CLOUD_FIELD_TILE: f32 = 14000.0;
+
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
+    let cloud_tile = format!("const CLOUD_FIELD_TILE: f32 = {CLOUD_FIELD_TILE:?};");
     [
+        cloud_tile.as_str(),
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
         include_str!("common/fullscreen.wgsl"),
