@@ -47,7 +47,10 @@ impl Root {
         let dir = std::env::temp_dir().join(format!(
             "depot-golden-offscreen-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         // the stock files the start-up check asks for (`omsi_cfg::ORIGINAL_ESSENTIALS`), as empty
@@ -71,22 +74,48 @@ impl Root {
         }
         let w = |name: &str, text: &str| std::fs::write(map_dir.join(name), text).unwrap();
         let o = |name: &str, text: &str| std::fs::write(sco_dir.join(name), text).unwrap();
-        w("global.cfg", "[name]\nGolden offscreen\n\n[map]\n0\n0\ntile_0_0.map\n");
+        w(
+            "global.cfg",
+            "[name]\nGolden offscreen\n\n[map]\n0\n0\ntile_0_0.map\n",
+        );
         // one object 20 m north of the camera, at the tile's origin height
         w("tile_0_0.map", "[version]\n14\n\n[object]\n0\nSceneryobjects\\Golden\\box.sco\n7\n10\n20\n0\n0\n0\n0\n0\n");
-        o("box.sco", "[groups]\n1\nGolden\n[friendlyname]\nBox\n[mesh]\nbox.x\n");
+        o(
+            "box.sco",
+            "[groups]\n1\nGolden\n[friendlyname]\nBox\n[mesh]\nbox.x\n",
+        );
         // a 4 m cube, x; up; depth
         let v = [
-            (-2, 0, -2), (2, 0, -2), (2, 0, 2), (-2, 0, 2),
-            (-2, 4, -2), (2, 4, -2), (2, 4, 2), (-2, 4, 2),
+            (-2, 0, -2),
+            (2, 0, -2),
+            (2, 0, 2),
+            (-2, 0, 2),
+            (-2, 4, -2),
+            (2, 4, -2),
+            (2, 4, 2),
+            (-2, 4, 2),
         ];
-        let quads = [[0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]];
+        let quads = [
+            [0, 1, 2, 3],
+            [4, 7, 6, 5],
+            [0, 4, 5, 1],
+            [1, 5, 6, 2],
+            [2, 6, 7, 3],
+            [3, 7, 4, 0],
+        ];
         let verts: Vec<String> = v.iter().map(|(x, y, z)| format!("{x};{y};{z};")).collect();
         let faces: Vec<String> = quads
             .iter()
-            .flat_map(|q| [format!("3;{},{},{};", q[0], q[1], q[2]), format!("3;{},{},{};", q[0], q[2], q[3])])
+            .flat_map(|q| {
+                [
+                    format!("3;{},{},{};", q[0], q[1], q[2]),
+                    format!("3;{},{},{};", q[0], q[2], q[3]),
+                ]
+            })
             .collect();
-        let uvs: Vec<String> = (0..8).map(|i| format!("{};{};", i % 2, (i / 2) % 2)).collect();
+        let uvs: Vec<String> = (0..8)
+            .map(|i| format!("{};{};", i % 2, (i / 2) % 2))
+            .collect();
         o(
             "model/box.x",
             &format!(
@@ -102,7 +131,14 @@ impl Root {
                 vec!["0"; faces.len()].join(","),
             ),
         );
-        image::save_buffer(sco_dir.join("texture").join("box.png"), &[200, 40, 40, 255].repeat(16), 4, 4, image::ColorType::Rgba8).unwrap();
+        image::save_buffer(
+            sco_dir.join("texture").join("box.png"),
+            &[200, 40, 40, 255].repeat(16),
+            4,
+            4,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
         Root(dir)
     }
 
@@ -116,7 +152,14 @@ impl Root {
             .arg(&self.0)
             .args(["--map", "maps/Golden/global.cfg", "--offscreen"])
             .arg(&out)
-            .args(["--size", &format!("{}x{}", SIZE.0, SIZE.1), "--cam", "10,0,2,0,0", "--time", "12:00"])
+            .args([
+                "--size",
+                &format!("{}x{}", SIZE.0, SIZE.1),
+                "--cam",
+                "10,0,2,0,0",
+                "--time",
+                "12:00",
+            ])
             // settings, the remembered root and the content folder stay out of the user's home
             .env("HOME", &home)
             .env("USERPROFILE", &home)
@@ -136,7 +179,6 @@ impl Root {
 }
 
 impl Drop for Root {
-
     fn drop(&mut self) {
         if let (Ok(p), Ok(t)) = (self.0.canonicalize(), std::env::temp_dir().canonicalize()) {
             if p.starts_with(&t) && p != t {
@@ -183,7 +225,9 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap()).collect()
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap())
+        .collect()
 }
 
 /// The golden file of one adapter: backend and name, lower case, every run of other
@@ -197,7 +241,9 @@ fn golden_path(name: &str, backend: &str) -> PathBuf {
             slug.push('-');
         }
     }
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(GOLDEN_DIR).join(format!("{}.txt", slug.trim_end_matches('-')))
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(GOLDEN_DIR)
+        .join(format!("{}.txt", slug.trim_end_matches('-')))
 }
 
 #[test]
@@ -206,29 +252,50 @@ fn synthetic_root_reads_back_as_written() {
     let global = omsi_map::GlobalCfg::load(&root.0.join("maps/Golden/global.cfg")).unwrap();
     assert_eq!(global.name, "Golden offscreen");
     assert_eq!(global.tiles.len(), 1);
-    assert_eq!((global.tiles[0].x, global.tiles[0].y, global.tiles[0].file.as_str()), (0, 0, "tile_0_0.map"));
+    assert_eq!(
+        (
+            global.tiles[0].x,
+            global.tiles[0].y,
+            global.tiles[0].file.as_str()
+        ),
+        (0, 0, "tile_0_0.map")
+    );
     let tile = omsi_map::Tile::load(&root.0.join("maps/Golden/tile_0_0.map")).unwrap();
     assert_eq!(tile.objects.len(), 1);
     let o = &tile.objects[0];
-    assert_eq!((o.file.as_str(), o.id, o.pos), ("Sceneryobjects\\Golden\\box.sco", 7, [10.0, 20.0, 0.0]));
+    assert_eq!(
+        (o.file.as_str(), o.id, o.pos),
+        ("Sceneryobjects\\Golden\\box.sco", 7, [10.0, 20.0, 0.0])
+    );
 }
 
 #[test]
 fn offscreen_picture_is_stable_and_shows_the_box() {
-    if std::env::var_os("OMSI_GOLDEN_RENDER").is_none() && std::env::var_os("OMSI_GOLDEN_BLESS").is_none() {
+    if std::env::var_os("OMSI_GOLDEN_RENDER").is_none()
+        && std::env::var_os("OMSI_GOLDEN_BLESS").is_none()
+    {
         eprintln!("SKIP: set OMSI_GOLDEN_RENDER=1 to render the synthetic root (needs a graphics adapter)");
         return;
     }
     let Some((name, backend)) = adapter() else {
-        assert!(std::env::var_os("OMSI_GOLDEN_REQUIRE").is_none(), "OMSI_GOLDEN_REQUIRE is set but there is no graphics adapter");
+        assert!(
+            std::env::var_os("OMSI_GOLDEN_REQUIRE").is_none(),
+            "OMSI_GOLDEN_REQUIRE is set but there is no graphics adapter"
+        );
         eprintln!("SKIP: no graphics adapter here; the offscreen picture cannot be rendered");
         return;
     };
     let root = Root::new();
-    let a = root.render("a.png").unwrap_or_else(|e| panic!("offscreen run on {name} ({backend}) failed: {e}"));
+    let a = root
+        .render("a.png")
+        .unwrap_or_else(|e| panic!("offscreen run on {name} ({backend}) failed: {e}"));
     let b = root.render("b.png").unwrap();
     assert_eq!(a.dimensions(), SIZE);
-    assert_eq!(a.as_raw(), b.as_raw(), "two offscreen runs of the same root differ");
+    assert_eq!(
+        a.as_raw(),
+        b.as_raw(),
+        "two offscreen runs of the same root differ"
+    );
     // the box stands in the middle of the picture; the corner shows only what is behind it
     let (centre, corner) = (a.get_pixel(SIZE.0 / 2, SIZE.1 / 2).0, a.get_pixel(2, 2).0);
     assert_ne!(centre[..3], corner[..3], "the box is not in the picture");
@@ -242,7 +309,11 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
         eprintln!("golden written to {}", path.display());
         return;
     }
-    let shown = path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap_or(&path).display().to_string();
+    let shown = path
+        .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+        .unwrap_or(&path)
+        .display()
+        .to_string();
     let Ok(text) = std::fs::read_to_string(&path) else {
         if std::env::var_os("OMSI_GOLDEN_REQUIRE").is_some() {
             panic!("no golden for {name} ({backend}); if this picture is right, commit {shown} as:\n{golden}");
@@ -250,13 +321,33 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
         eprintln!("SKIP golden comparison: {shown} does not exist (OMSI_GOLDEN_BLESS=1 writes it)");
         return;
     };
-    let field = |k: &str| text.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap_or_default().to_string();
-    assert_eq!((field("adapter"), field("backend")), (name.clone(), backend.clone()), "{shown} was recorded on another adapter");
+    let field = |k: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(&format!("{k}=")))
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert_eq!(
+        (field("adapter"), field("backend")),
+        (name.clone(), backend.clone()),
+        "{shown} was recorded on another adapter"
+    );
     let want = unhex(&field("thumb"));
     assert_eq!(want.len(), thumb.len(), "golden has another thumbnail size");
-    let tolerance: f64 = std::env::var("OMSI_GOLDEN_TOLERANCE").ok().and_then(|v| v.parse().ok()).unwrap_or(6.0);
-    let mean = want.iter().zip(&thumb).map(|(w, g)| (*w as f64 - *g as f64).abs()).sum::<f64>() / want.len() as f64;
-    assert!(mean <= tolerance, "picture differs from the golden: mean difference {mean:.2} > {tolerance}");
+    let tolerance: f64 = std::env::var("OMSI_GOLDEN_TOLERANCE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6.0);
+    let mean = want
+        .iter()
+        .zip(&thumb)
+        .map(|(w, g)| (*w as f64 - *g as f64).abs())
+        .sum::<f64>()
+        / want.len() as f64;
+    assert!(
+        mean <= tolerance,
+        "picture differs from the golden: mean difference {mean:.2} > {tolerance}"
+    );
 }
 
 /// The window hands the rail the player drives on to `Traffic::signal_aspects`, so a train
@@ -268,12 +359,25 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
 #[test]
 fn window_and_offscreen_differ_in_the_rail_given_to_signal_aspects() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let offscreen = std::fs::read_to_string(src.join("offscreen.rs")).unwrap();
-    let window = std::fs::read_to_string(src.join("app_events.rs")).unwrap();
+    // (compared without whitespace, so that rustfmt's line breaks do not matter)
+    let squash = |s: &str| s.split_whitespace().collect::<String>();
+    let offscreen = squash(&std::fs::read_to_string(src.join("offscreen.rs")).unwrap());
+    let window = squash(&std::fs::read_to_string(src.join("app_events.rs")).unwrap());
     let calls = |s: &str| s.matches(".signal_aspects(").count();
     assert_eq!(calls(&offscreen), 1);
-    assert!(offscreen.contains("signal_aspects(&world.signal_routes, None)"), "offscreen no longer passes no rail");
+    assert!(
+        offscreen.contains(&squash("signal_aspects(&world.signal_routes, None)")),
+        "offscreen no longer passes no rail"
+    );
     assert_eq!(calls(&window), 1);
-    assert!(window.contains("signal_aspects(&w.signal_routes, rail)"), "the window no longer passes the player's rail");
-    assert!(window.contains("p.rail.as_ref()).map(|r| (r.lane, r.along))"), "the window's rail is no longer the player's");
+    assert!(
+        window.contains(&squash("signal_aspects(&w.signal_routes, rail)")),
+        "the window no longer passes the player's rail"
+    );
+    assert!(
+        window.contains(&squash(
+            ".and_then(|p| p.rail.as_ref()).map(|r| (r.lane, r.along))"
+        )),
+        "the window's rail is no longer the player's"
+    );
 }

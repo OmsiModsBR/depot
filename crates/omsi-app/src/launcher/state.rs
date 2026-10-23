@@ -11,22 +11,51 @@ use std::time::Instant;
 
 /// Results of background work.
 pub enum Msg {
-    Content(Result<(Vec<core::MapInfo>, Vec<core::VehicleInfo>, Vec<core::WeatherInfo>), String>),
+    Content(
+        Result<
+            (
+                Vec<core::MapInfo>,
+                Vec<core::VehicleInfo>,
+                Vec<core::WeatherInfo>,
+            ),
+            String,
+        >,
+    ),
     /// The first reading of the content: the maps and weathers (quick to read), before the
     /// buses.
-    ContentEarly { maps: Vec<core::MapInfo>, weathers: Vec<core::WeatherInfo> },
+    ContentEarly {
+        maps: Vec<core::MapInfo>,
+        weathers: Vec<core::WeatherInfo>,
+    },
     /// The first reading of the content: the buses of the next few folders, how many
     /// folders are read and how many there are.
-    VehiclesRead { batch: Vec<core::VehicleInfo>, done: usize, total: usize },
-    Lines { map: String, date: String, lines: Result<Vec<core::LineInfo>, String> },
+    VehiclesRead {
+        batch: Vec<core::VehicleInfo>,
+        done: usize,
+        total: usize,
+    },
+    Lines {
+        map: String,
+        date: String,
+        lines: Result<Vec<core::LineInfo>, String>,
+    },
     Poll(Result<core::Poll, String>),
     Profile(Result<core::Profile, String>),
     Profiles(Vec<String>),
-    Ibis { key: String, info: Result<core::IbisInfo, String> },
+    Ibis {
+        key: String,
+        info: Result<core::IbisInfo, String>,
+    },
     Args(Result<Vec<String>, String>),
     Launched(Result<core::Launched, String>),
-    Stopped { pid: u32, result: Result<bool, String> },
-    LogTail { pid: u32, lines: Vec<String> },
+    Stopped {
+        pid: u32,
+        result: Result<bool, String>,
+    },
+    LogTail {
+        pid: u32,
+        lines: Vec<String>,
+    },
     Mods(Result<core::ModsStatus, String>),
     /// What the content takes on disk and how much of it there is (Setup), for the reading
     /// of that number.
@@ -36,7 +65,10 @@ pub enum Msg {
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Join(serde_json::Value),
     #[cfg(feature = "lan")]
-    Server { address: String, info: Result<omsi_net::ws::ServerInfo, String> },
+    Server {
+        address: String,
+        info: Result<omsi_net::ws::ServerInfo, String>,
+    },
     /// A background job stopped on an error of its own (a panic): whatever it was loading
     /// is not coming.
     Crashed(String),
@@ -70,7 +102,10 @@ pub enum JoinProto {
 fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
     let c = omsi_net::SessionCode::decode(code)?;
     for a in c.addrs().into_iter().take(3) {
-        if let Ok(i) = omsi_net::ws::query(&format!("http://{}:{}", a.ip(), a.port().saturating_add(10)), false) {
+        if let Ok(i) = omsi_net::ws::query(
+            &format!("http://{}:{}", a.ip(), a.port().saturating_add(10)),
+            false,
+        ) {
             return Ok(i);
         }
     }
@@ -84,8 +119,17 @@ fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
 #[cfg_attr(not(feature = "lan"), allow(unused_mut))]
 fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
     #[cfg(feature = "lan")]
-    if !list.iter().any(|s| omsi_net::official::is_alias(&s.address)) {
-        list.insert(0, ServerEntry { name: omsi_net::official::NAME.into(), address: omsi_net::official::ALIAS.into() });
+    if !list
+        .iter()
+        .any(|s| omsi_net::official::is_alias(&s.address))
+    {
+        list.insert(
+            0,
+            ServerEntry {
+                name: omsi_net::official::NAME.into(),
+                address: omsi_net::official::ALIAS.into(),
+            },
+        );
     }
     list
 }
@@ -199,7 +243,10 @@ impl Choice {
     }
 
     pub fn load() -> Choice {
-        let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let c: Choice = std::fs::read_to_string(choice_path())
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
         Self::fresh(c)
     }
 
@@ -229,7 +276,9 @@ impl Choice {
             c.version = 3;
         }
         // (older launchers took a vehicle line of a broken ailists.cfg for the map's depot)
-        if c.hof.to_ascii_lowercase().contains(".bus") || c.hof.to_ascii_lowercase().contains(".ovh") {
+        if c.hof.to_ascii_lowercase().contains(".bus")
+            || c.hof.to_ascii_lowercase().contains(".ovh")
+        {
             c.hof.clear();
         }
         c
@@ -317,7 +366,8 @@ pub struct State {
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub servers: Vec<ServerEntry>,
     #[cfg(feature = "lan")]
-    pub server_info: std::collections::HashMap<String, (Instant, Result<omsi_net::ws::ServerInfo, String>)>,
+    pub server_info:
+        std::collections::HashMap<String, (Instant, Result<omsi_net::ws::ServerInfo, String>)>,
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub server_asked: std::collections::HashMap<String, Instant>,
     pub joined_server: Option<String>,
@@ -330,12 +380,26 @@ impl State {
         let (tx, rx) = channel();
         let config = core::load_config();
         let settings = core::get_settings().unwrap_or_else(|_| core::settings_from_text(None));
-        crate::ui_language(settings.get("language").and_then(|x| x.as_str()).unwrap_or("ENG"));
-        crate::mt::enable(settings.get("machine_translation").and_then(|x| x.as_bool()).unwrap_or(false));
+        crate::ui_language(
+            settings
+                .get("language")
+                .and_then(|x| x.as_str())
+                .unwrap_or("ENG"),
+        );
+        crate::mt::enable(
+            settings
+                .get("machine_translation")
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false),
+        );
         let keybindings = core::get_keybindings().unwrap_or(serde_json::Value::Null);
         let mut choice = Choice::load();
         // (at the real time, a trip picked in an earlier session has most likely left)
-        if settings.get("use_real_time").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if settings
+            .get("use_real_time")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             choice.start_trip = None;
         }
         let mut s = State {
@@ -389,7 +453,12 @@ impl State {
             poll_t: 0.0,
             polling: false,
             second_armed: None,
-            servers: with_official(std::fs::read(servers_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()),
+            servers: with_official(
+                std::fs::read(servers_path())
+                    .ok()
+                    .and_then(|b| serde_json::from_slice(&b).ok())
+                    .unwrap_or_default(),
+            ),
             #[cfg(feature = "lan")]
             server_info: Default::default(),
             server_asked: Default::default(),
@@ -419,7 +488,11 @@ impl State {
 
     /// A game is about to start, starting (not in the list of games yet) or running.
     pub fn in_game(&self) -> bool {
-        self.queued_launch.is_some() || self.launch_hold.is_some_and(|t| t.elapsed().as_secs_f32() < 15.0) || self.instances.iter().any(|i| i.running)
+        self.queued_launch.is_some()
+            || self
+                .launch_hold
+                .is_some_and(|t| t.elapsed().as_secs_f32() < 15.0)
+            || self.instances.iter().any(|i| i.running)
     }
 
     pub fn spawn_launch(&mut self, d: core::Duty) {
@@ -456,9 +529,16 @@ impl State {
             let r = (|| -> anyhow::Result<_> {
                 let maps = core::list_maps()?;
                 let weathers = core::list_weather()?;
-                let _ = tx.send(Msg::ContentEarly { maps: maps.clone(), weathers: weathers.clone() });
+                let _ = tx.send(Msg::ContentEarly {
+                    maps: maps.clone(),
+                    weathers: weathers.clone(),
+                });
                 let vehicles = core::list_vehicles_progress(|batch, done, total| {
-                    let _ = tx.send(Msg::VehiclesRead { batch: batch.to_vec(), done, total });
+                    let _ = tx.send(Msg::VehiclesRead {
+                        batch: batch.to_vec(),
+                        done,
+                        total,
+                    });
                 })?;
                 Ok((maps, vehicles, weathers))
             })();
@@ -479,8 +559,12 @@ impl State {
     /// the first.
     fn pick_map(&mut self) {
         if !self.maps.iter().any(|m| m.file == self.choice.map) {
-            let last = core::omsi_options(std::path::Path::new(&self.config.root)).and_then(|o| o.last_map);
-            if let Some(m) = last.and_then(|l| self.maps.iter().find(|m| m.file.eq_ignore_ascii_case(&l))).or(self.maps.first()) {
+            let last = core::omsi_options(std::path::Path::new(&self.config.root))
+                .and_then(|o| o.last_map);
+            if let Some(m) = last
+                .and_then(|l| self.maps.iter().find(|m| m.file.eq_ignore_ascii_case(&l)))
+                .or(self.maps.first())
+            {
                 self.choice.map = m.file.clone();
                 self.choice.entry = -1;
             }
@@ -528,7 +612,10 @@ impl State {
         if self.ibis.as_ref().map(|i| i.0 == key).unwrap_or(false) {
             return;
         }
-        self.spawn(move || Msg::Ibis { key, info: core::ibis_info(&bus, &hof, &line).map_err(|e| format!("{e:#}")) });
+        self.spawn(move || Msg::Ibis {
+            key,
+            info: core::ibis_info(&bus, &hof, &line).map_err(|e| format!("{e:#}")),
+        });
     }
 
     pub fn load_args(&mut self) {
@@ -576,7 +663,10 @@ impl State {
         // the host's status (its buses): at the code's addresses, else through its tunnel
         if omsi_net::looks_like_code(&self.choice.lan_addr) {
             let code = self.choice.lan_addr.clone();
-            self.spawn(move || Msg::Server { info: host_status(&code), address: code });
+            self.spawn(move || Msg::Server {
+                info: host_status(&code),
+                address: code,
+            });
         }
     }
 
@@ -586,8 +676,18 @@ impl State {
         if self.choice.lan_mode != "join" {
             return None;
         }
-        let key = self.joined_server.clone().unwrap_or_else(|| self.choice.lan_addr.clone());
-        let list = self.server_info.get(&key)?.1.as_ref().ok()?.vehicles.clone();
+        let key = self
+            .joined_server
+            .clone()
+            .unwrap_or_else(|| self.choice.lan_addr.clone());
+        let list = self
+            .server_info
+            .get(&key)?
+            .1
+            .as_ref()
+            .ok()?
+            .vehicles
+            .clone();
         (!list.is_empty()).then_some(list)
     }
 
@@ -605,7 +705,10 @@ impl State {
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     pub fn save_servers(&self) {
         let _ = std::fs::create_dir_all(core::data_dir());
-        let _ = std::fs::write(servers_path(), serde_json::to_vec_pretty(&self.servers).unwrap_or_default());
+        let _ = std::fs::write(
+            servers_path(),
+            serde_json::to_vec_pretty(&self.servers).unwrap_or_default(),
+        );
     }
 
     /// Ask a server about itself (its status and icon), at most every `every` seconds.
@@ -615,12 +718,21 @@ impl State {
         if true {
             return;
         }
-        if self.server_asked.get(address).map(|t| t.elapsed().as_secs_f32() < every).unwrap_or(false) {
+        if self
+            .server_asked
+            .get(address)
+            .map(|t| t.elapsed().as_secs_f32() < every)
+            .unwrap_or(false)
+        {
             return;
         }
-        self.server_asked.insert(address.to_string(), Instant::now());
+        self.server_asked
+            .insert(address.to_string(), Instant::now());
         let a = address.to_string();
-        self.spawn(move || Msg::Server { info: omsi_net::ws::query(&a, true), address: a });
+        self.spawn(move || Msg::Server {
+            info: omsi_net::ws::query(&a, true),
+            address: a,
+        });
     }
 
     /// The Drive page joins `address`: the server's map is the map, the session is joined.
@@ -628,8 +740,13 @@ impl State {
     /// (a WebSocket), or `Auto` (the web gateway where the server answered, else UDP).
     #[cfg(feature = "lan")]
     pub fn join_server(&mut self, address: &str, proto: JoinProto) {
-        let info = self.server_info.get(address).cloned().and_then(|(_, r)| r.ok());
-        let is_web = omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
+        let info = self
+            .server_info
+            .get(address)
+            .cloned()
+            .and_then(|(_, r)| r.ok());
+        let is_web =
+            omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
         let proto = match (proto, &info) {
             (JoinProto::Auto, Some(_)) => JoinProto::WebSocket,
             (JoinProto::Auto, None) if !is_web => JoinProto::Udp,
@@ -638,18 +755,28 @@ impl State {
         let lan_addr = match proto {
             JoinProto::Udp => {
                 if is_web {
-                    self.set_status("UDP needs the game's address (host or host:port), not a web link", true);
+                    self.set_status(
+                        "UDP needs the game's address (host or host:port), not a web link",
+                        true,
+                    );
                     return;
                 }
                 address.to_string()
             }
             _ => {
                 let Some(info) = info.as_ref() else {
-                    self.set_status("The server has not answered yet (is its address right? is it running?)", true);
+                    self.set_status(
+                        "The server has not answered yet (is its address right? is it running?)",
+                        true,
+                    );
                     return;
                 };
                 // (a server added by its bare address is joined where it answered: its web gateway)
-                if !is_web && !info.reached_at.is_empty() { info.reached_at.clone() } else { address.to_string() }
+                if !is_web && !info.reached_at.is_empty() {
+                    info.reached_at.clone()
+                } else {
+                    address.to_string()
+                }
             }
         };
         if let Some(info) = info.as_ref() {
@@ -657,7 +784,12 @@ impl State {
             // (`lan_mods`), so this is a notice, not a refusal.
             // The Drive page needs a map of this installation chosen, so the choice stays
             // as it is then: `duty()` starts the game on the server's map anyway.
-            if !self.maps.is_empty() && !self.maps.iter().any(|m| m.file.eq_ignore_ascii_case(&info.map)) {
+            if !self.maps.is_empty()
+                && !self
+                    .maps
+                    .iter()
+                    .any(|m| m.file.eq_ignore_ascii_case(&info.map))
+            {
                 self.set_status(omsi_ui::tr("The server plays %{map}, which is not installed here: it is fetched from the server on joining.").replace("%{map}", &info.map), false);
             } else {
                 self.choice.map = info.map.clone();
@@ -666,12 +798,27 @@ impl State {
         self.choice.lan_mode = "join".into();
         self.choice.lan_addr = lan_addr;
         self.joined_server = Some(address.to_string());
-        let name = info.as_ref().map(|i| i.name.clone()).unwrap_or_else(|| address.to_string());
-        self.join = (true, omsi_ui::tr("the server %{name}").replace("%{name}", &name));
+        let name = info
+            .as_ref()
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| address.to_string());
+        self.join = (
+            true,
+            omsi_ui::tr("the server %{name}").replace("%{name}", &name),
+        );
         self.join_checked = address.to_string();
         self.touched();
-        let how = if proto == JoinProto::Udp { omsi_ui::tr(" over UDP").into_owned() } else { String::new() };
-        self.set_status(omsi_ui::tr("Joined %{name}%{how} - choose your bus and duty, then Start the duty").replace("%{name}", &name).replace("%{how}", &how), false);
+        let how = if proto == JoinProto::Udp {
+            omsi_ui::tr(" over UDP").into_owned()
+        } else {
+            String::new()
+        };
+        self.set_status(
+            omsi_ui::tr("Joined %{name}%{how} - choose your bus and duty, then Start the duty")
+                .replace("%{name}", &name)
+                .replace("%{how}", &how),
+            false,
+        );
     }
 
     /// Back to playing alone (the Drive page's "Leave Server").
@@ -690,12 +837,18 @@ impl State {
     }
 
     pub fn log_tail(&mut self, pid: u32) {
-        self.spawn(move || Msg::LogTail { pid, lines: core::log_tail(pid, 80).unwrap_or_default() });
+        self.spawn(move || Msg::LogTail {
+            pid,
+            lines: core::log_tail(pid, 80).unwrap_or_default(),
+        });
     }
 
     pub fn stop(&mut self, pid: u32) {
         self.stopping.insert(pid);
-        self.spawn(move || Msg::Stopped { pid, result: core::stop_instance(pid).map_err(|e| format!("{e:#}")) });
+        self.spawn(move || Msg::Stopped {
+            pid,
+            result: core::stop_instance(pid).map_err(|e| format!("{e:#}")),
+        });
     }
 
     pub fn install(&mut self, path: String) {
@@ -709,8 +862,15 @@ impl State {
         let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
-        self.spawn(move || Msg::ModInfo(core::inspect_mod(std::path::Path::new(&p2)).map_err(|e| format!("{e:#}"))));
-        self.spawn(move || Msg::Installed(core::start_install(std::path::Path::new(&path), &mode).map_err(|e| format!("{e:#}"))));
+        self.spawn(move || {
+            Msg::ModInfo(core::inspect_mod(std::path::Path::new(&p2)).map_err(|e| format!("{e:#}")))
+        });
+        self.spawn(move || {
+            Msg::Installed(
+                core::start_install(std::path::Path::new(&path), &mode)
+                    .map_err(|e| format!("{e:#}")),
+            )
+        });
     }
 
     pub fn launch(&mut self) {
@@ -723,8 +883,13 @@ impl State {
         if !self.save_pending_settings() {
             return;
         }
-        if !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root)).is_empty() {
-            self.set_status("A session needs the original OMSI 2: choose its folder under Setup first.", true);
+        if !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root))
+            .is_empty()
+        {
+            self.set_status(
+                "A session needs the original OMSI 2: choose its folder under Setup first.",
+                true,
+            );
             return;
         }
         let mut d = self.duty();
@@ -745,8 +910,17 @@ impl State {
         // you on Berlin-Spandau"). A map not installed here comes with the host's mods.
         #[cfg(feature = "lan")]
         let host_map = (c.lan_mode == "join")
-            .then(|| self.joined_server.clone().unwrap_or_else(|| c.lan_addr.clone()))
-            .and_then(|k| self.server_info.get(&k).and_then(|x| x.1.as_ref().ok()).map(|i| i.map.trim().replace('\\', "/")))
+            .then(|| {
+                self.joined_server
+                    .clone()
+                    .unwrap_or_else(|| c.lan_addr.clone())
+            })
+            .and_then(|k| {
+                self.server_info
+                    .get(&k)
+                    .and_then(|x| x.1.as_ref().ok())
+                    .map(|i| i.map.trim().replace('\\', "/"))
+            })
             .filter(|m| m.to_ascii_lowercase().contains("maps/"));
         #[cfg(not(feature = "lan"))]
         let host_map: Option<String> = None;
@@ -756,11 +930,20 @@ impl State {
             paint: Some(c.paint.clone()).filter(|p| !p.is_empty()),
             plate: Some(c.plate.clone()).filter(|p| !p.trim().is_empty()),
             number: Some(c.number.clone()).filter(|n| !n.trim().is_empty()),
-            hof: Some(if c.hof_manual { c.hof.clone() } else { self.default_hof() }).filter(|p| !p.is_empty()),
+            hof: Some(if c.hof_manual {
+                c.hof.clone()
+            } else {
+                self.default_hof()
+            })
+            .filter(|p| !p.is_empty()),
             entry: Some(c.entry),
             line: if c.free { None } else { c.line.clone() },
             tour: if c.free { None } else { c.tour.clone() },
-            trip: if c.free { None } else { self.picked_trip().map(|i| i.to_string()) },
+            trip: if c.free {
+                None
+            } else {
+                self.picked_trip().map(|i| i.to_string())
+            },
             whole_tour: !c.free && self.picked_trip().is_some(),
             time: format!("{:02}:{:02}", c.time / 60, c.time % 60),
             date: Some(c.date.clone()),
@@ -783,16 +966,26 @@ impl State {
     /// The situations to continue on the chosen map: the last one and the save slots
     /// (looked up at most every two seconds: the page asks every frame).
     pub fn saved_situations(&mut self) -> &[core::SavedSituation] {
-        let fresh = self.last_sit.as_ref().is_some_and(|(m, _, t)| *m == self.choice.map && t.elapsed().as_secs_f32() < 2.0);
+        let fresh = self
+            .last_sit
+            .as_ref()
+            .is_some_and(|(m, _, t)| *m == self.choice.map && t.elapsed().as_secs_f32() < 2.0);
         if !fresh {
-            if self.last_sit.as_ref().is_some_and(|(m, _, _)| *m != self.choice.map) {
+            if self
+                .last_sit
+                .as_ref()
+                .is_some_and(|(m, _, _)| *m != self.choice.map)
+            {
                 self.save_pick = 0;
             }
             let list = core::saved_situations(&self.choice.map);
             self.save_pick = self.save_pick.min(list.len().saturating_sub(1));
             self.last_sit = Some((self.choice.map.clone(), list, std::time::Instant::now()));
         }
-        self.last_sit.as_ref().map(|x| x.1.as_slice()).unwrap_or(&[])
+        self.last_sit
+            .as_ref()
+            .map(|x| x.1.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Whether a situation to continue lies on the chosen map.
@@ -807,7 +1000,11 @@ impl State {
         }
         let pick = self.save_pick;
         let list = self.saved_situations();
-        let Some(file) = list.get(pick).or_else(|| list.first()).map(|s| s.file.clone()) else {
+        let Some(file) = list
+            .get(pick)
+            .or_else(|| list.first())
+            .map(|s| s.file.clone())
+        else {
             self.set_status("No situation left on this map yet", true);
             return;
         };
@@ -856,7 +1053,11 @@ impl State {
                 true
             }
             Err(e) => {
-                self.set_status(omsi_ui::tr("Could not save settings: %{error}").replace("%{error}", &format!("{e:#}")), true);
+                self.set_status(
+                    omsi_ui::tr("Could not save settings: %{error}")
+                        .replace("%{error}", &format!("{e:#}")),
+                    true,
+                );
                 false
             }
         }
@@ -869,17 +1070,36 @@ impl State {
 
     /// Work done each frame: results of background work, the regular poll, saving.
     fn follow_clock(&mut self) {
-        let on = |k: &str| self.settings.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
-        let (time, date, year) = (on("use_real_time"), on("use_real_date"), on("use_real_year"));
+        let on = |k: &str| {
+            self.settings
+                .get(k)
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        let (time, date, year) = (
+            on("use_real_time"),
+            on("use_real_date"),
+            on("use_real_year"),
+        );
         if !time && !date {
             return;
         }
-        let Some((y, mo, d, h, m)) = core::local_now() else { return };
+        let Some((y, mo, d, h, m)) = core::local_now() else {
+            return;
+        };
         if time {
             self.choice.time = h * 60 + m;
         }
         if date {
-            let y = if year { y } else { self.choice.date.get(..4).and_then(|x| x.parse().ok()).unwrap_or(y) };
+            let y = if year {
+                y
+            } else {
+                self.choice
+                    .date
+                    .get(..4)
+                    .and_then(|x| x.parse().ok())
+                    .unwrap_or(y)
+            };
             let today = format!("{y:04}-{mo:02}-{d:02}");
             if self.choice.date != today {
                 self.choice.date = today;
@@ -923,7 +1143,8 @@ impl State {
             self.check_join();
         }
         let now = Instant::now();
-        self.fresh.retain(|_, t| now.duration_since(*t).as_secs() < 600);
+        self.fresh
+            .retain(|_, t| now.duration_since(*t).as_secs() < 600);
     }
 
     fn handle(&mut self, m: Msg) {
@@ -932,23 +1153,39 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
-                self.set_status(omsi_ui::tr("Reading the content stopped on an error: %{error}").replace("%{error}", &why.to_string()), true);
+                self.set_status(
+                    omsi_ui::tr("Reading the content stopped on an error: %{error}")
+                        .replace("%{error}", &why.to_string()),
+                    true,
+                );
             }
             #[cfg(feature = "lan")]
             Msg::Server { address, info } => {
                 // the host of the code typed in: its map is the one the duty is chosen on
                 // (installed here: the line, tour and entry point of another map go)
-                if self.choice.lan_mode == "join" && self.joined_server.is_none() && address == self.choice.lan_addr {
+                if self.choice.lan_mode == "join"
+                    && self.joined_server.is_none()
+                    && address == self.choice.lan_addr
+                {
                     if let Ok(i) = &info {
                         let theirs = i.map.trim().replace('\\', "/");
-                        if let Some((file, name)) = self.maps.iter().find(|m| m.file.eq_ignore_ascii_case(&theirs)).map(|m| (m.file.clone(), m.name.clone())) {
+                        if let Some((file, name)) = self
+                            .maps
+                            .iter()
+                            .find(|m| m.file.eq_ignore_ascii_case(&theirs))
+                            .map(|m| (m.file.clone(), m.name.clone()))
+                        {
                             if !self.choice.map.eq_ignore_ascii_case(&file) {
                                 self.choice.map = file;
                                 self.choice.line = None;
                                 self.choice.tour = None;
                                 self.choice.entry = 0;
                                 self.touched();
-                                self.set_status(omsi_ui::tr("The host drives on %{map}: that map is chosen").replace("%{map}", &name), false);
+                                self.set_status(
+                                    omsi_ui::tr("The host drives on %{map}: that map is chosen")
+                                        .replace("%{map}", &name),
+                                    false,
+                                );
                             }
                         }
                     }
@@ -959,39 +1196,105 @@ impl State {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(maps.iter().flat_map(|m| [m.name.as_str(), m.friendly.as_str()]));
+                crate::mt::protect(
+                    maps.iter()
+                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
+                );
                 crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
                 self.maps = maps;
                 self.weathers = weathers;
                 self.pick_map();
                 self.load_lines();
-                self.set_status(omsi_ui::tr("%{maps} maps - reading the buses…").replace("%{maps}", &self.maps.len().to_string()), false);
+                self.set_status(
+                    omsi_ui::tr("%{maps} maps - reading the buses…")
+                        .replace("%{maps}", &self.maps.len().to_string()),
+                    false,
+                );
             }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(batch.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(batch.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
+                crate::mt::protect(
+                    batch
+                        .iter()
+                        .flat_map(|v| {
+                            [
+                                v.name.as_str(),
+                                v.manufacturer.as_str(),
+                                v.type_name.as_str(),
+                            ]
+                        })
+                        .chain(
+                            batch
+                                .iter()
+                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
+                        ),
+                );
                 self.vehicles.extend(batch);
                 self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
                 // (names of things, not the interface: never machine-translated)
-                crate::mt::protect(maps.iter().flat_map(|m| [m.name.as_str(), m.friendly.as_str()]));
-                crate::mt::protect(vehicles.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(vehicles.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
+                crate::mt::protect(
+                    maps.iter()
+                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
+                );
+                crate::mt::protect(
+                    vehicles
+                        .iter()
+                        .flat_map(|v| {
+                            [
+                                v.name.as_str(),
+                                v.manufacturer.as_str(),
+                                v.type_name.as_str(),
+                            ]
+                        })
+                        .chain(
+                            vehicles
+                                .iter()
+                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
+                        ),
+                );
                 crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
-                let known: std::collections::HashSet<String> = self.maps.iter().map(|m| m.file.clone()).chain(self.vehicles.iter().map(|v| v.file.clone())).chain(self.weathers.iter().map(|w| w.file.clone())).collect();
+                let known: std::collections::HashSet<String> = self
+                    .maps
+                    .iter()
+                    .map(|m| m.file.clone())
+                    .chain(self.vehicles.iter().map(|v| v.file.clone()))
+                    .chain(self.weathers.iter().map(|w| w.file.clone()))
+                    .collect();
                 if !known.is_empty() {
-                    for f in maps.iter().map(|m| &m.file).chain(vehicles.iter().map(|v| &v.file)).chain(weathers.iter().map(|w| &w.file)) {
+                    for f in maps
+                        .iter()
+                        .map(|m| &m.file)
+                        .chain(vehicles.iter().map(|v| &v.file))
+                        .chain(weathers.iter().map(|w| &w.file))
+                    {
                         if !known.contains(f) {
                             self.fresh.insert(f.clone(), Instant::now());
                         }
                     }
                 }
-                self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses, %{weathers} weathers").replace("%{maps}", &maps.len().to_string()).replace("%{buses}", &vehicles.len().to_string()).replace("%{weathers}", &weathers.len().to_string()), false);
+                self.set_status(
+                    omsi_ui::tr("%{maps} maps, %{buses} buses, %{weathers} weathers")
+                        .replace("%{maps}", &maps.len().to_string())
+                        .replace("%{buses}", &vehicles.len().to_string())
+                        .replace("%{weathers}", &weathers.len().to_string()),
+                    false,
+                );
                 // (other files than before - another content folder chosen under Setup: the
                 // Maps and Vehicles pages take the new lists even when as many came)
-                let same = self.maps.iter().map(|m| &m.file).eq(maps.iter().map(|m| &m.file)) && self.vehicles.iter().map(|v| &v.file).eq(vehicles.iter().map(|v| &v.file));
+                let same = self
+                    .maps
+                    .iter()
+                    .map(|m| &m.file)
+                    .eq(maps.iter().map(|m| &m.file))
+                    && self
+                        .vehicles
+                        .iter()
+                        .map(|v| &v.file)
+                        .eq(vehicles.iter().map(|v| &v.file));
                 if !same {
                     self.content_gen += 1;
                 }
@@ -1019,7 +1322,9 @@ impl State {
                 }
                 self.pick_map();
                 // (the first reading asked for the lines with the maps already)
-                if !std::mem::take(&mut self.content_first) || self.lines_for != (self.choice.map.clone(), self.choice.date.clone()) {
+                if !std::mem::take(&mut self.content_first)
+                    || self.lines_for != (self.choice.map.clone(), self.choice.date.clone())
+                {
                     self.load_lines();
                 }
                 self.load_args();
@@ -1030,15 +1335,33 @@ impl State {
                 self.loading_content = false;
                 self.content_first = false;
                 self.content_done();
-                if omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root)).is_empty() {
-                    self.set_status(omsi_ui::tr("%{error}\nSet the OMSI 2 folder under Setup.").replace("%{error}", &e.to_string()), true);
+                if omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root))
+                    .is_empty()
+                {
+                    self.set_status(
+                        omsi_ui::tr("%{error}\nSet the OMSI 2 folder under Setup.")
+                            .replace("%{error}", &e.to_string()),
+                        true,
+                    );
                 } else {
                     self.set_status(root_problem(&self.config.root), true);
                 }
             }
             Msg::Lines { map, date, lines } => {
                 if let Ok(ls) = lines.as_ref() {
-                    crate::mt::protect(ls.iter().flat_map(|l| l.termini.iter().map(|t| t.as_str()).chain([l.name.as_str()])).chain(ls.iter().flat_map(|l| l.tours.iter().map(|t| t.number.as_str()))));
+                    crate::mt::protect(
+                        ls.iter()
+                            .flat_map(|l| {
+                                l.termini
+                                    .iter()
+                                    .map(|t| t.as_str())
+                                    .chain([l.name.as_str()])
+                            })
+                            .chain(
+                                ls.iter()
+                                    .flat_map(|l| l.tours.iter().map(|t| t.number.as_str())),
+                            ),
+                    );
                 }
                 if (map, date) != self.lines_for {
                     return;
@@ -1051,7 +1374,9 @@ impl State {
                         if let Some(line) = self.choice.line.clone() {
                             match self.lines.iter().find(|x| x.name == line) {
                                 None => {
-                                    note = omsi_ui::tr(" - line %{line} does not run on %{date}").replace("%{line}", &line.to_string()).replace("%{date}", &self.choice.date.to_string());
+                                    note = omsi_ui::tr(" - line %{line} does not run on %{date}")
+                                        .replace("%{line}", &line.to_string())
+                                        .replace("%{date}", &self.choice.date.to_string());
                                     self.choice.line = None;
                                     self.choice.tour = None;
                                 }
@@ -1066,7 +1391,13 @@ impl State {
                                 }
                             }
                         }
-                        self.set_status(omsi_ui::tr("%{n} lines on %{date}%{note}").replace("%{n}", &self.lines.len().to_string()).replace("%{date}", &self.choice.date.to_string()).replace("%{note}", &note), !note.is_empty());
+                        self.set_status(
+                            omsi_ui::tr("%{n} lines on %{date}%{note}")
+                                .replace("%{n}", &self.lines.len().to_string())
+                                .replace("%{date}", &self.choice.date.to_string())
+                                .replace("%{note}", &note),
+                            !note.is_empty(),
+                        );
                     }
                     Err(e) => {
                         self.lines.clear();
@@ -1083,11 +1414,26 @@ impl State {
                             core::log_to_file(&format!("inbox: installing {s}"));
                         }
                         if !p.started.is_empty() {
-                            self.set_status(omsi_ui::tr("Installing from the Mods folder: %{list}").replace("%{list}", &p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
+                            self.set_status(
+                                omsi_ui::tr("Installing from the Mods folder: %{list}").replace(
+                                    "%{list}",
+                                    &p.started
+                                        .iter()
+                                        .map(|x| x.rsplit('/').next().unwrap_or(x))
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                ),
+                                false,
+                            );
                         }
                         let mut installed = false;
                         for j in &p.jobs {
-                            let was = self.jobs.iter().find(|x| x.id == j.id).map(|x| x.finished.is_some()).unwrap_or(false);
+                            let was = self
+                                .jobs
+                                .iter()
+                                .find(|x| x.id == j.id)
+                                .map(|x| x.finished.is_some())
+                                .unwrap_or(false);
                             if j.finished.is_some() && !was && self.stamp.is_some() {
                                 if j.state == "done" {
                                     installed = true;
@@ -1103,10 +1449,16 @@ impl State {
                             let still = p.instances.iter().any(|n| n.pid == old.pid && n.running);
                             if !still && !self.stopping.contains(&old.pid) {
                                 if let Some(why) = disconnect_of(std::path::Path::new(&old.log)) {
-                                    core::log_to_file(&format!("game {} was sent away by its server: {why}", old.pid));
+                                    core::log_to_file(&format!(
+                                        "game {} was sent away by its server: {why}",
+                                        old.pid
+                                    ));
                                     self.disconnected = Some(why);
                                 } else if let Some(c) = crash_of(std::path::Path::new(&old.log)) {
-                                    core::log_to_file(&format!("game {} ended on an error: {}", old.pid, c.0));
+                                    core::log_to_file(&format!(
+                                        "game {} ended on an error: {}",
+                                        old.pid, c.0
+                                    ));
                                     self.crash = Some(c);
                                 }
                             }
@@ -1128,7 +1480,11 @@ impl State {
                         // reading over on top of the one going: a big installation never
                         // finished. A change then is taken up when the reading is done.)
                         let changed = self.stamp.as_ref().map(|s| *s != p.stamp).unwrap_or(false);
-                        self.stamp = if self.loading_content { None } else { Some(p.stamp) };
+                        self.stamp = if self.loading_content {
+                            None
+                        } else {
+                            Some(p.stamp)
+                        };
                         if changed || installed {
                             if self.loading_content {
                                 self.reload_content = true;
@@ -1169,15 +1525,42 @@ impl State {
             Msg::Ibis { key, info } => self.ibis = Some((key, info)),
             Msg::Args(r) => {
                 self.cmdline = match r {
-                    Ok(a) => format!("omsi {}", a.iter().map(|x| if x.contains(' ') { format!("\"{x}\"") } else { x.clone() }).collect::<Vec<_>>().join(" ")),
+                    Ok(a) => format!(
+                        "omsi {}",
+                        a.iter()
+                            .map(|x| if x.contains(' ') {
+                                format!("\"{x}\"")
+                            } else {
+                                x.clone()
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    ),
                     Err(e) => e,
                 }
             }
             Msg::Launched(Ok(l)) => {
-                core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
+                core::log_to_file(&format!(
+                    "launched pid {} ({} other game(s) running): {}",
+                    l.pid, l.others, l.command
+                ));
                 self.launched_pid = Some(l.pid);
                 self.started_here = Some(l.pid);
-                self.set_status(omsi_ui::tr("Game started (process %{pid}), log %{log}%{others}").replace("%{pid}", &l.pid.to_string()).replace("%{log}", &l.log.to_string()).replace("%{others}", &if l.others > 0 { omsi_ui::tr(" - %{n} other game(s) keep running").replace("%{n}", &l.others.to_string()) } else { String::new() }), false);
+                self.set_status(
+                    omsi_ui::tr("Game started (process %{pid}), log %{log}%{others}")
+                        .replace("%{pid}", &l.pid.to_string())
+                        .replace("%{log}", &l.log.to_string())
+                        .replace(
+                            "%{others}",
+                            &if l.others > 0 {
+                                omsi_ui::tr(" - %{n} other game(s) keep running")
+                                    .replace("%{n}", &l.others.to_string())
+                            } else {
+                                String::new()
+                            },
+                        ),
+                    false,
+                );
                 self.poll_now();
             }
             Msg::Launched(Err(e)) => {
@@ -1218,7 +1601,11 @@ impl State {
             Msg::Installed(Err(e)) => self.set_status(e, true),
             Msg::Join(v) => {
                 let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
-                let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                let text = v
+                    .get("text")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 self.join = (ok, text);
             }
         }
@@ -1249,24 +1636,49 @@ impl State {
     pub fn default_hof(&self) -> String {
         let on_date = self.map().and_then(|m| {
             let dir = omsi_cfg::resolve_path(std::path::Path::new(&self.config.root), &m.file);
-            omsi_map::ailists::depot_hof_on(dir.parent()?, omsi_map::ailists::date_code(&self.choice.date)?)
+            omsi_map::ailists::depot_hof_on(
+                dir.parent()?,
+                omsi_map::ailists::date_code(&self.choice.date)?,
+            )
         });
-        let want = on_date.or_else(|| self.map().map(|m| m.hof.clone())).unwrap_or_default();
+        let want = on_date
+            .or_else(|| self.map().map(|m| m.hof.clone()))
+            .unwrap_or_default();
         let Some(v) = self.bus() else { return want };
         // (the bus's own depot of the same place before the map's borrowed from another
         // bus, and one named like the map before its first, #896)
         let names: Vec<&str> = v.hofs.iter().map(|h| h.as_str()).collect();
-        let like = |hints: &[&str]| omsi_vehicle::hof::closest_name(&names, hints).map(|i| v.hofs[i].clone());
-        let map_hints: Vec<String> = self.map().map(|m| vec![m.name.clone(), m.friendly.clone(), m.file.trim_end_matches("/global.cfg").rsplit('/').next().unwrap_or("").to_string()]).unwrap_or_default();
+        let like = |hints: &[&str]| {
+            omsi_vehicle::hof::closest_name(&names, hints).map(|i| v.hofs[i].clone())
+        };
+        let map_hints: Vec<String> = self
+            .map()
+            .map(|m| {
+                vec![
+                    m.name.clone(),
+                    m.friendly.clone(),
+                    m.file
+                        .trim_end_matches("/global.cfg")
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("")
+                        .to_string(),
+                ]
+            })
+            .unwrap_or_default();
         let map_hints: Vec<&str> = map_hints.iter().map(|h| h.as_str()).collect();
         // a depot file carrying the line driven: the day's, one named like the map, else the fullest
         let with_line = match (&self.choice.line, self.choice.free) {
-            (Some(line), false) => core::depot_names_with_line(std::path::Path::new(&self.config.root), &v.file, line),
+            (Some(line), false) => {
+                core::depot_names_with_line(std::path::Path::new(&self.config.root), &v.file, line)
+            }
             _ => Vec::new(),
         };
         if !with_line.is_empty() && !with_line.iter().any(|h| h.eq_ignore_ascii_case(&want)) {
             let names: Vec<&str> = with_line.iter().map(|h| h.as_str()).collect();
-            let hints: Vec<&str> = std::iter::once(want.as_str()).chain(map_hints.iter().copied()).collect();
+            let hints: Vec<&str> = std::iter::once(want.as_str())
+                .chain(map_hints.iter().copied())
+                .collect();
             let pick = omsi_vehicle::hof::closest_name(&names, &hints).unwrap_or(0);
             return with_line[pick].clone();
         }
@@ -1306,7 +1718,12 @@ impl State {
         self.choice.paint.clear();
         self.choice.number.clear();
         // (a hand-picked depot file stays when the new bus has one of that name)
-        let keep = self.choice.hof_manual && self.bus().is_some_and(|v| v.hofs.iter().any(|h| h.eq_ignore_ascii_case(&self.choice.hof)));
+        let keep = self.choice.hof_manual
+            && self.bus().is_some_and(|v| {
+                v.hofs
+                    .iter()
+                    .any(|h| h.eq_ignore_ascii_case(&self.choice.hof))
+            });
         if !keep {
             self.choice.hof_manual = false;
             self.choice.hof = self.default_hof();
@@ -1332,7 +1749,12 @@ impl State {
     /// (its timetable days with it), and a weather preset that does not fit it any more goes.
     pub fn set_season(&mut self, season: &str) {
         self.choice.season = season.to_string();
-        let months = [("spring", "04"), ("summer", "07"), ("autumn", "10"), ("winter", "01")];
+        let months = [
+            ("spring", "04"),
+            ("summer", "07"),
+            ("autumn", "10"),
+            ("winter", "01"),
+        ];
         if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
             let date = self.choice.date.clone();
             self.choice.date = date_in_month(&date, month);
@@ -1352,7 +1774,12 @@ impl State {
         if self.choice.season != "auto" {
             return &self.choice.season;
         }
-        let m: u32 = self.choice.date.get(5..7).and_then(|x| x.parse().ok()).unwrap_or(5);
+        let m: u32 = self
+            .choice
+            .date
+            .get(5..7)
+            .and_then(|x| x.parse().ok())
+            .unwrap_or(5);
         match m {
             12 | 1 | 2 => "winter",
             3..=5 => "spring",
@@ -1391,18 +1818,26 @@ impl State {
     pub fn picked_trip(&self) -> Option<usize> {
         let (line, tour, index, time) = self.choice.start_trip.as_ref()?;
         // (at the real time the clock moves on, and the trip picked stays: the bus waits for it)
-        (self.choice.line.as_ref() == Some(line) && self.choice.tour.as_ref() == Some(tour) && (*time == self.choice.time || self.real_time())).then_some(*index)
+        (self.choice.line.as_ref() == Some(line)
+            && self.choice.tour.as_ref() == Some(tour)
+            && (*time == self.choice.time || self.real_time()))
+        .then_some(*index)
     }
 
     /// The start time follows the computer's clock (`use_real_time`).
     pub fn real_time(&self) -> bool {
-        self.settings.get("use_real_time").and_then(|v| v.as_bool()).unwrap_or(false)
+        self.settings
+            .get("use_real_time")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
     }
 
     /// Start the tour at trip `index` (leaving at `departure`): at its departure, or at the
     /// real time, which then stays and the bus waits for the trip.
     pub fn pick_trip(&mut self, index: usize, departure: f64) {
-        let (Some(line), Some(tour)) = (self.choice.line.clone(), self.choice.tour.clone()) else { return };
+        let (Some(line), Some(tour)) = (self.choice.line.clone(), self.choice.tour.clone()) else {
+            return;
+        };
         if !self.real_time() {
             self.choice.time = (departure / 60.0).floor() as i32;
         }
@@ -1418,7 +1853,14 @@ fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
 
 /// The trip a tour starts with at `now`, shared by the route preview and the launch choice.
 pub(super) fn trip_index_at(tour: &core::TourInfo, now: f64) -> Option<usize> {
-    tour.trips.iter().position(|x| x.departure >= now - 120.0).or(if tour.trips.is_empty() { None } else { Some(tour.trips.len() - 1) })
+    tour.trips
+        .iter()
+        .position(|x| x.departure >= now - 120.0)
+        .or(if tour.trips.is_empty() {
+            None
+        } else {
+            Some(tour.trips.len() - 1)
+        })
 }
 
 pub fn hhmm(seconds: f64) -> String {
@@ -1431,7 +1873,11 @@ pub fn hhmm(seconds: f64) -> String {
 fn date_in_month(date: &str, month: &str) -> String {
     let yy = date.get(0..4).unwrap_or("1989");
     let last = if month == "04" { 30 } else { 31 };
-    let dd = date.get(8..10).and_then(|d| d.parse::<u32>().ok()).unwrap_or(15).clamp(1, last);
+    let dd = date
+        .get(8..10)
+        .and_then(|d| d.parse::<u32>().ok())
+        .unwrap_or(15)
+        .clamp(1, last);
     format!("{yy}-{month}-{dd:02}")
 }
 
@@ -1457,7 +1903,9 @@ pub fn fmt_bytes(b: u64) -> String {
 }
 
 pub fn short_map(m: &str) -> String {
-    m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
+    m.trim_start_matches("maps/")
+        .trim_end_matches("/global.cfg")
+        .to_string()
 }
 
 /// Whether `path` is a .zip file (what the Mods page installs): `core::is_zip`.
@@ -1485,7 +1933,10 @@ pub fn root_problem(root: &str) -> String {
         "The original OMSI 2 was not found automatically: choose its folder (the one with Omsi.exe, maps and Vehicles in it) under Setup and press Save.".to_string()
     } else if !p.exists() {
         format!("{root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.")
-    } else if missing.iter().any(|m| m.contains("content folder")) || p.join("depot.exe").exists() || p.join("depot").is_file() {
+    } else if missing.iter().any(|m| m.contains("content folder"))
+        || p.join("depot.exe").exists()
+        || p.join("depot").is_file()
+    {
         format!("{root} is Project Depot's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
     } else if missing.is_empty() {
         String::new()
@@ -1501,10 +1952,20 @@ pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
     let text = std::fs::read(log).ok()?;
     let text = String::from_utf8_lossy(&text[text.len().saturating_sub(64 * 1024)..]).to_string();
     let all: Vec<&str> = text.lines().collect();
-    let run = &all[all.iter().rposition(|l| l.contains("starting the game:")).unwrap_or(0)..];
-    let line = run.iter().rev().find(|l| l.contains(crate::lan::LEFT_SERVER))?;
+    let run = &all[all
+        .iter()
+        .rposition(|l| l.contains("starting the game:"))
+        .unwrap_or(0)..];
+    let line = run
+        .iter()
+        .rev()
+        .find(|l| l.contains(crate::lan::LEFT_SERVER))?;
     let why = line.split_once(crate::lan::LEFT_SERVER)?.1.trim();
-    Some(if why.is_empty() { "sent away by the host".to_string() } else { why.chars().take(300).collect() })
+    Some(if why.is_empty() {
+        "sent away by the host".to_string()
+    } else {
+        why.chars().take(300).collect()
+    })
 }
 
 /// Without LAN play no server sends a game away.
@@ -1529,19 +1990,36 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     };
     // (an error the game got over - "the game goes on", a part of the picture left out -
     // is no crash)
-    let recovered = |l: &str| l.contains("the game goes on") || l.contains("left out") || l.contains("could not be recorded");
+    let recovered = |l: &str| {
+        l.contains("the game goes on")
+            || l.contains("left out")
+            || l.contains("could not be recorded")
+    };
     // (a lost graphics device ends the game in order - it saves the run - but it is a crash
     // for the player all the same: the driver gave up)
     // (one the game got over by starting again with safer graphics is no crash)
-    if lines.iter().any(|l| l.contains("starting again with safer graphics")) {
+    if lines
+        .iter()
+        .any(|l| l.contains("starting again with safer graphics"))
+    {
         return None;
     }
-    let lost = lines.iter().rposition(|l| l.contains("the graphics device was lost"));
+    let lost = lines
+        .iter()
+        .rposition(|l| l.contains("the graphics device was lost"));
     if lost.is_none() && lines.iter().any(|l| l.contains("game ends")) {
         return None;
     }
-    let at = lost.or_else(|| lines.iter().rposition(|l| l.contains("the game stopped on an error") || (l.contains(" ERROR ") && !recovered(l))))?;
-    let first = lines[at].split_once("] ").map(|x| x.1).unwrap_or(lines[at]).trim();
+    let at = lost.or_else(|| {
+        lines.iter().rposition(|l| {
+            l.contains("the game stopped on an error") || (l.contains(" ERROR ") && !recovered(l))
+        })
+    })?;
+    let first = lines[at]
+        .split_once("] ")
+        .map(|x| x.1)
+        .unwrap_or(lines[at])
+        .trim();
     // (a panic's message is on the following lines)
     let mut what = first.to_string();
     // (and stops at the next record: a lost device's line had "game ends" and the tile
@@ -1557,14 +2035,26 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     // run, before the end of the log and a line `…`: a report of the end alone never said
     // what it happened on (#1187). Its GitHub link keeps them and shortens only the end.
     let whole = String::from_utf8_lossy(&bytes);
-    let machine: Vec<&str> = MACHINE_LINES.iter().filter_map(|k| whole.lines().rfind(|l| l.contains(k))).collect();
+    let machine: Vec<&str> = MACHINE_LINES
+        .iter()
+        .filter_map(|k| whole.lines().rfind(|l| l.contains(k)))
+        .collect();
     let end = all[all.len().saturating_sub(150)..].join("\n");
-    let tail = if machine.is_empty() { end } else { format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n")) };
+    let tail = if machine.is_empty() {
+        end
+    } else {
+        format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n"))
+    };
     Some((what.chars().take(600).collect(), tail))
 }
 
 /// The log lines that tell what a game ran on (see `crash_of`).
-const MACHINE_LINES: [&str; 4] = ["] system: ", "] graphics adapter: ", "] opening graphics device: ", "] command line: "];
+const MACHINE_LINES: [&str; 4] = [
+    "] system: ",
+    "] graphics adapter: ",
+    "] opening graphics device: ",
+    "] command line: ",
+];
 
 /// The line between the machine and the end of the log in a crash's tail.
 pub const CRASH_TAIL_GAP: &str = "…";
@@ -1578,7 +2068,10 @@ mod disconnect_tests {
         let p = dir.join("game.log");
         let left = crate::lan::LEFT_SERVER;
         std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openomsi_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
-        assert_eq!(super::disconnect_of(&p).as_deref(), Some("Expulsé : conduite dangereuse"));
+        assert_eq!(
+            super::disconnect_of(&p).as_deref(),
+            Some("Expulsé : conduite dangereuse")
+        );
         // a run that ended in any other way: nothing
         std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
         assert!(super::disconnect_of(&p).is_none());
@@ -1592,7 +2085,8 @@ mod choice_tests {
     /// the default (no plate), and a typed plate survives a round trip.
     #[test]
     fn a_remembered_join_is_not_resumed_at_launch() {
-        let saved: super::Choice = serde_json::from_str(r#"{"lan_mode":"join","lan_addr":"main.example.org"}"#).unwrap();
+        let saved: super::Choice =
+            serde_json::from_str(r#"{"lan_mode":"join","lan_addr":"main.example.org"}"#).unwrap();
         assert_eq!(saved.lan_mode, "join");
         assert_eq!(super::Choice::fresh(saved).lan_mode, "off");
         let host: super::Choice = serde_json::from_str(r#"{"lan_mode":"host"}"#).unwrap();
@@ -1605,7 +2099,16 @@ mod choice_tests {
     fn the_drive_pages_bus_is_not_a_preselection() {
         let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","paint":"Red","number":"12","plate":"AB","hof":"H","hof_manual":true,"version":2}"#).unwrap();
         let c = super::Choice::fresh(old);
-        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str(), c.hof_manual), ("", "", "", "", false));
+        assert_eq!(
+            (
+                c.bus.as_str(),
+                c.paint.as_str(),
+                c.number.as_str(),
+                c.plate.as_str(),
+                c.hof_manual
+            ),
+            ("", "", "", "", false)
+        );
         assert_eq!(c.version, 3);
         // (one picked since stays)
         let mut now = super::Choice::default();
@@ -1620,25 +2123,56 @@ mod choice_tests {
     fn a_used_bus_and_its_clear() {
         let mut c = super::Choice::default();
         c.hof = "Automatic".into();
-        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: "Red".into(), hof: Some("Picked".into()), number: Some("3201".into()), plate: "B-V 1".into() });
-        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.hof.as_str(), c.number.as_str(), c.plate.as_str()), ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1"));
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus {
+            file: "Vehicles/A/a.bus".into(),
+            paint: "Red".into(),
+            hof: Some("Picked".into()),
+            number: Some("3201".into()),
+            plate: "B-V 1".into(),
+        });
+        assert_eq!(
+            (
+                c.bus.as_str(),
+                c.paint.as_str(),
+                c.hof.as_str(),
+                c.number.as_str(),
+                c.plate.as_str()
+            ),
+            ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1")
+        );
         assert!(c.hof_manual);
         c.clear_bus();
-        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str()), ("", "", "", ""));
+        assert_eq!(
+            (
+                c.bus.as_str(),
+                c.paint.as_str(),
+                c.number.as_str(),
+                c.plate.as_str()
+            ),
+            ("", "", "", "")
+        );
         assert!(!c.hof_manual);
         // (automatic depot file and no number: nothing picked by hand)
-        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: String::new(), hof: None, number: None, plate: String::new() });
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus {
+            file: "Vehicles/A/a.bus".into(),
+            paint: String::new(),
+            hof: None,
+            number: None,
+            plate: String::new(),
+        });
         assert!(!c.hof_manual);
         assert_eq!(c.number, "");
     }
 
     #[test]
     fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
-        let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","map":"maps/x/global.cfg"}"#).unwrap();
+        let old: super::Choice =
+            serde_json::from_str(r#"{"bus":"Vehicles/x.bus","map":"maps/x/global.cfg"}"#).unwrap();
         assert_eq!(old.plate, "");
         let mut c = super::Choice::default();
         c.plate = "B-AB 1234".into();
-        let back: super::Choice = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        let back: super::Choice =
+            serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
         assert_eq!(back.plate, "B-AB 1234");
     }
 }
@@ -1648,7 +2182,11 @@ mod launch_tests {
     use omsi_launcher_lib::Instance;
 
     fn game(pid: u32, running: bool) -> Instance {
-        Instance { pid, running, ..Default::default() }
+        Instance {
+            pid,
+            running,
+            ..Default::default()
+        }
     }
 
     /// The wait after Start ends with the first list of games that has the one started,
@@ -1676,7 +2214,11 @@ mod crash_tests {
         let (what, tail) = super::crash_of(&p).unwrap();
         assert!(what.contains("index out of bounds"), "{what}");
         assert!(tail.contains("loading"));
-        std::fs::write(&p, "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
+        std::fs::write(
+            &p,
+            "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n",
+        )
+        .unwrap();
         assert!(super::crash_of(&p).is_none());
         std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
         assert!(super::crash_of(&p).unwrap().0.contains("device was lost"));
@@ -1701,8 +2243,14 @@ mod crash_tests {
             [t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Parent device is lost)\n\
             [t INFO openomsi_game::app_events] game ends\n").unwrap();
         let (what, _) = super::crash_of(&p).unwrap();
-        assert!(what.contains("ending the session: the graphics device was lost"), "{what}");
-        assert!(!what.contains("Device::poll") && !what.contains("game ends"), "{what}");
+        assert!(
+            what.contains("ending the session: the graphics device was lost"),
+            "{what}"
+        );
+        assert!(
+            !what.contains("Device::poll") && !what.contains("game ends"),
+            "{what}"
+        );
         std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
             [t INFO openomsi_game::app_events] game ends\n\
             [t WARN openomsi_game] the graphics device did not close in order (the game had ended already)\n").unwrap();
@@ -1720,14 +2268,26 @@ mod crash_tests {
         let mut log = String::from("[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");
         // (more than the end that goes with the report)
         for k in 0..400 {
-            log.push_str(&format!("[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"));
+            log.push_str(&format!(
+                "[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"
+            ));
         }
         log.push_str("[t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openomsi_game::app_events] game ends\n[t WARN openomsi_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
         std::fs::write(&p, log).unwrap();
         let (what, tail) = super::crash_of(&p).unwrap();
-        assert_eq!(what, "ending the session: the graphics device was lost (Unknown: Out of memory)");
-        let (machine, end) = tail.split_once(&format!("\n{}\n", super::CRASH_TAIL_GAP)).unwrap();
-        assert!(machine.contains("8192 MB memory") && machine.contains("GTX 750") && machine.contains("maps/X/global.cfg"), "{machine}");
+        assert_eq!(
+            what,
+            "ending the session: the graphics device was lost (Unknown: Out of memory)"
+        );
+        let (machine, end) = tail
+            .split_once(&format!("\n{}\n", super::CRASH_TAIL_GAP))
+            .unwrap();
+        assert!(
+            machine.contains("8192 MB memory")
+                && machine.contains("GTX 750")
+                && machine.contains("maps/X/global.cfg"),
+            "{machine}"
+        );
         assert!(end.contains("352.71 s") && !end.contains("placed tile 0,0"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1749,7 +2309,14 @@ mod mods_tests {
             std::fs::write(dir.join(f), b"PK").unwrap();
         }
         let is = |name: &str| super::is_zip(&dir.join(name).to_string_lossy());
-        let seen = (is("Example bus.zip"), is("Map.ZIP"), is("Example bus"), is("pack.rar"), is("Folder.zip"), is("Missing.zip"));
+        let seen = (
+            is("Example bus.zip"),
+            is("Map.ZIP"),
+            is("Example bus"),
+            is("pack.rar"),
+            is("Folder.zip"),
+            is("Missing.zip"),
+        );
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(seen, (true, true, false, false, false, false));
     }

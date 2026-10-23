@@ -64,7 +64,14 @@ pub fn write_msg(w: &mut impl Write, m: &Msg) -> std::io::Result<()> {
             b.extend_from_slice(px);
             (b'F', b)
         }
-        Msg::Status { busy, error } => (b'S', serde_json::to_vec(&Status { busy: *busy, error: error.clone() }).unwrap_or_default()),
+        Msg::Status { busy, error } => (
+            b'S',
+            serde_json::to_vec(&Status {
+                busy: *busy,
+                error: error.clone(),
+            })
+            .unwrap_or_default(),
+        ),
         Msg::Kept(tag, shape) => {
             let mut b = Vec::with_capacity(16);
             b.extend_from_slice(&tag.to_le_bytes());
@@ -112,8 +119,15 @@ pub fn read_msg(r: &mut impl Read) -> std::io::Result<Msg> {
         b'F' if len >= 16 => {
             let w = u32::from_le_bytes([body[0], body[1], body[2], body[3]]);
             let h = u32::from_le_bytes([body[4], body[5], body[6], body[7]]);
-            let tag = u64::from_le_bytes([body[8], body[9], body[10], body[11], body[12], body[13], body[14], body[15]]);
-            if w == 0 || h == 0 || w > 8192 || h > 8192 || (w as usize) * (h as usize) * 4 != len - 16 {
+            let tag = u64::from_le_bytes([
+                body[8], body[9], body[10], body[11], body[12], body[13], body[14], body[15],
+            ]);
+            if w == 0
+                || h == 0
+                || w > 8192
+                || h > 8192
+                || (w as usize) * (h as usize) * 4 != len - 16
+            {
                 return Err(bad("preview picture of the wrong size"));
             }
             body.drain(..16);
@@ -121,11 +135,19 @@ pub fn read_msg(r: &mut impl Read) -> std::io::Result<Msg> {
         }
         b'S' => {
             let s: Status = serde_json::from_slice(&body).map_err(|_| bad("preview status"))?;
-            Ok(Msg::Status { busy: s.busy, error: s.error })
+            Ok(Msg::Status {
+                busy: s.busy,
+                error: s.error,
+            })
         }
         b'K' if len == 16 => {
             let n = |i: usize| u32::from_le_bytes([body[i], body[i + 1], body[i + 2], body[i + 3]]);
-            Ok(Msg::Kept(u64::from_le_bytes([body[0], body[1], body[2], body[3], body[4], body[5], body[6], body[7]]), Shape(n(8), n(12))))
+            Ok(Msg::Kept(
+                u64::from_le_bytes([
+                    body[0], body[1], body[2], body[3], body[4], body[5], body[6], body[7],
+                ]),
+                Shape(n(8), n(12)),
+            ))
         }
         _ => Err(bad("unknown preview message")),
     }
@@ -154,8 +176,17 @@ pub fn tag(look: &Look) -> u64 {
 /// the bus elsewhere: a picture kept for one page was shown stretched on the other).
 fn cache_file(look: &Look, shape: Shape) -> PathBuf {
     let bus = look.root.join(&look.bus);
-    let h = fnv(&[&look.root.to_string_lossy(), &look.bus, &look.paint, &bus.parent().map(fingerprint).unwrap_or_default(), crate::BUILD, &format!("{}:{}", shape.0, shape.1)]);
-    omsi_launcher_lib::data_dir().join("previews").join(format!("{h:016x}.png"))
+    let h = fnv(&[
+        &look.root.to_string_lossy(),
+        &look.bus,
+        &look.paint,
+        &bus.parent().map(fingerprint).unwrap_or_default(),
+        crate::BUILD,
+        &format!("{}:{}", shape.0, shape.1),
+    ]);
+    omsi_launcher_lib::data_dir()
+        .join("previews")
+        .join(format!("{h:016x}.png"))
 }
 
 /// The files under a bus's folder (its .bus, model, textures, paints, scripts), as their count,
@@ -163,7 +194,9 @@ fn cache_file(look: &Look, shape: Shape) -> PathBuf {
 /// (Read off the launcher's thread: a bus folder can hold hundreds of files.)
 fn fingerprint(dir: &std::path::Path) -> String {
     fn walk(dir: &std::path::Path, depth: u32, acc: &mut (u64, u64, u64)) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in rd.flatten() {
             let Ok(m) = e.metadata() else { continue };
             if m.is_dir() {
@@ -172,7 +205,12 @@ fn fingerprint(dir: &std::path::Path) -> String {
                 }
                 continue;
             }
-            let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+            let t = m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             acc.0 += 1;
             acc.1 += m.len();
             acc.2 = acc.2.max(t);
@@ -193,7 +231,10 @@ pub struct Shape(u32, u32);
 
 impl Shape {
     pub fn of(w: u32, h: u32, focus_x: f32) -> Shape {
-        Shape(((w as f32 / h.max(1) as f32) * 10.0).round() as u32, (focus_x * 20.0).round() as u32)
+        Shape(
+            ((w as f32 / h.max(1) as f32) * 10.0).round() as u32,
+            (focus_x * 20.0).round() as u32,
+        )
     }
 }
 
@@ -202,11 +243,20 @@ const KEEP: usize = 300;
 
 /// Only the `keep` newest pictures in `dir`.
 fn prune(dir: &std::path::Path, keep: usize) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = rd
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
-        .map(|e| (e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH), e.path()))
+        .map(|e| {
+            (
+                e.metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH),
+                e.path(),
+            )
+        })
         .collect();
     if files.len() <= keep {
         return;
@@ -224,7 +274,12 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
     let settings = crate::settings::Settings::load();
     let instance = crate::startup::graphics_instance();
     // (the renderer's setup waited for on the heap, not on this thread's stack)
-    let mut renderer = pollster::block_on(Box::pin(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), super::showroom_options(&settings))))?;
+    let mut renderer = pollster::block_on(Box::pin(omsi_render::Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        super::showroom_options(&settings),
+    )))?;
     log::info!("preview helper: drawing on {}", renderer.adapter_name);
     let mut room = Showroom::new();
     let mut size: Option<(u32, u32)> = None;
@@ -268,7 +323,9 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
         }
         if room.frames != frames {
             frames = room.frames;
-            if let (Some((w, h, px)), Some(t)) = (room.pixels(&renderer), room.shown_look().map(tag)) {
+            if let (Some((w, h, px)), Some(t)) =
+                (room.pixels(&renderer), room.shown_look().map(tag))
+            {
                 if !send(Msg::Frame(w, h, t, px.clone())) {
                     return Ok(());
                 }
@@ -276,7 +333,8 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
             }
         }
         // the settled picture is kept for the next time this bus is chosen
-        if let (true, Some(l), Some((w, h, px))) = (room.settled(), look.as_ref(), last_px.as_ref()) {
+        if let (true, Some(l), Some((w, h, px))) = (room.settled(), look.as_ref(), last_px.as_ref())
+        {
             let key = (tag(l), Shape::of(*w, *h, room.focus_x));
             if cached != Some(key) {
                 cached = Some(key);
@@ -287,12 +345,21 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
                     let _ = std::fs::create_dir_all(file.parent().unwrap_or(&file));
                     if let Some(mut img) = image::RgbaImage::from_raw(w, h, px) {
                         if w > KEEP_W {
-                            img = image::imageops::resize(&img, KEEP_W, (h as f32 * KEEP_W as f32 / w as f32).round() as u32, image::imageops::FilterType::Triangle);
+                            img = image::imageops::resize(
+                                &img,
+                                KEEP_W,
+                                (h as f32 * KEEP_W as f32 / w as f32).round() as u32,
+                                image::imageops::FilterType::Triangle,
+                            );
                         }
                         // (written beside it and then put in its place: a helper ended in the
                         // middle of writing leaves no half picture to be shown next time)
                         let part = file.with_extension("part");
-                        match img.save_with_format(&part, image::ImageFormat::Png).and_then(|_| std::fs::rename(&part, &file).map_err(image::ImageError::IoError)) {
+                        match img
+                            .save_with_format(&part, image::ImageFormat::Png)
+                            .and_then(|_| {
+                                std::fs::rename(&part, &file).map_err(image::ImageError::IoError)
+                            }) {
                             Ok(()) => drop(kept_tx.send(key)),
                             Err(e) => {
                                 log::warn!("preview helper: {}: {e}", file.display());
@@ -314,7 +381,10 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
         let now_status = (room.busy, room.error.clone());
         if now_status != status {
             status = now_status;
-            if !send(Msg::Status { busy: status.0, error: status.1.clone() }) {
+            if !send(Msg::Status {
+                busy: status.0,
+                error: status.1.clone(),
+            }) {
                 return Ok(());
             }
         }
@@ -328,7 +398,9 @@ pub fn helper_main() -> anyhow::Result<()> {
     // starts the next one on another graphics interface.
     #[cfg(windows)]
     unsafe {
-        use windows::Win32::System::Diagnostics::Debug::{SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX};
+        use windows::Win32::System::Diagnostics::Debug::{
+            SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX,
+        };
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     }
     let (tx, rx) = channel();
@@ -404,7 +476,11 @@ fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
         _ => None,
     };
     let rest = ["dx12", "gl"].into_iter().filter(|b| Some(*b) != chosen);
-    std::iter::once("vulkan").chain(chosen).chain(rest).map(Some).collect()
+    std::iter::once("vulkan")
+        .chain(chosen)
+        .chain(rest)
+        .map(Some)
+        .collect()
 }
 
 /// How long a helper that has not sent its first picture may go without a word before it is
@@ -436,7 +512,11 @@ impl Link {
                     }
                 })
                 .map_err(|e| e.to_string())?;
-            return Ok(Link { cmds, msgs, child: None });
+            return Ok(Link {
+                cmds,
+                msgs,
+                child: None,
+            });
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let log_file = helper_log();
@@ -448,7 +528,12 @@ impl Link {
             Err(_) => std::process::Stdio::null(),
         };
         let mut cmd = std::process::Command::new(&exe);
-        cmd.arg("--preview-helper").arg("--root").arg(&root).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(stderr);
+        cmd.arg("--preview-helper")
+            .arg("--root")
+            .arg(&root)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(stderr);
         if let Some(b) = backend {
             cmd.env(omsi_cfg::flags::BACKEND.name, b);
         }
@@ -466,8 +551,13 @@ impl Link {
         let mut stdout = child.stdout.take().ok_or("no output from the helper")?;
         std::thread::spawn(move || {
             for c in cmd_rx {
-                let Ok(line) = serde_json::to_string(&c) else { continue };
-                if writeln!(stdin, "{line}").and_then(|_| stdin.flush()).is_err() {
+                let Ok(line) = serde_json::to_string(&c) else {
+                    continue;
+                };
+                if writeln!(stdin, "{line}")
+                    .and_then(|_| stdin.flush())
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -490,8 +580,17 @@ impl Link {
                 }
             }
         });
-        log::info!("launcher: preview helper started ({}{}), its log is {}", child.id(), backend.map(|b| format!(", on {b}")).unwrap_or_default(), log_file.display());
-        Ok(Link { cmds, msgs, child: Some(child) })
+        log::info!(
+            "launcher: preview helper started ({}{}), its log is {}",
+            child.id(),
+            backend.map(|b| format!(", on {b}")).unwrap_or_default(),
+            log_file.display()
+        );
+        Ok(Link {
+            cmds,
+            msgs,
+            child: Some(child),
+        })
     }
 }
 
@@ -504,15 +603,26 @@ fn end_with_launcher(child: &std::process::Child) {
     use std::os::windows::io::AsRawHandle;
     use std::sync::OnceLock;
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE};
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
     // (one job for every helper, its handle kept open until the launcher ends: 0 if none)
     static JOB: OnceLock<isize> = OnceLock::new();
     let job = *JOB.get_or_init(|| unsafe {
-        let Ok(job) = CreateJobObjectW(None, windows::core::PCWSTR::null()) else { return 0 };
+        let Ok(job) = CreateJobObjectW(None, windows::core::PCWSTR::null()) else {
+            return 0;
+        };
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
-        match SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info as *const _ as *const _, size) {
+        match SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            size,
+        ) {
             Ok(()) => job.0 as isize,
             Err(e) => {
                 log::warn!("launcher: no job for the preview helper: {e}");
@@ -523,7 +633,9 @@ fn end_with_launcher(child: &std::process::Child) {
     if job == 0 {
         return;
     }
-    if let Err(e) = unsafe { AssignProcessToJobObject(HANDLE(job as *mut _), HANDLE(child.as_raw_handle())) } {
+    if let Err(e) =
+        unsafe { AssignProcessToJobObject(HANDLE(job as *mut _), HANDLE(child.as_raw_handle())) }
+    {
         log::warn!("launcher: the preview helper is not in the launcher's job: {e}");
     }
 }
@@ -701,15 +813,23 @@ impl Preview {
     /// A page that shows a picture has it, kept (from an earlier time, or by the helper just
     /// now for this shape): no helper is needed for it.
     fn picture_done(&self) -> bool {
-        let Some(t) = self.wanted.as_ref().map(tag) else { return false };
+        let Some(t) = self.wanted.as_ref().map(tag) else {
+            return false;
+        };
         let shape = self.size.map(|(w, h)| Shape::of(w, h, self.focus_x));
-        self.picture_only && !self.asked && self.has_picture() && (self.from_cache || (self.kept.map(|k| k.0) == Some(t) && self.kept.map(|k| k.1) == shape))
+        self.picture_only
+            && !self.asked
+            && self.has_picture()
+            && (self.from_cache
+                || (self.kept.map(|k| k.0) == Some(t) && self.kept.map(|k| k.1) == shape))
     }
 
     /// The kept picture of the bus wanted, for the shape the preview has, read on a thread
     /// (while the helper has not drawn that bus).
     fn read_cache(&mut self) {
-        let (Some(look), Some((w, h))) = (self.wanted.as_ref(), self.size) else { return };
+        let (Some(look), Some((w, h))) = (self.wanted.as_ref(), self.size) else {
+            return;
+        };
         if self.live {
             return;
         }
@@ -722,7 +842,10 @@ impl Preview {
         let look = look.clone();
         std::thread::spawn(move || {
             let f = cache_file(&look, key.1);
-            let img = image::open(&f).ok().map(|i| i.to_rgba8()).map(|i| (i.width(), i.height(), i.into_raw()));
+            let img = image::open(&f)
+                .ok()
+                .map(|i| i.to_rgba8())
+                .map(|i| (i.width(), i.height(), i.into_raw()));
             let _ = tx.send(img);
         });
         self.cache = Some((key, rx));
@@ -756,7 +879,9 @@ impl Preview {
         if let Some((key, rx)) = self.cache.as_ref() {
             match rx.try_recv() {
                 Ok(img) => {
-                    if let (Some(img), false, Some(t)) = (img, self.live, self.wanted.as_ref().map(tag)) {
+                    if let (Some(img), false, Some(t)) =
+                        (img, self.live, self.wanted.as_ref().map(tag))
+                    {
                         if self.cache_for.as_ref() == Some(key) && key.0 == t {
                             self.aspect = img.0 as f32 / img.1.max(1) as f32;
                             self.frame = Some(img);
@@ -786,11 +911,21 @@ impl Preview {
             self.sent = (None, None, -1.0);
             return;
         }
-        let Some(look) = self.wanted.clone() else { return };
+        let Some(look) = self.wanted.clone() else {
+            return;
+        };
         // (not while the kept picture is still being read: it may be all the page needs)
         let reading = self.picture_only && self.cache.is_some();
-        if self.link.is_none() && self.broken.as_ref() != Some(&look) && shown.is_some() && !reading && !self.picture_done() {
-            match Link::start(&look.root, self.backends.get(self.backend).copied().flatten()) {
+        if self.link.is_none()
+            && self.broken.as_ref() != Some(&look)
+            && shown.is_some()
+            && !reading
+            && !self.picture_done()
+        {
+            match Link::start(
+                &look.root,
+                self.backends.get(self.backend).copied().flatten(),
+            ) {
                 Ok(l) => {
                     self.link = Some(l);
                     self.drew = false;
@@ -807,7 +942,9 @@ impl Preview {
                 }
             }
         }
-        let Some(link) = self.link.as_ref() else { return };
+        let Some(link) = self.link.as_ref() else {
+            return;
+        };
         if self.sent.0.as_ref() != Some(&look) {
             let _ = link.cmds.send(Cmd::Look(look.clone()));
             self.sent.0 = Some(look.clone());
@@ -870,17 +1007,27 @@ impl Preview {
         }
         if ended {
             // (how it ended: the code it gave, if it has given one yet)
-            let code = self.link.as_mut().and_then(|l| l.child.as_mut()).and_then(|c| {
-                let until = Instant::now() + Duration::from_millis(300);
-                loop {
-                    match c.try_wait() {
-                        Ok(Some(s)) => return Some(s.to_string()),
-                        Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
-                        _ => return None,
+            let code = self
+                .link
+                .as_mut()
+                .and_then(|l| l.child.as_mut())
+                .and_then(|c| {
+                    let until = Instant::now() + Duration::from_millis(300);
+                    loop {
+                        match c.try_wait() {
+                            Ok(Some(s)) => return Some(s.to_string()),
+                            Ok(None) if Instant::now() < until => {
+                                std::thread::sleep(Duration::from_millis(20))
+                            }
+                            _ => return None,
+                        }
                     }
-                }
-            });
-            log::warn!("launcher: the preview helper stopped ({}; its log: {})", code.as_deref().unwrap_or("still ending"), helper_log().display());
+                });
+            log::warn!(
+                "launcher: the preview helper stopped ({}; its log: {})",
+                code.as_deref().unwrap_or("still ending"),
+                helper_log().display()
+            );
             self.link = None;
             self.live = false;
             self.busy = false;
@@ -891,11 +1038,15 @@ impl Preview {
                 // as when the launcher stops a helper)
                 super::showroom::clear_placing_mark();
                 self.backend += 1;
-                log::warn!("launcher: the preview helper is started again on {}", self.backends[self.backend].unwrap_or("the settings' interface"));
+                log::warn!(
+                    "launcher: the preview helper is started again on {}",
+                    self.backends[self.backend].unwrap_or("the settings' interface")
+                );
                 self.error = None;
                 return;
             }
-            self.error.get_or_insert_with(|| "The 3D preview stopped".into());
+            self.error
+                .get_or_insert_with(|| "The 3D preview stopped".into());
             self.broken = Some(look);
             // (what stays is the kept picture, if there is one, not the helper's last)
             if !self.from_cache {
@@ -934,8 +1085,14 @@ mod tests {
     fn messages_go_through_the_pipe_as_they_were_sent() {
         let msgs = [
             Msg::Frame(2, 1, 77, vec![1, 2, 3, 255, 4, 5, 6, 255]),
-            Msg::Status { busy: true, error: None },
-            Msg::Status { busy: false, error: Some("no bus".into()) },
+            Msg::Status {
+                busy: true,
+                error: None,
+            },
+            Msg::Status {
+                busy: false,
+                error: Some("no bus".into()),
+            },
             Msg::Kept(77, Shape::of(1280, 720, 0.5)),
         ];
         let mut buf = Vec::new();
@@ -952,18 +1109,44 @@ mod tests {
     #[test]
     fn a_stray_line_is_passed_over_and_a_wrong_size_refused() {
         let mut buf = b"hello world, a log line\n".to_vec();
-        write_msg(&mut buf, &Msg::Status { busy: true, error: None }).unwrap();
+        write_msg(
+            &mut buf,
+            &Msg::Status {
+                busy: true,
+                error: None,
+            },
+        )
+        .unwrap();
         let mut r = std::io::Cursor::new(buf);
-        assert_eq!(read_msg(&mut r).unwrap(), Msg::Status { busy: true, error: None });
+        assert_eq!(
+            read_msg(&mut r).unwrap(),
+            Msg::Status {
+                busy: true,
+                error: None
+            }
+        );
         assert!(read_msg(&mut std::io::Cursor::new(b"only a line\n".to_vec())).is_err());
         let mut buf = Vec::new();
         write_msg(&mut buf, &Msg::Frame(2, 2, 0, vec![0; 4])).unwrap();
-        assert!(read_msg(&mut std::io::Cursor::new(buf)).is_err(), "a 2x2 picture is 16 bytes");
+        assert!(
+            read_msg(&mut std::io::Cursor::new(buf)).is_err(),
+            "a 2x2 picture is 16 bytes"
+        );
     }
 
     #[test]
     fn commands_are_one_line_each() {
-        let cmds = [Cmd::Look(Look { bus: "Vehicles/A/a.bus".into(), time: 480, ..Default::default() }), Cmd::Size(800, 450), Cmd::Orbit(1.5, -2.0), Cmd::Zoom(0.9), Cmd::Focus(0.6)];
+        let cmds = [
+            Cmd::Look(Look {
+                bus: "Vehicles/A/a.bus".into(),
+                time: 480,
+                ..Default::default()
+            }),
+            Cmd::Size(800, 450),
+            Cmd::Orbit(1.5, -2.0),
+            Cmd::Zoom(0.9),
+            Cmd::Focus(0.6),
+        ];
         for c in cmds {
             let line = serde_json::to_string(&c).unwrap();
             assert!(!line.contains('\n'));
@@ -975,12 +1158,23 @@ mod tests {
     /// stops nothing of its last picture stays (no picture kept: "No preview").
     #[test]
     fn only_a_picture_of_the_bus_wanted_is_shown() {
-        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
-        let b = Look { bus: "Vehicles/B/b.bus".into(), ..a.clone() };
+        let a = Look {
+            root: "/nowhere".into(),
+            bus: "Vehicles/A/a.bus".into(),
+            ..Default::default()
+        };
+        let b = Look {
+            bus: "Vehicles/B/b.bus".into(),
+            ..a.clone()
+        };
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         p.want(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
@@ -990,7 +1184,10 @@ mod tests {
         p.want(b.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
-        assert!(!p.has_picture() && !p.live, "the first bus is not shown as the second");
+        assert!(
+            !p.has_picture() && !p.live,
+            "the first bus is not shown as the second"
+        );
         assert!(p.take_frame().is_none());
         msg_tx.send(Msg::Frame(2, 1, tag(&b), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
@@ -1006,12 +1203,20 @@ mod tests {
     /// on the next graphics interface. One still within the limit is waited for.
     #[test]
     fn a_helper_with_no_picture_for_too_long_is_tried_on_the_next_interface() {
-        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
+        let a = Look {
+            root: "/nowhere".into(),
+            bus: "Vehicles/A/a.bus".into(),
+            ..Default::default()
+        };
         let mut p = Preview::new();
         p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (_msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         p.want(a.clone());
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_some() && p.backend == 0, "still waited for");
@@ -1019,36 +1224,58 @@ mod tests {
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_none());
         assert_eq!(p.backend, 1);
-        assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
+        assert!(
+            p.broken.is_none() && p.error.is_none(),
+            "tried again, not given up"
+        );
     }
 
     /// A helper that ends before its first picture is started again on the next graphics
     /// interface (where there is one); one that had drawn is not.
     #[test]
     fn a_helper_gone_before_its_first_picture_is_tried_on_the_next_interface() {
-        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
+        let a = Look {
+            root: "/nowhere".into(),
+            bus: "Vehicles/A/a.bus".into(),
+            ..Default::default()
+        };
         let mut p = Preview::new();
         p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         p.want(a.clone());
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         assert!(p.link.is_none());
         assert_eq!(p.backend, 1);
-        assert!(p.broken.is_none() && p.error.is_none(), "tried again, not given up");
+        assert!(
+            p.broken.is_none() && p.error.is_none(),
+            "tried again, not given up"
+        );
         // one that drew pins its interface: a later helper gone early does not move it on
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         p.drew = false;
         drop(msg_tx);
         p.update(0.016, Some((2, 1)));
@@ -1065,28 +1292,56 @@ mod tests {
             return;
         }
         // (Vulkan first even when the game's setting names DirectX 12 or OpenGL)
-        assert_eq!(helper_backends("auto"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
-        assert_eq!(helper_backends("vulkan"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
-        assert_eq!(helper_backends("dx12"), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
-        assert_eq!(helper_backends("gl"), vec![Some("vulkan"), Some("gl"), Some("dx12")]);
-        assert_eq!(helper_backends(" D3D12 "), vec![Some("vulkan"), Some("dx12"), Some("gl")]);
-        assert_eq!(helper_backends("OpenGL"), vec![Some("vulkan"), Some("gl"), Some("dx12")]);
+        assert_eq!(
+            helper_backends("auto"),
+            vec![Some("vulkan"), Some("dx12"), Some("gl")]
+        );
+        assert_eq!(
+            helper_backends("vulkan"),
+            vec![Some("vulkan"), Some("dx12"), Some("gl")]
+        );
+        assert_eq!(
+            helper_backends("dx12"),
+            vec![Some("vulkan"), Some("dx12"), Some("gl")]
+        );
+        assert_eq!(
+            helper_backends("gl"),
+            vec![Some("vulkan"), Some("gl"), Some("dx12")]
+        );
+        assert_eq!(
+            helper_backends(" D3D12 "),
+            vec![Some("vulkan"), Some("dx12"), Some("gl")]
+        );
+        assert_eq!(
+            helper_backends("OpenGL"),
+            vec![Some("vulkan"), Some("gl"), Some("dx12")]
+        );
     }
 
     /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
     /// the picture stays; turning it asks for the live view.
     #[test]
     fn a_picture_page_lets_the_helper_go_once_the_picture_is_kept() {
-        let a = Look { root: "/nowhere".into(), bus: "Vehicles/A/a.bus".into(), ..Default::default() };
+        let a = Look {
+            root: "/nowhere".into(),
+            bus: "Vehicles/A/a.bus".into(),
+            ..Default::default()
+        };
         let mut p = Preview::new();
         let (cmds, _cmd_rx) = channel();
         let (msg_tx, msgs) = channel();
-        p.link = Some(Link { cmds, msgs, child: None });
+        p.link = Some(Link {
+            cmds,
+            msgs,
+            child: None,
+        });
         p.want_picture(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
         assert!(p.has_picture() && p.live && p.link.is_some());
-        msg_tx.send(Msg::Kept(tag(&a), Shape::of(2, 1, p.focus_x))).unwrap();
+        msg_tx
+            .send(Msg::Kept(tag(&a), Shape::of(2, 1, p.focus_x)))
+            .unwrap();
         for _ in 0..4 {
             p.update(1.0, Some((2, 1)));
         }
@@ -1106,11 +1361,20 @@ mod tests {
             let f = dir.join(format!("{i}.png"));
             std::fs::write(&f, b"x").unwrap();
             let t = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000 + i * 60);
-            std::fs::File::options().write(true).open(&f).unwrap().set_modified(t).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&f)
+                .unwrap()
+                .set_modified(t)
+                .unwrap();
         }
         std::fs::write(dir.join("notes.txt"), b"x").unwrap();
         prune(&dir, 2);
-        let mut left: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
         left.sort();
         assert_eq!(left, ["3.png", "4.png", "notes.txt"]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1118,16 +1382,36 @@ mod tests {
 
     #[test]
     fn the_kept_picture_is_per_bus_and_paint_not_per_light() {
-        let a = Look { root: "/omsi".into(), bus: "Vehicles/A/a.bus".into(), paint: "Red".into(), time: 480, ..Default::default() };
-        let b = Look { time: 1200, weather: "rain".into(), ..a.clone() };
-        let c = Look { paint: "Blue".into(), ..a.clone() };
+        let a = Look {
+            root: "/omsi".into(),
+            bus: "Vehicles/A/a.bus".into(),
+            paint: "Red".into(),
+            time: 480,
+            ..Default::default()
+        };
+        let b = Look {
+            time: 1200,
+            weather: "rain".into(),
+            ..a.clone()
+        };
+        let c = Look {
+            paint: "Blue".into(),
+            ..a.clone()
+        };
         let shape = Shape::of(1280, 720, 0.5);
         assert_eq!(cache_file(&a, shape), cache_file(&b, shape));
         assert_ne!(cache_file(&a, shape), cache_file(&c, shape));
         assert_eq!(tag(&a), tag(&b));
         assert_ne!(tag(&a), tag(&c));
         // (another page's preview, wider and with the bus further left, keeps its own)
-        assert_ne!(cache_file(&a, shape), cache_file(&a, Shape::of(1600, 720, 0.35)));
-        assert_eq!(shape, Shape::of(1284, 722, 0.51), "a few pixels more is the same shape");
+        assert_ne!(
+            cache_file(&a, shape),
+            cache_file(&a, Shape::of(1600, 720, 0.35))
+        );
+        assert_eq!(
+            shape,
+            Shape::of(1284, 722, 0.51),
+            "a few pixels more is the same shape"
+        );
     }
 }

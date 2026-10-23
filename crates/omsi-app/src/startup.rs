@@ -1,6 +1,6 @@
 //! Start-up: finding the OMSI 2 installation, the graphics instance, the build, the allocator and the console.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use omsi_render::Renderer;
 use std::path::{Path, PathBuf};
 use winit::keyboard::KeyCode;
@@ -44,7 +44,9 @@ pub(crate) fn end_with(pid: u32) {
         // waits for the launcher, so `pid` is still its own here)
         let h = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
         if h == 0 {
-            log::warn!("launcher: the program that started it ({pid}) is not found; it is not followed");
+            log::warn!(
+                "launcher: the program that started it ({pid}) is not found; it is not followed"
+            );
             return;
         }
         std::thread::spawn(move || {
@@ -82,11 +84,15 @@ impl std::io::Write for Tee {
 }
 
 /// When the program started (set first thing in `run`), for saying how long a window took.
-pub(crate) static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+pub(crate) static PROCESS_START: std::sync::OnceLock<std::time::Instant> =
+    std::sync::OnceLock::new();
 
 /// Milliseconds since the program started.
 pub(crate) fn since_start_ms() -> f64 {
-    PROCESS_START.get().map(|t| t.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0)
+    PROCESS_START
+        .get()
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
 }
 
 /// Does this folder look like an OMSI 2 installation?
@@ -101,7 +107,8 @@ pub(crate) fn is_omsi_root(p: &Path) -> bool {
 pub(crate) fn fatal_dialog(title: &str, text: &str) {
     log::error!("{title}: {text}");
     // started from a terminal (the message is right there) or by a test harness
-    if std::io::IsTerminal::is_terminal(&std::io::stderr()) || omsi_cfg::flags::BACKGROUND.is_set() {
+    if std::io::IsTerminal::is_terminal(&std::io::stderr()) || omsi_cfg::flags::BACKGROUND.is_set()
+    {
         return;
     }
     #[cfg(target_os = "macos")]
@@ -112,15 +119,27 @@ pub(crate) fn fatal_dialog(title: &str, text: &str) {
             esc(title),
             esc(text)
         );
-        let _ = std::process::Command::new("osascript").arg("-e").arg(script).status();
+        let _ = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .status();
     }
     #[cfg(windows)]
     {
         #[link(name = "user32")]
         extern "system" {
-            fn MessageBoxW(hwnd: *mut core::ffi::c_void, text: *const u16, caption: *const u16, kind: u32) -> i32;
+            fn MessageBoxW(
+                hwnd: *mut core::ffi::c_void,
+                text: *const u16,
+                caption: *const u16,
+                kind: u32,
+            ) -> i32;
         }
-        let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let wide = |s: &str| {
+            s.encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>()
+        };
         let (t, c) = (wide(text), wide(title));
         // MB_OK | MB_ICONERROR
         unsafe {
@@ -136,7 +155,10 @@ pub(crate) fn fatal_dialog(title: &str, text: &str) {
 /// saved key bindings there, else the original installation's (never written) - or, where
 /// that has none, its `keyboard_reset.cfg`, the standard keys OMSI falls back to as well.
 pub(crate) fn keyboard_cfg(root: &Path) -> PathBuf {
-    if let Some(own) = content_dir().map(|c| c.join("Inputs/keyboard.cfg")).filter(|p| p.exists()) {
+    if let Some(own) = content_dir()
+        .map(|c| c.join("Inputs/keyboard.cfg"))
+        .filter(|p| p.exists())
+    {
         return own;
     }
     omsi_cfg::original_keyboard_cfg(root)
@@ -154,12 +176,22 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
-    let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else { return Default::default() };
-    let stock: std::collections::HashSet<(String, i32, i32)> = omsi_content::input::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
+    let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else {
+        return Default::default();
+    };
+    let stock: std::collections::HashSet<(String, i32, i32)> =
+        omsi_content::input::stock_keys::STOCK_KEYS
+            .iter()
+            .map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md))
+            .collect();
     m.vehicles
         .iter()
         .chain(m.game.iter())
-        .filter(|b| b.chord() == modifier && b.scan_code != 0 && !stock.contains(&(b.action.to_ascii_lowercase(), b.scan_code, b.modifier)))
+        .filter(|b| {
+            b.chord() == modifier
+                && b.scan_code != 0
+                && !stock.contains(&(b.action.to_ascii_lowercase(), b.scan_code, b.modifier))
+        })
         .map(|b| b.scan_code)
         .collect()
 }
@@ -182,7 +214,10 @@ pub(crate) fn content_dir() -> Option<PathBuf> {
         dir
     };
     let cand = omsi_cfg::content_folder_of(&dir);
-    if !omsi_cfg::is_programs_folder(&cand) && (cand.exists() || std::fs::create_dir_all(&cand).is_ok()) && omsi_cfg::is_writable(&cand) {
+    if !omsi_cfg::is_programs_folder(&cand)
+        && (cand.exists() || std::fs::create_dir_all(&cand).is_ok())
+        && omsi_cfg::is_writable(&cand)
+    {
         Some(cand)
     } else {
         let fallback = omsi_cfg::paths::data_dir()?.join("content");
@@ -218,7 +253,10 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     // the folder the launcher was told about (Setup)
     if let Some(data) = omsi_cfg::paths::data_dir() {
         if let Ok(t) = std::fs::read_to_string(data.join("launcher.json")) {
-            if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
+            if let Some(r) = serde_json::from_str::<serde_json::Value>(&t)
+                .ok()
+                .and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from))
+            {
                 first.push(r);
             }
         }
@@ -261,18 +299,35 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
         let instance = backend_instance(b);
         let adapters = pollster::block_on(instance.enumerate_adapters(b));
         if adapters.iter().any(|a| !is_software(&a.get_info())) {
-            log::info!("graphics: {:?} ({})", b, adapters.iter().map(|a| a.get_info().name).collect::<Vec<_>>().join(", "));
+            log::info!(
+                "graphics: {:?} ({})",
+                b,
+                adapters
+                    .iter()
+                    .map(|a| a.get_info().name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             return instance;
         }
         if adapters.is_empty() {
             log::info!("graphics: no {b:?} adapter here");
             last = Some(instance);
         } else {
-            log::info!("graphics: {b:?} has only a software renderer ({})", adapters.iter().map(|a| a.get_info().name).collect::<Vec<_>>().join(", "));
+            log::info!(
+                "graphics: {b:?} has only a software renderer ({})",
+                adapters
+                    .iter()
+                    .map(|a| a.get_info().name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             software.get_or_insert(instance);
         }
     }
-    software.or(last).unwrap_or_else(|| wgpu::Instance::new(descriptor))
+    software
+        .or(last)
+        .unwrap_or_else(|| wgpu::Instance::new(descriptor))
 }
 
 /// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
@@ -286,12 +341,17 @@ pub(crate) fn d3d9_requested() -> bool {
         return false;
     }
     let settings = crate::settings::Settings::load();
-    let wanted = omsi_cfg::flags::BACKEND.text().unwrap_or_else(|| settings.graphics_api.clone());
+    let wanted = omsi_cfg::flags::BACKEND
+        .text()
+        .unwrap_or_else(|| settings.graphics_api.clone());
     is_d3d9(&wanted) && !settings.vr_requested()
 }
 
 pub(crate) fn is_d3d9(name: &str) -> bool {
-    matches!(name.trim().to_ascii_lowercase().as_str(), "d3d9" | "d3d9ex" | "dx9")
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "d3d9" | "d3d9ex" | "dx9"
+    )
 }
 
 /// wgpu's device that draws nothing (the dedicated server's, and the books of "DirectX9
@@ -327,10 +387,16 @@ pub(crate) fn backend_order() -> Vec<wgpu::Backends> {
     let wanted = if settings.vr_requested() {
         "dx12".to_owned()
     } else {
-        omsi_cfg::flags::BACKEND.text().unwrap_or(settings.graphics_api)
+        omsi_cfg::flags::BACKEND
+            .text()
+            .unwrap_or(settings.graphics_api)
     };
     let all: Vec<wgpu::Backends> = if cfg!(windows) {
-        vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN, wgpu::Backends::GL]
+        vec![
+            wgpu::Backends::DX12,
+            wgpu::Backends::VULKAN,
+            wgpu::Backends::GL,
+        ]
     } else {
         vec![wgpu::Backends::VULKAN, wgpu::Backends::GL]
     };
@@ -341,7 +407,10 @@ pub(crate) fn backend_order() -> Vec<wgpu::Backends> {
         _ => None,
     };
     // (the one asked for first, the others after it: a machine without it still starts)
-    first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).collect()
+    first
+        .into_iter()
+        .chain(all.into_iter().filter(|b| Some(*b) != first))
+        .collect()
 }
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
@@ -351,7 +420,9 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
 }
 
 fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
-    device_type == wgpu::DeviceType::Cpu || name.contains("Microsoft Basic Render Driver") || name.contains("llvmpipe")
+    device_type == wgpu::DeviceType::Cpu
+        || name.contains("Microsoft Basic Render Driver")
+        || name.contains("llvmpipe")
 }
 
 fn backend_instance(b: wgpu::Backends) -> wgpu::Instance {
@@ -360,8 +431,16 @@ fn backend_instance(b: wgpu::Backends) -> wgpu::Instance {
 
 /// The renderer of "DirectX9 (D3D9Ex)": on `instance` (wgpu's noop device, see
 /// [`game_instance`]), keeping the books of the scene for the Direct3D 9Ex device.
-pub(crate) fn books_renderer(instance: &wgpu::Instance, options: omsi_render::RenderOptions) -> Result<Renderer> {
-    pollster::block_on(Renderer::new_with(instance, None, Some(wgpu::TextureFormat::Bgra8UnormSrgb), options))
+pub(crate) fn books_renderer(
+    instance: &wgpu::Instance,
+    options: omsi_render::RenderOptions,
+) -> Result<Renderer> {
+    pollster::block_on(Renderer::new_with(
+        instance,
+        None,
+        Some(wgpu::TextureFormat::Bgra8UnormSrgb),
+        options,
+    ))
 }
 
 /// The renderer for a window: on `instance` if it can, else on the next graphics interface
@@ -376,7 +455,9 @@ pub(crate) fn window_renderer(
     window: &std::sync::Arc<winit::window::Window>,
     options: omsi_render::RenderOptions,
 ) -> Result<Renderer> {
-    for_window(instance, window, |adapter, surface| pollster::block_on(Renderer::new_on(adapter, Some(surface), None, options)))
+    for_window(instance, window, |adapter, surface| {
+        pollster::block_on(Renderer::new_on(adapter, Some(surface), None, options))
+    })
 }
 
 /// What `open` makes for a window (the game's renderer, or the launcher's plain device for
@@ -417,7 +498,11 @@ pub(crate) fn for_window<T>(
             let surface = match inst.create_surface(window.clone()) {
                 Ok(s) => s,
                 Err(e) => {
-                    failures.push(format!("{}: no surface ({e})", b.map(|b| format!("{b:?}")).unwrap_or_else(|| "first choice".into())));
+                    failures.push(format!(
+                        "{}: no surface ({e})",
+                        b.map(|b| format!("{b:?}"))
+                            .unwrap_or_else(|| "first choice".into())
+                    ));
                     no_surface.push(k - 1);
                     continue;
                 }
@@ -437,7 +522,10 @@ pub(crate) fn for_window<T>(
                 match omsi_render::catch(|| open(adapter, &surface)) {
                     Some(Ok(r)) => {
                         if !failures.is_empty() {
-                            log::warn!("graphics: drawing on {what}; before it {}", failures.join("; "));
+                            log::warn!(
+                                "graphics: drawing on {what}; before it {}",
+                                failures.join("; ")
+                            );
                         }
                         drop(surface);
                         *instance = inst;
@@ -455,7 +543,14 @@ pub(crate) fn for_window<T>(
             }
         }
     }
-    Err(anyhow!("no graphics device could be opened ({}); updating the graphics driver usually helps", if failures.is_empty() { "no adapter can show a window".to_string() } else { failures.join("; ") }))
+    Err(anyhow!(
+        "no graphics device could be opened ({}); updating the graphics driver usually helps",
+        if failures.is_empty() {
+            "no adapter can show a window".to_string()
+        } else {
+            failures.join("; ")
+        }
+    ))
 }
 
 /// Tell the player why the game cannot go on, also where there is no window yet (a message
@@ -467,10 +562,19 @@ pub(crate) fn fatal_message(text: &str) {
     {
         use windows::core::PCWSTR;
         use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
-        let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let wide = |s: &str| {
+            s.encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>()
+        };
         let (t, c) = (wide(text), wide("Project Depot"));
         unsafe {
-            MessageBoxW(None, PCWSTR(t.as_ptr()), PCWSTR(c.as_ptr()), MB_OK | MB_ICONERROR);
+            MessageBoxW(
+                None,
+                PCWSTR(t.as_ptr()),
+                PCWSTR(c.as_ptr()),
+                MB_OK | MB_ICONERROR,
+            );
         }
     }
 }
@@ -489,13 +593,20 @@ pub const VERSION: &str = env!("OPENOMSI_VERSION");
 /// The game runs inside gamescope (a Steam Deck's Gaming Mode, a Steam Machine): one
 /// window, shown over the whole screen.
 pub(crate) fn under_gamescope() -> bool {
-    std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some() || std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
+    std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_CURRENT_DESKTOP")
+            .is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
 }
 
 /// The monitor whose area holds the desktop point `at` (`rects`: each monitor's top left
 /// and size in pixels, in the order of the system's list).
 pub(crate) fn monitor_holding(rects: &[((i32, i32), (u32, u32))], at: (i32, i32)) -> Option<usize> {
-    rects.iter().position(|&((x, y), (w, h))| at.0 >= x && at.1 >= y && (at.0 as i64) < x as i64 + w as i64 && (at.1 as i64) < y as i64 + h as i64)
+    rects.iter().position(|&((x, y), (w, h))| {
+        at.0 >= x
+            && at.1 >= y
+            && (at.0 as i64) < x as i64 + w as i64
+            && (at.1 as i64) < y as i64 + h as i64
+    })
 }
 
 /// `--monitor-at X,Y` as a point.
@@ -506,18 +617,39 @@ pub(crate) fn parse_point(text: &str) -> Option<(i32, i32)> {
 
 /// The monitor a window opens on: the one that holds `prefer` (the launcher's, when it
 /// hands the game its place), else the primary one, else the first.
-pub(crate) fn window_monitor(event_loop: &winit::event_loop::ActiveEventLoop, prefer: Option<(i32, i32)>) -> Option<winit::monitor::MonitorHandle> {
+pub(crate) fn window_monitor(
+    event_loop: &winit::event_loop::ActiveEventLoop,
+    prefer: Option<(i32, i32)>,
+) -> Option<winit::monitor::MonitorHandle> {
     if let Some(at) = prefer {
         let monitors: Vec<_> = event_loop.available_monitors().collect();
-        let rects: Vec<_> = monitors.iter().map(|m| ((m.position().x, m.position().y), (m.size().width, m.size().height))).collect();
+        let rects: Vec<_> = monitors
+            .iter()
+            .map(|m| {
+                (
+                    (m.position().x, m.position().y),
+                    (m.size().width, m.size().height),
+                )
+            })
+            .collect();
         if let Some(i) = monitor_holding(&rects, at) {
             return monitors.into_iter().nth(i);
         }
     }
-    event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next())
+    event_loop
+        .primary_monitor()
+        .or_else(|| event_loop.available_monitors().next())
 }
 
-pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64, h: f64, prefer: Option<(i32, i32)>) -> (winit::dpi::LogicalSize<f64>, Option<winit::dpi::PhysicalPosition<i32>>) {
+pub(crate) fn fit_window(
+    event_loop: &winit::event_loop::ActiveEventLoop,
+    w: f64,
+    h: f64,
+    prefer: Option<(i32, i32)>,
+) -> (
+    winit::dpi::LogicalSize<f64>,
+    Option<winit::dpi::PhysicalPosition<i32>>,
+) {
     let Some(m) = window_monitor(event_loop, prefer) else {
         return (winit::dpi::LogicalSize::new(w, h), None);
     };
@@ -530,7 +662,11 @@ pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64
 /// `want` points fitted into a screen of `screen` pixels at `scale` (the size kept to 90 %
 /// of its width and 85 % of its height - a title bar and a task bar take some - with the
 /// shape kept), and where it starts for the screen's middle (pixels).
-pub(crate) fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f64, f64), (i32, i32)) {
+pub(crate) fn fit_rect(
+    want: (f64, f64),
+    screen: (f64, f64),
+    scale: f64,
+) -> ((f64, f64), (i32, i32)) {
     let (sw, sh) = (screen.0 / scale, screen.1 / scale);
     let k = (sw * 0.9 / want.0).min(sh * 0.85 / want.1).min(1.0);
     let (w, h) = ((want.0 * k).round(), (want.1 * k).round());
@@ -550,7 +686,11 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
 
 /// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
 /// is the "as OMSI 2" renderer: it ignores all of them.
-pub(crate) fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool, flag_plus: bool) -> (bool, bool) {
+pub(crate) fn enhanced_wanted(
+    settings: &crate::settings::Settings,
+    flag: bool,
+    flag_plus: bool,
+) -> (bool, bool) {
     let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
     let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
     if settings.d3d9_selected() {
@@ -563,20 +703,26 @@ pub(crate) fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool, 
 }
 
 /// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).
-pub(crate) static ENHANCED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static ENHANCED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Enhanced+ (ray tracing) asked for by `--enhanced-plus` or OMSI_ENHANCED_PLUS=1 whatever
 /// the settings say (see `Settings::render_options`).
-pub(crate) static ENHANCED_PLUS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static ENHANCED_PLUS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Vanilla graphics: the picture as OMSI 2 draws it (no Vanilla+ extras, see
 /// `omsi_render::Lighting::classic`).
-pub(crate) static CLASSIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static CLASSIC: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Volume of the AI vehicles and of the scenery's own sounds (OMSI's `sound_ai` and
 /// `sound_scenery`), as the bits of an f32.
-pub(crate) static SOUND_AI: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
-pub(crate) static SOUND_SCENERY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+pub(crate) static SOUND_AI: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x3f80_0000);
+pub(crate) static SOUND_SCENERY: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x3f80_0000);
 
 /// Edge of a mirror's picture (the `mirror_size` setting, OMSI's reflTexSize).
-pub(crate) static MIRROR_SIZE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(256);
+pub(crate) static MIRROR_SIZE: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(256);
 
 pub(crate) fn sound_gain(which: &std::sync::atomic::AtomicU32) -> f32 {
     f32::from_bits(which.load(std::sync::atomic::Ordering::Relaxed))
@@ -585,7 +731,8 @@ pub(crate) fn sound_gain(which: &std::sync::atomic::AtomicU32) -> f32 {
 /// The `clouds` setting: clouds in the sky (off: a clear sky whatever the weather says).
 pub(crate) static CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// `Settings::fair_weather_clouds`: a clear default sky gets a few clouds.
-pub(crate) static FAIR_CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub(crate) static FAIR_CLOUDS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 
 /// macOS's allocator keeps freed large blocks for reuse, and they count as the game's
 /// memory: after loading and unloading tiles it held more than half a gigabyte of them, and
@@ -595,9 +742,7 @@ pub(crate) static FAIR_CLOUDS: std::sync::atomic::AtomicBool = std::sync::atomic
 #[cfg(target_os = "macos")]
 pub(crate) fn restart_with_allocator_settings() {
     use std::os::unix::process::CommandExt;
-    if std::env::var_os("MallocLargeCache").is_some()
-        || omsi_cfg::flags::KEEP_ALLOCATOR.is_set()
-    {
+    if std::env::var_os("MallocLargeCache").is_some() || omsi_cfg::flags::KEEP_ALLOCATOR.is_set() {
         return;
     }
     let Ok(exe) = std::env::current_exe() else {
@@ -648,16 +793,26 @@ mod instance_tests {
     /// over, before the driver runs out (#48); losing the device stays the driver's call.
     #[test]
     fn every_instance_refuses_resources_past_the_memory_budget() {
-        for backends in [None, Some(wgpu::Backends::VULKAN), Some(wgpu::Backends::DX12)] {
+        for backends in [
+            None,
+            Some(wgpu::Backends::VULKAN),
+            Some(wgpu::Backends::DX12),
+        ] {
             let d = instance_descriptor(backends);
-            assert_eq!(d.memory_budget_thresholds.for_resource_creation, Some(RESOURCE_MEMORY_PERCENT));
+            assert_eq!(
+                d.memory_budget_thresholds.for_resource_creation,
+                Some(RESOURCE_MEMORY_PERCENT)
+            );
             assert_eq!(d.memory_budget_thresholds.for_device_loss, None);
         }
     }
 
     #[test]
     fn the_backends_asked_for_are_kept() {
-        assert_eq!(instance_descriptor(Some(wgpu::Backends::GL)).backends, wgpu::Backends::GL);
+        assert_eq!(
+            instance_descriptor(Some(wgpu::Backends::GL)).backends,
+            wgpu::Backends::GL
+        );
         assert_eq!(
             instance_descriptor(None).backends,
             wgpu::InstanceDescriptor::new_without_display_handle().backends
@@ -676,15 +831,24 @@ mod window_tests {
         assert!(software_adapter("Microsoft Basic Render Driver", Cpu));
         assert!(software_adapter("Microsoft Basic Render Driver", Other));
         assert!(software_adapter("llvmpipe (LLVM 15.0.7, 256 bits)", Cpu));
-        assert!(!software_adapter("Intel(R) HD Graphics 2500", IntegratedGpu));
-        assert!(!software_adapter("NVIDIA GeForce RTX 3050 Laptop GPU", DiscreteGpu));
+        assert!(!software_adapter(
+            "Intel(R) HD Graphics 2500",
+            IntegratedGpu
+        ));
+        assert!(!software_adapter(
+            "NVIDIA GeForce RTX 3050 Laptop GPU",
+            DiscreteGpu
+        ));
     }
 
     #[test]
     fn the_window_fits_a_small_screen_and_sits_in_its_middle() {
         // 1920 x 1200 at 125 %: 1600 x 900 points would be 2000 px wide
         let ((w, h), (x, y)) = super::fit_rect((1600.0, 900.0), (1920.0, 1200.0), 1.25);
-        assert!(w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0, "{w} x {h}");
+        assert!(
+            w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0,
+            "{w} x {h}"
+        );
         assert!(((w / h) - 16.0 / 9.0).abs() < 0.01);
         assert!((x as f64 - (1920.0 - w * 1.25) / 2.0).abs() <= 1.0);
         assert!(y > 0);
@@ -701,7 +865,11 @@ mod monitor_tests {
     #[test]
     fn the_monitor_holding_a_point_is_found_whatever_its_place() {
         // a monitor left of the primary one, the primary one, one above it
-        let rects = [((-1920, 0), (1920, 1080)), ((0, 0), (2560, 1440)), ((0, -1080), (1920, 1080))];
+        let rects = [
+            ((-1920, 0), (1920, 1080)),
+            ((0, 0), (2560, 1440)),
+            ((0, -1080), (1920, 1080)),
+        ];
         assert_eq!(monitor_holding(&rects, (-100, 500)), Some(0));
         assert_eq!(monitor_holding(&rects, (0, 0)), Some(1));
         assert_eq!(monitor_holding(&rects, (2559, 1439)), Some(1));
@@ -714,9 +882,16 @@ mod monitor_tests {
     #[test]
     fn a_monitor_left_of_the_primary_one_gets_through_the_argument_parser() {
         use clap::Parser;
-        for form in [vec!["depot", "--monitor-at=-1500,300"], vec!["depot", "--monitor-at", "-1500,300"]] {
-            let args = crate::cli::Args::try_parse_from(&form).unwrap_or_else(|e| panic!("{form:?}: {e}"));
-            assert_eq!(args.monitor_at.as_deref().and_then(parse_point), Some((-1500, 300)));
+        for form in [
+            vec!["depot", "--monitor-at=-1500,300"],
+            vec!["depot", "--monitor-at", "-1500,300"],
+        ] {
+            let args =
+                crate::cli::Args::try_parse_from(&form).unwrap_or_else(|e| panic!("{form:?}: {e}"));
+            assert_eq!(
+                args.monitor_at.as_deref().and_then(parse_point),
+                Some((-1500, 300))
+            );
         }
     }
 

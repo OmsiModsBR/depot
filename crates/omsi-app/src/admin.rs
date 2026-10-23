@@ -19,8 +19,8 @@
 //! `unstick <id>`, `clock <seconds of the day>`, `traffic next`, `traffic clear`,
 //! `weather cycle`, `weather set <Weather/file.owt>`.
 
-use crate::teleport::teleport;
 use crate::app::App;
+use crate::teleport::teleport;
 use omsi_net::{LanSession, Role};
 
 /// The clock speeds offered.
@@ -29,8 +29,22 @@ pub(crate) const SPEEDS: [f64; 6] = [1.0, 2.0, 4.0, 8.0, 15.0, 30.0];
 /// The lines of the administration menu: (label, action).
 pub(crate) fn items(app: &App) -> Vec<(String, String)> {
     let mut out = Vec::new();
-    let Some(lan) = app.online.lan.as_ref() else { return out };
-    let mut peers: Vec<(u32, String)> = lan.peers().map(|p| (p.pose.id, if p.pose.name.is_empty() { omsi_ui::tr("Player %{id}").replace("%{id}", &p.pose.id.to_string()) } else { p.pose.name.clone() })).collect();
+    let Some(lan) = app.online.lan.as_ref() else {
+        return out;
+    };
+    let mut peers: Vec<(u32, String)> = lan
+        .peers()
+        .map(|p| {
+            (
+                p.pose.id,
+                if p.pose.name.is_empty() {
+                    omsi_ui::tr("Player %{id}").replace("%{id}", &p.pose.id.to_string())
+                } else {
+                    p.pose.name.clone()
+                },
+            )
+        })
+        .collect();
     peers.sort();
     for (id, name) in &peers {
         if *id == lan.my_id {
@@ -39,42 +53,111 @@ pub(crate) fn items(app: &App) -> Vec<(String, String)> {
         // (the labels in the interface's language around the player's name)
         let tr = |t: &str| omsi_ui::tr(t).into_owned();
         out.push((format!("{name}: {}", tr("go to")), format!("goto {id}")));
-        out.push((format!("{name}: {}", tr("bring here")), format!("bring {id}")));
-        out.push((format!("{name}: {}", tr("repair and refuel their bus")), format!("service repair {id}")));
-        out.push((format!("{name}: {}", tr("put their bus back on its wheels")), format!("unstick {id}")));
+        out.push((
+            format!("{name}: {}", tr("bring here")),
+            format!("bring {id}"),
+        ));
+        out.push((
+            format!("{name}: {}", tr("repair and refuel their bus")),
+            format!("service repair {id}"),
+        ));
+        out.push((
+            format!("{name}: {}", tr("put their bus back on its wheels")),
+            format!("unstick {id}"),
+        ));
         out.push((format!("{name}: {}", tr("send away")), format!("kick {id}")));
-        out.push((format!("{name}: {}", tr("send away for the session")), format!("ban {id}")));
+        out.push((
+            format!("{name}: {}", tr("send away for the session")),
+            format!("ban {id}"),
+        ));
     }
     if peers.len() > 1 {
-        out.push((omsi_ui::tr("Bring everybody here").into_owned(), "bringall".into()));
-        out.push((omsi_ui::tr("Everybody: repair").into_owned(), "service repair all".into()));
-        out.push((omsi_ui::tr("Everybody: refuel").into_owned(), "service refuel all".into()));
-        out.push((omsi_ui::tr("Everybody: wash").into_owned(), "service wash all".into()));
+        out.push((
+            omsi_ui::tr("Bring everybody here").into_owned(),
+            "bringall".into(),
+        ));
+        out.push((
+            omsi_ui::tr("Everybody: repair").into_owned(),
+            "service repair all".into(),
+        ));
+        out.push((
+            omsi_ui::tr("Everybody: refuel").into_owned(),
+            "service refuel all".into(),
+        ));
+        out.push((
+            omsi_ui::tr("Everybody: wash").into_owned(),
+            "service wash all".into(),
+        ));
     }
-    for (label, secs) in [("Clock: 06:00 (morning)", 6 * 3600), ("Clock: 12:00 (noon)", 12 * 3600), ("Clock: 18:00 (evening)", 18 * 3600), ("Clock: 23:00 (night)", 23 * 3600)] {
+    for (label, secs) in [
+        ("Clock: 06:00 (morning)", 6 * 3600),
+        ("Clock: 12:00 (noon)", 12 * 3600),
+        ("Clock: 18:00 (evening)", 18 * 3600),
+        ("Clock: 23:00 (night)", 23 * 3600),
+    ] {
         out.push((omsi_ui::tr(label).into_owned(), format!("clock {secs}")));
     }
     if let Some(t) = app.traffic.as_ref() {
-        out.push((format!("{}: {} ({})", omsi_ui::tr("Traffic"), t.target, omsi_ui::tr("more / less")), "traffic next".into()));
+        out.push((
+            format!(
+                "{}: {} ({})",
+                omsi_ui::tr("Traffic"),
+                t.target,
+                omsi_ui::tr("more / less")
+            ),
+            "traffic next".into(),
+        ));
     }
     out.push(("Clock +1 hour".into(), "time 3600".into()));
     out.push(("Clock -1 hour".into(), "time -3600".into()));
     let speed = lan.clock_speed;
     for s in SPEEDS {
-        let mark = if (s - speed).abs() < 1e-6 { format!("  {}", omsi_ui::tr("(now)")) } else { String::new() };
-        out.push((format!("{} x{s}{mark}", omsi_ui::tr("Time speed")), format!("speed {s}")));
+        let mark = if (s - speed).abs() < 1e-6 {
+            format!("  {}", omsi_ui::tr("(now)"))
+        } else {
+            String::new()
+        };
+        out.push((
+            format!("{} x{s}{mark}", omsi_ui::tr("Time speed")),
+            format!("speed {s}"),
+        ));
     }
     out.push(("Next weather".into(), "weather next".into()));
     // the weather cycle, and each installed weather by name
     let cycling = app.weather_cycle.is_some();
-    out.push((format!("{}: {}", omsi_ui::tr("Weather cycle"), if cycling { omsi_ui::tr("on") } else { omsi_ui::tr("off") }), "weather cycle".into()));
+    out.push((
+        format!(
+            "{}: {}",
+            omsi_ui::tr("Weather cycle"),
+            if cycling {
+                omsi_ui::tr("on")
+            } else {
+                omsi_ui::tr("off")
+            }
+        ),
+        "weather cycle".into(),
+    ));
     for (file, w) in crate::weather_cycle::installed() {
-        let now = app.args.weather.as_deref().is_some_and(|c| c.replace('\\', "/").eq_ignore_ascii_case(&file));
-        let mark = if now { format!("  {}", omsi_ui::tr("(now)")) } else { String::new() };
-        out.push((format!("{}: {}{mark}", omsi_ui::tr("Weather"), w.name), format!("weather set {file}")));
+        let now = app
+            .args
+            .weather
+            .as_deref()
+            .is_some_and(|c| c.replace('\\', "/").eq_ignore_ascii_case(&file));
+        let mark = if now {
+            format!("  {}", omsi_ui::tr("(now)"))
+        } else {
+            String::new()
+        };
+        out.push((
+            format!("{}: {}{mark}", omsi_ui::tr("Weather"), w.name),
+            format!("weather set {file}"),
+        ));
     }
     if app.traffic.is_some() {
-        out.push((omsi_ui::tr("Clear the AI traffic (a jam)").into_owned(), "traffic clear".into()));
+        out.push((
+            omsi_ui::tr("Clear the AI traffic (a jam)").into_owned(),
+            "traffic clear".into(),
+        ));
     }
     out.push(("Back".into(), "back".into()));
     out
@@ -85,7 +168,9 @@ pub(crate) fn run(app: &mut App, action: &str) {
     if action == "back" {
         return;
     }
-    let Some(lan) = app.online.lan.as_mut() else { return };
+    let Some(lan) = app.online.lan.as_mut() else {
+        return;
+    };
     if lan.role == Role::Client {
         // (a server's admin: the server does it)
         lan.command(1, &format!("admin {action}"));
@@ -104,8 +189,12 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         // a notification (`notify <id|all> <notice id> <seconds> <kind> <text>`): to the other
         // players through the session, and on the host's own screen for `all` or its own number
         "notify" => {
-            let Some((who, rest)) = arg.trim().split_once(' ') else { return };
-            let Some((nid, n)) = crate::ui::Notice::parse(rest) else { return };
+            let Some((who, rest)) = arg.trim().split_once(' ') else {
+                return;
+            };
+            let Some((nid, n)) = crate::ui::Notice::parse(rest) else {
+                return;
+            };
             let mut here = false;
             if let Some(l) = app.online.lan.as_mut() {
                 let (ids, local) = notice_targets(who, l.peers().map(|p| p.pose.id), l.my_id);
@@ -121,11 +210,24 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         }
         "kick" | "ban" => {
             if let (Some(l), Some(id)) = (app.online.lan.as_mut(), id) {
-                l.kick(id, if verb == "ban" { "sent away for this session" } else { "sent away by the host" }, verb == "ban");
+                l.kick(
+                    id,
+                    if verb == "ban" {
+                        "sent away for this session"
+                    } else {
+                        "sent away by the host"
+                    },
+                    verb == "ban",
+                );
             }
         }
         "goto" => {
-            let at = app.online.remotes.remotes.get(&id.unwrap_or(0)).map(|r| (r.vehicle().position, r.vehicle().heading));
+            let at = app
+                .online
+                .remotes
+                .remotes
+                .get(&id.unwrap_or(0))
+                .map(|r| (r.vehicle().position, r.vehicle().heading));
             match (at, by) {
                 (Some((pos, heading)), None) => teleport_beside(app, pos, heading),
                 _ => app.service_msg = Some(("That player has no bus to go to".into(), 3.0)),
@@ -134,8 +236,16 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         "bring" => {
             // beside the host's bus (or the admin's), told to that player's game
             let here = match by {
-                None => app.player.as_ref().map(|p| (p.vehicle.position, p.vehicle.heading)),
-                Some(a) => app.online.remotes.remotes.get(&a).map(|r| (r.vehicle().position, r.vehicle().heading)),
+                None => app
+                    .player
+                    .as_ref()
+                    .map(|p| (p.vehicle.position, p.vehicle.heading)),
+                Some(a) => app
+                    .online
+                    .remotes
+                    .remotes
+                    .get(&a)
+                    .map(|r| (r.vehicle().position, r.vehicle().heading)),
             };
             if let (Some((pos, h)), Some(id), Some(l)) = (here, id, app.online.lan.as_mut()) {
                 let (x, y) = beside(pos, h, 8.0);
@@ -149,7 +259,10 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         }
         "speed" => {
             if app.real_time_locked() {
-                app.service_msg = Some(("The time speed is fixed while the real-time sync is on".into(), 3.0));
+                app.service_msg = Some((
+                    "The time speed is fixed while the real-time sync is on".into(),
+                    3.0,
+                ));
             } else if let Some(s) = finite(arg) {
                 let s = s.clamp(1.0, 30.0);
                 if let Some(l) = app.online.lan.as_mut() {
@@ -158,20 +271,40 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
                 app.service_msg = Some((format!("Time speed x{s}"), 3.0));
             }
         }
-        "weather" => match arg.trim().split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((arg.trim(), "")) {
+        "weather" => match arg
+            .trim()
+            .split_once(' ')
+            .map(|(a, b)| (a, b.trim()))
+            .unwrap_or((arg.trim(), ""))
+        {
             ("cycle", _) => {
                 if app.weather_cycle.take().is_none() {
-                    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7);
+                    let seed = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos() as u64)
+                        .unwrap_or(7);
                     let mut c = crate::weather_cycle::Cycle::new(seed);
                     // (the first change soon, not in an hour)
                     c.next_in = 60.0;
                     app.weather_cycle = Some(c);
                 }
                 let on = app.weather_cycle.is_some();
-                app.service_msg = Some((if on { "Weather cycle on" } else { "Weather cycle off" }.into(), 3.0));
+                app.service_msg = Some((
+                    if on {
+                        "Weather cycle on"
+                    } else {
+                        "Weather cycle off"
+                    }
+                    .into(),
+                    3.0,
+                ));
             }
             // (only an installed weather file: the name comes from the admin's game)
-            ("set", file) if !file.contains("..") && file.to_ascii_lowercase().starts_with("weather/") && file.to_ascii_lowercase().ends_with(".owt") => {
+            ("set", file)
+                if !file.contains("..")
+                    && file.to_ascii_lowercase().starts_with("weather/")
+                    && file.to_ascii_lowercase().ends_with(".owt") =>
+            {
                 app.change_weather(Some(file.to_string()), true, 1.0);
             }
             _ => app.next_weather(),
@@ -184,11 +317,23 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         // everybody beside the host's bus (or the admin's), one behind the other
         "bringall" => {
             let here = match by {
-                None => app.player.as_ref().map(|p| (p.vehicle.position, p.vehicle.heading)),
-                Some(a) => app.online.remotes.remotes.get(&a).map(|r| (r.vehicle().position, r.vehicle().heading)),
+                None => app
+                    .player
+                    .as_ref()
+                    .map(|p| (p.vehicle.position, p.vehicle.heading)),
+                Some(a) => app
+                    .online
+                    .remotes
+                    .remotes
+                    .get(&a)
+                    .map(|r| (r.vehicle().position, r.vehicle().heading)),
             };
             if let (Some((pos, h)), Some(l)) = (here, app.online.lan.as_mut()) {
-                let ids: Vec<u32> = l.peers().map(|p| p.pose.id).filter(|id| *id != l.my_id && Some(*id) != by).collect();
+                let ids: Vec<u32> = l
+                    .peers()
+                    .map(|p| p.pose.id)
+                    .filter(|id| *id != l.my_id && Some(*id) != by)
+                    .collect();
                 for (k, id) in ids.iter().enumerate() {
                     let (x, y) = beside(pos, h, 5.0 * (k as f64 + 1.0));
                     l.command(*id, &format!("teleport {x:.2} {y:.2} {:.2} {h:.1}", pos.z));
@@ -203,7 +348,14 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
                 return;
             }
             if let Some(l) = app.online.lan.as_mut() {
-                let ids: Vec<u32> = if who == "all" { l.peers().map(|p| p.pose.id).filter(|id| *id != l.my_id).collect() } else { who.trim().parse::<u32>().ok().into_iter().collect() };
+                let ids: Vec<u32> = if who == "all" {
+                    l.peers()
+                        .map(|p| p.pose.id)
+                        .filter(|id| *id != l.my_id)
+                        .collect()
+                } else {
+                    who.trim().parse::<u32>().ok().into_iter().collect()
+                };
                 for id in &ids {
                     l.command(*id, &format!("service {kind}"));
                 }
@@ -219,7 +371,8 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
         }
         "clock" => {
             if let Some(s) = finite(arg) {
-                let d = (s.rem_euclid(86400.0) - app.clock.time + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
+                let d = (s.rem_euclid(86400.0) - app.clock.time + 43_200.0).rem_euclid(86_400.0)
+                    - 43_200.0;
                 app.shift_clock(d);
             }
         }
@@ -230,7 +383,10 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             if let Some(t) = app.traffic.as_mut() {
                 t.target = crate::game_lists::next_step(&crate::game_lists::TRAFFIC, t.target);
                 app.args.traffic = t.target;
-                app.service_msg = Some((omsi_ui::tr("Traffic: %{n}").replace("%{n}", &t.target.to_string()), 3.0));
+                app.service_msg = Some((
+                    omsi_ui::tr("Traffic: %{n}").replace("%{n}", &t.target.to_string()),
+                    3.0,
+                ));
             }
         }
         _ => log::info!("admin: unknown action '{action}'"),
@@ -259,14 +415,23 @@ pub(crate) fn request(lan: &mut LanSession, password: &str) {
 /// The answer to a challenge: SHA-256 of the challenge and the password, in hex.
 fn response(challenge: &str, password: &str) -> String {
     use sha2::{Digest, Sha256};
-    let h = Sha256::new().chain_update(b"omsi2rw-admin").chain_update(challenge.as_bytes()).chain_update([0u8]).chain_update(password.as_bytes()).finalize();
+    let h = Sha256::new()
+        .chain_update(b"omsi2rw-admin")
+        .chain_update(challenge.as_bytes())
+        .chain_update([0u8])
+        .chain_update(password.as_bytes())
+        .finalize();
     h.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Equal strings, compared in time independent of where they differ.
 #[cfg(feature = "server")]
 fn same(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+            == 0
 }
 
 /// A point `side` metres to the right of a vehicle at `pos` facing `heading`.
@@ -281,14 +446,16 @@ fn teleport_beside(app: &mut App, pos: glam::DVec3, heading: f64) {
     teleport(app, glam::DVec3::new(x, y, pos.z), heading);
 }
 
-
 /// A command from another game (the host's, or an admin's to the host).
 pub(crate) fn command(app: &mut App, from: u32, text: &str) {
     let (verb, arg) = text.split_once(' ').unwrap_or((text, ""));
     match verb {
         // (host → us) put our bus there
         "teleport" if from == 1 => {
-            let v: Vec<f64> = arg.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let v: Vec<f64> = arg
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             if v.len() == 4 {
                 teleport(app, glam::DVec3::new(v[0], v[1], v[2]), v[3]);
                 app.service_msg = Some(("The host brought you to them".into(), 4.0));
@@ -296,12 +463,28 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
         }
         // (host → us) the host's object editor: a map object moved, turned or deleted…
         "objedit" if from == 1 => {
-            let v: Vec<f64> = arg.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let v: Vec<f64> = arg
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             if v.len() == 6 {
                 let id = v[0] as i64;
-                let e = crate::scene::ObjectEdit { moved: glam::DVec3::new(v[1], v[2], v[3]), turned: v[4], deleted: v[5] > 0.5 };
-                let same = app.world.as_ref().and_then(|w| w.object_edits.lock().get(&id).copied()) == Some(e);
-                if let (false, Some(w), Some(r), Some(scene)) = (same, app.world.clone(), app.renderer.as_ref(), app.scene.as_mut()) {
+                let e = crate::scene::ObjectEdit {
+                    moved: glam::DVec3::new(v[1], v[2], v[3]),
+                    turned: v[4],
+                    deleted: v[5] > 0.5,
+                };
+                let same = app
+                    .world
+                    .as_ref()
+                    .and_then(|w| w.object_edits.lock().get(&id).copied())
+                    == Some(e);
+                if let (false, Some(w), Some(r), Some(scene)) = (
+                    same,
+                    app.world.clone(),
+                    app.renderer.as_ref(),
+                    app.scene.as_mut(),
+                ) {
                     log::info!("LAN: the host's editor moved object {id} by ({:.2}, {:.2}, {:.2}), turned {:.1}, deleted {}", e.moved.x, e.moved.y, e.moved.z, e.turned, e.deleted);
                     w.apply_object_edit(r, scene, id, e);
                 }
@@ -310,17 +493,28 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
         // … or a new object (a copy), where it stands now
         "objadd" if from == 1 => {
             let mut it = arg.splitn(7, ' ');
-            let nums: Vec<f64> = (0..6).filter_map(|_| it.next().and_then(|x| x.parse().ok())).collect();
+            let nums: Vec<f64> = (0..6)
+                .filter_map(|_| it.next().and_then(|x| x.parse().ok()))
+                .collect();
             let rel = it.next().unwrap_or("").trim().to_string();
             if nums.len() == 6 && !rel.is_empty() {
                 let id = nums[0] as i64;
-                if let (Some(w), Some(r), Some(scene)) = (app.world.clone(), app.renderer.as_ref(), app.scene.as_mut()) {
+                if let (Some(w), Some(r), Some(scene)) =
+                    (app.world.clone(), app.renderer.as_ref(), app.scene.as_mut())
+                {
                     if let Some(g) = app.online.remote_added.remove(&id) {
                         w.remove_helper_object(r, scene, g);
                     }
                     if nums[5] < 0.5 {
                         let path = app.args.root.join(&rel);
-                        if let Some(g) = w.add_helper_object(r, scene, &path.to_string_lossy(), glam::DVec3::new(nums[1], nums[2], nums[3]), nums[4], &[]) {
+                        if let Some(g) = w.add_helper_object(
+                            r,
+                            scene,
+                            &path.to_string_lossy(),
+                            glam::DVec3::new(nums[1], nums[2], nums[3]),
+                            nums[4],
+                            &[],
+                        ) {
                             app.online.remote_added.insert(id, g);
                         }
                     }
@@ -332,7 +526,15 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
             let kind = arg.trim();
             if matches!(kind, "repair" | "refuel" | "wash") {
                 app.run_service(kind);
-                app.service_msg = Some((match kind { "repair" => "The host: repair", "refuel" => "The host: refuel", _ => "The host: wash" }.into(), 3.0));
+                app.service_msg = Some((
+                    match kind {
+                        "repair" => "The host: repair",
+                        "refuel" => "The host: refuel",
+                        _ => "The host: wash",
+                    }
+                    .into(),
+                    3.0,
+                ));
             }
         }
         "unstick" if from == 1 => {
@@ -345,7 +547,10 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
         // (server → us) the password was right: the menu is ours
         // (server → us) prove the password without sending it
         "admin-challenge" if from == 1 => {
-            let pw = PENDING_PASSWORD.lock().unwrap_or_else(|e| e.into_inner()).take();
+            let pw = PENDING_PASSWORD
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
             if let (Some(pw), Some(l)) = (pw, app.online.lan.as_mut()) {
                 l.command(1, &format!("auth {}", response(arg.trim(), &pw)));
             }
@@ -359,12 +564,23 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
             let reply = match parse_duty(arg) {
                 None => "duty-no malformed".to_string(),
                 Some((line, tour, trip, station)) => {
-                    let stops = app.schedule.as_ref().map(|s| s.tour_trip_stops(&line, &tour, trip)).unwrap_or_default();
-                    match stops.iter().position(|s| s.1 >= station).or(stops.len().checked_sub(1)) {
+                    let stops = app
+                        .schedule
+                        .as_ref()
+                        .map(|s| s.tour_trip_stops(&line, &tour, trip))
+                        .unwrap_or_default();
+                    match stops
+                        .iter()
+                        .position(|s| s.1 >= station)
+                        .or(stops.len().checked_sub(1))
+                    {
                         None => "duty-no unknown tour or trip".to_string(),
                         Some(chosen) => {
                             crate::game_lists::start_duty_at(app, &line, &tour, trip, chosen);
-                            let ok = app.duty.as_ref().is_some_and(|d| d.line.eq_ignore_ascii_case(&line) && d.tour.eq_ignore_ascii_case(&tour));
+                            let ok = app.duty.as_ref().is_some_and(|d| {
+                                d.line.eq_ignore_ascii_case(&line)
+                                    && d.tour.eq_ignore_ascii_case(&tour)
+                            });
                             log::info!("LAN: the server gave us line {line} tour {tour}, trip {trip} from stop {chosen}: {}", if ok { "taken" } else { "not taken" });
                             if ok {
                                 format!("duty-ok {}", duty_arg(&line, &tour, trip, stops[chosen].1))
@@ -400,18 +616,36 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
             if let Some(p) = app.player.as_mut() {
                 crate::game_lists::clear_timetable(&mut p.vehicle);
             }
-            log::info!("LAN: the server took our duty back ({})", had.as_deref().unwrap_or("we had none"));
+            log::info!(
+                "LAN: the server took our duty back ({})",
+                had.as_deref().unwrap_or("we had none")
+            );
             if had.is_some() {
                 app.service_msg = Some(("The dispatch took the duty back: free drive".into(), 6.0));
             }
             if let Some(l) = app.online.lan.as_mut() {
-                l.command(1, if had.is_some() { "duty-off-ok" } else { "duty-off-none" });
+                l.command(
+                    1,
+                    if had.is_some() {
+                        "duty-off-ok"
+                    } else {
+                        "duty-off-none"
+                    },
+                );
             }
         }
-        "admin-locked" if from == 1 => app.service_msg = Some(("Too many wrong admin passwords: try again later".into(), 4.0)),
+        "admin-locked" if from == 1 => {
+            app.service_msg = Some((
+                "Too many wrong admin passwords: try again later".into(),
+                4.0,
+            ))
+        }
         "admin-ok" if from == 1 => {
             app.online.is_admin = true;
-            app.service_msg = Some(("You administer this server now: Esc menu, Administration".into(), 6.0));
+            app.service_msg = Some((
+                "You administer this server now: Esc menu, Administration".into(),
+                6.0,
+            ));
         }
         "admin-no" if from == 1 => app.service_msg = Some(("Wrong admin password".into(), 4.0)),
         // (a game hosting by code sent a notice: the player's game showed it)
@@ -460,7 +694,10 @@ impl TrafficOrder {
     pub fn parse(arg: &str) -> Option<TrafficOrder> {
         match arg.trim() {
             "clear" => Some(TrafficOrder::Clear),
-            v => v.parse::<usize>().ok().map(|n| TrafficOrder::Density(n.min(crate::game_lists::TRAFFIC_MAX))),
+            v => v
+                .parse::<usize>()
+                .ok()
+                .map(|n| TrafficOrder::Density(n.min(crate::game_lists::TRAFFIC_MAX))),
         }
     }
 }
@@ -490,7 +727,10 @@ impl ServerAdmin {
 #[cfg(feature = "server")]
 fn weather_file_ok(file: &str) -> bool {
     let f = file.replace('\\', "/").to_ascii_lowercase();
-    f.starts_with("weather/") && f.ends_with(".owt") && !f.contains("..") && f.matches('/').count() == 1
+    f.starts_with("weather/")
+        && f.ends_with(".owt")
+        && !f.contains("..")
+        && f.matches('/').count() == 1
 }
 
 /// Who the commands of the web gateway's `POST /admin` come from: no player has this id.
@@ -499,18 +739,31 @@ pub(crate) const LOCAL_ADMIN: u32 = u32::MAX;
 
 /// A command a player sent the dedicated server.
 #[cfg(feature = "server")]
-pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &mut ServerAdmin, positions: &dyn Fn(u32) -> Option<(glam::DVec3, f64)>) {
+pub(crate) fn server_command(
+    lan: &mut LanSession,
+    from: u32,
+    text: &str,
+    adm: &mut ServerAdmin,
+    positions: &dyn Fn(u32) -> Option<(glam::DVec3, f64)>,
+) {
     let (verb, arg) = text.split_once(' ').unwrap_or((text, ""));
     match verb {
         // a joining game asks which voice server the session talks on (`voice`)
-        "voice?" => lan.command(from, &crate::voice::VoiceServer::command(crate::voice::hosted().as_ref())),
+        "voice?" => lan.command(
+            from,
+            &crate::voice::VoiceServer::command(crate::voice::hosted().as_ref()),
+        ),
         "auth?" => {
             if adm.password.is_empty() {
                 lan.command(from, "admin-no");
             } else if adm.locked() {
                 lan.command(from, "admin-locked");
             } else {
-                let c = format!("{:016x}{:016x}", omsi_net::random_session_id(), omsi_net::random_session_id());
+                let c = format!(
+                    "{:016x}{:016x}",
+                    omsi_net::random_session_id(),
+                    omsi_net::random_session_id()
+                );
                 adm.challenges.insert(from, c.clone());
                 lan.command(from, &format!("admin-challenge {c}"));
             }
@@ -540,9 +793,26 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
             match v {
                 "kick" | "ban" => {
                     // (`kick <id> [reason]`: the reason is what the player reads when the game closes)
-                    let why = a.trim().split_once(' ').map(|x| x.1.trim()).filter(|r| !r.is_empty());
-                    if let Some(id) = a.trim().split(' ').next().and_then(|x| x.parse::<u32>().ok()) {
-                        lan.kick(id, why.unwrap_or(if v == "ban" { "sent away for this session" } else { "sent away by an admin" }), v == "ban");
+                    let why = a
+                        .trim()
+                        .split_once(' ')
+                        .map(|x| x.1.trim())
+                        .filter(|r| !r.is_empty());
+                    if let Some(id) = a
+                        .trim()
+                        .split(' ')
+                        .next()
+                        .and_then(|x| x.parse::<u32>().ok())
+                    {
+                        lan.kick(
+                            id,
+                            why.unwrap_or(if v == "ban" {
+                                "sent away for this session"
+                            } else {
+                                "sent away by an admin"
+                            }),
+                            v == "ban",
+                        );
                     }
                 }
                 "bring" => {
@@ -571,7 +841,9 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
                 // the menu offers "weather next" and "weather set <file>" for each installed
                 // weather; a server took every one of them for "next"
                 "weather" => match a.trim().split_once(' ').map(|(k, f)| (k, f.trim())) {
-                    Some(("set", file)) if weather_file_ok(file) => adm.set_weather = Some(file.replace('\\', "/")),
+                    Some(("set", file)) if weather_file_ok(file) => {
+                        adm.set_weather = Some(file.replace('\\', "/"))
+                    }
                     _ => adm.next_weather = true,
                 },
                 "say" => {
@@ -603,7 +875,8 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
                 "notify" => {
                     if let Some((who, rest)) = a.trim().split_once(' ') {
                         if crate::ui::Notice::parse(rest).is_some() {
-                            let (ids, _) = notice_targets(who, lan.peers().map(|p| p.pose.id), lan.my_id);
+                            let (ids, _) =
+                                notice_targets(who, lan.peers().map(|p| p.pose.id), lan.my_id);
                             for id in ids {
                                 lan.command(id, &format!("notify {}", rest.trim()));
                             }
@@ -625,17 +898,31 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
                 }
                 "bringall" => {
                     if let Some((pos, h)) = positions(from) {
-                        let ids: Vec<u32> = lan.peers().map(|p| p.pose.id).filter(|id| *id != from && *id != lan.my_id).collect();
+                        let ids: Vec<u32> = lan
+                            .peers()
+                            .map(|p| p.pose.id)
+                            .filter(|id| *id != from && *id != lan.my_id)
+                            .collect();
                         for (k, id) in ids.iter().enumerate() {
                             let (x, y) = beside(pos, h, 5.0 * (k as f64 + 1.0));
-                            lan.command(*id, &format!("teleport {x:.2} {y:.2} {:.2} {h:.1}", pos.z));
+                            lan.command(
+                                *id,
+                                &format!("teleport {x:.2} {y:.2} {:.2} {h:.1}", pos.z),
+                            );
                         }
                     }
                 }
                 "service" => {
                     let (kind, who) = a.split_once(' ').unwrap_or((a, "all"));
                     if matches!(kind, "repair" | "refuel" | "wash") {
-                        let ids: Vec<u32> = if who == "all" { lan.peers().map(|p| p.pose.id).filter(|id| *id != lan.my_id).collect() } else { who.trim().parse::<u32>().ok().into_iter().collect() };
+                        let ids: Vec<u32> = if who == "all" {
+                            lan.peers()
+                                .map(|p| p.pose.id)
+                                .filter(|id| *id != lan.my_id)
+                                .collect()
+                        } else {
+                            who.trim().parse::<u32>().ok().into_iter().collect()
+                        };
                         for id in ids {
                             lan.command(id, &format!("service {kind}"));
                         }
@@ -660,7 +947,10 @@ pub(crate) fn server_command(lan: &mut LanSession, from: u32, text: &str, adm: &
         "duty-off-ok" => log::info!("server: player {from} left the duty"),
         "duty-off-none" => log::info!("server: player {from} had no duty to leave"),
         "duty-ok" => log::info!("server: player {from} took duty {}", arg.trim()),
-        "duty-no" => log::info!("server: player {from} could not take the duty: {}", arg.trim()),
+        "duty-no" => log::info!(
+            "server: player {from} could not take the duty: {}",
+            arg.trim()
+        ),
         // a player's game showed a notification (`notify`): said for the tool that sent it
         "notify-seen" => log::info!("server: player {from} saw notice {}", arg.trim()),
         _ => log::info!("server: command '{text}' from player {from} not taken"),
@@ -678,8 +968,15 @@ pub(crate) fn duty_arg(line: &str, tour: &str, trip: usize, stop: usize) -> Stri
 pub(crate) fn parse_duty(arg: &str) -> Option<(String, String, usize, usize)> {
     let unesc = |s: &str| s.replace("%20", " ").replace("%25", "%");
     let v: Vec<&str> = arg.split_whitespace().collect();
-    let [line, tour, trip, stop] = v[..] else { return None };
-    Some((unesc(line), unesc(tour), trip.parse().ok()?, stop.parse().ok()?))
+    let [line, tour, trip, stop] = v[..] else {
+        return None;
+    };
+    Some((
+        unesc(line),
+        unesc(tour),
+        trip.parse().ok()?,
+        stop.parse().ok()?,
+    ))
 }
 
 #[cfg(test)]
@@ -689,13 +986,27 @@ mod duty_tests {
     #[test]
     fn a_duty_goes_to_the_game_and_back() {
         assert_eq!(duty_arg("15", "5", 2, 7), "15 5 2 7");
-        assert_eq!(parse_duty("15 5 2 7"), Some(("15".into(), "5".into(), 2, 7)));
+        assert_eq!(
+            parse_duty("15 5 2 7"),
+            Some(("15".into(), "5".into(), 2, 7))
+        );
         // names with spaces and percent signs
         let a = duty_arg("KI-Zug", "ZOB RB 100%", 0, 0);
         assert_eq!(a, "KI-Zug ZOB%20RB%20100%25 0 0");
-        assert_eq!(parse_duty(&a), Some(("KI-Zug".into(), "ZOB RB 100%".into(), 0, 0)));
+        assert_eq!(
+            parse_duty(&a),
+            Some(("KI-Zug".into(), "ZOB RB 100%".into(), 0, 0))
+        );
         // missing or extra parts, not numbers: not a duty
-        for bad in ["", "15", "15 5", "15 5 2", "15 5 2 7 9", "15 5 x 7", "15 5 2 -1"] {
+        for bad in [
+            "",
+            "15",
+            "15 5",
+            "15 5 2",
+            "15 5 2 7 9",
+            "15 5 x 7",
+            "15 5 2 -1",
+        ] {
             assert_eq!(parse_duty(bad), None, "{bad}");
         }
     }
@@ -722,7 +1033,10 @@ mod notice_target_tests {
     #[test]
     fn all_is_every_player_and_the_host_itself() {
         // the host is player 1, the others 2 and 5
-        assert_eq!(notice_targets("all", [2, 5].into_iter(), 1), (vec![2, 5], true));
+        assert_eq!(
+            notice_targets("all", [2, 5].into_iter(), 1),
+            (vec![2, 5], true)
+        );
         assert_eq!(notice_targets("all", [].into_iter(), 1), (vec![], true));
         // one player; the host's own number: its own screen, nothing sent
         assert_eq!(notice_targets("5", [2, 5].into_iter(), 1), (vec![5], false));
@@ -742,7 +1056,10 @@ mod traffic_order_tests {
         assert_eq!(TrafficOrder::parse(" 20 "), Some(TrafficOrder::Density(20)));
         assert_eq!(TrafficOrder::parse("0"), Some(TrafficOrder::Density(0)));
         assert_eq!(TrafficOrder::parse("400"), Some(TrafficOrder::Density(120)));
-        assert_eq!(TrafficOrder::parse("120"), Some(TrafficOrder::Density(crate::game_lists::TRAFFIC_MAX)));
+        assert_eq!(
+            TrafficOrder::parse("120"),
+            Some(TrafficOrder::Density(crate::game_lists::TRAFFIC_MAX))
+        );
         for bad in ["", "next", "-5", "2.5"] {
             assert_eq!(TrafficOrder::parse(bad), None, "{bad}");
         }
