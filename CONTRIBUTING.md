@@ -10,6 +10,10 @@ Thanks for helping! A few rules keep the project healthy:
 * **One change per pull request**, with a message that says what the player notices.
 * `cargo test --workspace` and `cargo build --release` must pass (CI checks all platforms).
 * Code style: `rustfmt` defaults, comments explain *why*.
+* Tests live in each crate's `tests/` folder, not in `src/`; what a test needs from inside the
+  crate comes through its `testing` module behind the `test-support` feature (see
+  [docs/OMSI_SIM_REFACTOR.md](docs/OMSI_SIM_REFACTOR.md)). Crates that still have tests in `src/`
+  move them out as they are refactored.
 
 ## Branches
 

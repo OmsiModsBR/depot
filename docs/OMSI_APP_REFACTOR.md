@@ -57,6 +57,10 @@ Cerca de 19,6 mil linhas de `src/` (14%) são testes, em módulos `#[cfg(test)]`
 
 `impl App` aparece em 23 arquivos. O portão da C3 (nenhum arquivo com `impl App` acima de 1.500 linhas, exceto `app_events.rs`) ainda vale, mas `new_ui.rs` (2.486, com 1.450 de testes) só passa por causa dos testes.
 
+## Convenção de testes
+
+**Testes fora de `src/` são padrão no projeto** (decisão do mantenedor, 23/10/2026), não só neste crate. Como na Trilha S: nenhum `#[cfg(test)]`, `#[test]` ou `tests.rs` em `src/`; um binário de teste por crate (`tests/app/main.rs`, com um módulo por domínio espelhando `src/`) e os harnesses que o CI chama pelo nome como binários próprios; os auxílios em `tests/support/`; o que é interno chega aos testes por `omsi_app::testing`, compilado só com a feature `test-support`, ligada por uma dev-dependency do próprio crate.
+
 ## Princípios, aplicados a este crate
 
 Os mesmos da Trilha S: uma responsabilidade por arquivo, com o nome do assunto; função longa vira etapas com nome, na mesma ordem; cada domínio grande tem um `mod.rs` que expõe só o que o resto do jogo usa; trait só onde houver duas implementações de verdade (aqui, o backend gráfico); estado global vira parâmetro só junto da Frente B.
@@ -65,10 +69,27 @@ Duas regras próprias do app:
 
 1. **Um domínio é uma pasta.** O crate deixa de ter 109 arquivos na raiz. Cada pasta tem um `mod.rs` e os arquivos do domínio; os métodos do `App` de um domínio ficam na pasta dele, até a C2 transformá-los em métodos dos sub-structs.
 2. **O código novo entra direto na pasta do domínio.** Depois que uma pasta existir, nenhum `new_ui_*.rs` ou `d3d9_*.rs` novo na raiz.
+3. **Cada domínio é um pacote em três partes** (decisão do mantenedor, 23/10/2026), no modelo do pacote `omsi-sim/src/physics/`. O PR que cria a pasta de um domínio já reorganiza os arquivos dela nessa hierarquia; não há um PR só de mover arquivos seguido de outro de reestruturar.
+
+```
+<domínio>/
+  mod.rs              declara as três partes e reexporta só a interface
+  domain/             os objetos do domínio: structs, enums, estados e constantes, com os acessores
+                      que leem os campos; sem cálculo, sem renderer, sem disco, sem App
+  interface/
+    input.rs          a entrada: o que o resto do jogo chama ou entrega ao domínio (funções,
+                      métodos públicos, eventos), e o único caminho para dentro
+    output.rs         a saída: o que o domínio devolve (estados, eventos, pedidos) e o que ele
+                      precisa de fora (renderer, cena, áudio, disco, outros domínios), reunidos
+                      num lugar só, em vez de chamados de qualquer arquivo
+  implementation/     os procedimentos, um módulo por subdomínio, na ordem em que rodam
+```
+
+   Regras do pacote: `implementation/` só fala com outro domínio pela `interface/input.rs` dele, e só chega ao que é de fora pela própria `interface/output.rs`; `domain/` não importa `implementation/` nem `interface/`; o resto do crate importa o domínio só pelo que o `mod.rs` reexporta. Trait na saída só onde houver duas implementações de verdade (o backend gráfico de `output/`); nos outros casos `output.rs` reexporta ou embrulha os tipos concretos. Um domínio pequeno pode ter `domain.rs` e `implementation.rs` em vez de pastas, mas mantém as três partes. Os métodos de `impl App` de um domínio ficam em `implementation/` até a C2 trocá-los por métodos dos sub-structs.
 
 ## Arquitetura alvo
 
-Só a primeira camada; o detalhe de cada pasta é decidido no PR dela, medido na hora.
+Só a primeira camada; o detalhe de cada pasta é decidido no PR dela, medido na hora. Cada pasta abaixo é um pacote com `domain/`, `interface/` (`input.rs` e `output.rs`) e `implementation/`, como na regra 3 dos princípios. A pasta da nova interface se chama `interface/` (decisão do mantenedor), então a camada de entrada e saída dela fica em `interface/interface/`.
 
 ```
 src/
@@ -113,12 +134,12 @@ Duas fases. A primeira é de estrutura, em arquivos mornos, e pode começar já.
 | Item | Branch | O que entra, em commits | Pronto quando |
 | --- | --- | --- | --- |
 | AP1 | `feat/app-fmt` | (1) `scripts/fmt-merge.sh` (merge do commit anterior ao fmt, `cargo fmt` na própria branch, merge do commit de fmt com `-s ours`) e a configuração de git recomendada no CONTRIBUTING (`merge.conflictStyle = zdiff3`, `rerere.enabled = true`, `diff.renameLimit` alto); (2) `omsi-render-d3d9`, `omsi-launcher-core` e `omsi-launcher-ui` formatados e na lista bloqueante; (3) `cargo fmt -p omsi-app` sozinho, o crate na lista bloqueante e o passo informativo do workspace atualizado em `docs/QUALITY.md`; (4) `.git-blame-ignore-revs` com o hash do commit (3) | `fmt --check` bloqueante no `omsi-app` e nos três crates; testes, `offscreen-traces` e golden iguais |
-| AP2 | `feat/app-testes-*` | Os testes de `src/` para `tests/`, com `tests/support/` e o que é interno alcançado por `omsi_app::testing` atrás da feature `test-support`, como na Trilha S; um PR por grupo de domínios (gameplay; mundo e cena; interface, HUD e launcher; entrada e o resto), porque são cerca de 19,6 mil linhas. O teste de 662 linhas da nova interface vira um teste por página | Nenhum teste em `src/`; a mesma lista de testes, pelos nomes; `cargo build -p omsi-app` sem a feature não tem `testing` |
-| AP3 | `feat/app-interface` | `interface/` com os sete `new_ui*.rs`, divididos por tela; `hud/frame.rs` com `Frame`, `MenuKind`, `DropdownView`, `Preview` e os retângulos de clique, tirados de `ui.rs`, para que a nova interface deixe de depender do desenho antigo | Nenhum `new_ui*.rs` na raiz; `interface/` não importa `hud::legacy` |
-| AP4 | `feat/app-saida` | `output/` com `d3d9_output.rs`, `openxr.rs`, `vr_navigator.rs`, `mirror_hud.rs` e a câmera; um `Backend { Wgpu, D3d9 }` decidido uma vez na abertura da janela, no lugar das checagens espalhadas por `app.rs`, `startup.rs`, `app_events.rs` e pelos menus | Menções ao Direct3D 9 fora de `output/` e das opções de configuração só por `Backend`; o job do Windows verde no PR (é ele que compila esse código) |
-| AP5 | `feat/app-hud` | `hud/` com `ui.rs` dividido em texto, chat e avisos, informações e a lista de escolha; `game_lists.rs` dividido por assunto em `hud/lists/`; `nav/` dentro de `hud/` | Nenhum arquivo de `hud/` acima de 1.500 linhas |
+| AP2 | `feat/app-testes-*` | Os testes de `src/` para `tests/`, como na [convenção de testes](#convenção-de-testes); um PR por grupo de domínios (gameplay; mundo e cena; interface, HUD e launcher; entrada e o resto), porque são cerca de 19,6 mil linhas. O teste de 662 linhas da nova interface vira um teste por página | Nenhum teste em `src/`; a mesma lista de testes, pelos nomes; `cargo build -p omsi-app` sem a feature não tem `testing` |
+| AP3 | `feat/app-interface` | `interface/` com os sete `new_ui*.rs`, divididos por tela no pacote (`domain/` com o estado de cada tela, `interface/` com o que o frame chama e o que a interface pede ao jogo, `implementation/` com o desenho e o clique); `hud/frame.rs` com `Frame`, `MenuKind`, `DropdownView`, `Preview` e os retângulos de clique, tirados de `ui.rs`, para que a nova interface deixe de depender do desenho antigo | Nenhum `new_ui*.rs` na raiz; `interface/` não importa `hud::legacy` |
+| AP4 | `feat/app-saida` | `output/` como pacote, com `d3d9_output.rs`, `openxr.rs`, `vr_navigator.rs`, `mirror_hud.rs` e a câmera em `implementation/`; um `Backend { Wgpu, D3d9 }` em `interface/output.rs`, decidido uma vez na abertura da janela, no lugar das checagens espalhadas por `app.rs`, `startup.rs`, `app_events.rs` e pelos menus | Menções ao Direct3D 9 fora de `output/` e das opções de configuração só por `Backend`; o job do Windows verde no PR (é ele que compila esse código) |
+| AP5 | `feat/app-hud` | `hud/` como pacote, com `ui.rs` dividido em texto, chat e avisos, informações e a lista de escolha; `game_lists.rs` dividido por assunto em `hud/lists/`; `nav/` dentro de `hud/` | Nenhum arquivo de `hud/` acima de 1.500 linhas |
 | AP6 | `feat/app-launcher-*` | Em passos: (a) a lógica de domínio que mora na interface do launcher (`Choice::to_duty`, `default_hof`, estação, escolha de viagem, gravação do horário, favoritos, aeroporto mais próximo) para `omsi-launcher-core`, com testes; (b) o jogo deixa de importar `launcher` (`weather_time.rs`, `game_lists.rs`, `server.rs`, `android.rs`); (c) as páginas para `omsi-launcher-ui`, uma por PR, cortando as importações de módulos do jogo; (d) o que sobrar em `omsi-app/src/launcher/` é a ligação com o processo do jogo | `launcher/` no app abaixo de 2 mil linhas; `omsi-launcher-ui` sem dependência do `omsi-app` |
-| AP7 | `feat/app-dominios` | As pastas `core/`, `input/`, `world/`, `weather/`, `gameplay/` e `online/`, só movendo arquivos inteiros (a divisão de `scene.rs`, `traffic.rs`, `schedule.rs` e `humans.rs` fica para a fase 2), um PR por pasta | Nenhum arquivo de código na raiz além de `lib.rs` e `main.rs` |
+| AP7 | `feat/app-dominios` | As pastas `core/`, `input/`, `world/`, `weather/`, `gameplay/` e `online/`, um PR por pasta, cada uma já como pacote: os tipos vão para `domain/`, o que os outros domínios chamam para `interface/input.rs`, o que o domínio pede de fora para `interface/output.rs` e os procedimentos para `implementation/`. Os quatro arquivos gigantes (`scene.rs`, `traffic.rs`, `schedule.rs` e `humans.rs`) entram em `implementation/` com os tipos já separados em `domain/`; a divisão do resto deles fica para a fase 2 (C4 e E1). `online/` só ganha a hierarquia de pastas, sem reescrever o código desligado | Nenhum arquivo de código na raiz além de `lib.rs` e `main.rs`; cada pasta com as três partes |
 
 AP1 vem primeiro, porque o rustfmt deixa os PRs de movimento legíveis e porque cada PR seguinte já nasce formatado. AP2 vem antes da divisão, pelo mesmo motivo da Trilha S: com os testes fora de `src/`, mover um arquivo deixa de levar os testes junto. AP3 a AP7 não dependem entre si e podem trocar de ordem conforme o que estiver aberto no repositório.
 
@@ -147,19 +168,20 @@ A ordem e o conteúdo são os da [Trilha 4](MACRO_REFACTOR_DRAFT.md#trilha-4-ár
 - **Renderer.** O contrato que o Direct3D 9 usa (`FramePlan`, `MirrorEvent`, `AssetMirror`) é do `omsi-render` e fica fora desta trilha; a AP4 só organiza o lado do app.
 - **Correções do launcher.** Os PRs `fix/launcher-*` abertos (#244 a #280) mexem em `omsi-launcher-core/src/lib.rs` e em `settings/round_trip.rs`. O rustfmt da AP1 toca o segundo, então eles entram antes dela ou são portados com o `scripts/fmt-merge.sh`; a AP6 e a D1 esperam por eles.
 
-## Decisões pendentes
+## Decisões
 
-| Decisão | Recomendação | Alternativa | Por quê |
-| --- | --- | --- | --- |
-| Testes do app fora de `src/` (AP2) | Sim, como na Trilha S, com `omsi_app::testing` atrás de `test-support` | Manter os testes unitários em `src/` e só juntar os auxílios | É a convenção que o projeto escolheu para o `omsi-sim`; sem ela, cada PR de movimento leva os testes junto |
-| Quando a fase 1 começa | Já, começando pela AP1, em paralelo ao fim da Trilha 3 | Depois do fix-25 | A AP1 só depende de uma janela sem PRs abertos no app |
-| Destino do launcher | `omsi-launcher-ui` para a interface e `omsi-launcher-core` para a lógica | Um crate novo `omsi-launcher`, como a E2 dizia | Os dois crates já existem, e o launcher já roda como processo próprio |
-| Nome da pasta da nova interface | `interface/`, com o HUD antigo em `hud/legacy/` | Manter `new_ui` | "Nova" deixa de fazer sentido quando ela for a única |
+Tomadas pelo mantenedor em 23/10/2026:
+
+- **Testes:** fora de `src/`, como padrão do projeto (ver a [convenção de testes](#convenção-de-testes)).
+- **Quando começa:** já, pela AP1.
+- **Destino do launcher:** `omsi-launcher-ui` para a interface e `omsi-launcher-core` para a lógica, sem crate novo.
+- **Nome da pasta da nova interface:** `interface/`, com o HUD antigo em `hud/legacy/`.
+- **Hierarquia dos pacotes:** cada domínio criado já sai reestruturado em `domain/`, `interface/` (entrada e saída) e `implementation/` (regra 3 dos princípios).
 
 ## Critério de sucesso
 
 - `fmt --check` bloqueante no `omsi-app`, no `omsi-launcher-ui`, no `omsi-launcher-core` e no `omsi-render-d3d9`.
-- Nenhum arquivo de código na raiz de `src/` além de `lib.rs` e `main.rs`; nenhum teste em `src/`, se a AP2 for aprovada.
+- Nenhum arquivo de código na raiz de `src/` além de `lib.rs` e `main.rs`; cada domínio com `domain/`, `interface/` e `implementation/`, e nenhum import entre domínios que não passe pela interface; nenhum teste em `src/`.
 - A nova interface sem dependência do desenho em CPU do HUD; o backend gráfico escolhido num ponto só.
 - O launcher fora do app, a não ser a ligação com o processo do jogo.
 - No fim da fase 2, os portões da antiga Trilha 4: traço B0 idêntico em cada PR, `run_offscreen` abaixo de 400 linhas, `omsi-gameplay` compilando e testando sem `wgpu`, `omsi-app` abaixo de 50 mil linhas na configuração padrão, nenhum arquivo da cena acima de 3.000 linhas e nenhuma divergência conhecida no teste de ida e volta do `settings.cfg`.

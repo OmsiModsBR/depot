@@ -606,6 +606,11 @@ Quebrar a refatoração por crate funciona bem para 19 dos 21 crates. Não basta
 
 Em vez de fases em sequência, trilhas com portão próprio. Todas as branches de refatoração são `feat/<nome>`; mudanças de comportamento, inclusive a retirada de compensações, são `fix/<nome>`.
 
+Dois padrões valem para toda trilha que reorganiza um crate (decisões do mantenedor, 23/10/2026):
+
+- **Testes fora de `src/`.** Nenhum `#[cfg(test)]`, `#[test]` ou `tests.rs` em `src/`: um binário de teste por crate, com um módulo por domínio, os auxílios em `tests/support/` e o que é interno alcançado por um módulo `testing` atrás da feature `test-support`, como a Trilha S fez no `omsi-sim`. Os crates já reorganizados levam os testes para fora quando forem mexidos de novo.
+- **Pacotes por domínio em três partes**, no modelo de `omsi-sim/src/physics/`: `domain/` com os objetos, `interface/` com a entrada (`input.rs`, o que o resto do jogo chama) e a saída (`output.rs`, o que o domínio devolve e o que ele precisa de fora) e `implementation/` com os procedimentos. A trilha que cria a pasta de um domínio já a reorganiza assim. O detalhe está em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md#princípios-aplicados-a-este-crate).
+
 Situação em 23/10/2026:
 
 | Trilha | Situação |
@@ -719,6 +724,8 @@ Em duas fases:
 
 1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `interface/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
 2. **Áreas quentes.** A Trilha 4, com o mesmo conteúdo e as mesmas janelas.
+
+Cada pasta de domínio criada na fase 1 já sai como pacote com `domain/`, `interface/` (entrada e saída) e `implementation/`. Decidido pelo mantenedor em 23/10/2026: os testes saem de `src/` (padrão do projeto), a trilha começa já pela AP1, o launcher vai para `omsi-launcher-ui` e `omsi-launcher-core`, e a pasta da nova interface se chama `interface/`.
 
 Aposentar o desenho em CPU do HUD (o passo 1 da C6, reescrito, porque o menu do jogo já é desenhado pelo `omsi-ui`) muda o que aparece na tela e fica com a trilha da nova interface, fora desta.
 
