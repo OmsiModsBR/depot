@@ -60,9 +60,8 @@ pub enum Dynamics {
     /// A rigid body on its wheels: the player's vehicle, and the one the launcher shows (see
     /// `crate::rigid`).
     Rigid(RigidBody),
-    /// The kinematic model: the player's vehicle with `--physics simple` or on rails, and the
-    /// copies the AI and other games drive (their pose is set from outside, the model is not
-    /// stepped).
+    /// The kinematic model: the player's vehicle on rails, and the copies the AI and other
+    /// games drive (their pose is set from outside, the model is not stepped).
     Kinematic(KinematicModel),
 }
 
