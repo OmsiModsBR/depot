@@ -8,7 +8,7 @@
 
 use super::theme::*;
 use super::ui::ButtonKind;
-use super::{Launcher, Page};
+use super::Launcher;
 use glam::Vec2;
 use omsi_ui::paint::Align;
 use omsi_ui::{Rect, Weight};
@@ -46,10 +46,6 @@ pub struct Fingers {
 pub enum Purpose {
     /// The OMSI 2 folder (Setup).
     Root,
-    /// A mod as a folder.
-    ModFolder,
-    /// A mod archive (.zip: used in place, never unpacked).
-    ModZip,
 }
 
 /// The browser of the device's storage.
@@ -113,8 +109,7 @@ impl Browser {
                         continue;
                     }
                     let Ok(m) = e.metadata() else { continue };
-                    let archive = name.to_ascii_lowercase().ends_with(".zip");
-                    if m.is_dir() || (archive && self.purpose == Purpose::ModZip) {
+                    if m.is_dir() {
                         self.entries.push((name, m.is_dir(), m.len()));
                     }
                 }
@@ -135,8 +130,6 @@ impl Browser {
     fn title(&self) -> &'static str {
         match self.purpose {
             Purpose::Root => "Choose the OMSI 2 folder",
-            Purpose::ModFolder => "Choose the mod folder",
-            Purpose::ModZip => "Choose a mod archive (.zip)",
         }
     }
 }
@@ -293,14 +286,6 @@ impl Launcher {
                     chosen = Some(b.dir.clone());
                 }
             }
-            Purpose::ModFolder => {
-                if self.ui.button("browse-use", Rect::new(foot.right() - 220.0, foot.y, 220.0, foot.h), "Install this folder", Some("download"), ButtonKind::Primary) {
-                    chosen = Some(b.dir.clone());
-                }
-            }
-            Purpose::ModZip => {
-                self.ui.text_in("Tap a .zip to install it", Rect::new(foot.x, foot.y, foot.w, foot.h), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
-            }
         }
         // the folder's contents
         let list = Rect::new(inner.x, path_y + 28.0, inner.w, foot.y - path_y - 36.0);
@@ -323,7 +308,7 @@ impl Launcher {
                 if ui.row(&format!("{key}-{k}"), rr, false) {
                     picked = Some((name.clone(), *dir));
                 }
-                ui.icon(if *dir { "folder" } else { "inventory_2" }, Vec2::new(rr.x + 18.0, rr.center().y), 20.0, if *dir { ACCENT } else { TEXT_SOFT });
+                ui.icon(if *dir { "folder" } else { "inventory_2" }, Vec2::new(rr.x + 18.0, rr.center().y), 20.0, if *dir { accent() } else { TEXT_SOFT });
                 ui.text_in(name, Rect::new(rr.x + 40.0, rr.y, rr.w - 140.0, rr.h), 13.5, Weight::Medium, TEXT, Align::Left);
                 if !*dir {
                     ui.text_in(&super::state::fmt_bytes(*bytes), Rect::new(rr.x, rr.y, rr.w - 12.0, rr.h), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
@@ -358,12 +343,8 @@ impl Launcher {
         let s = p.to_string_lossy().to_string();
         match purpose {
             Purpose::Root => {
-                self.pages.setup_root = Some(s);
+                self.pages.setup.root = Some(s);
                 self.state.set_status("Folder chosen: press Save.", false);
-            }
-            Purpose::ModFolder | Purpose::ModZip => {
-                self.page = Page::Mods;
-                self.state.install(s);
             }
         }
     }

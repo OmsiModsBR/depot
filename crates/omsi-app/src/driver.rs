@@ -41,7 +41,9 @@
 use glam::{Mat4, Vec3};
 use omsi_geometry::util::wrap_deg_f32;
 use omsi_render::{AlphaMode, MeshId, Renderer, Scene};
-use omsi_sim::human::{curl_hands, grip_centres, hand_slot, skin_from, Activity, HumanType, Pose, PoseInput};
+use omsi_sim::people::{
+    curl_hands, grip_centres, hand_slot, skin_from, Activity, HumanType, Pose, PoseInput,
+};
 use omsi_sim::VehicleInstance;
 use std::sync::Arc;
 
@@ -304,7 +306,7 @@ pub struct DriverFigure {
 }
 
 /// The upper-arm and forearm bone slots of each side (0 left, 1 right) in `Posed::bones`,
-/// numbered as in `omsi_sim::human` (thighs 0-1, shins 2-3, upper arms 4-5, forearms 6-7).
+/// numbered as in `omsi_sim::people` (thighs 0-1, shins 2-3, upper arms 4-5, forearms 6-7).
 const UPPER_ARM_SLOT: [usize; 2] = [4, 5];
 const FORE_ARM_SLOT: [usize; 2] = [6, 7];
 

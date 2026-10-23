@@ -1,16 +1,21 @@
-//! The Maps page: the library of maps, what is known about the chosen one, its start points
-//! and what was found of its files. Read like the Vehicles page, on a thread of its own.
+//! The Maps page, where a session starts: the library of maps on the left, the chosen map's
+//! picture and its author's description in the middle, and on the right the start (the date,
+//! the kind of session, where to start and the weather), which the host draws into
+//! `start_area` - it holds the session's choice. Read like the Vehicles page, on a thread of
+//! its own.
 
-use crate::kit::{self, card, clipped, dot, shorten, text, Status};
+use crate::kit::{self, card, clipped, dot, shorten, Status};
 use crate::look::*;
+use crate::shell::BODY_TOP;
 use omsi_launcher_lib::MapInfo;
 use omsi_ui::paint::Align;
-use omsi_ui::widgets::{matches, Ui};
+use omsi_ui::widgets::{matches, ButtonKind, Ui};
 use omsi_ui::{Rect, Weight};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
-const DESCRIPTION_CHARS: usize = 1200;
+/// The longest description drawn (third-party text, bounded; the card scrolls).
+const DESCRIPTION_CHARS: usize = 20_000;
 
 enum Catalog {
     NotStarted,
@@ -23,19 +28,22 @@ pub struct MapsView {
     catalog: Catalog,
     query: String,
     selected: usize,
-    /// The start point picked in the map's list; `None` is automatic (the game's choice).
-    entry: Option<usize>,
-    /// A map (its file) and start point to show once the catalog is there (`select`).
-    pending: Option<(String, i32)>,
-    /// "Drive on this map" was clicked: the map's file and the start point's place in its
-    /// list, -1 for automatic (`take_use`).
-    used: Option<(String, i32)>,
+    /// A map (its file) to show once the catalog is there (`select`).
+    pending: Option<String>,
     /// The chosen map's file (for the host to find its picture by).
     current: Option<String>,
     /// The picture from the chosen map's folder, on the GPU: its texture and width over height.
     map_picture: Option<(usize, f32)>,
     /// That picture is still being looked for or read.
     picture_reading: bool,
+    /// The rows' small pictures on the GPU, by map file (`set_thumb`).
+    thumbs: std::collections::HashMap<String, usize>,
+    /// The files of the rows drawn on screen in the last frame (`visible`).
+    visible: Vec<String>,
+    /// Where the start's card goes (the host draws it), once the library is drawn.
+    start_area: Option<Rect>,
+    /// "Explore map" was clicked (`take_explore`).
+    explore: bool,
 }
 
 impl Default for MapsView {
@@ -44,12 +52,14 @@ impl Default for MapsView {
             catalog: Catalog::NotStarted,
             query: String::new(),
             selected: 0,
-            entry: None,
             pending: None,
-            used: None,
             current: None,
             map_picture: None,
             picture_reading: false,
+            thumbs: Default::default(),
+            visible: Vec::new(),
+            start_area: None,
+            explore: false,
         }
     }
 }
@@ -75,19 +85,44 @@ impl MapsView {
         self.picture_reading = reading;
     }
 
-    /// The map chosen in the library, and its start point (`None`: automatic).
-    pub fn chosen(&self) -> (usize, Option<usize>) {
-        (self.selected, self.entry)
+    /// The map chosen in the library (its place in the catalog).
+    /// The files of the library's rows on screen (after `draw`), for their small pictures.
+    pub fn visible(&self) -> &[String] {
+        &self.visible
+    }
+
+    /// The small picture of `file`'s row, once the host has one on the GPU.
+    pub fn set_thumb(&mut self, file: &str, tex: Option<usize>) {
+        match tex {
+            Some(t) => {
+                self.thumbs.insert(file.to_string(), t);
+            }
+            None => {
+                self.thumbs.remove(file);
+            }
+        }
+    }
+
+    pub fn chosen(&self) -> usize {
+        self.selected
+    }
+
+    /// Where the start's card goes, in the frame just drawn (none while the catalog is read
+    /// or could not be).
+    pub fn start_area(&self) -> Option<Rect> {
+        self.start_area
+    }
+
+    /// "Explore map" was clicked, once.
+    pub fn take_explore(&mut self) -> bool {
+        std::mem::take(&mut self.explore)
     }
 
     /// Take `list` as the catalog (the host's, which it reads again after Setup or an
     /// install). The map shown stays the one it was when it is still in the list.
     pub fn set_catalog(&mut self, list: Vec<MapInfo>) {
         let keep = match &self.catalog {
-            Catalog::Ready(old) => old.get(self.selected).map(|m| {
-                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
-                (m.file.clone(), entry)
-            }),
+            Catalog::Ready(old) => old.get(self.selected).map(|m| m.file.clone()),
             _ => None,
         };
         self.catalog = Catalog::Ready(Rc::new(list));
@@ -95,7 +130,6 @@ impl MapsView {
             self.pending = Some(keep);
         }
         self.selected = 0;
-        self.entry = None;
         self.apply_pending();
     }
 
@@ -115,10 +149,10 @@ impl MapsView {
         }
     }
 
-    /// Show the map whose file is `file` with the start point at `entry` in its list (-1:
-    /// automatic), when it is in the catalog; one not yet read is shown once it is.
-    pub fn select(&mut self, file: &str, entry: i32) {
-        self.pending = Some((file.to_string(), entry));
+    /// Show the map whose file is `file` when it is in the catalog; one not yet read is shown
+    /// once it is.
+    pub fn select(&mut self, file: &str) {
+        self.pending = Some(file.to_string());
         self.apply_pending();
     }
 
@@ -126,22 +160,13 @@ impl MapsView {
         let Catalog::Ready(list) = &self.catalog else {
             return;
         };
-        let Some((file, entry)) = self.pending.take() else {
+        let Some(file) = self.pending.take() else {
             return;
         };
         if let Some(i) = list.iter().position(|m| m.file.eq_ignore_ascii_case(&file)) {
             self.selected = i;
-            let known = usize::try_from(entry)
-                .ok()
-                .filter(|&e| e < list[i].entry_points.len());
-            self.entry = known;
             self.query.clear();
         }
-    }
-
-    /// The map (its file) and start point "Drive on this map" was clicked for, once.
-    pub fn take_use(&mut self) -> Option<(String, i32)> {
-        self.used.take()
     }
 
     fn load(&mut self) {
@@ -188,10 +213,11 @@ impl MapsView {
     pub fn draw(&mut self, ui: &mut Ui, body: Rect) {
         self.load();
         self.poll();
+        self.start_area = None;
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + 137.0, body.w, 120.0);
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 120.0);
                 card(ui, r, "Maps could not be listed", None);
                 clipped(
                     ui,
@@ -216,7 +242,7 @@ impl MapsView {
                 return;
             }
             _ => {
-                let r = Rect::new(body.x, body.y + 137.0, body.w, 90.0);
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 90.0);
                 card(ui, r, "Map library", None);
                 clipped(
                     ui,
@@ -233,37 +259,24 @@ impl MapsView {
         };
         self.apply_pending();
         let shown = self.shown(&list);
-        if !shown.is_empty() && !shown.contains(&self.selected) {
-            self.selected = shown[0];
-            self.entry = None;
-        }
-        let top = body.y + 137.0;
-        let rows_h = (body.h - 137.0 - 24.0).max(300.0);
-        let upper_h = (rows_h * 0.6).floor();
-        let lower_h = rows_h - upper_h - 16.0;
-        let lib = Rect::new(body.x, top, kit::fit(335.0, body.w), upper_h);
-        let files_w = kit::fit(392.0, body.w);
-        let files = Rect::new(body.right() - files_w, top, files_w, upper_h);
-        let mid = Rect::new(
-            lib.right() + 16.0,
-            top,
-            files.x - lib.right() - 32.0,
-            upper_h,
-        );
+        // (three columns: the library, the map and its description, the start)
+        let top = body.y + BODY_TOP;
+        let rows_h = (body.h - BODY_TOP - 24.0).max(300.0);
+        let lib = Rect::new(body.x, top, kit::fit(290.0, body.w), rows_h);
+        let start_w = kit::fit(320.0, body.w);
+        let start = Rect::new(body.right() - start_w, top, start_w, rows_h);
+        let mid_x = lib.right() + 14.0;
+        let mid_w = start.x - 14.0 - mid_x;
+        let pic_h = (rows_h * 0.56).floor();
+        let picture = Rect::new(mid_x, top, mid_w, pic_h);
+        let about = Rect::new(mid_x, top + pic_h + 14.0, mid_w, rows_h - pic_h - 14.0);
         self.library(ui, lib, &list, &shown);
-        let chosen = kit::chosen(&list, &shown, self.selected);
+        // (the map chosen stays while a search hides its row: only a click chooses another)
+        let chosen = list.get(self.selected);
         self.current = chosen.map(|m| m.file.clone());
-        self.picture(ui, mid, chosen);
-        self.files(ui, files, chosen);
-        let y2 = top + upper_h + 16.0;
-        let launch_w = kit::fit(426.0, body.w);
-        let launch = Rect::new(body.right() - launch_w, y2, launch_w, lower_h);
-        let about_w = (launch.x - 16.0 - body.x) * 0.5 - 8.0;
-        let about = Rect::new(body.x, y2, about_w, lower_h);
-        let starts = Rect::new(about.right() + 16.0, y2, about_w, lower_h);
+        self.picture(ui, picture, chosen);
         self.about(ui, about, chosen);
-        self.starts(ui, starts, chosen);
-        self.launch(ui, launch, chosen);
+        self.start_area = chosen.map(|_| start);
     }
 
     fn library(&mut self, ui: &mut Ui, r: Rect, list: &[MapInfo], shown: &[usize]) {
@@ -284,6 +297,8 @@ impl MapsView {
         let area = Rect::new(r.x + 8.0, r.y + 92.0, r.w - 16.0, r.h - 100.0);
         let mut picked = None;
         let selected = self.selected;
+        let thumbs = &self.thumbs;
+        let mut visible = Vec::new();
         ui.scroll_area("maps:list", area, &mut |ui, view| {
             let mut y = view.y;
             for &i in shown {
@@ -293,56 +308,121 @@ impl MapsView {
                     picked = Some(i);
                 }
                 if ui.rect_visible(row) {
+                    visible.push(m.file.clone());
+                    // (the map's own picture, small, cut to the row's shape; a quiet panel
+                    // until it is read, or when the map has none)
+                    let tw = (row.w * 0.3).clamp(56.0, THUMB_W);
+                    let th = tw * THUMB_H / THUMB_W;
+                    let pic = Rect::new(row.x + 10.0, row.center().y - th * 0.5, tw, th);
+                    match thumbs.get(&m.file) {
+                        Some(&tex) => ui.image_cover(pic, tex, THUMB_W / THUMB_H, 1.0),
+                        None => {
+                            ui.p().rounded(pic, 4.0, PANEL_2);
+                            ui.icon("o-map", pic.center(), 18.0, MUTED);
+                        }
+                    }
+                    let x = pic.right() + 12.0;
                     clipped(
                         ui,
                         &map_title(m),
-                        row.x + 16.0,
-                        row.y + 22.0,
-                        row.w - 40.0,
-                        15.0,
+                        x,
+                        row.y + 24.0,
+                        row.right() - 28.0 - x,
+                        14.5,
                         Weight::Bold,
                         FG,
                     );
                     let (status, label) = map_status(m);
-                    dot(ui, row.x + 21.0, row.y + 48.0, status);
-                    text(
+                    dot(ui, x + 5.0, row.y + 42.0, status);
+                    clipped(
                         ui,
-                        label,
-                        row.x + 34.0,
-                        row.y + 48.0,
+                        &label,
+                        x + 18.0,
+                        row.y + 42.0,
+                        row.right() - 28.0 - (x + 18.0),
                         12.0,
                         Weight::Regular,
                         status.color(),
+                    );
+                    clipped(
+                        ui,
+                        map_source(m),
+                        x,
+                        row.y + 58.0,
+                        row.right() - 28.0 - x,
+                        12.0,
+                        Weight::Regular,
+                        MUTED,
+                    );
+                    ui.icon(
+                        "o-chevron",
+                        glam::Vec2::new(row.right() - 16.0, row.center().y),
+                        14.0,
+                        MUTED,
                     );
                 }
                 y += 72.0;
             }
             y - view.y
         });
+        self.visible = visible;
         if let Some(i) = picked {
             self.selected = i;
-            self.entry = None;
         }
     }
 
     fn picture(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        card(ui, r, "Map", m.map(map_title).as_deref());
-        let inner = Rect::new(r.x + 1.0, r.y + 44.0, r.w - 2.0, r.h - 45.0);
+        card(ui, r, "Map", None);
+        // (the map's own radar view, with its streets and start points, in a window over the
+        // page)
+        let bw = ui.width("EXPLORE MAP", 12.5, Weight::Bold) + 52.0;
+        let b = Rect::new(r.right() - 15.0 - bw, r.y + 10.0, bw, 30.0);
+        if m.is_some()
+            && ui.button(
+                "maps:explore",
+                b,
+                "EXPLORE MAP",
+                Some("o-pin"),
+                ButtonKind::Normal,
+            )
+        {
+            self.explore = true;
+        }
+        if m.is_some() && self.map_picture.is_some() {
+            let note = "Picture from the map's folder";
+            let room = b.x - 12.0 - (r.x + 80.0);
+            let note = kit::fit_text(ui, note, 12.0 * TEXT_SCALE, room);
+            kit::right(
+                ui,
+                &note,
+                b.x - 12.0,
+                r.y + 22.0,
+                12.0,
+                Weight::Regular,
+                MUTED,
+            );
+        }
+        let inner = Rect::new(r.x + 1.0, r.y + 50.0, r.w - 2.0, r.h - 51.0);
         ui.p().rect(inner, PANEL_2);
         if m.is_none() {
             return;
         }
         match self.map_picture {
             Some((tex, aspect)) => {
-                ui.image_cover(inner, tex, aspect, 1.0);
-                // (as the concept: where the picture comes from, top left over it)
-                let t = "picture from the map's folder";
-                let px = 11.5 * TEXT_SCALE;
-                let w = ui.width(t, px, Weight::Regular) + 16.0;
-                let b = Rect::new(inner.x + 12.0, inner.y + 10.0, w, 22.0);
-                ui.p()
-                    .rounded(b, 4.0, omsi_ui::Color::rgba(10, 10, 12, 0.72));
-                ui.text_in(t, b, px, Weight::Regular, MUTED, Align::Center);
+                // (the whole picture, not cut: it is often the map's overview)
+                let want = inner.w / inner.h.max(1.0);
+                let (w, h) = if aspect > want {
+                    (inner.w, inner.w / aspect.max(0.01))
+                } else {
+                    (inner.h * aspect, inner.h)
+                };
+                let pic = Rect::new(
+                    inner.x + (inner.w - w) * 0.5,
+                    inner.y + (inner.h - h) * 0.5,
+                    w,
+                    h,
+                );
+                ui.image(pic, tex, 0.0);
             }
             None => {
                 ui.text_in(
@@ -361,23 +441,13 @@ impl MapsView {
         }
     }
 
-    fn files(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        card(ui, r, "Files found", None);
-        let Some(m) = m else { return };
-        let mut y = r.y + 58.0;
-        for (label, status, note) in file_status(m) {
-            dot(ui, r.x + 24.0, y, status);
-            let lw = text(ui, label, r.x + 42.0, y, 13.5, Weight::Regular, FG);
-            // (the note gives way to the label on a narrow card, never under it)
-            let room = r.right() - 19.0 - (r.x + 42.0 + lw + 12.0);
-            let note = kit::fit_text(ui, &note, 12.0 * TEXT_SCALE, room);
-            kit::right(ui, &note, r.right() - 19.0, y, 12.0, Weight::Regular, MUTED);
-            y += 30.0;
-        }
-    }
-
     fn about(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        card(ui, r, "About the selected map", None);
+        card(
+            ui,
+            r,
+            "About this map",
+            Some("scroll for the full description"),
+        );
         let Some(m) = m else { return };
         let desc = shorten(m.description.trim(), DESCRIPTION_CHARS);
         let desc = if desc.is_empty() {
@@ -385,113 +455,18 @@ impl MapsView {
         } else {
             desc
         };
-        let box_ = Rect::new(r.x + 15.0, r.y + 44.0, r.w - 30.0, (r.h - 58.0).max(0.0));
-        ui.p().rounded(box_, 6.0, PANEL_2);
-        ui.push_clip(box_.inset(1.0), 5.0);
-        ui.paragraph(
-            &desc,
-            glam::Vec2::new(box_.x + 12.0, box_.y + 18.0),
-            box_.w - 24.0,
-            12.5 * TEXT_SCALE,
-            Weight::Regular,
-            FG,
-        );
-        ui.pop_clip();
-    }
-
-    fn starts(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        let n = m.map(|m| m.entry_points.len()).unwrap_or(0);
-        card(ui, r, "Start points", Some(&format!("{n} found")));
-        let Some(m) = m else { return };
-        if m.entry_points.is_empty() {
-            clipped(
-                ui,
-                "This map lists no start point.",
-                r.x + 19.0,
-                r.y + 62.0,
-                r.w - 38.0,
-                13.0,
-                Weight::Regular,
-                MUTED,
-            );
-            return;
-        }
-        let area = Rect::new(r.x + 8.0, r.y + 44.0, r.w - 16.0, r.h - 52.0);
-        let mut picked = None;
-        let chosen = self.entry;
-        ui.scroll_area("maps:starts", area, &mut |ui, view| {
-            let mut y = view.y;
-            let rows = std::iter::once((None, "Automatic", "maps:start:auto".to_string())).chain(
-                m.entry_points
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| (Some(i), e.name.as_str(), format!("maps:start:{i}"))),
-            );
-            for (i, name, id) in rows {
-                let row = Rect::new(view.x, y, view.w - 8.0, 36.0);
-                if ui.row(&id, row, i == chosen) {
-                    picked = Some(i);
-                }
-                clipped(
-                    ui,
-                    name,
-                    row.x + 16.0,
-                    row.y + 18.0,
-                    row.w - 32.0,
-                    13.5,
-                    Weight::Medium,
-                    if i == chosen { FG } else { MUTED },
-                );
-                y += 36.0;
-            }
-            y - view.y
-        });
-        if let Some(i) = picked {
-            self.entry = i;
-        }
-    }
-
-    fn launch(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        card(ui, r, "Launch preparation", None);
-        let map = m.map(map_title).unwrap_or_default();
-        let start = match self.entry {
-            Some(e) => m
-                .and_then(|m| m.entry_points.get(e))
-                .map(|e| e.name.clone())
-                .unwrap_or_default(),
-            None => "Automatic".to_string(),
-        };
-        let mut y = r.y + 58.0;
-        for (k, val) in [("Map", map), ("Start point", start)] {
-            ui.p()
-                .rect(Rect::new(r.x + 1.0, y - 20.0, r.w - 2.0, 1.0), LINE);
-            text(ui, k, r.x + 19.0, y, 13.0, Weight::Regular, MUTED);
-            clipped(
-                ui,
-                &val,
-                r.x + 150.0,
-                y,
-                r.w - 170.0,
-                13.0,
+        let area = Rect::new(r.x + 8.0, r.y + 44.0, r.w - 16.0, (r.h - 52.0).max(0.0));
+        let px = 12.5 * TEXT_SCALE;
+        ui.scroll_area("maps:about", area, &mut |ui, view| {
+            ui.paragraph(
+                &desc,
+                glam::Vec2::new(view.x + 9.0, view.y + 14.0),
+                view.w - 26.0,
+                px,
                 Weight::Regular,
                 FG,
-            );
-            y += 40.0;
-        }
-        let b = Rect::new(r.x + 19.0, r.bottom() - 100.0, r.w - 38.0, 48.0);
-        if kit::action(
-            ui,
-            "maps:use",
-            b,
-            "DRIVE ON THIS MAP",
-            "Takes this map and start point to the Drive page.",
-            m.is_some(),
-        ) {
-            if let Some(m) = m {
-                let entry = self.entry.map(|e| e as i32).unwrap_or(-1);
-                self.used = Some((m.file.clone(), entry));
-            }
-        }
+            ) + 24.0
+        });
     }
 }
 
@@ -505,52 +480,25 @@ fn map_title(m: &MapInfo) -> String {
     }
 }
 
-fn map_status(m: &MapInfo) -> (Status, &'static str) {
-    if m.entry_points.is_empty() {
-        (Status::Warning, "No start point listed")
-    } else if m.installed {
-        (Status::Found, "Installed mod")
+/// The size of a row's small picture.
+const THUMB_W: f32 = 84.0;
+const THUMB_H: f32 = 52.0;
+
+/// Where a map comes from: installed here (the content folder) or the original OMSI 2's.
+fn map_source(m: &MapInfo) -> &'static str {
+    if m.installed {
+        "Installed mod"
     } else {
-        (Status::Found, "Original content")
+        "Original OMSI 2"
     }
 }
 
-/// What the catalog tells of a map's files. Roads, scenery objects and the timetable are not
-/// opened by the catalog, so they are `Unverified`, never "found".
-fn file_status(m: &MapInfo) -> Vec<(&'static str, Status, String)> {
-    let mut rows = vec![(
-        "Map file",
-        if m.file.is_empty() {
-            Status::Missing
-        } else {
-            Status::Found
-        },
-        "global.cfg".to_string(),
-    )];
-    rows.push(if m.entry_points.is_empty() {
-        ("Start points", Status::Warning, "none listed".into())
-    } else {
-        (
-            "Start points",
-            Status::Found,
-            format!("{} found", m.entry_points.len()),
-        )
-    });
-    rows.push(if m.hof.is_empty() {
-        (
-            "Depot file",
-            Status::Warning,
-            "none for the map's buses".into(),
-        )
-    } else {
-        ("Depot file", Status::Found, shorten(&m.hof, 24))
-    });
-    rows.push((
-        "Roads, scenery, timetable",
-        Status::Unverified,
-        "not checked yet".into(),
-    ));
-    rows
+fn map_status(m: &MapInfo) -> (Status, String) {
+    match m.entry_points.len() {
+        0 => (Status::Warning, "No start point listed".into()),
+        1 => (Status::Found, "1 start point".into()),
+        n => (Status::Found, format!("{n} start points")),
+    }
 }
 
 #[cfg(test)]
@@ -559,14 +507,10 @@ mod tests {
     use crate::sample;
 
     #[test]
-    fn a_map_without_start_points_or_depot_file_is_a_warning() {
+    fn a_map_without_start_points_is_a_warning() {
         let list = sample::maps();
         assert_eq!(map_status(&list[2]).0, Status::Warning);
-        let rows = file_status(&list[2]);
-        assert!(rows.iter().filter(|r| r.1 == Status::Warning).count() == 2);
-        assert_eq!(rows.last().unwrap().1, Status::Unverified);
-        assert_eq!(map_status(&list[0]).1, "Original content");
-        assert_eq!(map_status(&list[1]).1, "Installed mod");
+        assert_eq!(map_status(&list[0]).1, "3 start points");
     }
 
     #[test]
@@ -576,10 +520,51 @@ mod tests {
         assert_eq!(v.shown(&list).len(), 3);
         v.query = "city".into();
         assert_eq!(v.shown(&list), vec![1]);
-        // a search that matches nothing leaves no map chosen, not the first one
         v.query = "no such map".into();
-        let shown = v.shown(&list);
-        assert!(shown.is_empty());
-        assert!(kit::chosen(&list, &shown, v.selected).is_none());
+        assert!(v.shown(&list).is_empty());
+    }
+
+    /// The map the choice holds is the one shown once the catalog comes, and a search that
+    /// hides it does not choose another (the first map was taken, and saved, at every start).
+    #[test]
+    fn the_map_chosen_stays_until_another_is_clicked() {
+        let list = sample::maps();
+        let mut v = MapsView::default();
+        v.select(&list[1].file);
+        v.set_catalog(list.clone());
+        assert_eq!(v.chosen(), 1);
+        let mut ui = Ui::new();
+        let body = Rect::new(0.0, 0.0, 1180.0, 820.0);
+        ui.begin(glam::Vec2::new(1440.0, 900.0), 1.0, 0.016);
+        v.query = "no such map".into();
+        v.draw(&mut ui, body);
+        ui.finish();
+        assert_eq!(v.current(), Some(list[1].file.as_str()));
+        assert!(v.start_area().is_some());
+    }
+
+    /// The rows on screen are the ones whose small pictures the host reads, and a row says
+    /// where its map comes from.
+    #[test]
+    fn the_rows_on_screen_ask_for_their_pictures() {
+        let list = sample::maps();
+        let mut v = MapsView::with_catalog(list.clone());
+        let mut ui = Ui::new();
+        ui.begin(glam::Vec2::new(1440.0, 900.0), 1.0, 0.016);
+        v.draw(&mut ui, Rect::new(0.0, 0.0, 1180.0, 820.0));
+        ui.finish();
+        let files: Vec<_> = list.iter().map(|m| m.file.clone()).collect();
+        assert_eq!(v.visible(), files.as_slice());
+        v.set_thumb(&files[0], Some(7));
+        assert_eq!(v.thumbs.get(&files[0]), Some(&7));
+        v.set_thumb(&files[0], None);
+        assert!(v.thumbs.is_empty());
+        assert_ne!(
+            map_source(&list[0]),
+            map_source(&MapInfo {
+                installed: !list[0].installed,
+                ..list[0].clone()
+            })
+        );
     }
 }

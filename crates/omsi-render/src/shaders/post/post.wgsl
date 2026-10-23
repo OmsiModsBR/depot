@@ -31,19 +31,11 @@ struct PostParams {
 // light the player's bus's misted glass scatters there - enhanced.wgsl `pane_condensation`)
 @group(0) @binding(5) var t_mask: texture_2d<f32>;
 
-struct VsOut {
-    @builtin(position) clip: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
+alias VsOut = FullscreenVertex;
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: VsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    return out;
+    return fullscreen_vertex(i);
 }
 
 fn luma(c: vec3<f32>) -> f32 {
@@ -211,18 +203,6 @@ fn night_vision(c: vec3<f32>, strength: f32, pre: f32) -> vec3<f32> {
     return mix(c, night, rods * strength);
 }
 
-fn to_srgb(c: vec3<f32>) -> vec3<f32> {
-    let lo = c * 12.92;
-    let hi = 1.055 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
-    return select(hi, lo, c <= vec3<f32>(0.0031308));
-}
-
-fn from_srgb(c: vec3<f32>) -> vec3<f32> {
-    let lo = c / 12.92;
-    let hi = pow(max((c + 0.055) / 1.055, vec3<f32>(0.0)), vec3<f32>(2.4));
-    return select(hi, lo, c <= vec3<f32>(0.04045));
-}
-
 // The shoulder of `natural_tone` for one value: identity up to the knee, then an
 // exponential approach to white with the slope kept at the knee.
 const KNEE: f32 = 0.66;
@@ -309,7 +289,7 @@ fn graded(in: VsOut) -> vec3<f32> {
     } else {
         c = natural_tone(c * pow(2.0, ev), max(p.d.w, 1.0));
     }
-    var e = to_srgb(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)));
+    var e = srgb_encode(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)));
     // triangular dither of one code value: no bands in the sky's gradient
     let px = in.clip.xy;
     let n1 = fract(52.9829189 * fract(dot(px, vec2<f32>(0.06711056, 0.00583715))));
@@ -321,7 +301,7 @@ fn graded(in: VsOut) -> vec3<f32> {
 // straight to the (sRGB) target
 @fragment
 fn fs_tonemap(in: VsOut) -> @location(0) vec4<f32> {
-    return vec4<f32>(from_srgb(clamp(graded(in), vec3<f32>(0.0), vec3<f32>(1.0))), 1.0);
+    return vec4<f32>(srgb_decode(clamp(graded(in), vec3<f32>(0.0), vec3<f32>(1.0))), 1.0);
 }
 
 // into the gamma-encoded target FXAA reads, with its luma in alpha
@@ -364,7 +344,7 @@ fn fs_fxaa(in: VsOut) -> @location(0) vec4<f32> {
     // the bus's own screens as they are: FXAA took half the contrast out of their
     // letters (the screen mask is this pass's t_base)
     if (textureSampleLevel(t_base, s_lin, uv, 0.0).r > 0.5) {
-        return vec4<f32>(from_srgb(rgbm.rgb), 1.0);
+        return vec4<f32>(srgb_decode(rgbm.rgb), 1.0);
     }
     let m = rgbm.a;
     let n = lum_at(uv + vec2<f32>(0.0, -1.0) * texel);
@@ -375,7 +355,7 @@ fn fs_fxaa(in: VsOut) -> @location(0) vec4<f32> {
     let lo = min(m, min(min(n, s), min(e, w)));
     let range = hi - lo;
     if (range < max(0.0312, hi * 0.125)) {
-        return vec4<f32>(from_srgb(sharpened(uv, rgbm.rgb)), 1.0);
+        return vec4<f32>(srgb_decode(sharpened(uv, rgbm.rgb)), 1.0);
     }
     let nw = lum_at(uv + vec2<f32>(-1.0, -1.0) * texel);
     let ne = lum_at(uv + vec2<f32>(1.0, -1.0) * texel);
@@ -455,5 +435,5 @@ fn fs_fxaa(in: VsOut) -> @location(0) vec4<f32> {
     } else {
         fuv.x = fuv.x + blend * stp;
     }
-    return vec4<f32>(from_srgb(textureSampleLevel(t_src, s_lin, fuv, 0.0).rgb), 1.0);
+    return vec4<f32>(srgb_decode(textureSampleLevel(t_src, s_lin, fuv, 0.0).rgb), 1.0);
 }

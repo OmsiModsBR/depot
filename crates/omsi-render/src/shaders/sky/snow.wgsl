@@ -9,35 +9,7 @@
 // second (aggregates at 0.8 D^0.16 m/s, Locatelli and Hobbs 1974), sway as they go and
 // drift with the wind; opaque and lit by what lights them - the classic picture's
 // envir.cfg light, or the enhanced picture's sky, sun and lamps (`precip_light`).
-struct Camera {
-    view_proj: mat4x4<f32>,
-    cam_pos: vec4<f32>,
-    // (kept in lockstep with `CameraUniform` in lib.rs, as sky.wgsl's)
-    world_origin: vec4<f32>,
-    sun_dir: vec4<f32>,
-    ambient: vec4<f32>,
-    fog: vec4<f32>,
-    sun_color: vec4<f32>,
-    sky_color: vec4<f32>,
-    light_grid: vec4<f32>,
-    sky: vec4<f32>,
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    clouds: vec4<f32>,
-    light_view_proj: mat4x4<f32>,
-    light_view_proj_far: mat4x4<f32>,
-    shadow: vec4<f32>,
-    post: vec4<f32>,
-    inside_a: vec4<f32>,
-    inside_b: vec4<f32>,
-    inside_c: vec4<f32>,
-    flags: vec4<f32>,
-    light_view_proj_close: mat4x4<f32>,
-    wind: vec4<f32>,
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
-    tree_wind: vec4<f32>,
-};
+
 @group(0) @binding(0) var<uniform> camera: Camera;
 
 struct SnowParams {

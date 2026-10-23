@@ -61,10 +61,17 @@ impl AiBody {
         let turn = (u.x * w.y - u.y * w.x).atan2(u.dot(w)).abs() as f32;
         let bend_k = if look > 0.1 { 2.0 * turn / look } else { 0.0 };
         let need = (bend_k * self.wheelbase).atan().to_degrees() * 1.15;
-        let limit = if omsi_cfg::flags::AI_MODEL_LOCK.is_set() {
+        let lock = if omsi_cfg::flags::AI_MODEL_LOCK.is_set() {
             self.max_steer
         } else {
             self.max_steer.max(need.min(60.0))
+        };
+        // and never a curvature over 20/v² (1/m): a bend no tighter than 20 m/s² sideways at
+        // this speed, the AI's limit in OMSI
+        let limit = if v > 0.1 {
+            lock.min((20.0 * self.wheelbase / (v * v)).atan().to_degrees())
+        } else {
+            lock
         };
         // OMSI_DEBUG_AI_WIDE: every tenth of a second a car stands over 1.5 m beside its way
         if omsi_cfg::flags::DEBUG_AI_WIDE.is_set() {
@@ -85,6 +92,8 @@ impl AiBody {
             let rate = self.steer_rate * dt * if limit > self.max_steer { 1.5 } else { 1.0 };
             self.steer_cmd += (want - self.steer_cmd).clamp(-rate, rate);
             self.steer += (self.steer_cmd - self.steer) * (dt / 0.08).min(1.0);
+            // (the cap holds on the wheel too, when the speed tightens it under the turn)
+            self.steer = self.steer.clamp(-limit, limit);
         }
         let k = self.steer.to_radians().tan() / self.wheelbase;
         let dpsi = (v * dt * k) as f64;
