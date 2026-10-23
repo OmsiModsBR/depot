@@ -4,18 +4,23 @@ use crate::actions::dump_display_textures;
 use crate::app::App;
 use crate::camera_util::{ORBIT_MAX, ORBIT_MIN};
 use crate::describe;
+#[cfg(feature = "lan")]
+use crate::lan;
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-#[cfg(feature = "lan")]
-use crate::lan;
 
 impl App {
     /// A key of the input script by name: a letter, a digit, F1..F12, or one of the named keys.
     pub(crate) fn script_key(name: &str) -> Option<KeyCode> {
         use KeyCode::*;
-        pub(crate) const LETTERS: [KeyCode; 26] = [KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ];
-        pub(crate) const DIGITS: [KeyCode; 10] = [Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9];
+        pub(crate) const LETTERS: [KeyCode; 26] = [
+            KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN,
+            KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+        ];
+        pub(crate) const DIGITS: [KeyCode; 10] = [
+            Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9,
+        ];
         pub(crate) const FKEYS: [KeyCode; 12] = [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12];
         let b = name.as_bytes();
         if b.len() == 1 && b[0].is_ascii_alphabetic() {
@@ -168,7 +173,13 @@ impl App {
                             self.on_left(false);
                         }
                     }
-                    log::info!("input script: click: placing {:?}, placed at {:?}", self.placing.as_ref().map(|p| (p.at, p.blocked)), self.placed.last().map(|q| (q.vehicle.position, q.vehicle.heading)));
+                    log::info!(
+                        "input script: click: placing {:?}, placed at {:?}",
+                        self.placing.as_ref().map(|p| (p.at, p.blocked)),
+                        self.placed
+                            .last()
+                            .map(|q| (q.vehicle.position, q.vehicle.heading))
+                    );
                 }
                 // `both down|up`: both mouse buttons held (OMSI's mouse zoom) or let go
                 "both" => {
@@ -179,7 +190,11 @@ impl App {
                     } else {
                         self.buttons_held = (false, false);
                         self.both_drag = None;
-                        log::info!("input script: both buttons up: zoom {:?}, orbit {:.1}", self.view_zoom.get(&self.view), self.orbit);
+                        log::info!(
+                            "input script: both buttons up: zoom {:?}, orbit {:.1}",
+                            self.view_zoom.get(&self.view),
+                            self.orbit
+                        );
                     }
                 }
                 // `right down|up`: the right mouse button, through the window's own path
@@ -254,7 +269,10 @@ impl App {
                     if let (Some(p), Some(c)) = (self.player.as_ref(), self.camera.as_ref()) {
                         let d = c.position - p.vehicle.position;
                         let h = p.vehicle.heading.to_radians();
-                        let (fwd, right) = (glam::DVec2::new(h.sin(), h.cos()), glam::DVec2::new(h.cos(), -h.sin()));
+                        let (fwd, right) = (
+                            glam::DVec2::new(h.sin(), h.cos()),
+                            glam::DVec2::new(h.cos(), -h.sin()),
+                        );
                         log::info!("input script: view {} camera in the bus ({:.2}, {:.2}, {:.2}), on foot {:?}", self.view, d.truncate().dot(right), d.truncate().dot(fwd), d.z, self.on_foot.as_ref().map(|f| f.pos));
                     }
                 }
@@ -292,7 +310,10 @@ impl App {
                 // `menu <what>`: a line of the game menu by its id (`menu remove`, `menu switch`),
                 // `menu pick:<n>`: line n of the list open
                 "menu" => {
-                    if let Some(n) = arg.strip_prefix("pick:").and_then(|n| n.parse::<usize>().ok()) {
+                    if let Some(n) = arg
+                        .strip_prefix("pick:")
+                        .and_then(|n| n.parse::<usize>().ok())
+                    {
                         self.chooser_pick(n);
                     } else {
                         if self.game_menu.is_none() {
@@ -308,7 +329,19 @@ impl App {
                             }
                         }
                     }
-                    let riders = self.humans.as_ref().map(|h| (h.people_in(crate::humans::BusId::Player), self.placed.iter().map(|q| h.people_in(crate::humans::BusId::Ai(crate::humans::placed_bus_id(q.uid)))).collect::<Vec<_>>()));
+                    let riders = self.humans.as_ref().map(|h| {
+                        (
+                            h.people_in(crate::humans::BusId::Player),
+                            self.placed
+                                .iter()
+                                .map(|q| {
+                                    h.people_in(crate::humans::BusId::Ai(
+                                        crate::humans::placed_bus_id(q.uid),
+                                    ))
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    });
                     log::info!("input script: menu {arg}: player {:?}, on foot {:?}, placed {}, people in the bus / the placed ones {:?}", self.player.as_ref().map(|p| p.vehicle.position), self.on_foot.as_ref().map(|f| f.pos), self.placed.len(), riders);
                 }
                 // `shot <file>`: the window's own view into a PNG, drawn from the scene the
@@ -324,7 +357,6 @@ impl App {
             }
         }
     }
-
 }
 
 /// `OMSI_INPUT="t=3 move 1045,826; t=3.2 press; ..."` → (time, command) pairs.

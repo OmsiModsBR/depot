@@ -12,7 +12,9 @@ pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
     // bridge), else the highest ground there (a place picked on the map, at no height)
     let ground = app.world.as_ref().and_then(|w| {
         let near = (at.z != 0.0)
-            .then(|| crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below)
+            .then(|| {
+                crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below
+            })
             .flatten()
             .filter(|b| (at.z - b).abs() < 3.0);
         near.or_else(|| w.walk_height(at.x, at.y))
@@ -30,7 +32,11 @@ pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
                 p.vehicle.update(1.0 / 30.0);
             }
         }
-        log::info!("teleported to ({:.1}, {:.1}) heading {heading:.0}", at.x, at.y);
+        log::info!(
+            "teleported to ({:.1}, {:.1}) heading {heading:.0}",
+            at.x,
+            at.y
+        );
     }
 }
 
@@ -45,7 +51,10 @@ pub(crate) fn guard_fall(app: &mut App, dt: f32) {
     // building's roof is not its ground - measured from the roof, a bus driving under it
     // had fallen through the world and was put up there), and the highest there is
     let (under, ground) = match app.world.as_ref() {
-        Some(w) => (crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below, w.walk_height(at.x, at.y)),
+        Some(w) => (
+            crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below,
+            w.walk_height(at.x, at.y),
+        ),
         None => (None, None),
     };
     app.safe_age += dt;
@@ -58,7 +67,10 @@ pub(crate) fn guard_fall(app: &mut App, dt: f32) {
         if let Some((pos, heading)) = app.safe_pose {
             log::warn!("the bus fell through the world at ({:.1}, {:.1}, {:.1}): put back at ({:.1}, {:.1})", at.x, at.y, at.z, pos.x, pos.y);
             teleport(app, pos, heading);
-            app.service_msg = Some(("The bus fell through the ground: it was put back where it last stood".into(), 5.0));
+            app.service_msg = Some((
+                "The bus fell through the ground: it was put back where it last stood".into(),
+                5.0,
+            ));
         }
         return;
     }

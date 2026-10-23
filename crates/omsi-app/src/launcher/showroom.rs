@@ -9,19 +9,19 @@
 //! a fresh `World` (whose caches belong to one scene); the old scene goes when the new one
 //! is ready, so the picture never goes blank while switching.
 
-use anyhow::{anyhow, Result};
-use clap::Parser;
 use crate::cli::Args;
 use crate::player;
 use crate::scene;
 use crate::situation::start_clock;
 use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
 use crate::weather_setup::{load_weather, setup_sky, weather_lighting};
+use anyhow::{anyhow, Result};
+use clap::Parser;
 use glam::DVec3;
 use omsi_render::{Camera, Lighting, Renderer, Scene};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver};
+use std::sync::Arc;
 
 /// What the showroom shows.
 #[derive(Clone, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -100,7 +100,11 @@ pub fn clear_placing_mark() {
 }
 
 fn args_for(look: &Look) -> Args {
-    let mut v = vec!["omsi".to_string(), "--root".into(), look.root.to_string_lossy().to_string()];
+    let mut v = vec![
+        "omsi".to_string(),
+        "--root".into(),
+        look.root.to_string_lossy().to_string(),
+    ];
     if !look.map.is_empty() {
         v.extend(["--map".into(), look.map.clone()]);
     }
@@ -114,7 +118,10 @@ fn args_for(look: &Look) -> Args {
     if !look.weather.is_empty() && !look.weather.starts_with("metar:") {
         v.extend(["--weather".into(), look.weather.clone()]);
     }
-    v.extend(["--time".into(), format!("{:02}:{:02}", look.time / 60, look.time % 60)]);
+    v.extend([
+        "--time".into(),
+        format!("{:02}:{:02}", look.time / 60, look.time % 60),
+    ]);
     if !look.date.is_empty() {
         v.extend(["--date".into(), look.date.clone()]);
     }
@@ -208,15 +215,31 @@ impl Showroom {
         if let Some(w) = self.wanted.clone() {
             let shown = self.shown.as_ref().map(|s| &s.look);
             let loading = self.loading.as_ref().map(|l| &l.0);
-            if shown != Some(&w) && loading != Some(&w) && self.loading.is_none() && self.failed.as_ref() != Some(&w) {
+            if shown != Some(&w)
+                && loading != Some(&w)
+                && self.loading.is_none()
+                && self.failed.as_ref() != Some(&w)
+            {
                 // only the light changed: no need to read the bus again
-                let same_bus = shown.map(|s| s.bus == w.bus && s.paint == w.paint && s.map == w.map && s.root == w.root).unwrap_or(false);
+                let same_bus = shown
+                    .map(|s| {
+                        s.bus == w.bus && s.paint == w.paint && s.map == w.map && s.root == w.root
+                    })
+                    .unwrap_or(false);
                 if same_bus {
                     if let Some(s) = self.shown.as_mut() {
                         s.look = w.clone();
                         let args = args_for(&w);
                         s.weather = load_weather(&args);
-                        setup_sky(&args, renderer, &mut s.scene, omsi_content::Envir::load(&args.root.join("envir.cfg")).ok().as_ref(), Some(&s.weather));
+                        setup_sky(
+                            &args,
+                            renderer,
+                            &mut s.scene,
+                            omsi_content::Envir::load(&args.root.join("envir.cfg"))
+                                .ok()
+                                .as_ref(),
+                            Some(&s.weather),
+                        );
                         s.lighting = lighting_for(&args, &s.weather);
                     }
                     self.dirty = true;
@@ -233,7 +256,10 @@ impl Showroom {
         }
         let k = 1.0 - (-dt / 0.18).exp();
         // still turning: the picture must follow
-        if (self.yaw_to - self.yaw).abs() > 0.05 || (self.pitch_to - self.pitch).abs() > 0.05 || (self.zoom_to - self.zoom).abs() > 0.001 {
+        if (self.yaw_to - self.yaw).abs() > 0.05
+            || (self.pitch_to - self.pitch).abs() > 0.05
+            || (self.zoom_to - self.zoom).abs() > 0.001
+        {
             self.dirty = true;
         }
         self.yaw += (self.yaw_to - self.yaw) * k;
@@ -243,7 +269,14 @@ impl Showroom {
         // the bus's own state, whenever the picture is drawn again
         if let (true, Some(s)) = (self.dirty, self.shown.as_mut()) {
             if let (Some(v), Some(r)) = (s.vehicle.as_mut(), s.render.as_mut()) {
-                player::sync_vehicle_transforms(renderer, &mut s.scene, v, r, &mut s.trailers, false);
+                player::sync_vehicle_transforms(
+                    renderer,
+                    &mut s.scene,
+                    v,
+                    r,
+                    &mut s.trailers,
+                    false,
+                );
             }
         }
         swapped
@@ -263,8 +296,12 @@ impl Showroom {
             list.push('\n');
             let _ = std::fs::write(&skip, list);
         }
-        if std::fs::read_to_string(&skip).is_ok_and(|t| t.lines().any(|b| b.trim() == look.bus.trim())) {
-            self.error = Some("The 3D preview of this bus stopped the launcher once, so it is left out".into());
+        if std::fs::read_to_string(&skip)
+            .is_ok_and(|t| t.lines().any(|b| b.trim() == look.bus.trim()))
+        {
+            self.error = Some(
+                "The 3D preview of this bus stopped the launcher once, so it is left out".into(),
+            );
             self.failed = Some(look);
             return;
         }
@@ -276,7 +313,11 @@ impl Showroom {
         let t0 = std::time::Instant::now();
         let world = match scene::World::open(&root, &map_cfg, date) {
             Ok(w) => {
-                log::info!("showroom: {} opened in {:.2} s", map_cfg.display(), t0.elapsed().as_secs_f64());
+                log::info!(
+                    "showroom: {} opened in {:.2} s",
+                    map_cfg.display(),
+                    t0.elapsed().as_secs_f64()
+                );
                 Arc::new(w)
             }
             Err(e) => {
@@ -326,7 +367,10 @@ impl Showroom {
                 // passed): a slow swing passes under the thresholds for a step or two as it
                 // turns, and a single still step stopped it short of where it comes to rest.
                 let still = |v: &omsi_sim::VehicleInstance| {
-                    v.rigid().into_iter().chain(v.trailers.iter().filter_map(|t| t.rigid())).all(|rb| rb.velocity().length() < 0.002 && rb.omega().length() < 0.0005)
+                    v.rigid()
+                        .into_iter()
+                        .chain(v.trailers.iter().filter_map(|t| t.rigid()))
+                        .all(|rb| rb.velocity().length() < 0.002 && rb.omega().length() < 0.0005)
                 };
                 let mut still_for = 0;
                 for _ in 0..300 {
@@ -340,7 +384,13 @@ impl Showroom {
                 for t in &vehicle.trailers {
                     prefetch.prefetch(&t.ty, scheme.filter(|i| *i < t.ty.paint_schemes.len()));
                 }
-                Ok(Ready { look: l2, world, vt, vehicle, scheme })
+                Ok(Ready {
+                    look: l2,
+                    world,
+                    vt,
+                    vehicle,
+                    scheme,
+                })
             })();
             let _ = tx.send(r.map_err(|e| format!("{e:#}")));
         });
@@ -363,42 +413,101 @@ impl Showroom {
             vehicle.heading = 0.0;
         }
         let render = world.add_vehicle(renderer, &mut scene, &r.vt, r.scheme);
-        let trailers: Vec<scene::VehicleRender> = vehicle.trailers.iter().map(|t| world.add_vehicle_part(renderer, &mut scene, &t.ty, r.scheme.filter(|i| *i < t.ty.paint_schemes.len()), &render)).collect();
-        vehicle.init_text_textures(&mut world.fonts.lock(), &|p| omsi_texture::decode_file(p).ok().map(|i| (i.width, i.height, i.rgba)));
+        let trailers: Vec<scene::VehicleRender> = vehicle
+            .trailers
+            .iter()
+            .map(|t| {
+                world.add_vehicle_part(
+                    renderer,
+                    &mut scene,
+                    &t.ty,
+                    r.scheme.filter(|i| *i < t.ty.paint_schemes.len()),
+                    &render,
+                )
+            })
+            .collect();
+        vehicle.init_text_textures(&mut world.fonts.lock(), &|p| {
+            omsi_texture::decode_file(p)
+                .ok()
+                .map(|i| (i.width, i.height, i.rgba))
+        });
         for t in vehicle.trailers.iter_mut() {
-            t.init_text_textures(&mut world.fonts.lock(), &|p| omsi_texture::decode_file(p).ok().map(|i| (i.width, i.height, i.rgba)));
+            t.init_text_textures(&mut world.fonts.lock(), &|p| {
+                omsi_texture::decode_file(p)
+                    .ok()
+                    .map(|i| (i.width, i.height, i.rgba))
+            });
         }
         vehicle.update(1.0 / 30.0);
         // the bus's size from its bounding box (with the rear section behind it)
-        let bb = r.vt.def.bounding_box.unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
+        let bb =
+            r.vt.def
+                .bounding_box
+                .unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
         let mut length = bb[1];
         let mut centre = glam::Vec3::new(bb[3], bb[4], bb[5]);
         for t in &vehicle.trailers {
-            let tb = t.ty.def.bounding_box.unwrap_or([2.5, 8.0, 3.0, 0.0, 0.0, 1.5]);
+            let tb =
+                t.ty.def
+                    .bounding_box
+                    .unwrap_or([2.5, 8.0, 3.0, 0.0, 0.0, 1.5]);
             let back = (t.position - vehicle.position).truncate().length() as f32 + tb[1] * 0.5;
             let total = bb[1] * 0.5 + back;
             centre.y = bb[4] + bb[1] * 0.5 - total * 0.5;
             length = total;
         }
         let lighting = lighting_for(&args, &weather);
-        log::info!("showroom: {} ({} meshes, {:.1} m long) placed in {:.2} s", r.look.bus, render.instances.len(), length, t0.elapsed().as_secs_f64());
+        log::info!(
+            "showroom: {} ({} meshes, {:.1} m long) placed in {:.2} s",
+            r.look.bus,
+            render.instances.len(),
+            length,
+            t0.elapsed().as_secs_f64()
+        );
         let _ = std::fs::remove_file(placing_mark());
-        Shown { look: r.look, scene, world: Some(world), vehicle: Some(vehicle), render: Some(render), trailers, centre, length, weather, lighting }
+        Shown {
+            look: r.look,
+            scene,
+            world: Some(world),
+            vehicle: Some(vehicle),
+            render: Some(render),
+            trailers,
+            centre,
+            length,
+            weather,
+            lighting,
+        }
     }
 
     /// The picture of the bus at `w` x `h` pixels, drawn again when something changed.
-    pub fn preview(&mut self, renderer: &mut Renderer, w: u32, h: u32) -> Option<wgpu::TextureView> {
+    pub fn preview(
+        &mut self,
+        renderer: &mut Renderer,
+        w: u32,
+        h: u32,
+    ) -> Option<wgpu::TextureView> {
         self.shown.as_ref()?;
         let (w, h) = (w.max(16), h.max(16));
-        if self.target.as_ref().map(|t| (t.2, t.3) != (w, h)).unwrap_or(true) {
+        if self
+            .target
+            .as_ref()
+            .map(|t| (t.2, t.3) != (w, h))
+            .unwrap_or(true)
+        {
             let tex = renderer.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("bus preview"),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: renderer.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
             let view = tex.create_view(&Default::default());
@@ -428,7 +537,11 @@ impl Showroom {
         let dist = (fit * zoom).max(8.0);
         let (sy, cy) = yaw.to_radians().sin_cos();
         let (sp, cp) = pitch.to_radians().sin_cos();
-        let target_pt = DVec3::new(s.centre.x as f64, s.centre.y as f64, (s.centre.z * 0.75) as f64);
+        let target_pt = DVec3::new(
+            s.centre.x as f64,
+            s.centre.y as f64,
+            (s.centre.z * 0.75) as f64,
+        );
         // from the camera towards the bus: forward along the yaw, down by the pitch
         let dir = DVec3::new((sy * cp) as f64, (cy * cp) as f64, -sp as f64);
         let mut pos = target_pt - dir * dist as f64;
@@ -437,7 +550,15 @@ impl Showroom {
         // side by as much
         let side = (focus - 0.5) * 2.0 * half_v * aspect;
         let look_yaw = yaw - side.atan().to_degrees();
-        let cam = Camera { position: pos, yaw: look_yaw, pitch: -pitch, roll: 0.0, fov_deg: fov, near: 0.2, far: 6000.0 };
+        let cam = Camera {
+            position: pos,
+            yaw: look_yaw,
+            pitch: -pitch,
+            roll: 0.0,
+            fov_deg: fov,
+            near: 0.2,
+            far: 6000.0,
+        };
         s.scene.overlays.clear();
         let _ = &s.weather;
         renderer.render(&mut s.scene, target, w, h, &cam, &s.lighting);
@@ -447,8 +568,19 @@ impl Showroom {
     /// The bus stands in the picture as it was asked for, the camera at rest and nothing
     /// loading (the picture worth keeping for the next time that bus is chosen).
     pub fn settled(&self) -> bool {
-        let still = (self.yaw_to - self.yaw).abs() <= 0.05 && (self.pitch_to - self.pitch).abs() <= 0.05 && (self.zoom_to - self.zoom).abs() <= 0.001 && (self.focus_x - self.focus_now).abs() <= 0.002;
-        self.has_picture() && self.loading.is_none() && !self.dirty && still && self.shown.as_ref().map(|s| Some(&s.look) == self.wanted.as_ref()).unwrap_or(false)
+        let still = (self.yaw_to - self.yaw).abs() <= 0.05
+            && (self.pitch_to - self.pitch).abs() <= 0.05
+            && (self.zoom_to - self.zoom).abs() <= 0.001
+            && (self.focus_x - self.focus_now).abs() <= 0.002;
+        self.has_picture()
+            && self.loading.is_none()
+            && !self.dirty
+            && still
+            && self
+                .shown
+                .as_ref()
+                .map(|s| Some(&s.look) == self.wanted.as_ref())
+                .unwrap_or(false)
     }
 
     /// The picture's pixels (RGBA, sRGB) and its size, read back from the GPU.
@@ -456,17 +588,44 @@ impl Showroom {
         let (tex, _, w, h) = self.target.as_ref()?;
         let (w, h) = (*w, *h);
         let stride = (w * 4).div_ceil(256) * 256;
-        let buf = renderer.device.create_buffer(&wgpu::BufferDescriptor { label: Some("bus preview read"), size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        let buf = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("bus preview read"),
+            size: (stride * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
         let mut enc = renderer.device.create_command_encoder(&Default::default());
-        enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+        enc.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buf,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(stride),
+                    rows_per_image: None,
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
         renderer.queue.submit([enc.finish()]);
         let data = renderer.read_buffer(&buf).ok()?;
-        let bgra = matches!(renderer.format(), wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm);
+        let bgra = matches!(
+            renderer.format(),
+            wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm
+        );
         let mut rgba = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
             let row = &data[(y * stride) as usize..(y * stride + w * 4) as usize];
             for px in row.chunks_exact(4) {
-                let (r, g, b) = if bgra { (px[2], px[1], px[0]) } else { (px[0], px[1], px[2]) };
+                let (r, g, b) = if bgra {
+                    (px[2], px[1], px[0])
+                } else {
+                    (px[0], px[1], px[2])
+                };
                 rgba.extend_from_slice(&[r, g, b, 255]);
             }
         }
@@ -480,9 +639,12 @@ impl Showroom {
     }
 
     pub fn has_picture(&self) -> bool {
-        self.shown.as_ref().map(|s| s.vehicle.is_some()).unwrap_or(false) && self.target.is_some()
+        self.shown
+            .as_ref()
+            .map(|s| s.vehicle.is_some())
+            .unwrap_or(false)
+            && self.target.is_some()
     }
-
 }
 
 /// The light of the look's time and weather, with the sun's shadow under the bus. Always
@@ -492,7 +654,13 @@ fn lighting_for(args: &Args, weather: &omsi_content::weather::Weather) -> Lighti
     let clock = start_clock(args);
     let envir = omsi_content::Envir::load(&args.root.join("envir.cfg")).ok();
     let daylight = omsi_sim::Daylight::compute(&clock, envir.as_ref());
-    let mut l = weather_lighting(&daylight, weather, crate::weather_setup::cloud_drift_at(weather, clock.time), 0.0, true);
+    let mut l = weather_lighting(
+        &daylight,
+        weather,
+        crate::weather_setup::cloud_drift_at(weather, clock.time),
+        0.0,
+        true,
+    );
     l.shadows = daylight.altitude_deg > 2.0;
     l.enhanced = false;
     l.classic = false;
@@ -520,8 +688,27 @@ fn add_floor(renderer: &Renderer, scene: &mut Scene) {
     for k in 0..n {
         indices.extend([0u32, 1 + ((k + 1) % n) as u32, 1 + k as u32]);
     }
-    let data = omsi_geometry::MeshData { positions, normals, uvs, ranges: vec![(0, indices.len() as u32, 0)], indices, one_sided: false };
+    let data = omsi_geometry::MeshData {
+        positions,
+        normals,
+        uvs,
+        ranges: vec![(0, indices.len() as u32, 0)],
+        indices,
+        one_sided: false,
+    };
     let mesh = renderer.add_mesh(scene, &data);
-    let mat = renderer.add_material(scene, None, omsi_render::AlphaMode::Opaque, [0.12, 0.125, 0.135, 1.0], false);
-    renderer.add_instance(scene, mesh, DVec3::new(0.0, 0.0, -0.005), glam::Mat4::IDENTITY, vec![mat]);
+    let mat = renderer.add_material(
+        scene,
+        None,
+        omsi_render::AlphaMode::Opaque,
+        [0.12, 0.125, 0.135, 1.0],
+        false,
+    );
+    renderer.add_instance(
+        scene,
+        mesh,
+        DVec3::new(0.0, 0.0, -0.005),
+        glam::Mat4::IDENTITY,
+        vec![mat],
+    );
 }

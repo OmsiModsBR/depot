@@ -24,11 +24,25 @@ pub struct Money {
 impl Money {
     pub fn new(root: &Path, money_system: &str) -> Money {
         let path = omsi_cfg::resolve_path(root, money_system);
-        let currency = Currency::load(&path).map_err(|e| log::warn!("money system {}: {e}", path.display())).ok();
+        let currency = Currency::load(&path)
+            .map_err(|e| log::warn!("money system {}: {e}", path.display()))
+            .ok();
         if let Some(c) = &currency {
-            log::info!("money system {}: {} coins, {} bills", c.name, c.coins.len(), c.bills.len());
+            log::info!(
+                "money system {}: {} coins, {} bills",
+                c.name,
+                c.coins.len(),
+                c.bills.len()
+            );
         }
-        Money { currency, dir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(), meshes: HashMap::new(), placed: Vec::new(), hidden: Vec::new(), rng: 0x5151_7777 }
+        Money {
+            currency,
+            dir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+            meshes: HashMap::new(),
+            placed: Vec::new(),
+            hidden: Vec::new(),
+            rng: 0x5151_7777,
+        }
     }
 
     fn rand_f(&mut self) -> f32 {
@@ -39,9 +53,18 @@ impl Money {
     /// notes (index `coins.len() + k`). The passengers had only ever paid in coins - a
     /// Novi Sad fare of 65 dinars was always 20 + 20 + 20 + 5, never a 100 note.
     fn denominations(&self) -> Vec<(usize, f32)> {
-        let Some(c) = &self.currency else { return Vec::new() };
+        let Some(c) = &self.currency else {
+            return Vec::new();
+        };
         let n = c.coins.len();
-        let mut all: Vec<(usize, f32)> = c.coins.iter().enumerate().map(|(i, (_, v))| (i, *v)).chain(c.bills.iter().enumerate().map(|(k, (_, v))| (n + k, *v))).filter(|(_, v)| *v > 0.0).collect();
+        let mut all: Vec<(usize, f32)> = c
+            .coins
+            .iter()
+            .enumerate()
+            .map(|(i, (_, v))| (i, *v))
+            .chain(c.bills.iter().enumerate().map(|(k, (_, v))| (n + k, *v)))
+            .filter(|(_, v)| *v > 0.0)
+            .collect();
         all.sort_by(|a, b| b.1.total_cmp(&a.1));
         all
     }
@@ -84,7 +107,6 @@ impl Money {
         out
     }
 
-
     /// What a passenger puts on the desk for `price`, as OMSI does it:
     /// coins drawn at random until they cover the price, then every coin that is not needed
     /// (the rest still covers the price less half the smallest coin) taken back again.
@@ -121,7 +143,16 @@ impl Money {
 
     /// The value of the smallest coin (the tolerance of the change is half of it).
     pub fn smallest_value(&self) -> f32 {
-        self.currency.as_ref().and_then(|c| c.coins.iter().map(|(_, v)| *v).filter(|v| *v > 0.0).reduce(f32::min)).unwrap_or(0.01)
+        self.currency
+            .as_ref()
+            .and_then(|c| {
+                c.coins
+                    .iter()
+                    .map(|(_, v)| *v)
+                    .filter(|v| *v > 0.0)
+                    .reduce(f32::min)
+            })
+            .unwrap_or(0.01)
     }
 
     /// How many coins lie on the change tray.
@@ -132,24 +163,51 @@ impl Money {
     pub fn value_of(&self, coins: &[usize]) -> f32 {
         let Some(c) = &self.currency else { return 0.0 };
         let n = c.coins.len();
-        coins.iter().filter_map(|&i| if i < n { c.coins.get(i) } else { c.bills.get(i - n) }).map(|(_, v)| *v).sum()
+        coins
+            .iter()
+            .filter_map(|&i| {
+                if i < n {
+                    c.coins.get(i)
+                } else {
+                    c.bills.get(i - n)
+                }
+            })
+            .map(|(_, v)| *v)
+            .sum()
     }
 
-    fn mesh(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, coin: usize) -> Option<(MeshId, Vec<MaterialId>)> {
+    fn mesh(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        coin: usize,
+    ) -> Option<(MeshId, Vec<MaterialId>)> {
         if let Some(m) = self.meshes.get(&coin) {
             return Some(m.clone());
         }
         let c = self.currency.as_ref()?;
         let n = c.coins.len();
-        let file = if coin < n { c.coins.get(coin)?.0.clone() } else { c.bills.get(coin - n)?.0.clone() };
-        let m = omsi_o3d::load_mesh(&omsi_cfg::resolve_path(&self.dir, &file)).map_err(|e| log::warn!("{e}")).ok()?;
-        let dirs = [self.dir.clone(), omsi_cfg::resolve_path(&world.root, "Texture")];
+        let file = if coin < n {
+            c.coins.get(coin)?.0.clone()
+        } else {
+            c.bills.get(coin - n)?.0.clone()
+        };
+        let m = omsi_o3d::load_mesh(&omsi_cfg::resolve_path(&self.dir, &file))
+            .map_err(|e| log::warn!("{e}"))
+            .ok()?;
+        let dirs = [
+            self.dir.clone(),
+            omsi_cfg::resolve_path(&world.root, "Texture"),
+        ];
         let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
         let mats: Vec<MaterialId> = m
             .materials
             .iter()
             .map(|mat| {
-                let tex = omsi_texture::find_texture(&mat.texture, &dirs_ref).and_then(|p| world.textures.get_gpu_fast(&p)).map(|(img, _)| renderer.add_texture_data(scene, &img));
+                let tex = omsi_texture::find_texture(&mat.texture, &dirs_ref)
+                    .and_then(|p| world.textures.get_gpu_fast(&p))
+                    .map(|(img, _)| renderer.add_texture_data(scene, &img));
                 renderer.add_material(scene, tex, AlphaMode::Opaque, [1.0; 4], false)
             })
             .collect();
@@ -166,12 +224,25 @@ impl Money {
     /// mesh (`parent`, its `[mesh_ident]`) the money lies on: it moves with that mesh - the
     /// change tray in a cash desk swinging with the driver's door (#1468).
     #[allow(clippy::too_many_arguments)]
-    pub fn place(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, coins: &[usize], point: Vec3, var: [f32; 2], change: bool, parent: Option<&str>) {
+    pub fn place(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        coins: &[usize],
+        point: Vec3,
+        var: [f32; 2],
+        change: bool,
+        parent: Option<&str>,
+    ) {
         for coin in coins {
-            let Some((id, mats)) = self.mesh(world, renderer, scene, *coin) else { continue };
+            let Some((id, mats)) = self.mesh(world, renderer, scene, *coin) else {
+                continue;
+            };
             let local = Self::coin_place(point, var, [self.rand_f(), self.rand_f(), self.rand_f()]);
             let inst = renderer.add_instance(scene, id, DVec3::ZERO, Mat4::IDENTITY, mats);
-            self.placed.push((inst, local, *coin, change, parent.map(str::to_string)));
+            self.placed
+                .push((inst, local, *coin, change, parent.map(str::to_string)));
         }
     }
 
@@ -204,7 +275,11 @@ impl Money {
             bus.ty
                 .meshes
                 .iter()
-                .rposition(|m| defs.get(m.def_index).and_then(|d| d.mesh_ident.as_deref()).is_some_and(|n| n.trim().eq_ignore_ascii_case(name.trim())))
+                .rposition(|m| {
+                    defs.get(m.def_index)
+                        .and_then(|d| d.mesh_ident.as_deref())
+                        .is_some_and(|n| n.trim().eq_ignore_ascii_case(name.trim()))
+                })
                 .and_then(|i| bus.mesh_transforms.get(i).copied())
                 .unwrap_or(Mat4::IDENTITY)
         };
@@ -227,7 +302,13 @@ pub struct TicketBlocks {
 }
 
 impl TicketBlocks {
-    pub fn new(world: &World, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance, pack: &Path) -> TicketBlocks {
+    pub fn new(
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        bus: &VehicleInstance,
+        pack: &Path,
+    ) -> TicketBlocks {
         let dir = pack.parent().map(Path::to_path_buf).unwrap_or_default();
         let mut blocks = Vec::new();
         for (n, a) in bus.ty.def.attachments.iter().enumerate() {
@@ -235,27 +316,40 @@ impl TicketBlocks {
             if !omsi_cfg::vfs::is_file(&file) {
                 continue;
             }
-            let Ok(m) = omsi_o3d::load_mesh(&file).map_err(|e| log::warn!("{e}")) else { continue };
+            let Ok(m) = omsi_o3d::load_mesh(&file).map_err(|e| log::warn!("{e}")) else {
+                continue;
+            };
             let dirs = [dir.clone(), omsi_cfg::resolve_path(&world.root, "Texture")];
             let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
             let mats: Vec<MaterialId> = m
                 .materials
                 .iter()
                 .map(|mat| {
-                    let tex = omsi_texture::find_texture(&mat.texture, &dirs_ref).and_then(|p| world.textures.get_gpu_fast(&p)).map(|(img, _)| renderer.add_texture_data(scene, &img));
+                    let tex = omsi_texture::find_texture(&mat.texture, &dirs_ref)
+                        .and_then(|p| world.textures.get_gpu_fast(&p))
+                        .map(|(img, _)| renderer.add_texture_data(scene, &img));
                     renderer.add_material(scene, tex, AlphaMode::Test, [1.0; 4], false)
                 })
                 .collect();
             let data = mesh_from_o3d(&m);
             let id = renderer.add_mesh(scene, &data);
             let inst = renderer.add_instance(scene, id, DVec3::ZERO, Mat4::IDENTITY, mats);
-            let local = crate::tiles::attachment_matrix(&omsi_scenery::sco::Attachment { ops: a.ops.clone() });
+            let local = crate::tiles::attachment_matrix(&omsi_scenery::sco::Attachment {
+                ops: a.ops.clone(),
+            });
             blocks.push((inst, local, n, data));
         }
         if !blocks.is_empty() {
-            log::info!("ticket blocks: {} of {} on the bus", blocks.len(), dir.display());
+            log::info!(
+                "ticket blocks: {} of {} on the bus",
+                blocks.len(),
+                dir.display()
+            );
         }
-        TicketBlocks { made_for: (bus.ty.def.path.clone(), pack.to_path_buf()), blocks }
+        TicketBlocks {
+            made_for: (bus.ty.def.path.clone(), pack.to_path_buf()),
+            blocks,
+        }
     }
 
     pub fn sync(&self, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
@@ -271,7 +365,9 @@ impl TicketBlocks {
         let rot = bus.body_rotation();
         self.blocks
             .iter()
-            .filter_map(|(_, local, n, data)| omsi_geometry::ray_mesh(o, dir, data, &(rot * *local)).map(|t| (t, *n)))
+            .filter_map(|(_, local, n, data)| {
+                omsi_geometry::ray_mesh(o, dir, data, &(rot * *local)).map(|t| (t, *n))
+            })
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .map(|x| x.1)
     }
@@ -284,7 +380,14 @@ mod tests {
     #[test]
     fn coins_lie_flat_on_the_point_not_stacked() {
         let point = Vec3::new(0.4, 5.0, 1.1);
-        let mut rng = Money { currency: None, dir: PathBuf::new(), meshes: HashMap::new(), placed: Vec::new(), hidden: Vec::new(), rng: 7 };
+        let mut rng = Money {
+            currency: None,
+            dir: PathBuf::new(),
+            meshes: HashMap::new(),
+            placed: Vec::new(),
+            hidden: Vec::new(),
+            rng: 7,
+        };
         let mut top = f32::MIN;
         for _ in 0..80 {
             let r = [rng.rand_f(), rng.rand_f(), rng.rand_f()];
