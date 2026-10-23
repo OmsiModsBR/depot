@@ -2,18 +2,18 @@
 
 pub mod ai;
 pub mod anim;
+pub mod automation;
 pub mod clock;
 pub mod collision;
 pub mod daylight;
 pub mod host;
 pub use omsi_html as htmlengine;
-pub mod ibis;
+
 pub mod input;
 pub mod particles;
 pub mod people;
 pub mod physics;
 pub mod scenery;
-pub mod startup;
 pub mod textures;
 pub mod traffic;
 pub mod vehicle;
@@ -27,6 +27,7 @@ pub use people as human;
 pub use people::omsi_anim as human_omsi;
 
 pub use anim::{AnimState, MeshAnimator};
+pub use automation::{ibis, startup};
 pub use clock::SimClock;
 pub use daylight::Daylight;
 pub use host::VehicleHost;
