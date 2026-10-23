@@ -7,6 +7,7 @@ use crate::effects::{puddles, rt};
 use crate::gpu::{GpuContext, Samplers};
 use crate::lighting::LightMapAtlas;
 use crate::output::{Diagnostics, Presenter};
+use crate::passes::DrawItem;
 use crate::passes::{
     Exposure, FogLampsPass, PassPipelines, PostPipelines, PrepassPipelines, ShadowResources,
     SpriteResources, SsaoPass,
@@ -122,4 +123,8 @@ pub const LAMP_CODE_STRIDE: u32 = 64;
 pub(crate) struct FrameScratch {
     /// The draw list: the instances' indices in draw order.
     pub(crate) list: Vec<u32>,
+    /// The main pass's draw items, the vehicle's, and the prepass's.
+    pub(crate) items: Vec<DrawItem>,
+    pub(crate) cab_items: Vec<DrawItem>,
+    pub(crate) prepass_items: Vec<DrawItem>,
 }
