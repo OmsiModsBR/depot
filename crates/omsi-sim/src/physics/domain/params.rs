@@ -195,10 +195,6 @@ pub const INSIDE_FRAMES: f64 = 2.0;
 pub(crate) const AI_STEER_RATE_HEAVY: f32 = 25.0;
 pub(crate) const AI_STEER_RATE: f32 = 40.0;
 pub(crate) const AI_HEAVY_MASS: f32 = 6000.0;
-/// The axle angle an AI vehicle hands its scripts is held to this (rad), and an axle closer
-/// than `AI_STEER_ARM_MIN` (m) to the `[rot_pnt_long]` line is not steered. *tuned*
-pub(crate) const AI_AXLE_STEER_MAX: f32 = 1.2;
-pub(crate) const AI_STEER_ARM_MIN: f32 = 0.5;
 /// The longest frame the kinematic model steps (s): a longer one is cut to it. *tuned*
 pub(crate) const KINEMATIC_DT_MAX: f32 = 0.1;
 

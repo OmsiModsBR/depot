@@ -222,21 +222,17 @@ pub fn wheel_rest_loads_supported(def: &Vehicle, support_long: f32) -> (Vec<f32>
     )
 }
 
-/// The line an AI vehicle turns about (`[rot_pnt_long]`, normally the rear axle) and the
-/// distance from it to the front axle: (rotation point, wheelbase), both in metres along the
-/// body.
+/// The line an AI vehicle turns about (`[rot_pnt_long]` as the file gives it, 0 for a file
+/// without one) and the distance from it to the front axle: (rotation point, wheelbase),
+/// both in metres along the body. The wheelbase of the bicycle model is kept to 0.8 m so
+/// that a rotation point at or in front of the front axle (a file's error, shown as it is:
+/// the car turns about that line) still gives a finite steering angle.
 pub fn ai_rotation_point(def: &Vehicle) -> (f32, f32) {
     let front = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
-    let rear = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
     if def.axles.is_empty() {
         return (-1.3, 2.6);
     }
-    // a rotation point at (or in front of) the front axle is a file without one
-    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 {
-        def.rot_pnt_long
-    } else {
-        rear
-    };
+    let rot = def.rot_pnt_long;
     (rot, (front - rot).max(0.8))
 }
 
@@ -256,14 +252,13 @@ impl AiSpec {
         let mass = (if tonnes { def.mass * 1000.0 } else { def.mass }).max(300.0);
         let unit = if tonnes { 1000.0 } else { 1.0 };
         let heavy = mass > AI_HEAVY_MASS;
-        // inv_min_turnradius = tan(max angle) / wheelbase
+        // inv_min_turnradius = tan(max angle) / wheelbase, with no lock of the game's own:
+        // a file without it gives none (the car steers only as far as the way's bends make
+        // it, see `AiBody::drive`)
         let max_steer = if def.inv_min_turn_radius > 0.0 {
-            (def.inv_min_turn_radius * wheelbase)
-                .atan()
-                .to_degrees()
-                .clamp(15.0, 55.0)
+            (def.inv_min_turn_radius * wheelbase).atan().to_degrees()
         } else {
-            35.0
+            0.0
         };
         let mut wheels = Vec::new();
         for (i, a) in def.axles.iter().enumerate() {
