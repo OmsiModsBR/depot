@@ -36,20 +36,40 @@ fn check(field: usize, value: &str, root: &str) -> (Status, String) {
     let v = value.trim();
     let p = std::path::Path::new(v);
     match field {
-        0 if v.is_empty() => (Status::Missing, "Not chosen yet: the folder with maps and Vehicles in it.".into()),
+        0 if v.is_empty() => (
+            Status::Missing,
+            "Not chosen yet: the folder with maps and Vehicles in it.".into(),
+        ),
         0 => {
             let missing = omsi_cfg::missing_original_essentials(p);
             if missing.is_empty() {
-                (Status::Found, "The essential files are there. Read only: the launcher never writes to it.".into())
+                (
+                    Status::Found,
+                    "The essential files are there. Read only: the launcher never writes to it."
+                        .into(),
+                )
             } else {
-                (Status::Error, omsi_ui::tr("Not a complete OMSI 2 installation: it lacks %{files}.").replace("%{files}", &lacking(&missing, 4)))
+                (
+                    Status::Error,
+                    omsi_ui::tr("Not a complete OMSI 2 installation: it lacks %{files}.")
+                        .replace("%{files}", &lacking(&missing, 4)),
+                )
             }
         }
-        1 if v.is_empty() => (Status::Warning, "Not found: choose the depot program.".into()),
+        1 if v.is_empty() => (
+            Status::Warning,
+            "Not found: choose the depot program.".into(),
+        ),
         1 if p.is_file() => {
-            let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf()));
+            let beside = std::env::current_exe()
+                .ok()
+                .and_then(|e| e.parent().map(|d| d.to_path_buf()));
             if beside.is_some_and(|d| p.parent() == Some(d.as_path())) {
-                (Status::Found, omsi_ui::tr("Found next to the launcher. Version %{version}").replace("%{version}", env!("CARGO_PKG_VERSION")))
+                (
+                    Status::Found,
+                    omsi_ui::tr("Found next to the launcher. Version %{version}")
+                        .replace("%{version}", env!("CARGO_PKG_VERSION")),
+                )
             } else {
                 (Status::Found, "Found.".into())
             }
@@ -58,22 +78,44 @@ fn check(field: usize, value: &str, root: &str) -> (Status, String) {
         // (the content folder: nothing is written while it is typed - Save makes it and
         // tries it)
         // (`OMSI_CONTENT` wins over what is chosen here)
-        _ if omsi_cfg::flags::CONTENT.os().is_some() => (Status::Warning, "Set by OMSI_CONTENT: what is chosen here is used once it is no longer set.".into()),
-        _ if v.is_empty() => (Status::Found, "Beside the game program. Mods put here are not available in OMSI 2.".into()),
+        _ if omsi_cfg::flags::CONTENT.os().is_some() => (
+            Status::Warning,
+            "Set by OMSI_CONTENT: what is chosen here is used once it is no longer set.".into(),
+        ),
+        _ if v.is_empty() => (
+            Status::Found,
+            "Beside the game program. Mods put here are not available in OMSI 2.".into(),
+        ),
         _ if p.is_file() => (Status::Error, "This is a file, not a folder.".into()),
         _ => match core::content_choice_problem(p, std::path::Path::new(root.trim())) {
-            Some(why) => (Status::Error, omsi_ui::tr("Cannot be used: %{why}.").replace("%{why}", &why_text(&why))),
-            None if !p.exists() => (Status::Warning, "It does not exist yet: it is made when you save.".into()),
-            None => (Status::Found, "Mods put here are not available in OMSI 2.".into()),
+            Some(why) => (
+                Status::Error,
+                omsi_ui::tr("Cannot be used: %{why}.").replace("%{why}", &why_text(&why)),
+            ),
+            None if !p.exists() => (
+                Status::Warning,
+                "It does not exist yet: it is made when you save.".into(),
+            ),
+            None => (
+                Status::Found,
+                "Mods put here are not available in OMSI 2.".into(),
+            ),
         },
     }
 }
 
 /// What an OMSI 2 folder lacks, as its lines say it: the first `n` files, and how many more.
 fn lacking(missing: &[String], n: usize) -> String {
-    let shown = missing.iter().take(n).map(String::as_str).collect::<Vec<_>>().join(", ");
+    let shown = missing
+        .iter()
+        .take(n)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
     if missing.len() > n {
-        omsi_ui::tr("%{files} and %{n} more").replace("%{files}", &shown).replace("%{n}", &(missing.len() - n).to_string())
+        omsi_ui::tr("%{files} and %{n} more")
+            .replace("%{files}", &shown)
+            .replace("%{n}", &(missing.len() - n).to_string())
     } else {
         shown
     }
@@ -118,12 +160,29 @@ pub fn setup(l: &mut Launcher, area: Rect) {
         l.state.load_usage();
     }
     if l.pages.setup.content_now.is_none() {
-        l.pages.setup.content_now = Some(core::content_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default());
+        l.pages.setup.content_now = Some(
+            core::content_dir()
+                .map(|d| d.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        );
     }
     let foot_h = 60.0;
     let main = Rect::new(body.x, body.y, body.w, body.h - foot_h - GAP);
-    let right_w = if phone { 0.0 } else { (body.w * 0.3).clamp(300.0, 420.0) };
-    let left = Rect::new(main.x, main.y, if phone { main.w } else { main.w - right_w - GAP }, main.h);
+    let right_w = if phone {
+        0.0
+    } else {
+        (body.w * 0.3).clamp(300.0, 420.0)
+    };
+    let left = Rect::new(
+        main.x,
+        main.y,
+        if phone {
+            main.w
+        } else {
+            main.w - right_w - GAP
+        },
+        main.h,
+    );
     let mut y = folders(l, left);
     if !phone {
         if l.pages.setup.tab == 1 {
@@ -138,10 +197,40 @@ pub fn setup(l: &mut Launcher, area: Rect) {
 /// A folder's field (label over it, Browse beside it, what was found under it). True when
 /// Browse was pressed.
 #[allow(clippy::too_many_arguments)]
-fn folder_row(ui: &mut Ui, x: f32, y: f32, w: f32, label: &str, id: &str, value: &mut String, hint: &str, icon: &str, status: &(Status, String)) -> (bool, bool) {
-    ui.text_in(label, Rect::new(x, y, w, 18.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
-    let changed = ui.text_input(&format!("cfg-{id}"), Rect::new(x, y + 20.0, w - 92.0, 34.0), value, hint, Some(icon));
-    let browse = ui.button(&format!("browse-{id}"), Rect::new(x + w - 82.0, y + 20.0, 82.0, 34.0), "Browse", None, ButtonKind::Normal);
+fn folder_row(
+    ui: &mut Ui,
+    x: f32,
+    y: f32,
+    w: f32,
+    label: &str,
+    id: &str,
+    value: &mut String,
+    hint: &str,
+    icon: &str,
+    status: &(Status, String),
+) -> (bool, bool) {
+    ui.text_in(
+        label,
+        Rect::new(x, y, w, 18.0),
+        12.5,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
+    let changed = ui.text_input(
+        &format!("cfg-{id}"),
+        Rect::new(x, y + 20.0, w - 92.0, 34.0),
+        value,
+        hint,
+        Some(icon),
+    );
+    let browse = ui.button(
+        &format!("browse-{id}"),
+        Rect::new(x + w - 82.0, y + 20.0, 82.0, 34.0),
+        "Browse",
+        None,
+        ButtonKind::Normal,
+    );
     omsi_launcher_ui::kit::dot(ui, x + 4.0, y + 68.0, status.0);
     let c = match status.0 {
         Status::Found => OK,
@@ -149,7 +238,16 @@ fn folder_row(ui: &mut Ui, x: f32, y: f32, w: f32, label: &str, id: &str, value:
         Status::Unverified => TEXT_DIM,
         Status::Missing | Status::Error => DANGER,
     };
-    omsi_launcher_ui::kit::clipped(ui, &status.1, x + 15.0, y + 68.0, w - 15.0, 12.5, Weight::Regular, c);
+    omsi_launcher_ui::kit::clipped(
+        ui,
+        &status.1,
+        x + 15.0,
+        y + 68.0,
+        w - 15.0,
+        12.5,
+        Weight::Regular,
+        c,
+    );
     (changed, browse)
 }
 
@@ -161,33 +259,77 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
     let extra = if in_process { 96.0 } else { 0.0 };
     let r = Rect::new(col.x, col.y, col.w, 46.0 + rows * 88.0 + extra);
     l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "Folders");
-    let saved = [l.state.config.root.clone(), l.state.config.game.clone(), l.state.config.content.clone()];
+    let inner = Launcher::card_title(
+        &mut l.ui,
+        Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
+        "Folders",
+    );
+    let saved = [
+        l.state.config.root.clone(),
+        l.state.config.game.clone(),
+        l.state.config.content.clone(),
+    ];
     let mut values = [
-        l.pages.setup.root.clone().unwrap_or_else(|| saved[0].clone()),
-        l.pages.setup.game.clone().unwrap_or_else(|| saved[1].clone()),
-        l.pages.setup.content.clone().unwrap_or_else(|| saved[2].clone()),
+        l.pages
+            .setup
+            .root
+            .clone()
+            .unwrap_or_else(|| saved[0].clone()),
+        l.pages
+            .setup
+            .game
+            .clone()
+            .unwrap_or_else(|| saved[1].clone()),
+        l.pages
+            .setup
+            .content
+            .clone()
+            .unwrap_or_else(|| saved[2].clone()),
     ];
     for f in 0..3 {
         // (the content folder is checked again when the OMSI 2 folder changes too)
-        let key = if f == 2 { format!("{}\u{0}{}", values[2], values[0]) } else { values[f].clone() };
+        let key = if f == 2 {
+            format!("{}\u{0}{}", values[2], values[0])
+        } else {
+            values[f].clone()
+        };
         if l.pages.setup.checks[f].1.is_none() || l.pages.setup.checks[f].0 != key {
             let out = check(f, &values[f], &values[0]);
             l.pages.setup.checks[f] = (key, Some(out));
         }
     }
-    let status = |v: &SetupView, f: usize| v.checks[f].1.clone().unwrap_or((Status::Unverified, String::new()));
+    let status = |v: &SetupView, f: usize| {
+        v.checks[f]
+            .1
+            .clone()
+            .unwrap_or((Status::Unverified, String::new()))
+    };
     let content_hint = l.pages.setup.content_now.clone().unwrap_or_default();
     let mut y = inner.y;
     let list: &[(usize, &str, &str, &str)] = if in_process {
         &[(0, "OMSI 2 folder", "/path/to/OMSI 2", "o-folder")]
     } else {
-        &[(0, "OMSI 2 folder", "D:\\OMSI 2", "o-folder"), (1, "Game program", "depot", "o-play"), (2, "Depot content folder", "", "o-folder")]
+        &[
+            (0, "OMSI 2 folder", "D:\\OMSI 2", "o-folder"),
+            (1, "Game program", "depot", "o-play"),
+            (2, "Depot content folder", "", "o-folder"),
+        ]
     };
     for &(f, label, hint, icon) in list {
         let hint = if f == 2 { content_hint.as_str() } else { hint };
         let st = status(&l.pages.setup, f);
-        let (changed, browse) = folder_row(&mut l.ui, inner.x, y, inner.w, label, FIELDS[f], &mut values[f], hint, icon, &st);
+        let (changed, browse) = folder_row(
+            &mut l.ui,
+            inner.x,
+            y,
+            inner.w,
+            label,
+            FIELDS[f],
+            &mut values[f],
+            hint,
+            icon,
+            &st,
+        );
         if changed {
             set(&mut l.pages.setup, f, values[f].clone());
         }
@@ -198,7 +340,9 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
                     l.browse(super::mobile::Purpose::Root, &start);
                 }
                 0 => {
-                    if let Some(p) = core::pick_folder("The OMSI 2 folder (with maps and Vehicles in it)") {
+                    if let Some(p) =
+                        core::pick_folder("The OMSI 2 folder (with maps and Vehicles in it)")
+                    {
                         set(&mut l.pages.setup, 0, p.to_string_lossy().to_string());
                     }
                 }
@@ -208,7 +352,9 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
                     }
                 }
                 _ => {
-                    if let Some(p) = core::pick_folder("The Depot's content folder (mods are installed into it)") {
+                    if let Some(p) =
+                        core::pick_folder("The Depot's content folder (mods are installed into it)")
+                    {
                         set(&mut l.pages.setup, 2, p.to_string_lossy().to_string());
                     }
                 }
@@ -236,17 +382,62 @@ fn set(v: &mut SetupView, f: usize, s: String) {
 fn free_space(l: &mut Launcher, at: Rect) -> f32 {
     let r = Rect::new(at.x, at.y, at.w, 186.0);
     l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "Free up space");
+    let inner = Launcher::card_title(
+        &mut l.ui,
+        Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
+        "Free up space",
+    );
     chip(&mut l.ui, r.right() - 18.0, r.y + 22.0, "Experimental");
     let half = inner.w * 0.5;
-    let total = l.state.usage.as_ref().map(|u| fmt_size(u.tree.bytes)).unwrap_or_else(|| "Counting…".into());
-    l.ui.text_in("Content found (both folders)", Rect::new(inner.x, inner.y, half, 18.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
-    l.ui.text_in(&total, Rect::new(inner.x, inner.y + 18.0, half, 30.0), 22.0, Weight::Bold, TEXT, Align::Left);
-    l.ui.text_in("Compression with NTFS (LZX)", Rect::new(inner.x + half, inner.y, half, 18.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
-    l.ui.text_in("Not available yet", Rect::new(inner.x + half, inner.y + 18.0, half, 30.0), 22.0, Weight::Bold, WARN, Align::Left);
+    let total = l
+        .state
+        .usage
+        .as_ref()
+        .map(|u| fmt_size(u.tree.bytes))
+        .unwrap_or_else(|| "Counting…".into());
+    l.ui.text_in(
+        "Content found (both folders)",
+        Rect::new(inner.x, inner.y, half, 18.0),
+        12.5,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
+    l.ui.text_in(
+        &total,
+        Rect::new(inner.x, inner.y + 18.0, half, 30.0),
+        22.0,
+        Weight::Bold,
+        TEXT,
+        Align::Left,
+    );
+    l.ui.text_in(
+        "Compression with NTFS (LZX)",
+        Rect::new(inner.x + half, inner.y, half, 18.0),
+        12.5,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
+    l.ui.text_in(
+        "Not available yet",
+        Rect::new(inner.x + half, inner.y + 18.0, half, 30.0),
+        22.0,
+        Weight::Bold,
+        WARN,
+        Align::Left,
+    );
     let y = inner.y + 60.0;
-    dim_button(&mut l.ui, Rect::new(inner.x, y, 220.0, 34.0), "Compress with NTFS (LZX)...");
-    dim_button(&mut l.ui, Rect::new(inner.x + 230.0, y, 160.0, 34.0), "Undo compression");
+    dim_button(
+        &mut l.ui,
+        Rect::new(inner.x, y, 220.0, 34.0),
+        "Compress with NTFS (LZX)...",
+    );
+    dim_button(
+        &mut l.ui,
+        Rect::new(inner.x + 230.0, y, 160.0, 34.0),
+        "Undo compression",
+    );
     l.ui.paragraph("How compressing the content should work is still being decided; nothing is compressed for now.", Vec2::new(inner.x, y + 44.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
     r.bottom()
 }
@@ -271,16 +462,53 @@ fn chip(ui: &mut Ui, right: f32, cy: f32, label: &str) {
 fn own_files(l: &mut Launcher, at: Rect) {
     let r = Rect::new(at.x, at.y, at.w, 128.0);
     l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "The Depot's own files");
-    omsi_launcher_ui::kit::right(&mut l.ui, "logs, previews and settings", r.right() - 18.0, r.y + 22.0, 12.0, Weight::Regular, TEXT_DIM);
+    let inner = Launcher::card_title(
+        &mut l.ui,
+        Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
+        "The Depot's own files",
+    );
+    omsi_launcher_ui::kit::right(
+        &mut l.ui,
+        "logs, previews and settings",
+        r.right() - 18.0,
+        r.y + 22.0,
+        12.0,
+        Weight::Regular,
+        TEXT_DIM,
+    );
     let dir = core::data_dir();
     let field = Rect::new(inner.x, inner.y, inner.w - 132.0, 34.0);
     l.ui.p().rounded(field, CONTROL_RADIUS, FIELD);
     l.ui.p().rounded_border(field, CONTROL_RADIUS, 1.0, EDGE);
-    l.ui.icon("o-folder", Vec2::new(field.x + 18.0, field.center().y), 15.0, TEXT_DIM);
-    omsi_launcher_ui::kit::clipped(&mut l.ui, &dir.to_string_lossy(), field.x + 34.0, field.center().y, field.w - 44.0, 13.5, Weight::Regular, TEXT);
-    if l.ui.button("open-depot-folder", Rect::new(inner.right() - 122.0, inner.y, 122.0, 34.0), "Open folder", None, ButtonKind::Normal) && !core::open_folder(&dir) {
-        l.state.set_status(omsi_ui::tr("The folder could not be opened: %{path}").replace("%{path}", &dir.display().to_string()), true);
+    l.ui.icon(
+        "o-folder",
+        Vec2::new(field.x + 18.0, field.center().y),
+        15.0,
+        TEXT_DIM,
+    );
+    omsi_launcher_ui::kit::clipped(
+        &mut l.ui,
+        &dir.to_string_lossy(),
+        field.x + 34.0,
+        field.center().y,
+        field.w - 44.0,
+        13.5,
+        Weight::Regular,
+        TEXT,
+    );
+    if l.ui.button(
+        "open-depot-folder",
+        Rect::new(inner.right() - 122.0, inner.y, 122.0, 34.0),
+        "Open folder",
+        None,
+        ButtonKind::Normal,
+    ) && !core::open_folder(&dir)
+    {
+        l.state.set_status(
+            omsi_ui::tr("The folder could not be opened: %{path}")
+                .replace("%{path}", &dir.display().to_string()),
+            true,
+        );
     }
     l.ui.paragraph("Holds the game log, the launcher log, the preview cache and your settings. Safe to open; nothing here changes the original OMSI 2.", Vec2::new(inner.x, inner.y + 44.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
 }
@@ -288,38 +516,100 @@ fn own_files(l: &mut Launcher, at: Rect) {
 /// The Content card: what was found, or what it takes on disk.
 fn content(l: &mut Launcher, r: Rect) {
     l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "Content");
+    let inner = Launcher::card_title(
+        &mut l.ui,
+        Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
+        "Content",
+    );
     let mut tab = l.pages.setup.tab;
-    l.ui.segmented("setup-content-tab", Rect::new(inner.x, inner.y, inner.w, 36.0), &mut tab, &["What was found", "Disk usage"]);
+    l.ui.segmented(
+        "setup-content-tab",
+        Rect::new(inner.x, inner.y, inner.w, 36.0),
+        &mut tab,
+        &["What was found", "Disk usage"],
+    );
     l.pages.setup.tab = tab;
     let y = inner.y + 48.0;
     let Some(usage) = l.state.usage.clone() else {
-        l.ui.text_in("Counting what is in both folders…", Rect::new(inner.x, y, inner.w, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        l.ui.text_in(
+            "Counting what is in both folders…",
+            Rect::new(inner.x, y, inner.w, 22.0),
+            13.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
         return;
     };
     if tab == 0 {
         let c = usage.counts;
-        let rows = [("Maps", c.maps), ("Vehicles", c.vehicles), ("Sceneryobjects", c.sceneryobjects), ("Splines", c.splines), ("Archives (.zip)", c.archives)];
+        let rows = [
+            ("Maps", c.maps),
+            ("Vehicles", c.vehicles),
+            ("Sceneryobjects", c.sceneryobjects),
+            ("Splines", c.splines),
+            ("Archives (.zip)", c.archives),
+        ];
         let mut ry = y;
         for (k, (name, n)) in rows.iter().enumerate() {
             if k > 0 {
                 l.ui.p().rect(Rect::new(inner.x, ry, inner.w, 1.0), EDGE);
             }
-            omsi_launcher_ui::kit::dot(&mut l.ui, inner.x + 4.0, ry + 17.0, if *n > 0 { Status::Found } else { Status::Unverified });
-            l.ui.text_in(name, Rect::new(inner.x + 18.0, ry + 5.0, inner.w - 80.0, 24.0), 13.5, Weight::Regular, TEXT, Align::Left);
-            l.ui.text_in(&n.to_string(), Rect::new(inner.x, ry + 5.0, inner.w, 24.0), 13.5, Weight::Regular, TEXT_DIM, Align::Right);
+            omsi_launcher_ui::kit::dot(
+                &mut l.ui,
+                inner.x + 4.0,
+                ry + 17.0,
+                if *n > 0 {
+                    Status::Found
+                } else {
+                    Status::Unverified
+                },
+            );
+            l.ui.text_in(
+                name,
+                Rect::new(inner.x + 18.0, ry + 5.0, inner.w - 80.0, 24.0),
+                13.5,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            l.ui.text_in(
+                &n.to_string(),
+                Rect::new(inner.x, ry + 5.0, inner.w, 24.0),
+                13.5,
+                Weight::Regular,
+                TEXT_DIM,
+                Align::Right,
+            );
             ry += 35.0;
         }
         let note = "Counted each time the page opens, in the OMSI 2 folder and the content folder.";
         let h = l.ui.paragraph_height(note, inner.w, 12.0, Weight::Regular);
-        l.ui.paragraph(note, Vec2::new(inner.x, inner.bottom() - h), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
+        l.ui.paragraph(
+            note,
+            Vec2::new(inner.x, inner.bottom() - h),
+            inner.w,
+            12.0,
+            Weight::Regular,
+            TEXT_FAINT,
+        );
         return;
     }
     let note = "Inside out: folder, then type, then what is in it, then file kind. Click a slice; click the middle to go back.";
-    let y = y + l.ui.paragraph(note, Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM) + 10.0;
+    let y =
+        y + l.ui.paragraph(
+            note,
+            Vec2::new(inner.x, y),
+            inner.w,
+            12.0,
+            Weight::Regular,
+            TEXT_DIM,
+        ) + 10.0;
     let legend = disk::by_type(&usage.tree);
     let legend_h = legend.len().div_ceil(2) as f32 * 22.0;
-    let side = (inner.w).min(inner.bottom() - y - legend_h - 24.0).max(120.0);
+    let side = (inner.w)
+        .min(inner.bottom() - y - legend_h - 24.0)
+        .max(120.0);
     let chart_r = Rect::new(inner.x + (inner.w - side) * 0.5, y, side, side);
     chart(&mut l.ui, chart_r, &usage.tree, &mut l.pages.setup.focus);
     let mut ly = chart_r.bottom() + 18.0;
@@ -329,9 +619,24 @@ fn content(l: &mut Launcher, r: Rect) {
         if k > 0 && k % 2 == 0 {
             ly += 22.0;
         }
-        l.ui.p().rounded(Rect::new(x, ly + 6.0, 10.0, 10.0), 2.0, type_color(name));
-        l.ui.text_in(name, Rect::new(x + 18.0, ly, cw - 70.0, 22.0), 13.0, Weight::Regular, TEXT, Align::Left);
-        l.ui.text_in(&fmt_size(*bytes), Rect::new(x, ly, cw, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Right);
+        l.ui.p()
+            .rounded(Rect::new(x, ly + 6.0, 10.0, 10.0), 2.0, type_color(name));
+        l.ui.text_in(
+            name,
+            Rect::new(x + 18.0, ly, cw - 70.0, 22.0),
+            13.0,
+            Weight::Regular,
+            TEXT,
+            Align::Left,
+        );
+        l.ui.text_in(
+            &fmt_size(*bytes),
+            Rect::new(x, ly, cw, 22.0),
+            13.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Right,
+        );
     }
 }
 
@@ -396,7 +701,13 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
     let ring_w = (outer - hole) / rings as f32;
     let mut slices: Vec<Slice> = Vec::new();
     // (breadth first: each ring from the one inside it)
-    let mut level: Vec<(&Node, f32, f32, Vec<usize>, Option<&str>)> = vec![(top, -std::f32::consts::FRAC_PI_2, -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU, focus.clone(), top_ty)];
+    let mut level: Vec<(&Node, f32, f32, Vec<usize>, Option<&str>)> = vec![(
+        top,
+        -std::f32::consts::FRAC_PI_2,
+        -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU,
+        focus.clone(),
+        top_ty,
+    )];
     for ring in 0..rings {
         let mut next = Vec::new();
         for (n, a0, a1, path, ty) in level {
@@ -409,8 +720,21 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
                 let mut p = path.clone();
                 p.push(k);
                 let depth = p.len();
-                let kty = if depth == 2 { Some(kid.name.as_str()) } else { ty };
-                slices.push(Slice { ring, a0: a, a1: a + span, path: p.clone(), depth, node: kid, ty: kty, index: k });
+                let kty = if depth == 2 {
+                    Some(kid.name.as_str())
+                } else {
+                    ty
+                };
+                slices.push(Slice {
+                    ring,
+                    a0: a,
+                    a1: a + span,
+                    path: p.clone(),
+                    depth,
+                    node: kid,
+                    ty: kty,
+                    index: k,
+                });
                 next.push((kid, a, a + span, p, kty));
                 a += span;
             }
@@ -427,7 +751,9 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
         if ang < -std::f32::consts::FRAC_PI_2 {
             ang += std::f32::consts::TAU;
         }
-        slices.iter().position(|s| s.ring == ring && ang >= s.a0 && ang < s.a1)
+        slices
+            .iter()
+            .position(|s| s.ring == ring && ang >= s.a0 && ang < s.a1)
     } else {
         None
     };
@@ -451,7 +777,11 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
                 tc.mix(PANEL, darker)
             }
         };
-        let col = if hovered == Some(k) { base.lighten(0.18) } else { base };
+        let col = if hovered == Some(k) {
+            base.lighten(0.18)
+        } else {
+            base
+        };
         ui.p().arc(c, r0, r1, s.a0 + gap, s.a1 - gap, col);
     }
     ui.p().circle(c, hole - 2.0, FIELD);
@@ -460,9 +790,23 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
         None => (top.name.clone(), top.bytes),
     };
     let size = fmt_size(bytes);
-    ui.text_in(&size, Rect::new(c.x - hole, c.y - 16.0, hole * 2.0, 24.0), 18.0, Weight::Bold, TEXT, Align::Center);
+    ui.text_in(
+        &size,
+        Rect::new(c.x - hole, c.y - 16.0, hole * 2.0, 24.0),
+        18.0,
+        Weight::Bold,
+        TEXT,
+        Align::Center,
+    );
     let name = omsi_launcher_ui::kit::fit_text(ui, &title, 11.0, hole * 1.7);
-    ui.text_in(&name, Rect::new(c.x - hole, c.y + 8.0, hole * 2.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Center);
+    ui.text_in(
+        &name,
+        Rect::new(c.x - hole, c.y + 8.0, hole * 2.0, 16.0),
+        11.0,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Center,
+    );
     if clicked {
         match hovered {
             Some(k) if !slices[k].node.kids.is_empty() => *focus = slices[k].path.clone(),
@@ -479,8 +823,13 @@ fn foot(l: &mut Launcher, r: Rect) {
     l.ui.panel(r);
     let v = &l.pages.setup;
     let cfg = &l.state.config;
-    let moving = v.content.as_ref().is_some_and(|s| s.trim() != cfg.content.trim());
-    let edited = v.root.as_ref().is_some_and(|s| *s != cfg.root) || v.game.as_ref().is_some_and(|s| *s != cfg.game) || moving;
+    let moving = v
+        .content
+        .as_ref()
+        .is_some_and(|s| s.trim() != cfg.content.trim());
+    let edited = v.root.as_ref().is_some_and(|s| *s != cfg.root)
+        || v.game.as_ref().is_some_and(|s| *s != cfg.game)
+        || moving;
     // (another content folder: what the one before holds is not taken along)
     let (text, c) = if moving {
         ("Another content folder: the mods, your controls, saved situations and screenshots of the one before stay there; nothing is moved.", WARN)
@@ -488,11 +837,20 @@ fn foot(l: &mut Launcher, r: Rect) {
         ("Changes apply to the next game you start.", TEXT_SOFT)
     };
     let text = omsi_launcher_ui::kit::fit_text(&mut l.ui, text, 13.5, r.w - 300.0);
-    l.ui.text_in(&text, Rect::new(r.x + 18.0, r.y, r.w - 300.0, r.h), 13.5, Weight::Regular, c, Align::Left);
+    l.ui.text_in(
+        &text,
+        Rect::new(r.x + 18.0, r.y, r.w - 300.0, r.h),
+        13.5,
+        Weight::Regular,
+        c,
+        Align::Left,
+    );
     let save = Rect::new(r.right() - 18.0 - 104.0, r.center().y - 17.0, 104.0, 34.0);
     let revert = Rect::new(save.x - 10.0 - 92.0, save.y, 92.0, 34.0);
     if edited {
-        if l.ui.button("cfg-revert", revert, "Revert", None, ButtonKind::Normal) {
+        if l.ui
+            .button("cfg-revert", revert, "Revert", None, ButtonKind::Normal)
+        {
             l.pages.setup.root = None;
             l.pages.setup.game = None;
             l.pages.setup.content = None;
@@ -500,28 +858,69 @@ fn foot(l: &mut Launcher, r: Rect) {
     } else {
         dim_button(&mut l.ui, revert, "Revert");
     }
-    if l.ui.button("cfg-save", save, "Save", Some("save"), ButtonKind::Primary) {
+    if l.ui
+        .button("cfg-save", save, "Save", Some("save"), ButtonKind::Primary)
+    {
         save_folders(l);
     }
 }
 
 fn save_folders(l: &mut Launcher) {
     let cfg = l.state.config.clone();
-    let chosen = l.pages.setup.root.clone().unwrap_or_else(|| cfg.root.clone()).trim().to_string();
-    let game = l.pages.setup.game.clone().unwrap_or_else(|| cfg.game.clone()).trim().to_string();
-    let content = l.pages.setup.content.clone().unwrap_or_else(|| cfg.content.clone()).trim().to_string();
+    let chosen = l
+        .pages
+        .setup
+        .root
+        .clone()
+        .unwrap_or_else(|| cfg.root.clone())
+        .trim()
+        .to_string();
+    let game = l
+        .pages
+        .setup
+        .game
+        .clone()
+        .unwrap_or_else(|| cfg.game.clone())
+        .trim()
+        .to_string();
+    let content = l
+        .pages
+        .setup
+        .content
+        .clone()
+        .unwrap_or_else(|| cfg.content.clone())
+        .trim()
+        .to_string();
     // A folder that is no complete installation is said so, with what it lacks, and
     // nothing is saved: it was saved, then quietly replaced by the installation found
     // before, while the page said "Saved" (#1656).
-    let missing = if chosen.is_empty() { Vec::new() } else { omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen)) };
+    let missing = if chosen.is_empty() {
+        Vec::new()
+    } else {
+        omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen))
+    };
     if !missing.is_empty() {
-        l.state.set_status(omsi_ui::tr("Not saved: %{path} is not a complete OMSI 2 installation - it lacks %{files}").replace("%{path}", &chosen).replace("%{files}", &lacking(&missing, 6)), true);
+        l.state.set_status(
+            omsi_ui::tr(
+                "Not saved: %{path} is not a complete OMSI 2 installation - it lacks %{files}",
+            )
+            .replace("%{path}", &chosen)
+            .replace("%{files}", &lacking(&missing, 6)),
+            true,
+        );
         return;
     }
     // (checked at each Save, against the OMSI 2 folder saved with it)
     if !content.is_empty() {
-        if let Some(why) = core::content_folder_problem(std::path::Path::new(&content), std::path::Path::new(&chosen)) {
-            l.state.set_status(omsi_ui::tr("Not saved: the content folder cannot be used - %{why}").replace("%{why}", &why_text(&why)), true);
+        if let Some(why) = core::content_folder_problem(
+            std::path::Path::new(&content),
+            std::path::Path::new(&chosen),
+        ) {
+            l.state.set_status(
+                omsi_ui::tr("Not saved: the content folder cannot be used - %{why}")
+                    .replace("%{why}", &why_text(&why)),
+                true,
+            );
             return;
         }
     }
@@ -535,14 +934,23 @@ fn save_folders(l: &mut Launcher) {
             // changed while the launcher ran is read as it is now)
             omsi_cfg::content_changed();
             l.state.config = core::load_config();
-            l.pages.setup = SetupView { tab: l.pages.setup.tab, ..SetupView::default() };
-            let same = chosen.is_empty() || std::path::Path::new(&chosen) == std::path::Path::new(&l.state.config.root);
+            l.pages.setup = SetupView {
+                tab: l.pages.setup.tab,
+                ..SetupView::default()
+            };
+            let same = chosen.is_empty()
+                || std::path::Path::new(&chosen) == std::path::Path::new(&l.state.config.root);
             if same && content_moved {
                 l.state.set_status("Saved. What is in the content folder used before (mods, your controls, saved situations, screenshots) stays there; nothing is moved.", false);
             } else if same {
-                l.state.set_status("Saved. Reading the content again…", false);
+                l.state
+                    .set_status("Saved. Reading the content again…", false);
             } else {
-                l.state.set_status(omsi_ui::tr("Saved, but the OMSI 2 folder used is %{path}").replace("%{path}", &l.state.config.root), true);
+                l.state.set_status(
+                    omsi_ui::tr("Saved, but the OMSI 2 folder used is %{path}")
+                        .replace("%{path}", &l.state.config.root),
+                    true,
+                );
             }
             // (a phone: the gallery is kept out of the folder chosen at once, before
             // its media scanner lists its textures as photos, #1632)
@@ -566,9 +974,32 @@ mod tests {
     use super::*;
 
     fn tree() -> Node {
-        let leaf = |n: &str, b: u64| Node { name: n.into(), bytes: b, kids: Vec::new() };
-        let part = |n: &str, kids: Vec<Node>| Node { name: n.into(), bytes: kids.iter().map(|k| k.bytes).sum(), kids };
-        part("content", vec![part("OMSI 2 folder", vec![part("Vehicles", vec![part("Bus", vec![leaf("Textures", 60), leaf("Models", 20)])]), part("Maps", vec![part("Town", vec![leaf("Settings and text", 20)])])])])
+        let leaf = |n: &str, b: u64| Node {
+            name: n.into(),
+            bytes: b,
+            kids: Vec::new(),
+        };
+        let part = |n: &str, kids: Vec<Node>| Node {
+            name: n.into(),
+            bytes: kids.iter().map(|k| k.bytes).sum(),
+            kids,
+        };
+        part(
+            "content",
+            vec![part(
+                "OMSI 2 folder",
+                vec![
+                    part(
+                        "Vehicles",
+                        vec![part("Bus", vec![leaf("Textures", 60), leaf("Models", 20)])],
+                    ),
+                    part(
+                        "Maps",
+                        vec![part("Town", vec![leaf("Settings and text", 20)])],
+                    ),
+                ],
+            )],
+        )
     }
 
     #[test]
@@ -589,9 +1020,15 @@ mod tests {
         std::fs::create_dir_all(&base).unwrap();
         let root = base.to_string_lossy().to_string();
         assert_eq!(check(2, &root, &root).0, Status::Error);
-        assert_eq!(check(2, &base.join("depot").to_string_lossy(), &root).0, Status::Error);
+        assert_eq!(
+            check(2, &base.join("depot").to_string_lossy(), &root).0,
+            Status::Error
+        );
         let beside = base.with_extension("content");
-        assert_eq!(check(2, &beside.to_string_lossy(), &root).0, Status::Warning);
+        assert_eq!(
+            check(2, &beside.to_string_lossy(), &root).0,
+            Status::Warning
+        );
         assert_eq!(check(2, "", &root).0, Status::Found);
         assert!(core::content_folder_problem(&base, &base).is_some());
         let _ = std::fs::remove_dir_all(&base);
