@@ -12,6 +12,7 @@
 //! `layout` is arithmetic over the text's widths, so both are tested without a window.
 
 use crate::paint::Align;
+use crate::theme::accent;
 use crate::widgets::Ui;
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -26,7 +27,6 @@ const BG: Color = Color::hex(0x101215);
 const LINE: Color = Color::hex(0x2b2f37);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
-const ACCENT: Color = Color::hex(0xf0a30a);
 // The pipeline blends in linear light, the concept (a web page) in sRGB: a see-through colour
 // here shows much more of what is under it than the same opacity there. The opacities below
 // are the concept's carried over so the screen looks as it does (`over_black` for the veils).
@@ -163,8 +163,9 @@ pub struct Card<'a> {
     pub icon: &'a str,
 }
 
-/// What the screen says. All text is the caller's: the interface's own (the stage, the
-/// activity) is translated here, names and the authors' texts are drawn as they are.
+/// What the screen says. All text is the caller's: the activity is translated here; the
+/// heading and the stage come translated (their values are filled in), and names and the
+/// authors' texts are drawn as they are.
 pub struct View<'a> {
     pub version: &'a str,
     /// "Example map · Line 50 · 08:00"
@@ -329,14 +330,14 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
         12.5,
         Weight::Regular,
         SOFT,
-        true,
+        false,
     );
     ui.p().rect(l.bar, TRACK);
     let done = view.progress.clamp(0.0, 1.0);
     if done > 0.0 {
         ui.p().rect(
             Rect::new(l.bar.x, l.bar.y, (l.bar.w * done).max(1.0), l.bar.h),
-            ACCENT,
+            accent(),
         );
     }
     let pct = format!("{}%", (done * 100.0).round() as u32);
@@ -411,7 +412,7 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
                 y + SUB_LH * 0.5,
                 12.0,
                 Weight::Regular,
-                ACCENT,
+                accent(),
                 false,
             );
             y += SUB_LH;

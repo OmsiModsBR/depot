@@ -3,8 +3,8 @@
 use crate::assets::{
     drop_top_levels, fit_image, fit_size, make_meshes, mesh_page_bytes, mesh_vertices, next_gen,
     snow_texture_flag, upload_speed_mb_s, upload_texture, AlphaMode, BindKey, GpuTexture, Material,
-    MaterialExtra, MaterialMaps, MaterialUniform, MeshPage, PbrMaps, PreparedMesh, PreparedTexture,
-    TexAddressing, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
+    MaterialDesc, MaterialExtra, MaterialMaps, MaterialUniform, MeshPage, PbrMaps, PreparedMesh,
+    PreparedTexture, TexAddressing, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
 };
 use crate::gpu::{buffer_init, mip_levels};
 use crate::renderer::{MirrorEvent, MirrorTexture, Renderer};
@@ -474,8 +474,12 @@ impl Renderer {
         unlit: bool,
         transmap: Option<(TextureId, bool)>,
     ) -> MaterialId {
-        self.add_material_full(
-            scene, texture, alpha, color, unlit, transmap, None, None, None, None, [0.0; 3],
+        self.add_material_desc(
+            scene,
+            MaterialDesc {
+                transmap,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 
@@ -490,8 +494,13 @@ impl Renderer {
         transmap: Option<(TextureId, bool)>,
         nightmap: Option<TextureId>,
     ) -> MaterialId {
-        self.add_material_full(
-            scene, texture, alpha, color, unlit, transmap, None, nightmap, None, None, [0.0; 3],
+        self.add_material_desc(
+            scene,
+            MaterialDesc {
+                transmap,
+                nightmap,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 
@@ -508,8 +517,14 @@ impl Renderer {
         nightmap: Option<TextureId>,
         lightmap: Option<TextureId>,
     ) -> MaterialId {
-        self.add_material_full(
-            scene, texture, alpha, color, unlit, transmap, None, nightmap, lightmap, None, [0.0; 3],
+        self.add_material_desc(
+            scene,
+            MaterialDesc {
+                transmap,
+                nightmap,
+                lightmap,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 
@@ -527,9 +542,15 @@ impl Renderer {
         lightmap: Option<TextureId>,
         envmap: Option<(TextureId, f32)>,
     ) -> MaterialId {
-        self.add_material_full(
-            scene, texture, alpha, color, unlit, transmap, None, nightmap, lightmap, envmap,
-            [0.0; 3],
+        self.add_material_desc(
+            scene,
+            MaterialDesc {
+                transmap,
+                nightmap,
+                lightmap,
+                envmap,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 
@@ -547,9 +568,16 @@ impl Renderer {
         envmap: Option<(TextureId, f32)>,
         emissive: [f32; 3],
     ) -> MaterialId {
-        self.add_material_full(
-            scene, texture, alpha, color, unlit, transmap, None, nightmap, lightmap, envmap,
-            emissive,
+        self.add_material_desc(
+            scene,
+            MaterialDesc {
+                transmap,
+                nightmap,
+                lightmap,
+                envmap,
+                emissive,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 
@@ -570,20 +598,26 @@ impl Renderer {
         emissive: [f32; 3],
         extra: MaterialExtra,
     ) -> MaterialId {
-        self.add_material_inner(
+        self.add_material_desc(
             scene,
-            texture,
-            alpha,
-            color,
-            unlit,
-            transmap,
-            None,
-            nightmap,
-            lightmap,
-            envmap,
-            emissive,
-            extra.moisture,
-            extra,
+            MaterialDesc {
+                transmap,
+                nightmap,
+                lightmap,
+                envmap,
+                emissive,
+                moisture: extra.moisture,
+                extra,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
+        )
+    }
+
+    /// Makes a material from its description: the `add_material_*` calls build one of these.
+    pub fn add_material_desc(&self, scene: &mut Scene, d: MaterialDesc) -> MaterialId {
+        self.add_material_inner(
+            scene, d.texture, d.alpha, d.color, d.unlit, d.transmap, d.terrain, d.nightmap,
+            d.lightmap, d.envmap, d.emissive, d.moisture, d.extra,
         )
     }
 
@@ -749,23 +783,21 @@ impl Renderer {
         nightmap: Option<TextureId>,
         moisture: f32,
     ) -> MaterialId {
-        self.add_material_wet(
+        let alpha = if mask.is_some() {
+            AlphaMode::Test
+        } else {
+            AlphaMode::Opaque
+        };
+        self.add_material_desc(
             scene,
-            texture,
-            if mask.is_some() {
-                AlphaMode::Test
-            } else {
-                AlphaMode::Opaque
+            MaterialDesc {
+                transmap: mask.map(|m| (m, true)),
+                terrain: Some((detail.map(|d| d.1).unwrap_or(0.0), repeats)),
+                nightmap,
+                lightmap: detail.map(|d| d.0),
+                moisture,
+                ..MaterialDesc::new(texture, alpha, [1.0; 4], false)
             },
-            [1.0; 4],
-            false,
-            mask.map(|m| (m, true)),
-            Some((detail.map(|d| d.1).unwrap_or(0.0), repeats)),
-            nightmap,
-            detail.map(|d| d.0),
-            None,
-            [0.0; 3],
-            moisture,
         )
     }
 
@@ -787,22 +819,19 @@ impl Renderer {
         // never write biased terrain depth over the splines drawn in the next phase:
         // they contribute no colour, but would reject the road and expose the sky.
         // The C++ handler likewise draws painted terrain with depth writes disabled.
-        self.add_material_inner(
+        self.add_material_desc(
             scene,
-            texture,
-            AlphaMode::Blend,
-            [1.0; 4],
-            false,
-            Some((mask, true)),
-            Some((detail.map(|d| d.1).unwrap_or(0.0), repeats)),
-            nightmap,
-            detail.map(|d| d.0),
-            None,
-            [0.0; 3],
-            moisture,
-            MaterialExtra {
-                no_z_write: true,
-                ..MaterialExtra::default()
+            MaterialDesc {
+                transmap: Some((mask, true)),
+                terrain: Some((detail.map(|d| d.1).unwrap_or(0.0), repeats)),
+                nightmap,
+                lightmap: detail.map(|d| d.0),
+                moisture,
+                extra: MaterialExtra {
+                    no_z_write: true,
+                    ..MaterialExtra::default()
+                },
+                ..MaterialDesc::new(texture, AlphaMode::Blend, [1.0; 4], false)
             },
         )
     }
@@ -825,20 +854,18 @@ impl Renderer {
         emissive: [f32; 3],
         moisture: f32,
     ) -> MaterialId {
-        self.add_material_inner(
+        self.add_material_desc(
             scene,
-            texture,
-            alpha,
-            color,
-            unlit,
-            transmap,
-            terrain,
-            nightmap,
-            lightmap,
-            envmap,
-            emissive,
-            moisture,
-            MaterialExtra::default(),
+            MaterialDesc {
+                transmap,
+                terrain,
+                nightmap,
+                lightmap,
+                envmap,
+                emissive,
+                moisture,
+                ..MaterialDesc::new(texture, alpha, color, unlit)
+            },
         )
     }
 

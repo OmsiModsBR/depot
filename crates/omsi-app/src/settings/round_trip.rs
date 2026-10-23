@@ -110,7 +110,7 @@ const VARIED: &[(&str, &str)] = &[
     ("led_mips", "2.5"),
     ("graphics_api", "vulkan"),
     ("ctrl_off", "Pad 1"),
-    ("steering_linear", "1"),
+    ("steering_linear", "0"),
     ("old_steering", "1"),
     ("red_steer_spd", "1"),
     ("ff_invert", "1"),
@@ -165,6 +165,8 @@ const VARIED: &[(&str, &str)] = &[
     ("notes", "0"),
     ("info_bar", "1"),
     ("autosave_minutes", "10"),
+    ("ui_accent", "Teal"),
+    ("ui_corners", "square"),
     ("shadow_casters", "omsi"),
     ("post_aa", "off"),
     ("drive_keys", "wasd"),
@@ -185,8 +187,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
     ("ui_opacity", "launcher>game", "no 0.2-1 range, and 0 instead of 0.85 for what is no number"),
-    ("min_obj_size", "launcher>game", "no 0-0.2 range"),
-    ("vol_scenery", "launcher>game", "no 0-1 range"),
     // the launcher keeps these texts as written; the game reads them to its own choices
     ("render_scale", "launcher>game", "kept as text; the game makes 0 or less auto, takes more than 1.5 as a percentage and clamps to 0.5-1"),
     ("pax_voices", "launcher>game", "kept as text; the game reads anything but tickets and off as all"),

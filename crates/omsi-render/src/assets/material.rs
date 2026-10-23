@@ -145,6 +145,53 @@ impl Material {
     }
 }
 
+/// A material as a loader describes it: its maps, its colour and what it does beyond them.
+/// `Renderer::add_material_desc` makes the material from it; the `add_material_*` calls are
+/// the same with some of these fields fixed.
+#[derive(Debug, Clone, Copy)]
+pub struct MaterialDesc {
+    pub texture: Option<TextureId>,
+    pub alpha: AlphaMode,
+    pub color: [f32; 4],
+    pub unlit: bool,
+    /// `[matl_transmap]`: the map, and whether its alpha channel is used.
+    pub transmap: Option<(TextureId, bool)>,
+    /// The ground's detail strength and its repeats (terrain only).
+    pub terrain: Option<(f32, f32)>,
+    /// `[matl_nightmap]`
+    pub nightmap: Option<TextureId>,
+    /// `[matl_lightmap]`
+    pub lightmap: Option<TextureId>,
+    /// `[matl_envmap]`: the sphere map and its strength.
+    pub envmap: Option<(TextureId, f32)>,
+    /// `[matl_allcolor]`
+    pub emissive: [f32; 3],
+    /// How wet the surface gets in the rain (1 for one that darkens and mirrors the sky).
+    pub moisture: f32,
+    /// The settings beyond the maps.
+    pub extra: MaterialExtra,
+}
+
+impl MaterialDesc {
+    /// A material with a texture and a colour and nothing else.
+    pub fn new(texture: Option<TextureId>, alpha: AlphaMode, color: [f32; 4], unlit: bool) -> Self {
+        Self {
+            texture,
+            alpha,
+            color,
+            unlit,
+            transmap: None,
+            terrain: None,
+            nightmap: None,
+            lightmap: None,
+            envmap: None,
+            emissive: [0.0; 3],
+            moisture: 0.0,
+            extra: MaterialExtra::default(),
+        }
+    }
+}
+
 /// The material manager's settings beyond the maps of `add_material_all`: depth handling,
 /// the reflection mask and the o3d material's specular term.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

@@ -1657,6 +1657,12 @@ impl ApplicationHandler for App {
                         }
                     }
                     d.learn_loaded(&w.object_positions.lock());
+                    // (a stop marked in the timetable window is skipped once it is the next)
+                    while let Some(name) = d.skip_marked_next() {
+                        log::info!("duty: stop '{name}' skipped as marked, next stop {}", d.next_stop);
+                        let (trip, k) = d.trip_for_ibis();
+                        p.ibis_to_stop(trip, k);
+                    }
                     let due = (d.trip_index, d.next_stop);
                     let served = d.update(&mut p.vehicle, self.clock.time);
                     if let Some((arrival, departure)) = served {
@@ -1702,7 +1708,7 @@ impl ApplicationHandler for App {
                     }
                     if crash > 0.0 {
                         self.career.crashed(crash, p.vehicle.motion().velocity_kmh() / 3.6);
-                        self.service_msg = Some((format!("Crash: {:.0} kJ", crash / 1000.0), 6.0));
+                        self.service_msg = Some((omsi_ui::tr("Crash: %{energy} kJ").replace("%{energy}", &format!("{:.0}", crash / 1000.0)), 6.0));
                         #[cfg(feature = "plugins")]
                         {
                             use omsi_plugin::InfoValue::Num;
@@ -1725,12 +1731,14 @@ impl ApplicationHandler for App {
                 }
                 // --on-foot: the bus the start put down goes, the player stands beside it
                 if self.args.on_foot && self.world.is_some() {
+                    let entry = crate::world_load::spawn_point(&self.args, self.world.as_deref());
                     self.args.on_foot = false;
                     if self.player.is_some() {
                         self.remove_driven_vehicle();
                     } else if let Some(c) = self.camera.as_ref() {
-                        // (no bus came: where the camera stands, on the ground)
-                        let p = c.position;
+                        // (no bus came - the launcher's "Without bus": at the entry point
+                        // chosen, else where the camera stands, on the ground)
+                        let p = entry.unwrap_or(c.position);
                         let z = self.world.as_ref().and_then(|w| w.walk_height(p.x, p.y)).unwrap_or(p.z - 1.7);
                         let yaw = c.yaw as f64;
                         self.start_on_foot(glam::DVec3::new(p.x, p.y, z), yaw);
@@ -2359,13 +2367,14 @@ impl ApplicationHandler for App {
                     }
                     if let Some(d) = self.duty.as_ref().filter(|d| d.trip_done()) {
                         lines.push(match d.trips.get(d.trip_index + 1) {
-                            Some(next) => format!(
-                                "End of the trip. Next: {} to {}, from {} at {} (it starts by itself a minute before)",
-                                if next.line.trim().is_empty() { "service trip".to_string() } else { format!("line {}", next.line) },
-                                next.terminus.strip_prefix(&format!("{} ", next.line)).unwrap_or(&next.terminus),
-                                next.stops.first().map(|s| s.name.trim()).unwrap_or("?"),
-                                crate::schedule::hhmm(next.departure)
-                            ),
+                            Some(next) => omsi_ui::tr("End of the trip. Next: %{trip} to %{terminus}, from %{stop} at %{time} (it starts by itself a minute before)")
+                                .replace(
+                                    "%{trip}",
+                                    &if next.line.trim().is_empty() { omsi_ui::tr("service trip").into_owned() } else { omsi_ui::tr("line %{line}").replace("%{line}", &next.line) },
+                                )
+                                .replace("%{terminus}", next.terminus.strip_prefix(&format!("{} ", next.line)).unwrap_or(&next.terminus))
+                                .replace("%{stop}", next.stops.first().map(|s| s.name.trim()).unwrap_or("?"))
+                                .replace("%{time}", &crate::schedule::hhmm(next.departure)),
                             None => "End of the duty: the tour's last trip is done".into(),
                         });
                     }
@@ -2389,16 +2398,15 @@ impl ApplicationHandler for App {
                         if let Some(hint) = h.hint() {
                             lines.push(hint);
                         } else if let Some((name, value)) = &h.request {
-                            lines.push(format!("Passenger wants: {name}  {value:.2}"));
+                            lines.push(omsi_ui::tr("Passenger wants: %{ticket}  %{price}").replace("%{ticket}", name).replace("%{price}", &format!("{value:.2}")));
                         }
                         if let Some((paid, value)) = h.paid {
-                            lines.push(format!(
-                                "paid: {paid:.2}  (change {:.2})",
-                                (paid - value).max(0.0)
-                            ));
+                            lines.push(
+                                omsi_ui::tr("paid: %{paid}  (change %{change})").replace("%{paid}", &format!("{paid:.2}")).replace("%{change}", &format!("{:.2}", (paid - value).max(0.0))),
+                            );
                         }
                         if let Some(owed) = h.change_due {
-                            lines.push(format!("Change due: {owed:.2}"));
+                            lines.push(omsi_ui::tr("Change due: %{owed}").replace("%{owed}", &format!("{owed:.2}")));
                         }
                     }
                     // (the cursor no longer works the cab: how to have it back)

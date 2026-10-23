@@ -6,6 +6,7 @@ use crate::assets::{
     TexAddressing, TextureId, Vertex,
 };
 use crate::gpu::{buffer_init, mip_levels};
+use crate::passes::PostPass;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
 
@@ -49,26 +50,6 @@ impl Renderer {
 }
 
 impl Renderer {
-    pub(crate) fn add_material_full(
-        &self,
-        scene: &mut Scene,
-        texture: Option<TextureId>,
-        alpha: AlphaMode,
-        color: [f32; 4],
-        unlit: bool,
-        transmap: Option<(TextureId, bool)>,
-        terrain: Option<(f32, f32)>,
-        nightmap: Option<TextureId>,
-        lightmap: Option<TextureId>,
-        envmap: Option<(TextureId, f32)>,
-        emissive: [f32; 3],
-    ) -> MaterialId {
-        self.add_material_wet(
-            scene, texture, alpha, color, unlit, transmap, terrain, nightmap, lightmap, envmap,
-            emissive, 0.0,
-        )
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_material_inner(
         &self,
@@ -561,25 +542,7 @@ impl Renderer {
                     },
                 ],
             });
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("mip"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &dst,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.assets.mip_pipeline);
-            pass.set_bind_group(0, &bg, &[]);
-            pass.draw(0..3, 0..1);
+            PostPass::new("mip", &dst).draw(&mut encoder, &self.assets.mip_pipeline, &[&bg]);
         }
         self.queue.submit([encoder.finish()]);
     }

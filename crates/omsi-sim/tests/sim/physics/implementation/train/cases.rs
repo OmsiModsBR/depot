@@ -452,3 +452,26 @@ fn a_hinge_ahead_of_the_ball_holds() {
     assert!(t.front().origin().y > 50.0, "{:?}", t.front().origin());
     assert!(t.gap < 0.02, "{}", t.gap);
 }
+
+/// A file without `[coupling_front_character]` gives the joint no limits and no turntable:
+/// a ball free about every axis. A file's angles are taken as it gives them.
+#[test]
+fn a_joint_without_coupling_front_character_is_a_free_ball() {
+    use omsi_sim::testing::physics::domain::JointKind;
+    let (_, rear) = gn92(false);
+    let without = Vehicle {
+        coupling_front_character: None,
+        ..rear.clone()
+    };
+    let j = Joint::new(0, 1, &without, Vec3::ZERO, Vec3::ZERO);
+    assert_eq!(j.kind, JointKind::Ball);
+    assert_eq!((j.alpha_max, j.beta_min, j.beta_max), (0.0, 0.0, 0.0));
+    let stiff = Vehicle {
+        coupling_front_character: Some([0.0, 5.0, 5.0, 1.0]),
+        ..rear
+    };
+    let j = Joint::new(0, 1, &stiff, Vec3::ZERO, Vec3::ZERO);
+    assert_eq!(j.kind, JointKind::Articulation);
+    assert_eq!(j.alpha_max, 0.0);
+    assert_eq!(j.beta_min, 5f32.to_radians());
+}
