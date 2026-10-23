@@ -162,9 +162,38 @@ pub fn protect<'a>(texts: impl IntoIterator<Item = &'a str>) {
     }
 }
 
+/// A language's templates, each cut at its values.
+type Templates = std::sync::Arc<Vec<Vec<String>>>;
+
+/// The tables' templates in `lang` (the ones with words around their values).
+fn templates(lang: &str) -> Templates {
+    static T: OnceLock<parking_lot::RwLock<HashMap<String, Templates>>> = OnceLock::new();
+    let t = T.get_or_init(Default::default);
+    if let Some(v) = t.read().get(lang) {
+        return v.clone();
+    }
+    let list: Vec<Vec<String>> = crate::_RUST_I18N_BACKEND
+        .messages_for_locale(lang)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, v)| v.contains("%{"))
+        .map(|(_, v)| crate::tr_fill::parts(&v))
+        .filter(|p| crate::tr_fill::telling(p))
+        .collect();
+    let list = std::sync::Arc::new(list);
+    t.write().insert(lang.to_string(), list.clone());
+    list
+}
+
 /// `omsi_ui::tr`'s fallback: the translation when there is one, else asked for.
 fn lookup(lang: &str, text: &str) -> Option<String> {
     if !ENABLED.load(Ordering::Relaxed) || nllb(lang).is_none() || !worth(text) || names().read().contains(text.trim()) {
+        return None;
+    }
+    // (a template the tables have, already translated and with its values in: drawn as it
+    // is, not taken for English and translated again)
+    if templates(lang).iter().any(|p| crate::tr_fill::values(p, text).is_some()) {
+        names().write().insert(text.trim().to_string());
         return None;
     }
     let (m, cv) = state();
@@ -361,5 +390,13 @@ mod tests {
         assert!(!super::worth("12:05"));
         assert!(!super::worth("Vehicles/MAN_SD200/MAN_SD77.bus"));
         assert!(!super::worth("IBIS"));
+    }
+
+    #[test]
+    fn a_filled_in_translation_is_recognised() {
+        let fits = |t: &str| super::templates("de").iter().any(|p| crate::tr_fill::values(p, t).is_some());
+        assert!(fits("Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"));
+        assert!(fits("\u{201e}ASS_toggle\u{201c} hinzuf\u{fc}gen und eine Taste zuweisen"));
+        assert!(!fits("Back to my bus"));
     }
 }

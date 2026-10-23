@@ -143,7 +143,10 @@ pub enum Align {
 
 /// The outline of a rounded box (clockwise in screen space), `n` points per corner.
 pub fn rounded_outline(r: Rect, radius: f32) -> Vec<Vec2> {
-    let rad = radius.min(r.w * 0.5).min(r.h * 0.5).max(0.0);
+    let rad = crate::theme::corner(radius)
+        .min(r.w * 0.5)
+        .min(r.h * 0.5)
+        .max(0.0);
     if rad < 0.5 {
         return vec![
             Vec2::new(r.x, r.y),

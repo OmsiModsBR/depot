@@ -11,6 +11,7 @@
 
 #[cfg(feature = "lan")]
 mod admin;
+mod api_limits;
 #[cfg(steam)]
 mod steam;
 #[cfg(feature = "lan")]
@@ -31,6 +32,7 @@ mod platform;
 mod touch;
 mod placing;
 mod mt;
+mod tr_fill;
 mod about;
 mod screenshot_name;
 mod actions;
@@ -158,7 +160,7 @@ const _LOCALES: &str = include_str!("../locales/app.yml");
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
 pub(crate) fn ui_language(code: &str) {
-    omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()));
+    omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()).or_else(|| tr_fill::fill(lang, text)));
     let iso = omsi_launcher_lib::language_iso(code);
     omsi_ui::i18n::set_language(iso);
     omsi_sim::vehicle_api::set_locale(iso);
@@ -178,7 +180,7 @@ use offscreen::run_offscreen;
 use services::run_export;
 use situation::apply_situation;
 use startup::{
-    BUILD, CLASSIC, CLOUDS, content_dir, ENHANCED, ENHANCED_PLUS, fatal_dialog, find_root,
+    BUILD, CLASSIC, CLOUDS, content_dir, FAIR_CLOUDS, ENHANCED, ENHANCED_PLUS, fatal_dialog, find_root,
     graphics_instance, is_omsi_root, MIRROR_SIZE, root_memo, SOUND_AI, SOUND_SCENERY, VERSION,
 };
 
@@ -282,6 +284,7 @@ pub(crate) fn launcher_statics() {
     ENHANCED.store(startup::enhanced_wanted(&s, false, false).0, std::sync::atomic::Ordering::Relaxed);
     CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
+    FAIR_CLOUDS.store(s.fair_weather_clouds(), std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Everything before a window: the language, the session's random seed, the original
@@ -289,6 +292,8 @@ pub(crate) fn launcher_statics() {
 /// nothing more to do (a fatal error was shown).
 pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option<ServerCfg>)>> {
     ui_language(&settings::Settings::load().language);
+    // (the launcher and every menu of the game wear the accent chosen in Settings > Interface)
+    settings::Settings::load().apply_accent();
     // (a server has no interface to translate)
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
@@ -432,6 +437,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
     ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(), std::sync::atomic::Ordering::Relaxed);
+    FAIR_CLOUDS.store(settings.fair_weather_clouds(), std::sync::atomic::Ordering::Relaxed);
     SOUND_AI.store(settings.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
     SOUND_SCENERY.store(settings.vol_scenery.to_bits(), std::sync::atomic::Ordering::Relaxed);
     MIRROR_SIZE.store(settings.mirror_size, std::sync::atomic::Ordering::Relaxed);

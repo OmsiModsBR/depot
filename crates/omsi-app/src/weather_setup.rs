@@ -3,7 +3,7 @@
 use crate::cli::Args;
 use crate::lights;
 use crate::scene;
-use crate::startup::{CLASSIC, CLOUDS, ENHANCED};
+use crate::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
 pub(crate) use omsi_content::weather::psychro::{
     absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
     relative_humidity_percent as relative_humidity,
@@ -138,8 +138,8 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
             let mut w = w;
             // No weather chosen: the clear default (#CAVOK, no cloud at all) gets a few fair-
             // weather cumulus clouds, as long as clouds are wanted - a sky without a single
-            // cloud was the first thing that looked wrong.
-            if args.weather.is_none() && CLOUDS.load(std::sync::atomic::Ordering::Relaxed) && w.clouds.0.trim().starts_with("-1") {
+            // cloud was the first thing that looked wrong (not under DirectX9: OMSI 2's sky)
+            if args.weather.is_none() && CLOUDS.load(std::sync::atomic::Ordering::Relaxed) && FAIR_CLOUDS.load(std::sync::atomic::Ordering::Relaxed) && w.clouds.0.trim().starts_with("-1") {
                 w.clouds = ("Cumulus 1".into(), 100.0);
             }
             // the vehicles ask for it while they go onto the GPU (the snow on the panes)
