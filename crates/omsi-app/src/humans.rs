@@ -21,7 +21,7 @@
 //! joint is carried by its own section, whatever the angle of the bend.
 //!
 //! Movement is a crowd: everybody on the same floor (the ground, or one bus) avoids
-//! everybody else with the anticipatory model of `omsi_sim::crowd`, does not push into
+//! everybody else with the anticipatory model of `omsi_sim::people::crowd`, does not push into
 //! somebody standing in front, speeds up, slows down and turns at a human pace, and keeps
 //! to the aisle inside a bus. Doorways and the cash desk are taken one at a time, people
 //! getting off go first, and somebody pressed against another for seconds slips past.
@@ -45,9 +45,9 @@ use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_geometry::util::{angle_diff, wrap_deg};
 use omsi_render::{AlphaMode, Camera, MaterialId, MeshId, Renderer, Scene};
-use omsi_sim::crowd::{self, Block, CrowdParams, PathGraph, Walker};
-use omsi_sim::human::{skin, Activity, HumanType};
-use omsi_sim::human_omsi::{AnimInput, OmsiAnim};
+use omsi_sim::people::crowd::{self, Block, CrowdParams, PathGraph, Walker};
+use omsi_sim::people::omsi_anim::{AnimInput, OmsiAnim};
+use omsi_sim::people::{skin, Activity, HumanType};
 use omsi_sim::traffic::{LaneKind, Network};
 use omsi_sim::VehicleInstance;
 use omsi_vehicle::PassengerCabin;
@@ -1437,7 +1437,7 @@ pub struct Person {
     /// The bones the skins were made with, and whether this frame's pose changed them
     /// (somebody standing still keeps the mesh of the frame before: skinning and uploading
     /// thirty waiting people every frame took 2 ms of the frame at a bus station).
-    skin_bones: Option<[glam::Affine3A; omsi_sim::human::SLOTS]>,
+    skin_bones: Option<[glam::Affine3A; omsi_sim::people::SLOTS]>,
     pose_changed: bool,
     /// Interior light of the bus the person is in (0 outside).
     interior: f32,
@@ -4868,7 +4868,7 @@ impl Humans {
                         let v = q.as_dvec3() - x.pos;
                         let (s, c) = x.yaw.sin_cos();
                         let local = Vec3::new((v.x * c - v.y * s) as f32, (v.x * s + v.y * c) as f32, v.z as f32);
-                        omsi_sim::human_omsi::d3d(local)
+                        omsi_sim::people::omsi_anim::d3d(local)
                     };
                     let reach = (x.reach && x.inside.is_some()).then(|| own(x.reach_at));
                     let look = match (x.look_driver, bn) {
@@ -4973,7 +4973,7 @@ impl Humans {
         let pose_one = |p: &mut Person| {
             let Person { anim, ty, skins, skin_bones, pose_changed, .. } = p;
             *pose_changed = false;
-            let bones = omsi_sim::human::slots_from_omsi(&anim.bones(&ty.omsi));
+            let bones = omsi_sim::people::slots_from_omsi(&anim.bones(&ty.omsi));
             if bones.iter().any(|b| !b.is_finite()) && !skins.is_empty() {
                 // keep the last good mesh (the rest pose would be the file's T-pose)
                 return;

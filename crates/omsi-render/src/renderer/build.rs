@@ -524,6 +524,7 @@ impl Renderer {
             asset_mirror: Default::default(),
             plan_sink: None,
             counts: Default::default(),
+            scratch: Default::default(),
             rt,
         }
     }

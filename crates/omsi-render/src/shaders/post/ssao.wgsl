@@ -9,20 +9,11 @@ struct SsaoParams {
 @group(0) @binding(0) var<uniform> p: SsaoParams;
 @group(0) @binding(1) var t_depth: texture_depth_2d;
 
-struct VsOut {
-    @builtin(position) clip: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
+alias VsOut = FullscreenVertex;
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
-    // one triangle over the whole screen
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: VsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
-    return out;
+    return fullscreen_vertex(i);
 }
 
 // view-space position of a pixel (reversed Z: the depth is 0 at the far plane)

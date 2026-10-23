@@ -57,8 +57,9 @@ pub use install::paths;
 pub use install::search::{self as install_search, find_original_install};
 pub use install::{
     content_folder_of, drop_unusable_home, ensure_content_layout, is_programs_folder, is_writable,
-    migrate_legacy_data_dir, missing_original_essentials, original_keyboard_cfg, CONTENT_FOLDERS,
-    CONTENT_MARKER, LEGACY_CONTENT_MARKER, ORIGINAL_ESSENTIALS,
+    migrate_legacy_data_dir, missing_original_essentials, original_inputs_file,
+    original_keyboard_cfg, CONTENT_FOLDERS, CONTENT_MARKER, LEGACY_CONTENT_MARKER,
+    ORIGINAL_ESSENTIALS,
 };
 pub use text::number::{parse_f32, parse_f64, parse_i32, parse_i64};
 pub use text::{

@@ -27,7 +27,6 @@ use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weig
 const CARD: Color = Color::rgba(14, 16, 20, 225.0 / 255.0);
 const INK: Color = Color::rgba(236, 236, 236, 1.0);
 const DARK_INK: Color = Color::rgba(18, 14, 8, 1.0);
-const ACCENT: Color = Color::rgba(232, 160, 48, 1.0);
 // (solid greys, the menus' own: the pipeline blends in linear light, where a tenth of white
 // over the dark card came out a light grey)
 const TRACK: Color = Color::rgba(62, 62, 62, 1.0);
@@ -457,7 +456,7 @@ impl Layout<'_> {
                     self.rounded(
                         Rect::new(track.x, track.y, fill, *height),
                         height * 0.5,
-                        e.color.map(color).unwrap_or(ACCENT),
+                        e.color.map(color).unwrap_or(omsi_ui::theme::accent()),
                         None,
                     );
                 }
@@ -465,7 +464,7 @@ impl Layout<'_> {
             Kind::Badge { text, text_color } => {
                 let w = self.natural(e).min(r.w);
                 let b = Rect::new(r.x, r.y + (r.h - BADGE_H) * 0.5, w, BADGE_H);
-                let fill = e.color.map(color).unwrap_or(ACCENT);
+                let fill = e.color.map(color).unwrap_or(omsi_ui::theme::accent());
                 self.rounded(b, BADGE_H * 0.5, fill, None);
                 let t = self.fit(text, BADGE_PX, Weight::Medium, w - 2.0 * BADGE_PAD);
                 let tw = self.width(&t, BADGE_PX, Weight::Medium);
@@ -566,7 +565,12 @@ pub(crate) fn layout(p: &Panel, fonts: &Fonts, backdrop: f32) -> Laid {
 /// A notification as a panel: the stripe in its colour, the icon and the title in a row
 /// above the text.
 pub(crate) fn toast_panel(t: &Toast) -> Panel {
-    let accent = t.color.unwrap_or(Rgba([232, 160, 48, 255]));
+    // (no colour of its own: the interface's accent, as the player chose it)
+    let accent = t.color.unwrap_or_else(|| {
+        let c = omsi_ui::theme::accent().0;
+        let b = |v: f32| (v * 255.0).round() as u8;
+        Rgba([b(c[0]), b(c[1]), b(c[2]), 255])
+    });
     let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
         id: None,
         color: c,

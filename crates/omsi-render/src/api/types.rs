@@ -3,7 +3,7 @@
 
 pub use crate::assets::{
     fit_texture, prepare_mesh, prepare_meshes, prepare_texture, AlphaMode, GpuMesh, GpuTexture,
-    Material, MaterialExtra, PbrMaps, PreparedMesh, PreparedTexture, TexAddressing,
+    Material, MaterialDesc, MaterialExtra, PbrMaps, PreparedMesh, PreparedTexture, TexAddressing,
 };
 pub use crate::gpu::{
     catch, catching, gl_backend, poll_gpu, wait_gpu, GpuWaitError, ADAPTER_TEXTURE_MB,

@@ -166,7 +166,7 @@ fn games_card(l: &mut Launcher, r: Rect) {
         .instances
         .iter()
         .filter(|i| i.running)
-        .map(|i| format!("{} (process {})", super::state::short_map(&i.map), i.pid))
+        .map(|i| omsi_ui::tr("%{map} (process %{pid})").replace("%{map}", &super::state::short_map(&i.map)).replace("%{pid}", &i.pid.to_string()))
         .collect();
     card(
         &mut l.ui,

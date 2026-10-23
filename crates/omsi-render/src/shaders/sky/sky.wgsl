@@ -1,39 +1,5 @@
 // Sky dome: the envir.cfg gradient textures (day / twilight / night), u = azimuth relative
 // to the sun, v = elevation (0 zenith … 1 horizon), blended by the sun altitude.
-struct Camera {
-    view_proj: mat4x4<f32>,
-    cam_pos: vec4<f32>,
-    // Kept in lockstep with `CameraUniform` in lib.rs.  The sky does not use the
-    // floating-origin reconstruction itself, but omitting this member shifts every
-    // following field one vec4 earlier: vanilla then reads the light-grid as `sky`
-    // weights (usually all zero) and clears/draws a black sky.
-    world_origin: vec4<f32>,
-    sun_dir: vec4<f32>,
-    ambient: vec4<f32>,
-    fog: vec4<f32>,
-    sun_color: vec4<f32>,
-    sky_color: vec4<f32>,
-    light_grid: vec4<f32>,
-    sky: vec4<f32>,          // x sun azimuth (rad), y day weight, z twilight weight, w night weight
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    clouds: vec4<f32>,       // x density 0..1, yz texture offset (wind drift)
-    light_view_proj: mat4x4<f32>,
-    light_view_proj_far: mat4x4<f32>,
-    shadow: vec4<f32>,
-    post: vec4<f32>,         // x enhanced, y time
-    inside_a: vec4<f32>,
-    inside_b: vec4<f32>,
-    inside_c: vec4<f32>,
-    flags: vec4<f32>,
-    light_view_proj_close: mat4x4<f32>,
-    wind: vec4<f32>,
-    // Enhanced: the street lamps' shadow maps (the tiles under the far map), and the
-    // lights they belong to (-1: none)
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
-    tree_wind: vec4<f32>,
-};
 
 // A hash of a lattice point, from its integer bits.
 //
@@ -85,9 +51,6 @@ fn cloud_fbm(p: vec2<f32>) -> f32 {
 @group(1) @binding(4) var t_clouds: texture_2d<f32>;
 @group(1) @binding(5) var s_repeat: sampler;
 
-/// How far the cloud field reaches before it repeats (m): a cumulus is then half a
-/// kilometre to two across.
-const CLOUD_FIELD_TILE: f32 = 14000.0;
 
 // The ground point under the sky at distance `t` along the view ray `d`, in the clouds' own
 // frame (world coordinates modulo 70 km, lib.rs `CLOUD_ORIGIN_PERIOD`), so that the cloud
