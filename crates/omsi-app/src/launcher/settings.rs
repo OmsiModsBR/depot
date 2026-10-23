@@ -1529,6 +1529,13 @@ pub static OPTS: &[Opt] = &[
     ),
     toggle(
         DEVICES,
+        "Keyboard and mouse",
+        "mouse_past_edge",
+        "Mouse steering past the window's edge",
+        "Off: the edge is the most the mouse steers at speed, as in OMSI",
+    ),
+    toggle(
+        DEVICES,
         "Wheel and pedals",
         "momentary_gears",
         "H-pattern shifter returns to neutral",
@@ -3382,6 +3389,7 @@ mod tests {
         "mouse_sens",
         "mouse_smooth",
         "mouse_right_off",
+        "mouse_past_edge",
         "blinker_cancel",
         "brake_hold",
         "auto_clutch",

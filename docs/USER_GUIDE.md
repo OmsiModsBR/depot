@@ -264,6 +264,8 @@ html terminals, the dashboard's LCDs) dim at night as a real dashboard's do, and
 lifted over their own colour by the eye's adaptation to the dark cab; the gauges' backlight
 and the destination LED matrices (`led_glow`) are left as they are. `mouse_sens` (mouse steering,
 1 = OMSI's), `mouse_smooth` (0: the mouse's wheel follows the cursor without easing),
+`mouse_past_edge` (1: with the cursor at the window's edge, moving the mouse on turns the wheel
+further, up to full lock at any speed; 0 by default, as in OMSI),
 `ui_scale` (the size of the game's interface over the picture - its texts,
 the menu, the timetable, the navigator and the city map - from 0.5 to 2, 1 by default, on
 top of the screen's own scaling; on a window taller than 1080 lines the interface grows with

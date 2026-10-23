@@ -122,6 +122,7 @@ const VARIED: &[(&str, &str)] = &[
     ("mouse_steering", "1"),
     ("mouse_right_off", "1"),
     ("mouse_smooth", "0"),
+    ("mouse_past_edge", "1"),
     ("blinker_cancel", "0"),
     ("look_sens", "1.5"),
     ("look_smoothing_ms", "50"),

@@ -97,6 +97,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `momentary_gears` | yes | yes | yes | yes |
 | `mouse_right_off` | yes | yes | yes | yes |
 | `mouse_sens` | yes | yes | yes | yes, known difference (launcher>game) |
+| `mouse_past_edge` | yes | yes | yes | yes |
 | `mouse_smooth` | yes | yes | yes | yes |
 | `mouse_steering` | - | - | yes | yes |
 | `msaa` | yes | yes | yes | yes, known difference (launcher>game) |

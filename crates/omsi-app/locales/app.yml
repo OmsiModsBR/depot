@@ -230,6 +230,15 @@ _version: 2
   zh-tw: "平滑滑鼠轉向（關閉：方向盤立即跟隨游標，如同 OMSI）"
   pt: "Direção suave com o mouse (desativado: o volante segue o cursor imediatamente, como no OMSI)"
   pt-pt: "Direção suave com o rato (desativado: o volante segue o cursor imediatamente, como no OMSI)"
+"Mouse steering past the window's edge":
+  pt: "Direção com o mouse além da borda da janela"
+  pt-pt: "Direção com o rato além do limite da janela"
+"Off: the edge is the most the mouse steers at speed, as in OMSI":
+  pt: "Desativado: em velocidade, a borda é o máximo que o mouse esterça, como no OMSI"
+  pt-pt: "Desativado: em velocidade, o limite é o máximo que o rato vira, como no OMSI"
+"Pushing on at the edge turns the wheel to full lock; off: the edge is the most, as in OMSI":
+  pt: "Empurrar além da borda gira o volante até o batente; desativado: a borda é o máximo, como no OMSI"
+  pt-pt: "Empurrar além do limite roda o volante até ao batente; desativado: o limite é o máximo, como no OMSI"
 "Road texture vibration":
   be: "Вібрацыя ад паверхні дарогі"
   ca: "Vibració del paviment"

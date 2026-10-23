@@ -702,8 +702,12 @@ impl App {
     /// Mouse steering beyond the window's edge: with the cursor pinned at the left or right
     /// edge, the mouse moving on outwards turns the wheel further (the whole width per full
     /// lock, as standing); moving back gives that back first, the cursor held at the edge
-    /// until it is used up, so the wheel never jumps.
+    /// until it is used up, so the wheel never jumps. Only with `mouse_past_edge` on: in OMSI
+    /// the edge is the most the mouse steers, and at speed this went past what the tyres grip.
     pub(crate) fn mouse_past_edge(&mut self, dx: f32) {
+        if !self.settings.mouse_past_edge {
+            return;
+        }
         let Some(w) = self.surface.as_ref().map(|s| s.config.width as f32) else {
             return;
         };
