@@ -95,7 +95,8 @@ impl PhysicsSpec {
         } else {
             def.moment_of_inertia
         };
-        let inertia = Vec3::from(moi) * 1000.0;
+        // the file's first, second and third value are pitch, yaw and roll (see `inertia`)
+        let inertia = Vec3::new(moi[0], moi[2], moi[1]) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
@@ -300,8 +301,8 @@ impl AiSpec {
             damper[2] += w.c * w.lat * w.lat;
         }
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
-        // (pitch and roll: the first and the third value, as the player's body once read them;
-        // OMSI's roll is the second - see `PhysicsSpec::inertia`)
+        // (pitch and roll: the first and the third value, as the player's body reads them - see
+        // `PhysicsSpec::inertia`)
         let mut inertia = [
             def.moment_of_inertia[0] * unit,
             def.moment_of_inertia[2] * unit,

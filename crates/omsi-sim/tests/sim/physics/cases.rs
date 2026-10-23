@@ -908,7 +908,7 @@ fn the_moments_of_inertia_are_in_tonne_square_metres() {
     };
     assert_eq!(
         i([6000.0, 90.0, 400.0]),
-        Vec3::new(6_000_000.0, 90_000.0, 400_000.0)
+        Vec3::new(6_000_000.0, 400_000.0, 90_000.0)
     );
     assert_eq!(i([0.05, 0.05, 0.05]), Vec3::splat(50.0));
     assert_eq!(i([0.0; 3]), Vec3::splat(100_000.0));
