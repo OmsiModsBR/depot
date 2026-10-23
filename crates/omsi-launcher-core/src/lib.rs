@@ -3383,7 +3383,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 } else {
                     json!(val
                         .parse::<f64>()
-                        .map(|m| (m.max(0.0).round() as i64).to_string())
+                        .map(|m| m.max(0.0).to_string())
                         .unwrap_or_else(|_| "auto".into()))
                 }
             }
