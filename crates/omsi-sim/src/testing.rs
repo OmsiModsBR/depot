@@ -57,9 +57,6 @@ pub mod collision {
         }
     }
 }
-pub mod crowd {
-    pub use crate::crowd::*;
-}
 pub mod daylight {
     pub use crate::daylight::*;
 
@@ -77,15 +74,28 @@ pub mod host {
         crate::host::arg_idx(v)
     }
 }
-pub mod human {
-    pub use crate::human::*;
+pub mod ibis {
+    pub use crate::ibis::*;
+
+    pub fn layouts(t: &Target, room: usize) -> Vec<String> {
+        crate::ibis::layouts(t, room)
+    }
+}
+pub mod input {
+    pub use crate::input::*;
+}
+pub mod particles {
+    pub use crate::particles::*;
+}
+pub mod people {
+    pub use crate::people::*;
 
     use glam::{DVec3, Vec2};
 
-    pub const SIDE: [f32; 2] = crate::human::SIDE;
+    pub const SIDE: [f32; 2] = crate::people::rig::SIDE;
 
     pub fn bone_id_by_name(name: &str) -> Option<i32> {
-        crate::human::bone_id_by_name(name)
+        crate::people::rig::bone_id_by_name(name)
     }
 
     /// How a rig is measured from a human's files.
@@ -152,29 +162,20 @@ pub mod human {
             Pose::rest_target(self, rig, side, origin, heading, walking)
         }
     }
-}
-pub mod human_omsi {
-    pub use crate::human_omsi::*;
 
-    pub const THIGH_CURVE: [(f32, f32); 4] = crate::human_omsi::THIGH_CURVE;
-    pub const KNEE_CURVE: [(f32, f32); 4] = crate::human_omsi::KNEE_CURVE;
-
-    pub fn curve(c: &[(f32, f32)], x: f32) -> f32 {
-        crate::human_omsi::curve(c, x)
+    pub mod crowd {
+        pub use crate::people::crowd::*;
     }
-}
-pub mod ibis {
-    pub use crate::ibis::*;
+    pub mod omsi_anim {
+        pub use crate::people::omsi_anim::*;
 
-    pub fn layouts(t: &Target, room: usize) -> Vec<String> {
-        crate::ibis::layouts(t, room)
+        pub const THIGH_CURVE: [(f32, f32); 4] = crate::people::omsi_anim::THIGH_CURVE;
+        pub const KNEE_CURVE: [(f32, f32); 4] = crate::people::omsi_anim::KNEE_CURVE;
+
+        pub fn curve(c: &[(f32, f32)], x: f32) -> f32 {
+            crate::people::omsi_anim::curve(c, x)
+        }
     }
-}
-pub mod input {
-    pub use crate::input::*;
-}
-pub mod particles {
-    pub use crate::particles::*;
 }
 pub mod physics {
     pub use crate::physics::*;

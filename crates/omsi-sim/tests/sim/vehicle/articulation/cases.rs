@@ -213,3 +213,64 @@ fn the_gn92_weaves_on_two_bodies() {
         .rigid()
         .is_some_and(|rb| (rb.mass() - 7200.0).abs() < 1.0));
 }
+
+/// Both sections of an articulated bus lying on one sloping plane, bent in a curve: the joint
+/// is bent about the vertical axis only, so beta stays 0 and alpha is the bend - on a grade
+/// taken straight up or across, and on a crossfall. Measured as headings and pitches against
+/// the horizon, the bend alone made 2° of beta on a 6% grade.
+#[test]
+fn joint_angles_on_one_sloping_plane_bend_only_alpha() {
+    use glam::{Mat4, Quat};
+    use omsi_sim::vehicle::joint_angles;
+    let yaw = |h: f64| Quat::from_rotation_z((-h).to_radians() as f32);
+    let grade = |g: f32| Quat::from_rotation_x(g.atan());
+    let cross = |g: f32| Quat::from_rotation_y(g.atan());
+    for plane in [grade(0.06), grade(0.10), cross(0.025), cross(0.04)] {
+        for own in [0.0, 90.0, 200.0] {
+            for bend in [-45.0, 20.0, 35.0] {
+                let lead = own + bend;
+                let (alpha, beta) = joint_angles(
+                    Mat4::from_quat(plane * yaw(lead)),
+                    lead,
+                    Mat4::from_quat(plane * yaw(own)),
+                    own,
+                );
+                assert!(beta.abs() < 1e-3, "beta {beta} at {own}° bent {bend}°");
+                assert!((alpha - bend).abs() < 1e-3, "alpha {alpha} for {bend}°");
+            }
+        }
+    }
+}
+
+/// Unbent, beta is the part in front's pitch less this one's (it grows as the part in front
+/// noses up against the one behind); bent on level ground, alpha is its heading less this
+/// one's. A model turned round (travelling backwards along its own axis) reads the same.
+#[test]
+fn joint_angles_on_level_ground_and_turned_models() {
+    use omsi_sim::vehicle::{body_rotation, joint_angles};
+    for reversed in [false, true] {
+        for (lead_pitch, own_pitch) in [(3.0f32, 0.0f32), (0.0, -2.0), (-1.5, 1.0)] {
+            let (alpha, beta) = joint_angles(
+                body_rotation(10.0, lead_pitch, 0.0, false),
+                10.0,
+                body_rotation(10.0, own_pitch, 0.0, reversed),
+                10.0,
+            );
+            let want = (lead_pitch - own_pitch) as f64;
+            assert!(alpha.abs() < 1e-3, "alpha {alpha}");
+            assert!(
+                // (asin of the rise over the run: 3.004 for 3°)
+                (beta - want).abs() < 0.01,
+                "beta {beta} for {want} ({reversed})"
+            );
+        }
+        let (alpha, beta) = joint_angles(
+            body_rotation(40.0, 0.0, 0.0, false),
+            40.0,
+            body_rotation(10.0, 0.0, 0.0, reversed),
+            10.0,
+        );
+        assert!((alpha - 30.0).abs() < 1e-3, "alpha {alpha} ({reversed})");
+        assert!(beta.abs() < 1e-3, "beta {beta} ({reversed})");
+    }
+}

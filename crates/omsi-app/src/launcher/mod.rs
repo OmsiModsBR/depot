@@ -10,8 +10,13 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+mod backdrop;
+mod chrome;
 mod diagnostics;
 mod gfx;
+mod keyboard;
+pub(crate) mod settings;
+pub(crate) mod setup;
 pub(crate) mod drive;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -21,11 +26,15 @@ mod multiplayer;
 pub(crate) mod pages;
 pub(crate) mod preview;
 mod showroom;
+mod start;
 mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use state::crash_of;
 mod theme;
+mod thumbs;
 mod timetable;
+mod timetable_plan;
+mod tray;
 mod ui;
 mod dialogs;
 
@@ -178,15 +187,29 @@ pub struct Launcher {
     /// The Maps page's picture of the chosen map (from its folder): the map file it is of, the
     /// pixels not yet on the GPU or being read, and its texture with its width over height.
     map_pic: MapPicture,
+    /// The small pictures of the Maps library's rows.
+    thumbs: thumbs::Thumbs,
+    /// The Scene background's picture (Settings > Interface > Background).
+    backdrop: backdrop::Backdrop,
+    /// The Maps page's start: its typed date and time, and the window open over the page.
+    start: start::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
+    /// The content reading the Maps and Vehicles pages' lists are of (`State::content_gen`).
+    catalog_gen: u64,
     /// The window has the keyboard / is hidden: without focus it is drawn ten times a
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
     occluded: bool,
+    /// The window put away while a game started from it runs (the Windows 11 concept): into
+    /// the tray where there is one, else minimized; it comes back when that game ends. The
+    /// game: its process and when it started (a later process with the same number is
+    /// another), and the minute the tray's menu last showed.
+    tucked: Option<(u32, u64, u64)>,
+    tray: Option<tray::Tray>,
     /// The player came back to the launcher's window while a game runs (clicked it, Alt+Tab):
     /// it is drawn and answers again until the game has the focus back. Before, it stood
     /// still the whole game long, and the session code could not be copied (#825).
@@ -209,6 +232,10 @@ pub struct Launcher {
     /// Whether the OMSI 2 folder chosen has what the game needs, for that folder (looked at
     /// again when the window gets the focus back: the status bar asks for it every frame).
     root_ok: Option<(String, bool)>,
+    /// The window's own title bar and edges (see `chrome`).
+    chrome: chrome::Chrome,
+    /// The accent the sidebar's logo was coloured in.
+    logo_accent: omsi_ui::theme::Accent,
 }
 
 /// Run the launcher window until it is closed.
@@ -269,12 +296,18 @@ impl Launcher {
         preview_rect: None,
         preview_tex: None,
         map_pic: MapPicture::default(),
+        thumbs: thumbs::Thumbs::default(),
+        backdrop: backdrop::Backdrop::default(),
+        start: start::StartView::default(),
         mapview: mapview::MapView::new(),
         map_rect: None,
         map_tex: None,
         map_gen: 0,
+        catalog_gen: 0,
         focused: true,
         occluded: false,
+        tucked: None,
+        tray: None,
         awake_in_game: false,
         last_input: Instant::now(),
         fingers: Default::default(),
@@ -285,6 +318,8 @@ impl Launcher {
         gpu_rest_drop: None,
         shown_once: false,
         root_ok: None,
+        chrome: Default::default(),
+        logo_accent: omsi_ui::theme::current_accent(),
     };
     // no original installation found anywhere: the launcher still opens, on Setup, and says
     // what it needs (only starting a session needs the game)
@@ -308,13 +343,67 @@ impl Launcher {
             "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
             _ => {}
         }
+        // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
+        let popup = match p.split(':').nth(1) {
+            Some("start-point") => Some(start::Popup::StartPoint),
+            Some("weather") => Some(start::Popup::Weather),
+            Some("explore") => Some(start::Popup::Explore),
+            _ => None,
+        };
+        if let Some(popup) = popup {
+            start::open(&mut app, popup);
+        }
+        // (controls:reload, controls:add: the keyboard's windows)
+        match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
+            Some("reload") => app.pages.kb.dialog = Some(keyboard::Dialog::Reload { backup: true, pads: true }),
+            Some("add") => app.pages.kb.dialog = Some(keyboard::Dialog::Add { query: String::new(), chosen: None, key: None, waiting: false }),
+            // (controls:action=NAME: that action chosen, in the game's keys when it is one of them)
+            Some(a) if a.starts_with("action=") => {
+                let a = a["action=".len()..].to_string();
+                let game = app.state.keybindings.get("game").and_then(|x| x.as_array()).is_some_and(|x| x.iter().any(|b| b.get("action").and_then(|v| v.as_str()) == Some(a.as_str())));
+                app.pages.kb.chosen = Some((game as usize, a));
+            }
+            _ => {}
+        }
+        // (settings:q=TEXT: the settings searched for TEXT; settings:changed: the changed ones)
+        match p.split(':').nth(1) {
+            Some(q) if q.starts_with("q=") => app.pages.set.query = q["q=".len()..].to_string(),
+            Some("changed") => app.pages.set.changed_only = true,
+            _ => {}
+        }
+        // (setup:usage: the Content card's disk usage; setup:usage=0,1 a part of it looked into)
+        if let Some(u) = p.split_once(':').filter(|x| x.0 == "setup").map(|x| x.1) {
+            if let Some(rest) = u.strip_prefix("usage") {
+                app.pages.setup.tab = 1;
+                app.pages.setup.focus = rest.trim_start_matches('=').split(',').filter_map(|k| k.parse().ok()).collect();
+            }
+        }
+        // (timetable:stop=NAME: that stop chosen on the map)
+        let tt_part = |key: &str| p.strip_prefix("timetable:").and_then(|rest| rest.split(':').find_map(|x| x.strip_prefix(key)));
+        if let Some(stop) = tt_part("stop=") {
+            app.pages.tt.set_stop(stop);
+        }
+        // (timetable:line=NAME: that line chosen, timetable:find=TEXT: that typed in the
+        // map's search)
+        if let Some(line) = tt_part("line=") {
+            app.pages.tt.set_line(line);
+        }
+        if let Some(q) = tt_part("find=") {
+            app.pages.tt.set_find(q);
+        }
+        // (profile:drive: the chosen drive's details over Profile / Sessions)
+        if p.split(':').nth(1) == Some("drive") {
+            app.pages.drive_details = true;
+        }
         if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
             // (the Drive page's second part is which of its three steps: drive:2 the map)
             app.drive.tab = step.min(2);
-            // (the Controls and Settings pages' second part is their tab: controls:1 the game
-            // controllers, settings:3 Sound)
+            // (the Controls page's second part is its tab, controls:1 the game controllers; the
+            // Settings page's its section, settings:5 Sound)
             app.pages.controls_tab = step;
-            app.pages.settings_tab = step.min(pages::SETTINGS_TABS.len() - 1);
+            app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+            // (and the Timetable page's its tab, timetable:1 the schematic)
+            app.pages.tt.tab = step.min(2);
         }
     }
     app
@@ -332,6 +421,8 @@ impl Launcher {
         self.preview = preview::Preview::new();
         self.map_tex = None;
         self.map_pic = MapPicture::default();
+        self.thumbs.forget_textures();
+        self.backdrop.forget_texture();
         self.map_gen = 0;
         self.mapview.drop_gpu();
         self.icons.clear();
@@ -369,6 +460,7 @@ impl Launcher {
     fn new_gpu(&mut self, gfx: &gfx::Gfx) -> omsi_ui::Gpu {
         let mut gpu = omsi_ui::Gpu::new(&gfx.device, gfx.format(), 4, self.ui.atlas.size);
         self.logo = omsi_launcher_ui::offscreen::load_logo(&mut gpu, &gfx.device, &gfx.queue);
+        self.logo_accent = omsi_ui::theme::current_accent();
         self.adapter = gfx.adapter_name.clone();
         gpu
     }
@@ -427,6 +519,8 @@ impl ApplicationHandler for Launcher {
         };
         let mut attrs = Window::default_attributes().with_title("Project Depot").with_window_icon(crate::startup::window_icon()).with_inner_size(fit);
         if !mobile::mobile() {
+            // (the launcher draws its own title bar, as Windows 11 apps do: see `chrome`)
+            attrs = attrs.with_decorations(!chrome::own_frame());
             // (no bigger than the window fitted to the screen: a small one at 150 % has less)
             attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(1080.0f64.min(fit.width), 680.0f64.min(fit.height)));
             if let Some(at) = at {
@@ -475,10 +569,7 @@ impl ApplicationHandler for Launcher {
             self.last_input = Instant::now();
         }
         match event {
-            WindowEvent::CloseRequested => {
-                self.pages.pads.cancel_feedback_test();
-                event_loop.exit();
-            }
+            WindowEvent::CloseRequested => self.quit(event_loop),
             WindowEvent::Touch(t) => self.touch(t, scale),
             WindowEvent::Focused(f) => self.set_focus(f),
             WindowEvent::Occluded(o) => {
@@ -604,7 +695,8 @@ impl ApplicationHandler for Launcher {
                 }
             }
             WindowEvent::DroppedFile(path) => {
-                // a mod folder or supported archive dropped on the window is installed
+                // a .zip dropped on the window is installed (a folder is refused:
+                // `State::install` says why)
                 self.page = Page::Mods;
                 self.state.install(path.to_string_lossy().to_string());
             }
@@ -619,6 +711,7 @@ impl ApplicationHandler for Launcher {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.check_exit(event_loop);
+        self.tray_tick(event_loop);
         // (a screenshot asked for by a script is drawn even when hidden, and so is the frame
         // that gives the graphics device up again when the game is back in front: the
         // game's window hides the launcher's then, and drawn nothing, it kept the device)
@@ -628,8 +721,10 @@ impl ApplicationHandler for Launcher {
         // Device given up while a game runs: still need a redraw when the game ends so the
         // device is opened again (Occluded alone used to leave the resting picture forever).
         let resume_needed = !mobile::mobile() && self.gfx.is_none() && !self.state.in_game();
-        // (a minimized window is hidden too, whether or not the system said it was covered)
-        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
+        // (a minimized window is hidden too, whether or not the system said it was covered,
+        // and so is one put into the tray)
+        let minimized = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
+            || self.window.as_ref().and_then(|w| w.is_visible()) == Some(false);
         let occluded = (self.occluded || minimized) && self.shot.is_none() && !resting && !waking && !resume_needed
             && !self.script.iter().any(|(_, c)| c.starts_with("shot"));
         let interval = if occluded {
@@ -669,7 +764,148 @@ impl ApplicationHandler for Launcher {
     }
 }
 
+/// Seconds since 1970.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// How long a game started at `t` (s since 1970) has run, in whole minutes: the tray's menu
+/// shows it, brought up to date once a minute.
+fn run_time(t: u64) -> String {
+    let m = now_secs().saturating_sub(t) / 60;
+    if m < 60 {
+        omsi_ui::tr("%{m} min").replace("%{m}", &m.to_string())
+    } else {
+        omsi_ui::tr("%{h} h %{m} min").replace("%{h}", &(m / 60).to_string()).replace("%{m}", &(m % 60).to_string())
+    }
+}
+
+/// A tour's days as the core puts them ("Mon-Fri & holidays, school days"), in the
+/// player's language, piece by piece.
+pub(crate) fn days_text(d: &str) -> String {
+    let (head, school) = match (d.strip_suffix(", school holidays"), d.strip_suffix(", school days")) {
+        (Some(h), _) => (h, Some("school holidays")),
+        (_, Some(h)) => (h, Some("school days")),
+        _ => (d, None),
+    };
+    let (week, holidays) = match head.strip_suffix(" & holidays") {
+        Some(w) => (w, true),
+        None if head == "holidays" => ("", true),
+        None => (head, false),
+    };
+    let mut out = week.split(", ").filter(|x| !x.is_empty()).map(|x| omsi_ui::tr(x).into_owned()).collect::<Vec<_>>().join(", ");
+    if holidays {
+        out = if out.is_empty() { omsi_ui::tr("holidays").into_owned() } else { format!("{out} & {}", omsi_ui::tr("holidays")) };
+    }
+    if let Some(x) = school {
+        out = format!("{out}, {}", omsi_ui::tr(x));
+    }
+    out
+}
+
+/// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
+/// player's language.
+pub(crate) fn precip_text(p: &str) -> String {
+    match (p.strip_prefix("rain "), p.strip_prefix("snow ")) {
+        (Some(n), _) => omsi_ui::tr("rain %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        (_, Some(n)) => omsi_ui::tr("snow %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        _ => omsi_ui::tr(p).into_owned(),
+    }
+}
+
+/// Whether the program can bring its window back from the taskbar by itself (not on
+/// Wayland, where only the player can).
+fn can_restore(w: &Window) -> bool {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    !matches!(w.window_handle().map(|h| h.as_raw()), Ok(RawWindowHandle::Wayland(_)))
+}
+
 impl Launcher {
+    /// The launcher ends: the window's close button, or the tray's Quit (the games keep
+    /// running).
+    fn quit(&mut self, event_loop: &ActiveEventLoop) {
+        self.pages.pads.cancel_feedback_test();
+        // (the icon leaves the tray before the process ends)
+        self.tray = None;
+        event_loop.exit();
+    }
+
+    /// While a game started from here runs the launcher's window goes into the tray
+    /// (Windows; elsewhere it is minimized), and comes back when that game ends; the tray's
+    /// menu is answered here.
+    fn tray_tick(&mut self, event_loop: &ActiveEventLoop) {
+        if mobile::mobile() || self.shot.is_some() {
+            return;
+        }
+        let Some(w) = self.window.clone() else { return };
+        let game = |l: &Launcher, pid: u32, started: u64| l.state.instances.iter().find(|i| i.running && i.pid == pid && i.started == started).cloned();
+        let head = |i: &core::Instance| format!("Project Depot  \u{b7}  {}  \u{b7}  {}", state::short_map(&i.map), run_time(i.started));
+        if let Some((pid, started, shown)) = self.tucked {
+            match game(self, pid, started) {
+                None => {
+                    self.tray = None;
+                    self.tucked = None;
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                }
+                Some(i) => {
+                    // (the menu's first line says how long it has run: brought up to date
+                    // once a minute)
+                    let minute = now_secs() / 60;
+                    if minute != shown {
+                        if let Some(t) = self.tray.as_ref() {
+                            t.set_head(&head(&i));
+                        }
+                        self.tucked = Some((pid, started, minute));
+                    }
+                }
+            }
+        }
+        if self.tucked.is_none() {
+            let mine = self.state.started_here.and_then(|pid| self.state.instances.iter().find(|i| i.running && i.pid == pid).cloned());
+            if let Some(i) = mine {
+                self.state.started_here = None;
+                self.tray = tray::Tray::new(&omsi_ui::tr("Project Depot: a game is running"), &head(&i));
+                if self.tray.is_some() {
+                    w.set_visible(false);
+                } else if can_restore(&w) {
+                    // (where there is no tray; on Wayland a window minimized cannot be brought
+                    // back by the program, so it stays where it is there)
+                    w.set_minimized(true);
+                }
+                self.tucked = Some((i.pid, i.started, now_secs() / 60));
+            }
+        }
+        while let Some(cmd) = self.tray.as_ref().and_then(|t| t.take()) {
+            let Some((pid, started, _)) = self.tucked else { break };
+            match cmd {
+                tray::TrayCmd::Show => {
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                    w.request_redraw();
+                }
+                tray::TrayCmd::OpenLog => {
+                    // (the game the menu names)
+                    let log = game(self, pid, started).map(|i| i.log);
+                    if !log.is_some_and(|l| core::open_file(std::path::Path::new(&l))) {
+                        self.state.set_status("The game's log could not be opened.", true);
+                    }
+                }
+                tray::TrayCmd::StopGame => {
+                    if game(self, pid, started).is_some() {
+                        self.state.stop(pid);
+                    }
+                }
+                tray::TrayCmd::Quit => {
+                    self.quit(event_loop);
+                    break;
+                }
+            }
+        }
+    }
+
     /// Physical pixels per interface pixel: the screen's scale, times a zoom that makes the
     /// interface (laid out for a 1440 x 880 window) grow with a bigger window and shrink a
     /// little with a smaller one, so that it fills the window the same way at any size.
@@ -850,8 +1086,17 @@ impl Launcher {
         // --- the interface
         self.preview_rect = None;
         self.map_rect = None;
+        let own_frame = chrome::own_frame();
+        if own_frame {
+            self.chrome.maximized = window.is_maximized();
+            self.chrome_before(&window, size);
+        }
         self.ui.begin(size, scale, dt);
         self.draw_ui();
+        if own_frame && self.chrome_after(&window, size) {
+            self.pages.pads.cancel_feedback_test();
+            event_loop.exit();
+        }
         if mobile::mobile() {
             // what no list took of a finger's drag scrolls the page
             if !self.ui.wheel_taken() && self.browser.is_none() {
@@ -878,7 +1123,15 @@ impl Launcher {
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
         let Some(renderer) = self.gfx.as_mut() else { return };
-        if let (Some((w, h, px)), Some(gpu)) = (self.preview.take_frame(), self.gpu.as_mut()) {
+        let frame = self.preview.take_frame();
+        // (the bus as the preview drew it, behind the Vehicles page with the Scene background:
+        // blurred even while that is off, as no other frame may come once it is switched on)
+        if let (Some((w, h, px)), Some(tag)) = (frame.as_ref(), self.preview.showing()) {
+            self.backdrop.offer_bus(tag, *w, *h, px);
+        }
+        self.backdrop.update();
+        self.thumbs.update();
+        if let (Some((w, h, px)), Some(gpu)) = (frame, self.gpu.as_mut()) {
             match self.preview_tex {
                 Some(id) => gpu.update_image(&renderer.device, &renderer.queue, id, w, h, &px),
                 None => self.preview_tex = Some(gpu.add_image(&renderer.device, &renderer.queue, w, h, &px)),
@@ -886,6 +1139,14 @@ impl Launcher {
         }
         if let Some(gpu) = self.gpu.as_mut() {
             self.map_pic.upload(gpu, &renderer.device, &renderer.queue);
+            self.thumbs.upload(gpu, &renderer.device, &renderer.queue);
+            self.backdrop.upload(gpu, &renderer.device, &renderer.queue);
+            // (the logo's coloured part wears the accent: drawn again when another is chosen)
+            let accent = omsi_ui::theme::current_accent();
+            if let (Some((tex, _)), true) = (self.logo, accent != self.logo_accent) {
+                omsi_launcher_ui::offscreen::tint_logo(gpu, &renderer.device, &renderer.queue, tex);
+                self.logo_accent = accent;
+            }
         }
         // the map picture, drawn again when what it shows, where it looks or the zoom's own
         // thinness changed
@@ -1054,6 +1315,12 @@ impl Launcher {
     }
 
     fn draw_ui(&mut self) {
+        // (the accent the settings hold: chosen on Settings > Interface, or back to amber
+        // after "Reset all settings")
+        let accent = self.state.settings.get("ui_accent").and_then(|v| v.as_str()).unwrap_or("");
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(accent).unwrap_or_default());
+        // (and its corners: square ones are flatter, closer to Content Manager)
+        omsi_ui::theme::set_square(self.state.settings.get("ui_corners").and_then(|v| v.as_str()) == Some("square"));
         if self.page != Page::Controls || self.pages.controls_tab != 1 {
             self.pages.pads.cancel_feedback_test();
         }
@@ -1064,10 +1331,16 @@ impl Launcher {
         let disconnected = self.state.disconnected.is_some();
         let crash = !disconnected && self.state.crash.is_some();
         let reset = !crash && !disconnected && self.pages.confirm_reset;
+        // (a window of the Maps page's start lies over the page, as a dialog does)
+        let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
+        // (and a drive's details over Profile / Sessions)
+        let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
+        // (and the keyboard's Reload and Add a control over Controls)
+        let keys = !mobile && self.page == Page::Controls && self.pages.controls_tab == 0 && self.pages.kb.dialog.is_some();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved = (self.browser.is_some() || crash || reset || disconnected).then(|| {
+        let saved = (self.browser.is_some() || crash || reset || disconnected || window || drive || keys).then(|| {
             let i = self.ui.input.clone();
             self.ui.input.mouse = Vec2::new(-1e4, -1e4);
             self.ui.input.pressed = false;
@@ -1085,11 +1358,24 @@ impl Launcher {
             }
             phone::draw(self);
         } else {
-        let rail_w = RAIL_W;
+        // (sessions start from Maps on a computer; the Drive page is the phone's - through
+        // `go`, so that Maps shows the map the choice holds, not the library's first)
+        if self.page == Page::Drive {
+            self.go(Page::Maps);
+            self.page_anim = 1.0;
+        }
+        // (and the games open now are on Profile / Sessions)
+        if self.page == Page::Sessions {
+            self.go(Page::Profile);
+            self.page_anim = 1.0;
+        }
+        let rail_w = self.rail_w();
         self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
         // (no wider than a page reads well: on a wide screen the rest is margin, the page
-        // in the middle - the panels stretched across 2000 px with their text at one end)
+        // in the middle - the panels stretched across 2000 px with their text at one end;
+        // under the top bar, the heading a little closer to it than to the window's edge)
         let (margin, top) = if mobile { (36.0, 14.0) } else { (64.0, 28.0) };
+        let top = if self.top_nav() { top + omsi_launcher_ui::look::TOPBAR_H - 8.0 } else { top };
         let avail = size.x - rail_w - margin;
         let w = avail.min(1760.0);
         let seen = size.y - top - 40.0;
@@ -1100,6 +1386,8 @@ impl Launcher {
         let content = Rect::new(rail_w + margin * 0.5 + (avail - w) * 0.5, top - self.page_scroll, w, h);
         let e = 1.0 - (1.0 - self.page_anim).powi(3);
         let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
+        let glass = self.draw_backdrop();
+        omsi_ui::theme::set_glass(glass);
         match self.page {
             Page::Drive => drive::draw(self, content),
             Page::Vehicles => self.vehicles_page(content),
@@ -1110,17 +1398,19 @@ impl Launcher {
             #[cfg(not(feature = "lan"))]
             Page::Multiplayer => {}
             Page::Profile => pages::profile(self, content),
-            Page::Settings => pages::settings(self, content),
+            Page::Settings => settings::settings(self, content),
             Page::Controls => pages::controls(self, content),
             Page::Sessions => pages::sessions(self, content),
             Page::Mods => pages::mods(self, content),
             Page::Tutorials => pages::tutorials(self, content),
             Page::Timetable => timetable::draw(self, content),
-            Page::Setup => pages::setup(self, content),
+            Page::Setup => setup::setup(self, content),
         }
         // the rail over the page (a scrolled page passes under it)
         self.rail();
         self.status_bar();
+        // (dialogs and what lies over the pages stay solid)
+        omsi_ui::theme::set_glass(false);
         }
         if let Some(i) = saved {
             self.ui.input = i;
@@ -1129,7 +1419,13 @@ impl Launcher {
             } else if crash {
                 self.draw_crash_dialog();
             } else if reset {
-                pages::reset_dialog(self);
+                settings::reset_dialog(self);
+            } else if self.browser.is_none() && window {
+                start::popup(self);
+            } else if self.browser.is_none() && drive {
+                pages::drive_dialog(self);
+            } else if self.browser.is_none() && keys {
+                keyboard::dialog(self);
             } else {
                 self.draw_browser();
             }
@@ -1138,6 +1434,11 @@ impl Launcher {
         // (see `frame`), which stays in the window until the game ends
         if !mobile && self.state.in_game() && !self.awake() {
             self.draw_game_banner();
+        }
+        // (over everything, dialogs too: the window can always be moved, sized and closed)
+        if chrome::own_frame() {
+            let w = self.ui.size.x;
+            self.chrome.clicked = omsi_launcher_ui::shell::caption_buttons(&mut self.ui, w, self.chrome.maximized);
         }
     }
 
@@ -1154,7 +1455,7 @@ impl Launcher {
         let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
         self.ui.panel(r);
         let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
-        self.ui.icon("directions_bus", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, ACCENT);
+        self.ui.icon("directions_bus", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, accent());
         self.ui.text_in("The game is running", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
         self.ui.paragraph(text, Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     }
@@ -1291,9 +1592,14 @@ impl Launcher {
                 other => { self.phone.tab = phone::Tab::More; Some(other) }
             };
             match p {
-                Page::Profile => self.state.load_profile(),
+                Page::Profile => {
+                    self.state.load_profile();
+                    self.state.poll_now();
+                }
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
+                // (counted again each time the page opens: a mod installed meanwhile counts)
+                Page::Setup => self.state.usage_asked = false,
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();
@@ -1302,39 +1608,91 @@ impl Launcher {
                 Page::Maps => {
                     self.maps.retry_if_failed();
                     self.refresh_catalogs();
-                    self.maps.select(&self.state.choice.map, self.state.choice.entry);
+                    self.maps.select(&self.state.choice.map);
                 }
                 _ => {}
             }
         }
     }
 
-    /// The sidebar over the page's left side (a scrolled page passes under it): the pages,
-    /// and the driver at its foot.
+    /// The Scene background is chosen (Settings > Interface > Background).
+    fn scene(&self) -> bool {
+        !mobile::mobile() && self.state.settings.get("ui_background").and_then(|v| v.as_str()) == Some("scene")
+    }
+
+    /// With the Scene background, the page's picture behind it, blurred and darkened: true
+    /// when there is one (the panels are drawn as glass then), false for the plain dark.
+    fn draw_backdrop(&mut self) -> bool {
+        if !self.scene() {
+            return false;
+        }
+        let root = std::path::PathBuf::from(&self.state.config.root);
+        let map = |file: &str| backdrop::Want::Map { root: root.clone(), file: file.to_string() };
+        self.backdrop.game_running(self.state.in_game());
+        let want = match self.page {
+            Page::Maps => self.maps.current().map(map),
+            Page::Vehicles if self.preview.has_picture() => self.preview.showing().map(backdrop::Want::Bus),
+            // (while the next bus is drawn, the picture before stays: not a screenshot between)
+            Page::Vehicles if self.preview.loading() => self.backdrop.wanted().cloned(),
+            Page::Vehicles => None,
+            Page::Drive => Some(&self.state.choice.map).filter(|m| !m.is_empty()).map(|m| map(m)),
+            _ => None,
+        };
+        self.backdrop.want(want.unwrap_or(backdrop::Want::Latest));
+        let Some((tex, aspect)) = self.backdrop.shown() else { return false };
+        self.backdrop.fade = (self.backdrop.fade + self.ui.dt / 0.35).min(1.0);
+        let full = Rect::new(0.0, 0.0, self.ui.size.x, self.ui.size.y);
+        self.ui.image_cover(full, tex, aspect, self.backdrop.fade);
+        // (the dimming as the eye sees it: the veil is laid in linear light, where the same
+        // cover darkens far less)
+        let dim = core::dimming_of(self.state.settings.get("ui_dimming").unwrap_or(&serde_json::Value::Null)) as f32 / 100.0;
+        let cover = 1.0 - (1.0 - dim).powf(2.2);
+        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, cover * self.backdrop.fade));
+        true
+    }
+
+    /// The pages are listed in a bar along the top (Settings > Interface > Navigation), not in
+    /// the sidebar.
+    pub(crate) fn top_nav(&self) -> bool {
+        !mobile::mobile() && self.state.settings.get("ui_nav").and_then(|v| v.as_str()) == Some("top")
+    }
+
+    /// The width the sidebar takes from the pages (none under a top bar).
+    pub(crate) fn rail_w(&self) -> f32 {
+        if self.top_nav() {
+            0.0
+        } else {
+            RAIL_W
+        }
+    }
+
+    /// The sidebar over the page's left side (a scrolled page passes under it), or the top
+    /// bar over its top: the pages, and the driver at the sidebar's foot.
     fn rail(&mut self) {
         let size = self.ui.size;
         let running = self.state.instances.iter().filter(|i| i.running).count();
         let jobs = self.state.jobs.iter().filter(|j| j.finished.is_none()).count();
         let mut badges = Vec::new();
         if running > 0 {
-            badges.push((UiPage::Sessions, running.to_string(), OK));
+            // (the phone lists Sessions; the sidebar has them on Profile / Sessions)
+            badges.push((if mobile::mobile() { UiPage::Sessions } else { UiPage::Profile }, running.to_string(), OK));
         }
         if jobs > 0 {
-            badges.push((UiPage::Mods, jobs.to_string(), ACCENT));
+            badges.push((UiPage::Mods, jobs.to_string(), accent()));
         }
         let (level, name) = match &self.state.profile {
             Some(p) => (p.level, p.name.clone()),
             None => (1, self.state.config.profile.clone()),
         };
         let name = if name.is_empty() { "No driver".to_string() } else { name };
-        let level = format!("Level {level}");
-        let bar = omsi_launcher_ui::shell::Sidebar {
-            page: self.page.shown().unwrap_or(UiPage::Drive),
-            logo: self.logo,
-            badges: &badges,
-            footer: (&name, &level),
+        let level = omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string());
+        let page = self.page.shown().unwrap_or(UiPage::Drive);
+        let nav = if self.top_nav() {
+            omsi_launcher_ui::shell::TopBar { page, logo: self.logo, badges: &badges }.draw(&mut self.ui, size.x)
+        } else {
+            omsi_launcher_ui::shell::Sidebar { page, logo: self.logo, badges: &badges, footer: (&name, &level) }.draw(&mut self.ui, size.y)
         };
-        match bar.draw(&mut self.ui, size.y) {
+        match nav {
             Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
             Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
             None => {}
@@ -1345,12 +1703,15 @@ impl Launcher {
     /// pages show (the host reads them again after Setup or an install, and fills them as its
     /// scan goes on).
     fn refresh_catalogs(&mut self) {
+        // (as many as before, but other ones: another content folder chosen under Setup)
+        let other = self.catalog_gen != self.state.content_gen;
+        self.catalog_gen = self.state.content_gen;
         let host = self.state.vehicles.len();
-        if host > 0 && self.vehicles.catalog_len() != Some(host) {
+        if host > 0 && (other || self.vehicles.catalog_len() != Some(host)) {
             self.vehicles.set_catalog(self.state.vehicles.clone());
         }
         let host = self.state.maps.len();
-        if host > 0 && self.maps.catalog_len() != Some(host) {
+        if host > 0 && (other || self.maps.catalog_len() != Some(host)) {
             self.maps.set_catalog(self.state.maps.clone());
         }
     }
@@ -1372,6 +1733,11 @@ impl Launcher {
         let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
         self.vehicles.set_picture(has_bus.then_some(picture));
         self.vehicles.draw(&mut self.ui, body);
+        // (the bus the next start uses: its card shows what is chosen for it)
+        if let Some(file) = self.vehicles.fresh_bus().filter(|f| f.eq_ignore_ascii_case(&self.state.choice.bus)) {
+            let c = &self.state.choice;
+            self.vehicles.prepare(&file, c.hof_manual.then_some(c.hof.as_str()), &c.number, &c.plate);
+        }
         if let (Some((bus, paint)), false) = (self.vehicles.current().cloned(), self.state.in_game()) {
             let c = &self.state.choice;
             if !c.map.is_empty() {
@@ -1388,17 +1754,15 @@ impl Launcher {
                 }
             }
         }
-        if let Some((file, paint)) = self.vehicles.take_use() {
-            self.state.select_bus(&file);
-            self.state.choice.paint = paint;
-            self.state.touched();
-            self.drive.tab = 0;
-            self.go(Page::Drive);
+        if let Some(u) = self.vehicles.take_use() {
+            self.state.use_bus(u);
+            self.go(Page::Maps);
         }
     }
 
-    /// The Maps page; "Drive on this map" takes the map and its start point to the Drive
-    /// page.
+    /// The Maps page: the library, the chosen map's picture and description, and the start
+    /// (`start`), which holds the session's choice - the map chosen in the library is the one
+    /// a session starts on.
     fn maps_page(&mut self, area: Rect) {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
@@ -1407,14 +1771,23 @@ impl Launcher {
         // the chosen map's picture, read from its folder on a thread
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic.want(std::path::Path::new(&self.state.config.root), &file);
+            if !file.eq_ignore_ascii_case(&self.state.choice.map) {
+                self.state.select_map(&file);
+            }
         }
         self.maps.set_picture(self.map_pic.shown(), self.map_pic.reading.is_some() || self.map_pic.pending.is_some());
-        if let Some((file, entry)) = self.maps.take_use() {
-            self.state.select_map(&file);
-            self.state.choice.entry = entry;
-            self.state.touched();
-            self.drive.tab = 2;
-            self.go(Page::Drive);
+        // the rows' small pictures, the same file read on a thread of their own
+        let root = std::path::PathBuf::from(&self.state.config.root);
+        for file in self.maps.visible().to_vec() {
+            let dir = MapPicture::folder(&root, &file);
+            self.thumbs.want(&file, move || dir.and_then(|d| MapPicture::find(&d)).and_then(|f| MapPicture::read(&f)));
+            self.maps.set_thumb(&file, self.thumbs.get(&file));
+        }
+        if let Some(r) = self.maps.start_area() {
+            start::card(self, r);
+        }
+        if self.maps.take_explore() {
+            self.start.popup = Some(start::Popup::Explore);
         }
     }
 
@@ -1438,7 +1811,7 @@ impl Launcher {
         let games = self.state.instances.len();
         let root_ok = self.root_ok();
         let chips = [
-            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { format!("Games: {games} running") }, games > 0),
+            (if games == 0 { "Game: not running".to_string() } else if games == 1 { "Game: running".to_string() } else { omsi_ui::tr("Games: %{games} running").replace("%{games}", &games.to_string()) }, games > 0),
             ((if root_ok { "OMSI 2 folder: read" } else { "OMSI 2 folder: not chosen" }).to_string(), false),
             ((if self.preview.live { "Preview helper: running, stops when the page closes" } else { "Preview helper: stopped" }).to_string(), self.preview.live),
         ];
@@ -1448,6 +1821,7 @@ impl Launcher {
             let dot = if lit { 12.0 } else { 0.0 };
             let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
             let r = Rect::new(at, cy - 12.0, w, 24.0);
+            self.ui.p().rounded(r, 12.0, PANEL);
             self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
             if lit {
                 self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);
@@ -1461,7 +1835,7 @@ impl Launcher {
 
     fn status_bar(&mut self) {
         let size = self.ui.size;
-        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { RAIL_W };
+        let rail_w = if mobile::mobile() { mobile::RAIL_W_MOBILE } else { self.rail_w() };
         let left = if mobile::mobile() { rail_w + 20.0 } else { self.status_chips(rail_w + 28.0, size.y - 22.0) };
         let (text, err, at) = self.state.status.clone();
         if text.is_empty() {
@@ -1592,8 +1966,7 @@ impl MapPicture {
             self.pending = None;
             // (found through the content roots as the map list found it: a mod's map, or one
             // read in place from an archive, has its own picture)
-            let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
-            let dir = global.parent().map(|d| d.to_path_buf());
+            let dir = Self::folder(root, file);
             let (tx, rx) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
                 let img = dir.and_then(|d| Self::find(&d)).and_then(|f| Self::read(&f));
@@ -1613,8 +1986,14 @@ impl MapPicture {
         }
     }
 
+    /// The folder of the map `file`, found through the content roots as the map list found it.
+    pub(super) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
+        let global = omsi_cfg::find_in_roots(file).map(|(_, p)| p).unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
+        global.parent().map(|d| d.to_path_buf())
+    }
+
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
-    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    pub(super) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
             .into_iter()
             .filter(|(_, is_dir)| !is_dir)
@@ -1629,7 +2008,7 @@ impl MapPicture {
     /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
     /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
     /// on any card).
-    fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+    pub(super) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
         if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
             return None;
         }

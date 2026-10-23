@@ -82,9 +82,10 @@ Mouse steering works in the driver's, the passenger and the outside view; the wh
 the cursor smoothly (a short easing, no steps). With *Smooth mouse steering* off (Settings →
 Driving) the wheel and the pedals are where the cursor says at once, as in OMSI.
 
-Two switches there change the steering keys (both off by default): *Steering linearity* turns
+Two switches there change the steering keys: *Steering linearity* (on by default) turns
 the wheel at OMSI's own steady pace (the curvature grows by the same amount every millisecond
-the key is held, whatever the bus), and *Old Steering* is OMSI's wheel that stays where you
+the key is held, whatever the bus; off, the keys turn it slower the faster the bus goes), and
+*Old Steering* (off by default) is OMSI's wheel that stays where you
 leave it - turn it back yourself. **Num 5** (`steering_neutral`) brings the wheel back to the
 middle in a straight line, as in OMSI at the pace the keys turn it (never slower than the
 wheel comes back by itself). The clutch key works as in OMSI: the pedal goes down at once
@@ -446,25 +447,31 @@ Depot files can also be placed in a top-level `HOFs/` folder. Every vehicle can 
 vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy takes
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
-Installing a mod: the launcher's **Mods** page opens the system's folder / file picker
-(Finder, Explorer, GTK) for a mod folder or a `.zip` archive and sorts it
-into place (OMSI-style folders anywhere inside are merged; a lone bus, map, object or
-spline folder is recognised by its `.bus` / `global.cfg` / `.sco` / `.sli` files and put
-under the right folder), or drop it into `Mods/` next to the binary and open the page.
-`openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` and `--cli mods` do the same
-from a shell. **`.rar` and `.7z` archives are not supported** (unpack them with your own tool
-and install the folder), and **a `.zip` is never unpacked by the launcher**. An installation is
-a background job: a folder's listing (or a `.zip`'s table of contents) becomes a plan, the disk
-is checked for room, a folder is copied into a staging folder on the content volume and moved
-into place in one step, and it can be cancelled and cleaned up at any point. A repaint for a bus that is not installed is kept aside and installed when the
-bus arrives.
+Installing a mod: the launcher's **Mods** page installs a mod's **`.zip`**: its
+**Choose a .zip file** button opens the system's file picker (Finder, Explorer, GTK), a
+`.zip` can be dropped on the window, or put into `Mods/` in the content folder (the page
+lists what is in it). The launcher works out what is in it and installs it in place (see
+below). **Loose folders are never installed by the launcher**: the page's *Loose files*
+part opens the two folders to copy them into by hand, the original OMSI 2 folder (the mod
+then works in OMSI 2 and in the Depot) or the Depot's content folder (the Depot only). A
+folder in `Mods/`, or one dropped on the window, is left where it is.
+
+From a shell, `openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` installs a
+`.zip`, and `--cli mods` installs the `.zip` files in `Mods/`, as the page does (`--cli poll`
+with `watch` likewise). `--cli install` refuses a folder too. **`.rar` and `.7z` archives are
+not supported** (unpack them with your own tool and copy the folder by hand), and **a `.zip`
+is never unpacked by the launcher**. An installation is a background job: the `.zip`'s table
+of contents becomes a plan, the disk is checked for room, the archive is put into place in one
+step, and it can be cancelled and cleaned up at any point. A pack an older version kept aside
+in `Mods/waiting` (a repaint for a bus that was not installed) is a folder: it is not
+installed from there, copy it by hand once the bus is installed.
 
 A `.zip` is **used in place**, and only that way: a `.zip` laid out like OMSI 2 is put into the
 content folder's `Archives/` (hard-linked when it is on the same disk, moved from the
 `Mods/` inbox, else copied after a free-space check) and read by the game without
 unpacking (`omsi_cfg::vfs` mounts every archive there, as well as `--content-zip` and
 `OMSI_CONTENT_ZIP`). A `.zip` whose folders are not where the game looks for them (a lone bus
-folder, say) is refused; unpack it yourself and install the folder. The `mode` of
+folder, say) is refused; unpack it yourself and copy the folder by hand. The `mode` of
 `--cli install '{"path":…,"mode":…}'` is accepted but no longer changes anything, and
 `--cli modinfo '{"path":…}'` shows what the launcher would do. The launcher's lists see the maps
 and buses inside the archives.

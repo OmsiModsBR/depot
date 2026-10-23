@@ -76,6 +76,8 @@ pub(crate) fn gl_worker_turn() -> Option<std::sync::MutexGuard<'static, ()>> {
 /// whichever backend draws; Linux, through the DRM driver's sysfs (amdgpu; not
 /// NVIDIA's own driver, whose memory [`vulkan_vram_mb`] reads from Vulkan instead).
 pub(crate) fn dedicated_vram_mb(info: &wgpu::AdapterInfo) -> Option<u64> {
+    // SAFETY: DXGI is called with no pointers of ours; the factory and adapters are COM
+    // objects the `windows` crate releases when dropped, and only their descriptions are read
     #[cfg(windows)]
     unsafe {
         use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};

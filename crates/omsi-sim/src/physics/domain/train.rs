@@ -6,10 +6,11 @@ use glam::Vec3;
 /// What a joint lets turn besides the vertical and the transverse axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JointKind {
-    /// A lorry's hitch (`[coupling_front_character]` type 0): free about every axis.
+    /// A lorry's hitch (`[coupling_front_character]` type 0, or no such section): free about
+    /// every axis, with no limits.
     Ball,
     /// An articulated bus's turntable (any other type): the sections do not roll against
-    /// each other.
+    /// each other, and the joint stops at `alpha_max`, `beta_min` and `beta_max`.
     Articulation,
 }
 

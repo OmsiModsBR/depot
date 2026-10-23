@@ -4,6 +4,7 @@
 use crate::gpu::{
     fullscreen_pipeline, gl_worker_turn, mip_levels, sampler_entry, target_2d, texture_entry,
 };
+use crate::shaders::with_fullscreen;
 
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
@@ -526,7 +527,9 @@ pub(crate) fn mip_pipeline(
     log::info!("renderer: compiling the mip maps shaders");
     let mip_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("mip"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/assets/mip.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(
+            with_fullscreen(include_str!("../shaders/assets/mip.wgsl")).into(),
+        ),
     });
     let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("mip"),

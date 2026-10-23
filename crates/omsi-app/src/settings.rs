@@ -178,6 +178,11 @@ pub struct Settings {
     pub info_bar: bool,
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
     pub autosave_minutes: u32,
+    /// The interface's accent colour (`omsi_ui::theme::Accent`, by name), in the launcher and
+    /// every menu of the game.
+    pub ui_accent: String,
+    /// The launcher's corners, "rounded" or "square" (the game's menus keep theirs).
+    pub ui_corners: String,
     /// The size of the game's interface over the picture - texts, the menu, the timetable,
     /// the navigator - on top of the screen's own scale and the window's height (see
     /// `ui::size_factor`): 0.5 .. 2 (1 = as designed).
@@ -412,7 +417,7 @@ impl Settings {
     }
     /// The defaults of a computer.
     fn desktop() -> Self {
-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), detail_textures: true, exact_fare: true, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), post_aa: "fxaa".into(), render_scale: 0.0, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, nav_surface: true, nav_light: false, nav_contours: false, nav_orientation: "map".into(), get_up: false, texture_compression: true, texture_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, clouds: true, windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_refresh: "full".into(), doppler: true, muffle_outside: false, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, pad_steer_smooth: 120.0, pad_steer_linear: false, arrows_switch_cams: false, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: true, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, outside_fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_bind: String::new(), head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, voice_chat: true, info_bar: false, autosave_minutes: 5 }
+        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, navigator: true, ui_opacity: 0.85, notes: true, ui_scale: 1.0, ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), detail_textures: true, exact_fare: true, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), post_aa: "fxaa".into(), render_scale: 0.0, language: "ENG".into(), pax_voices: "all".into(), nav_arrows: false, nav_ai: true, nav_surface: true, nav_light: false, nav_contours: false, nav_orientation: "map".into(), get_up: false, texture_compression: true, texture_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, clouds: true, windy_trees: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_refresh: "full".into(), doppler: true, muffle_outside: false, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, pad_steer_smooth: 120.0, pad_steer_linear: false, arrows_switch_cams: false, ctrl_off: String::new(), steering_linear: true, old_steering: false, red_steer_spd: false, reflections: true, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, fov: 0.0, outside_fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_bind: String::new(), head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, voice_chat: true, info_bar: false, autosave_minutes: 5, ui_accent: "Amber".into(), ui_corners: "rounded".into() }
     }
 }
 
@@ -432,6 +437,13 @@ impl Settings {
     pub fn resolution() -> Option<(u32, u32)> {
         let text = std::fs::read_to_string(Self::path()?).ok()?;
         resolution_of(&text)
+    }
+
+    /// The accent the settings choose, for every menu drawn from now on; the game's menus keep
+    /// their rounded corners (on Android the launcher, square or not, ran in this same process).
+    pub fn apply_accent(&self) {
+        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(&self.ui_accent).unwrap_or_default());
+        omsi_ui::theme::set_square(false);
     }
 
     pub fn load() -> Settings {
@@ -689,6 +701,8 @@ impl Settings {
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
                 "autosave_minutes" => s.autosave_minutes = v.parse::<u32>().map(|x| x.min(60)).unwrap_or(s.autosave_minutes),
+                "ui_accent" => s.ui_accent = omsi_ui::theme::Accent::named(v).unwrap_or_default().name().into(),
+                "ui_corners" => s.ui_corners = if v.eq_ignore_ascii_case("square") { "square" } else { "rounded" }.into(),
                 "chat_size" => s.chat_size = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 3.0)).unwrap_or(s.chat_size),
                 "ui_scale" => s.ui_scale = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 2.0)).unwrap_or(s.ui_scale),
                 "shadow_casters" => s.shadow_casters = if v.eq_ignore_ascii_case("omsi") { "omsi".into() } else { "all".into() },
@@ -758,6 +772,8 @@ impl Settings {
         text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
         text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
         text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
+        text.push_str(&format!("ui_accent={}\n", self.ui_accent));
+        text.push_str(&format!("ui_corners={}\n", self.ui_corners));
         text
     }
 
@@ -782,6 +798,12 @@ impl Settings {
         cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
     }
 
+    /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
+    /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
+    pub fn fair_weather_clouds(&self) -> bool {
+        !self.d3d9_selected()
+    }
+
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
     fn locked_for_api(mut self) -> Self {
         if self.d3d9_selected() {
@@ -799,6 +821,19 @@ impl Settings {
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
+        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
+        self.msaa = 1;
+        self.render_scale = 0.0;
+        self.anisotropy = 1;
+        self.post_aa = "off".into();
+        self.mirror_size = 0;
+        self.mirror_refresh = "off".into();
+        self.windy_trees = false;
+        // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
+        // `fair_weather_clouds`)
+        self.clouds = true;
+        // (the sun's own light only: Enhanced's brighter night is an improvement)
+        self.night_brightness = 0.0;
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
@@ -870,6 +905,24 @@ mod round_trip;
 
 #[cfg(test)]
 mod tests {
+    /// The launcher writes the accents the game reads: the same names, in the same order, the
+    /// default first.
+    #[test]
+    fn the_launcher_and_the_game_know_the_same_accents() {
+        let game: Vec<&str> = omsi_ui::theme::Accent::ALL.iter().map(|a| a.name()).collect();
+        assert_eq!(game, omsi_launcher_lib::ACCENTS);
+        assert_eq!(omsi_launcher_lib::ACCENTS[0], omsi_ui::theme::Accent::default().name());
+    }
+
+    /// Square corners are the launcher's only: the game's menus are rounded again when its
+    /// settings are applied (on Android the launcher ran in the same process just before).
+    #[test]
+    fn the_game_menus_keep_rounded_corners_after_a_square_launcher() {
+        omsi_ui::theme::set_square(true);
+        super::Settings::from_text("ui_corners=square\n").apply_accent();
+        assert!(!omsi_ui::theme::square());
+    }
+
     /// The information bar is as the last session left it (#1164); off at first.
     #[test]
     fn the_information_bar_is_kept_between_sessions() {
@@ -879,6 +932,42 @@ mod tests {
     }
 
     /// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
+    /// The locked values of the "DirectX9 (D3D9Ex)" table (`api_limits`) are what `lock_vanilla`
+    /// sets, option by option; a new table entry needs its check here.
+    #[test]
+    fn the_d3d9_lock_sets_every_option_of_the_table() {
+        let mut s = Settings::default();
+        s.msaa = 8;
+        s.anisotropy = 16;
+        s.render_scale = 0.5;
+        s.mirror_size = 512;
+        s.mirror_refresh = "full".into();
+        s.windy_trees = true;
+        s.night_brightness = 1.0;
+        s.clouds = false;
+        s.lock_vanilla();
+        for l in crate::api_limits::D3D9 {
+            let ok = match l.key {
+                "graphics" => s.graphics == "vanilla" && s.classic(),
+                "msaa" => s.msaa == 1,
+                "render_scale" => s.render_scale == 0.0,
+                "anisotropy" => s.anisotropy == 1,
+                "mirror_size" => s.mirror_size == 0,
+                "mirror_refresh" => s.mirror_refresh == "off",
+                "windy_trees" => !s.windy_trees,
+                "clouds" => s.clouds,
+                "shadows" => !s.shadows,
+                "ssao" => !s.ssao,
+                "detail_textures" => !s.detail_textures,
+                "night_brightness" => s.night_brightness == 0.0,
+                // (hidden, and with nothing of their own to switch off under Vanilla)
+                "preset" | "shadow_size" | "shadow_casters" | "led_glow" | "led_mips" => true,
+                other => panic!("{other} is in the table but `lock_vanilla` is not checked for it"),
+            };
+            assert!(ok, "{} is not set by the lock", l.key);
+        }
+    }
+
     #[test]
     fn d3d9_has_no_graphics_improvements_to_choose() {
         for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
@@ -894,6 +983,18 @@ mod tests {
                 let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
                 assert_eq!((loaded.shadows, loaded.ssao, loaded.detail_textures), (file.shadows, file.ssao, file.detail_textures));
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
+                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
+                let saved = Settings::from_text(&format!(
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
+                ))
+                .locked_for_api();
+                assert_eq!((saved.msaa, saved.anisotropy, saved.render_scale), (1, 1, 0.0));
+                assert_eq!((saved.mirror_size, saved.mirror_refresh.as_str()), (0, "off"));
+                // (what it does draw stays as saved: env maps and shadow meshes)
+                assert!(saved.reflections && saved.shadow_blobs);
+                assert_eq!((saved.windy_trees, saved.post_aa.as_str()), (false, "off"));
+                // (clouds are on, as OMSI 2 has the weather's own: a saved "off" is not taken)
+                assert!(saved.clouds);
                 // VR takes DirectX 12 instead, with the graphics as chosen
                 let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n")).locked_for_api();
                 assert_eq!(vr.graphics, g);

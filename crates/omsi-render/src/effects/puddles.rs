@@ -12,7 +12,7 @@ use crate::gpu::{
 use crate::lighting::half_to_f32;
 use crate::lighting::Lighting;
 use crate::passes::{
-    encode_batches, encode_batches_filtered, one_sided_primitive, post_pass, Batch, Exposure,
+    encode_batches, encode_batches_filtered, one_sided_primitive, Batch, Exposure, PostPass,
     PostPipelines, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS,
 };
 #[cfg(test)]
@@ -59,7 +59,9 @@ pub(crate) struct Uniform {
 
 pub(crate) fn shader_source() -> String {
     [
+        include_str!("../shaders/common/fullscreen.wgsl"),
         include_str!("../shaders/common/colour.wgsl"),
+        include_str!("../shaders/common/math.wgsl"),
         include_str!("../shaders/common/puddle_common.wgsl"),
         include_str!("../shaders/effects/puddle_reflection.wgsl"),
     ]
@@ -740,45 +742,31 @@ impl Pipelines {
                 |pipe| &pipelines.glass[(pipe % 4 / 2) as usize],
             );
         }
-        post_pass(
-            encoder,
-            &targets.trace,
-            pass_timer(queries, timed, "puddle rays"),
-            &pipelines.trace,
-            &targets.trace_bg,
-        );
+        PostPass::new("post", &targets.trace)
+            .timer(pass_timer(queries, timed, "puddle rays"))
+            .draw(encoder, &pipelines.trace, &[&targets.trace_bg]);
         let filter_timer = pass_timer(queries, timed, "puddle filter");
-        post_pass(
-            encoder,
-            &targets.blur,
-            filter_timer
-                .as_ref()
-                .map(|t| wgpu::RenderPassTimestampWrites {
-                    query_set: t.query_set,
-                    beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                    end_of_pass_write_index: None,
-                }),
-            &pipelines.blur_x,
-            &targets.blur_x_bg,
-        );
-        post_pass(
-            encoder,
-            &targets.filtered,
-            filter_timer.map(|t| wgpu::RenderPassTimestampWrites {
+        PostPass::new("post", &targets.blur)
+            .timer(
+                filter_timer
+                    .as_ref()
+                    .map(|t| wgpu::RenderPassTimestampWrites {
+                        query_set: t.query_set,
+                        beginning_of_pass_write_index: t.beginning_of_pass_write_index,
+                        end_of_pass_write_index: None,
+                    }),
+            )
+            .draw(encoder, &pipelines.blur_x, &[&targets.blur_x_bg]);
+        PostPass::new("post", &targets.filtered)
+            .timer(filter_timer.map(|t| wgpu::RenderPassTimestampWrites {
                 query_set: t.query_set,
                 beginning_of_pass_write_index: None,
                 end_of_pass_write_index: t.end_of_pass_write_index,
-            }),
-            &pipelines.blur_y,
-            &targets.blur_y_bg,
-        );
-        post_pass(
-            encoder,
-            &targets.view,
-            pass_timer(queries, timed, "puddle resolve"),
-            &pipelines.resolve,
-            &targets.resolve_bg,
-        );
+            }))
+            .draw(encoder, &pipelines.blur_y, &[&targets.blur_y_bg]);
+        PostPass::new("post", &targets.view)
+            .timer(pass_timer(queries, timed, "puddle resolve"))
+            .draw(encoder, &pipelines.resolve, &[&targets.resolve_bg]);
     }
 }
 

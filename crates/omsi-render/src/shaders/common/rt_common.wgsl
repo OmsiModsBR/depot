@@ -62,7 +62,6 @@ const MASK_GLASS: u32 = 0x08u;
 // tracing's pipelines were never made on Windows, and every frame was thrown away.)
 const RT_FORCE_OPAQUE: u32 = 0x01u;
 const RT_FIRST_HIT: u32 = 0x04u;
-const PI: f32 = 3.14159265;
 
 fn world_pos(uv: vec2<f32>, depth: f32) -> vec3<f32> {
     let h = p.inv_view_proj * vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);

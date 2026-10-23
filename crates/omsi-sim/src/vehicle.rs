@@ -6,12 +6,12 @@ use crate::particles::ParticleSet;
 use crate::physics::{Controls, Dynamics, KinematicModel, VehicleMotion};
 use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
-use omsi_script::{State, Vm};
+use omsi_script::{Program, State, Vm};
 use std::sync::Arc;
 
 mod ai_frame;
-pub(crate) mod articulation;
 mod builtins;
+pub(crate) mod coupled;
 pub(crate) mod motion;
 pub(crate) mod physics_bridge;
 mod pose;
@@ -19,7 +19,7 @@ pub(crate) mod props;
 pub(crate) mod radio;
 pub(crate) mod scripts;
 mod skin;
-pub(crate) mod trailer;
+pub(crate) use coupled::{articulation, trailer};
 pub(crate) mod vehicle_type;
 pub(crate) mod visuals;
 pub(crate) mod weather;
@@ -31,7 +31,8 @@ use props::PropsPlan;
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
 pub use trailer::{
-    body_heading, body_reversed, coupling_offsets, coupling_placement, coupling_points, TrailerPart,
+    body_heading, body_reversed, body_rotation, coupling_offsets, coupling_placement,
+    coupling_points, joint_angles, TrailerPart,
 };
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
@@ -172,18 +173,19 @@ impl VehicleInstance {
             .unwrap_or_default()
     }
 
-    pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
-        let program = ty.program.clone();
-        let mut state = State::new(&program);
-        let mut vm = Vm::new();
-        let mut host = host;
-        host.script_textures = ty
+    fn load_textures(
+        ty: &VehicleType,
+    ) -> (
+        Vec<crate::scripttex::ScriptTexture>,
+        Vec<crate::htmltex::HtmlTexture>,
+    ) {
+        let script_textures: Vec<crate::scripttex::ScriptTexture> = ty
             .model
             .script_textures
             .iter()
             .map(|(w, h)| crate::scripttex::ScriptTexture::new(*w, *h))
             .collect();
-        host.content_dir = ty.def.dir().to_path_buf();
+
         let html_textures: Vec<crate::htmltex::HtmlTexture> = ty
             .model
             .html_textures
@@ -195,7 +197,15 @@ impl VehicleInstance {
                     .with_asset_dirs(crate::htmltex::asset_dirs(&dirs, &d.path))
             })
             .collect();
-        host.number_var = program.str_var("number");
+        (script_textures, html_textures)
+    }
+
+    fn initial_state(
+        ty: &VehicleType,
+        program: &Program,
+        host: &VehicleHost,
+    ) -> (State, HashMap<String, omsi_script::VarId>) {
+        let mut state = State::new(program);
         // The vehicle dialog has already chosen these. They must exist before {init}: many
         // mods branch on the fleet number to choose equipment, textures or script state.
         if let (Some(i), Some(number)) = (program.str_var("number"), host.initial_number.as_ref()) {
@@ -283,7 +293,10 @@ impl VehicleInstance {
         if let Some(i) = var_index.get("schedule_active") {
             state.vars[*i as usize] = host.schedule_active;
         }
-        vm.run_init(&program, &mut state, &mut host);
+        (state, var_index)
+    }
+
+    fn animators(ty: &VehicleType, program: &Program) -> Vec<MeshAnimator> {
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
             .iter()
@@ -296,6 +309,38 @@ impl VehicleInstance {
                 .map(|m| &ty.model.meshes[m.def_index])
                 .collect::<Vec<_>>(),
         );
+        animators
+    }
+
+    fn ai_lift(ty: &VehicleType, rest_sag: &[(f32, f32)]) -> f32 {
+        let ai_lift = {
+            let offs: Vec<f32> = rest_sag
+                .iter()
+                .enumerate()
+                .map(|(a, (comp, off))| {
+                    if ty.suspension_axles.contains(&a) {
+                        *off
+                    } else {
+                        off - comp
+                    }
+                })
+                .collect();
+            offs.iter().sum::<f32>() / offs.len().max(1) as f32
+        };
+        ai_lift
+    }
+
+    pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
+        let program = ty.program.clone();
+        let mut host = host;
+        let (script_textures, html_textures) = Self::load_textures(&ty);
+        host.script_textures = script_textures;
+        host.content_dir = ty.def.dir().to_path_buf();
+        host.number_var = program.str_var("number");
+        let (mut state, var_index) = Self::initial_state(&ty, &program, &host);
+        let mut vm = Vm::new();
+        vm.run_init(&program, &mut state, &mut host);
+        let animators = Self::animators(&ty, &program);
         let n = ty.meshes.len();
         let motion = VehicleMotion::at_rest(&ty.def);
         let kinematic = KinematicModel::from_definition(&ty.def);
@@ -323,25 +368,7 @@ impl VehicleInstance {
             })
             .collect();
         let rest_sag = crate::physics::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
-        // An AI copy has no rigid body: it stands on the contact plane of its wheels
-        // (`ai::AiBody`), and what the modelled tyre reaches below its hub less than
-        // the model thinks lifts it. An axle the model does not move with `Axle_Suspension`
-        // got the spring sag taken off its hub height (`VehicleType::hub_heights`), which an
-        // AI copy without springs must not stand on.
-        let ai_lift = {
-            let offs: Vec<f32> = rest_sag
-                .iter()
-                .enumerate()
-                .map(|(a, (comp, off))| {
-                    if ty.suspension_axles.contains(&a) {
-                        *off
-                    } else {
-                        off - comp
-                    }
-                })
-                .collect();
-            offs.iter().sum::<f32>() / offs.len().max(1) as f32
-        };
+        let ai_lift = Self::ai_lift(&ty, &rest_sag);
         VehicleInstance {
             a_trans: OmsiFrames::default(),
             particles: ParticleSet::new(
