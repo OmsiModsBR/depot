@@ -63,8 +63,6 @@ pub const DRY_GRIP: f32 = 0.85;
 
 // Steering.
 
-/// The furthest a wheel or an axle turns (rad, about 60°). *tuned*
-pub const MAX_STEER: f32 = 1.05;
 /// The range of the kinematic model's full lock (deg): a file's is held to it, and one
 /// without a usable `[inv_min_turnradius]` gets the least, the old default. *fallback*
 pub const LOCK_DEG_MIN: f32 = 10.0;

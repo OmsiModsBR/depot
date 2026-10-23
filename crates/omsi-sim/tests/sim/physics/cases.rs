@@ -121,6 +121,28 @@ fn the_axle_steers_as_far_left_as_right() {
     );
 }
 
+/// The axle turns as far as `[inv_min_turnradius]` takes it, with no angle limit of the
+/// game's own: a lock of 0.4 1/m puts the front axle, 5.94 m ahead of the turning line, at
+/// atan(5.94 x 0.4), about 67°.
+#[test]
+fn the_axle_turns_as_far_as_the_lock_takes_it() {
+    let mut rb = RigidBody::from_definition(
+        &Vehicle {
+            inv_min_turn_radius: 0.4,
+            ..bus()
+        },
+        &[],
+    );
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    for _ in 0..5 {
+        rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 1.0, &g);
+    }
+    let axle = rb.axle_steer(0);
+    assert!((axle - (5.938f32 * 0.4).atan()).abs() < 1e-3, "{axle}");
+    assert!(rb.wheels().iter().all(|w| w.steer().is_finite()));
+}
+
 /// A brake stronger than the road takes locks the wheels (the ABS scripts see the
 /// wheel stand while the bus still moves); a brake the road takes keeps them turning.
 #[test]
