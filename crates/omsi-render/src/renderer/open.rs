@@ -291,6 +291,8 @@ impl Renderer {
                     wgpu::MemoryHints::Performance
                 },
                 // (the ray queries are still an experimental feature of wgpu)
+                // SAFETY: only when ray queries were asked for and the adapter offers them;
+                // the experimental features are wgpu's own, with no memory the game owns
                 experimental_features: if ray_query {
                     unsafe { wgpu::ExperimentalFeatures::enabled() }
                 } else {
