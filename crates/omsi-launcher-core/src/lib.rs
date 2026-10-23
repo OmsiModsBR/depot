@@ -3675,7 +3675,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 1.5))
                     .unwrap_or(0.28))
             }
-            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" => {
+            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" && k != "seat_z" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .map(|x| x.clamp(-1.5, 1.5))
@@ -3683,6 +3683,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             // (what is no finite number is the default, as the game reads it)
             "seat_x" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(-1.5, 1.5))
+                    .unwrap_or(0.0))
+            }
+            // (what is no finite number is the default, as the game reads it)
+            "seat_z" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .ok()
