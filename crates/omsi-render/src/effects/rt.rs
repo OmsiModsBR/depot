@@ -156,6 +156,7 @@ fn refl_div() -> u32 {
 pub(crate) fn lighting_source() -> String {
     [
         include_str!("../shaders/common/rt_common.wgsl"),
+        include_str!("../shaders/common/math.wgsl"),
         include_str!("../shaders/effects/rt.wgsl"),
     ]
     .join("\n")
@@ -174,6 +175,7 @@ pub(crate) fn reflect_source() -> String {
     [
         include_str!("../shaders/common/rt_common.wgsl"),
         include_str!("../shaders/common/fullscreen.wgsl"),
+        include_str!("../shaders/common/math.wgsl"),
         enh,
         include_str!("../shaders/effects/rt_reflect.wgsl"),
     ]

@@ -7,7 +7,7 @@ use crate::gpu::{
 };
 use crate::lighting::{meter_tuning, tone_contrast, ExposureLog, Lighting};
 use crate::scene::{Scene, TextureId};
-use crate::shaders::with_fullscreen;
+use crate::shaders::post_shader_source;
 use crate::sky::{atmosphere, SkyResources};
 use crate::targets::TargetCache;
 
@@ -49,9 +49,7 @@ pub(crate) fn post_pipelines(
     log::info!("renderer: compiling the post passes shaders");
     let post_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("post"),
-        source: wgpu::ShaderSource::Wgsl(
-            with_fullscreen(include_str!("../shaders/post/post.wgsl")).into(),
-        ),
+        source: wgpu::ShaderSource::Wgsl(post_shader_source().into()),
     });
     let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("post"),

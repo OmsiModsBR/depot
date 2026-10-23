@@ -1200,14 +1200,6 @@ fn world_pattern_xy(p: vec3<f32>) -> vec2<f32> {
     return p.xy + camera.world_origin.xy;
 }
 
-// Whether every component is a finite number, tested on the bits: Metal's fast maths takes
-// `x != x` and comparisons with a NaN as it likes (a NaN colour happened to come out as
-// something on the Mac), Direct3D 12 keeps the NaN and draws it black.
-fn all_finite(v: vec3<f32>) -> bool {
-    let e = bitcast<vec3<u32>>(v) & vec3<u32>(0x7f800000u);
-    return all(e != vec3<u32>(0x7f800000u));
-}
-
 fn finite_or(v: vec3<f32>, fallback: vec3<f32>) -> vec3<f32> {
     return select(fallback, v, all_finite(v));
 }

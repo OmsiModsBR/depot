@@ -299,10 +299,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
         ("snow", snow_shader_source()),
-        (
-            "post",
-            with_fullscreen(include_str!("shaders/post/post.wgsl")),
-        ),
+        ("post", post_shader_source()),
         (
             "ssao",
             with_fullscreen(include_str!("shaders/post/ssao.wgsl")),
