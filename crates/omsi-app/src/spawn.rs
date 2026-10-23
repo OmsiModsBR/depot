@@ -413,7 +413,7 @@ pub(crate) fn spawn_player(
     if rail_bound {
         log::info!("rail: {} is bound to the rails", vt.def.path.display());
     }
-    if args.physics != "simple" && !rail_bound {
+    if !rail_bound {
         // (on what the wheels stand on near the height found above: the texel height of
         // `ground_height` undid that, and put the bus on a wall's top or a deck over it)
         if let Some(z) =

@@ -359,21 +359,25 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
 #[test]
 fn window_and_offscreen_differ_in_the_rail_given_to_signal_aspects() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let offscreen = std::fs::read_to_string(src.join("offscreen.rs")).unwrap();
-    let window = std::fs::read_to_string(src.join("app_events.rs")).unwrap();
+    // (compared without whitespace, so that rustfmt's line breaks do not matter)
+    let squash = |s: &str| s.split_whitespace().collect::<String>();
+    let offscreen = squash(&std::fs::read_to_string(src.join("offscreen.rs")).unwrap());
+    let window = squash(&std::fs::read_to_string(src.join("app_events.rs")).unwrap());
     let calls = |s: &str| s.matches(".signal_aspects(").count();
     assert_eq!(calls(&offscreen), 1);
     assert!(
-        offscreen.contains("signal_aspects(&world.signal_routes, None)"),
+        offscreen.contains(&squash("signal_aspects(&world.signal_routes, None)")),
         "offscreen no longer passes no rail"
     );
     assert_eq!(calls(&window), 1);
     assert!(
-        window.contains("signal_aspects(&w.signal_routes, rail)"),
+        window.contains(&squash("signal_aspects(&w.signal_routes, rail)")),
         "the window no longer passes the player's rail"
     );
     assert!(
-        window.contains("p.rail.as_ref()).map(|r| (r.lane, r.along))"),
+        window.contains(&squash(
+            ".and_then(|p| p.rail.as_ref()).map(|r| (r.lane, r.along))"
+        )),
         "the window's rail is no longer the player's"
     );
 }
