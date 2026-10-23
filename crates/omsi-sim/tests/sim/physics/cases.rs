@@ -682,10 +682,11 @@ fn a_face_stops_the_wheels_at_any_speed() {
                 "{kmh} km/h at {fps} fps: front axle reached {front}"
             );
             assert!(top < 0.3, "{kmh} km/h at {fps} fps: thrown up to {top}");
-            // (a rebound of a metre or so: with the moments of inertia on OMSI's axes
-            // the body's lower yaw inertia takes a little more of the blow back)
+            // (a rebound of a metre or two: with the moments of inertia on OMSI's axes
+            // the body's lower yaw inertia takes a little more of the blow back, and with
+            // the tyres holding outright the body cannot turn away from it)
             assert!(
-                rb.forward_speed().abs() < 1.5,
+                rb.forward_speed().abs() < 2.0,
                 "{kmh} km/h at {fps} fps: still at {}",
                 rb.forward_speed()
             );

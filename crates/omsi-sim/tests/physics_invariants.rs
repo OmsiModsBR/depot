@@ -175,3 +175,41 @@ fn i4_holding_the_bus_follows_its_wheels() {
         );
     }
 }
+
+/// I4 from the first frame: holding, the bus turns about its `[rot_pnt_long]` line as soon as
+/// the wheel turns: a quick turn of the wheel at speed gives the yaw rate v κ from the first
+/// frame, not after the tyres have pushed the body round.
+#[test]
+fn i4_holding_the_bus_turns_about_its_rotation_point_at_once() {
+    for (kmh, steer) in [(50.0f32, 0.25f32), (30.0, 0.5), (15.0, 1.0)] {
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        let dt = 1.0 / 60.0;
+        let brakes = [0.0; 4];
+        for _ in 0..120 {
+            rb.step(dt, 0.0, &brakes, 0.0, &flat);
+        }
+        let v = kmh / 3.6;
+        rb.set_velocity(rb.orientation().mul_vec3(Vec3::Y) * v);
+        for w in rb.wheels_mut() {
+            w.set_spin(v / w.radius());
+        }
+        for _ in 0..60 {
+            rb.step(dt, 0.0, &brakes, 0.0, &flat);
+        }
+        let mut yaw_off = 0.0f32;
+        for _ in 0..10 {
+            rb.step(dt, 0.0, &brakes, steer, &flat);
+            assert!(
+                rb.holding(),
+                "{kmh} km/h, steering {steer}: the tyres let go"
+            );
+            let ratio = rb.omega().z / (rb.forward_speed() * rb.kappa());
+            yaw_off = yaw_off.max((ratio.abs() - 1.0).abs());
+        }
+        assert!(
+            yaw_off < 0.02,
+            "{kmh} km/h, steering {steer}: the yaw rate is {yaw_off} off v κ"
+        );
+    }
+}
