@@ -37,7 +37,13 @@ packages=()
 for crate in "$@"; do
     packages+=(-p "$crate")
 done
-${CARGO_FMT:-cargo fmt} "${packages[@]}"
+# (rustfmt sometimes needs a second pass to settle; run it until the check passes)
+for _ in 1 2 3; do
+    ${CARGO_FMT:-cargo fmt} "${packages[@]}"
+    if ${CARGO_FMT:-cargo fmt} "${packages[@]}" -- --check >/dev/null; then
+        break
+    fi
+done
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     git commit -q -am "Format the branch as in $(git rev-parse --short "$fmt_commit")"
 fi
