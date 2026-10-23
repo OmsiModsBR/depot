@@ -111,6 +111,7 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
 
 pub(crate) fn scene_shader_text(gl: bool) -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("scene/shader.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
@@ -168,6 +169,7 @@ pub(crate) fn lean_scene(src: String) -> String {
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
+        include_str!("common/camera.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("sky/sky.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
@@ -180,6 +182,7 @@ pub(crate) fn sky_shader_source() -> String {
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
         include_str!("sky/snow.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
@@ -226,6 +229,7 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
+        include_str!("common/camera.wgsl"),
         include_str!("lights/fog_lamps.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
@@ -235,21 +239,16 @@ pub(crate) fn fog_lamps_shader_source() -> String {
 }
 
 /// The scene's point lights and their grid as the fog pass reads them (`lamp_air.wgsl`):
-/// the scene shader's declarations.
-pub(crate) const FOG_LAMP_LIGHTS: &str = "struct PointLight {
-    pos: vec4<f32>,
-    color: vec4<f32>,
-    dir: vec4<f32>,
-    extra: vec4<f32>,
-};
-@group(0) @binding(3) var<storage, read> lights: array<PointLight>;
+/// the scene shader's bindings (the types are in `common/camera.wgsl`).
+pub(crate) const FOG_LAMP_LIGHTS: &str =
+    "@group(0) @binding(3) var<storage, read> lights: array<PointLight>;
 @group(0) @binding(4) var<storage, read> grid: array<u32>;
-const CELL_CAP: u32 = 32u;
 ";
 
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
+        include_str!("common/camera.wgsl"),
         include_str!("lights/corona.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
