@@ -1,14 +1,15 @@
 //! The parts coupled behind a vehicle (an articulated bus's rear sections, a lorry's
 //! trailers): how they hang on their coupling and where they are drawn.
 
-use super::pose::camera_in_body;
-use super::props::{MeshProps, PropsPlan};
-use super::skin::{rest_transforms, skin_key, skin_vertices};
-use super::vehicle_type::VehicleType;
-use super::visuals::{is_shadow_mesh, onto_plane};
-use super::{articulation, VehicleInstance};
+use super::articulation;
 use crate::anim::MeshAnimator;
 use crate::particles::ParticleSet;
+use crate::vehicle::pose::camera_in_body;
+use crate::vehicle::props::{MeshProps, PropsPlan};
+use crate::vehicle::skin::{rest_transforms, skin_key, skin_vertices};
+use crate::vehicle::vehicle_type::VehicleType;
+use crate::vehicle::visuals::{is_shadow_mesh, onto_plane};
+use crate::vehicle::VehicleInstance;
 use glam::{DVec3, Mat4, Quat, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
@@ -96,53 +97,53 @@ pub struct TrailerPart {
     pub particles: ParticleSet,
     /// Its lights' brightness as they come on and go out (see `VehicleInstance::light_fade`).
     pub light_fade: Vec<f32>,
-    pub(super) animators: Vec<MeshAnimator>,
+    pub(in crate::vehicle) animators: Vec<MeshAnimator>,
     pub mesh_transforms: Vec<Mat4>,
     pub mesh_props: Vec<MeshProps>,
     pub position: DVec3,
     pub heading: f64,
     /// World position of the rear pivot (the trailer axle) from the last frame.
-    pub(super) pivot: Option<DVec3>,
+    pub(in crate::vehicle) pivot: Option<DVec3>,
     /// Coupling → rear axle distance.
-    pub(super) length: f32,
+    pub(in crate::vehicle) length: f32,
     /// How far ahead of the ball, on the part in front, the joint pitches (see
     /// [`TrailerPart::pitch_offset`]).
-    pub(super) pitch_offset: f32,
-    pub(super) coupling_front: Vec3,
-    pub(super) coupling_back: Vec3,
+    pub(in crate::vehicle) pitch_offset: f32,
+    pub(in crate::vehicle) coupling_front: Vec3,
+    pub(in crate::vehicle) coupling_back: Vec3,
     pub(crate) axle_long: f32,
-    pub(super) axle_count: usize,
+    pub(in crate::vehicle) axle_count: usize,
     /// First axle index of this part in the train's `Wheel_*` variables.
     pub(crate) first_axle: usize,
-    pub(super) wheel_radius: f32,
+    pub(in crate::vehicle) wheel_radius: f32,
     /// `articulation_<n>_alpha` (the angle about the vertical axis, which the jackknife
     /// protection watches and the joint's plates and bellows turn with) and
     /// `articulation_<n>_beta` (about the transverse axis) of this part's joint.
-    pub(super) v_alpha: Option<omsi_script::VarId>,
-    pub(super) v_beta: Option<omsi_script::VarId>,
-    pub(super) odometer: f32,
+    pub(in crate::vehicle) v_alpha: Option<omsi_script::VarId>,
+    pub(in crate::vehicle) v_beta: Option<omsi_script::VarId>,
+    pub(in crate::vehicle) odometer: f32,
     pub reversed: bool,
     /// Per axle of this part: tyre radius less the unloaded hub height, the static load per
     /// wheel and the spring rate - it sits down on its springs like the part it follows.
-    pub(super) rest: Vec<(f32, f32, f32)>,
+    pub(in crate::vehicle) rest: Vec<(f32, f32, f32)>,
     /// `Axle_Brakeforce_<axle>_L/R` of this part's axles, in the leading vehicle's scripts.
-    pub(super) v_brakes: Vec<Option<omsi_script::VarId>>,
+    pub(in crate::vehicle) v_brakes: Vec<Option<omsi_script::VarId>>,
     /// How far the part's origin stands above the ground under its axles (m).
-    pub(super) ground_lift: f32,
+    pub(in crate::vehicle) ground_lift: f32,
     /// The part's pitch (degrees, nose up) and lean (degrees, as the vehicle's `bank`) as
     /// it travels (not turned round for a reversed part), and the eased height of its axle.
     pub(crate) pitch: f32,
     pub(crate) bank: f32,
     pub(crate) axle_z: Option<f64>,
     /// How fast the axle's height moves (m/s), for the road part's springs (see `follow`).
-    pub(super) axle_vz: f64,
+    pub(in crate::vehicle) axle_vz: f64,
     /// The track under its turning axle, when it runs on rails (`VehicleInstance::retrail`):
     /// it stands at the track's height, not on whatever the ground probe finds there.
     pub(crate) track: Option<DVec3>,
     /// Mesh property sources, resolved against the leading vehicle's variables.
-    pub(super) props_plan: PropsPlan,
+    pub(in crate::vehicle) props_plan: PropsPlan,
     /// The part's own body behind the player's vehicle (see `articulation`).
-    pub(super) body: Option<articulation::PartBody>,
+    pub(in crate::vehicle) body: Option<articulation::PartBody>,
     /// The meshes' transforms in the modelled pose, for `[smoothskin]` (made when needed).
     skin_rest: Vec<Mat4>,
     /// The part's own `[texttexture]`s, written from the leading vehicle's string

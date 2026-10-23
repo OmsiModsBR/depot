@@ -10,8 +10,8 @@ use omsi_script::{State, Vm};
 use std::sync::Arc;
 
 mod ai_frame;
-pub(crate) mod articulation;
 mod builtins;
+pub(crate) mod coupled;
 pub(crate) mod motion;
 pub(crate) mod physics_bridge;
 mod pose;
@@ -19,7 +19,7 @@ pub(crate) mod props;
 pub(crate) mod radio;
 pub(crate) mod scripts;
 mod skin;
-pub(crate) mod trailer;
+pub(crate) use coupled::{articulation, trailer};
 pub(crate) mod vehicle_type;
 pub(crate) mod visuals;
 pub(crate) mod weather;

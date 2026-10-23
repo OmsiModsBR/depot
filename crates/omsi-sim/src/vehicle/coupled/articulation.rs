@@ -7,19 +7,19 @@
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle.
 
-use super::physics_bridge::PartWheelVars;
 use super::trailer::{body_reversed, TrailerPart, ARTICULATION_SIGN};
-use super::VehicleInstance;
 use crate::physics::{BodyInputs, Joint, RigidBody};
+use crate::vehicle::physics_bridge::PartWheelVars;
+use crate::vehicle::VehicleInstance;
 use glam::{DVec3, Mat4, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
 
 /// A part's own body and the variables its wheels are written to.
 pub struct PartBody {
-    pub(super) rb: RigidBody,
+    pub(in crate::vehicle) rb: RigidBody,
     /// Hung on its joint since the train was last put down (see [`TrailerPart::realign`]).
-    pub(super) placed: bool,
+    pub(in crate::vehicle) placed: bool,
     vars: Vec<PartWheelVars>,
 }
 
@@ -58,7 +58,7 @@ impl TrailerPart {
     }
 
     /// The part's body is to be hung on its joint again at the next step.
-    pub(super) fn unplace(&mut self) {
+    pub(in crate::vehicle) fn unplace(&mut self) {
         if let Some(b) = self.body.as_mut() {
             b.placed = false;
         }
@@ -93,7 +93,7 @@ impl VehicleInstance {
     /// parts coupled behind it - or of the body alone, the parts handing it what they hold
     /// along the joint (`physics::CoupledPart`) as they follow.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn step_bodies(
+    pub(in crate::vehicle) fn step_bodies(
         &mut self,
         mut lead: RigidBody,
         dt: f32,
