@@ -15,7 +15,11 @@ pub(crate) fn sanitize_part(raw: &str) -> String {
     let mut out = String::new();
     let mut last_us = false;
     for c in raw.trim().chars() {
-        let bad = c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '_');
+        let bad = c.is_control()
+            || matches!(
+                c,
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '_'
+            );
         let c = if bad || c.is_whitespace() { '_' } else { c };
         if c == '_' {
             if last_us {
@@ -28,10 +32,14 @@ pub(crate) fn sanitize_part(raw: &str) -> String {
         out.push(c);
     }
     let out: String = out.chars().take(MAX_PART).collect();
-    let out = out.trim_matches(|c| c == '_' || c == '.' || c == ' ').to_string();
+    let out = out
+        .trim_matches(|c| c == '_' || c == '.' || c == ' ')
+        .to_string();
     let stem = out.split('.').next().unwrap_or("").to_ascii_uppercase();
     let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.len() == 4 && stem.as_bytes()[3].is_ascii_digit());
+        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit());
     if reserved {
         format!("{out}_")
     } else {
@@ -57,7 +65,9 @@ pub(crate) fn build(secs: u64, map: &str, vehicle: Option<&str>) -> String {
 /// What a capture's file name says: (secs, map, vehicle). `None` when it is not one of ours.
 /// Old names give a map of `None`; a name with one part gives only the map.
 pub(crate) fn parse(file_name: &str) -> Option<(u64, Option<String>, Option<String>)> {
-    let stem = file_name.strip_suffix(".png").or_else(|| file_name.strip_suffix(".PNG"))?;
+    let stem = file_name
+        .strip_suffix(".png")
+        .or_else(|| file_name.strip_suffix(".PNG"))?;
     let rest = stem.strip_prefix("omsi_")?;
     let mut parts = rest.split(SEP);
     let secs = parts.next()?.parse().ok()?;
@@ -80,7 +90,10 @@ mod tests {
 
     #[test]
     fn map_and_vehicle_follow_the_time() {
-        assert_eq!(build(1760000000, "Grundorf", Some("MB O305")), "omsi_1760000000__Grundorf__MB_O305.png");
+        assert_eq!(
+            build(1760000000, "Grundorf", Some("MB O305")),
+            "omsi_1760000000__Grundorf__MB_O305.png"
+        );
     }
 
     #[test]
@@ -97,7 +110,10 @@ mod tests {
     #[test]
     fn unsafe_characters_never_reach_the_file_name() {
         let n = build(1, "a/b\\c:d*e?\"f<g>h|i", Some("../../x\u{7}y"));
-        assert!(!n.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\u{7}']), "{n}");
+        assert!(
+            !n.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\u{7}']),
+            "{n}"
+        );
         assert_eq!(sanitize_part("..hidden. "), "hidden");
         assert_eq!(sanitize_part("a   b__c"), "a_b_c");
     }
@@ -119,8 +135,14 @@ mod tests {
     #[test]
     fn what_is_built_is_read_back() {
         let n = build(42, "Grundorf", Some("MB O305"));
-        assert_eq!(parse(&n), Some((42, Some("Grundorf".into()), Some("MB_O305".into()))));
-        assert_eq!(parse("omsi_42__Grundorf.png"), Some((42, Some("Grundorf".into()), None)));
+        assert_eq!(
+            parse(&n),
+            Some((42, Some("Grundorf".into()), Some("MB_O305".into())))
+        );
+        assert_eq!(
+            parse("omsi_42__Grundorf.png"),
+            Some((42, Some("Grundorf".into()), None))
+        );
     }
 
     #[test]
@@ -132,8 +154,14 @@ mod tests {
 
     #[test]
     fn folder_names_come_from_content_paths() {
-        assert_eq!(folder_of("maps/Grundorf/Global.cfg").as_deref(), Some("Grundorf"));
-        assert_eq!(folder_of("Vehicles\\MB_O305\\MB_O305.bus").as_deref(), Some("MB_O305"));
+        assert_eq!(
+            folder_of("maps/Grundorf/Global.cfg").as_deref(),
+            Some("Grundorf")
+        );
+        assert_eq!(
+            folder_of("Vehicles\\MB_O305\\MB_O305.bus").as_deref(),
+            Some("MB_O305")
+        );
         assert_eq!(folder_of("single.cfg").as_deref(), Some("single.cfg"));
     }
 }

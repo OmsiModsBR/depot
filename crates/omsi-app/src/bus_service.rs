@@ -71,7 +71,14 @@ pub struct Stop {
 impl Stop {
     #[allow(clippy::type_complexity)]
     pub fn from_tuple(t: (usize, f32, f32, f64, i64, f32)) -> Stop {
-        Stop { ri: t.0, s: t.1, bay: t.2, depart: t.3, id: t.4, side: t.5 }
+        Stop {
+            ri: t.0,
+            s: t.1,
+            bay: t.2,
+            depart: t.3,
+            id: t.4,
+            side: t.5,
+        }
     }
 }
 
@@ -298,7 +305,10 @@ impl BusService {
     }
 
     pub fn at_stop(&self) -> bool {
-        matches!(self.phase, Phase::Boarding | Phase::Waiting | Phase::Closing)
+        matches!(
+            self.phase,
+            Phase::Boarding | Phase::Waiting | Phase::Closing
+        )
     }
 
     /// Seconds it expects to stand where it is yet (for the traffic behind: worth going
@@ -357,10 +367,19 @@ impl BusService {
     /// Arrived at the front stop: what now.
     fn arrive(&mut self, ctx: &Ctx, depart: f64, at: (usize, f32)) {
         if omsi_cfg::flags::DEBUG_STOPS.is_set() {
-            log::info!("t={:.1}: timetable bus {} serves its stop {:?}", ctx.day_time, ctx.id, self.stops.front().map(|s| s.id));
+            log::info!(
+                "t={:.1}: timetable bus {} serves its stop {:?}",
+                ctx.day_time,
+                ctx.id,
+                self.stops.front().map(|s| s.id)
+            );
         }
         let layover = std::mem::take(&mut self.layover);
-        let rail = ctx.net.lanes.get(at.0).is_some_and(|l| l.kind == LaneKind::Rail);
+        let rail = ctx
+            .net
+            .lanes
+            .get(at.0)
+            .is_some_and(|l| l.kind == LaneKind::Rail);
         let wait = early_wait(depart, ctx.day_time, layover, rail);
         self.leave_at = ctx.day_time + wait;
         self.arrived_at = ctx.day_time;
@@ -383,7 +402,10 @@ impl BusService {
                 ctx.id,
                 depart - ctx.day_time,
                 self.phase,
-                ctx.net.lanes.get(at.0).map(|l| { let p = l.at(at.1).0; (p.x.round(), p.y.round()) })
+                ctx.net.lanes.get(at.0).map(|l| {
+                    let p = l.at(at.1).0;
+                    (p.x.round(), p.y.round())
+                })
             );
         }
     }
@@ -417,7 +439,9 @@ impl BusService {
                 .iter()
                 .find(|&&(l, dl)| dl > 0.0 && !ctx.net.crossings[l].is_empty())
                 .map(|w| (w.1 - st.front - 1.0).max(4.0));
-            let len = (lat.abs() * 8.0).clamp(8.0, 30.0).min(junction.unwrap_or(f32::MAX));
+            let len = (lat.abs() * 8.0)
+                .clamp(8.0, 30.0)
+                .min(junction.unwrap_or(f32::MAX));
             st.lateral_target = 0.0;
             st.lateral_ramp = (lat, 0.0, st.odometer, len);
         }
@@ -433,7 +457,12 @@ impl BusService {
 
     /// One frame of the service: where the bus has to stop (distance from its origin along
     /// its way), if anywhere; it also sets its blinker and its place across the lane.
-    pub fn step(&mut self, st: &mut AiState, vehicle: &mut VehicleInstance, ctx: &Ctx) -> Option<f32> {
+    pub fn step(
+        &mut self,
+        st: &mut AiState,
+        vehicle: &mut VehicleInstance,
+        ctx: &Ctx,
+    ) -> Option<f32> {
         self.phase_t += ctx.dt;
         let here = Some(st.front);
         match self.phase {
@@ -442,7 +471,9 @@ impl BusService {
                 let board_at = self.leave_at - LAYOVER_BOARDING;
                 if !self.boarded && ctx.day_time >= board_at {
                     self.boarded = true;
-                    self.boarding = self.boarding.max((self.leave_at - ctx.day_time) as f32 - 3.0);
+                    self.boarding = self
+                        .boarding
+                        .max((self.leave_at - ctx.day_time) as f32 - 3.0);
                     self.set_phase(Phase::Boarding);
                 } else if self.boarded && ctx.day_time >= self.leave_at {
                     self.set_phase(Phase::Closing);
@@ -485,7 +516,11 @@ impl BusService {
                 let bay = self.stops.front().map(|s| s.bay).unwrap_or(0.0);
                 st.signal = out_signal(bay);
                 st.signal_time = st.signal_time.max(1.0);
-                let answered = vehicle.station_released() && vehicle.var("AI_Scheduled_AtStation").map(|v| v.abs() < 0.5).unwrap_or(true);
+                let answered = vehicle.station_released()
+                    && vehicle
+                        .var("AI_Scheduled_AtStation")
+                        .map(|v| v.abs() < 0.5)
+                        .unwrap_or(true);
                 if (answered && self.phase_t >= CLOSE_MIN) || self.phase_t >= CLOSE_MAX {
                     self.depart(st, vehicle, ctx);
                     if self.phase == Phase::TripDone {
@@ -500,7 +535,12 @@ impl BusService {
     }
 
     /// Driving: brake for the next stop, pull into its bay.
-    fn approach(&mut self, st: &mut AiState, vehicle: &mut VehicleInstance, ctx: &Ctx) -> Option<f32> {
+    fn approach(
+        &mut self,
+        st: &mut AiState,
+        vehicle: &mut VehicleInstance,
+        ctx: &Ctx,
+    ) -> Option<f32> {
         loop {
             let Some(stop) = self.stops.front().copied() else {
                 if !ctx.passing {
@@ -529,12 +569,23 @@ impl BusService {
             let d = st.route_distance(ctx.net, stop.ri, stop.s);
             // near enough to see whether anybody wants it (a train keeps to its stations)
             if self.serve.is_none() && d < SKIP_DECIDE {
-                let rail = ctx.net.lanes.get(st.lane).is_some_and(|l| l.kind == LaneKind::Rail);
-                self.serve = Some(rail || self.must_serve(&stop, ctx.day_time) || ctx.wanted.unwrap_or(true));
+                let rail = ctx
+                    .net
+                    .lanes
+                    .get(st.lane)
+                    .is_some_and(|l| l.kind == LaneKind::Rail);
+                self.serve = Some(
+                    rail || self.must_serve(&stop, ctx.day_time) || ctx.wanted.unwrap_or(true),
+                );
             }
             if self.serve == Some(false) {
                 if ctx.debug || omsi_cfg::flags::DEBUG_STOPS.is_set() {
-                    log::info!("t={:.1}: timetable bus {} passes its stop {}: nobody gets off or on", ctx.day_time, ctx.id, stop.id);
+                    log::info!(
+                        "t={:.1}: timetable bus {} passes its stop {}: nobody gets off or on",
+                        ctx.day_time,
+                        ctx.id,
+                        stop.id
+                    );
                 }
                 self.stops.pop_front();
                 self.near_d = f32::INFINITY;
@@ -601,7 +652,11 @@ impl BusService {
 /// offset of its `[ai_brakeperformance]` ("to correct unprecise braking").
 pub fn stop_shift(ty: &omsi_sim::VehicleType, rail: bool) -> f32 {
     let hold = ty.def.ai_brake_performance.map(|b| b[4]).unwrap_or(0.0);
-    let half = if rail { ty.half_length().unwrap_or(0.0) } else { 0.0 };
+    let half = if rail {
+        ty.half_length().unwrap_or(0.0)
+    } else {
+        0.0
+    };
     half - hold
 }
 
@@ -676,8 +731,11 @@ mod tests {
                 (7, "A".into(), 300.0, 320.0),
             ],
         };
-        let mut v =
-            crate::schedule::tests::script_test_vehicle("{frame_ai}\n{end}\n", "schedule_active\n", "");
+        let mut v = crate::schedule::tests::script_test_vehicle(
+            "{frame_ai}\n{end}\n",
+            "schedule_active\n",
+            "",
+        );
         v.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof {
             termini: vec![omsi_vehicle::hof::Terminus {
                 texture_id: "terminal".into(),
@@ -726,7 +784,14 @@ mod tests {
     /// (#767); somebody on the way out does, wherever.
     #[test]
     fn a_hold_counts_at_the_stop_served() {
-        let stop = Stop { ri: 0, s: 0.0, bay: 0.0, depart: 0.0, id: 42, side: 0.0 };
+        let stop = Stop {
+            ri: 0,
+            s: 0.0,
+            bay: 0.0,
+            depart: 0.0,
+            id: 42,
+            side: 0.0,
+        };
         let mut s = BusService::new(vec![stop]);
         s.phase = Phase::Boarding;
         s.boarding = 0.0;
@@ -805,14 +870,41 @@ mod tests {
 
     impl Rig {
         fn at_first_stop(depart: f64, now: f64, id: u64) -> Rig {
-            let lane = omsi_sim::traffic::LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 300.0, 0.0, 0.0, LaneKind::Street, 2.5);
-            let net = Network { lanes: vec![lane], crossings: vec![Vec::new()], ..Default::default() };
+            let lane = omsi_sim::traffic::LaneBuilder::arc(
+                glam::DVec3::ZERO,
+                0.0,
+                300.0,
+                0.0,
+                0.0,
+                LaneKind::Street,
+                2.5,
+            );
+            let net = Network {
+                lanes: vec![lane],
+                crossings: vec![Vec::new()],
+                ..Default::default()
+            };
             let mut st = AiState::new(0, 100.0, id);
             st.route = vec![0];
-            let stop = |id, s, depart| Stop { ri: 0, s, bay: 0.0, depart, id, side: 0.0 };
+            let stop = |id, s, depart| Stop {
+                ri: 0,
+                s,
+                bay: 0.0,
+                depart,
+                id,
+                side: 0.0,
+            };
             let svc = BusService::new(vec![stop(1, 100.0, depart), stop(2, 250.0, depart + 300.0)]);
-            let vehicle = crate::schedule::tests::script_test_vehicle("{frame_ai}\n{end}\n", "", "");
-            Rig { net, st, vehicle, svc, now, id }
+            let vehicle =
+                crate::schedule::tests::script_test_vehicle("{frame_ai}\n{end}\n", "", "");
+            Rig {
+                net,
+                st,
+                vehicle,
+                svc,
+                now,
+                id,
+            }
         }
 
         /// One frame of `dt` seconds; whether `holds` keeps the doors open (somebody at them).
@@ -859,9 +951,17 @@ mod tests {
         for id in 1..=10u64 {
             // due at 08:00:00, there at 08:00:30 (late): off as soon as the doors are shut
             let mut rig = Rig::at_first_stop(28_800.0, 28_830.0, id);
-            let left = rig.seconds_to_leave(120.0, false).unwrap_or_else(|| panic!("bus {id} never left ({:?})", rig.svc.phase));
-            assert!(left <= boarding_time(id) + CLOSE_MAX + 1.0, "bus {id} stood {left:.1} s");
-            assert!(left >= boarding_time(id), "bus {id} left with its doors open {left:.1} s");
+            let left = rig
+                .seconds_to_leave(120.0, false)
+                .unwrap_or_else(|| panic!("bus {id} never left ({:?})", rig.svc.phase));
+            assert!(
+                left <= boarding_time(id) + CLOSE_MAX + 1.0,
+                "bus {id} stood {left:.1} s"
+            );
+            assert!(
+                left >= boarding_time(id),
+                "bus {id} left with its doors open {left:.1} s"
+            );
         }
     }
 
@@ -872,7 +972,10 @@ mod tests {
         let mut rig = Rig::at_first_stop(28_800.0, 28_700.0, 3);
         let left = rig.seconds_to_leave(300.0, false).expect("never left");
         let wait = early_wait(28_800.0, 28_700.0, false, false) as f32;
-        assert!(left >= wait && left <= wait + 2.0 + CLOSE_MAX, "left after {left:.1} s, expected about {wait:.0} s");
+        assert!(
+            left >= wait && left <= wait + 2.0 + CLOSE_MAX,
+            "left after {left:.1} s, expected about {wait:.0} s"
+        );
     }
 
     /// #172: somebody at the doors who cannot get on or off (an exit that never opens, a
@@ -884,7 +987,11 @@ mod tests {
     fn nobody_keeps_a_bus_at_its_stop_for_good() {
         let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
         let left = rig.seconds_to_leave(600.0, true);
-        assert!(left.is_some(), "still {:?} after ten minutes of somebody at the doors", rig.svc.phase);
+        assert!(
+            left.is_some(),
+            "still {:?} after ten minutes of somebody at the doors",
+            rig.svc.phase
+        );
     }
 
     /// The limit does not cut short a crowd: people getting on one after another keep the
@@ -895,9 +1002,14 @@ mod tests {
         let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
         let base = boarding_time(3);
         let left = rig.seconds_to_leave(base + MAX_HELD - 5.0, true);
-        assert!(left.is_none(), "left after {left:?} with people at the doors");
+        assert!(
+            left.is_none(),
+            "left after {left:?} with people at the doors"
+        );
         assert_eq!(rig.svc.phase, Phase::Boarding);
-        let left = rig.seconds_to_leave(20.0 + CLOSE_MAX, true).expect("never left");
+        let left = rig
+            .seconds_to_leave(20.0 + CLOSE_MAX, true)
+            .expect("never left");
         assert!(left < 20.0 + CLOSE_MAX);
     }
 
@@ -922,7 +1034,27 @@ mod tests {
         let mut rig = Rig::at_first_stop(28_800.0, 28_800.0, 3);
         rig.seconds_to_leave(600.0, true).expect("never left");
         assert!(rig.svc.held_out);
-        rig.svc.restart(vec![Stop { ri: 0, s: 100.0, bay: 0.0, depart: rig.now, id: 5, side: 0.0 }, Stop { ri: 0, s: 250.0, bay: 0.0, depart: rig.now + 300.0, id: 6, side: 0.0 }], false);
+        rig.svc.restart(
+            vec![
+                Stop {
+                    ri: 0,
+                    s: 100.0,
+                    bay: 0.0,
+                    depart: rig.now,
+                    id: 5,
+                    side: 0.0,
+                },
+                Stop {
+                    ri: 0,
+                    s: 250.0,
+                    bay: 0.0,
+                    depart: rig.now + 300.0,
+                    id: 6,
+                    side: 0.0,
+                },
+            ],
+            false,
+        );
         rig.st.s = 100.0;
         rig.st.speed = 0.0;
         for _ in 0..50 {
@@ -947,7 +1079,18 @@ mod tests {
     ) -> Option<f64> {
         let mut t = from;
         while t < to {
-            let ctx = Ctx { net, way: &[], day_time: t, dt: 0.5, id: 1, stopped: 0.0, passing: false, kerb_swerve: None, wanted: None, debug: false };
+            let ctx = Ctx {
+                net,
+                way: &[],
+                day_time: t,
+                dt: 0.5,
+                id: 1,
+                stopped: 0.0,
+                passing: false,
+                kerb_swerve: None,
+                wanted: None,
+                debug: false,
+            };
             s.step(st, v, &ctx);
             if stop_when(s) {
                 return Some(t);
@@ -963,7 +1106,15 @@ mod tests {
     fn a_bus_early_at_the_end_of_a_trip_waits_for_the_next_trips_departure() {
         use omsi_sim::traffic::LaneBuilder;
         let net = Network {
-            lanes: vec![LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 200.0, 0.0, 0.0, LaneKind::Street, 3.0)],
+            lanes: vec![LaneBuilder::arc(
+                glam::DVec3::ZERO,
+                0.0,
+                200.0,
+                0.0,
+                0.0,
+                LaneKind::Street,
+                3.0,
+            )],
             ..Default::default()
         };
         let mut st = AiState::new(0, 10.0, 1);
@@ -973,13 +1124,28 @@ mod tests {
         let stop = |id: i64, s: f32, depart: f64| Stop::from_tuple((0, s, 0.0, depart, id, 0.0));
         let mut b = BusService::new(vec![stop(1, 10.3, 1000.0)]);
         b.last_stop = Some(1);
-        let done = run_until(&mut b, &mut st, &mut v, &net, 500.0, 2000.0, |b| b.trip_done()).expect("the trip ends");
-        assert!(done >= 1000.0 - EARLY_LEAVE, "the first trip is over at {done}");
+        let done = run_until(&mut b, &mut st, &mut v, &net, 500.0, 2000.0, |b| {
+            b.trip_done()
+        })
+        .expect("the trip ends");
+        assert!(
+            done >= 1000.0 - EARLY_LEAVE,
+            "the first trip is over at {done}"
+        );
         // the tour's next trip leaves the same place at 1300 s: the bus takes it on in place
         b.restart(vec![stop(2, 10.3, 1300.0), stop(3, 150.0, 1500.0)], true);
-        let left = run_until(&mut b, &mut st, &mut v, &net, done, 3000.0, |b| b.stops.len() == 1).expect("it sets off");
-        assert!(left >= 1300.0, "left at {left} for a trip that leaves at 1300");
-        assert!(left < 1310.0, "left at {left}: it waits for no more than the doors take to close");
+        let left = run_until(&mut b, &mut st, &mut v, &net, done, 3000.0, |b| {
+            b.stops.len() == 1
+        })
+        .expect("it sets off");
+        assert!(
+            left >= 1300.0,
+            "left at {left} for a trip that leaves at 1300"
+        );
+        assert!(
+            left < 1310.0,
+            "left at {left}: it waits for no more than the doors take to close"
+        );
     }
 
     #[test]
