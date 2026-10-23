@@ -26,7 +26,8 @@ pub struct Thumbs {
 /// `img` cut to the thumbnail's shape (its middle) and made that small.
 pub fn make(img: &image::RgbaImage) -> image::RgbaImage {
     let d = image::DynamicImage::ImageRgba8(img.clone());
-    d.resize_to_fill(W, H, image::imageops::FilterType::Triangle).to_rgba8()
+    d.resize_to_fill(W, H, image::imageops::FilterType::Triangle)
+        .to_rgba8()
 }
 
 impl Thumbs {
@@ -36,20 +37,26 @@ impl Thumbs {
     }
 
     /// Make the thumbnail of `key` with `read` (on the thread), unless it is made or asked for.
-    pub fn want(&mut self, key: &str, read: impl FnOnce() -> Option<image::RgbaImage> + Send + 'static) {
+    pub fn want(
+        &mut self,
+        key: &str,
+        read: impl FnOnce() -> Option<image::RgbaImage> + Send + 'static,
+    ) {
         if self.kept.contains_key(key) || self.asked.contains(key) {
             return;
         }
         if self.jobs.is_none() {
             let (jtx, jrx) = channel::<Job>();
             let (dtx, drx) = channel();
-            let spawned = std::thread::Builder::new().name("launcher-thumbs".into()).spawn(move || {
-                for (key, read) in jrx {
-                    if dtx.send((key, read().map(|i| make(&i)))).is_err() {
-                        break;
+            let spawned = std::thread::Builder::new()
+                .name("launcher-thumbs".into())
+                .spawn(move || {
+                    for (key, read) in jrx {
+                        if dtx.send((key, read().map(|i| make(&i)))).is_err() {
+                            break;
+                        }
                     }
-                }
-            });
+                });
             if spawned.is_err() {
                 return;
             }

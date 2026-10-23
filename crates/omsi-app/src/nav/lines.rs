@@ -1,5 +1,5 @@
-use omsi_ui::Color;
 use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER};
+use omsi_ui::Color;
 
 /// The texts of the lines panel and of the "you are on" chip. A language without its own gets English.
 pub(super) struct LinesText {
@@ -119,7 +119,23 @@ pub(super) fn decimal_comma() -> bool {
 fn decimal_comma_in(code: &str) -> bool {
     matches!(
         code,
-        "be" | "ca" | "cs" | "de" | "es" | "fr" | "hu" | "id" | "it" | "kk" | "nl" | "pl" | "pt" | "pt-pt" | "ru" | "tr" | "uk" | "vi"
+        "be" | "ca"
+            | "cs"
+            | "de"
+            | "es"
+            | "fr"
+            | "hu"
+            | "id"
+            | "it"
+            | "kk"
+            | "nl"
+            | "pl"
+            | "pt"
+            | "pt-pt"
+            | "ru"
+            | "tr"
+            | "uk"
+            | "vi"
     )
 }
 
@@ -129,7 +145,9 @@ mod tests {
 
     #[test]
     fn decimals_follow_the_language() {
-        for c in ["es", "fr", "de", "pt", "pt-pt", "ru", "pl", "it", "tr", "hu", "id", "vi"] {
+        for c in [
+            "es", "fr", "de", "pt", "pt-pt", "ru", "pl", "it", "tr", "hu", "id", "vi",
+        ] {
             assert!(decimal_comma_in(c), "{c}");
         }
         for c in ["", "en", "ja", "ko", "zh", "zh-tw", "th", "hi", "ms", "tl"] {
@@ -141,21 +159,55 @@ mod tests {
     fn every_text_of_the_panel_is_in_the_catalog_for_every_language() {
         let t = lines_text();
         let mut keys = vec![
-            t.lines, t.line_data, t.map_lines, t.all, t.express, t.feeders, t.length, t.stops, t.trip, t.route, t.vehicles,
-            t.circular, t.out_back, t.minutes, t.count, t.timetable, t.loading, t.tick_all, t.tick_none, t.towards,
-            t.predicted, t.heavy, t.terrain, t.elev, t.next_stop, t.follow, t.you_are_here, t.city, t.street, t.distance, t.arrival,
-            t.stops_left, t.driven, t.you, t.keys,
+            t.lines,
+            t.line_data,
+            t.map_lines,
+            t.all,
+            t.express,
+            t.feeders,
+            t.length,
+            t.stops,
+            t.trip,
+            t.route,
+            t.vehicles,
+            t.circular,
+            t.out_back,
+            t.minutes,
+            t.count,
+            t.timetable,
+            t.loading,
+            t.tick_all,
+            t.tick_none,
+            t.towards,
+            t.predicted,
+            t.heavy,
+            t.terrain,
+            t.elev,
+            t.next_stop,
+            t.follow,
+            t.you_are_here,
+            t.city,
+            t.street,
+            t.distance,
+            t.arrival,
+            t.stops_left,
+            t.driven,
+            t.you,
+            t.keys,
         ];
         keys.extend(t.hint);
         keys.extend(t.modals);
         keys.extend(t.days);
         keys.extend(t.orient);
         for lang in [
-            "be", "ca", "cs", "de", "es", "fr", "hi", "hu", "id", "it", "ja", "kk", "ko", "ms", "nl", "pl", "pt", "pt-pt", "ru", "th", "tl", "tr", "uk", "vi",
-            "zh", "zh-tw",
+            "be", "ca", "cs", "de", "es", "fr", "hi", "hu", "id", "it", "ja", "kk", "ko", "ms",
+            "nl", "pl", "pt", "pt-pt", "ru", "th", "tl", "tr", "uk", "vi", "zh", "zh-tw",
         ] {
             for k in &keys {
-                assert!(crate::_rust_i18n_try_translate(lang, k).is_some(), "{lang}: {k:?}");
+                assert!(
+                    crate::_rust_i18n_try_translate(lang, k).is_some(),
+                    "{lang}: {k:?}"
+                );
             }
         }
     }
@@ -167,6 +219,9 @@ pub(super) const GROUP_EXPRESS_TAB: u8 = GROUP_EXPRESS;
 pub(super) const GROUP_FEEDER_TAB: u8 = GROUP_FEEDER;
 
 pub(super) fn line_color(i: usize) -> Color {
-    const P: [u32; 10] = [0xe83f9b, 0x17b8c4, 0xff8a1f, 0xff4d4d, 0x8bd13f, 0xd46bff, 0x1fd1a0, 0xff6fb5, 0xf2c14e, 0x4da3ff];
+    const P: [u32; 10] = [
+        0xe83f9b, 0x17b8c4, 0xff8a1f, 0xff4d4d, 0x8bd13f, 0xd46bff, 0x1fd1a0, 0xff6fb5, 0xf2c14e,
+        0x4da3ff,
+    ];
     Color::hex(P[i % P.len()])
 }

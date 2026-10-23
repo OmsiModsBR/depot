@@ -1,11 +1,11 @@
 //! Runs without a window: exporting a bus (`--export-glb`) and the service commands.
 
-use anyhow::{anyhow, Result};
 use crate::cli::Args;
 use crate::export;
 use crate::scene::World;
 use crate::situation::start_clock;
 use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -58,7 +58,14 @@ fn petrol_station_test(world: &World, v: &omsi_sim::VehicleInstance, log: bool) 
     let stations = world.petrol_stations.lock();
     if log && omsi_cfg::flags::DEBUG_SERVICES.is_set() {
         for p in stations.iter() {
-            log::info!("petrol station box at ({:.1}, {:.1}) {:.1} x {:.1} m: bus {:.1} m away", p.center.x, p.center.y, p.half.x * 2.0, p.half.y * 2.0, me.separation(p));
+            log::info!(
+                "petrol station box at ({:.1}, {:.1}) {:.1} x {:.1} m: bus {:.1} m away",
+                p.center.x,
+                p.center.y,
+                p.half.x * 2.0,
+                p.half.y * 2.0,
+                me.separation(p)
+            );
         }
     }
     stations.iter().any(|p| me.separation(p) < 0.0)
@@ -123,7 +130,11 @@ mod tests {
 
     /// A vehicle of `script` alone, with the variables `vars`.
     fn scripted(script: &str, vars: &str) -> omsi_sim::VehicleInstance {
-        let dir = std::env::temp_dir().join(format!("omsi_services_{}_{}", std::process::id(), vars.len()));
+        let dir = std::env::temp_dir().join(format!(
+            "omsi_services_{}_{}",
+            std::process::id(),
+            vars.len()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("main.osc"), script).unwrap();
         std::fs::write(dir.join("vars.txt"), vars).unwrap();
@@ -154,14 +165,24 @@ mod tests {
     #[test]
     fn a_bus_without_a_repair_time_is_repaired_at_once() {
         // (the NEOMAN Overhaul: a `malfunction_reset` and no `malfunction_gettime`)
-        let mut v = scripted("{trigger:malfunction_reset}\n0 (S.L.Fail_Gelenk_true)\n{end}\n", "Fail_Gelenk_true\n");
+        let mut v = scripted(
+            "{trigger:malfunction_reset}\n0 (S.L.Fail_Gelenk_true)\n{end}\n",
+            "Fail_Gelenk_true\n",
+        );
         v.set_var("Fail_Gelenk_true", 1.0);
-        let args = Args { repair: true, ..Args::parse_from(["depot"]) };
+        let args = Args {
+            repair: true,
+            ..Args::parse_from(["depot"])
+        };
         let mut clock = omsi_sim::SimClock::default();
         let msg = run_services(&args, &mut v, &mut clock, 30.0, false);
         assert_eq!(msg, vec!["repaired".to_string()]);
         assert_eq!(v.var("Fail_Gelenk_true"), Some(0.0));
-        assert_eq!(clock.time, omsi_sim::SimClock::default().time, "no team to wait for");
+        assert_eq!(
+            clock.time,
+            omsi_sim::SimClock::default().time,
+            "no team to wait for"
+        );
     }
 
     #[test]
@@ -171,7 +192,10 @@ mod tests {
             "broken\n",
         );
         v.set_var("broken", 1.0);
-        let args = Args { repair: true, ..Args::parse_from(["depot"]) };
+        let args = Args {
+            repair: true,
+            ..Args::parse_from(["depot"])
+        };
         let mut clock = omsi_sim::SimClock::default();
         let was = clock.time;
         let msg = run_services(&args, &mut v, &mut clock, 30.0, false);

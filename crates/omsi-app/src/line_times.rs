@@ -25,13 +25,19 @@ struct CacheState {
 
 impl TimesCache {
     pub fn new(load: impl Fn(i32) -> LineTimes + Send + Sync + 'static) -> TimesCache {
-        TimesCache { load: std::sync::Arc::new(load), state: Default::default() }
+        TimesCache {
+            load: std::sync::Arc::new(load),
+            state: Default::default(),
+        }
     }
 
     /// What has been read for `date`, without starting a read (None: not read yet, or for another date).
     pub fn peek(&self, date: i32) -> Option<std::sync::Arc<LineTimes>> {
         let st = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        st.done.as_ref().filter(|(d, _)| *d == date).map(|(_, t)| t.clone())
+        st.done
+            .as_ref()
+            .filter(|(d, _)| *d == date)
+            .map(|(_, t)| t.clone())
     }
 
     /// The timetable of `date`; None while it is being read.
@@ -109,12 +115,18 @@ pub struct DepKey {
 
 impl Dep {
     pub fn key(&self) -> DepKey {
-        DepKey { t: self.t as u32, trip: Some(self.trip), profile: Some(self.profile) }
+        DepKey {
+            t: self.t as u32,
+            trip: Some(self.trip),
+            profile: Some(self.profile),
+        }
     }
 
     /// Whether this is the departure `pick` names.
     pub fn is(&self, pick: &DepKey) -> bool {
-        self.t as u32 == pick.t && pick.trip.is_none_or(|trip| trip == self.trip) && pick.profile.is_none_or(|p| p == self.profile)
+        self.t as u32 == pick.t
+            && pick.trip.is_none_or(|trip| trip == self.trip)
+            && pick.profile.is_none_or(|p| p == self.profile)
     }
 }
 
@@ -430,7 +442,10 @@ mod tests {
         assert!(c.get(20260101).is_none(), "the first call does not wait");
         let a = wait(&c, 20260101);
         let b = c.get(20260101).expect("cached");
-        assert!(std::sync::Arc::ptr_eq(&a, &b), "the same object, no new read");
+        assert!(
+            std::sync::Arc::ptr_eq(&a, &b),
+            "the same object, no new read"
+        );
         assert!(c.peek(20260101).is_some());
         assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 1);
         // another date is read again
@@ -464,18 +479,48 @@ mod tests {
 
     #[test]
     fn two_departures_at_one_time_are_told_apart_by_their_trip() {
-        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 1, profile: 0 });
+        let (a, b) = (
+            Dep {
+                t: 3600.0,
+                mask: 1023,
+                trip: 0,
+                profile: 0,
+            },
+            Dep {
+                t: 3600.0,
+                mask: 1023,
+                trip: 1,
+                profile: 0,
+            },
+        );
         let pick = b.key();
         assert!(!a.is(&pick) && b.is(&pick));
         // a bare time is the first departure at that time
-        let bare = DepKey { t: 3600, trip: None, profile: None };
+        let bare = DepKey {
+            t: 3600,
+            trip: None,
+            profile: None,
+        };
         assert!(a.is(&bare) && b.is(&bare));
         assert!(!Dep { t: 3660.0, ..a }.is(&bare));
     }
 
     #[test]
     fn two_profiles_of_one_trip_at_one_time_are_told_apart() {
-        let (a, b) = (Dep { t: 3600.0, mask: 1023, trip: 0, profile: 0 }, Dep { t: 3600.0, mask: 1023, trip: 0, profile: 1 });
+        let (a, b) = (
+            Dep {
+                t: 3600.0,
+                mask: 1023,
+                trip: 0,
+                profile: 0,
+            },
+            Dep {
+                t: 3600.0,
+                mask: 1023,
+                trip: 0,
+                profile: 1,
+            },
+        );
         let pick = b.key();
         assert!(!a.is(&pick) && b.is(&pick));
     }
@@ -483,12 +528,24 @@ mod tests {
     #[test]
     fn the_school_period_bit_follows_the_holiday_ranges() {
         let cal = omsi_map::Calendar {
-            ranges: vec![omsi_map::HolidayRange { start: 20260701, end: 20260731, name: "summer".into() }],
+            ranges: vec![omsi_map::HolidayRange {
+                start: 20260701,
+                end: 20260731,
+                name: "summer".into(),
+            }],
             holidays: vec![],
         };
-        assert_eq!(period_bit(&cal, 20260715), 1 << 8, "inside a range: school holidays");
+        assert_eq!(
+            period_bit(&cal, 20260715),
+            1 << 8,
+            "inside a range: school holidays"
+        );
         assert_eq!(period_bit(&cal, 20260901), 1 << 9, "outside: term time");
-        assert_eq!(period_bit(&cal, 0), (1 << 8) | (1 << 9), "no date: nothing is left out");
+        assert_eq!(
+            period_bit(&cal, 0),
+            (1 << 8) | (1 << 9),
+            "no date: nothing is left out"
+        );
         // a tour of the other period is left out, one for both (the default mask) is kept
         assert_eq!(0b11_0000_0000 & period_bit(&cal, 20260715), 1 << 8);
         assert_eq!((1 << 9 | 0b1111111) & period_bit(&cal, 20260715), 0);

@@ -28,7 +28,10 @@ impl Root {
         let dir = std::env::temp_dir().join(format!(
             "depot-state-trace-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let root = Root(dir);
         let w = |rel: &str, text: &str| {
@@ -93,13 +96,34 @@ impl Root {
             "maps/Trace/global.cfg",
             &format!(
                 "[name]\nState trace\n\n[entrypoints]\n{}[map]\n0\n0\ntile_0_0.map\n",
-                lines(&["1", "0", "99", "0", "148.25", "0", "70", "0", "0", "0", "1", "0", "Start"])
+                lines(&[
+                    "1", "0", "99", "0", "148.25", "0", "70", "0", "0", "0", "1", "0", "Start"
+                ])
             ),
         );
         let spline = |id: &str, y: &str| {
             format!(
                 "[spline]\n{}",
-                lines(&["0", r"Splines\Trace\road.sli", id, "0", "0", "150", "0", y, "0", "100", "0", "0", "0", "0", "0", "0", "0", "0"])
+                lines(&[
+                    "0",
+                    r"Splines\Trace\road.sli",
+                    id,
+                    "0",
+                    "0",
+                    "150",
+                    "0",
+                    y,
+                    "0",
+                    "100",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0"
+                ])
             )
         };
         w(
@@ -108,10 +132,24 @@ impl Root {
                 "[version]\n14\n\n{}{}[object]\n{}",
                 spline("1", "50"),
                 spline("2", "160"),
-                lines(&["0", r"Sceneryobjects\Trace\crossing.sco", "3", "150", "150", "0", "0", "0", "0", "0"])
+                lines(&[
+                    "0",
+                    r"Sceneryobjects\Trace\crossing.sco",
+                    "3",
+                    "150",
+                    "150",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0"
+                ])
             ),
         );
-        w("maps/Trace/ailists.cfg", "[aigroup_2]\nCars\n\nVehicles\\TraceCar\\car.ovh\t1\n[end]\n");
+        w(
+            "maps/Trace/ailists.cfg",
+            "[aigroup_2]\nCars\n\nVehicles\\TraceCar\\car.ovh\t1\n[end]\n",
+        );
         root
     }
 
@@ -124,10 +162,21 @@ impl Root {
         let run = Command::new(env!("CARGO_BIN_EXE_depot"))
             .arg("--root")
             .arg(&self.0)
-            .args(["--map", "maps/Trace/global.cfg", "--bus", r"Vehicles\TraceBus\trace.bus", "--offscreen"])
+            .args([
+                "--map",
+                "maps/Trace/global.cfg",
+                "--bus",
+                r"Vehicles\TraceBus\trace.bus",
+                "--offscreen",
+            ])
             .arg(self.0.join(format!("{name}.png")))
             .args(["--size", "320x180", "--view", "outside", "--time", "12:00"])
-            .args(["--drive", &DRIVE.to_string(), "--traffic", &AI_CARS.to_string()])
+            .args([
+                "--drive",
+                &DRIVE.to_string(),
+                "--traffic",
+                &AI_CARS.to_string(),
+            ])
             .env("OMSI_STATE_TRACE", &out)
             // the bus has no engine: it rolls on from 30 km/h
             .env("OMSI_DRIVE_V0", "30")
@@ -191,16 +240,42 @@ fn vehicle(w: &dyn Fn(&str, &str), png: &dyn Fn(&str, [u8; 4]), dir: &str, file:
             axle(-2.637 * scale, 280, 116, 1),
         ),
     );
-    w(&format!("Vehicles/{dir}/model/model.cfg"), "[mesh]\nbody.x\n");
+    w(
+        &format!("Vehicles/{dir}/model/model.cfg"),
+        "[mesh]\nbody.x\n",
+    );
     let (x, z) = (1.2, 6.0 * scale);
-    let v = [(-x, 0.0, -z), (x, 0.0, -z), (x, 0.0, z), (-x, 0.0, z), (-x, 3.0, -z), (x, 3.0, -z), (x, 3.0, z), (-x, 3.0, z)];
-    let quads = [[0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]];
+    let v = [
+        (-x, 0.0, -z),
+        (x, 0.0, -z),
+        (x, 0.0, z),
+        (-x, 0.0, z),
+        (-x, 3.0, -z),
+        (x, 3.0, -z),
+        (x, 3.0, z),
+        (-x, 3.0, z),
+    ];
+    let quads = [
+        [0, 1, 2, 3],
+        [4, 7, 6, 5],
+        [0, 4, 5, 1],
+        [1, 5, 6, 2],
+        [2, 6, 7, 3],
+        [3, 7, 4, 0],
+    ];
     let verts: Vec<String> = v.iter().map(|(x, y, z)| format!("{x};{y};{z};")).collect();
     let faces: Vec<String> = quads
         .iter()
-        .flat_map(|q| [format!("3;{},{},{};", q[0], q[1], q[2]), format!("3;{},{},{};", q[0], q[2], q[3])])
+        .flat_map(|q| {
+            [
+                format!("3;{},{},{};", q[0], q[1], q[2]),
+                format!("3;{},{},{};", q[0], q[2], q[3]),
+            ]
+        })
         .collect();
-    let uvs: Vec<String> = (0..8).map(|i| format!("{};{};", i % 2, (i / 2) % 2)).collect();
+    let uvs: Vec<String> = (0..8)
+        .map(|i| format!("{};{};", i % 2, (i / 2) % 2))
+        .collect();
     w(
         &format!("Vehicles/{dir}/model/body.x"),
         &format!(
@@ -216,7 +291,10 @@ fn vehicle(w: &dyn Fn(&str, &str), png: &dyn Fn(&str, [u8; 4]), dir: &str, file:
             vec!["0"; faces.len()].join(","),
         ),
     );
-    png(&format!("Vehicles/{dir}/texture/body.png"), [200, 200, 40, 255]);
+    png(
+        &format!("Vehicles/{dir}/texture/body.png"),
+        [200, 200, 40, 255],
+    );
 }
 
 #[test]
@@ -228,7 +306,9 @@ fn synthetic_root_reads_back_as_written() {
     let tile = omsi_map::Tile::load(&root.0.join("maps/Trace/tile_0_0.map")).unwrap();
     assert_eq!(tile.splines.len(), 2);
     assert_eq!(tile.objects.len(), 1);
-    let crossing = omsi_scenery::SceneryObject::load(&root.0.join("Sceneryobjects/Trace/crossing.sco")).unwrap();
+    let crossing =
+        omsi_scenery::SceneryObject::load(&root.0.join("Sceneryobjects/Trace/crossing.sco"))
+            .unwrap();
     assert_eq!(crossing.traffic_lights.len(), 2);
     assert_eq!(crossing.paths.len(), 2);
     let road = omsi_scenery::Spline::load(&root.0.join("Splines/Trace/road.sli")).unwrap();
@@ -244,22 +324,58 @@ fn offscreen_state_trace_is_repeatable_and_shows_the_street() {
         return;
     };
     let root = Root::new();
-    let a = root.trace("a.trace").unwrap_or_else(|e| panic!("offscreen run failed: {e}"));
+    let a = root
+        .trace("a.trace")
+        .unwrap_or_else(|e| panic!("offscreen run failed: {e}"));
     let b = root.trace("b.trace").unwrap();
     if a != b {
-        let line = a.lines().zip(b.lines()).position(|(x, y)| x != y).unwrap_or(0);
-        panic!("two runs of the same root differ, first at line {}:\n- {}\n+ {}", line + 1, a.lines().nth(line).unwrap_or(""), b.lines().nth(line).unwrap_or(""));
+        let line = a
+            .lines()
+            .zip(b.lines())
+            .position(|(x, y)| x != y)
+            .unwrap_or(0);
+        panic!(
+            "two runs of the same root differ, first at line {}:\n- {}\n+ {}",
+            line + 1,
+            a.lines().nth(line).unwrap_or(""),
+            b.lines().nth(line).unwrap_or("")
+        );
     }
     // the street is not empty: every frame, the bus, the cars and both lights
     let frames = a.lines().filter(|l| l.starts_with("frame ")).count();
     // (`--drive` counts its frames as the seconds over 1/30 s, rounded down)
-    assert!((DRIVE * 30..=DRIVE * 30 + 1).contains(&(frames as u32)), "{frames} blocks: not one per frame and the last state");
-    assert!(a.lines().filter(|l| l.starts_with("  cars ")).all(|l| l != "  cars 0"), "a frame without AI cars");
-    let lights: std::collections::HashSet<&str> = a.lines().filter(|l| l.starts_with("  lights 0:")).collect();
-    assert!(lights.len() >= 3, "the lights did not go through their program: {lights:?}");
-    let y = |l: &str| l.split_whitespace().nth(3).and_then(|v| v.parse::<f64>().ok());
-    let players: Vec<f64> = a.lines().filter(|l| l.starts_with("  player p ")).filter_map(y).collect();
-    assert!(players.last().unwrap() - players[0] > 20.0, "the bus did not roll north: {:?} .. {:?}", players.first(), players.last());
+    assert!(
+        (DRIVE * 30..=DRIVE * 30 + 1).contains(&(frames as u32)),
+        "{frames} blocks: not one per frame and the last state"
+    );
+    assert!(
+        a.lines()
+            .filter(|l| l.starts_with("  cars "))
+            .all(|l| l != "  cars 0"),
+        "a frame without AI cars"
+    );
+    let lights: std::collections::HashSet<&str> =
+        a.lines().filter(|l| l.starts_with("  lights 0:")).collect();
+    assert!(
+        lights.len() >= 3,
+        "the lights did not go through their program: {lights:?}"
+    );
+    let y = |l: &str| {
+        l.split_whitespace()
+            .nth(3)
+            .and_then(|v| v.parse::<f64>().ok())
+    };
+    let players: Vec<f64> = a
+        .lines()
+        .filter(|l| l.starts_with("  player p "))
+        .filter_map(y)
+        .collect();
+    assert!(
+        players.last().unwrap() - players[0] > 20.0,
+        "the bus did not roll north: {:?} .. {:?}",
+        players.first(),
+        players.last()
+    );
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("synthetic.trace"), a).unwrap();
 }

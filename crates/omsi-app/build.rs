@@ -7,12 +7,20 @@ use std::process::Command;
 fn main() {
     let git = |args: &[&str]| -> Option<String> {
         let out = Command::new("git").args(args).output().ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     let hash = git(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|| "unknown".into());
-    let date = git(&["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"]).unwrap_or_default();
-    let dirty = git(&["status", "--porcelain"]).map(|s| !s.trim().is_empty()).unwrap_or(false);
-    println!("cargo:rustc-env=OMSI_BUILD={hash}{} {date}", if dirty { "+" } else { "" });
+    let date =
+        git(&["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"]).unwrap_or_default();
+    let dirty = git(&["status", "--porcelain"])
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    println!(
+        "cargo:rustc-env=OMSI_BUILD={hash}{} {date}",
+        if dirty { "+" } else { "" }
+    );
     println!("cargo:rustc-env=OPENOMSI_VERSION={}", version(&git));
     println!("cargo:rerun-if-env-changed=OPENOMSI_VERSION");
     println!("cargo:rerun-if-changed=../../VERSION");
@@ -21,8 +29,13 @@ fn main() {
     windows_icon();
     steam();
     // (the executable exports the two switchable-graphics hints of main.rs, see there)
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
-        for sym in ["NvOptimusEnablement", "AmdPowerXpressRequestHighPerformance"] {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        for sym in [
+            "NvOptimusEnablement",
+            "AmdPowerXpressRequestHighPerformance",
+        ] {
             println!("cargo:rustc-link-arg-bin=depot=/EXPORT:{sym},DATA");
         }
     }
@@ -50,7 +63,10 @@ fn steam() {
     let src = std::path::Path::new("../../assets/steam_redist").join(lib);
     println!("cargo:rerun-if-changed={}", src.display());
     // (OUT_DIR is <target>/<profile>/build/<crate>/out: the binary lies three folders up)
-    if let Some(dir) = std::env::var_os("OUT_DIR").map(std::path::PathBuf::from).and_then(|o| o.ancestors().nth(3).map(|d| d.to_path_buf())) {
+    if let Some(dir) = std::env::var_os("OUT_DIR")
+        .map(std::path::PathBuf::from)
+        .and_then(|o| o.ancestors().nth(3).map(|d| d.to_path_buf()))
+    {
         let _ = std::fs::copy(&src, dir.join(lib));
     }
 }
@@ -64,10 +80,22 @@ fn version(git: &dyn Fn(&[&str]) -> Option<String>) -> String {
             return v.trim().to_string();
         }
     }
-    let base = std::fs::read_to_string("../../VERSION").map(|s| s.trim().to_string()).unwrap_or_else(|_| "0.0".into());
+    let base = std::fs::read_to_string("../../VERSION")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "0.0".into());
     let n = git(&["log", "-1", "--format=%H", "--", "VERSION"])
         .filter(|h| !h.is_empty())
-        .and_then(|h| git(&["rev-list", "--count", "--invert-grep", "--fixed-strings", "--grep=[skip ci]", "--grep=[skip actions]", &format!("{h}..HEAD")]))
+        .and_then(|h| {
+            git(&[
+                "rev-list",
+                "--count",
+                "--invert-grep",
+                "--fixed-strings",
+                "--grep=[skip ci]",
+                "--grep=[skip actions]",
+                &format!("{h}..HEAD"),
+            ])
+        })
         .unwrap_or_else(|| "0".into());
     format!("{base}.{n}")
 }
@@ -81,7 +109,10 @@ fn windows_icon() {
     res.set_icon("../../assets/icons/app/depot.ico")
         .set("ProductName", "Project Depot")
         .set("FileDescription", "Project Depot")
-        .set("ProductVersion", &std::env::var("OPENOMSI_VERSION").unwrap_or_default());
+        .set(
+            "ProductVersion",
+            &std::env::var("OPENOMSI_VERSION").unwrap_or_default(),
+        );
     if let Err(e) = res.compile() {
         println!("cargo:warning=no icon in the executable: {e}");
     }

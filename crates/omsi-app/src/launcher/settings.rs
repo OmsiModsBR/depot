@@ -16,7 +16,19 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 11] = ["General", "Simulation", "Graphics", "Advanced graphics", "Display and VR", "Sound", "Traffic and people", "Driving devices", "Plug-ins", "Presets and files", "Interface"];
+pub const SECTIONS: [&str; 11] = [
+    "General",
+    "Simulation",
+    "Graphics",
+    "Advanced graphics",
+    "Display and VR",
+    "Sound",
+    "Traffic and people",
+    "Driving devices",
+    "Plug-ins",
+    "Presets and files",
+    "Interface",
+];
 const GENERAL: usize = 0;
 const SIMULATION: usize = 1;
 const GRAPHICS: usize = 2;
@@ -42,7 +54,13 @@ pub enum Kind {
     Toggle,
     Pick(&'static [(&'static str, &'static str)]),
     /// A slider over `min..max` by `step`; `show` is the value's text, `keep` what is stored.
-    Slide { min: f32, max: f32, step: f32, show: fn(f32) -> String, keep: fn(f32) -> Value },
+    Slide {
+        min: f32,
+        max: f32,
+        step: f32,
+        show: fn(f32) -> String,
+        keep: fn(f32) -> Value,
+    },
     /// The quality preset: sets several graphics options at once (not a key of the file).
     Preset,
     /// The graphics API: what this platform offers.
@@ -82,25 +100,95 @@ pub struct Opt {
     pub when: When,
 }
 
-const fn toggle(sec: usize, group: &'static str, key: &'static str, label: &'static str, hint: &'static str) -> Opt {
-    Opt { sec, group, key, label, hint, kind: Kind::Toggle, when: When::Next }
+const fn toggle(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
+) -> Opt {
+    Opt {
+        sec,
+        group,
+        key,
+        label,
+        hint,
+        kind: Kind::Toggle,
+        when: When::Next,
+    }
 }
 
-const fn pick(sec: usize, group: &'static str, key: &'static str, label: &'static str, hint: &'static str, options: &'static [(&'static str, &'static str)]) -> Opt {
-    Opt { sec, group, key, label, hint, kind: Kind::Pick(options), when: When::Next }
+const fn pick(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
+    options: &'static [(&'static str, &'static str)],
+) -> Opt {
+    Opt {
+        sec,
+        group,
+        key,
+        label,
+        hint,
+        kind: Kind::Pick(options),
+        when: When::Next,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
-const fn slide(sec: usize, group: &'static str, key: &'static str, label: &'static str, hint: &'static str, (min, max, step): (f32, f32, f32), show: fn(f32) -> String, keep: fn(f32) -> Value) -> Opt {
-    Opt { sec, group, key, label, hint, kind: Kind::Slide { min, max, step, show, keep }, when: When::Next }
+const fn slide(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
+    (min, max, step): (f32, f32, f32),
+    show: fn(f32) -> String,
+    keep: fn(f32) -> Value,
+) -> Opt {
+    Opt {
+        sec,
+        group,
+        key,
+        label,
+        hint,
+        kind: Kind::Slide {
+            min,
+            max,
+            step,
+            show,
+            keep,
+        },
+        when: When::Next,
+    }
 }
 
-const fn special(sec: usize, group: &'static str, key: &'static str, label: &'static str, hint: &'static str, kind: Kind) -> Opt {
-    Opt { sec, group, key, label, hint, kind, when: When::Next }
+const fn special(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
+    kind: Kind,
+) -> Opt {
+    Opt {
+        sec,
+        group,
+        key,
+        label,
+        hint,
+        kind,
+        when: When::Next,
+    }
 }
 
 const fn now(o: Opt) -> Opt {
-    Opt { when: When::Now, ..o }
+    Opt {
+        when: When::Now,
+        ..o
+    }
 }
 
 // (the sliders' texts and what they store)
@@ -108,13 +196,25 @@ fn pct(v: f32) -> String {
     format!("{:.0}%", v * 100.0)
 }
 fn pct_or_omsi(v: f32) -> String {
-    if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { pct(v) }
+    if (v - 1.0).abs() < 0.01 {
+        "OMSI".to_string()
+    } else {
+        pct(v)
+    }
 }
 fn pct_or_off(v: f32) -> String {
-    if v <= 0.0 { "Off".to_string() } else { pct(v) }
+    if v <= 0.0 {
+        "Off".to_string()
+    } else {
+        pct(v)
+    }
 }
 fn whole_pct_or_off(v: f32) -> String {
-    if v <= 0.0 { "Off".to_string() } else { format!("{v:.0}%") }
+    if v <= 0.0 {
+        "Off".to_string()
+    } else {
+        format!("{v:.0}%")
+    }
 }
 fn mm(v: f32) -> String {
     format!("{v:.0} mm")
@@ -132,28 +232,56 @@ fn whole_pct(v: f32) -> String {
     format!("{v:.0} %")
 }
 fn ms_or_off(v: f32) -> String {
-    if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }
+    if v <= 0.0 {
+        "Off".to_string()
+    } else {
+        format!("{v:.0} ms")
+    }
 }
 fn secs_as_ms(v: f32) -> String {
     format!("{:.0} ms", v * 1000.0)
 }
 fn fov(v: f32) -> String {
-    if v < 20.0 { "Default".to_string() } else { deg(v) }
+    if v < 20.0 {
+        "Default".to_string()
+    } else {
+        deg(v)
+    }
 }
 fn outside_fov(v: f32) -> String {
-    if v < 20.0 { "Auto".to_string() } else { deg(v) }
+    if v < 20.0 {
+        "Auto".to_string()
+    } else {
+        deg(v)
+    }
 }
 fn night(v: f32) -> String {
-    if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") }
+    if v < 0.01 {
+        "Off".to_string()
+    } else {
+        format!("+{v:.2}")
+    }
 }
 fn led(v: f32) -> String {
-    if v < 0.5 { "Off".to_string() } else { format!("{}", v as i64) }
+    if v < 0.5 {
+        "Off".to_string()
+    } else {
+        format!("{}", v as i64)
+    }
 }
 fn led_mip(v: f32) -> String {
-    if v < 0.005 { "Off".to_string() } else { format!("{v:.2}") }
+    if v < 0.005 {
+        "Off".to_string()
+    } else {
+        format!("{v:.2}")
+    }
 }
 fn wheel_lock(v: f32) -> String {
-    if v < 45.0 { "OMSI".to_string() } else { deg(v) }
+    if v < 45.0 {
+        "OMSI".to_string()
+    } else {
+        deg(v)
+    }
 }
 fn pedal(v: f32) -> String {
     if (v - 1.0).abs() < 0.01 {
@@ -174,7 +302,11 @@ fn vibration(v: f32) -> String {
     }
 }
 fn fade(v: f32) -> String {
-    if v < 0.01 { "Off".to_string() } else { format!("{:.0} ms", (v * 1000.0).round() as i32) }
+    if v < 0.01 {
+        "Off".to_string()
+    } else {
+        format!("{:.0} ms", (v * 1000.0).round() as i32)
+    }
 }
 fn count(v: f32) -> String {
     format!("{v:.0}")
@@ -213,180 +345,1399 @@ fn percent_axis(v: f32) -> Value {
     json!(v.round().clamp(0.0, 100.0))
 }
 
-const CORNERS: &[(&str, &str)] = &[("top-left", "Top left"), ("top-right", "Top right"), ("bottom-left", "Bottom left"), ("bottom-right", "Bottom right")];
-const SEASONS: &[(&str, &str)] = &[("auto", "By date"), ("spring", "Spring"), ("summer", "Summer"), ("autumn", "Autumn"), ("winter", "Winter")];
+const CORNERS: &[(&str, &str)] = &[
+    ("top-left", "Top left"),
+    ("top-right", "Top right"),
+    ("bottom-left", "Bottom left"),
+    ("bottom-right", "Bottom right"),
+];
+const SEASONS: &[(&str, &str)] = &[
+    ("auto", "By date"),
+    ("spring", "Spring"),
+    ("summer", "Summer"),
+    ("autumn", "Autumn"),
+    ("winter", "Winter"),
+];
 
 /// The window sizes the settings offer (`resolution`).
-pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[("auto", "Automatic"), ("1280x720", "1280 x 720"), ("1280x800", "1280 x 800 (Steam Deck)"), ("1366x768", "1366 x 768"), ("1600x900", "1600 x 900"), ("1920x1080", "1920 x 1080"), ("1920x1200", "1920 x 1200"), ("2560x1440", "2560 x 1440"), ("3840x2160", "3840 x 2160")];
+pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[
+    ("auto", "Automatic"),
+    ("1280x720", "1280 x 720"),
+    ("1280x800", "1280 x 800 (Steam Deck)"),
+    ("1366x768", "1366 x 768"),
+    ("1600x900", "1600 x 900"),
+    ("1920x1080", "1920 x 1080"),
+    ("1920x1200", "1920 x 1200"),
+    ("2560x1440", "2560 x 1440"),
+    ("3840x2160", "3840 x 2160"),
+];
 
 /// Every option of the page, section by section, card by card.
 pub static OPTS: &[Opt] = &[
     // General
-    now(special(GENERAL, "Language", "language", "Language", "The launcher's texts at once, the game's at its next start", Kind::Language)),
-    now(toggle(GENERAL, "Language", "machine_translation", "Translate the remaining texts automatically", "Offline; the 620 MB download starts at once")),
-    toggle(GENERAL, "Driving help", "steering_linear", "Steering linearity", "Keys turn the wheel at OMSI's steady pace"),
-    toggle(GENERAL, "Driving help", "old_steering", "Old steering", "The wheel stays; turn it back yourself"),
-    toggle(GENERAL, "Driving help", "red_steer_spd", "Dynamic steering", "Slower steering keys at speed (OMSI's redSteerSpd)"),
-    toggle(GENERAL, "Driving help", "blinker_cancel", "Indicators cancel themselves", "As the bus's script does"),
-    toggle(GENERAL, "Driving help", "brake_hold", "Keyboard brake holds", "Stays on until the throttle, as in OMSI"),
-    toggle(GENERAL, "Driving help", "auto_clutch", "Automatic clutch", "For manual gearboxes"),
-    toggle(GENERAL, "Driving help", "auto_shift", "Automated manual gearbox", "Shifts a manual gearbox by the engine speed"),
-    toggle(GENERAL, "Driving help", "get_up", "Ability to get up", "Ctrl+Shift+G leaves the seat"),
-    slide(GENERAL, "On screen", "ui_scale", "Game interface size", "Texts, menu, timetable and navigator", (0.5, 2.0, 0.05), pct, hundredths),
-    toggle(GENERAL, "On screen", "ui_scale_window", "Interface grows with the window", "On windows taller than 1080p"),
-    slide(GENERAL, "On screen", "ui_opacity", "Interface opacity", "The panels behind the texts", (0.2, 1.0, 0.05), pct, hundredths),
-    toggle(GENERAL, "On screen", "tooltips", "Name of the button under the mouse", ""),
-    toggle(GENERAL, "On screen", "show_fps", "Frame rate in the corner", ""),
-    toggle(GENERAL, "On screen", "notes", "Notes in the top-left corner", ""),
-    toggle(GENERAL, "Navigator", "navigator", "Navigator", "Shift+N: map, schedule, off"),
-    toggle(GENERAL, "Navigator", "nav_arrows", "Route arrows", "As in OMSI 2"),
+    now(special(
+        GENERAL,
+        "Language",
+        "language",
+        "Language",
+        "The launcher's texts at once, the game's at its next start",
+        Kind::Language,
+    )),
+    now(toggle(
+        GENERAL,
+        "Language",
+        "machine_translation",
+        "Translate the remaining texts automatically",
+        "Offline; the 620 MB download starts at once",
+    )),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "steering_linear",
+        "Steering linearity",
+        "Keys turn the wheel at OMSI's steady pace",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "old_steering",
+        "Old steering",
+        "The wheel stays; turn it back yourself",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "red_steer_spd",
+        "Dynamic steering",
+        "Slower steering keys at speed (OMSI's redSteerSpd)",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "blinker_cancel",
+        "Indicators cancel themselves",
+        "As the bus's script does",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "brake_hold",
+        "Keyboard brake holds",
+        "Stays on until the throttle, as in OMSI",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "auto_clutch",
+        "Automatic clutch",
+        "For manual gearboxes",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "auto_shift",
+        "Automated manual gearbox",
+        "Shifts a manual gearbox by the engine speed",
+    ),
+    toggle(
+        GENERAL,
+        "Driving help",
+        "get_up",
+        "Ability to get up",
+        "Ctrl+Shift+G leaves the seat",
+    ),
+    slide(
+        GENERAL,
+        "On screen",
+        "ui_scale",
+        "Game interface size",
+        "Texts, menu, timetable and navigator",
+        (0.5, 2.0, 0.05),
+        pct,
+        hundredths,
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "ui_scale_window",
+        "Interface grows with the window",
+        "On windows taller than 1080p",
+    ),
+    slide(
+        GENERAL,
+        "On screen",
+        "ui_opacity",
+        "Interface opacity",
+        "The panels behind the texts",
+        (0.2, 1.0, 0.05),
+        pct,
+        hundredths,
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "tooltips",
+        "Name of the button under the mouse",
+        "",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "show_fps",
+        "Frame rate in the corner",
+        "",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "notes",
+        "Notes in the top-left corner",
+        "",
+    ),
+    toggle(
+        GENERAL,
+        "Navigator",
+        "navigator",
+        "Navigator",
+        "Shift+N: map, schedule, off",
+    ),
+    toggle(
+        GENERAL,
+        "Navigator",
+        "nav_arrows",
+        "Route arrows",
+        "As in OMSI 2",
+    ),
     toggle(GENERAL, "Navigator", "nav_ai", "AI vehicles on the map", ""),
-    pick(GENERAL, "Navigator", "navigator_corner", "Corner", "Where the navigator sits", CORNERS),
+    pick(
+        GENERAL,
+        "Navigator",
+        "navigator_corner",
+        "Corner",
+        "Where the navigator sits",
+        CORNERS,
+    ),
     toggle(GENERAL, "Online", "chat", "Chat in online games", ""),
-    slide(GENERAL, "Online", "chat_size", "Chat size", "Ctrl and the wheel over it in the game", (0.5, 3.0, 0.1), pct, tenths),
-    toggle(GENERAL, "Online", "name_tags", "Other players' names", "Above their buses"),
-    toggle(GENERAL, "Online", "voice_chat", "Voice chat", "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server"),
-    now(toggle(GENERAL, "Launcher", "launcher_rest", "The launcher rests while a game runs", "Gives the graphics card to the game")),
+    slide(
+        GENERAL,
+        "Online",
+        "chat_size",
+        "Chat size",
+        "Ctrl and the wheel over it in the game",
+        (0.5, 3.0, 0.1),
+        pct,
+        tenths,
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "name_tags",
+        "Other players' names",
+        "Above their buses",
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "voice_chat",
+        "Voice chat",
+        "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server",
+    ),
+    now(toggle(
+        GENERAL,
+        "Launcher",
+        "launcher_rest",
+        "The launcher rests while a game runs",
+        "Gives the graphics card to the game",
+    )),
     // Simulation
-    toggle(SIMULATION, "Collisions", "collision_vehicles", "With vehicles", ""),
-    toggle(SIMULATION, "Collisions", "collision_objects", "With objects", "Walls, poles"),
-    toggle(SIMULATION, "Collisions", "collision_pedestrians", "With people", ""),
-    pick(SIMULATION, "Wear and saving", "maintenance", "Maintenance", "How the buses wear", &[("0", "Infinite (no wear)"), ("1", "Very bad"), ("2", "Bad"), ("3", "Normal"), ("4", "Good")]),
-    pick(SIMULATION, "Wear and saving", "autosave_minutes", "Autosave", "The last situation, while you play", &[("0", "Off"), ("2", "Every 2 minutes"), ("5", "Every 5 minutes"), ("10", "Every 10 minutes"), ("15", "Every 15 minutes")]),
-    toggle(SIMULATION, "Clock and weather", "use_real_time", "Start at the real time", ""),
-    toggle(SIMULATION, "Clock and weather", "use_real_date", "Start on today's date", ""),
-    toggle(SIMULATION, "Clock and weather", "time_sync", "Sync the clock with the real time", "Locks the time"),
-    toggle(SIMULATION, "Clock and weather", "metar_sync", "Sync the weather with METAR", "Locks the weather"),
-    pick(SIMULATION, "Clock and weather", "time_speed", "Time speed", "Not in multiplayer or with the real-time sync", &[("1", "Real time"), ("2", "x2"), ("4", "x4"), ("8", "x8"), ("15", "x15"), ("30", "x30")]),
-    pick(SIMULATION, "Start of a drive", "start.season", "Season", "By date follows the start's date", SEASONS),
-    toggle(SIMULATION, "Start of a drive", "start.autostart", "Put the bus into service on start", "Shift+U"),
+    toggle(
+        SIMULATION,
+        "Collisions",
+        "collision_vehicles",
+        "With vehicles",
+        "",
+    ),
+    toggle(
+        SIMULATION,
+        "Collisions",
+        "collision_objects",
+        "With objects",
+        "Walls, poles",
+    ),
+    toggle(
+        SIMULATION,
+        "Collisions",
+        "collision_pedestrians",
+        "With people",
+        "",
+    ),
+    pick(
+        SIMULATION,
+        "Wear and saving",
+        "maintenance",
+        "Maintenance",
+        "How the buses wear",
+        &[
+            ("0", "Infinite (no wear)"),
+            ("1", "Very bad"),
+            ("2", "Bad"),
+            ("3", "Normal"),
+            ("4", "Good"),
+        ],
+    ),
+    pick(
+        SIMULATION,
+        "Wear and saving",
+        "autosave_minutes",
+        "Autosave",
+        "The last situation, while you play",
+        &[
+            ("0", "Off"),
+            ("2", "Every 2 minutes"),
+            ("5", "Every 5 minutes"),
+            ("10", "Every 10 minutes"),
+            ("15", "Every 15 minutes"),
+        ],
+    ),
+    toggle(
+        SIMULATION,
+        "Clock and weather",
+        "use_real_time",
+        "Start at the real time",
+        "",
+    ),
+    toggle(
+        SIMULATION,
+        "Clock and weather",
+        "use_real_date",
+        "Start on today's date",
+        "",
+    ),
+    toggle(
+        SIMULATION,
+        "Clock and weather",
+        "time_sync",
+        "Sync the clock with the real time",
+        "Locks the time",
+    ),
+    toggle(
+        SIMULATION,
+        "Clock and weather",
+        "metar_sync",
+        "Sync the weather with METAR",
+        "Locks the weather",
+    ),
+    pick(
+        SIMULATION,
+        "Clock and weather",
+        "time_speed",
+        "Time speed",
+        "Not in multiplayer or with the real-time sync",
+        &[
+            ("1", "Real time"),
+            ("2", "x2"),
+            ("4", "x4"),
+            ("8", "x8"),
+            ("15", "x15"),
+            ("30", "x30"),
+        ],
+    ),
+    pick(
+        SIMULATION,
+        "Start of a drive",
+        "start.season",
+        "Season",
+        "By date follows the start's date",
+        SEASONS,
+    ),
+    toggle(
+        SIMULATION,
+        "Start of a drive",
+        "start.autostart",
+        "Put the bus into service on start",
+        "Shift+U",
+    ),
     // Graphics
-    special(GRAPHICS, "Graphics API", "graphics_api", "Graphics API", "Decides what the other graphics options can do", Kind::Api),
-    special(GRAPHICS, "Picture", "preset", "Quality preset", "Sets many options at once", Kind::Preset),
-    pick(GRAPHICS, "Picture", "graphics", "Graphics", "Vanilla draws what OMSI 2 draws", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]),
-    pick(GRAPHICS, "Picture", "msaa", "Anti-aliasing", "Smooths edges", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]),
-    pick(GRAPHICS, "Picture", "render_scale", "Render scale", "Draws smaller, then fits the window", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]),
-    pick(GRAPHICS, "Picture", "anisotropy", "Anisotropic filtering", "Sharper textures at an angle", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]),
-    pick(GRAPHICS, "View", "view_distance", "View distance", "How far you see", &[("auto", "Default (1200 m)"), ("600", "600 m - fastest"), ("900", "900 m"), ("1200", "1200 m"), ("1500", "1500 m"), ("2000", "2000 m"), ("2500", "2500 m")]),
-    pick(GRAPHICS, "View", "max_obj_dist", "Object distance", "How far objects are drawn", &[("auto", "Automatic"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]),
-    pick(GRAPHICS, "View", "min_obj_size", "Small objects", "Hides very small things at a distance", &[("0.005", "All"), ("0.013", "Normal"), ("0.02", "Fewer (faster)"), ("0.03", "Few (fastest)")]),
+    special(
+        GRAPHICS,
+        "Graphics API",
+        "graphics_api",
+        "Graphics API",
+        "Decides what the other graphics options can do",
+        Kind::Api,
+    ),
+    special(
+        GRAPHICS,
+        "Picture",
+        "preset",
+        "Quality preset",
+        "Sets many options at once",
+        Kind::Preset,
+    ),
+    pick(
+        GRAPHICS,
+        "Picture",
+        "graphics",
+        "Graphics",
+        "Vanilla draws what OMSI 2 draws",
+        &[
+            ("vanilla", "Vanilla (as OMSI 2)"),
+            ("vanilla_plus", "Vanilla+"),
+            ("enhanced", "Enhanced"),
+            ("enhanced_plus", "Enhanced+"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "Picture",
+        "msaa",
+        "Anti-aliasing",
+        "Smooths edges",
+        &[
+            ("1", "Off"),
+            ("2", "2x MSAA"),
+            ("4", "4x MSAA"),
+            ("8", "8x MSAA"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "Picture",
+        "render_scale",
+        "Render scale",
+        "Draws smaller, then fits the window",
+        &[
+            ("auto", "Auto"),
+            ("1", "100%"),
+            ("0.85", "85%"),
+            ("0.75", "75%"),
+            ("0.67", "67%"),
+            ("0.5", "50%"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "Picture",
+        "anisotropy",
+        "Anisotropic filtering",
+        "Sharper textures at an angle",
+        &[
+            ("1", "Off"),
+            ("2", "2x"),
+            ("4", "4x"),
+            ("8", "8x"),
+            ("16", "16x"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "View",
+        "view_distance",
+        "View distance",
+        "How far you see",
+        &[
+            ("auto", "Default (1200 m)"),
+            ("600", "600 m - fastest"),
+            ("900", "900 m"),
+            ("1200", "1200 m"),
+            ("1500", "1500 m"),
+            ("2000", "2000 m"),
+            ("2500", "2500 m"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "View",
+        "max_obj_dist",
+        "Object distance",
+        "How far objects are drawn",
+        &[
+            ("auto", "Automatic"),
+            ("500", "500 m"),
+            ("750", "750 m"),
+            ("900", "900 m"),
+            ("1500", "1500 m"),
+            ("3000", "3000 m"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "View",
+        "min_obj_size",
+        "Small objects",
+        "Hides very small things at a distance",
+        &[
+            ("0.005", "All"),
+            ("0.013", "Normal"),
+            ("0.02", "Fewer (faster)"),
+            ("0.03", "Few (fastest)"),
+        ],
+    ),
     toggle(GRAPHICS, "Light and shadows", "shadows", "Sun shadows", ""),
-    pick(GRAPHICS, "Light and shadows", "shadow_size", "Shadow map", "Sharper shadows, more memory", &[("1024", "1024"), ("2048", "2048"), ("4096", "4096")]),
-    toggle(GRAPHICS, "Light and shadows", "ssao", "Ambient occlusion", ""),
-    pick(GRAPHICS, "Light and shadows", "shadow_casters", "Shadows cast by", "", &[("all", "Every solid mesh"), ("omsi", "[shadow] meshes, as OMSI")]),
-    toggle(GRAPHICS, "Light and shadows", "shadow_blobs", "OMSI's shadow meshes", "Under vehicles, in every graphics mode"),
-    slide(GRAPHICS, "Light and shadows", "night_brightness", "Night brightness", "How much brighter the night is shown", (0.0, 3.0, 0.25), night, quarters),
-    toggle(GRAPHICS, "Effects", "reflections", "Reflection maps", "Paint, chrome, glass"),
-    pick(GRAPHICS, "Effects", "mirror_size", "Mirrors", "What mirrors show", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]),
-    pick(GRAPHICS, "Effects", "mirror_refresh", "Real-time reflections", "", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]),
+    pick(
+        GRAPHICS,
+        "Light and shadows",
+        "shadow_size",
+        "Shadow map",
+        "Sharper shadows, more memory",
+        &[("1024", "1024"), ("2048", "2048"), ("4096", "4096")],
+    ),
+    toggle(
+        GRAPHICS,
+        "Light and shadows",
+        "ssao",
+        "Ambient occlusion",
+        "",
+    ),
+    pick(
+        GRAPHICS,
+        "Light and shadows",
+        "shadow_casters",
+        "Shadows cast by",
+        "",
+        &[
+            ("all", "Every solid mesh"),
+            ("omsi", "[shadow] meshes, as OMSI"),
+        ],
+    ),
+    toggle(
+        GRAPHICS,
+        "Light and shadows",
+        "shadow_blobs",
+        "OMSI's shadow meshes",
+        "Under vehicles, in every graphics mode",
+    ),
+    slide(
+        GRAPHICS,
+        "Light and shadows",
+        "night_brightness",
+        "Night brightness",
+        "How much brighter the night is shown",
+        (0.0, 3.0, 0.25),
+        night,
+        quarters,
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "reflections",
+        "Reflection maps",
+        "Paint, chrome, glass",
+    ),
+    pick(
+        GRAPHICS,
+        "Effects",
+        "mirror_size",
+        "Mirrors",
+        "What mirrors show",
+        &[
+            ("0", "Off"),
+            ("128", "Low (128)"),
+            ("256", "Normal (256)"),
+            ("512", "High (512)"),
+            ("1024", "Very high (1024)"),
+        ],
+    ),
+    pick(
+        GRAPHICS,
+        "Effects",
+        "mirror_refresh",
+        "Real-time reflections",
+        "",
+        &[
+            ("off", "None (frozen picture)"),
+            ("eco", "Economical"),
+            ("full", "Full"),
+        ],
+    ),
     toggle(GRAPHICS, "Effects", "clouds", "Clouds", ""),
-    toggle(GRAPHICS, "Effects", "windy_trees", "Windy trees", "Leaves sway in the wind"),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "windy_trees",
+        "Windy trees",
+        "Leaves sway in the wind",
+    ),
     // Advanced graphics
-    special(ADVANCED, "Textures", "texture_memory", "Texture memory", "How much the textures may take", Kind::TexMem),
-    toggle(ADVANCED, "Textures", "texture_compression", "Compress textures on loading", "Less memory, a slower first load"),
-    toggle(ADVANCED, "Textures", "detail_textures", "Detail texturing up close", "Fine grain on the ground and large walls"),
-    slide(ADVANCED, "LED displays", "led_glow", "LED glow", "How brightly the dots burn", (0.0, 15.0, 1.0), led, whole_int),
-    slide(ADVANCED, "LED displays", "led_mips", "LED mip strength", "Off: the sharpest dots and the most shimmer", (0.0, 4.0, 0.05), led_mip, by_five_hundredths),
+    special(
+        ADVANCED,
+        "Textures",
+        "texture_memory",
+        "Texture memory",
+        "How much the textures may take",
+        Kind::TexMem,
+    ),
+    toggle(
+        ADVANCED,
+        "Textures",
+        "texture_compression",
+        "Compress textures on loading",
+        "Less memory, a slower first load",
+    ),
+    toggle(
+        ADVANCED,
+        "Textures",
+        "detail_textures",
+        "Detail texturing up close",
+        "Fine grain on the ground and large walls",
+    ),
+    slide(
+        ADVANCED,
+        "LED displays",
+        "led_glow",
+        "LED glow",
+        "How brightly the dots burn",
+        (0.0, 15.0, 1.0),
+        led,
+        whole_int,
+    ),
+    slide(
+        ADVANCED,
+        "LED displays",
+        "led_mips",
+        "LED mip strength",
+        "Off: the sharpest dots and the most shimmer",
+        (0.0, 4.0, 0.05),
+        led_mip,
+        by_five_hundredths,
+    ),
     // Display and VR
     toggle(DISPLAY, "Window", "fullscreen", "Fullscreen", ""),
-    pick(DISPLAY, "Window", "resolution", "Window size", "Automatic fits the screen", RESOLUTIONS),
+    pick(
+        DISPLAY,
+        "Window",
+        "resolution",
+        "Window size",
+        "Automatic fits the screen",
+        RESOLUTIONS,
+    ),
     toggle(DISPLAY, "Window", "vsync", "V-sync", ""),
-    pick(DISPLAY, "Window", "max_fps", "Frame limit", "", &[("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps"), ("144", "144 fps"), ("1000", "Unlimited")]),
-    slide(DISPLAY, "Cameras and views", "fov", "Field of view", "The driver's view", (0.0, 120.0, 1.0), fov, whole_or_default),
-    slide(DISPLAY, "Cameras and views", "triple_fov_deg", "Field of view", "Of the three screens", (0.0, 120.0, 1.0), fov, whole_or_default),
-    slide(DISPLAY, "Cameras and views", "outside_fov", "Outside view field of view", "F3", (0.0, 120.0, 1.0), outside_fov, whole_or_default),
-    slide(DISPLAY, "Cameras and views", "look_sens", "Mouse look sensitivity", "", (0.1, 2.0, 0.05), pct_or_omsi, hundredths),
-    slide(DISPLAY, "Cameras and views", "look_smoothing_ms", "Smooth the mouse look", "", (0.0, 200.0, 10.0), ms_or_off, whole),
-    toggle(DISPLAY, "Cameras and views", "right_stick_look", "Right stick turns the view", ""),
-    toggle(DISPLAY, "Cameras and views", "alt_view", "Right mouse button turns the view", "Shift+right zooms; off: right zooms as in OMSI"),
-    toggle(DISPLAY, "Cameras and views", "precision_zoom", "Precision mouse zoom", "A field-of-view curve instead of steps"),
-    toggle(DISPLAY, "Cameras and views", "driverview_smooth", "Camera glides between viewpoints", ""),
-    toggle(DISPLAY, "Cameras and views", "hands_in_cab", "Driver's hands in the cab view", ""),
-    toggle(DISPLAY, "Cameras and views", "camera_collision", "Camera collisions", "Outside view"),
-    toggle(DISPLAY, "Cameras and views", "driver", "Driver at the wheel", "Outside views"),
-    toggle(DISPLAY, "Head and motion", "head_movement", "Head moves with the bus", ""),
-    slide(DISPLAY, "Head and motion", "head_idle", "Head sway at a standstill", "", (0.0, 1.0, 0.05), pct_or_off, hundredths),
-    slide(DISPLAY, "Head and motion", "head_idle_pace", "Sway pace", "", (0.5, 2.0, 0.05), pct, hundredths),
-    toggle(DISPLAY, "Head and motion", "steer_look", "View turns with the steering", ""),
-    slide(DISPLAY, "Head and motion", "steer_look_angle", "Steering view angle", "", (0.0, 60.0, 1.0), deg, as_is),
-    slide(DISPLAY, "Head and motion", "steer_look_response", "Steering view response", "", (0.05, 1.0, 0.05), secs_as_ms, as_is),
-    toggle(DISPLAY, "Head tracking", "head_tracking", "Head tracking", "Native TrackIR / OpenTrack"),
-    slide(DISPLAY, "Head tracking", "head_tracking_yaw_sens", "Yaw sensitivity", "Left / right", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    slide(DISPLAY, "Head tracking", "head_tracking_pitch_sens", "Pitch sensitivity", "Up / down", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    slide(DISPLAY, "Head tracking", "head_tracking_roll_sens", "Roll sensitivity", "", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_yaw", "Invert yaw", ""),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_pitch", "Invert pitch", ""),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_roll", "Invert roll", ""),
-    slide(DISPLAY, "Head tracking", "head_tracking_x_sens", "X sensitivity", "Left / right", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    slide(DISPLAY, "Head tracking", "head_tracking_y_sens", "Y sensitivity", "Up / down", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    slide(DISPLAY, "Head tracking", "head_tracking_z_sens", "Z sensitivity", "Forward / back", (0.0, 100.0, 1.0), whole_pct_or_off, percent_axis),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_x", "Invert X", ""),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_y", "Invert Y", ""),
-    toggle(DISPLAY, "Head tracking", "head_tracking_invert_z", "Invert Z", ""),
-    toggle(DISPLAY, "Triple screen", "triple_screen", "Three screen projections", "Three equal screens in a row; OpenXR takes priority"),
-    toggle(DISPLAY, "Triple screen", "triple_span", "Span three monitors at startup", ""),
-    toggle(DISPLAY, "Triple screen", "triple_hud_center", "HUD on the centre screen", ""),
-    slide(DISPLAY, "Triple screen", "triple_width_mm", "Visible width of one panel", "", (200.0, 2000.0, 10.0), mm, as_is),
-    slide(DISPLAY, "Triple screen", "triple_distance_mm", "Eye to centre screen", "", (200.0, 3000.0, 10.0), mm, as_is),
-    slide(DISPLAY, "Triple screen", "triple_bezel_mm", "Both frames at each join", "", (0.0, 100.0, 1.0), mm, as_is),
-    slide(DISPLAY, "Triple screen", "triple_left_angle_deg", "Left screen inward angle", "", (0.0, 90.0, 1.0), deg, as_is),
-    slide(DISPLAY, "Triple screen", "triple_right_angle_deg", "Right screen inward angle", "", (0.0, 90.0, 1.0), deg, as_is),
-    slide(DISPLAY, "Triple screen", "triple_eye_height_mm", "Eye above screen centre", "", (-500.0, 500.0, 1.0), mm, as_is),
+    pick(
+        DISPLAY,
+        "Window",
+        "max_fps",
+        "Frame limit",
+        "",
+        &[
+            ("0", "Screen refresh rate"),
+            ("30", "30 fps"),
+            ("45", "45 fps"),
+            ("60", "60 fps"),
+            ("120", "120 fps"),
+            ("144", "144 fps"),
+            ("1000", "Unlimited"),
+        ],
+    ),
+    slide(
+        DISPLAY,
+        "Cameras and views",
+        "fov",
+        "Field of view",
+        "The driver's view",
+        (0.0, 120.0, 1.0),
+        fov,
+        whole_or_default,
+    ),
+    slide(
+        DISPLAY,
+        "Cameras and views",
+        "triple_fov_deg",
+        "Field of view",
+        "Of the three screens",
+        (0.0, 120.0, 1.0),
+        fov,
+        whole_or_default,
+    ),
+    slide(
+        DISPLAY,
+        "Cameras and views",
+        "outside_fov",
+        "Outside view field of view",
+        "F3",
+        (0.0, 120.0, 1.0),
+        outside_fov,
+        whole_or_default,
+    ),
+    slide(
+        DISPLAY,
+        "Cameras and views",
+        "look_sens",
+        "Mouse look sensitivity",
+        "",
+        (0.1, 2.0, 0.05),
+        pct_or_omsi,
+        hundredths,
+    ),
+    slide(
+        DISPLAY,
+        "Cameras and views",
+        "look_smoothing_ms",
+        "Smooth the mouse look",
+        "",
+        (0.0, 200.0, 10.0),
+        ms_or_off,
+        whole,
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "right_stick_look",
+        "Right stick turns the view",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "alt_view",
+        "Right mouse button turns the view",
+        "Shift+right zooms; off: right zooms as in OMSI",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "precision_zoom",
+        "Precision mouse zoom",
+        "A field-of-view curve instead of steps",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "driverview_smooth",
+        "Camera glides between viewpoints",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "hands_in_cab",
+        "Driver's hands in the cab view",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "camera_collision",
+        "Camera collisions",
+        "Outside view",
+    ),
+    toggle(
+        DISPLAY,
+        "Cameras and views",
+        "driver",
+        "Driver at the wheel",
+        "Outside views",
+    ),
+    toggle(
+        DISPLAY,
+        "Head and motion",
+        "head_movement",
+        "Head moves with the bus",
+        "",
+    ),
+    slide(
+        DISPLAY,
+        "Head and motion",
+        "head_idle",
+        "Head sway at a standstill",
+        "",
+        (0.0, 1.0, 0.05),
+        pct_or_off,
+        hundredths,
+    ),
+    slide(
+        DISPLAY,
+        "Head and motion",
+        "head_idle_pace",
+        "Sway pace",
+        "",
+        (0.5, 2.0, 0.05),
+        pct,
+        hundredths,
+    ),
+    toggle(
+        DISPLAY,
+        "Head and motion",
+        "steer_look",
+        "View turns with the steering",
+        "",
+    ),
+    slide(
+        DISPLAY,
+        "Head and motion",
+        "steer_look_angle",
+        "Steering view angle",
+        "",
+        (0.0, 60.0, 1.0),
+        deg,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Head and motion",
+        "steer_look_response",
+        "Steering view response",
+        "",
+        (0.05, 1.0, 0.05),
+        secs_as_ms,
+        as_is,
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking",
+        "Head tracking",
+        "Native TrackIR / OpenTrack",
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_yaw_sens",
+        "Yaw sensitivity",
+        "Left / right",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_pitch_sens",
+        "Pitch sensitivity",
+        "Up / down",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_roll_sens",
+        "Roll sensitivity",
+        "",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_yaw",
+        "Invert yaw",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_pitch",
+        "Invert pitch",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_roll",
+        "Invert roll",
+        "",
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_x_sens",
+        "X sensitivity",
+        "Left / right",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_y_sens",
+        "Y sensitivity",
+        "Up / down",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    slide(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_z_sens",
+        "Z sensitivity",
+        "Forward / back",
+        (0.0, 100.0, 1.0),
+        whole_pct_or_off,
+        percent_axis,
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_x",
+        "Invert X",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_y",
+        "Invert Y",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Head tracking",
+        "head_tracking_invert_z",
+        "Invert Z",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Triple screen",
+        "triple_screen",
+        "Three screen projections",
+        "Three equal screens in a row; OpenXR takes priority",
+    ),
+    toggle(
+        DISPLAY,
+        "Triple screen",
+        "triple_span",
+        "Span three monitors at startup",
+        "",
+    ),
+    toggle(
+        DISPLAY,
+        "Triple screen",
+        "triple_hud_center",
+        "HUD on the centre screen",
+        "",
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_width_mm",
+        "Visible width of one panel",
+        "",
+        (200.0, 2000.0, 10.0),
+        mm,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_distance_mm",
+        "Eye to centre screen",
+        "",
+        (200.0, 3000.0, 10.0),
+        mm,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_bezel_mm",
+        "Both frames at each join",
+        "",
+        (0.0, 100.0, 1.0),
+        mm,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_left_angle_deg",
+        "Left screen inward angle",
+        "",
+        (0.0, 90.0, 1.0),
+        deg,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_right_angle_deg",
+        "Right screen inward angle",
+        "",
+        (0.0, 90.0, 1.0),
+        deg,
+        as_is,
+    ),
+    slide(
+        DISPLAY,
+        "Triple screen",
+        "triple_eye_height_mm",
+        "Eye above screen centre",
+        "",
+        (-500.0, 500.0, 1.0),
+        mm,
+        as_is,
+    ),
     toggle(DISPLAY, "VR headset", "vr", "Use an OpenXR headset", ""),
-    pick(DISPLAY, "VR headset", "vr_scale", "Eye resolution", "", &[("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")]),
-    pick(DISPLAY, "VR headset", "vr_head_smoothing_ms", "Head tracking smoothing", "", &[("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")]),
-    pick(DISPLAY, "VR headset", "vr_mirror_rate", "Bus mirror refresh", "Shared by all mirrors; higher costs frame rate", &[("0", "Off"), ("8", "8/s"), ("16", "16/s"), ("24", "24/s"), ("32", "32/s"), ("48", "48/s"), ("60", "60/s"), ("90", "90/s"), ("120", "120/s"), ("180", "180/s"), ("240", "240/s"), ("360", "360/s"), ("-1", "Every frame")]),
-    toggle(DISPLAY, "VR headset", "vr_desktop_mirror", "Headset picture on the monitor", ""),
+    pick(
+        DISPLAY,
+        "VR headset",
+        "vr_scale",
+        "Eye resolution",
+        "",
+        &[
+            ("0.5", "50%"),
+            ("0.65", "65%"),
+            ("0.8", "80%"),
+            ("1", "100%"),
+        ],
+    ),
+    pick(
+        DISPLAY,
+        "VR headset",
+        "vr_head_smoothing_ms",
+        "Head tracking smoothing",
+        "",
+        &[
+            ("0", "Off"),
+            ("5", "5 ms"),
+            ("10", "10 ms"),
+            ("20", "20 ms"),
+            ("30", "30 ms"),
+        ],
+    ),
+    pick(
+        DISPLAY,
+        "VR headset",
+        "vr_mirror_rate",
+        "Bus mirror refresh",
+        "Shared by all mirrors; higher costs frame rate",
+        &[
+            ("0", "Off"),
+            ("8", "8/s"),
+            ("16", "16/s"),
+            ("24", "24/s"),
+            ("32", "32/s"),
+            ("48", "48/s"),
+            ("60", "60/s"),
+            ("90", "90/s"),
+            ("120", "120/s"),
+            ("180", "180/s"),
+            ("240", "240/s"),
+            ("360", "360/s"),
+            ("-1", "Every frame"),
+        ],
+    ),
+    toggle(
+        DISPLAY,
+        "VR headset",
+        "vr_desktop_mirror",
+        "Headset picture on the monitor",
+        "",
+    ),
     // Sound
-    slide(SOUND, "Volume", "volume", "Volume", "", (0.0, 1.0, 0.05), pct, hundredths),
-    slide(SOUND, "Volume", "vol_ai", "Traffic", "", (0.0, 1.0, 0.05), pct, hundredths),
-    slide(SOUND, "Volume", "vol_scenery", "Surroundings", "", (0.0, 1.0, 0.05), pct, hundredths),
+    slide(
+        SOUND,
+        "Volume",
+        "volume",
+        "Volume",
+        "",
+        (0.0, 1.0, 0.05),
+        pct,
+        hundredths,
+    ),
+    slide(
+        SOUND,
+        "Volume",
+        "vol_ai",
+        "Traffic",
+        "",
+        (0.0, 1.0, 0.05),
+        pct,
+        hundredths,
+    ),
+    slide(
+        SOUND,
+        "Volume",
+        "vol_scenery",
+        "Surroundings",
+        "",
+        (0.0, 1.0, 0.05),
+        pct,
+        hundredths,
+    ),
     toggle(SOUND, "Sound", "doppler", "Doppler effect", ""),
-    toggle(SOUND, "Sound", "muffle_outside", "Muffle outside sounds", "Heard from the cab"),
-    pick(SOUND, "Sound", "pax_voices", "Passenger voices", "", &[("all", "Greetings and tickets"), ("tickets", "Only the ticket asked for"), ("off", "Silent")]),
+    toggle(
+        SOUND,
+        "Sound",
+        "muffle_outside",
+        "Muffle outside sounds",
+        "Heard from the cab",
+    ),
+    pick(
+        SOUND,
+        "Sound",
+        "pax_voices",
+        "Passenger voices",
+        "",
+        &[
+            ("all", "Greetings and tickets"),
+            ("tickets", "Only the ticket asked for"),
+            ("off", "Silent"),
+        ],
+    ),
     // Traffic and people
-    slide(TRAFFIC, "AI traffic", "start.traffic", "Cars around", "At the start of a drive", (0.0, 120.0, 1.0), count, as_is),
-    toggle(TRAFFIC, "AI traffic", "start.schedule", "Timetable buses", "Drive their tours on the map"),
-    pick(TRAFFIC, "AI traffic", "ai_unsched_factor", "Random traffic", "Cars and trucks", &[("25", "25%"), ("50", "50%"), ("75", "75%"), ("100", "100%"), ("150", "150%"), ("200", "200%")]),
-    pick(TRAFFIC, "AI traffic", "ai_max_scheduled", "Timetable vehicles", "", &[("0", "All"), ("10", "At most 10"), ("25", "At most 25"), ("50", "At most 50")]),
-    pick(TRAFFIC, "AI traffic", "ai_max_parked", "Parked cars", "", &[("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")]),
-    toggle(TRAFFIC, "People", "start.passengers", "Passengers", "At the stops"),
-    pick(TRAFFIC, "People", "ai_max_humans", "People", "Waiting, walking or riding at once", &[("50", "At most 50"), ("100", "At most 100"), ("200", "At most 200"), ("400", "At most 400"), ("800", "At most 800")]),
-    slide(TRAFFIC, "People", "pax_density", "How many passengers", "", (0.0, 2.0, 0.1), pct, hundredths),
-    pick(TRAFFIC, "People", "boarding", "Boarding", "How passengers get their tickets", &[("auto", "Pay and take the ticket"), ("pay", "The driver sells the ticket"), ("walk", "Just walk in")]),
-    toggle(TRAFFIC, "People", "exact_fare", "Passengers pay the exact fare", "No change at the cash desk"),
+    slide(
+        TRAFFIC,
+        "AI traffic",
+        "start.traffic",
+        "Cars around",
+        "At the start of a drive",
+        (0.0, 120.0, 1.0),
+        count,
+        as_is,
+    ),
+    toggle(
+        TRAFFIC,
+        "AI traffic",
+        "start.schedule",
+        "Timetable buses",
+        "Drive their tours on the map",
+    ),
+    pick(
+        TRAFFIC,
+        "AI traffic",
+        "ai_unsched_factor",
+        "Random traffic",
+        "Cars and trucks",
+        &[
+            ("25", "25%"),
+            ("50", "50%"),
+            ("75", "75%"),
+            ("100", "100%"),
+            ("150", "150%"),
+            ("200", "200%"),
+        ],
+    ),
+    pick(
+        TRAFFIC,
+        "AI traffic",
+        "ai_max_scheduled",
+        "Timetable vehicles",
+        "",
+        &[
+            ("0", "All"),
+            ("10", "At most 10"),
+            ("25", "At most 25"),
+            ("50", "At most 50"),
+        ],
+    ),
+    pick(
+        TRAFFIC,
+        "AI traffic",
+        "ai_max_parked",
+        "Parked cars",
+        "",
+        &[
+            ("-1", "None"),
+            ("0", "Every space"),
+            ("35", "At most 35"),
+            ("100", "At most 100"),
+            ("250", "At most 250"),
+        ],
+    ),
+    toggle(
+        TRAFFIC,
+        "People",
+        "start.passengers",
+        "Passengers",
+        "At the stops",
+    ),
+    pick(
+        TRAFFIC,
+        "People",
+        "ai_max_humans",
+        "People",
+        "Waiting, walking or riding at once",
+        &[
+            ("50", "At most 50"),
+            ("100", "At most 100"),
+            ("200", "At most 200"),
+            ("400", "At most 400"),
+            ("800", "At most 800"),
+        ],
+    ),
+    slide(
+        TRAFFIC,
+        "People",
+        "pax_density",
+        "How many passengers",
+        "",
+        (0.0, 2.0, 0.1),
+        pct,
+        hundredths,
+    ),
+    pick(
+        TRAFFIC,
+        "People",
+        "boarding",
+        "Boarding",
+        "How passengers get their tickets",
+        &[
+            ("auto", "Pay and take the ticket"),
+            ("pay", "The driver sells the ticket"),
+            ("walk", "Just walk in"),
+        ],
+    ),
+    toggle(
+        TRAFFIC,
+        "People",
+        "exact_fare",
+        "Passengers pay the exact fare",
+        "No change at the cash desk",
+    ),
     // Driving devices
-    pick(DEVICES, "Keyboard and mouse", "drive_keys", "Driving keys", "", &[("omsi", "Custom controls (Controls page)"), ("simple", "W A S D + arrows"), ("wasd", "W A S D only"), ("arrows", "Arrow keys only")]),
-    slide(DEVICES, "Keyboard and mouse", "mouse_sens", "Mouse steering sensitivity", "O switches the mouse steering", (0.1, 3.0, 0.05), pct_or_omsi, hundredths),
-    toggle(DEVICES, "Keyboard and mouse", "mouse_smooth", "Smooth mouse steering", "Off: the wheel follows the cursor at once, as in OMSI"),
-    toggle(DEVICES, "Keyboard and mouse", "mouse_right_off", "A right click ends the mouse steering", "As in OMSI"),
-    toggle(DEVICES, "Wheel and pedals", "momentary_gears", "H-pattern shifter returns to neutral", "When the gear is released"),
-    slide(DEVICES, "Wheel and pedals", "wheel_range", "Wheel rotation", "The wheel's own", (180.0, 1800.0, 30.0), deg, whole),
-    slide(DEVICES, "Wheel and pedals", "wheel_lock", "Full lock at", "A real bus: about two and a half turns", (0.0, 1800.0, 30.0), wheel_lock, lock_or_omsi),
-    slide(DEVICES, "Wheel and pedals", "pad_steer_smooth", "Stick steering smoothing", "", (0.0, 300.0, 10.0), ms_or_off, whole),
-    toggle(DEVICES, "Wheel and pedals", "pad_steer_linear", "Stick steers like a wheel", "A wheel seen as a gamepad"),
-    toggle(DEVICES, "Wheel and pedals", "arrows_switch_cams", "Arrow keys switch the cameras with a wheel", "No glance"),
-    slide(DEVICES, "Wheel and pedals", "pedal_throttle", "Throttle pedal strength", "", (0.5, 2.0, 0.05), pedal, hundredths),
-    slide(DEVICES, "Wheel and pedals", "pedal_brake", "Brake pedal strength", "", (0.5, 2.0, 0.05), pedal, hundredths),
-    toggle(DEVICES, "Force feedback", "ff_enabled", "Force feedback and vibration", ""),
-    toggle(DEVICES, "Force feedback", "ff_invert", "Invert force feedback by default", "A wheel with a saved direction keeps its own"),
-    slide(DEVICES, "Force feedback", "ff_road_vib", "Road texture vibration", "", (0.0, 4.0, 0.05), vibration, twentieths),
-    slide(DEVICES, "Force feedback", "ff_engine_vib", "Engine vibration", "", (0.0, 4.0, 0.05), vibration, twentieths),
-    slide(DEVICES, "Force feedback", "ff_fade", "Vibration fade-out", "", (0.0, 1.5, 0.05), fade, hundredths),
-    slide(DEVICES, "Seat", "seat_y", "Seat forward / back", "Moves the driver's eye", (-0.6, 0.6, 0.01), cm, hundredths),
-    slide(DEVICES, "Seat", "seat_z", "Seat up / down", "", (-0.6, 0.6, 0.01), cm, hundredths),
-    slide(DEVICES, "Seat", "seat_x", "Seat right / left", "", (-0.6, 0.6, 0.01), cm, hundredths),
-    slide(DEVICES, "Seat", "seat_pitch_deg", "Head pitch", "", (-45.0, 45.0, 1.0), signed_deg, whole),
+    pick(
+        DEVICES,
+        "Keyboard and mouse",
+        "drive_keys",
+        "Driving keys",
+        "",
+        &[
+            ("omsi", "Custom controls (Controls page)"),
+            ("simple", "W A S D + arrows"),
+            ("wasd", "W A S D only"),
+            ("arrows", "Arrow keys only"),
+        ],
+    ),
+    slide(
+        DEVICES,
+        "Keyboard and mouse",
+        "mouse_sens",
+        "Mouse steering sensitivity",
+        "O switches the mouse steering",
+        (0.1, 3.0, 0.05),
+        pct_or_omsi,
+        hundredths,
+    ),
+    toggle(
+        DEVICES,
+        "Keyboard and mouse",
+        "mouse_smooth",
+        "Smooth mouse steering",
+        "Off: the wheel follows the cursor at once, as in OMSI",
+    ),
+    toggle(
+        DEVICES,
+        "Keyboard and mouse",
+        "mouse_right_off",
+        "A right click ends the mouse steering",
+        "As in OMSI",
+    ),
+    toggle(
+        DEVICES,
+        "Wheel and pedals",
+        "momentary_gears",
+        "H-pattern shifter returns to neutral",
+        "When the gear is released",
+    ),
+    slide(
+        DEVICES,
+        "Wheel and pedals",
+        "wheel_range",
+        "Wheel rotation",
+        "The wheel's own",
+        (180.0, 1800.0, 30.0),
+        deg,
+        whole,
+    ),
+    slide(
+        DEVICES,
+        "Wheel and pedals",
+        "wheel_lock",
+        "Full lock at",
+        "A real bus: about two and a half turns",
+        (0.0, 1800.0, 30.0),
+        wheel_lock,
+        lock_or_omsi,
+    ),
+    slide(
+        DEVICES,
+        "Wheel and pedals",
+        "pad_steer_smooth",
+        "Stick steering smoothing",
+        "",
+        (0.0, 300.0, 10.0),
+        ms_or_off,
+        whole,
+    ),
+    toggle(
+        DEVICES,
+        "Wheel and pedals",
+        "pad_steer_linear",
+        "Stick steers like a wheel",
+        "A wheel seen as a gamepad",
+    ),
+    toggle(
+        DEVICES,
+        "Wheel and pedals",
+        "arrows_switch_cams",
+        "Arrow keys switch the cameras with a wheel",
+        "No glance",
+    ),
+    slide(
+        DEVICES,
+        "Wheel and pedals",
+        "pedal_throttle",
+        "Throttle pedal strength",
+        "",
+        (0.5, 2.0, 0.05),
+        pedal,
+        hundredths,
+    ),
+    slide(
+        DEVICES,
+        "Wheel and pedals",
+        "pedal_brake",
+        "Brake pedal strength",
+        "",
+        (0.5, 2.0, 0.05),
+        pedal,
+        hundredths,
+    ),
+    toggle(
+        DEVICES,
+        "Force feedback",
+        "ff_enabled",
+        "Force feedback and vibration",
+        "",
+    ),
+    toggle(
+        DEVICES,
+        "Force feedback",
+        "ff_invert",
+        "Invert force feedback by default",
+        "A wheel with a saved direction keeps its own",
+    ),
+    slide(
+        DEVICES,
+        "Force feedback",
+        "ff_road_vib",
+        "Road texture vibration",
+        "",
+        (0.0, 4.0, 0.05),
+        vibration,
+        twentieths,
+    ),
+    slide(
+        DEVICES,
+        "Force feedback",
+        "ff_engine_vib",
+        "Engine vibration",
+        "",
+        (0.0, 4.0, 0.05),
+        vibration,
+        twentieths,
+    ),
+    slide(
+        DEVICES,
+        "Force feedback",
+        "ff_fade",
+        "Vibration fade-out",
+        "",
+        (0.0, 1.5, 0.05),
+        fade,
+        hundredths,
+    ),
+    slide(
+        DEVICES,
+        "Seat",
+        "seat_y",
+        "Seat forward / back",
+        "Moves the driver's eye",
+        (-0.6, 0.6, 0.01),
+        cm,
+        hundredths,
+    ),
+    slide(
+        DEVICES,
+        "Seat",
+        "seat_z",
+        "Seat up / down",
+        "",
+        (-0.6, 0.6, 0.01),
+        cm,
+        hundredths,
+    ),
+    slide(
+        DEVICES,
+        "Seat",
+        "seat_x",
+        "Seat right / left",
+        "",
+        (-0.6, 0.6, 0.01),
+        cm,
+        hundredths,
+    ),
+    slide(
+        DEVICES,
+        "Seat",
+        "seat_pitch_deg",
+        "Head pitch",
+        "",
+        (-45.0, 45.0, 1.0),
+        signed_deg,
+        whole,
+    ),
     // interface: the launcher's own, at once (the accent also colours the game's menus)
-    now(pick(INTERFACE, "Accent color", "ui_accent", "Accent color", "The launcher and every menu of the game", ACCENTS)),
-    now(pick(INTERFACE, "Layout", "ui_nav", "Navigation", "Top bar: the pages in a row", &[("sidebar", "Sidebar"), ("top", "Top bar")])),
-    now(pick(INTERFACE, "Layout", "ui_background", "Background", "Scene: a blurred picture behind", &[("plain", "Plain dark"), ("scene", "Scene")])),
-    now(slide(INTERFACE, "Layout", "ui_dimming", "Dimming", "How much the scene is darkened under the text", (30.0, 90.0, 1.0), whole_pct, whole_int)),
-    now(pick(INTERFACE, "Layout", "ui_corners", "Corners", "Square is flatter", &[("rounded", "Rounded"), ("square", "Square")])),
+    now(pick(
+        INTERFACE,
+        "Accent color",
+        "ui_accent",
+        "Accent color",
+        "The launcher and every menu of the game",
+        ACCENTS,
+    )),
+    now(pick(
+        INTERFACE,
+        "Layout",
+        "ui_nav",
+        "Navigation",
+        "Top bar: the pages in a row",
+        &[("sidebar", "Sidebar"), ("top", "Top bar")],
+    )),
+    now(pick(
+        INTERFACE,
+        "Layout",
+        "ui_background",
+        "Background",
+        "Scene: a blurred picture behind",
+        &[("plain", "Plain dark"), ("scene", "Scene")],
+    )),
+    now(slide(
+        INTERFACE,
+        "Layout",
+        "ui_dimming",
+        "Dimming",
+        "How much the scene is darkened under the text",
+        (30.0, 90.0, 1.0),
+        whole_pct,
+        whole_int,
+    )),
+    now(pick(
+        INTERFACE,
+        "Layout",
+        "ui_corners",
+        "Corners",
+        "Square is flatter",
+        &[("rounded", "Rounded"), ("square", "Square")],
+    )),
 ];
 
 /// The accent colours (`omsi_ui::theme::Accent`), the default first.
-const ACCENTS: &[(&str, &str)] = &[("Amber", "Amber"), ("Orange", "Orange"), ("Red", "Red"), ("Pink", "Pink"), ("Purple", "Purple"), ("Blue", "Blue"), ("Teal", "Teal"), ("Green", "Green")];
+const ACCENTS: &[(&str, &str)] = &[
+    ("Amber", "Amber"),
+    ("Orange", "Orange"),
+    ("Red", "Red"),
+    ("Pink", "Pink"),
+    ("Purple", "Purple"),
+    ("Blue", "Blue"),
+    ("Teal", "Teal"),
+    ("Green", "Green"),
+];
 
 /// The settings and the start's choices the page changes, and whether it changed either.
 pub struct Store<'a> {
@@ -460,7 +1811,11 @@ fn value_text(v: &Value) -> String {
 
 fn same(a: &Value, b: &Value) -> bool {
     let (a, b) = (value_text(a), value_text(b));
-    a == b || a.parse::<f64>().ok().zip(b.parse::<f64>().ok()).is_some_and(|(x, y)| (x - y).abs() < 1e-6)
+    a == b
+        || a.parse::<f64>()
+            .ok()
+            .zip(b.parse::<f64>().ok())
+            .is_some_and(|(x, y)| (x - y).abs() < 1e-6)
 }
 
 /// The option differs from how it comes (an option with no default, or the preset, never does).
@@ -476,12 +1831,19 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
 /// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
 fn d3d9_fixes_vanilla(s: &Value) -> bool {
     // (the environment read last: the page asks this for every option, every frame)
-    cfg!(windows) && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9") && !s.get("vr").and_then(Value::as_bool).unwrap_or(false) && !omsi_cfg::flags::OPENXR.is_set()
+    cfg!(windows)
+        && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
+        && !s.get("vr").and_then(Value::as_bool).unwrap_or(false)
+        && !omsi_cfg::flags::OPENXR.is_set()
 }
 
 /// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
 fn api_limit(s: &Value, key: &str) -> Option<&'static crate::api_limits::ApiLimit> {
-    if d3d9_fixes_vanilla(s) { crate::api_limits::d3d9(key) } else { None }
+    if d3d9_fixes_vanilla(s) {
+        crate::api_limits::d3d9(key)
+    } else {
+        None
+    }
 }
 
 /// How an option shows with the settings as they are.
@@ -509,7 +1871,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     let triple = st.on("triple_screen") && !st.on("vr");
     let visible = match o.key {
         "graphics_api" => !cfg!(target_os = "macos"),
-        "shadow_size" | "shadow_casters" | "detail_textures" | "night_brightness" | "led_glow" | "led_mips" => !classic,
+        "shadow_size" | "shadow_casters" | "detail_textures" | "night_brightness" | "led_glow"
+        | "led_mips" => !classic,
         "ssao" | "shadows" => !classic && !traced,
         "reflections" => !traced,
         "fov" => !triple,
@@ -521,17 +1884,33 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "ui_dimming" => st.get("ui_background").as_str() == Some("scene"),
         _ => true,
     };
-    if visible { Shown::Row } else { Shown::Hidden }
+    if visible {
+        Shown::Row
+    } else {
+        Shown::Hidden
+    }
 }
 
 /// The quality presets: they set most of the graphics options. (OMSI's own option_presets/*.oop
 /// are named after the PCs of their day - "PC 2006", "X10 high" - and are on Presets and files.)
 fn presets() -> [(&'static str, Value); 4] {
     [
-        ("Low", json!({"msaa": 1, "anisotropy": 2, "shadow_size": 1024, "ssao": false, "shadows": false, "detail_textures": false, "clouds": false, "view_distance": "600", "min_obj_size": 0.03, "max_obj_dist": "500", "mirror_size": 128, "mirror_refresh": "eco", "render_scale": "0.75", "texture_memory": 800})),
-        ("Medium", json!({"msaa": 2, "anisotropy": 4, "shadow_size": 2048, "ssao": false, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "900", "min_obj_size": 0.02, "max_obj_dist": "750", "mirror_size": 256, "mirror_refresh": "eco", "render_scale": "auto", "texture_memory": 1200})),
-        ("High", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 2048, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "auto", "min_obj_size": 0.013, "max_obj_dist": "auto", "mirror_size": 256, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
-        ("Ultra", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 4096, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "2000", "min_obj_size": 0.005, "max_obj_dist": "1500", "mirror_size": 512, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
+        (
+            "Low",
+            json!({"msaa": 1, "anisotropy": 2, "shadow_size": 1024, "ssao": false, "shadows": false, "detail_textures": false, "clouds": false, "view_distance": "600", "min_obj_size": 0.03, "max_obj_dist": "500", "mirror_size": 128, "mirror_refresh": "eco", "render_scale": "0.75", "texture_memory": 800}),
+        ),
+        (
+            "Medium",
+            json!({"msaa": 2, "anisotropy": 4, "shadow_size": 2048, "ssao": false, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "900", "min_obj_size": 0.02, "max_obj_dist": "750", "mirror_size": 256, "mirror_refresh": "eco", "render_scale": "auto", "texture_memory": 1200}),
+        ),
+        (
+            "High",
+            json!({"msaa": 4, "anisotropy": 8, "shadow_size": 2048, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "auto", "min_obj_size": 0.013, "max_obj_dist": "auto", "mirror_size": 256, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0}),
+        ),
+        (
+            "Ultra",
+            json!({"msaa": 4, "anisotropy": 8, "shadow_size": 4096, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "2000", "min_obj_size": 0.005, "max_obj_dist": "1500", "mirror_size": 512, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0}),
+        ),
     ]
 }
 
@@ -540,34 +1919,64 @@ fn api_options() -> &'static [(&'static str, &'static str)] {
     // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
     // renderer, Windows only and never chosen by "Automatic")
     if cfg!(windows) {
-        &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL"), ("d3d9", "DirectX9 (D3D9Ex)")]
+        &[
+            ("auto", "Automatic"),
+            ("vulkan", "Vulkan"),
+            ("dx12", "DirectX 12"),
+            ("gl", "OpenGL"),
+            ("d3d9", "DirectX9 (D3D9Ex)"),
+        ]
     } else {
-        &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("gl", "OpenGL")]
+        &[
+            ("auto", "Automatic"),
+            ("vulkan", "Vulkan"),
+            ("gl", "OpenGL"),
+        ]
     }
 }
 
 fn mb(v: i64) -> String {
-    if v >= 1000 { format!("{:.1} GB", v as f64 / 1000.0) } else { format!("{v} MB") }
+    if v >= 1000 {
+        format!("{:.1} GB", v as f64 / 1000.0)
+    } else {
+        format!("{v} MB")
+    }
 }
 
 /// The choices of a dropdown option (the texture memory's "Automatic" says what it comes to).
 fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
-    let own = |list: &[(&str, &str)]| list.iter().map(|(v, t)| (v.to_string(), t.to_string())).collect();
+    let own = |list: &[(&str, &str)]| {
+        list.iter()
+            .map(|(v, t)| (v.to_string(), t.to_string()))
+            .collect()
+    };
     match &o.kind {
         Kind::Pick(list) => own(list),
         Kind::Api => own(api_options()),
-        Kind::Language => own(&core::LANGUAGES.iter().map(|l| (l.0, l.1)).collect::<Vec<_>>()),
-        Kind::Preset => presets().iter().map(|p| (p.0.to_string(), p.0.to_string())).chain([("custom".to_string(), "Custom".to_string())]).collect(),
+        Kind::Language => own(&core::LANGUAGES
+            .iter()
+            .map(|l| (l.0, l.1))
+            .collect::<Vec<_>>()),
+        Kind::Preset => presets()
+            .iter()
+            .map(|p| (p.0.to_string(), p.0.to_string()))
+            .chain([("custom".to_string(), "Custom".to_string())])
+            .collect(),
         Kind::TexMem => {
             // (the game takes the smaller of an eighth of the memory and what the graphics
             // adapter is taken to hold, see `memory::texture_budget`)
-            let adapter = omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64;
+            let adapter =
+                omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64;
             let auto = match (st.get("texture_memory_auto").as_i64().unwrap_or(0), adapter) {
                 (m, 0) => m,
                 (0, a) => a,
                 (m, a) => m.min(a),
             };
-            let auto = if auto > 0 { omsi_ui::tr("Automatic (%{size} here)").replace("%{size}", &mb(auto)) } else { "Automatic".to_string() };
+            let auto = if auto > 0 {
+                omsi_ui::tr("Automatic (%{size} here)").replace("%{size}", &mb(auto))
+            } else {
+                "Automatic".to_string()
+            };
             let mut out = vec![("0".to_string(), auto)];
             out.extend([500, 1000, 1500, 2000, 3000, 4000, 6000].map(|m| (m.to_string(), mb(m))));
             out
@@ -578,7 +1987,10 @@ fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
 
 /// Which preset the settings match now (`None`: Custom).
 fn preset_now(st: &Store) -> Option<usize> {
-    presets().iter().position(|p| p.1.as_object().is_some_and(|o| o.iter().all(|(k, v)| same(st.get(k), v))))
+    presets().iter().position(|p| {
+        p.1.as_object()
+            .is_some_and(|o| o.iter().all(|(k, v)| same(st.get(k), v)))
+    })
 }
 
 /// A dropdown option's choice now: its index, a value written by hand getting an entry of its own.
@@ -611,10 +2023,23 @@ fn choose(o: &Opt, st: &mut Store, value: &str) {
         }
         return;
     }
-    let like = if st.get(o.key).is_null() { default_of(o.key).unwrap_or(Value::Null) } else { st.get(o.key).clone() };
+    let like = if st.get(o.key).is_null() {
+        default_of(o.key).unwrap_or(Value::Null)
+    } else {
+        st.get(o.key).clone()
+    };
     let v = match like {
         Value::Bool(_) => json!(value == "1"),
-        Value::Number(_) => value.parse::<f64>().map(|f| if f.fract() == 0.0 { json!(f as i64) } else { json!(f) }).unwrap_or(json!(value)),
+        Value::Number(_) => value
+            .parse::<f64>()
+            .map(|f| {
+                if f.fract() == 0.0 {
+                    json!(f as i64)
+                } else {
+                    json!(f)
+                }
+            })
+            .unwrap_or(json!(value)),
         _ => json!(value),
     };
     st.set(o.key, v);
@@ -634,7 +2059,10 @@ fn after(key: &str, st: &mut Store) {
         // (the field of view of the three screens follows from their distance)
         "triple_distance_mm" => st.s["triple_fov_deg"] = json!(0.0),
         "machine_translation" => crate::mt::enable(st.on("machine_translation")),
-        "ui_accent" => omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(st.get("ui_accent").as_str().unwrap_or("")).unwrap_or_default()),
+        "ui_accent" => omsi_ui::theme::set_accent(
+            omsi_ui::theme::Accent::named(st.get("ui_accent").as_str().unwrap_or(""))
+                .unwrap_or_default(),
+        ),
         _ => {}
     }
 }
@@ -643,7 +2071,16 @@ fn after(key: &str, st: &mut Store) {
 pub fn listed<'a>(sec: usize, query: &str, changed_only: bool, st: &Store) -> Vec<&'a Opt> {
     let q = query.trim().to_lowercase();
     OPTS.iter()
-        .filter(|o| if q.is_empty() { changed_only || o.sec == sec } else { matches(o.label, &q) || matches(o.hint, &q) || matches(o.group, &q) || matches(SECTIONS[o.sec], &q) })
+        .filter(|o| {
+            if q.is_empty() {
+                changed_only || o.sec == sec
+            } else {
+                matches(o.label, &q)
+                    || matches(o.hint, &q)
+                    || matches(o.group, &q)
+                    || matches(SECTIONS[o.sec], &q)
+            }
+        })
         .filter(|o| match shown(o, st) {
             Shown::Hidden => false,
             // (a row fixed by the graphics API cannot be taken back here: "changed" leaves it out)
@@ -697,8 +2134,15 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool) -> Vec<Card<'a>> {
             out.push(Card::Accent(o));
             continue;
         }
-        let title = if mixed { format!("{} · {}", SECTIONS[o.sec], o.group) } else { o.group.to_string() };
-        match out.iter_mut().find(|c| matches!(c, Card::Group(t, _) if *t == title)) {
+        let title = if mixed {
+            format!("{} · {}", SECTIONS[o.sec], o.group)
+        } else {
+            o.group.to_string()
+        };
+        match out
+            .iter_mut()
+            .find(|c| matches!(c, Card::Group(t, _) if *t == title))
+        {
             Some(Card::Group(_, rows)) => rows.push(o),
             _ => out.push(Card::Group(title, vec![o])),
         }
@@ -728,7 +2172,13 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let sec = l.pages.set.sec.min(SECTIONS.len() - 1);
     let (_, title, line) = UiPage::Settings.heading().unwrap_or_default();
     let searching = !l.pages.set.query.trim().is_empty();
-    let place = if searching { "Search" } else if l.pages.set.changed_only { "Changed" } else { SECTIONS[sec] };
+    let place = if searching {
+        "Search"
+    } else if l.pages.set.changed_only {
+        "Changed"
+    } else {
+        SECTIONS[sec]
+    };
     let body = l.page_title_with(area, UiPage::Settings.title(), (place, title, line));
     let root = std::path::PathBuf::from(&l.state.config.root);
     let mut start = start_values(&l.state.choice);
@@ -736,7 +2186,12 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let narrow = body.w < 760.0;
     let view = &mut l.pages.set;
     let ui = &mut l.ui;
-    let mut st = Store { s: &mut l.state.settings, start: &mut start, changed: false, start_changed: false };
+    let mut st = Store {
+        s: &mut l.state.settings,
+        start: &mut start,
+        changed: false,
+        start_changed: false,
+    };
     // the bar: the search, all or the changed ones, how many are changed, the presets
     let bar_h = 34.0;
     // (each section's rows and whether one is changed, once a frame: the list and the chip use them)
@@ -752,21 +2207,51 @@ pub fn settings(l: &mut Launcher, area: Rect) {
             per_sec[o.sec].0 += 1;
         }
     }
-    let sw = if narrow { body.w } else { (body.w * 0.4).min(520.0) };
-    ui.text_input("set-search", Rect::new(body.x, body.y, sw, bar_h), &mut view.query, "Search every option...", Some("search"));
+    let sw = if narrow {
+        body.w
+    } else {
+        (body.w * 0.4).min(520.0)
+    };
+    ui.text_input(
+        "set-search",
+        Rect::new(body.x, body.y, sw, bar_h),
+        &mut view.query,
+        "Search every option...",
+        Some("search"),
+    );
     let mut show = view.changed_only as usize;
-    let (seg, mut y) = if narrow { (Rect::new(body.x, body.y + bar_h + 10.0, 200.0, bar_h), body.y + (bar_h + 10.0) * 2.0) } else { (Rect::new(body.x + sw + 12.0, body.y, 200.0, bar_h), body.y + bar_h + 14.0) };
+    let (seg, mut y) = if narrow {
+        (
+            Rect::new(body.x, body.y + bar_h + 10.0, 200.0, bar_h),
+            body.y + (bar_h + 10.0) * 2.0,
+        )
+    } else {
+        (
+            Rect::new(body.x + sw + 12.0, body.y, 200.0, bar_h),
+            body.y + bar_h + 14.0,
+        )
+    };
     if ui.segmented("set-show", seg, &mut show, &["All", "Changed"]) {
         view.changed_only = show == 1;
     }
     if !narrow {
         let pw = ui.width("Presets", 13.0, Weight::Bold) + 48.0;
-        if ui.button("set-presets", Rect::new(body.right() - pw, body.y, pw, bar_h), "Presets", Some("inventory_2"), ButtonKind::Normal) {
+        if ui.button(
+            "set-presets",
+            Rect::new(body.right() - pw, body.y, pw, bar_h),
+            "Presets",
+            Some("inventory_2"),
+            ButtonKind::Normal,
+        ) {
             view.sec = PRESETS;
             view.query.clear();
             view.changed_only = false;
         }
-        let chip = if n_changed == 1 { "1 changed from default".to_string() } else { omsi_ui::tr("%{n} changed from default").replace("%{n}", &n_changed.to_string()) };
+        let chip = if n_changed == 1 {
+            "1 changed from default".to_string()
+        } else {
+            omsi_ui::tr("%{n} changed from default").replace("%{n}", &n_changed.to_string())
+        };
         let cw = ui.width(&chip, 12.0, Weight::Regular) + 24.0;
         let cr = Rect::new(body.right() - pw - 10.0 - cw, body.y + 4.0, cw, 26.0);
         ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
@@ -779,7 +2264,17 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let content = if narrow {
         let mut s = sec;
         let names: Vec<String> = SECTIONS.iter().map(|s| s.to_string()).collect();
-        if ui.select("set-section", Rect::new(seg.right() + 10.0, seg.y, (body.right() - seg.right() - 10.0).max(120.0), bar_h), &mut s, &names) {
+        if ui.select(
+            "set-section",
+            Rect::new(
+                seg.right() + 10.0,
+                seg.y,
+                (body.right() - seg.right() - 10.0).max(120.0),
+                bar_h,
+            ),
+            &mut s,
+            &names,
+        ) {
             view.sec = s;
             view.query.clear();
             view.changed_only = false;
@@ -794,11 +2289,18 @@ pub fn settings(l: &mut Launcher, area: Rect) {
             view.changed_only = false;
         }
         y = nav.y;
-        Rect::new(nav.right() + GAP, y, body.right() - nav.right() - GAP, nav.h)
+        Rect::new(
+            nav.right() + GAP,
+            y,
+            body.right() - nav.right() - GAP,
+            nav.h,
+        )
     };
     let sec = view.sec.min(SECTIONS.len() - 1);
     let opts = listed(sec, &q, view.changed_only, &st);
-    section_body(ui, content, sec, mixed, narrow, &opts, &mut st, &mut out, &root);
+    section_body(
+        ui, content, sec, mixed, narrow, &opts, &mut st, &mut out, &root,
+    );
     // (the launcher speaks the chosen language at once)
     crate::ui_language(st.get("language").as_str().unwrap_or("ENG"));
     let (changed, start_changed) = (st.changed, st.start_changed);
@@ -827,14 +2329,35 @@ pub fn settings(l: &mut Launcher, area: Rect) {
 /// The section `sec` (or, `mixed`, what a search or "changed only" lists: `opts`) in `content`,
 /// scrolled: its cards in two columns, one on a narrow window.
 #[allow(clippy::too_many_arguments)]
-fn section_body(ui: &mut Ui, content: Rect, sec: usize, mixed: bool, narrow: bool, opts: &[&Opt], st: &mut Store, out: &mut Outside, root: &std::path::Path) {
+fn section_body(
+    ui: &mut Ui,
+    content: Rect,
+    sec: usize,
+    mixed: bool,
+    narrow: bool,
+    opts: &[&Opt],
+    st: &mut Store,
+    out: &mut Outside,
+    root: &std::path::Path,
+) {
     let id = format!("set-page-{sec}-{mixed}");
     ui.scroll_area(&id, content, &mut |ui, v| {
         let w = v.w - 8.0;
         let list = cards(opts, sec, mixed);
         if list.is_empty() {
-            let text = if mixed { "Nothing matches. A search looks through every section." } else { "Nothing to set here with the options chosen now." };
-            ui.text_in(text, Rect::new(v.x, v.y, w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+            let text = if mixed {
+                "Nothing matches. A search looks through every section."
+            } else {
+                "Nothing to set here with the options chosen now."
+            };
+            ui.text_in(
+                text,
+                Rect::new(v.x, v.y, w, 30.0),
+                13.0,
+                Weight::Regular,
+                TEXT_DIM,
+                Align::Left,
+            );
             return 30.0;
         }
         // (a card goes under the shorter column; a wide one across both)
@@ -869,7 +2392,13 @@ fn section_body(ui: &mut Ui, content: Rect, sec: usize, mixed: bool, narrow: boo
 
 /// The sections on the left, with how many options each shows (a dot: one of them changed).
 /// Returns a section clicked.
-fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, per_sec: &[(usize, bool)]) -> Option<usize> {
+fn sections_card(
+    ui: &mut Ui,
+    r: Rect,
+    sec: usize,
+    mixed: bool,
+    per_sec: &[(usize, bool)],
+) -> Option<usize> {
     ui.panel(r);
     let mut picked = None;
     let x = r.x + 12.0;
@@ -885,12 +2414,27 @@ fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, per_sec: &[(usiz
             ui.p().rounded(rr, 5.0, Color::WHITE.alpha(0.05));
         }
         let name = omsi_launcher_ui::kit::fit_text(ui, name, 13.5, rr.w - 60.0);
-        ui.text_in(&name, Rect::new(rr.x + 10.0, rr.y, rr.w - 50.0, rr.h), 13.5, Weight::Medium, TEXT, Align::Left);
+        ui.text_in(
+            &name,
+            Rect::new(rr.x + 10.0, rr.y, rr.w - 50.0, rr.h),
+            13.5,
+            Weight::Medium,
+            TEXT,
+            Align::Left,
+        );
         let (n, any_changed) = per_sec[i];
         if n > 0 {
-            ui.text_in(&n.to_string(), Rect::new(rr.right() - 44.0, rr.y, 34.0, rr.h), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+            ui.text_in(
+                &n.to_string(),
+                Rect::new(rr.right() - 44.0, rr.y, 34.0, rr.h),
+                12.0,
+                Weight::Regular,
+                TEXT_DIM,
+                Align::Right,
+            );
             if any_changed {
-                ui.p().circle(Vec2::new(rr.right() - 52.0, rr.center().y), 3.0, accent());
+                ui.p()
+                    .circle(Vec2::new(rr.right() - 52.0, rr.center().y), 3.0, accent());
             }
         }
         if clicked {
@@ -909,10 +2453,21 @@ fn sections_card(ui: &mut Ui, r: Rect, sec: usize, mixed: bool, per_sec: &[(usiz
 /// A card's frame and title, its count at the right. Returns the top of its body.
 fn card_frame(ui: &mut Ui, r: Rect, title: &str, count: Option<usize>) -> f32 {
     ui.panel(r);
-    let tw = if count.is_some() { r.w - 80.0 } else { r.w - 32.0 };
+    let tw = if count.is_some() {
+        r.w - 80.0
+    } else {
+        r.w - 32.0
+    };
     omsi_launcher_ui::kit::heading(ui, Rect::new(r.x + 16.0, r.y + 6.0, tw, 30.0), title);
     if let Some(n) = count {
-        ui.text_in(&n.to_string(), Rect::new(r.right() - 56.0, r.y + 8.0, 40.0, 24.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+        ui.text_in(
+            &n.to_string(),
+            Rect::new(r.right() - 56.0, r.y + 8.0, 40.0, 24.0),
+            12.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Right,
+        );
     }
     r.y + HEAD_H
 }
@@ -935,42 +2490,97 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     };
     let is_changed = locked.is_none() && changed(o, st);
     // (a switch takes little room: its name gets the rest)
-    let cw = if matches!(o.kind, Kind::Toggle) && locked.is_none() { 60.0 } else { (r.w * 0.42).clamp(140.0, 210.0) };
-    let ctrl = Rect::new(r.right() - 16.0 - 26.0 - cw, r.y + (r.h - 32.0) * 0.5, cw, 32.0);
+    let cw = if matches!(o.kind, Kind::Toggle) && locked.is_none() {
+        60.0
+    } else {
+        (r.w * 0.42).clamp(140.0, 210.0)
+    };
+    let ctrl = Rect::new(
+        r.right() - 16.0 - 26.0 - cw,
+        r.y + (r.h - 32.0) * 0.5,
+        cw,
+        32.0,
+    );
     let room = ctrl.x - r.x - 16.0 - 12.0;
     let x = r.x + 16.0;
     let fade = if locked.is_some() { 0.5 } else { 1.0 };
     let label = omsi_launcher_ui::kit::fit_text(ui, o.label, 13.5, room - 12.0);
-    ui.text_in(&label, Rect::new(x, r.y + 6.0, room, 20.0), 13.5, Weight::Regular, TEXT.alpha(fade), Align::Left);
+    ui.text_in(
+        &label,
+        Rect::new(x, r.y + 6.0, room, 20.0),
+        13.5,
+        Weight::Regular,
+        TEXT.alpha(fade),
+        Align::Left,
+    );
     if is_changed {
         let lw = ui.width(&label, 13.5, Weight::Regular);
-        ui.p().circle(Vec2::new(x + lw + 9.0, r.y + 16.0), 3.0, accent());
+        ui.p()
+            .circle(Vec2::new(x + lw + 9.0, r.y + 16.0), 3.0, accent());
     }
     // (the line under the name: what it does, then when a change takes effect - or why it is fixed)
     let (when, wc) = match &locked {
         Some(_) => ("Locked".to_string(), WARN),
-        None => (omsi_ui::tr(o.when.text()).into_owned(), if o.when == When::Now { OK } else { TEXT_DIM }),
+        None => (
+            omsi_ui::tr(o.when.text()).into_owned(),
+            if o.when == When::Now { OK } else { TEXT_DIM },
+        ),
     };
     let ww = ui.width(&when, 11.5, Weight::Regular);
     let hint = match &locked {
-        Some(t) => t.split_once(" - ").map(|x| x.1.to_string()).unwrap_or_default(),
+        Some(t) => t
+            .split_once(" - ")
+            .map(|x| x.1.to_string())
+            .unwrap_or_default(),
         // (the translation's download and setting up, while it is under way)
-        None if o.key == "machine_translation" && st.on(o.key) && !matches!(crate::mt::status().as_str(), "" | "Ready") => crate::mt::status(),
+        None if o.key == "machine_translation"
+            && st.on(o.key)
+            && !matches!(crate::mt::status().as_str(), "" | "Ready") =>
+        {
+            crate::mt::status()
+        }
         None => omsi_ui::tr(o.hint).into_owned(),
     };
     let mut wx = x;
     if !hint.is_empty() {
-        let h = omsi_launcher_ui::kit::fit_text(ui, &format!("{hint} · "), 11.5, (room - ww).max(20.0));
-        ui.text_in(&h, Rect::new(x, r.y + 26.0, room, 16.0), 11.5, Weight::Regular, TEXT_DIM.alpha(fade), Align::Left);
+        let h =
+            omsi_launcher_ui::kit::fit_text(ui, &format!("{hint} · "), 11.5, (room - ww).max(20.0));
+        ui.text_in(
+            &h,
+            Rect::new(x, r.y + 26.0, room, 16.0),
+            11.5,
+            Weight::Regular,
+            TEXT_DIM.alpha(fade),
+            Align::Left,
+        );
         wx += ui.width(&h, 11.5, Weight::Regular);
     }
-    ui.text_in(&when, Rect::new(wx, r.y + 26.0, ww + 4.0, 16.0), 11.5, Weight::Regular, wc, Align::Left);
+    ui.text_in(
+        &when,
+        Rect::new(wx, r.y + 26.0, ww + 4.0, 16.0),
+        11.5,
+        Weight::Regular,
+        wc,
+        Align::Left,
+    );
     if let Some(t) = &locked {
         let value = t.split_once(" - ").map(|x| x.0).unwrap_or(t);
         ui.p().rounded(ctrl, 4.0, FIELD.alpha(0.6));
         ui.p().rounded_border(ctrl, 4.0, 1.0, EDGE);
-        ui.text_in(value, Rect::new(ctrl.x + 12.0, ctrl.y, ctrl.w - 24.0, ctrl.h), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
-        ui.icon("lock", Vec2::new(r.right() - 16.0 - 9.0, r.center().y), 15.0, TEXT_DIM);
+        ui.text_in(
+            value,
+            Rect::new(ctrl.x + 12.0, ctrl.y, ctrl.w - 24.0, ctrl.h),
+            13.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
+        ui.icon(
+            "lock",
+            Vec2::new(r.right() - 16.0 - 9.0, r.center().y),
+            15.0,
+            TEXT_DIM,
+        );
         return;
     }
     let id = format!("opt-{}", o.key);
@@ -982,8 +2592,16 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
                 after(o.key, st);
             }
         }
-        Kind::Slide { min, max, step, show, keep } => {
-            let or = default_of(o.key).and_then(|d| d.as_f64()).unwrap_or(*min as f64);
+        Kind::Slide {
+            min,
+            max,
+            step,
+            show,
+            keep,
+        } => {
+            let or = default_of(o.key)
+                .and_then(|d| d.as_f64())
+                .unwrap_or(*min as f64);
             let mut v = st.get(o.key).as_f64().unwrap_or(or) as f32;
             if ui.slider(&id, ctrl, &mut v, *min, *max, *step, "", &|x| show(x)) {
                 st.set(o.key, keep(v));
@@ -1001,7 +2619,15 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             }
         }
     }
-    if is_changed && ui.icon_button(&format!("opt-reset-{}", o.key), Vec2::new(r.right() - 16.0 - 9.0, r.center().y), 12.0, "restart_alt", "Back to the default") {
+    if is_changed
+        && ui.icon_button(
+            &format!("opt-reset-{}", o.key),
+            Vec2::new(r.right() - 16.0 - 9.0, r.center().y),
+            12.0,
+            "restart_alt",
+            "Back to the default",
+        )
+    {
         reset(o, st);
     }
 }
@@ -1012,7 +2638,12 @@ fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     ui.panel(r);
     ui.p().rounded(r, RADIUS, accent().alpha(0.08));
     ui.p().rounded_border(r, RADIUS, 1.0, accent().alpha(0.55));
-    let top = card_frame_plain(ui, r, "Graphics API", "decides what the other graphics options can do");
+    let top = card_frame_plain(
+        ui,
+        r,
+        "Graphics API",
+        "decides what the other graphics options can do",
+    );
     let fw = (r.w * 0.36).clamp(220.0, 320.0);
     let field = Rect::new(r.x + 16.0, top, fw, 40.0);
     let mut options = options_of(o, st);
@@ -1022,40 +2653,98 @@ fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
         let value = options[sel].0.clone();
         choose(o, st, &value);
     }
-    let names = api_options().iter().map(|x| omsi_ui::tr(x.1).into_owned()).collect::<Vec<_>>().join(" · ");
-    let nh = ui.paragraph(&names, Vec2::new(field.x, field.bottom() + 8.0), fw, 11.5, Weight::Regular, TEXT_DIM);
-    ui.text_in("Next start", Rect::new(field.x, field.bottom() + 10.0 + nh, fw, 16.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
+    let names = api_options()
+        .iter()
+        .map(|x| omsi_ui::tr(x.1).into_owned())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let nh = ui.paragraph(
+        &names,
+        Vec2::new(field.x, field.bottom() + 8.0),
+        fw,
+        11.5,
+        Weight::Regular,
+        TEXT_DIM,
+    );
+    ui.text_in(
+        "Next start",
+        Rect::new(field.x, field.bottom() + 10.0 + nh, fw, 16.0),
+        11.5,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
     let tx = field.right() + 24.0;
     let text = if d3d9_fixes_vanilla(st.s) {
         "DirectX9 (D3D9Ex) is on. It is for compatibility and better performance on older hardware, and draws as close to the real OMSI 2 as it can: only the options OMSI 2 has, no improvements. What goes beyond OMSI 2 is hidden; what DirectX9 does not draw yet is shown locked. Your own choices come back when you switch API."
     } else {
         "The API you choose can limit other options. When one is not available with it, that option is locked and says why. Today only DirectX9 (D3D9Ex) limits options."
     };
-    ui.paragraph(text, Vec2::new(tx, top + 2.0), (r.right() - 16.0 - tx).max(100.0), 13.0, Weight::Regular, TEXT_SOFT);
+    ui.paragraph(
+        text,
+        Vec2::new(tx, top + 2.0),
+        (r.right() - 16.0 - tx).max(100.0),
+        13.0,
+        Weight::Regular,
+        TEXT_SOFT,
+    );
 }
 
 /// A card's title with a quiet note at its right. Returns the top of its body.
 fn card_frame_plain(ui: &mut Ui, r: Rect, title: &str, note: &str) -> f32 {
     omsi_launcher_ui::kit::heading(ui, Rect::new(r.x + 16.0, r.y + 6.0, r.w * 0.5, 30.0), title);
-    ui.text_in(note, Rect::new(r.x + r.w * 0.5, r.y + 8.0, r.w * 0.5 - 16.0, 24.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+    ui.text_in(
+        note,
+        Rect::new(r.x + r.w * 0.5, r.y + 8.0, r.w * 0.5 - 16.0, 24.0),
+        12.0,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Right,
+    );
     r.y + HEAD_H
 }
 
 /// The page's own cards (radio stations, controls, plug-ins, presets and files). Returns the
 /// height it needed.
-fn own_card(ui: &mut Ui, r: Rect, name: &str, st: &mut Store, out: &mut Outside, root: &std::path::Path) -> f32 {
+fn own_card(
+    ui: &mut Ui,
+    r: Rect,
+    name: &str,
+    st: &mut Store,
+    out: &mut Outside,
+    root: &std::path::Path,
+) -> f32 {
     match name {
         "radio" => radio_stations(ui, r),
         "controls" => {
             let mut y = card_frame(ui, r, "Keys and controllers", None);
             let x = r.x + 16.0;
             let w = r.w - 32.0;
-            y += ui.paragraph("Which key or button does what is set on the Controls page.", Vec2::new(x, y), w, 12.5, Weight::Regular, TEXT_DIM) + 10.0;
-            if ui.button("s-go-keys", Rect::new(x, y, w, 34.0), "Change the keys", Some("keyboard"), ButtonKind::Normal) {
+            y += ui.paragraph(
+                "Which key or button does what is set on the Controls page.",
+                Vec2::new(x, y),
+                w,
+                12.5,
+                Weight::Regular,
+                TEXT_DIM,
+            ) + 10.0;
+            if ui.button(
+                "s-go-keys",
+                Rect::new(x, y, w, 34.0),
+                "Change the keys",
+                Some("keyboard"),
+                ButtonKind::Normal,
+            ) {
                 out.controls = Some(0);
             }
             y += 42.0;
-            if ui.button("s-go-pads", Rect::new(x, y, w, 34.0), "Set up a wheel or pedals", Some("sports_esports"), ButtonKind::Normal) {
+            if ui.button(
+                "s-go-pads",
+                Rect::new(x, y, w, 34.0),
+                "Set up a wheel or pedals",
+                Some("sports_esports"),
+                ButtonKind::Normal,
+            ) {
                 out.controls = Some(1);
             }
             y + 34.0 + 16.0 - r.y
@@ -1088,9 +2777,27 @@ fn radio_stations(ui: &mut Ui, r: Rect) -> f32 {
         for (k, (name, address)) in list.iter_mut().enumerate() {
             let row = Rect::new(x, y, w, ROW - 2.0);
             let nw = (row.w * 0.3).round();
-            changed |= ui.text_input(&format!("radio-name-{k}"), Rect::new(row.x, row.y, nw, row.h), name, "Name", None);
-            changed |= ui.text_input(&format!("radio-url-{k}"), Rect::new(row.x + nw + 8.0, row.y, row.w - nw - 8.0 - 36.0, row.h), address, "https://…", None);
-            if ui.icon_button(&format!("radio-del-{k}"), Vec2::new(row.right() - 16.0, row.center().y), 14.0, "delete", "Remove this station") {
+            changed |= ui.text_input(
+                &format!("radio-name-{k}"),
+                Rect::new(row.x, row.y, nw, row.h),
+                name,
+                "Name",
+                None,
+            );
+            changed |= ui.text_input(
+                &format!("radio-url-{k}"),
+                Rect::new(row.x + nw + 8.0, row.y, row.w - nw - 8.0 - 36.0, row.h),
+                address,
+                "https://…",
+                None,
+            );
+            if ui.icon_button(
+                &format!("radio-del-{k}"),
+                Vec2::new(row.right() - 16.0, row.center().y),
+                14.0,
+                "delete",
+                "Remove this station",
+            ) {
                 remove = Some(k);
             }
             y += ROW + 4.0;
@@ -1099,7 +2806,13 @@ fn radio_stations(ui: &mut Ui, r: Rect) -> f32 {
             list.remove(k);
             changed = true;
         }
-        if ui.button("radio-add", Rect::new(x, y, w, ROW - 2.0), "Add a station", Some("add"), ButtonKind::Normal) {
+        if ui.button(
+            "radio-add",
+            Rect::new(x, y, w, ROW - 2.0),
+            "Add a station",
+            Some("add"),
+            ButtonKind::Normal,
+        ) {
             list.push((String::new(), String::new()));
         }
         y += ROW + 4.0;
@@ -1139,13 +2852,34 @@ fn plugins_card(ui: &mut Ui, r: Rect, root: &std::path::Path) -> f32 {
     let x = r.x + 16.0;
     let w = r.w - 32.0;
     if names.is_empty() {
-        ui.text_in("The OMSI 2 folder has no plug-ins.", Rect::new(x, y, w, 24.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        ui.text_in(
+            "The OMSI 2 folder has no plug-ins.",
+            Rect::new(x, y, w, 24.0),
+            13.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
         y += 30.0;
     }
     for n in &names {
         ui.p().rect(Rect::new(r.x, y, r.w, 1.0), EDGE);
-        ui.text_in(n, Rect::new(x, y, w * 0.6, 34.0), 13.0, Weight::Regular, TEXT, Align::Left);
-        ui.text_in("Not loaded in this build", Rect::new(x + w * 0.6, y, w * 0.4, 34.0), 12.5, Weight::Regular, TEXT_DIM, Align::Right);
+        ui.text_in(
+            n,
+            Rect::new(x, y, w * 0.6, 34.0),
+            13.0,
+            Weight::Regular,
+            TEXT,
+            Align::Left,
+        );
+        ui.text_in(
+            "Not loaded in this build",
+            Rect::new(x + w * 0.6, y, w * 0.4, 34.0),
+            12.5,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Right,
+        );
         y += 34.0;
     }
     y += 6.0;
@@ -1173,12 +2907,32 @@ fn option_presets_card(ui: &mut Ui, r: Rect, st: &mut Store, root: &std::path::P
     let w = r.w - 32.0;
     y += ui.paragraph("From the option_presets folder of the OMSI 2 folder. One changes only what this game reads from it: the frame limit, the object detail and distance, the anisotropic filtering, the texture memory and the mirrors.", Vec2::new(x, y), w, 12.0, Weight::Regular, TEXT_DIM) + 8.0;
     if list.is_empty() {
-        ui.text_in("No presets found.", Rect::new(x, y, w, 24.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        ui.text_in(
+            "No presets found.",
+            Rect::new(x, y, w, 24.0),
+            13.0,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
         y += 30.0;
     }
     for (k, (name, values)) in list.iter().enumerate() {
-        ui.text_in(name, Rect::new(x, y, w - 100.0, 34.0), 13.0, Weight::Regular, TEXT, Align::Left);
-        if ui.button(&format!("oop-{k}"), Rect::new(r.right() - 16.0 - 90.0, y + 2.0, 90.0, 30.0), "Apply", None, ButtonKind::Normal) {
+        ui.text_in(
+            name,
+            Rect::new(x, y, w - 100.0, 34.0),
+            13.0,
+            Weight::Regular,
+            TEXT,
+            Align::Left,
+        );
+        if ui.button(
+            &format!("oop-{k}"),
+            Rect::new(r.right() - 16.0 - 90.0, y + 2.0, 90.0, 30.0),
+            "Apply",
+            None,
+            ButtonKind::Normal,
+        ) {
             for (key, v) in values.as_object().into_iter().flatten() {
                 st.set(key, v.clone());
             }
@@ -1214,17 +2968,37 @@ fn profiles_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
     GFX_PROFILES.with(|g| {
         let mut g = g.borrow_mut();
         let g = &mut *g;
-        let names: Vec<String> = g.list.get_or_insert_with(|| core::graphics_profiles().into_keys().collect()).clone();
+        let names: Vec<String> = g
+            .list
+            .get_or_insert_with(|| core::graphics_profiles().into_keys().collect())
+            .clone();
         g.sel = g.sel.min(names.len().saturating_sub(1));
-        let labels: Vec<String> = if names.is_empty() { vec!["No saved profiles".to_string()] } else { names.clone() };
+        let labels: Vec<String> = if names.is_empty() {
+            vec!["No saved profiles".to_string()]
+        } else {
+            names.clone()
+        };
         let r = row(&mut y);
         ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Saved profile");
-        if ui.select("s-gp-sel", Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &mut g.sel, &labels) && !names.is_empty() {
+        if ui.select(
+            "s-gp-sel",
+            Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h),
+            &mut g.sel,
+            &labels,
+        ) && !names.is_empty()
+        {
             g.name = names[g.sel].clone();
         }
         let r = row(&mut y);
         let half = (r.w - GAP) * 0.5;
-        if ui.button("s-gp-load", Rect::new(r.x, r.y, half, r.h), "Load", Some("download"), ButtonKind::Normal) && !names.is_empty() {
+        if ui.button(
+            "s-gp-load",
+            Rect::new(r.x, r.y, half, r.h),
+            "Load",
+            Some("download"),
+            ButtonKind::Normal,
+        ) && !names.is_empty()
+        {
             let name = names[g.sel].clone();
             match core::graphics_profiles().get(&name) {
                 Some(p) => {
@@ -1235,7 +3009,14 @@ fn profiles_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
                 None => g.msg = omsi_ui::tr("\"%{name}\" is gone.").replace("%{name}", &name),
             }
         }
-        if ui.button("s-gp-del", Rect::new(r.x + half + GAP, r.y, half, r.h), "Delete", Some("delete"), ButtonKind::Danger) && !names.is_empty() {
+        if ui.button(
+            "s-gp-del",
+            Rect::new(r.x + half + GAP, r.y, half, r.h),
+            "Delete",
+            Some("delete"),
+            ButtonKind::Danger,
+        ) && !names.is_empty()
+        {
             let name = names[g.sel].clone();
             g.msg = match core::delete_graphics_profile(&name) {
                 Ok(()) => omsi_ui::tr("Deleted \"%{name}\".").replace("%{name}", &name),
@@ -1246,7 +3027,13 @@ fn profiles_card(ui: &mut Ui, r: Rect, st: &mut Store) -> f32 {
         let r = row(&mut y);
         ui.text_input("s-gp-name", r, &mut g.name, "Profile name", None);
         let r = row(&mut y);
-        if ui.button("s-gp-save", r, "Save current graphics as profile", Some("save"), ButtonKind::Primary) {
+        if ui.button(
+            "s-gp-save",
+            r,
+            "Save current graphics as profile",
+            Some("save"),
+            ButtonKind::Primary,
+        ) {
             g.msg = match core::save_graphics_profile(&g.name, st.s) {
                 Ok(name) => {
                     g.name = name.clone();
@@ -1271,19 +3058,45 @@ fn files_card(ui: &mut Ui, r: Rect, out: &mut Outside) -> f32 {
     let mut y = card_frame(ui, r, "Reset and files", None);
     let x = r.x + 16.0;
     let w = r.w - 32.0;
-    if ui.button("s-reset", Rect::new(x, y, w, 34.0), "Reset every setting...", Some("restart_alt"), ButtonKind::Danger) {
+    if ui.button(
+        "s-reset",
+        Rect::new(x, y, w, 34.0),
+        "Reset every setting...",
+        Some("restart_alt"),
+        ButtonKind::Danger,
+    ) {
         out.reset = true;
     }
     y += 42.0;
-    if ui.button("s-folder", Rect::new(x, y, w, 34.0), "Open the settings folder", Some("folder_open"), ButtonKind::Normal) {
+    if ui.button(
+        "s-folder",
+        Rect::new(x, y, w, 34.0),
+        "Open the settings folder",
+        Some("folder_open"),
+        ButtonKind::Normal,
+    ) {
         core::open_folder(&core::data_dir());
     }
     y += 46.0;
     // this build's version and the project's release page (in-app updating is disabled, see
     // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
-    ui.text_in(&omsi_ui::tr("This is Project Depot %{version}").replace("%{version}", &crate::about::current_version().to_string()), Rect::new(x, y, w, 22.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
+    ui.text_in(
+        &omsi_ui::tr("This is Project Depot %{version}")
+            .replace("%{version}", &crate::about::current_version().to_string()),
+        Rect::new(x, y, w, 22.0),
+        12.5,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
     y += 26.0;
-    if ui.button("s-about-releases", Rect::new(x, y, w, 34.0), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
+    if ui.button(
+        "s-about-releases",
+        Rect::new(x, y, w, 34.0),
+        "github.com/OmsiModsBR/depot/releases",
+        Some("open_in_new"),
+        ButtonKind::Ghost,
+    ) {
         crate::about::open_url(crate::about::RELEASES_URL);
     }
     y + 34.0 + 14.0 - r.y
@@ -1300,14 +3113,38 @@ pub fn reset_dialog(l: &mut Launcher) {
     let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
     l.ui.panel(r);
     let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
-    l.ui.icon("restart_alt", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, DANGER);
-    l.ui.text_in("Reset every setting?", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
+    l.ui.icon(
+        "restart_alt",
+        Vec2::new(inner.x + 14.0, inner.y + 14.0),
+        26.0,
+        DANGER,
+    );
+    l.ui.text_in(
+        "Reset every setting?",
+        Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0),
+        18.0,
+        Weight::Bold,
+        TEXT,
+        Align::Left,
+    );
     l.ui.paragraph("Every option on this page goes back to how it came, the start's choices (season, traffic, passengers) included. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     let by = inner.bottom() - 38.0;
-    if l.ui.button("reset-no", Rect::new(inner.right() - 250.0, by, 110.0, 38.0), "Cancel", None, ButtonKind::Normal) {
+    if l.ui.button(
+        "reset-no",
+        Rect::new(inner.right() - 250.0, by, 110.0, 38.0),
+        "Cancel",
+        None,
+        ButtonKind::Normal,
+    ) {
         l.pages.confirm_reset = false;
     }
-    if l.ui.button("reset-yes", Rect::new(inner.right() - 130.0, by, 130.0, 38.0), "Reset", Some("restart_alt"), ButtonKind::Danger) {
+    if l.ui.button(
+        "reset-yes",
+        Rect::new(inner.right() - 130.0, by, 130.0, 38.0),
+        "Reset",
+        Some("restart_alt"),
+        ButtonKind::Danger,
+    ) {
         let language = l.state.settings.get("language").cloned();
         l.state.settings = core::settings_from_text(None);
         if let Some(lang) = language {
@@ -1324,7 +3161,8 @@ pub fn reset_dialog(l: &mut Launcher) {
         }
         l.state.touched();
         l.pages.confirm_reset = false;
-        l.state.set_status("Every setting is back to how it came.", false);
+        l.state
+            .set_status("Every setting is back to how it came.", false);
     }
 }
 
@@ -1339,9 +3177,17 @@ fn accent_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     let iw = r.w - 32.0;
     if changed(o, st) {
         let tw = ui.width(&omsi_ui::tr(o.label).to_uppercase(), 12.0, Weight::Bold) * 1.12;
-        ui.p().circle(Vec2::new(x + tw + 10.0, r.y + 22.0), 3.0, accent());
+        ui.p()
+            .circle(Vec2::new(x + tw + 10.0, r.y + 22.0), 3.0, accent());
     }
-    ui.text_in(&omsi_ui::tr(When::Now.text()), Rect::new(r.right() - 116.0, r.y + 8.0, 100.0, 24.0), 11.5, Weight::Regular, OK, Align::Right);
+    ui.text_in(
+        &omsi_ui::tr(When::Now.text()),
+        Rect::new(r.right() - 116.0, r.y + 8.0, 100.0, 24.0),
+        11.5,
+        Weight::Regular,
+        OK,
+        Align::Right,
+    );
     let chosen = Accent::named(st.get(o.key).as_str().unwrap_or("")).unwrap_or_default();
     let gap = 12.0;
     let w = (iw - gap * 3.0) / 4.0;
@@ -1352,13 +3198,38 @@ fn accent_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
         let id = id_of(&format!("accent-{}", a.name().to_ascii_lowercase()));
         let (hover, _, clicked) = ui.interact_key(id, Rect::new(sx, sy, w, 76.0));
         let on = a == chosen;
-        ui.p().rounded(sw, RADIUS, if hover && !on { a.color().lighten(0.08) } else { a.color() });
+        ui.p().rounded(
+            sw,
+            RADIUS,
+            if hover && !on {
+                a.color().lighten(0.08)
+            } else {
+                a.color()
+            },
+        );
         if on {
-            ui.p().rounded_border(sw.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
-            ui.icon("check_circle", sw.center(), 22.0, omsi_ui::theme::on(a.color()));
+            ui.p()
+                .rounded_border(sw.inset(-3.0), RADIUS + 3.0, 2.0, TEXT);
+            ui.icon(
+                "check_circle",
+                sw.center(),
+                22.0,
+                omsi_ui::theme::on(a.color()),
+            );
         }
-        let name = if a == Accent::default() { omsi_ui::tr("%{name} (default)").replace("%{name}", &omsi_ui::tr(a.name())) } else { a.name().to_string() };
-        ui.text_in(&name, Rect::new(sx, sy + 56.0, w, 20.0), 12.0, Weight::Regular, if on { TEXT } else { TEXT_DIM }, Align::Center);
+        let name = if a == Accent::default() {
+            omsi_ui::tr("%{name} (default)").replace("%{name}", &omsi_ui::tr(a.name()))
+        } else {
+            a.name().to_string()
+        };
+        ui.text_in(
+            &name,
+            Rect::new(sx, sy + 56.0, w, 20.0),
+            12.0,
+            Weight::Regular,
+            if on { TEXT } else { TEXT_DIM },
+            Align::Center,
+        );
         if clicked && !on {
             st.set(o.key, json!(a.name()));
             after(o.key, st);
@@ -1366,7 +3237,14 @@ fn accent_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     }
     let mut y = top + 84.0 * 2.0;
     y += ui.paragraph("A short fixed palette, chosen for contrast on the dark background. It applies to the launcher and to every menu of the game, the Alt bar included.", Vec2::new(x, y), iw, 12.0, Weight::Regular, TEXT_DIM) + 10.0;
-    if ui.button("accent-default", Rect::new(x, y, 160.0, 34.0), "Back to default", Some("restart_alt"), ButtonKind::Normal) && chosen != Accent::default() {
+    if ui.button(
+        "accent-default",
+        Rect::new(x, y, 160.0, 34.0),
+        "Back to default",
+        Some("restart_alt"),
+        ButtonKind::Normal,
+    ) && chosen != Accent::default()
+    {
         reset(o, st);
     }
 }
@@ -1378,29 +3256,87 @@ fn preview_card(ui: &mut Ui, r: Rect) -> f32 {
     let iw = r.w - 32.0;
     let nav = Rect::new(x, y, 200.0, 40.0);
     ui.p().rounded(nav, 4.0, HOVER);
-    ui.p().rounded(Rect::new(nav.x, nav.y + 11.0, 3.0, 18.0), 1.5, accent());
-    ui.icon("map", Vec2::new(nav.x + 24.0, nav.center().y), 20.0, accent());
-    ui.text_in("Maps", Rect::new(nav.x + 44.0, nav.y, 140.0, nav.h), 14.0, Weight::Medium, TEXT, Align::Left);
+    ui.p()
+        .rounded(Rect::new(nav.x, nav.y + 11.0, 3.0, 18.0), 1.5, accent());
+    ui.icon(
+        "map",
+        Vec2::new(nav.x + 24.0, nav.center().y),
+        20.0,
+        accent(),
+    );
+    ui.text_in(
+        "Maps",
+        Rect::new(nav.x + 44.0, nav.y, 140.0, nav.h),
+        14.0,
+        Weight::Medium,
+        TEXT,
+        Align::Left,
+    );
     y += 52.0;
     let go = Rect::new(x, y, 130.0, 34.0);
     ui.p().rounded(go, 6.0, accent());
-    ui.text_in("Start driving", go, 13.0, Weight::Bold, on_accent(), Align::Center);
+    ui.text_in(
+        "Start driving",
+        go,
+        13.0,
+        Weight::Bold,
+        on_accent(),
+        Align::Center,
+    );
     let cancel = Rect::new(go.right() + 10.0, y, 90.0, 34.0);
     ui.p().rounded(cancel, 6.0, FIELD);
     ui.p().rounded_border(cancel, 6.0, 1.0, EDGE);
     ui.text_in("Cancel", cancel, 13.0, Weight::Medium, TEXT, Align::Center);
     for (k, on) in [(0.0, true), (1.0, false)] {
         let t = Rect::new(cancel.right() + 16.0 + k * 50.0, y + 8.0, 34.0, 18.0);
-        ui.p().rounded(t, 9.0, if on { accent() } else { Color::rgba(62, 62, 62, 1.0) });
-        ui.p().circle(Vec2::new(if on { t.right() - 9.0 } else { t.x + 9.0 }, t.center().y), 6.0, Color::rgba(240, 240, 240, 1.0));
+        ui.p().rounded(
+            t,
+            9.0,
+            if on {
+                accent()
+            } else {
+                Color::rgba(62, 62, 62, 1.0)
+            },
+        );
+        ui.p().circle(
+            Vec2::new(if on { t.right() - 9.0 } else { t.x + 9.0 }, t.center().y),
+            6.0,
+            Color::rgba(240, 240, 240, 1.0),
+        );
     }
     y += 50.0;
     let row = Rect::new(x, y, (iw * 0.55).max(200.0), 48.0);
     ui.p().rounded(row, 6.0, omsi_ui::theme::accent_soft());
     ui.p().rounded_border(row, 6.0, 1.0, accent().alpha(0.55));
-    ui.text_in("Example bus A", Rect::new(row.x + 12.0, row.y + 5.0, row.w - 24.0, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
-    ui.text_in("Selected item", Rect::new(row.x + 12.0, row.y + 24.0, row.w - 24.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
-    ui.text_in("Link and highlight text", Rect::new(row.right() + 14.0, row.y, (x + iw - row.right() - 14.0).max(0.0), row.h), 13.5, Weight::Regular, accent(), Align::Left);
+    ui.text_in(
+        "Example bus A",
+        Rect::new(row.x + 12.0, row.y + 5.0, row.w - 24.0, 20.0),
+        13.5,
+        Weight::Bold,
+        TEXT,
+        Align::Left,
+    );
+    ui.text_in(
+        "Selected item",
+        Rect::new(row.x + 12.0, row.y + 24.0, row.w - 24.0, 18.0),
+        12.0,
+        Weight::Regular,
+        TEXT_DIM,
+        Align::Left,
+    );
+    ui.text_in(
+        "Link and highlight text",
+        Rect::new(
+            row.right() + 14.0,
+            row.y,
+            (x + iw - row.right() - 14.0).max(0.0),
+            row.h,
+        ),
+        13.5,
+        Weight::Regular,
+        accent(),
+        Align::Left,
+    );
     y + 60.0 - r.y
 }
 
@@ -1410,25 +3346,161 @@ mod tests {
 
     /// Every option the page had before its sections (by its key): nothing may go missing.
     const BEFORE: &[&str] = &[
-        "preset", "graphics", "msaa", "render_scale", "anisotropy", "shadow_size", "ssao", "shadows", "shadow_casters", "detail_textures", "night_brightness", "led_glow", "led_mips", "shadow_blobs", "reflections", "clouds", "windy_trees",
-        "fullscreen", "resolution", "vsync", "max_fps", "graphics_api", "view_distance", "max_obj_dist", "min_obj_size", "mirror_size", "mirror_refresh", "texture_memory", "texture_compression",
-        "drive_keys", "steering_linear", "old_steering", "red_steer_spd", "mouse_sens", "mouse_smooth", "mouse_right_off", "blinker_cancel", "brake_hold", "auto_clutch", "auto_shift",
-        "momentary_gears", "wheel_range", "wheel_lock", "pad_steer_smooth", "pad_steer_linear", "arrows_switch_cams", "pedal_throttle", "pedal_brake", "ff_enabled", "ff_invert", "ff_road_vib", "ff_engine_vib", "ff_fade",
-        "seat_y", "seat_z", "seat_x", "seat_pitch_deg", "fov", "triple_fov_deg", "outside_fov", "look_sens", "right_stick_look", "look_smoothing_ms", "head_idle", "head_idle_pace", "steer_look", "steer_look_angle", "steer_look_response",
-        "head_movement", "driverview_smooth", "hands_in_cab", "alt_view", "precision_zoom", "camera_collision", "driver", "head_tracking",
-        "head_tracking_yaw_sens", "head_tracking_pitch_sens", "head_tracking_roll_sens", "head_tracking_invert_yaw", "head_tracking_invert_pitch", "head_tracking_invert_roll",
-        "head_tracking_x_sens", "head_tracking_y_sens", "head_tracking_z_sens", "head_tracking_invert_x", "head_tracking_invert_y", "head_tracking_invert_z",
-        "triple_screen", "triple_span", "triple_hud_center", "triple_width_mm", "triple_distance_mm", "triple_bezel_mm", "triple_left_angle_deg", "triple_right_angle_deg", "triple_eye_height_mm",
-        "vr", "vr_scale", "vr_head_smoothing_ms", "vr_mirror_rate", "vr_desktop_mirror",
-        "volume", "vol_ai", "vol_scenery", "doppler", "muffle_outside", "pax_voices",
-        "boarding", "exact_fare", "pax_density", "get_up", "ai_unsched_factor", "ai_max_scheduled", "ai_max_parked", "autosave_minutes", "ai_max_humans",
-        "maintenance", "collision_vehicles", "collision_objects", "collision_pedestrians", "use_real_time", "use_real_date", "time_sync", "metar_sync", "time_speed",
-        "language", "machine_translation", "launcher_rest", "voice_chat", "ui_scale", "ui_scale_window", "ui_opacity", "tooltips", "show_fps", "notes", "chat", "chat_size", "name_tags",
-        "navigator", "nav_arrows", "nav_ai", "navigator_corner",
+        "preset",
+        "graphics",
+        "msaa",
+        "render_scale",
+        "anisotropy",
+        "shadow_size",
+        "ssao",
+        "shadows",
+        "shadow_casters",
+        "detail_textures",
+        "night_brightness",
+        "led_glow",
+        "led_mips",
+        "shadow_blobs",
+        "reflections",
+        "clouds",
+        "windy_trees",
+        "fullscreen",
+        "resolution",
+        "vsync",
+        "max_fps",
+        "graphics_api",
+        "view_distance",
+        "max_obj_dist",
+        "min_obj_size",
+        "mirror_size",
+        "mirror_refresh",
+        "texture_memory",
+        "texture_compression",
+        "drive_keys",
+        "steering_linear",
+        "old_steering",
+        "red_steer_spd",
+        "mouse_sens",
+        "mouse_smooth",
+        "mouse_right_off",
+        "blinker_cancel",
+        "brake_hold",
+        "auto_clutch",
+        "auto_shift",
+        "momentary_gears",
+        "wheel_range",
+        "wheel_lock",
+        "pad_steer_smooth",
+        "pad_steer_linear",
+        "arrows_switch_cams",
+        "pedal_throttle",
+        "pedal_brake",
+        "ff_enabled",
+        "ff_invert",
+        "ff_road_vib",
+        "ff_engine_vib",
+        "ff_fade",
+        "seat_y",
+        "seat_z",
+        "seat_x",
+        "seat_pitch_deg",
+        "fov",
+        "triple_fov_deg",
+        "outside_fov",
+        "look_sens",
+        "right_stick_look",
+        "look_smoothing_ms",
+        "head_idle",
+        "head_idle_pace",
+        "steer_look",
+        "steer_look_angle",
+        "steer_look_response",
+        "head_movement",
+        "driverview_smooth",
+        "hands_in_cab",
+        "alt_view",
+        "precision_zoom",
+        "camera_collision",
+        "driver",
+        "head_tracking",
+        "head_tracking_yaw_sens",
+        "head_tracking_pitch_sens",
+        "head_tracking_roll_sens",
+        "head_tracking_invert_yaw",
+        "head_tracking_invert_pitch",
+        "head_tracking_invert_roll",
+        "head_tracking_x_sens",
+        "head_tracking_y_sens",
+        "head_tracking_z_sens",
+        "head_tracking_invert_x",
+        "head_tracking_invert_y",
+        "head_tracking_invert_z",
+        "triple_screen",
+        "triple_span",
+        "triple_hud_center",
+        "triple_width_mm",
+        "triple_distance_mm",
+        "triple_bezel_mm",
+        "triple_left_angle_deg",
+        "triple_right_angle_deg",
+        "triple_eye_height_mm",
+        "vr",
+        "vr_scale",
+        "vr_head_smoothing_ms",
+        "vr_mirror_rate",
+        "vr_desktop_mirror",
+        "volume",
+        "vol_ai",
+        "vol_scenery",
+        "doppler",
+        "muffle_outside",
+        "pax_voices",
+        "boarding",
+        "exact_fare",
+        "pax_density",
+        "get_up",
+        "ai_unsched_factor",
+        "ai_max_scheduled",
+        "ai_max_parked",
+        "autosave_minutes",
+        "ai_max_humans",
+        "maintenance",
+        "collision_vehicles",
+        "collision_objects",
+        "collision_pedestrians",
+        "use_real_time",
+        "use_real_date",
+        "time_sync",
+        "metar_sync",
+        "time_speed",
+        "language",
+        "machine_translation",
+        "launcher_rest",
+        "voice_chat",
+        "ui_scale",
+        "ui_scale_window",
+        "ui_opacity",
+        "tooltips",
+        "show_fps",
+        "notes",
+        "chat",
+        "chat_size",
+        "name_tags",
+        "navigator",
+        "nav_arrows",
+        "nav_ai",
+        "navigator_corner",
         // (the Interface section, drawn on its own before)
-        "ui_accent", "ui_nav", "ui_background", "ui_dimming", "ui_corners",
+        "ui_accent",
+        "ui_nav",
+        "ui_background",
+        "ui_dimming",
+        "ui_corners",
         // (the Maps page's temporary window: the start's own choices)
-        "start.season", "start.traffic", "start.passengers", "start.schedule", "start.autostart",
+        "start.season",
+        "start.traffic",
+        "start.passengers",
+        "start.schedule",
+        "start.autostart",
     ];
 
     /// Settings that show every row: Enhanced (Vanilla hides the shadows and effects), triple
@@ -1448,14 +3520,37 @@ mod tests {
     /// One frame of section `sec` (or a search for `query`), tall enough that nothing is cut
     /// off. The Sound section lists one radio station (not the radio.cfg of whoever runs the
     /// tests). Returns whether the settings and the start's choices changed.
-    fn frame(ui: &mut Ui, sec: usize, query: &str, s: &mut Value, start: &mut Value, out: &mut Outside) -> (bool, bool) {
+    fn frame(
+        ui: &mut Ui,
+        sec: usize,
+        query: &str,
+        s: &mut Value,
+        start: &mut Value,
+        out: &mut Outside,
+    ) -> (bool, bool) {
         RADIO.with(|r| {
-            r.borrow_mut().get_or_insert_with(|| vec![("One".into(), "https://example.org/one.mp3".into())]);
+            r.borrow_mut()
+                .get_or_insert_with(|| vec![("One".into(), "https://example.org/one.mp3".into())]);
         });
         ui.begin(Vec2::new(1400.0, 6000.0), 1.0, 1.0 / 60.0);
-        let mut st = Store { s, start, changed: false, start_changed: false };
+        let mut st = Store {
+            s,
+            start,
+            changed: false,
+            start_changed: false,
+        };
         let opts = listed(sec, query, false, &st);
-        section_body(ui, Rect::new(0.0, 0.0, 1400.0, 6000.0), sec, !query.is_empty(), false, &opts, &mut st, out, std::path::Path::new("/nowhere"));
+        section_body(
+            ui,
+            Rect::new(0.0, 0.0, 1400.0, 6000.0),
+            sec,
+            !query.is_empty(),
+            false,
+            &opts,
+            &mut st,
+            out,
+            std::path::Path::new("/nowhere"),
+        );
         (st.changed, st.start_changed)
     }
 
@@ -1466,7 +3561,10 @@ mod tests {
         // (twice: the page's own cards take their height from the frame before)
         frame(&mut ui, sec, "", s, start, &mut out);
         frame(&mut ui, sec, "", s, start, &mut out);
-        let r = *ui.drawn.get(&id_of(name)).unwrap_or_else(|| panic!("{name} is not in {}", SECTIONS[sec]));
+        let r = *ui
+            .drawn
+            .get(&id_of(name))
+            .unwrap_or_else(|| panic!("{name} is not in {}", SECTIONS[sec]));
         ui.input.mouse = r.center();
         ui.input.pressed = true;
         ui.input.down = true;
@@ -1484,7 +3582,11 @@ mod tests {
         for k in BEFORE {
             assert_eq!(keys.iter().filter(|x| *x == k).count(), 1, "{k}");
         }
-        assert_eq!(keys.len(), BEFORE.len(), "an option the list above does not name");
+        assert_eq!(
+            keys.len(),
+            BEFORE.len(),
+            "an option the list above does not name"
+        );
         // (each has a default to go back to, but the preset, which is not one setting)
         for o in OPTS.iter().filter(|o| o.key != "preset") {
             assert!(default_of(o.key).is_some(), "{} has no default", o.key);
@@ -1497,12 +3599,36 @@ mod tests {
         let (mut s, mut start) = (all_rows(), start());
         for sec in 0..SECTIONS.len() {
             let mut ui = Ui::new();
-            frame(&mut ui, sec, "", &mut s, &mut start, &mut Outside::default());
-            let st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
-            for o in OPTS.iter().filter(|o| o.sec == sec && shown(o, &st) == Shown::Row) {
+            frame(
+                &mut ui,
+                sec,
+                "",
+                &mut s,
+                &mut start,
+                &mut Outside::default(),
+            );
+            let st = Store {
+                s: &mut s,
+                start: &mut start,
+                changed: false,
+                start_changed: false,
+            };
+            for o in OPTS
+                .iter()
+                .filter(|o| o.sec == sec && shown(o, &st) == Shown::Row)
+            {
                 // (the accent colour as swatches in its section)
-                let id = if o.key == "ui_accent" { "accent-amber".to_string() } else { format!("opt-{}", o.key) };
-                assert!(ui.drawn.contains_key(&id_of(&id)), "{} is not drawn in {}", o.key, SECTIONS[sec]);
+                let id = if o.key == "ui_accent" {
+                    "accent-amber".to_string()
+                } else {
+                    format!("opt-{}", o.key)
+                };
+                assert!(
+                    ui.drawn.contains_key(&id_of(&id)),
+                    "{} is not drawn in {}",
+                    o.key,
+                    SECTIONS[sec]
+                );
             }
         }
     }
@@ -1511,21 +3637,42 @@ mod tests {
     /// API, and none under DirectX9 (it is hidden or shown locked); nothing saved is rewritten.
     #[test]
     fn d3d9_limits_each_option_of_the_table() {
-        let section_of = |key: &str| OPTS.iter().find(|o| o.key == key).unwrap_or_else(|| panic!("{key} is not on the page")).sec;
+        let section_of = |key: &str| {
+            OPTS.iter()
+                .find(|o| o.key == key)
+                .unwrap_or_else(|| panic!("{key} is not on the page"))
+                .sec
+        };
         let drawn = |s: &mut Value, key: &str| {
             let mut ui = Ui::new();
-            frame(&mut ui, section_of(key), "", s, &mut start(), &mut Outside::default());
+            frame(
+                &mut ui,
+                section_of(key),
+                "",
+                s,
+                &mut start(),
+                &mut Outside::default(),
+            );
             ui.drawn.contains_key(&id_of(&format!("opt-{key}")))
         };
         let mut s = all_rows();
         s["graphics_api"] = json!("vulkan");
         for l in crate::api_limits::D3D9 {
-            assert!(drawn(&mut s, l.key), "{} has no control under Vulkan", l.key);
+            assert!(
+                drawn(&mut s, l.key),
+                "{} has no control under Vulkan",
+                l.key
+            );
         }
         s["graphics_api"] = json!("d3d9");
         let before = s.clone();
         for l in crate::api_limits::D3D9 {
-            assert_eq!(drawn(&mut s, l.key), !cfg!(windows), "{} under DirectX9", l.key);
+            assert_eq!(
+                drawn(&mut s, l.key),
+                !cfg!(windows),
+                "{} under DirectX9",
+                l.key
+            );
         }
         assert_eq!(s, before);
         // (VR takes DirectX 12 instead: the choice is offered)
@@ -1542,7 +3689,14 @@ mod tests {
         assert!(changed);
         assert_eq!(s["anisotropy"], json!(8));
         let mut ui = Ui::new();
-        frame(&mut ui, GRAPHICS, "", &mut s, &mut start, &mut Outside::default());
+        frame(
+            &mut ui,
+            GRAPHICS,
+            "",
+            &mut s,
+            &mut start,
+            &mut Outside::default(),
+        );
         assert!(!ui.drawn.contains_key(&id_of("opt-reset-anisotropy")));
     }
 
@@ -1551,15 +3705,33 @@ mod tests {
     fn a_search_finds_options_in_any_section() {
         let (mut s, mut start) = (all_rows(), start());
         s["doppler"] = json!(false);
-        let st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
-        let found: Vec<&str> = listed(GENERAL, "doppler", false, &st).iter().map(|o| o.key).collect();
+        let st = Store {
+            s: &mut s,
+            start: &mut start,
+            changed: false,
+            start_changed: false,
+        };
+        let found: Vec<&str> = listed(GENERAL, "doppler", false, &st)
+            .iter()
+            .map(|o| o.key)
+            .collect();
         assert_eq!(found, ["doppler"]);
-        let changed: Vec<&str> = listed(GENERAL, "", true, &st).iter().map(|o| o.key).collect();
+        let changed: Vec<&str> = listed(GENERAL, "", true, &st)
+            .iter()
+            .map(|o| o.key)
+            .collect();
         assert!(changed.contains(&"doppler"), "{changed:?}");
         assert!(changed.contains(&"graphics") && changed.contains(&"triple_screen"));
         assert!(!changed.contains(&"volume"));
         let mut ui = Ui::new();
-        frame(&mut ui, GENERAL, "doppler", &mut s, &mut start, &mut Outside::default());
+        frame(
+            &mut ui,
+            GENERAL,
+            "doppler",
+            &mut s,
+            &mut start,
+            &mut Outside::default(),
+        );
         assert!(ui.drawn.contains_key(&id_of("opt-doppler")));
     }
 
@@ -1570,7 +3742,10 @@ mod tests {
         let saved = s.clone();
         click(TRAFFIC, "opt-start.passengers", &mut s, &mut start);
         assert_eq!(start["passengers"], json!(false));
-        assert_eq!(s, saved, "the settings file is not where the start's choices go");
+        assert_eq!(
+            s, saved,
+            "the settings file is not where the start's choices go"
+        );
         let mut c = Choice::default();
         apply_start(&mut c, &start);
         assert!(!c.passengers && c.schedule);
@@ -1586,7 +3761,10 @@ mod tests {
         click(INTERFACE, "accent-blue", &mut s, &mut start);
         assert_eq!(s["ui_accent"], json!("Blue"));
         let saved = core::settings_to_text(&s, None);
-        assert_eq!(core::settings_from_text(Some(&saved))["ui_accent"], json!("Blue"));
+        assert_eq!(
+            core::settings_from_text(Some(&saved))["ui_accent"],
+            json!("Blue")
+        );
         click(INTERFACE, "accent-default", &mut s, &mut start);
         assert_eq!(s["ui_accent"], json!("Amber"));
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
@@ -1596,17 +3774,37 @@ mod tests {
     #[test]
     fn the_interface_options_are_searched_counted_and_reset() {
         let (mut s, mut start) = (all_rows(), start());
-        let st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
-        let keys = |q: &str, st: &Store| listed(0, q, false, st).iter().map(|o| o.key).collect::<Vec<_>>();
+        let st = Store {
+            s: &mut s,
+            start: &mut start,
+            changed: false,
+            start_changed: false,
+        };
+        let keys = |q: &str, st: &Store| {
+            listed(0, q, false, st)
+                .iter()
+                .map(|o| o.key)
+                .collect::<Vec<_>>()
+        };
         assert!(keys("accent", &st).contains(&"ui_accent"));
         assert!(keys("corners", &st).contains(&"ui_corners"));
         drop(st);
         s["ui_corners"] = json!("square");
         s["ui_background"] = json!("scene");
         s["ui_dimming"] = json!(40);
-        let mut st = Store { s: &mut s, start: &mut start, changed: false, start_changed: false };
+        let mut st = Store {
+            s: &mut s,
+            start: &mut start,
+            changed: false,
+            start_changed: false,
+        };
         let changed_keys: Vec<&str> = listed(0, "", true, &st).iter().map(|o| o.key).collect();
-        assert!(["ui_corners", "ui_background", "ui_dimming"].iter().all(|k| changed_keys.contains(k)), "{changed_keys:?}");
+        assert!(
+            ["ui_corners", "ui_background", "ui_dimming"]
+                .iter()
+                .all(|k| changed_keys.contains(k)),
+            "{changed_keys:?}"
+        );
         let corners = OPTS.iter().find(|o| o.key == "ui_corners").unwrap();
         assert_eq!(corners.when, When::Now);
         reset(corners, &mut st);
@@ -1615,7 +3813,9 @@ mod tests {
         st.set("ui_background", json!("plain"));
         let dimming = OPTS.iter().find(|o| o.key == "ui_dimming").unwrap();
         assert_eq!(shown(dimming, &st), Shown::Hidden);
-        assert!(!listed(0, "", true, &st).iter().any(|o| o.key == "ui_dimming"));
+        assert!(!listed(0, "", true, &st)
+            .iter()
+            .any(|o| o.key == "ui_dimming"));
     }
 
     /// The mouse steering's smoothing is on unless switched off, and the switch is kept (#1092).
@@ -1633,8 +3833,14 @@ mod tests {
     #[test]
     fn the_devices_lead_to_the_keys_and_the_controllers_and_reset_asks_first() {
         let (mut s, mut start) = (all_rows(), start());
-        assert_eq!(click(DEVICES, "s-go-keys", &mut s, &mut start).0.controls, Some(0));
-        assert_eq!(click(DEVICES, "s-go-pads", &mut s, &mut start).0.controls, Some(1));
+        assert_eq!(
+            click(DEVICES, "s-go-keys", &mut s, &mut start).0.controls,
+            Some(0)
+        );
+        assert_eq!(
+            click(DEVICES, "s-go-pads", &mut s, &mut start).0.controls,
+            Some(1)
+        );
         let before = s.clone();
         assert!(click(PRESETS, "s-reset", &mut s, &mut start).0.reset);
         assert_eq!(s, before);
