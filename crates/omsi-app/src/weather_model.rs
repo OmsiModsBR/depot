@@ -111,7 +111,13 @@ pub fn start(clock: &omsi_sim::SimClock) -> Weather {
     let w = model.weather();
     *CURRENT.lock().unwrap_or_else(|e| e.into_inner()) = Some(model.sky());
     log::info!("weather: the physical model, {:.1} °C, {:.0} % humidity, cumulus {:.2}, deck {:.2}, veil {:.2}, fog {:.2}, rain {:.2}, visibility {:.0} m", model.temp, model.humidity() * 100.0, model.cumulus, model.deck, model.veil, model.fog, model.precip, w.fog.0);
-    *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Session { model, year: clock.year, latitude: place.latitude, longitude: place.longitude, at: (clock.day_of_year, clock.time) });
+    *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Session {
+        model,
+        year: clock.year,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        at: (clock.day_of_year, clock.time),
+    });
     w
 }
 
@@ -129,7 +135,8 @@ pub fn refresh(clock: &omsi_sim::SimClock) -> Option<Weather> {
     let s = guard.as_mut()?;
     let place = omsi_sim::daylight::place();
     let elapsed = (clock.day_of_year - s.at.0) as f64 * 86_400.0 + (clock.time - s.at.1);
-    let moved = (place.latitude - s.latitude).abs() > 0.01 || (place.longitude - s.longitude).abs() > 0.01;
+    let moved =
+        (place.latitude - s.latitude).abs() > 0.01 || (place.longitude - s.longitude).abs() > 0.01;
     if moved || clock.year != s.year || !(0.0..=86_400.0).contains(&elapsed) {
         s.model = WeatherModel::new(clock, &place);
         s.year = clock.year;
@@ -170,7 +177,12 @@ fn sun_at(year: i32, hours: f64, place: &omsi_sim::daylight::SunPlace) -> (f32, 
     let doy = (day.rem_euclid(len) + 1.0) as i32;
     // the clock that shows this solar time at the place
     let clock_h = solar + place.timezone - place.longitude / 15.0;
-    let mut clock = omsi_sim::SimClock { year, day_of_year: doy, time: clock_h * 3600.0, ..Default::default() };
+    let mut clock = omsi_sim::SimClock {
+        year,
+        day_of_year: doy,
+        time: clock_h * 3600.0,
+        ..Default::default()
+    };
     clock.time += place.dst_hours(&clock) * 3600.0;
     let (alt, _) = omsi_sim::daylight::sun_position(&clock, place);
     (doy as f32, alt as f32)
@@ -192,7 +204,8 @@ impl WeatherModel {
             let phase = hash(self.year_seed, i as u32) as f64 * std::f64::consts::TAU;
             let mod_t = 23.0 + 11.0 * hash(self.year_seed, 10 + i as u32) as f64;
             let mod_phase = hash(self.year_seed, 20 + i as u32) as f64 * std::f64::consts::TAU;
-            let swell = (0.55 + 0.45 * (std::f64::consts::TAU * days / mod_t + mod_phase).sin()) as f32;
+            let swell =
+                (0.55 + 0.45 * (std::f64::consts::TAU * days / mod_t + mod_phase).sin()) as f32;
             let w = std::f64::consts::TAU / t;
             p += a * k * swell * (w * days + phase).sin() as f32;
             dp += a * k * swell * (w as f32) * (w * days + phase).cos() as f32;
@@ -271,7 +284,8 @@ impl WeatherModel {
         // --- radiation at the ground
         let total_cloud = (self.cumulus + self.deck * (1.0 - self.cumulus)).clamp(0.0, 1.0);
         let sin_alt = alt.to_radians().sin().max(0.0);
-        let clear_sw = 1000.0 * sin_alt.powf(1.15) * (-0.09 * self.aerosol / sin_alt.max(0.05)).exp();
+        let clear_sw =
+            1000.0 * sin_alt.powf(1.15) * (-0.09 * self.aerosol / sin_alt.max(0.05)).exp();
         let cloud_t = 1.0 - 0.75 * total_cloud.powf(3.4);
         let sw = clear_sw * cloud_t * (-0.35 * self.veil).exp() * (1.0 - 0.6 * self.fog);
         let albedo = 0.18 + 0.5 * self.snow_cover;
@@ -286,7 +300,11 @@ impl WeatherModel {
         // shallow stable layer over the ground, which cools fast)
         // (and is cut off from the flow above it: on a calm clear night the ground air cools
         // on its own, down to its dew point)
-        let (capacity, coupling) = if heat > 0.0 { (340.0, 14.0) } else { (170.0, 14.0 + 20.0 * (1.0 - (wind / 6.0).min(1.0))) };
+        let (capacity, coupling) = if heat > 0.0 {
+            (340.0, 14.0)
+        } else {
+            (170.0, 14.0 + 20.0 * (1.0 - (wind / 6.0).min(1.0)))
+        };
         self.temp += dt * (heat / capacity - (self.temp - advected) / coupling);
         // --- the boundary layer: mixed up by the day's heat, collapsing at night
         // (a Bowen ratio of about one: half the net radiation heats the air)
@@ -299,11 +317,16 @@ impl WeatherModel {
             self.mixed += dt * (150.0 - self.mixed) / 1.2;
         }
         self.mixed = self.mixed.clamp(100.0, 2600.0);
-        self.residual = if self.mixed > self.residual { self.mixed } else { self.residual + dt * (self.mixed - self.residual) / 30.0 };
+        self.residual = if self.mixed > self.residual {
+            self.mixed
+        } else {
+            self.residual + dt * (self.mixed - self.residual) / 30.0
+        };
         // --- water near the ground
         let rh_bg = (0.72 + 0.12 * lift + 0.08 * (1.0 - s)).clamp(0.4, 0.95);
         let q_bg = q_sat(advected) * rh_bg;
-        let evaporation = self.ground_wet * (q_sat(self.temp) - self.q).max(0.0) * (0.05 + sw_abs / 4000.0);
+        let evaporation =
+            self.ground_wet * (q_sat(self.temp) - self.q).max(0.0) * (0.05 + sw_abs / 4000.0);
         // (the plants' transpiration by day: the summer's main source of the air's water)
         let transpiration = sw_abs / 2500.0 * (0.25 + 0.75 * s) * (1.0 - self.snow_cover);
         self.q += dt * ((q_bg - self.q) / 16.0 + evaporation + transpiration);
@@ -329,14 +352,23 @@ impl WeatherModel {
         // cumulus: where the mixed layer reaches the condensation level
         let lcl = 125.0 * (self.temp - td).max(0.0);
         let reach = (self.mixed - lcl) / (0.3 * lcl + 200.0);
-        let cu_target = if sensible > 0.0 { smoothstep(0.0, 1.0, reach) * 0.85 * (0.45 + 0.55 * self.rh_up.min(1.0)) * (1.0 + 0.5 * lift.min(0.0)) } else { 0.0 };
+        let cu_target = if sensible > 0.0 {
+            smoothstep(0.0, 1.0, reach)
+                * 0.85
+                * (0.45 + 0.55 * self.rh_up.min(1.0))
+                * (1.0 + 0.5 * lift.min(0.0))
+        } else {
+            0.0
+        };
         let cu_tau = if cu_target > self.cumulus { 0.6 } else { 1.0 };
         self.cumulus += dt * (cu_target - self.cumulus) / cu_tau;
         self.cumulus = self.cumulus.clamp(0.0, 0.85);
         // the grey deck: a saturated rising troposphere (nimbostratus, altostratus), or a
         // saturated layer under an inversion (stratus) where the day does not mix it out
         let mid = smoothstep(0.76, 0.96, self.rh_up);
-        let low = smoothstep(0.86, 0.97, rh_s) * (1.0 - smoothstep(80.0, 300.0, sensible)) * (0.6 + 0.4 * (1.0 - s));
+        let low = smoothstep(0.86, 0.97, rh_s)
+            * (1.0 - smoothstep(80.0, 300.0, sensible))
+            * (0.6 + 0.4 * (1.0 - s));
         let deck_target = mid.max(low * 0.97);
         self.deck += dt * (deck_target - self.deck) / 1.5;
         self.deck = self.deck.clamp(0.0, 1.0);
@@ -348,7 +380,11 @@ impl WeatherModel {
         let frontal = ((self.rh_up - 0.95) * 6.0).clamp(0.0, 1.0) * smoothstep(0.2, 0.7, lift);
         // (a cumulus grows into a shower cloud when it is deep - a lot of it, warm moist air
         // under a moist troposphere that is not sinking)
-        let showers = smoothstep(0.45, 0.75, self.cumulus) * smoothstep(15.0, 24.0, self.temp) * smoothstep(0.6, 0.85, self.rh_up) * smoothstep(-0.4, 0.1, lift) * 0.8;
+        let showers = smoothstep(0.45, 0.75, self.cumulus)
+            * smoothstep(15.0, 24.0, self.temp)
+            * smoothstep(0.6, 0.85, self.rh_up)
+            * smoothstep(-0.4, 0.1, lift)
+            * 0.8;
         let target = frontal.max(showers);
         self.precip += dt * (target - self.precip) / 0.5;
         self.precip = self.precip.clamp(0.0, 1.0);
@@ -356,18 +392,26 @@ impl WeatherModel {
         // down only in warmer air)
         let snowing = self.precip > 0.05 && self.temp < 1.5;
         // the ground: wetted by rain, dried by sun and wind
-        self.ground_wet += dt * (self.precip * 2.0 - (sw_abs / 400.0 + wind / 30.0 + 0.02) * self.ground_wet);
+        self.ground_wet +=
+            dt * (self.precip * 2.0 - (sw_abs / 400.0 + wind / 30.0 + 0.02) * self.ground_wet);
         self.ground_wet = self.ground_wet.clamp(0.0, 1.0);
         // the snow: a heavy fall lays some 2 cm an hour; it thaws by about a millimetre an
         // hour per degree of warm air, by the sun it absorbs and under warm rain
         let fall = if snowing { self.precip * 2.0 } else { 0.0 };
-        let melt = 0.1 * self.temp.max(0.0) + sw_abs * (1.0 - 0.7) / 900.0 * (self.temp > -3.0) as i32 as f32 + if self.precip > 0.05 && !snowing { self.precip * 0.4 } else { 0.0 };
+        let melt = 0.1 * self.temp.max(0.0)
+            + sw_abs * (1.0 - 0.7) / 900.0 * (self.temp > -3.0) as i32 as f32
+            + if self.precip > 0.05 && !snowing {
+                self.precip * 0.4
+            } else {
+                0.0
+            };
         self.snow_depth = (self.snow_depth + dt * (fall - melt)).clamp(0.0, 80.0);
         self.snow_cover = smoothstep(0.0, 3.0, self.snow_depth);
         // --- aerosol: the city's emissions, trapped under a high, washed out, blown away
         let trapping = 1.0 + 0.8 * (-lift).max(0.0);
         let source = 0.02 * trapping;
-        let sink = self.aerosol * (0.012 * wind / 5.0 + 0.35 * self.precip + 0.004 * self.mixed / 1000.0);
+        let sink =
+            self.aerosol * (0.012 * wind / 5.0 + 0.35 * self.precip + 0.004 * self.mixed / 1000.0);
         self.aerosol += dt * (source - sink - (self.aerosol - 0.8) * 0.004);
         self.aerosol = self.aerosol.clamp(0.25, 4.0);
         self.hours += dt as f64;
@@ -421,7 +465,13 @@ impl WeatherModel {
         // south-west ahead of a low (pressure falling), north-west behind it
         let wind_dir = if dp < 0.0 { 225.0 } else { 300.0 } + 20.0 * (p / 10.0).clamp(-1.0, 1.0);
         let precip = if self.precip > 0.03 {
-            vec![if self.temp < 1.0 { 2.0 } else { 1.0 }, (self.precip * 255.0).clamp(20.0, 255.0), 0.0, 0.0, 0.0]
+            vec![
+                if self.temp < 1.0 { 2.0 } else { 1.0 },
+                (self.precip * 255.0).clamp(20.0, 255.0),
+                0.0,
+                0.0,
+                0.0,
+            ]
         } else {
             vec![0.0, 0.0, 0.0, 0.0, 0.0]
         };
@@ -430,13 +480,17 @@ impl WeatherModel {
             description: String::new(),
             fog: (vis.max(80.0), 1.0),
             wind: (wind_dir, wind_speed),
-            temp: (self.temp, crate::weather_setup::absolute_humidity(self.temp, rh * 100.0)),
+            temp: (
+                self.temp,
+                crate::weather_setup::absolute_humidity(self.temp, rh * 100.0),
+            ),
             pressure: 1013.0 + p,
             clouds: (kind.into(), lcl.max(200.0)),
             precip,
             ground_wet: [self.ground_wet * 255.0, 255.0, 115.0],
             snow: self.snow_cover > 0.3 || (self.precip > 0.05 && self.temp < 1.5),
-            snow_on_road: (self.snow_depth > 2.0 && self.temp < 0.5) || (self.precip > 0.3 && self.temp < 0.0),
+            snow_on_road: (self.snow_depth > 2.0 && self.temp < 0.5)
+                || (self.precip > 0.3 && self.temp < 0.0),
             ..Default::default()
         }
     }
@@ -451,7 +505,12 @@ mod tests {
     }
 
     fn run(year: i32, doy: i32, days: i32, mut f: impl FnMut(&WeatherModel, f64)) {
-        let clock = omsi_sim::SimClock { year, day_of_year: doy, time: 0.0, ..Default::default() };
+        let clock = omsi_sim::SimClock {
+            year,
+            day_of_year: doy,
+            time: 0.0,
+            ..Default::default()
+        };
         let mut m = WeatherModel::new(&clock, &place());
         for k in 0..(days * 24 * 2) {
             m.step(year, &place(), 0.5);
@@ -514,9 +573,18 @@ mod tests {
                 fog_mornings += 1;
             }
         });
-        assert!(grey_winter > grey_summer + 5, "grey days: winter {grey_winter}, summer {grey_summer}");
-        assert!((15..300).contains(&rain_hours), "rain {rain_hours} half-hours in 45 winter days");
-        assert!(cumulus_afternoons >= 8, "cumulus afternoons {cumulus_afternoons}");
+        assert!(
+            grey_winter > grey_summer + 5,
+            "grey days: winter {grey_winter}, summer {grey_summer}"
+        );
+        assert!(
+            (15..300).contains(&rain_hours),
+            "rain {rain_hours} half-hours in 45 winter days"
+        );
+        assert!(
+            cumulus_afternoons >= 8,
+            "cumulus afternoons {cumulus_afternoons}"
+        );
         assert!(clear_evenings >= 5, "clear evenings {clear_evenings}");
         assert!(fog_mornings >= 1, "foggy autumn mornings {fog_mornings}");
     }
@@ -542,7 +610,12 @@ mod tests {
         });
         let avg = |v: &Vec<f32>| v.iter().sum::<f32>() / v.len().max(1) as f32;
         assert!(!after_rain.is_empty() && !dry_long.is_empty());
-        assert!(avg(&dry_long) > avg(&after_rain) * 1.3, "{} vs {}", avg(&dry_long), avg(&after_rain));
+        assert!(
+            avg(&dry_long) > avg(&after_rain) * 1.3,
+            "{} vs {}",
+            avg(&dry_long),
+            avg(&after_rain)
+        );
     }
 
     #[test]
@@ -567,9 +640,19 @@ mod report {
     #[ignore]
     fn weather_report() {
         let place = omsi_sim::daylight::SunPlace::default();
-        for (doy0, label) in [(1, "winter"), (100, "spring"), (180, "summer"), (280, "autumn")] {
+        for (doy0, label) in [
+            (1, "winter"),
+            (100, "spring"),
+            (180, "summer"),
+            (280, "autumn"),
+        ] {
             println!("== {label}");
-            let clock = omsi_sim::SimClock { year: 2026, day_of_year: doy0, time: 0.0, ..Default::default() };
+            let clock = omsi_sim::SimClock {
+                year: 2026,
+                day_of_year: doy0,
+                time: 0.0,
+                ..Default::default()
+            };
             let mut m = WeatherModel::new(&clock, &place);
             let mut stats = [0.0f32; 6];
             let mut snow_days = 0;
@@ -583,20 +666,45 @@ mod report {
                         stats[5] = 125.0 * (m.temp - dew_point(m.q)).max(0.0);
                     }
                     if hour % 3 == 2 {
-                        let c = if m.precip > 0.1 && m.temp < 1.5 { '*' } else if m.precip > 0.1 { 'R' } else if m.fog > 0.4 { 'F' } else if m.deck > 0.85 { '#' } else if m.deck > 0.5 { '=' } else if m.cumulus > 0.45 { 'C' } else if m.cumulus > 0.15 { 'c' } else if m.veil > 0.5 { '~' } else { '.' };
+                        let c = if m.precip > 0.1 && m.temp < 1.5 {
+                            '*'
+                        } else if m.precip > 0.1 {
+                            'R'
+                        } else if m.fog > 0.4 {
+                            'F'
+                        } else if m.deck > 0.85 {
+                            '#'
+                        } else if m.deck > 0.5 {
+                            '='
+                        } else if m.cumulus > 0.45 {
+                            'C'
+                        } else if m.cumulus > 0.15 {
+                            'c'
+                        } else if m.veil > 0.5 {
+                            '~'
+                        } else {
+                            '.'
+                        };
                         line.push(c);
                     }
                     stats[0] += (m.precip > 0.1) as i32 as f32;
                     stats[1] += (m.deck > 0.85) as i32 as f32;
                     stats[2] += (m.fog > 0.4) as i32 as f32;
                     stats[3 + 0] += 0.0;
-                    if hour == 12 && m.snow_cover > 0.5 { snow_days += 1; }
+                    if hour == 12 && m.snow_cover > 0.5 {
+                        snow_days += 1;
+                    }
                 }
                 let w = m.weather();
                 println!("{line}  14h T {:4.1} mix {:4.0} lcl {:4.0} | 23h T {:5.1} rh {:3.0}% vis {:6.0} haze {:.2} mix {:4.0} rh_up {:.2} p {:6.1}", stats[3], stats[4], stats[5], m.temp, m.humidity() * 100.0, w.fog.0, m.sky().haze, m.mixed, m.rh_up, w.pressure);
                 let _ = &w;
             }
-            println!("rain {:.0}% grey {:.0}% fog {:.0}% snow-covered days {snow_days}", stats[0] / 7.2, stats[1] / 7.2, stats[2] / 7.2);
+            println!(
+                "rain {:.0}% grey {:.0}% fog {:.0}% snow-covered days {snow_days}",
+                stats[0] / 7.2,
+                stats[1] / 7.2,
+                stats[2] / 7.2
+            );
         }
     }
 }

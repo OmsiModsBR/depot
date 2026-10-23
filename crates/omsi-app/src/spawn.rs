@@ -1,10 +1,10 @@
 //! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
 
-use anyhow::{Context, Result};
-use crate::cli::{Args, parse_triggers};
+use crate::cli::{parse_triggers, Args};
 use crate::player::Player;
 use crate::scene::{self, World};
 use crate::situation::{find_hof, start_clock};
+use anyhow::{Context, Result};
 use glam::{DVec3, Vec3};
 use omsi_render::{Renderer, Scene};
 use std::path::{Path, PathBuf};
@@ -47,10 +47,19 @@ pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
 /// is not followed. (Following `[couple_back]` whatever the way, the Berlin A3's unit - the
 /// S car and its K car turned round, whose `[couple_back]` names the S car - went on S, K,
 /// S, K, S, none of them turned.)
-pub(crate) fn next_coupled(def: &omsi_vehicle::vehicle::Vehicle, rev: bool, toward_back: bool) -> Option<(PathBuf, bool)> {
-    let (file, flag) = if toward_back != rev { def.couple_back.as_ref() } else { def.couple_front.as_ref() }?;
+pub(crate) fn next_coupled(
+    def: &omsi_vehicle::vehicle::Vehicle,
+    rev: bool,
+    toward_back: bool,
+) -> Option<(PathBuf, bool)> {
+    let (file, flag) = if toward_back != rev {
+        def.couple_back.as_ref()
+    } else {
+        def.couple_front.as_ref()
+    }?;
     let path = omsi_cfg::resolve_path(def.dir(), file);
-    let same = path.file_name().map(|f| f.to_ascii_lowercase()) == def.path.file_name().map(|f| f.to_ascii_lowercase());
+    let same = path.file_name().map(|f| f.to_ascii_lowercase())
+        == def.path.file_name().map(|f| f.to_ascii_lowercase());
     if !flag && same {
         return None;
     }
@@ -143,7 +152,11 @@ fn player_identity(
         .find(|(k, _)| k.eq_ignore_ascii_case("ident"))
         .map(|(_, v)| v.trim())
         .filter(|v| !v.is_empty());
-    let typed = args.plate.as_deref().map(str::trim).filter(|p| !p.is_empty());
+    let typed = args
+        .plate
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
     let ident = if let Some(p) = typed {
         Some(p.to_string())
     } else if let Some(p) = saved_ident {
@@ -185,7 +198,11 @@ pub(crate) fn spawn_player(
     );
     let doors = crate::player::door_keys(&vt);
     if !doors.is_empty() {
-        let keys: Vec<String> = doors.iter().enumerate().map(|(i, g)| format!("Shift+{} = {}", i + 1, g.join(" + "))).collect();
+        let keys: Vec<String> = doors
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("Shift+{} = {}", i + 1, g.join(" + ")))
+            .collect();
         log::info!("door keys: {}", keys.join(", "));
     }
     let mut host = omsi_sim::VehicleHost::new(start_clock(args));
@@ -247,7 +264,16 @@ pub(crate) fn spawn_player(
                 // (a bridge over the place, a lower level) is not this one
                 if let Some(g) = world.stand_height(pos.x, pos.y, pos.z) {
                     vehicle.position.z = g;
-                } else if crate::scene::drive_probe(&world.terrains, &world.surfaces, pos.x, pos.y, pos.z + 1.5).below.is_none() {
+                } else if crate::scene::drive_probe(
+                    &world.terrains,
+                    &world.surfaces,
+                    pos.x,
+                    pos.y,
+                    pos.z + 1.5,
+                )
+                .below
+                .is_none()
+                {
                     // nothing under the place at all (the marker came out under the ground):
                     // on the ground above, not in the void under the map
                     if let Some(g) = world.walk_height(pos.x, pos.y) {
@@ -283,7 +309,14 @@ pub(crate) fn spawn_player(
         None => log::info!("paint: the model's own textures"),
     }
     vehicle.apply_paint_vars(scheme);
-    log::info!("gearbox: {}", if vehicle.ty.program.manual_gearbox() { "manual (gates)" } else { "automatic or none" });
+    log::info!(
+        "gearbox: {}",
+        if vehicle.ty.program.manual_gearbox() {
+            "manual (gates)"
+        } else {
+            "automatic or none"
+        }
+    );
     if let Some(sp) = &args.spawn {
         let v: Vec<f64> = sp
             .split(',')
@@ -292,7 +325,9 @@ pub(crate) fn spawn_player(
         if v.len() >= 3 {
             // x,y,heading[,z]: a height given is the road's (the ground may lie below it)
             let z = match v.get(3) {
-                Some(&road) => world.stand_height(v[0], v[1], road).map_or(road, |g| road.max(g)),
+                Some(&road) => world
+                    .stand_height(v[0], v[1], road)
+                    .map_or(road, |g| road.max(g)),
                 None => world.ground_height(v[0], v[1]).unwrap_or(0.0),
             };
             vehicle.position = DVec3::new(v[0], v[1], z);
@@ -302,11 +337,19 @@ pub(crate) fn spawn_player(
     // a parked bus or car standing where the player's bus is put (a depot's entry point):
     // it drives off instead of the player's bus standing inside it
     if let Some(bb) = vt.def.bounding_box {
-        let n = world.clear_parked_under(renderer, scene, &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading));
+        let n = world.clear_parked_under(
+            renderer,
+            scene,
+            &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading),
+        );
         if n > 0 {
             log::info!("spawn: {n} parked vehicle(s) cleared from the place of the bus");
         }
-        world.clear_props_under(renderer, scene, &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading));
+        world.clear_props_under(
+            renderer,
+            scene,
+            &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading),
+        );
     }
     let render = world.add_vehicle(renderer, scene, &vt, scheme);
     // coupled rear sections / trailers
@@ -373,7 +416,9 @@ pub(crate) fn spawn_player(
     if args.physics != "simple" && !rail_bound {
         // (on what the wheels stand on near the height found above: the texel height of
         // `ground_height` undid that, and put the bus on a wall's top or a deck over it)
-        if let Some(z) = world.stand_height(vehicle.position.x, vehicle.position.y, vehicle.position.z) {
+        if let Some(z) =
+            world.stand_height(vehicle.position.x, vehicle.position.y, vehicle.position.z)
+        {
             vehicle.position.z = z;
         }
         log::info!("spawn: the bus stands at height {:.2}", vehicle.position.z);
@@ -407,9 +452,21 @@ pub(crate) fn spawn_player(
     }
     log::info!(
         "collision world: {} obstacle boxes, {} collision meshes of {} parts",
-        vehicle.collision.as_ref().map(|c| c.boxes.len()).unwrap_or(0),
-        vehicle.collision.as_ref().map(|c| c.meshes.len()).unwrap_or(0),
-        vehicle.collision.as_ref().map(|c| c.mesh_parts()).unwrap_or(0)
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.boxes.len())
+            .unwrap_or(0),
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.meshes.len())
+            .unwrap_or(0),
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.mesh_parts())
+            .unwrap_or(0)
     );
     let bindings = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args.root))
         .map(|k| k.with_game_defaults().vehicles)
@@ -542,13 +599,14 @@ pub(crate) fn spawn_player(
                 .fold(f32::MAX, f32::min);
             log::info!("mesh {i:3} {:40} vp={} tris={:6} bounds {:?}..{:?} uv {:?}..{:?} min|n|={nrm:.2} mats={} anims={} visible={:?}", def.file, def.viewpoint, vm.data.indices.len() / 3, lo, hi, uv0, uv1, vm.materials.len(), def.animations.len(), def.visible);
             // per material slot: which part of its texture the mesh shows (display texts)
-            if omsi_cfg::flags::DEBUG_MESHES.text()
+            if omsi_cfg::flags::DEBUG_MESHES
+                .text()
                 .map(|f| {
                     !f.is_empty()
                         && def
-                        .file
-                        .to_ascii_lowercase()
-                        .contains(&f.to_ascii_lowercase())
+                            .file
+                            .to_ascii_lowercase()
+                            .contains(&f.to_ascii_lowercase())
                 })
                 .unwrap_or(false)
             {
@@ -654,7 +712,10 @@ pub(crate) fn spawn_player(
     // is put in - cold, ready, the situation's) are not played: the first frame played them
     // all, an engine stopping as every session began (#1198). OMSI puts a bus down silent.
     if !p.vehicle.host.fired_triggers.is_empty() {
-        log::info!("spawn: sound triggers of the set-up left silent: {:?}", p.vehicle.host.fired_triggers);
+        log::info!(
+            "spawn: sound triggers of the set-up left silent: {:?}",
+            p.vehicle.host.fired_triggers
+        );
     }
     p.vehicle.host.fired_triggers.clear();
     p.vehicle.host.fired_trigger_vars.clear();
@@ -671,12 +732,19 @@ pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> O
         vt.paint_schemes
             .iter()
             .position(|s| s.name.eq_ignore_ascii_case(p))
-            .or_else(|| p.parse::<usize>().ok().filter(|i| *i < vt.paint_schemes.len()))
+            .or_else(|| {
+                p.parse::<usize>()
+                    .ok()
+                    .filter(|i| *i < vt.paint_schemes.len())
+            })
     });
     if let (Some(p), None) = (asked, found) {
         log::warn!(
             "paint scheme '{p}' not found; available: {:?}",
-            vt.paint_schemes.iter().map(|s| s.name.as_str()).collect::<Vec<_>>()
+            vt.paint_schemes
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
         );
     }
     found
@@ -685,8 +753,14 @@ pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> O
 /// Where the map's `global.cfg` recorded an entry point (x, height, y within its tile), in
 /// world coordinates, taken in the tile of its object at `object` (Grundorf's records agree
 /// with their objects that way to a few decimetres).
-pub(crate) fn recorded_entry_pos(ep: &omsi_map::global::EntryPoint, object: DVec3) -> Option<DVec3> {
+pub(crate) fn recorded_entry_pos(
+    ep: &omsi_map::global::EntryPoint,
+    object: DVec3,
+) -> Option<DVec3> {
     let s = omsi_map::tile_size();
     let (tx, ty) = ((object.x / s).floor(), (object.y / s).floor());
-    ep.pos.iter().all(|v| v.is_finite()).then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
+    ep.pos
+        .iter()
+        .all(|v| v.is_finite())
+        .then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
 }

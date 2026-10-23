@@ -18,7 +18,12 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 const MODEL_REPO: &str = "JustFrederik/nllb-200-distilled-600M-ct2-int8";
-const MODEL_FILES: [&str; 4] = ["config.json", "shared_vocabulary.txt", "tokenizer.json", "model.bin"];
+const MODEL_FILES: [&str; 4] = [
+    "config.json",
+    "shared_vocabulary.txt",
+    "tokenizer.json",
+    "model.bin",
+];
 /// The model repository's revision fetched, and each file's SHA-256 there (checked before a
 /// download is kept).
 const MODEL_REVISION: &str = "302d78f00e6fdb50a1064059df7c392b735e9d05";
@@ -61,7 +66,11 @@ fn data_dir() -> Option<PathBuf> {
 }
 
 fn model_dir() -> Option<PathBuf> {
-    Some(data_dir()?.join("models").join("nllb-200-distilled-600M-int8"))
+    Some(
+        data_dir()?
+            .join("models")
+            .join("nllb-200-distilled-600M-int8"),
+    )
 }
 
 fn cache_file(lang: &str) -> Option<PathBuf> {
@@ -113,7 +122,9 @@ pub fn enable(on: bool) {
     }
     omsi_ui::i18n::set_fallback(Some(lookup));
     WORKER.call_once(|| {
-        let _ = std::thread::Builder::new().name("translation".into()).spawn(worker);
+        let _ = std::thread::Builder::new()
+            .name("translation".into())
+            .spawn(worker);
     });
 }
 
@@ -124,11 +135,16 @@ fn worth(text: &str) -> bool {
         return false;
     }
     // (a file, a folder: never)
-    if t.contains('/') || t.contains('\\') || (!t.contains(' ') && t.contains('.') && !t.ends_with('.')) {
+    if t.contains('/')
+        || t.contains('\\')
+        || (!t.contains(' ') && t.contains('.') && !t.ends_with('.'))
+    {
         return false;
     }
     // (a session code or an address in it: the line is translated around it, not with it)
-    if t.split_whitespace().any(|w| w.matches('-').count() >= 3 || w.starts_with("http")) {
+    if t.split_whitespace()
+        .any(|w| w.matches('-').count() >= 3 || w.starts_with("http"))
+    {
         return false;
     }
     // at least one word of three small letters ("MAN SD200", "12:05", "IBIS" are left)
@@ -187,12 +203,19 @@ fn templates(lang: &str) -> Templates {
 
 /// `omsi_ui::tr`'s fallback: the translation when there is one, else asked for.
 fn lookup(lang: &str, text: &str) -> Option<String> {
-    if !ENABLED.load(Ordering::Relaxed) || nllb(lang).is_none() || !worth(text) || names().read().contains(text.trim()) {
+    if !ENABLED.load(Ordering::Relaxed)
+        || nllb(lang).is_none()
+        || !worth(text)
+        || names().read().contains(text.trim())
+    {
         return None;
     }
     // (a template the tables have, already translated and with its values in: drawn as it
     // is, not taken for English and translated again)
-    if templates(lang).iter().any(|p| crate::tr_fill::values(p, text).is_some()) {
+    if templates(lang)
+        .iter()
+        .any(|p| crate::tr_fill::values(p, text).is_some())
+    {
         names().write().insert(text.trim().to_string());
         return None;
     }
@@ -200,7 +223,10 @@ fn lookup(lang: &str, text: &str) -> Option<String> {
     let mut mt = m.lock();
     if !mt.loaded.contains(lang) {
         mt.loaded.insert(lang.to_string());
-        if let Some(saved) = cache_file(lang).and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice::<HashMap<String, String>>(&b).ok()) {
+        if let Some(saved) = cache_file(lang)
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<HashMap<String, String>>(&b).ok())
+        {
             log::info!("translation: {} {lang} texts from the cache", saved.len());
             mt.cache.entry(lang.to_string()).or_default().extend(saved);
         }
@@ -265,10 +291,18 @@ fn worker() {
                     return;
                 };
                 let t0 = Instant::now();
-                let cfg = ct2rs::Config { device: ct2rs::Device::CPU, compute_type: ct2rs::ComputeType::INT8, num_threads_per_replica: 2, ..Default::default() };
+                let cfg = ct2rs::Config {
+                    device: ct2rs::Device::CPU,
+                    compute_type: ct2rs::ComputeType::INT8,
+                    num_threads_per_replica: 2,
+                    ..Default::default()
+                };
                 match ct2rs::Translator::new(&dir, &cfg) {
                     Ok(t) => {
-                        log::info!("translation: model loaded in {:.1} s", t0.elapsed().as_secs_f32());
+                        log::info!(
+                            "translation: model loaded in {:.1} s",
+                            t0.elapsed().as_secs_f32()
+                        );
                         set_status("Ready");
                         translator = Some(t);
                     }
@@ -284,9 +318,16 @@ fn worker() {
             let Some(target) = nllb(&lang) else { continue };
             let src: Vec<String> = batch.iter().map(|(_, t)| format!("eng_Latn {t}")).collect();
             let prefix: Vec<Vec<&str>> = batch.iter().map(|_| vec![target]).collect();
-            let opts = ct2rs::TranslationOptions { beam_size: 2, max_decoding_length: 256, ..Default::default() };
+            let opts = ct2rs::TranslationOptions {
+                beam_size: 2,
+                max_decoding_length: 256,
+                ..Default::default()
+            };
             let t0 = Instant::now();
-            let res = translator.as_ref().unwrap().translate_batch_with_target_prefix(&src, &prefix, &opts, None);
+            let res = translator
+                .as_ref()
+                .unwrap()
+                .translate_batch_with_target_prefix(&src, &prefix, &opts, None);
             match res {
                 Ok(r) => {
                     let (m, _) = state();
@@ -300,7 +341,11 @@ fn worker() {
                     }
                     let snapshot = c.clone();
                     drop(mt);
-                    log::debug!("translation: {} {lang} texts in {:.2} s", batch.len(), t0.elapsed().as_secs_f32());
+                    log::debug!(
+                        "translation: {} {lang} texts in {:.2} s",
+                        batch.len(),
+                        t0.elapsed().as_secs_f32()
+                    );
                     if let Some(p) = cache_file(&lang) {
                         let _ = std::fs::create_dir_all(p.parent().unwrap());
                         if let Ok(b) = serde_json::to_vec_pretty(&snapshot) {
@@ -337,7 +382,10 @@ fn fetch_model() -> Option<PathBuf> {
                 return None;
             }
         };
-        let total: u64 = resp.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0);
+        let total: u64 = resp
+            .header("Content-Length")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         let tmp = path.with_extension("part");
         let mut out = std::fs::File::create(&tmp).ok()?;
         let mut rd = resp.into_reader();
@@ -363,11 +411,17 @@ fn fetch_model() -> Option<PathBuf> {
             done += n as u64;
             if last.elapsed() > Duration::from_millis(500) && total > 1_000_000 {
                 last = Instant::now();
-                set_status(format!("Downloading the translation model: {} %", done * 100 / total));
+                set_status(format!(
+                    "Downloading the translation model: {} %",
+                    done * 100 / total
+                ));
             }
         }
         drop(out);
-        let got: String = sha2::Digest::finalize(hash).iter().map(|b| format!("{b:02x}")).collect();
+        let got: String = sha2::Digest::finalize(hash)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         if got != want {
             log::warn!("translation: {f} does not match its published SHA-256; removed");
             let _ = std::fs::remove_file(&tmp);
@@ -394,9 +448,17 @@ mod tests {
 
     #[test]
     fn a_filled_in_translation_is_recognised() {
-        let fits = |t: &str| super::templates("de").iter().any(|p| crate::tr_fill::values(p, t).is_some());
-        assert!(fits("Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"));
-        assert!(fits("\u{201e}ASS_toggle\u{201c} hinzuf\u{fc}gen und eine Taste zuweisen"));
+        let fits = |t: &str| {
+            super::templates("de")
+                .iter()
+                .any(|p| crate::tr_fill::values(p, t).is_some())
+        };
+        assert!(fits(
+            "Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"
+        ));
+        assert!(fits(
+            "\u{201e}ASS_toggle\u{201c} hinzuf\u{fc}gen und eine Taste zuweisen"
+        ));
         assert!(!fits("Back to my bus"));
     }
 }

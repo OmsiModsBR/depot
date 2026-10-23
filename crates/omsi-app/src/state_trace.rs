@@ -33,8 +33,13 @@ pub(crate) struct StateTrace {
 impl StateTrace {
     /// The trace `OMSI_STATE_TRACE` asks for, if any.
     pub(crate) fn from_env() -> Option<StateTrace> {
-        let path = omsi_cfg::flags::STATE_TRACE.text().filter(|p| !p.trim().is_empty())?;
-        Some(StateTrace { path: PathBuf::from(path), text: String::new() })
+        let path = omsi_cfg::flags::STATE_TRACE
+            .text()
+            .filter(|p| !p.trim().is_empty())?;
+        Some(StateTrace {
+            path: PathBuf::from(path),
+            text: String::new(),
+        })
     }
 
     /// The state at the start of frame `i` (`t` seconds into the run).
@@ -82,7 +87,14 @@ impl StateTrace {
             let _ = writeln!(
                 s,
                 "    car {} p {:?} {:?} {:?} heading {:?} speed {:?} lane {} s {:?}",
-                c.id, v.position.x, v.position.y, v.position.z, v.heading, c.state.speed, c.state.lane, c.state.s
+                c.id,
+                v.position.x,
+                v.position.y,
+                v.position.z,
+                v.heading,
+                c.state.speed,
+                c.state.lane,
+                c.state.s
             );
         }
         s.push_str("  lights");
@@ -95,7 +107,10 @@ impl StateTrace {
         s.push('\n');
         // (the rail signals as the frame's step will set them; the offscreen run hands
         // them no player's rail, see `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`)
-        let mut rail: Vec<(i64, f32)> = t.signal_aspects(&world.signal_routes, None).into_iter().collect();
+        let mut rail: Vec<(i64, f32)> = t
+            .signal_aspects(&world.signal_routes, None)
+            .into_iter()
+            .collect();
         rail.sort_by_key(|r| r.0);
         s.push_str("  rail");
         for (id, aspect) in rail {
@@ -109,7 +124,11 @@ impl StateTrace {
         match duty {
             Some(d) => {
                 let delay = player.map(|p| p.vehicle.host.tt_delay).unwrap_or_default();
-                let _ = writeln!(s, "  duty line {} tour {} trip {} next_stop {} delay {delay:?}", d.line, d.tour, d.trip_index, d.next_stop);
+                let _ = writeln!(
+                    s,
+                    "  duty line {} tour {} trip {} next_stop {} delay {delay:?}",
+                    d.line, d.tour, d.trip_index, d.next_stop
+                );
             }
             None => s.push_str("  duty -\n"),
         }
@@ -120,7 +139,12 @@ impl StateTrace {
         if let Some(dir) = self.path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(&self.path, self.text).map_err(|e| anyhow::anyhow!("OMSI_STATE_TRACE: cannot write {}: {e}", self.path.display()))?;
+        std::fs::write(&self.path, self.text).map_err(|e| {
+            anyhow::anyhow!(
+                "OMSI_STATE_TRACE: cannot write {}: {e}",
+                self.path.display()
+            )
+        })?;
         log::info!("state trace written to {}", self.path.display());
         Ok(())
     }

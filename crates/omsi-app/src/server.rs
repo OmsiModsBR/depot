@@ -10,9 +10,9 @@
 //! 64x64 PNG, like Minecraft's), `server.log` its log. A missing `server.cfg` is written with
 //! the defaults and a comment for every key.
 
-use anyhow::{Context, Result};
 use crate::cli::Args;
 use crate::startup::BUILD;
+use anyhow::{Context, Result};
 use std::path::Path;
 
 /// What `server.cfg` says (see `DEFAULT_CFG`).
@@ -129,10 +129,15 @@ voice_radio = 1
 impl ServerCfg {
     pub(crate) fn load(path: &Path) -> Result<ServerCfg> {
         if !path.is_file() {
-            std::fs::write(path, DEFAULT_CFG).with_context(|| format!("writing {}", path.display()))?;
-            log::info!("server: {} did not exist; written with the defaults", path.display());
+            std::fs::write(path, DEFAULT_CFG)
+                .with_context(|| format!("writing {}", path.display()))?;
+            log::info!(
+                "server: {} did not exist; written with the defaults",
+                path.display()
+            );
         }
-        let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let mut kv: std::collections::HashMap<String, String> = Default::default();
         for line in text.lines() {
             let l = line.trim();
@@ -143,11 +148,23 @@ impl ServerCfg {
                 kv.insert(k.trim().to_ascii_lowercase(), v.trim().to_string());
             }
         }
-        let get = |k: &str, d: &str| kv.get(k).cloned().filter(|v| !v.is_empty()).unwrap_or_else(|| d.to_string());
-        let flag = |k: &str, d: bool| kv.get(k).map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")).unwrap_or(d);
+        let get = |k: &str, d: &str| {
+            kv.get(k)
+                .cloned()
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| d.to_string())
+        };
+        let flag = |k: &str, d: bool| {
+            kv.get(k)
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(d)
+        };
         let num = |k: &str, d: i64| kv.get(k).and_then(|v| v.parse::<i64>().ok()).unwrap_or(d);
         let dir = path.parent().unwrap_or(Path::new("."));
-        let icon = std::fs::read(dir.join("server-icon.png")).ok().filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024).unwrap_or_default();
+        let icon = std::fs::read(dir.join("server-icon.png"))
+            .ok()
+            .filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024)
+            .unwrap_or_default();
         Ok(ServerCfg {
             name: get("name", "Project Depot server"),
             motd: get("motd", ""),
@@ -165,11 +182,33 @@ impl ServerCfg {
             radius: num("radius", 0) as i32,
             icon,
             admin_password: kv.get("admin_password").cloned().unwrap_or_default(),
-            time_speed: kv.get("time_speed").and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite()).unwrap_or(1.0).clamp(1.0, 30.0),
+            time_speed: kv
+                .get("time_speed")
+                .and_then(|v| v.parse::<f64>().ok())
+                .filter(|v| v.is_finite())
+                .unwrap_or(1.0)
+                .clamp(1.0, 30.0),
             real_time: flag("real_time", false),
             metar_sync: flag("metar_sync", false),
-            metar_station: kv.get("metar_station").map(|v| v.chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()).unwrap_or_default(),
-            vehicles: kv.get("vehicles").map(|v| v.split(';').map(|x| x.trim().replace('\\', "/")).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+            metar_station: kv
+                .get("metar_station")
+                .map(|v| {
+                    v.chars()
+                        .filter(|c| c.is_ascii_alphabetic())
+                        .take(4)
+                        .collect::<String>()
+                        .to_ascii_uppercase()
+                })
+                .unwrap_or_default(),
+            vehicles: kv
+                .get("vehicles")
+                .map(|v| {
+                    v.split(';')
+                        .map(|x| x.trim().replace('\\', "/"))
+                        .filter(|x| !x.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
             share_positions: flag("share_positions", false),
             voice: crate::voice::VoiceServer::from_kv(|k| kv.get(k).cloned()),
         })
@@ -203,7 +242,10 @@ pub(crate) fn info_of(cfg: &ServerCfg) -> omsi_net::ws::ServerInfo {
 pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     let cfg = ServerCfg::load(path)?;
     SERVER_MODE.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _ = SERVER_ADMIN.set((cfg.admin_password.clone(), if cfg.real_time { 1.0 } else { cfg.time_speed }));
+    let _ = SERVER_ADMIN.set((
+        cfg.admin_password.clone(),
+        if cfg.real_time { 1.0 } else { cfg.time_speed },
+    ));
     crate::real_time::set_server_real(cfg.real_time);
     let _ = SERVER_VEHICLES.set(cfg.vehicles.clone());
     let _ = SERVER_VOICE.set(cfg.voice.clone());
@@ -217,9 +259,17 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     }
     args.weather = cfg.weather.clone();
     // the METAR sync: the report's weather from the start (the host loop downloads it again)
-    let station = cfg.metar_sync.then(|| if cfg.metar_station.is_empty() { crate::launcher::drive::nearest_airport(&args.root.to_string_lossy(), &args.map) } else { cfg.metar_station.clone() });
+    let station = cfg.metar_sync.then(|| {
+        if cfg.metar_station.is_empty() {
+            crate::launcher::drive::nearest_airport(&args.root.to_string_lossy(), &args.map)
+        } else {
+            cfg.metar_station.clone()
+        }
+    });
     if let Some(icao) = station.as_ref() {
-        match crate::weather_setup::try_metar(icao).and_then(|w| crate::weather_setup::report_wire(&w)) {
+        match crate::weather_setup::try_metar(icao)
+            .and_then(|w| crate::weather_setup::report_wire(&w))
+        {
             Some(wire) => args.weather = Some(wire),
             None => log::warn!("server: no METAR report for {icao} yet; trying again soon"),
         }
@@ -253,30 +303,51 @@ pub(crate) static SERVER_VEHICLES: std::sync::OnceLock<Vec<String>> = std::sync:
 pub(crate) fn allows(list: &[String], file: &str) -> bool {
     let norm = |s: &str| s.trim().replace('\\', "/").to_ascii_lowercase();
     let f = norm(file);
-    list.is_empty() || list.iter().map(|v| norm(v)).any(|v| f == v || f.ends_with(&format!("/{v}")))
+    list.is_empty()
+        || list
+            .iter()
+            .map(|v| norm(v))
+            .any(|v| f == v || f.ends_with(&format!("/{v}")))
 }
 
 /// A server's `vehicles` list holds: a player who drives another bus (put down in the game's
 /// own vehicle menu, which a game before this one did not limit to the list, #1183) is sent
 /// away and told which buses the server has. It may join again with one of them.
 pub(crate) fn enforce_vehicles(lan: &mut omsi_net::LanSession) {
-    let Some(list) = SERVER_VEHICLES.get().filter(|l| !l.is_empty()) else { return };
-    let out: Vec<(u32, String)> = lan.peers().filter(|p| p.has_info && !p.pose.bus.is_empty() && !allows(list, &p.pose.bus)).map(|p| (p.pose.id, p.pose.bus.clone())).collect();
+    let Some(list) = SERVER_VEHICLES.get().filter(|l| !l.is_empty()) else {
+        return;
+    };
+    let out: Vec<(u32, String)> = lan
+        .peers()
+        .filter(|p| p.has_info && !p.pose.bus.is_empty() && !allows(list, &p.pose.bus))
+        .map(|p| (p.pose.id, p.pose.bus.clone()))
+        .collect();
     for (id, bus) in out {
-        log::warn!("server: player {id} drives {bus}, which the vehicles list does not allow: sent away");
-        let names: Vec<&str> = list.iter().map(|v| v.rsplit('/').next().unwrap_or(v)).collect();
-        lan.kick(id, &format!("this server allows only these buses: {}", names.join(", ")), false);
+        log::warn!(
+            "server: player {id} drives {bus}, which the vehicles list does not allow: sent away"
+        );
+        let names: Vec<&str> = list
+            .iter()
+            .map(|v| v.rsplit('/').next().unwrap_or(v))
+            .collect();
+        lan.kick(
+            id,
+            &format!("this server allows only these buses: {}", names.join(", ")),
+            false,
+        );
     }
 }
 
 /// A dedicated server's voice server (`voice_*` of `server.cfg`).
-pub(crate) static SERVER_VOICE: std::sync::OnceLock<Option<crate::voice::VoiceServer>> = std::sync::OnceLock::new();
+pub(crate) static SERVER_VOICE: std::sync::OnceLock<Option<crate::voice::VoiceServer>> =
+    std::sync::OnceLock::new();
 
 /// A dedicated server's admin password and clock speed (for the host loop).
 pub(crate) static SERVER_ADMIN: std::sync::OnceLock<(String, f64)> = std::sync::OnceLock::new();
 
 /// A dedicated server run: graphics without a device, the whole world by interest.
-pub(crate) static SERVER_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static SERVER_MODE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Every second of a server run: what the status page says (players, time, weather) and
 /// who is where (`GET /players`, when `share_positions` is on).
@@ -284,9 +355,20 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     let players = lan.peers().filter(|p| p.has_info).count();
     // (the admin's clock shift may take the time below 0 or past midnight: 23:08 had come
     // out as "00:-52")
-    crate::lan::update_server_info(players, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
-    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).collect();
-    let list = poses.iter().filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id))).collect();
+    crate::lan::update_server_info(
+        players,
+        &crate::schedule::hhmm(time.rem_euclid(86400.0)),
+        weather,
+    );
+    let poses: Vec<&omsi_net::Pose> = lan
+        .peers()
+        .filter(|p| p.has_info && p.has_pose)
+        .map(|p| &p.pose)
+        .collect();
+    let list = poses
+        .iter()
+        .filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id)))
+        .collect();
     crate::lan::update_server_players(list);
 }
 
@@ -294,10 +376,17 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
 /// bus it sits in (`Walker::aboard`; the walker's own point lags behind that bus); otherwise
 /// with the bus it drives. The walker comes first: a player who got out keeps its vehicle, so
 /// such a state carries `FLAG_VEHICLE` (the parked bus) and the walker. `None`: no place known.
-pub(crate) fn player_info<'a>(q: &omsi_net::Pose, pose_of: impl Fn(u32) -> Option<&'a omsi_net::Pose>) -> Option<omsi_net::ws::PlayerInfo> {
+pub(crate) fn player_info<'a>(
+    q: &omsi_net::Pose,
+    pose_of: impl Fn(u32) -> Option<&'a omsi_net::Pose>,
+) -> Option<omsi_net::ws::PlayerInfo> {
     let driving = q.walker.is_none() && q.has_vehicle();
     let (x, y, heading, speed_kmh, aboard) = match q.walker {
-        Some(w) => match w.aboard.and_then(|a| pose_of(a.owner)).filter(|b| b.has_vehicle()) {
+        Some(w) => match w
+            .aboard
+            .and_then(|a| pose_of(a.owner))
+            .filter(|b| b.has_vehicle())
+        {
             Some(b) => (b.x, b.y, b.heading, b.speed_kmh, Some(b.id)),
             // (a walker's speed is in m/s)
             None => (w.x, w.y, w.heading, w.speed * 3.6, None),
@@ -309,9 +398,21 @@ pub(crate) fn player_info<'a>(q: &omsi_net::Pose, pose_of: impl Fn(u32) -> Optio
         id: q.id,
         name: q.name.clone(),
         // (what a player on foot last drove is not what it drives)
-        bus: if driving { q.bus.clone() } else { String::new() },
-        line: if driving { q.line.clone() } else { String::new() },
-        destination: if driving { q.destination.clone() } else { String::new() },
+        bus: if driving {
+            q.bus.clone()
+        } else {
+            String::new()
+        },
+        line: if driving {
+            q.line.clone()
+        } else {
+            String::new()
+        },
+        destination: if driving {
+            q.destination.clone()
+        } else {
+            String::new()
+        },
         tour: q.tour.clone(),
         x,
         y,
@@ -329,7 +430,10 @@ mod vehicles_tests {
 
     #[test]
     fn the_list_allows_its_buses_only() {
-        let list = vec!["Vehicles/MAN_SD200/MAN_SD77.bus".to_string(), "Vehicles/MAN_SD202/MAN_D92.bus".to_string()];
+        let list = vec![
+            "Vehicles/MAN_SD200/MAN_SD77.bus".to_string(),
+            "Vehicles/MAN_SD202/MAN_D92.bus".to_string(),
+        ];
         assert!(allows(&list, "Vehicles/MAN_SD200/MAN_SD77.bus"));
         // another case, backslashes, a folder before it
         assert!(allows(&list, "vehicles\\man_sd200\\MAN_SD77.bus"));
@@ -350,7 +454,18 @@ mod players_tests {
     use omsi_net::{Aboard, Pose, Walker, FLAG_VEHICLE};
 
     fn bus(id: u32, x: f64, y: f64) -> Pose {
-        Pose { id, name: format!("p{id}"), bus: "Vehicles/MAN_SD200/MAN_SD77.bus".into(), line: "37".into(), x, y, heading: 90.0, speed_kmh: 40.0, flags: FLAG_VEHICLE, ..Default::default() }
+        Pose {
+            id,
+            name: format!("p{id}"),
+            bus: "Vehicles/MAN_SD200/MAN_SD77.bus".into(),
+            line: "37".into(),
+            x,
+            y,
+            heading: 90.0,
+            speed_kmh: 40.0,
+            flags: FLAG_VEHICLE,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -358,34 +473,97 @@ mod players_tests {
         let none = |_| None;
         // driving: the bus
         let d = player_info(&bus(2, 100.0, 200.0), none).unwrap();
-        assert_eq!((d.x, d.y, d.speed_kmh, d.on_foot, d.aboard, d.line.as_str()), (100.0, 200.0, 40.0, false, None, "37"));
+        assert_eq!(
+            (d.x, d.y, d.speed_kmh, d.on_foot, d.aboard, d.line.as_str()),
+            (100.0, 200.0, 40.0, false, None, "37")
+        );
         // on foot: the walker, not the zeroed vehicle fields
-        let mut w = Pose { id: 3, name: "p3".into(), bus: "Vehicles/MAN_SD200/MAN_SD77.bus".into(), ..Default::default() };
-        w.walker = Some(Walker { x: 10.0, y: 20.0, heading: 45.0, speed: 1.5, ..Default::default() });
+        let mut w = Pose {
+            id: 3,
+            name: "p3".into(),
+            bus: "Vehicles/MAN_SD200/MAN_SD77.bus".into(),
+            ..Default::default()
+        };
+        w.walker = Some(Walker {
+            x: 10.0,
+            y: 20.0,
+            heading: 45.0,
+            speed: 1.5,
+            ..Default::default()
+        });
         let f = player_info(&w, none).unwrap();
-        assert_eq!((f.x, f.y, f.heading, f.on_foot, f.bus.as_str()), (10.0, 20.0, 45.0, true, ""));
+        assert_eq!(
+            (f.x, f.y, f.heading, f.on_foot, f.bus.as_str()),
+            (10.0, 20.0, 45.0, true, "")
+        );
         assert!((f.speed_kmh - 5.4).abs() < 1e-4);
         // aboard player 2's bus: placed with it
         let driver = bus(2, 100.0, 200.0);
-        w.walker = Some(Walker { x: 90.0, y: 190.0, aboard: Some(Aboard { owner: 2, ..Default::default() }), ..Default::default() });
+        w.walker = Some(Walker {
+            x: 90.0,
+            y: 190.0,
+            aboard: Some(Aboard {
+                owner: 2,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
         let a = player_info(&w, |id| (id == 2).then_some(&driver)).unwrap();
-        assert_eq!((a.x, a.y, a.speed_kmh, a.on_foot, a.aboard), (100.0, 200.0, 40.0, true, Some(2)));
+        assert_eq!(
+            (a.x, a.y, a.speed_kmh, a.on_foot, a.aboard),
+            (100.0, 200.0, 40.0, true, Some(2))
+        );
         // aboard a bus that is gone: its own point
         let g = player_info(&w, none).unwrap();
         assert_eq!((g.x, g.y, g.aboard), (90.0, 190.0, None));
         // got out of its own bus: the state keeps FLAG_VEHICLE and the parked bus's place, and
         // has the walker - the walker wins
         let mut out = bus(5, 100.0, 200.0);
-        out.walker = Some(Walker { x: 104.0, y: 197.0, heading: 180.0, speed: 1.0, ..Default::default() });
+        out.walker = Some(Walker {
+            x: 104.0,
+            y: 197.0,
+            heading: 180.0,
+            speed: 1.0,
+            ..Default::default()
+        });
         assert!(out.has_vehicle());
         let o = player_info(&out, none).unwrap();
-        assert_eq!((o.x, o.y, o.heading, o.on_foot, o.aboard, o.bus.as_str(), o.line.as_str()), (104.0, 197.0, 180.0, true, None, "", ""));
+        assert_eq!(
+            (
+                o.x,
+                o.y,
+                o.heading,
+                o.on_foot,
+                o.aboard,
+                o.bus.as_str(),
+                o.line.as_str()
+            ),
+            (104.0, 197.0, 180.0, true, None, "", "")
+        );
         assert!((o.speed_kmh - 3.6).abs() < 1e-4);
         // and sitting in another player's bus after getting out of its own: with that bus
-        out.walker = Some(Walker { x: 1.0, y: 1.0, aboard: Some(Aboard { owner: 2, ..Default::default() }), ..Default::default() });
+        out.walker = Some(Walker {
+            x: 1.0,
+            y: 1.0,
+            aboard: Some(Aboard {
+                owner: 2,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
         let oa = player_info(&out, |id| (id == 2).then_some(&driver)).unwrap();
-        assert_eq!((oa.x, oa.y, oa.on_foot, oa.aboard), (100.0, 200.0, true, Some(2)));
+        assert_eq!(
+            (oa.x, oa.y, oa.on_foot, oa.aboard),
+            (100.0, 200.0, true, Some(2))
+        );
         // neither a bus nor a walker: not listed
-        assert!(player_info(&Pose { id: 4, ..Default::default() }, none).is_none());
+        assert!(player_info(
+            &Pose {
+                id: 4,
+                ..Default::default()
+            },
+            none
+        )
+        .is_none());
     }
 }

@@ -20,7 +20,9 @@ pub fn current_version() -> &'static str {
 /// or `#`. Anything else (another repository whose name merely starts the same, a userinfo
 /// trick such as `https://github.com@evil/`, another scheme) is refused.
 pub fn is_depot_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix(REPO_URL) else { return false };
+    let Some(rest) = url.strip_prefix(REPO_URL) else {
+        return false;
+    };
     rest.is_empty() || rest.starts_with(['/', '?', '#'])
 }
 
@@ -36,7 +38,10 @@ pub fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("rundll32").arg("url.dll,FileProtocolHandler").arg(url).spawn();
+    let _ = std::process::Command::new("rundll32")
+        .arg("url.dll,FileProtocolHandler")
+        .arg(url)
+        .spawn();
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
@@ -49,13 +54,21 @@ mod tests {
     fn only_the_projects_own_pages_are_opened() {
         assert!(is_depot_url(REPO_URL));
         assert!(is_depot_url(RELEASES_URL));
-        assert!(is_depot_url("https://github.com/OmsiModsBR/depot/issues/new?title=a&body=b"));
+        assert!(is_depot_url(
+            "https://github.com/OmsiModsBR/depot/issues/new?title=a&body=b"
+        ));
         assert!(is_depot_url("https://github.com/OmsiModsBR/depot#readme"));
         assert!(!is_depot_url("http://github.com/OmsiModsBR/depot"));
         assert!(!is_depot_url("https://github.com/OmsiModsBR/depot-evil"));
-        assert!(!is_depot_url("https://github.com/OmsiModsBR/depotx/releases"));
-        assert!(!is_depot_url("https://github.com.evil.example/OmsiModsBR/depot"));
-        assert!(!is_depot_url("https://github.com@evil.example/OmsiModsBR/depot"));
+        assert!(!is_depot_url(
+            "https://github.com/OmsiModsBR/depotx/releases"
+        ));
+        assert!(!is_depot_url(
+            "https://github.com.evil.example/OmsiModsBR/depot"
+        ));
+        assert!(!is_depot_url(
+            "https://github.com@evil.example/OmsiModsBR/depot"
+        ));
         assert!(!is_depot_url("file:///etc/passwd"));
         assert!(!is_depot_url("javascript:alert(1)"));
         assert!(!is_depot_url(""));

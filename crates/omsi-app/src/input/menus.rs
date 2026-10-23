@@ -20,7 +20,11 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
 /// Without LAN play the game joins nothing (`--lan-join` is ignored).
 pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
     #[cfg(feature = "lan")]
-    return args.lan_join.as_deref().map(|t| omsi_net::ws::ws_url(t).is_some()).unwrap_or(false);
+    return args
+        .lan_join
+        .as_deref()
+        .map(|t| omsi_net::ws::ws_url(t).is_some())
+        .unwrap_or(false);
     #[cfg(not(feature = "lan"))]
     {
         let _ = args;
@@ -82,8 +86,11 @@ impl App {
     pub(crate) fn close_game_menu(&mut self) {
         self.key_capture = None;
         if self.menu_edit_icao {
-            if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
-            self.menu_edit_icao=false; self.menu_edit=None;
+            if let Some(w) = self.window.as_ref() {
+                w.set_ime_allowed(false);
+            }
+            self.menu_edit_icao = false;
+            self.menu_edit = None;
         }
         self.game_menu = None;
         self.menu_top = None;
@@ -97,18 +104,30 @@ impl App {
         self.admin_list = Some(crate::game_lists::items(self, &kind));
         self.list_kind = Some(kind);
         // (on its first line, not on a heading)
-        self.chooser = Some(if self.is_heading(0) { self.chooser_next(0, 1) } else { 0 });
+        self.chooser = Some(if self.is_heading(0) {
+            self.chooser_next(0, 1)
+        } else {
+            0
+        });
     }
 
     /// Line `k` of the list shown heads the lines under it (`game_lists::HEADING`).
     pub(crate) fn is_heading(&self, k: usize) -> bool {
-        self.admin_list.as_ref().and_then(|l| l.get(k)).is_some_and(|l| l.1 == crate::game_lists::HEADING)
+        self.admin_list
+            .as_ref()
+            .and_then(|l| l.get(k))
+            .is_some_and(|l| l.1 == crate::game_lists::HEADING)
     }
 
     /// The line `step` lines on from `sel` (round the list; `n - 1` is one back), over the
     /// headings.
     pub(crate) fn chooser_next(&self, sel: usize, step: usize) -> usize {
-        let n = self.admin_list.as_ref().unwrap_or(&self.vehicle_list).len().max(1);
+        let n = self
+            .admin_list
+            .as_ref()
+            .unwrap_or(&self.vehicle_list)
+            .len()
+            .max(1);
         let mut k = sel;
         for _ in 0..n {
             k = (k + step) % n;
@@ -122,7 +141,15 @@ impl App {
     /// Left or Right on line `k` of a list, or a click on the arrows round its value: its
     /// setting one step down (`-`) or up (`+`), see `game_lists::ADJUST`; other lines stay.
     pub(crate) fn chooser_adjust(&mut self, k: usize, dir: &str) {
-        let Some(action) = self.admin_list.as_ref().and_then(|l| l.get(k)).and_then(|l| l.1.strip_suffix(crate::game_lists::ADJUST)).map(|a| format!("{a} {dir}")) else { return };
+        let Some(action) = self
+            .admin_list
+            .as_ref()
+            .and_then(|l| l.get(k))
+            .and_then(|l| l.1.strip_suffix(crate::game_lists::ADJUST))
+            .map(|a| format!("{a} {dir}"))
+        else {
+            return;
+        };
         // (run as a pick of the line, with the step in place of the mark)
         if let Some(l) = self.admin_list.as_mut().and_then(|l| l.get_mut(k)) {
             l.1 = action;
@@ -130,27 +157,43 @@ impl App {
         self.chooser_pick(k);
     }
 
-    pub(crate) fn start_icao_edit(&mut self){
-        self.menu_edit=Some(String::new()); self.menu_edit_icao=true;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(true);}
+    pub(crate) fn start_icao_edit(&mut self) {
+        self.menu_edit = Some(String::new());
+        self.menu_edit_icao = true;
+        if let Some(w) = self.window.as_ref() {
+            w.set_ime_allowed(true);
+        }
     }
 
-    pub(crate) fn apply_icao_edit(&mut self){
-        let code=self.menu_edit.take().unwrap_or_default().trim().to_ascii_uppercase();
-        self.menu_edit_icao=false;
-        if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);}
-        if code.len()==4&&code.chars().all(|c|c.is_ascii_alphabetic()){
-            self.settings.metar_station=code.clone();
-            crate::game_lists::remember_setting("metar_station",&code);
-            self.metar_rx=None; self.metar_once=false; self.metar_next=0.0;
-            self.service_msg=Some((format!("METAR source: {code}"),3.0));
-        }else if !code.is_empty(){self.service_msg=Some(("ICAO must be exactly 4 letters".into(),3.0));}
+    pub(crate) fn apply_icao_edit(&mut self) {
+        let code = self
+            .menu_edit
+            .take()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_uppercase();
+        self.menu_edit_icao = false;
+        if let Some(w) = self.window.as_ref() {
+            w.set_ime_allowed(false);
+        }
+        if code.len() == 4 && code.chars().all(|c| c.is_ascii_alphabetic()) {
+            self.settings.metar_station = code.clone();
+            crate::game_lists::remember_setting("metar_station", &code);
+            self.metar_rx = None;
+            self.metar_once = false;
+            self.metar_next = 0.0;
+            self.service_msg = Some((format!("METAR source: {code}"), 3.0));
+        } else if !code.is_empty() {
+            self.service_msg = Some(("ICAO must be exactly 4 letters".into(), 3.0));
+        }
         self.refresh_list();
     }
 
     /// Set the clock to the time typed (digits: hh, hhmm or hhmmss; what is missing is 0).
     pub(crate) fn apply_time_edit(&mut self) {
-        let Some(d) = self.menu_edit.take() else { return };
+        let Some(d) = self.menu_edit.take() else {
+            return;
+        };
         if !d.is_empty() {
             let mut c = d.clone();
             while c.len() < 6 {
@@ -159,16 +202,27 @@ impl App {
             let n = |a: usize| c[a..a + 2].parse::<i64>().unwrap_or(0);
             let (h, m, sec) = (n(0), n(2), n(4));
             if h > 23 || m > 59 || sec > 59 {
-                self.service_msg = Some((omsi_ui::tr("%{time} is no time of day").replace("%{time}", &format!("{:02}:{:02}:{:02}", h, m, sec)), 3.0));
+                self.service_msg = Some((
+                    omsi_ui::tr("%{time} is no time of day")
+                        .replace("%{time}", &format!("{:02}:{:02}:{:02}", h, m, sec)),
+                    3.0,
+                ));
             } else if self.is_lan_client() {
                 self.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
             } else if self.real_time_locked() {
-                self.service_msg = Some(("The time cannot be changed while the real-time sync is on".into(), 3.0));
+                self.service_msg = Some((
+                    "The time cannot be changed while the real-time sync is on".into(),
+                    3.0,
+                ));
             } else {
                 let t = self.clock.time;
                 let day_start = t - t.rem_euclid(86400.0);
                 self.shift_clock(day_start + (h * 3600 + m * 60 + sec) as f64 - t);
-                self.service_msg = Some((omsi_ui::tr("Clock: %{time}").replace("%{time}", &format!("{:02}:{:02}:{:02}", h, m, sec)), 3.0));
+                self.service_msg = Some((
+                    omsi_ui::tr("Clock: %{time}")
+                        .replace("%{time}", &format!("{:02}:{:02}:{:02}", h, m, sec)),
+                    3.0,
+                ));
             }
         }
         self.refresh_list();
@@ -176,7 +230,9 @@ impl App {
 
     /// The open list made again from what it shows (a value changed), the chosen line kept.
     pub(crate) fn refresh_list(&mut self) {
-        let Some(kind) = self.list_kind.clone() else { return };
+        let Some(kind) = self.list_kind.clone() else {
+            return;
+        };
         let keep = self.chooser;
         self.open_list(kind);
         if let (Some(k), Some(l)) = (keep, self.admin_list.as_ref()) {
@@ -187,15 +243,33 @@ impl App {
     /// A settings window (options, vehicle, world) is open.
     pub(crate) fn settings_list(&self) -> bool {
         use crate::game_lists::ListKind;
-        self.chooser.is_some() && matches!(self.list_kind, Some(ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) | ListKind::Controls | ListKind::Keyboard(_) | ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtonSettings(..)))
+        self.chooser.is_some()
+            && matches!(
+                self.list_kind,
+                Some(
+                    ListKind::Options(_)
+                        | ListKind::Vehicle(_)
+                        | ListKind::World(_)
+                        | ListKind::Controls
+                        | ListKind::Keyboard(_)
+                        | ListKind::ControllerDevices(_)
+                        | ListKind::Controller(..)
+                        | ListKind::ControllerAxis(..)
+                        | ListKind::ControllerButtonSettings(..)
+                )
+            )
     }
 
     /// The open list is closed: back to the game menu.
     pub(crate) fn close_list(&mut self) {
         self.key_capture = None;
         self.dropdown = None;
-        if self.menu_edit_icao { if let Some(w)=self.window.as_ref(){w.set_ime_allowed(false);} }
-        self.menu_edit_icao=false;
+        if self.menu_edit_icao {
+            if let Some(w) = self.window.as_ref() {
+                w.set_ime_allowed(false);
+            }
+        }
+        self.menu_edit_icao = false;
         self.menu_edit = None;
         self.chooser = None;
         self.admin_list = None;
@@ -223,16 +297,28 @@ impl App {
 
     /// The next (or previous) page of the open settings window, round the ends.
     pub(crate) fn settings_tab_step(&mut self, forward: bool) {
-        let Some(kind) = self.list_kind.clone() else { return };
-        let Some((titles, at)) = crate::game_lists::page_titles(self, &kind) else { return };
+        let Some(kind) = self.list_kind.clone() else {
+            return;
+        };
+        let Some((titles, at)) = crate::game_lists::page_titles(self, &kind) else {
+            return;
+        };
         let n = titles.len().max(1);
-        self.settings_tab(if forward { (at + 1) % n } else { (at + n - 1) % n });
+        self.settings_tab(if forward {
+            (at + 1) % n
+        } else {
+            (at + n - 1) % n
+        });
     }
 
     /// A click on the sidebar of a settings window: page `i`, or (the last box) the way back.
     pub(crate) fn settings_side_click(&mut self, i: usize) {
-        let Some(kind) = self.list_kind.clone() else { return };
-        let n = crate::game_lists::page_titles(self, &kind).map(|t| t.0.len()).unwrap_or(0);
+        let Some(kind) = self.list_kind.clone() else {
+            return;
+        };
+        let n = crate::game_lists::page_titles(self, &kind)
+            .map(|t| t.0.len())
+            .unwrap_or(0);
         if i < n {
             self.settings_tab(i);
         } else {
@@ -249,20 +335,43 @@ impl App {
     /// Change the value of line `k` of the open settings window as `mv` says.
     pub(crate) fn list_adjust(&mut self, k: usize, mv: crate::game_lists::Move) {
         use crate::game_lists::ListKind;
-        let Some(kind) = self.list_kind.clone() else { return };
-        if !matches!(kind, ListKind::Options(_) | ListKind::World(_) | ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtonSettings(..)) {
+        let Some(kind) = self.list_kind.clone() else {
+            return;
+        };
+        if !matches!(
+            kind,
+            ListKind::Options(_)
+                | ListKind::World(_)
+                | ListKind::ControllerDevices(_)
+                | ListKind::Controller(..)
+                | ListKind::ControllerAxis(..)
+                | ListKind::ControllerButtonSettings(..)
+        ) {
             return;
         }
-        let Some(action) = self.admin_list.as_ref().and_then(|l| l.get(k)).map(|x| x.1.clone()) else { return };
+        let Some(action) = self
+            .admin_list
+            .as_ref()
+            .and_then(|l| l.get(k))
+            .map(|x| x.1.clone())
+        else {
+            return;
+        };
         let slider = crate::game_lists::is_slider(action.split(' ').next().unwrap_or(""));
         crate::game_lists::LIST_DIRTY.store(false, std::sync::atomic::Ordering::Relaxed);
         if let Some(next) = crate::game_lists::run_move(self, &kind, &action, mv) {
             // (a slider dragged sends the same value many times over: the list stays)
-            if slider && !crate::game_lists::LIST_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            if slider
+                && !crate::game_lists::LIST_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
                 return;
             }
             self.open_list(next);
-            let last = self.admin_list.as_ref().map(|l| l.len().saturating_sub(1)).unwrap_or(0);
+            let last = self
+                .admin_list
+                .as_ref()
+                .map(|l| l.len().saturating_sub(1))
+                .unwrap_or(0);
             self.chooser = Some(k.min(last));
         }
     }
@@ -272,7 +381,14 @@ impl App {
     /// True when the control is a slider (which the mouse button then holds: it follows the cursor).
     pub(crate) fn list_click(&mut self, k: usize, fx: f32) -> bool {
         use crate::game_lists::Move;
-        let Some(action) = self.admin_list.as_ref().and_then(|l| l.get(k)).map(|x| x.1.clone()) else { return false };
+        let Some(action) = self
+            .admin_list
+            .as_ref()
+            .and_then(|l| l.get(k))
+            .map(|x| x.1.clone())
+        else {
+            return false;
+        };
         let verb = action.split(' ').next().unwrap_or("");
         let slider = crate::game_lists::is_slider(verb);
         let mv = if slider {
@@ -289,40 +405,73 @@ impl App {
     /// Entry `i` of the open drop-down is taken: done, and the window's rows shown again
     /// with the new value.
     pub(crate) fn dropdown_pick(&mut self, i: usize) {
-        let Some(d) = self.dropdown.take() else { return };
-        let Some((_, action)) = d.items.get(i).cloned() else { return };
+        let Some(d) = self.dropdown.take() else {
+            return;
+        };
+        let Some((_, action)) = d.items.get(i).cloned() else {
+            return;
+        };
         crate::game_lists::dropdown_apply(self, &action);
         if let Some(kind) = self.list_kind.clone() {
             self.open_list(kind);
-            let last = self.admin_list.as_ref().map(|l| l.len().saturating_sub(1)).unwrap_or(0);
+            let last = self
+                .admin_list
+                .as_ref()
+                .map(|l| l.len().saturating_sub(1))
+                .unwrap_or(0);
             self.chooser = Some(d.row.min(last));
         }
     }
 
     /// A line's tours are open, with the stops of the tour chosen beside them.
     pub(crate) fn tours_list(&self) -> bool {
-        self.chooser.is_some() && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
+        self.chooser.is_some()
+            && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
     }
 
     /// The trip of the chosen tour leaving before (or after) the one chosen, as OMSI's
     /// timetable steps through the times of a tour (the tour itself stays).
     pub(crate) fn trip_step(&mut self, forward: bool) {
         let k = self.chooser.unwrap_or(0);
-        let (Some((line, tour)), Some((_, _, trip, trips))) = (crate::game_lists::tour_at(self, k), crate::game_lists::tour_choice(self, k)) else { return };
-        let to = if forward { (trip + 1).min(trips.saturating_sub(1)) } else { trip.saturating_sub(1) };
+        let (Some((line, tour)), Some((_, _, trip, trips))) = (
+            crate::game_lists::tour_at(self, k),
+            crate::game_lists::tour_choice(self, k),
+        ) else {
+            return;
+        };
+        let to = if forward {
+            (trip + 1).min(trips.saturating_sub(1))
+        } else {
+            trip.saturating_sub(1)
+        };
         if to != trip {
             self.pane_scroll = None;
-            self.list_kind = Some(crate::game_lists::ListKind::Tours(line, Some((tour, 0, to))));
+            self.list_kind = Some(crate::game_lists::ListKind::Tours(
+                line,
+                Some((tour, 0, to)),
+            ));
         }
     }
 
     /// The stop to start the chosen tour from, one on (or back).
     pub(crate) fn tour_stop_step(&mut self, forward: bool) {
         let k = self.chooser.unwrap_or(0);
-        let (Some((line, tour)), Some((n, at, trip, _))) = (crate::game_lists::tour_at(self, k), crate::game_lists::tour_choice(self, k)) else { return };
-        let to = if forward { (at + 1).min(n - 1) } else { at.saturating_sub(1) };
+        let (Some((line, tour)), Some((n, at, trip, _))) = (
+            crate::game_lists::tour_at(self, k),
+            crate::game_lists::tour_choice(self, k),
+        ) else {
+            return;
+        };
+        let to = if forward {
+            (at + 1).min(n - 1)
+        } else {
+            at.saturating_sub(1)
+        };
         self.pane_scroll = None;
-        self.list_kind = Some(crate::game_lists::ListKind::Tours(line, Some((tour, to, trip))));
+        self.list_kind = Some(crate::game_lists::ListKind::Tours(
+            line,
+            Some((tour, to, trip)),
+        ));
     }
 
     /// A click in the timetable beside the tours: stop `i` as the start, or (`usize::MAX`)
@@ -334,10 +483,18 @@ impl App {
             self.trip_step(i == usize::MAX - 2);
             return;
         }
-        let (Some((line, tour)), Some((n, at, trip, _))) = (crate::game_lists::tour_at(self, k), crate::game_lists::tour_choice(self, k)) else { return };
+        let (Some((line, tour)), Some((n, at, trip, _))) = (
+            crate::game_lists::tour_at(self, k),
+            crate::game_lists::tour_choice(self, k),
+        ) else {
+            return;
+        };
         if i < n {
             self.pane_scroll = None;
-            self.list_kind = Some(crate::game_lists::ListKind::Tours(line, Some((tour, i, trip))));
+            self.list_kind = Some(crate::game_lists::ListKind::Tours(
+                line,
+                Some((tour, i, trip)),
+            ));
             return;
         }
         crate::game_lists::start_duty_at(self, &line, &tour, trip, at);
@@ -356,7 +513,12 @@ impl App {
         }
         // a row of a settings window that drops a list down (the weather preset, the clouds)
         if self.settings_list() {
-            let id = self.admin_list.as_ref().and_then(|l| l.get(k)).map(|l| l.1.clone()).unwrap_or_default();
+            let id = self
+                .admin_list
+                .as_ref()
+                .and_then(|l| l.get(k))
+                .map(|l| l.1.clone())
+                .unwrap_or_default();
             if let Some(d) = crate::game_lists::dropdown_for(self, k, &id) {
                 self.dropdown = Some(d);
                 self.dd_reveal();
@@ -367,8 +529,13 @@ impl App {
         // a list of the menu's (the administration, the options …): done, and the list
         // shown again - or the next one (a line's tours), or back to the menu
         if let Some(list) = self.admin_list.take() {
-            let kind = self.list_kind.take().unwrap_or(crate::game_lists::ListKind::Admin);
-            let Some((_, action)) = list.get(k).cloned() else { return };
+            let kind = self
+                .list_kind
+                .take()
+                .unwrap_or(crate::game_lists::ListKind::Admin);
+            let Some((_, action)) = list.get(k).cloned() else {
+                return;
+            };
             match crate::game_lists::run(self, &kind, &action) {
                 Some(next) => {
                     let keep = next == kind;
@@ -377,17 +544,38 @@ impl App {
                     }
                     self.open_list(next);
                     if keep {
-                        self.chooser = Some(k.min(self.admin_list.as_ref().map(|l| l.len().saturating_sub(1)).unwrap_or(0)));
+                        self.chooser = Some(
+                            k.min(
+                                self.admin_list
+                                    .as_ref()
+                                    .map(|l| l.len().saturating_sub(1))
+                                    .unwrap_or(0),
+                            ),
+                        );
                     }
                 }
-                None if action != "back" && matches!(kind, crate::game_lists::ListKind::Tours(..) | crate::game_lists::ListKind::Numbers | crate::game_lists::ListKind::Destinations | crate::game_lists::ListKind::RouteNumbers | crate::game_lists::ListKind::Hofs | crate::game_lists::ListKind::Spots) => self.close_game_menu(),
+                None if action != "back"
+                    && matches!(
+                        kind,
+                        crate::game_lists::ListKind::Tours(..)
+                            | crate::game_lists::ListKind::Numbers
+                            | crate::game_lists::ListKind::Destinations
+                            | crate::game_lists::ListKind::RouteNumbers
+                            | crate::game_lists::ListKind::Hofs
+                            | crate::game_lists::ListKind::Spots
+                    ) =>
+                {
+                    self.close_game_menu()
+                }
                 None => self.menu_top = None,
             }
             return;
         }
         // a vehicle of the list: its livery and depot file are asked for first
         self.menu_top = None;
-        let Some((_, bus)) = self.vehicle_list.get(k).cloned() else { return };
+        let Some((_, bus)) = self.vehicle_list.get(k).cloned() else {
+            return;
+        };
         self.open_list(crate::game_lists::ListKind::PlaceLivery(bus));
     }
 
@@ -435,7 +623,11 @@ impl crate::app::App {
             }
         }
         if host || self.is_server_admin() {
-            let before_quit = v.iter().position(|x| x.0 == "quit").unwrap_or(v.len()).max(at);
+            let before_quit = v
+                .iter()
+                .position(|x| x.0 == "quit")
+                .unwrap_or(v.len())
+                .max(at);
             v.insert(before_quit, ("admin", "Administration..."));
         }
         v
@@ -445,8 +637,19 @@ impl crate::app::App {
     #[cfg(feature = "lan")]
     pub(crate) fn copy_server_code(&mut self) {
         // (the host's code; a player or a server's join code or address as it was entered)
-        let Some(code) = self.online.lan.as_ref().and_then(|l| l.code()).map(|c| c.encode()).or_else(|| self.args.lan_join.clone()).filter(|c| !c.trim().is_empty()) else {
-            self.service_msg = Some(("No server code: not in a LAN session or on a server".into(), 3.0));
+        let Some(code) = self
+            .online
+            .lan
+            .as_ref()
+            .and_then(|l| l.code())
+            .map(|c| c.encode())
+            .or_else(|| self.args.lan_join.clone())
+            .filter(|c| !c.trim().is_empty())
+        else {
+            self.service_msg = Some((
+                "No server code: not in a LAN session or on a server".into(),
+                3.0,
+            ));
             return;
         };
         #[cfg(not(target_os = "android"))]
@@ -460,9 +663,14 @@ impl crate::app::App {
                 if c.is_none() {
                     *c = arboard::Clipboard::new().ok();
                 }
-                c.as_mut().is_some_and(|cb| cb.set_text(code.clone()).is_ok())
+                c.as_mut()
+                    .is_some_and(|cb| cb.set_text(code.clone()).is_ok())
             });
-            self.service_msg = Some(if ok { ("Server code copied".into(), 3.0) } else { (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0) });
+            self.service_msg = Some(if ok {
+                ("Server code copied".into(), 3.0)
+            } else {
+                (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
+            });
         }
         #[cfg(target_os = "android")]
         {
@@ -477,7 +685,11 @@ impl crate::app::App {
 
     /// Whether line `k` of the game menu is greyed out.
     pub(crate) fn menu_item_off(&self, k: usize) -> bool {
-        self.chooser.is_none() && self.game_menu_items().get(k).is_some_and(|m| self.menu_disabled_ids().contains(&m.0))
+        self.chooser.is_none()
+            && self
+                .game_menu_items()
+                .get(k)
+                .is_some_and(|m| self.menu_disabled_ids().contains(&m.0))
     }
 
     /// The next line up or down from `from` that can be chosen (round the ends; the greyed-out
