@@ -110,7 +110,7 @@ const VARIED: &[(&str, &str)] = &[
     ("led_mips", "2.5"),
     ("graphics_api", "vulkan"),
     ("ctrl_off", "Pad 1"),
-    ("steering_linear", "1"),
+    ("steering_linear", "0"),
     ("old_steering", "1"),
     ("red_steer_spd", "1"),
     ("ff_invert", "1"),
