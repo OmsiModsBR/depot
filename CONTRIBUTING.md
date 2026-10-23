@@ -25,6 +25,19 @@ prefix are short, lowercase and hyphenated (`feat/route-editor`, `fix/door-sound
 A branch whose changes outgrow its prefix (a docs branch that needs a code change, a fix
 that turns into a refactor) is renamed, or the extra work moves to a branch of its own.
 
+Refactoring moves a lot of code around. These git settings make merges follow moved files
+and remember conflict resolutions you already made:
+
+```sh
+git config merge.conflictStyle zdiff3
+git config rerere.enabled true
+git config diff.renameLimit 20000
+```
+
+When `main` gets a commit that only runs `cargo fmt` on a crate your branch changes, bring
+the branch over it with `scripts/fmt-merge.sh <fmt-commit> <crate>...` instead of a plain
+merge: it formats your branch the same way and records the format commit as merged.
+
 ## Files and licences
 
 * **Contributions are MIT**, like the rest of the code and documentation. The few
