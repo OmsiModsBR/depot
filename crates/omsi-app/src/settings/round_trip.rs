@@ -198,11 +198,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
         "kept as text; the game reads anything but tickets and off as all",
     ),
     (
-        "drive_keys",
-        "launcher>game",
-        "kept as text; the game keeps simple unless it is wasd, arrows, omsi or simple",
-    ),
-    (
         "boarding",
         "launcher>game",
         "kept as written; the game lowercases it",

@@ -3461,12 +3461,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
-                if k != "navigator_corner" && k != "render_scale" =>
+                if k != "navigator_corner" && k != "drive_keys" && k != "render_scale" =>
             {
                 v[&k] = json!(val)
             }
             // (the game lowercases it)
             "navigator_corner" => v[&k] = json!(val.to_ascii_lowercase()),
+            // (wasd, arrows, omsi or simple, else simple, as the game reads it)
+            "drive_keys" => {
+                v[&k] = json!(match val.to_ascii_lowercase().as_str() {
+                    "wasd" | "arrows" | "omsi" | "simple" => val.to_ascii_lowercase(),
+                    _ => "simple".into(),
+                })
+            }
             // (auto, or 0.5 to 1 (a value above 1.5 is a percentage), else auto, as the game reads it)
             "render_scale" => {
                 v[&k] = json!(if val.eq_ignore_ascii_case("auto") {
