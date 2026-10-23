@@ -6,6 +6,7 @@ use crate::gpu::{
 };
 use crate::lighting::{LampShadow, Lighting, FAR_MAP_ASPECT, LAMP_SHADOWS};
 use crate::scene::Scene;
+use crate::shaders::with_fullscreen;
 use glam::{DVec3, Mat4, Vec3};
 
 /// Half size of the area around the camera covered by the near shadow cascade (m).
@@ -138,11 +139,13 @@ pub(crate) fn shadow_pipelines(
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shadow clear"),
             source: wgpu::ShaderSource::Wgsl(
-                "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-                    let x = f32(i32(i & 1u) * 4 - 1);
-                    let y = f32(i32(i >> 1u) * 4 - 1);
-                    return vec4<f32>(x, y, 1.0, 1.0);
-                }"
+                with_fullscreen(
+                    "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+                    var clip = fullscreen_vertex(i).clip;
+                    clip.z = 1.0;
+                    return clip;
+                }",
+                )
                 .into(),
             ),
         });

@@ -173,6 +173,7 @@ pub(crate) fn reflect_source() -> String {
         .expect("Enhanced struct")];
     [
         include_str!("../shaders/common/rt_common.wgsl"),
+        include_str!("../shaders/common/fullscreen.wgsl"),
         enh,
         include_str!("../shaders/effects/rt_reflect.wgsl"),
     ]

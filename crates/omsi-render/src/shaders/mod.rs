@@ -5,6 +5,12 @@
 
 use crate::gpu::{array_path, basic_pipelines, rt_gbuf, ArrayPath, ARRAY_TEX_WIDTH};
 
+/// A full-screen pass's shader with the shared triangle (`common/fullscreen.wgsl`) ahead
+/// of it.
+pub(crate) fn with_fullscreen(src: &str) -> String {
+    [include_str!("common/fullscreen.wgsl"), src].join("\n")
+}
+
 /// The scene shader: the vanilla path and the enhanced fragment shader in one module.
 ///
 /// On OpenGL a texture has one sampler (GLSL's combined sampler2D), so there the tile
@@ -170,6 +176,7 @@ pub(crate) fn lean_scene(src: String) -> String {
 pub(crate) fn sky_shader_source() -> String {
     [
         include_str!("common/camera.wgsl"),
+        include_str!("common/fullscreen.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("sky/sky.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
@@ -230,6 +237,7 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
         include_str!("common/camera.wgsl"),
+        include_str!("common/fullscreen.wgsl"),
         include_str!("lights/fog_lamps.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
