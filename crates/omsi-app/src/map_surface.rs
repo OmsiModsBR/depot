@@ -61,12 +61,20 @@ pub fn contour_strength(mpp: f64) -> f32 {
 /// The marks for the heights along one contour line: the first after 150 m (index lines) or 100 m, then every
 /// 700 m or 450 m of the line; a mark sits at the middle of the segment that reaches the distance.
 fn height_marks(pts: &[DVec2], height: i32, index: bool) -> Vec<ContourMark> {
-    let (first, every) = if index { (150.0, 700.0) } else { (100.0, 450.0) };
+    let (first, every) = if index {
+        (150.0, 700.0)
+    } else {
+        (100.0, 450.0)
+    };
     let (mut out, mut run, mut next) = (Vec::new(), 0.0, first);
     for s in pts.windows(2) {
         run += (s[1] - s[0]).length();
         if run >= next {
-            out.push(ContourMark { at: (s[0] + s[1]) * 0.5, height, index });
+            out.push(ContourMark {
+                at: (s[0] + s[1]) * 0.5,
+                height,
+                index,
+            });
             next = run + every;
         }
     }
@@ -98,7 +106,10 @@ pub fn marks_to_write<'a>(
             continue;
         }
         let b = label_box(p, m);
-        if !taken.iter().any(|t| t.x < b.right() && b.x < t.right() && t.y < b.bottom() && b.y < t.bottom()) {
+        if !taken
+            .iter()
+            .any(|t| t.x < b.right() && b.x < t.right() && t.y < b.bottom() && b.y < t.bottom())
+        {
             shown.push((p, m));
         }
     }
@@ -365,7 +376,9 @@ fn package_relative(raw: &str) -> Option<String> {
     }
     // a component of only dots (or spaces) is refused too: Windows-style names, which the package readers apply,
     // drop trailing dots and spaces, so `...` would end up as `..`
-    if p.split('/').any(|c| c.trim_end_matches(['.', ' ']).is_empty()) {
+    if p.split('/')
+        .any(|c| c.trim_end_matches(['.', ' ']).is_empty())
+    {
         return None;
     }
     Some(p)
@@ -463,14 +476,25 @@ impl MapSurface {
                 "player_line" => player_colors[1] = parse_color(v).unwrap_or(player_colors[1]),
                 "player_brt" => player_colors[2] = parse_color(v).unwrap_or(player_colors[2]),
                 "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
-                "north" => north = v.parse().ok().filter(|n: &f32| n.is_finite()).unwrap_or(0.0),
+                "north" => {
+                    north = v
+                        .parse()
+                        .ok()
+                        .filter(|n: &f32| n.is_finite())
+                        .unwrap_or(0.0)
+                }
                 "tram_vehicles" | "metro_vehicles" | "rail_vehicles" => {
                     let modal = match k.as_str() {
                         "tram_vehicles" => MODAL_TRAM,
                         "metro_vehicles" => MODAL_METRO,
                         _ => MODAL_RAIL,
                     };
-                    kinds.extend(v.split(',').map(|p| p.trim().to_lowercase()).filter(|p| !p.is_empty()).map(|p| (p, modal)));
+                    kinds.extend(
+                        v.split(',')
+                            .map(|p| p.trim().to_lowercase())
+                            .filter(|p| !p.is_empty())
+                            .map(|p| (p, modal)),
+                    );
                 }
                 "brt_lines" => {
                     brt_lines = v
@@ -514,7 +538,11 @@ impl MapSurface {
                 s.load_lines(&dir);
                 s.terrain_offset = terrain_offset;
                 s.north = north;
-                s.has_contours = s.index.iter().any(|e| s.data.get(e.at..e.at + e.len).is_some_and(chunk_has_contours));
+                s.has_contours = s.index.iter().any(|e| {
+                    s.data
+                        .get(e.at..e.at + e.len)
+                        .is_some_and(chunk_has_contours)
+                });
                 s.map_dir = map_dir.to_path_buf();
                 s.has_streets = s.index.iter().any(|e| {
                     s.data
@@ -683,7 +711,10 @@ impl MapSurface {
             return None;
         }
         let a = self.world_to_author(pos) - self.origin;
-        let (cx, cy) = ((a.x / self.chunk).floor() as i32, (a.y / self.chunk).floor() as i32);
+        let (cx, cy) = (
+            (a.x / self.chunk).floor() as i32,
+            (a.y / self.chunk).floor() as i32,
+        );
         let mut found: Vec<(f64, f32)> = Vec::new();
         for dx in -2..=2 {
             for dy in -2..=2 {
@@ -718,16 +749,25 @@ impl MapSurface {
         self.request_contour_marks_with(|s| s.skim_contour_marks());
     }
 
-    fn request_contour_marks_with(self: &std::sync::Arc<Self>, work: impl FnOnce(&MapSurface) -> Vec<ContourMark> + Send + 'static) {
-        if !self.has_contours || self.contour_job.swap(true, std::sync::atomic::Ordering::AcqRel) {
+    fn request_contour_marks_with(
+        self: &std::sync::Arc<Self>,
+        work: impl FnOnce(&MapSurface) -> Vec<ContourMark> + Send + 'static,
+    ) {
+        if !self.has_contours
+            || self
+                .contour_job
+                .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
             return;
         }
         let this = self.clone();
         // (a worker that cannot start or panics leaves the marks unset: the heights stay off)
-        let _ = std::thread::Builder::new().name("contour-heights".into()).spawn(move || {
-            let marks = work(&this);
-            let _ = this.contour_marks.set(marks);
-        });
+        let _ = std::thread::Builder::new()
+            .name("contour-heights".into())
+            .spawn(move || {
+                let marks = work(&this);
+                let _ = this.contour_marks.set(marks);
+            });
     }
 
     /// The marks of every chunk, reading only the contour lines' records (fills and other lines are skipped).
@@ -766,7 +806,11 @@ impl MapSurface {
             for _ in 0..n {
                 pts.push(self.to_world(r.f32()?, r.f32()?));
             }
-            out.extend(height_marks(&pts, (w + self.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
+            out.extend(height_marks(
+                &pts,
+                (w + self.terrain_offset).round() as i32,
+                class == LINE_CONTOUR_INDEX,
+            ));
         }
         Some(())
     }
@@ -775,7 +819,10 @@ impl MapSurface {
     /// the map does not name it.
     pub fn rail_kind(&self, vehicle_path: &str) -> Option<u8> {
         let p = vehicle_path.to_lowercase().replace('\\', "/");
-        self.rail_kinds.iter().find(|(part, _)| p.contains(part.as_str())).map(|k| k.1)
+        self.rail_kinds
+            .iter()
+            .find(|(part, _)| p.contains(part.as_str()))
+            .map(|k| k.1)
     }
 
     /// Whether line record `i` holds on `date` (yyyymmdd; 0 = not known: all do).
@@ -787,11 +834,17 @@ impl MapSurface {
     /// The map's timetable (`TTData`, with the eras in force): departures and the time at each stop, per line.
     /// Never waits: None while it is read (away from the frame), and read again when the date (yyyymmdd; the eras
     /// and the school period follow it) changes.
-    pub fn times(&self, chrono: &[std::path::PathBuf], date: i32) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
+    pub fn times(
+        &self,
+        chrono: &[std::path::PathBuf],
+        date: i32,
+    ) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
         self.times
             .get_or_init(|| {
                 let (dir, chrono) = (self.map_dir.clone(), chrono.to_vec());
-                crate::line_times::TimesCache::new(move |date| crate::line_times::LineTimes::load(&dir, &chrono, date))
+                crate::line_times::TimesCache::new(move |date| {
+                    crate::line_times::LineTimes::load(&dir, &chrono, date)
+                })
             })
             .get(date)
     }
@@ -847,7 +900,11 @@ impl MapSurface {
             }
             street = best
                 .filter(|b| b.0 <= reach)
-                .map(|b| Street { name: self.name(b.1), speed: b.2, heavy: if b.3 == b.2 { 0 } else { b.3 } })
+                .map(|b| Street {
+                    name: self.name(b.1),
+                    speed: b.2,
+                    heavy: if b.3 == b.2 { 0 } else { b.3 },
+                })
                 .filter(|s| !s.name.is_empty());
         }
         street
@@ -885,7 +942,10 @@ impl MapSurface {
                 continue;
             }
             let Some(icon_path) = package_relative(f[0]) else {
-                log::warn!("map surface: icon path \"{}\" is not inside the package: line ignored", f[0]);
+                log::warn!(
+                    "map surface: icon path \"{}\" is not inside the package: line ignored",
+                    f[0]
+                );
                 continue;
             };
             let (Ok(width), Ok(x), Ok(y)) = (
@@ -898,7 +958,10 @@ impl MapSurface {
             if !(width > 0.0 && width < 512.0) || !x.is_finite() || !y.is_finite() {
                 continue;
             }
-            let icon = match files.iter().position(|n| n.eq_ignore_ascii_case(&icon_path)) {
+            let icon = match files
+                .iter()
+                .position(|n| n.eq_ignore_ascii_case(&icon_path))
+            {
                 Some(i) => i,
                 None => {
                     let path = dir.join(&icon_path);
@@ -936,7 +999,8 @@ impl MapSurface {
         }
         let sizes: Vec<(u32, u32)> = images.iter().map(|i| (i.width, i.height)).collect();
         let (w, h, pos) = pack_icons(&sizes);
-        self.markers.retain(|m| pos.get(m.icon).is_some_and(Option::is_some));
+        self.markers
+            .retain(|m| pos.get(m.icon).is_some_and(Option::is_some));
         if self.markers.is_empty() {
             return;
         }
@@ -1106,7 +1170,14 @@ impl MapSurface {
     /// The surface as vertices (relative to `anchor`, drawn under the roads): built-up
     /// land, green, water, then rivers, rail and borders. `near` limits it to the chunks
     /// within a radius of a point (the tilted navigator); None builds the whole map.
-    pub fn build(&self, p: &mut Painter, anchor: DVec2, near: Option<(DVec2, f64)>, light: bool, contours: f32) {
+    pub fn build(
+        &self,
+        p: &mut Painter,
+        anchor: DVec2,
+        near: Option<(DVec2, f64)>,
+        light: bool,
+        contours: f32,
+    ) {
         let strength = contours;
         let contours = contours > 0.0;
         let rel = |q: DVec2| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
@@ -1155,7 +1226,10 @@ impl MapSurface {
             }
         }
         // rivers under rail under borders; a river's width tells river from stream
-        for want in [LINE_RIVER, LINE_RAIL, LINE_BORDER].into_iter().filter(|w| !contours || *w != LINE_BORDER) {
+        for want in [LINE_RIVER, LINE_RAIL, LINE_BORDER]
+            .into_iter()
+            .filter(|w| !contours || *w != LINE_BORDER)
+        {
             for (class, w, pts) in lines.iter().filter(|l| l.0 == want) {
                 let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
                 match *class {
@@ -1172,7 +1246,10 @@ impl MapSurface {
         }
         // the terrain's contour lines (on request), the index lines heavier
         if contours {
-            for (class, _, pts) in lines.iter().filter(|l| l.0 == LINE_CONTOUR || l.0 == LINE_CONTOUR_INDEX) {
+            for (class, _, pts) in lines
+                .iter()
+                .filter(|l| l.0 == LINE_CONTOUR || l.0 == LINE_CONTOUR_INDEX)
+            {
                 let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
                 if *class == LINE_CONTOUR_INDEX {
                     p.ribbon(&v, 1.9, 1.5, pal.contour.alpha(strength), false);
@@ -1310,7 +1387,11 @@ fn street_in_chunk(body: &[u8], p: DVec2, best: &mut Option<(f64, u32, u32, u32)
         let width = r.f32()?;
         let name = r.u32()?;
         let n = r.u32()? as usize;
-        let (speed, heavy) = if class == LINE_STREET_LIMITS { (width.max(0.0).round() as u32, flags as u32) } else { (0, 0) };
+        let (speed, heavy) = if class == LINE_STREET_LIMITS {
+            (width.max(0.0).round() as u32, flags as u32)
+        } else {
+            (0, 0)
+        };
         if class != LINE_STREET && class != LINE_STREET_LIMITS {
             r.take(n.checked_mul(8)?)?;
             continue;
@@ -1575,13 +1656,35 @@ mod tests {
 
     #[test]
     fn icon_paths_stay_inside_the_package() {
-        assert_eq!(package_relative("icons/stop.png").as_deref(), Some("icons/stop.png"));
-        assert_eq!(package_relative("icons\\stop.png").as_deref(), Some("icons/stop.png"));
+        assert_eq!(
+            package_relative("icons/stop.png").as_deref(),
+            Some("icons/stop.png")
+        );
+        assert_eq!(
+            package_relative("icons\\stop.png").as_deref(),
+            Some("icons/stop.png")
+        );
         assert_eq!(package_relative("a/b/c.png").as_deref(), Some("a/b/c.png"));
         for bad in [
-            "", "  ", "/etc/x.png", "\\x.png", "C:/a.png", "C:\\a.png", "C:a.png", "\\\\server\\share\\a.png",
-            "icons/../../x", "../x.png", "./x.png", "a//b.png", "a/./b.png", "icons/", "a/b:c.png",
-            "a/.../x.png", ".../x.png", "a/.. /x.png", "a/ /x.png",
+            "",
+            "  ",
+            "/etc/x.png",
+            "\\x.png",
+            "C:/a.png",
+            "C:\\a.png",
+            "C:a.png",
+            "\\\\server\\share\\a.png",
+            "icons/../../x",
+            "../x.png",
+            "./x.png",
+            "a//b.png",
+            "a/./b.png",
+            "icons/",
+            "a/b:c.png",
+            "a/.../x.png",
+            ".../x.png",
+            "a/.. /x.png",
+            "a/ /x.png",
         ] {
             assert_eq!(package_relative(bad), None, "{bad:?}");
         }
@@ -1594,7 +1697,11 @@ mod tests {
         assert_eq!(pos[3], Some((902, 902)));
         let (w, h, pos) = pack_icons(&[(1024, 1024), (1024, 1024)]);
         assert!(w <= 2048 && h <= 2048, "{w}x{h}");
-        assert_eq!(pos, vec![Some((1, 1)), None], "the second does not fit and is left out");
+        assert_eq!(
+            pos,
+            vec![Some((1, 1)), None],
+            "the second does not fit and is left out"
+        );
         let (w, h, pos) = pack_icons(&[(10, 6), (4, 4)]);
         assert_eq!((w, h), (17, 8));
         assert_eq!(pos, vec![Some((1, 1)), Some((12, 1))]);
@@ -1656,7 +1763,14 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
         let kinds: Vec<u8> = lines.iter().map(|l| l.modal).collect();
         assert_eq!(
             kinds,
-            [MODAL_BUS, MODAL_TRAM, MODAL_METRO, MODAL_RAIL, MODAL_BUS, MODAL_BUS]
+            [
+                MODAL_BUS,
+                MODAL_TRAM,
+                MODAL_METRO,
+                MODAL_RAIL,
+                MODAL_BUS,
+                MODAL_BUS
+            ]
         );
         // a line with no kind or dates is a bus line open at both ends
         assert_eq!((lines[0].from, lines[0].to), (0, 0));
@@ -1725,7 +1839,10 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
         let mut b = Vec::new();
         b.extend(0u32.to_le_bytes());
         b.extend(2u32.to_le_bytes());
-        for (class, h, y) in [(LINE_CONTOUR, 100.0f32, 0.0f32), (LINE_CONTOUR_INDEX, 120.0, 100.0)] {
+        for (class, h, y) in [
+            (LINE_CONTOUR, 100.0f32, 0.0f32),
+            (LINE_CONTOUR_INDEX, 120.0, 100.0),
+        ] {
             b.extend([class, 0]);
             b.extend(h.to_le_bytes());
             b.extend(u32::MAX.to_le_bytes());
@@ -1758,26 +1875,51 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
     #[test]
     fn heights_are_marked_along_a_line_and_not_too_close() {
         // a straight line of 100 m segments, 2 km long
-        let pts: Vec<DVec2> = (0..=20).map(|i| DVec2::new(i as f64 * 100.0, 0.0)).collect();
+        let pts: Vec<DVec2> = (0..=20)
+            .map(|i| DVec2::new(i as f64 * 100.0, 0.0))
+            .collect();
         let idx = height_marks(&pts, 120, true);
         // first once 150 m are run (the segment 100-200 m), then 700 m of line further on (counted from where it was reached)
-        assert_eq!(idx.iter().map(|m| m.at.x).collect::<Vec<_>>(), vec![150.0, 850.0, 1550.0]);
+        assert_eq!(
+            idx.iter().map(|m| m.at.x).collect::<Vec<_>>(),
+            vec![150.0, 850.0, 1550.0]
+        );
         assert!(idx.iter().all(|m| m.index && m.height == 120));
         let plain = height_marks(&pts, 100, false);
-        assert_eq!(plain.iter().map(|m| m.at.x).collect::<Vec<_>>(), vec![50.0, 550.0, 1050.0, 1550.0]);
+        assert_eq!(
+            plain.iter().map(|m| m.at.x).collect::<Vec<_>>(),
+            vec![50.0, 550.0, 1050.0, 1550.0]
+        );
         // close up all of them, far away only the index ones, none nearer than the minimum
         let all: Vec<ContourMark> = plain.iter().chain(&idx).copied().collect();
         let scale = |p: DVec2| Vec2::new(p.x as f32 / 4.0, 0.0); // 4 m a pixel
         let label_at = |p: Vec2, _: &ContourMark| Rect::new(p.x - 20.0, p.y - 6.0, 40.0, 12.0);
         let close = marks_to_write(&all, 4.0, 1.0, scale, |_| true, &[], label_at);
-        assert!(close.iter().any(|(_, m)| !m.index), "close up the plain lines are marked too");
+        assert!(
+            close.iter().any(|(_, m)| !m.index),
+            "close up the plain lines are marked too"
+        );
         for (i, (a, _)) in close.iter().enumerate() {
-            assert!(close.iter().skip(i + 1).all(|(b, _)| (*a - *b).length() >= 64.0));
+            assert!(close
+                .iter()
+                .skip(i + 1)
+                .all(|(b, _)| (*a - *b).length() >= 64.0));
         }
-        let far = marks_to_write(&all, 20.0, 1.0, |p| Vec2::new(p.x as f32 / 20.0, 0.0), |_| true, &[], label_at);
+        let far = marks_to_write(
+            &all,
+            20.0,
+            1.0,
+            |p| Vec2::new(p.x as f32 / 20.0, 0.0),
+            |_| true,
+            &[],
+            label_at,
+        );
         assert!(!far.is_empty() && far.iter().all(|(_, m)| m.index));
         assert!(marks_to_write(&all, 40.0, 1.0, scale, |_| true, &[], label_at).is_empty());
-        assert!(marks_to_write(&all, 4.0, 1.0, scale, |_| false, &[], label_at).is_empty(), "outside the window");
+        assert!(
+            marks_to_write(&all, 4.0, 1.0, scale, |_| false, &[], label_at).is_empty(),
+            "outside the window"
+        );
         // a label over a box already taken is left out; the others stay
         let first = close[0].0;
         let taken = [Rect::new(first.x - 5.0, first.y - 5.0, 10.0, 10.0)];
@@ -1795,7 +1937,12 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
             b.extend(v.to_le_bytes());
         }
         b.extend(4u32.to_le_bytes());
-        for (class, h, y) in [(LINE_RIVER, 3.0f32, 5.0f32), (LINE_CONTOUR, 100.0, 0.0), (LINE_STREET, 0.0, 9.0), (LINE_CONTOUR_INDEX, 120.0, 100.0)] {
+        for (class, h, y) in [
+            (LINE_RIVER, 3.0f32, 5.0f32),
+            (LINE_CONTOUR, 100.0, 0.0),
+            (LINE_STREET, 0.0, 9.0),
+            (LINE_CONTOUR_INDEX, 120.0, 100.0),
+        ] {
             b.extend([class, 0]);
             b.extend(h.to_le_bytes());
             b.extend(u32::MAX.to_le_bytes());
@@ -1811,11 +1958,20 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
 
     fn full_walk_marks(s: &MapSurface, body: &[u8]) -> Vec<ContourMark> {
         let mut out = Vec::new();
-        let _ = s.walk(body, |_, _| {}, |(class, w), pts| {
-            if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
-                out.extend(height_marks(&pts, (w + s.terrain_offset).round() as i32, class == LINE_CONTOUR_INDEX));
-            }
-        }, |_| {});
+        let _ = s.walk(
+            body,
+            |_, _| {},
+            |(class, w), pts| {
+                if class == LINE_CONTOUR || class == LINE_CONTOUR_INDEX {
+                    out.extend(height_marks(
+                        &pts,
+                        (w + s.terrain_offset).round() as i32,
+                        class == LINE_CONTOUR_INDEX,
+                    ));
+                }
+            },
+            |_| {},
+        );
         out
     }
 
@@ -1890,7 +2046,14 @@ L\t7\tALI\tNew\tbus\t20000101\t0\nR\t1\t2\t3\t0\td\t\tA - C\nP\t5 5 0 0\n";
 
     #[test]
     fn contour_lines_get_fainter_as_the_view_widens() {
-        assert_eq!((contour_strength(1.0), contour_strength(8.0), contour_strength(30.0)), (1.0, 0.5, 0.2));
+        assert_eq!(
+            (
+                contour_strength(1.0),
+                contour_strength(8.0),
+                contour_strength(30.0)
+            ),
+            (1.0, 0.5, 0.2)
+        );
     }
 
     #[test]

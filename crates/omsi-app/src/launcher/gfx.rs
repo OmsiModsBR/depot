@@ -22,7 +22,9 @@ impl Gfx {
     /// A device for `window`: on `instance` if it can, else on the next graphics interface
     /// and adapter that can (`instance` then becomes that one's), as the game opens its own.
     pub fn for_window(instance: &mut wgpu::Instance, window: &Arc<Window>) -> Result<Gfx> {
-        crate::startup::for_window(instance, window, |adapter, surface| Gfx::open(adapter, surface))
+        crate::startup::for_window(instance, window, |adapter, surface| {
+            Gfx::open(adapter, surface)
+        })
     }
 
     fn open(adapter: wgpu::Adapter, surface: &wgpu::Surface<'static>) -> Result<Gfx> {
@@ -47,13 +49,22 @@ impl Gfx {
             let lost = lost.clone();
             device.set_device_lost_callback(move |reason, message| {
                 log::warn!("launcher: graphics device lost ({reason:?}): {message}");
-                *lost.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{reason:?}: {message}"));
+                *lost.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(format!("{reason:?}: {message}"));
             });
         }
-        device.on_uncaptured_error(Arc::new(|e: wgpu::Error| log::warn!("launcher: graphics error: {e}")));
+        device.on_uncaptured_error(Arc::new(|e: wgpu::Error| {
+            log::warn!("launcher: graphics error: {e}")
+        }));
         let adapter_name = format!("{} ({:?})", info.name, info.backend);
         log::info!("launcher: drawing on {adapter_name}, {format:?}");
-        Ok(Gfx { device, queue, format, adapter_name, lost })
+        Ok(Gfx {
+            device,
+            queue,
+            format,
+            adapter_name,
+            lost,
+        })
     }
 
     /// Let the device go (a lost one without wgpu's panic reaching the launcher).
@@ -101,7 +112,13 @@ impl Drop for WinSurface {
         // the frame it was drawing never finishes, and letting the surface go tears the
         // swapchain down under it (a Vulkan validation panic, and the launcher gone instead of
         // drawing again on a new device, #274). The window keeps it until the process ends.
-        if !std::thread::panicking() && self.lost.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+        if !std::thread::panicking()
+            && self
+                .lost
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_none()
+        {
             // SAFETY: dropped only here, once
             unsafe { std::mem::ManuallyDrop::drop(&mut self.surface) };
         }
@@ -109,8 +126,16 @@ impl Drop for WinSurface {
 }
 
 impl WinSurface {
-    pub fn new(instance: &wgpu::Instance, window: Arc<Window>, gfx: &Gfx, width: u32, height: u32) -> Result<WinSurface> {
-        let surface = instance.create_surface(window).map_err(|e| anyhow!("create_surface: {e}"))?;
+    pub fn new(
+        instance: &wgpu::Instance,
+        window: Arc<Window>,
+        gfx: &Gfx,
+        width: u32,
+        height: u32,
+    ) -> Result<WinSurface> {
+        let surface = instance
+            .create_surface(window)
+            .map_err(|e| anyhow!("create_surface: {e}"))?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: gfx.format(),
@@ -122,7 +147,11 @@ impl WinSurface {
             view_formats: vec![],
         };
         surface.configure(&gfx.device, &config);
-        Ok(WinSurface { surface: std::mem::ManuallyDrop::new(surface), config, lost: gfx.lost.clone() })
+        Ok(WinSurface {
+            surface: std::mem::ManuallyDrop::new(surface),
+            config,
+            lost: gfx.lost.clone(),
+        })
     }
 
     pub fn resize(&mut self, gfx: &Gfx, width: u32, height: u32) {

@@ -230,22 +230,31 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
         "arrow.sco",
         "[groups]\n1\nUtilities\n[friendlyname]\nRoute Arrow Left\n[helparrow]\n[nocollision]\n[mesh]\narrow.x\n",
     );
-    fixture.write("arrow.x", r#"xof 0303txt 0032
+    fixture.write(
+        "arrow.x",
+        r#"xof 0303txt 0032
         Mesh arrow {
             3; 0;0;2;, 1;0;2;, 0;1;2;;
             1; 3;0,1,2;;
             MeshMaterialList {1;1;0;; Material {1;1;1;1;;0;0;0;0;;0;0;0;;}}
         }
-    "#);
+    "#,
+    );
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
-    let object = world.object_type("arrow.sco").expect("synthetic route arrow must load");
+    let object = world
+        .object_type("arrow.sco")
+        .expect("synthetic route arrow must load");
     assert!(object.sco.is_help_arrow);
     let instance = crate::startup::graphics_instance();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
+        omsi_render::RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
     ))
     .expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -285,15 +294,37 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
     while !world.upload_step(&renderer, &mut scene, &mut upload, None) {}
     while !world.place_step(&renderer, &mut scene, &mut upload, None) {}
     world.commit_upload(upload, &mut LoadStats::default());
-    let arrows = world.help_arrows.lock().get(&(0, 0)).cloned().unwrap_or_default();
+    let arrows = world
+        .help_arrows
+        .lock()
+        .get(&(0, 0))
+        .cloned()
+        .unwrap_or_default();
     assert!(!arrows.is_empty(), "the arrow is put up with its tile");
-    let shown = |scene: &Scene| arrows.iter().map(|i| scene.instances[*i].visible).collect::<Vec<_>>();
-    assert!(shown(&scene).iter().all(|v| !v), "hidden while the route arrows are off");
+    let shown = |scene: &Scene| {
+        arrows
+            .iter()
+            .map(|i| scene.instances[*i].visible)
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        shown(&scene).iter().all(|v| !v),
+        "hidden while the route arrows are off"
+    );
     assert!(arrows.iter().all(|i| !scene.instances[*i].casts_shadow));
     world.show_help_arrows(&renderer, &mut scene, true);
-    assert!(shown(&scene).iter().all(|v| *v), "drawn once they are switched on");
+    assert!(
+        shown(&scene).iter().all(|v| *v),
+        "drawn once they are switched on"
+    );
     world.show_help_arrows(&renderer, &mut scene, false);
-    assert!(shown(&scene).iter().all(|v| !v), "hidden again once they are off");
+    assert!(
+        shown(&scene).iter().all(|v| !v),
+        "hidden again once they are off"
+    );
     world.unload_tile(&renderer, &mut scene, (0, 0), None);
-    assert!(world.help_arrows.lock().is_empty(), "the tile's arrows go with it");
+    assert!(
+        world.help_arrows.lock().is_empty(),
+        "the tile's arrows go with it"
+    );
 }
