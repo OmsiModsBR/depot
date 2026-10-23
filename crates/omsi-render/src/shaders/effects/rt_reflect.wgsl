@@ -220,9 +220,7 @@ struct VsOut {
 
 @vertex
 fn vs_full(@builtin(vertex_index) i: u32) -> VsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    return VsOut(vec4<f32>(x, y, 0.0, 1.0));
+    return VsOut(fullscreen_vertex(i).clip);
 }
 
 @fragment

@@ -7,6 +7,7 @@ use crate::gpu::{
 };
 use crate::passes::PostPass;
 use crate::scene::{Scene, TextureId};
+use crate::shaders::with_fullscreen;
 use std::sync::Arc;
 
 /// Helper for windowed rendering.
@@ -195,7 +196,9 @@ pub(crate) fn upscale_pipelines(
     log::info!("renderer: compiling the upscaler shaders");
     let upscale_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("upscale"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/output/upscale.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(
+            with_fullscreen(include_str!("../shaders/output/upscale.wgsl")).into(),
+        ),
     });
     let upscale_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("upscale"),

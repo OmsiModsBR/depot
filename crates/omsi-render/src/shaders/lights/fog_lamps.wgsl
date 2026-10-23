@@ -25,11 +25,7 @@ struct FogVsOut {
 
 @vertex
 fn vs_fog_lamps(@builtin(vertex_index) i: u32) -> FogVsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: FogVsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    return out;
+    return FogVsOut(fullscreen_vertex(i).clip);
 }
 
 // The camera, the direction through a full-size pixel position and the distance to what

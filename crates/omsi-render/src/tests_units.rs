@@ -299,14 +299,23 @@ fn shaders_validate_and_match_the_uniforms() {
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
         ("snow", snow_shader_source()),
-        ("post", include_str!("shaders/post/post.wgsl").to_string()),
-        ("ssao", include_str!("shaders/post/ssao.wgsl").to_string()),
+        (
+            "post",
+            with_fullscreen(include_str!("shaders/post/post.wgsl")),
+        ),
+        (
+            "ssao",
+            with_fullscreen(include_str!("shaders/post/ssao.wgsl")),
+        ),
         ("puddles", puddles::shader_source()),
         (
             "upscale",
-            include_str!("shaders/output/upscale.wgsl").to_string(),
+            with_fullscreen(include_str!("shaders/output/upscale.wgsl")),
         ),
-        ("mip", include_str!("shaders/assets/mip.wgsl").to_string()),
+        (
+            "mip",
+            with_fullscreen(include_str!("shaders/assets/mip.wgsl")),
+        ),
         (
             "xr_ui",
             include_str!("shaders/output/xr_ui.wgsl").to_string(),

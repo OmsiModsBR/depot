@@ -59,6 +59,7 @@ pub(crate) struct Uniform {
 
 pub(crate) fn shader_source() -> String {
     [
+        include_str!("../shaders/common/fullscreen.wgsl"),
         include_str!("../shaders/common/colour.wgsl"),
         include_str!("../shaders/common/puddle_common.wgsl"),
         include_str!("../shaders/effects/puddle_reflection.wgsl"),
