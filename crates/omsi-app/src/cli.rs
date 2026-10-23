@@ -184,9 +184,6 @@ pub(crate) struct Args {
     /// Offscreen: also save images at these seconds of the --drive run (out_<t>.png).
     #[arg(long)]
     pub(crate) snapshots: Option<String>,
-    /// Vehicle physics: rigid (default) or simple (kinematic).
-    #[arg(long, default_value = "rigid")]
-    pub(crate) physics: String,
     /// Day of year override (set by --situation).
     #[arg(long, hide = true)]
     pub(crate) day_of_year: Option<i32>,
