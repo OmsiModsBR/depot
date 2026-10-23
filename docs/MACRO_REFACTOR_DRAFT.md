@@ -1,6 +1,31 @@
 # Macro-refatoração do depot (rascunho)
 
-Rascunho de 10/10/2026, fechado para as trilhas 0 e 1 em 11/10/2026. Revisto em 16/10/2026 com a auditoria estática do código (seção [Auditoria de 16/10/2026](#auditoria-de-16102026)).
+Rascunho de 10/10/2026, fechado para as trilhas 0 e 1 em 11/10/2026. Revisto em 16/10/2026 com a auditoria estática do código (seção [Auditoria de 16/10/2026](#auditoria-de-16102026)). Revisto de novo em 23/10/2026 (seção [Revisão de 23/10/2026](#revisão-de-23102026)), com a nova interface, o launcher como processo próprio e o renderer Direct3D 9, e ganhou a [Trilha App](#trilha-app-omsi-app-por-domínio), que junta tudo o que mexe no `omsi-app`, inclusive o código novo da interface, do launcher e da saída Direct3D 9.
+
+## Revisão de 23/10/2026
+
+Revisão do plano contra o `main` em `e99b624` (PR #398), a issue #61 e os PRs abertos.
+
+**O que terminou desde 16/10/2026.** A Trilha F (F0 a F3, PRs #144 a #178), a Trilha S (S1 a S5, até o #386) e, da Trilha 3, D5, D6, C5 e o passo 3 da C6. Na Trilha 3 sobram o fix-25 e o passo 1 da C6, que esta revisão reescreve. A Trilha 4 não começou.
+
+**O que entrou e o plano não previa.**
+
+- **A nova interface** (#166, PRs de cerca de #250 a #380). O menu Esc e as páginas atrás dele, a barra Alt e suas janelas, a janela de adicionar veículo, o relatório de fim de viagem e a tela de carregamento são desenhados por `omsi-ui`, a partir de `omsi-app/src/new_ui*.rs` (6,8 mil linhas), também na tela tripla e no VR. O foco por teclado do kit entrou em `omsi_ui::nav` (#321), desligado até uma página pedir. O desenho está em `docs/NEW_UI_FOUNDATIONS.md`.
+- **O launcher como processo próprio.** Sem argumentos, o binário abre só o launcher, com o pipeline da interface e sem cena, scripts ou áudio; a sessão é um processo filho, e a prévia do ônibus vem de um ajudante (`--preview-helper`). Entrou o crate `omsi-launcher-ui` (a barra lateral, as páginas de veículos e mapas e os tokens do `look.rs`), mas `omsi-app/src/launcher/` cresceu de 12,8 mil para 19,2 mil linhas.
+- **O renderer Direct3D 9Ex** (`omsi-render-d3d9`, PRs #341 a #358 e #371), uma opção de renderização desligada por padrão, só no Windows. Nesse modo o `omsi-render` roda num dispositivo que não desenha e faz a contabilidade (cena, culling, nível de detalhe, ordem de alpha); ele entrega o plano de cada quadro e os eventos de asset (`set_plan_sink`, `set_asset_mirror`, `api/mirror.rs`) ao crate novo, pela cola em `omsi-app/src/d3d9_output.rs`.
+
+**Números de hoje.** O `omsi-app` tem 144,3 mil linhas (eram 124,8 mil), o `omsi-ui` 13,9 mil (eram cerca de 4,6 mil), o `omsi-launcher-core` 10,4 mil (eram 6,0 mil), o `omsi-sim` 42,0 mil, o `omsi-render` 28,6 mil, e os crates novos têm 3,2 mil (`omsi-launcher-ui`) e 6,5 mil (`omsi-render-d3d9`). O alvo de "`omsi-app` abaixo de 50 mil linhas" ficou mais longe.
+
+**O que muda no plano.**
+
+1. **Uma trilha só para o `omsi-app`**, a [Trilha App](#trilha-app-omsi-app-por-domínio), pedida pelo mantenedor: a formatação do crate, os testes fora de `src/`, a nova interface, a saída gráfica, o HUD, o launcher e as pastas por domínio na fase 1; a Trilha 4 passa a ser a fase 2 dela.
+2. **O passo 1 da C6 é reescrito.** Levar o menu do jogo para o kit, um de cada vez, já aconteceu por outro caminho. O que sobra é separar os dados e os retângulos de clique do HUD do desenho em CPU de `ui.rs` (Trilha App) e aposentar esse desenho (trilha da nova interface). Ver [C6](#c6-uma-pilha-de-ui-nova-16102026).
+3. **A D1 é o registro de configurações do #151.** A tabela `SettingSpec` passa a alimentar quatro consumidores: o jogo, o launcher antigo, as páginas novas do launcher e as janelas de configuração do menu Esc.
+4. **A linha `omsi-launcher` da E2 sai.** O launcher deixa o app para `omsi-launcher-ui` (interface) e `omsi-launcher-core` (lógica), no passo AP6 da Trilha App.
+5. **Entra a C7**, o contrato do segundo renderer: o plano de quadro e os eventos de asset do `omsi-render` documentados e testados, e as constantes que Rust, WGSL e HLSL compartilham num lugar só. Ver [C7](#c7-o-contrato-do-segundo-renderer-nova-23102026).
+6. **A rede de segurança não cobre o Direct3D 9.** O golden roda no lavapipe, sobre o wgpu, e os testes de dispositivo do Direct3D 9 só rodam no Windows com driver; o job do Windows no CI é informativo. O frame passa a ter três caminhos (janela no wgpu, janela no Direct3D 9 e offscreen), o que reforça a Frente B.
+
+**Sobras registradas dos itens concluídos.** Da trilha 0, o `offscreen-golden` ainda é informativo. Da C5, o `GrowBuffer`, o reaproveitamento dos bind groups do overlay no VR, as partes de `Renderer::open_on` que só falam com o wgpu (para `gpu/`) e os `Vec` locais que ainda restam em `draw_lists`. Da D6, o índice de texturas que pula `.jpeg`, se isso vira `fix/`. Da Trilha S, `people/omsi_anim.rs::advance` (206 linhas). Da A2, o `scripts/fmt-merge.sh` e o `.git-blame-ignore-revs`, que nunca foram criados; os crates fora da lista bloqueante do `fmt --check` são `omsi-app`, `omsi-launcher-core`, `omsi-launcher-ui`, `omsi-render-d3d9`, `omsi-html`, `omsi-net` e `omsi-plugin`. A3 e A4 não começaram. A parte de testes de `.o3d` do fix-25 já foi feita pelo passo 1 da D6 (#208).
 
 ## Revisão de 16/10/2026
 
@@ -113,13 +138,13 @@ Não são refatoração. Cada um é um PR `fix/` próprio, na fila normal e com 
 
 | # | Onde | Problema | Situação |
 | --- | --- | --- | --- |
-| B1 | `omsi-render/src/renderer/prepare.rs:213,248` | O fallback sem MSAA ou sem RT recria o `Renderer` inteiro e perde o que o jogo já enviou: texturas de corona e fumaça, tiles do atlas de light-map, `dynamic_scale` e as opções em tempo de execução | em correção |
-| B2 | `omsi-app/src/condensation.rs:236` | Umidade absoluta (g/m³) usada como ponto de orvalho (°C), o que embaça os vidros cedo demais no frio | em correção |
-| B3 | `omsi-app/src/world_load.rs:18` | `season_folder` carrega o clima só para ler a neve: liga o modelo global, escreve globais e, com `metar:`, busca o METAR uma segunda vez com bloqueio de até 6 s | em correção |
-| B4 | `omsi-app/src/launcher/pages.rs:2085` | `save_gamectrler` grava sem rename atômico e sem a checagem de ida e volta, e sem pasta de conteúdo salva em `~/.depot/Inputs`, que o jogo não lê | PR #140 |
-| B5 | `omsi-render/src/output/diagnostics.rs` | `GpuTimers::collect` lê o buffer mapeado sem a proteção contra pânico depois da perda do dispositivo | a abrir |
-| B6 | `omsi-app/src/weather_time.rs:101` | `change_weather` busca o METAR na thread principal | a abrir |
-| B7 | `omsi-render/src/passes/depth.rs` | O blur do SSAO usa o rótulo `"ssao"` do passe anterior | a abrir, trivial |
+| B1 | `omsi-render/src/renderer/prepare.rs:213,248` | O fallback sem MSAA ou sem RT recria o `Renderer` inteiro e perde o que o jogo já enviou: texturas de corona e fumaça, tiles do atlas de light-map, `dynamic_scale` e as opções em tempo de execução | corrigido |
+| B2 | `omsi-app/src/condensation.rs:236` | Umidade absoluta (g/m³) usada como ponto de orvalho (°C), o que embaça os vidros cedo demais no frio | corrigido |
+| B3 | `omsi-app/src/world_load.rs:18` | `season_folder` carrega o clima só para ler a neve: liga o modelo global, escreve globais e, com `metar:`, busca o METAR uma segunda vez com bloqueio de até 6 s | corrigido |
+| B4 | `omsi-app/src/launcher/pages.rs:2085` | `save_gamectrler` grava sem rename atômico e sem a checagem de ida e volta, e sem pasta de conteúdo salva em `~/.depot/Inputs`, que o jogo não lê | corrigido (#140) |
+| B5 | `omsi-render/src/output/diagnostics.rs` | `GpuTimers::collect` lê o buffer mapeado sem a proteção contra pânico depois da perda do dispositivo | corrigido: a leitura passa por `catch` |
+| B6 | `omsi-app/src/weather_time.rs:101` | `change_weather` busca o METAR na thread principal | a conferir (23/10/2026) |
+| B7 | `omsi-render/src/passes/depth.rs` | O blur do SSAO usa o rótulo `"ssao"` do passe anterior | aberto: o tempo já se chama `"ssao blur"`, o passe continua `"ssao"` |
 
 ### Backlog da auditoria e onde cada item entra
 
@@ -145,10 +170,10 @@ Os ids `fix-N` são do backlog da auditoria, não nomes de branch. Prioridade P0
 | fix-19 | P2 | Módulo `weather/` com `WeatherState` e `WeatherChoice` | E3 |
 | fix-20 | P2 | Lógica e passes fora de `api/`; `post_pass` mais amplo; script de camadas com imports agrupados | C5 |
 | fix-21 | P2 | Includes WGSL comuns (Camera, VS de tela cheia, sRGB, FXAA, guarda contra NaN) | C5 |
-| fix-22 | P2 | Um kit de widgets só, em `omsi-ui`, usado também pelo menu do jogo | C6 |
+| fix-22 | P2 | Um kit de widgets só, em `omsi-ui`, usado também pelo menu do jogo | C6 (o menu do jogo já é do `omsi-ui` desde a nova interface; ver a revisão de 23/10/2026) |
 | fix-23 | P2 | `navigator.rs` em `nav/`; o caminho mais curto para `omsi-sim` | C6 |
 | fix-24 | P3 | Alocações por frame | Fase de performance do mapa, item a item |
-| fix-25 | P3 | Comentários `SAFETY` nos `unsafe`, `bytemuck` no lugar de slices à mão, testes de `.o3d` | Trilha 3 |
+| fix-25 | P3 | Comentários `SAFETY` nos `unsafe`, `bytemuck` no lugar de slices à mão, testes de `.o3d` | Trilha 3 (os testes de `.o3d` entraram na D6, #208; `omsi-render` feito no #398) |
 
 ### Regras que valem para o backlog
 
@@ -199,6 +224,8 @@ O ganho é que o binário do jogo deixa de compilar cerca de 23 mil linhas, o cl
 4. Tirar o `continue-on-error` do passo de fmt em `depot-ci.yml` e atualizar a linha em `docs/QUALITY.md`.
 
 O risco é baixo: rustfmt não muda semântica, e os traços da física e o golden confirmam isso.
+
+O `omsi-app`, junto com o `scripts/fmt-merge.sh`, o `.git-blame-ignore-revs` e os crates que entraram depois (`omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9`), é o passo AP1 da [Trilha App](#trilha-app-omsi-app-por-domínio).
 
 ### A3. Clippy por crate
 
@@ -368,6 +395,26 @@ Hoje o jogo tem `ui.rs`, que rasteriza na CPU, `omsi-ui`, que desenha na GPU, e 
 
 O "OPENOMSI" do menu (`ui.rs:1430`) é um PR `fix/` de uma linha, sem esperar esta frente.
 
+**Revisão de 23/10/2026.** A nova interface fez o essencial do passo 1 por outro caminho: o menu Esc, as páginas atrás dele (configurações, listas, drop-downs), a barra Alt e suas janelas e a tela de carregamento já são desenhados por `omsi_ui` (`pause_menu`, `menu_page`, `alt_bar`, `alt_windows`, `loading`), e o foco por teclado que o 1b esperava entrou no #321. O `hud.rs` caiu para 202 linhas. O que sobra:
+
+- O `ui.rs` (2.431 linhas) ainda desenha em CPU o chat, os avisos, os nomes, o tutorial, o horário, a barra de informações e a lista de escolha (`draw_menu`, 406 linhas), e é a fonte dos dados e dos retângulos de clique das páginas novas (`new_ui_pages` usa `ui::Frame` e `write_hits`). Separar os dados do desenho é estrutura e entra na Trilha App (AP3 e AP5). Levar o que o `ui.rs` ainda desenha para o `omsi-ui` muda o que aparece na tela e fica com a trilha da nova interface (#166), com capturas antes e depois. Quando nada mais usar o desenho em CPU, ele vai para trás de uma feature desligada e a cópia da Roboto sai.
+- O "OPENOMSI" continua lá, agora em `ui.rs:1396`.
+- O passo 2 continua valendo e rende mais: as linhas de `game_lists.rs` alimentam também o `omsi_ui::menu_page`. Vai para a fase 2 da Trilha App, junto da C2.
+- O passo 4 (um arquivo de perfil por ônibus) não começou.
+- O passo 5 foi atendido em parte pelo índice de conteúdo do `omsi-launcher-core` (`index.rs`); falta conferir se o jogo ainda lista pastas por conta própria.
+- O `omsi_ui::theme` e o `look.rs` do `omsi-launcher-ui` são dois conjuntos de tokens, de propósito, até o launcher novo virar o padrão (passo 5 da migração em `docs/NEW_UI_FOUNDATIONS.md`).
+
+### C7. O contrato do segundo renderer (nova, 23/10/2026)
+
+Com a opção "DirectX9 (D3D9Ex)", o `omsi-render` passou a ter um consumidor de fora: o `omsi-render-d3d9` lê o plano de cada quadro (`FramePlan`) e os eventos de asset (`MirrorEvent`, `AssetMirror`), e os seus shaders HLSL (`scene.hlsl`, `ui.hlsl`) seguem os layouts do renderer padrão (o vértice, os parâmetros de instância, os 11 vetores do material, o uniform da câmera). Nenhum teste prende esse contrato, e o portão da C5 ("nenhum Camera copiado em WGSL") não enxerga o HLSL.
+
+- Documentar o contrato no `crates/omsi-render/ARCHITECTURE.md` e cobri-lo com testes do lado do `omsi-render`, para que uma mudança de estrutura no renderer não quebre o Direct3D 9 sem aviso.
+- Pôr num lugar só as constantes que Rust, WGSL e HLSL compartilham (`ALPHA_CUT`, `ALPHA_TEST_REF`, o tamanho do material, o layout do vértice e da instância), com um teste no estilo de `camera_wgsl_matches_camera_uniform`.
+- Manter o desenho de hoje (o `omsi-render` contabiliza e entrega o plano) sem um trait de backend comum, até haver uma terceira implementação.
+- Do lado do app, a escolha do backend sai das checagens espalhadas e fica num ponto só (Trilha App, AP4).
+
+Os comentários `SAFETY` do crate novo já cobrem 57 dos 62 `unsafe`; os que faltam entram no fix-25.
+
 ## Frente D: configuração
 
 O depot lê configuração por três caminhos que não conversam: variáveis de ambiente, o `settings.cfg` e a linha de comando. O problema mais sério que esta revisão encontrou está aqui: o `settings.cfg` tem **dois parsers com dois conjuntos de padrões**.
@@ -390,6 +437,8 @@ Proposta:
 - `Settings` é carregado uma vez e passado como `Arc<Settings>`, no lugar dos cerca de 20 `Settings::load()`, um deles dentro do frame.
 - Os leitores de `mirrors.cfg` viram um único `per_bus_file<T>(prefixo)`.
 - A lógica de domínio que mora na UI do launcher (`Choice` com `to_duty`, `default_hof`, estação, escolha de viagem, gravação do horário, favoritos, aeroporto mais próximo, em `state.rs`, `timetable.rs` e `drive.rs`) vai para `omsi-launcher-core`, com testes, e o jogo deixa de depender da UI do launcher (`weather_time.rs:181`, `server.rs:220`, `game_lists.rs:2197`). `pages.rs` vira uma pasta `pages/`, e os portões `if true { return }` do multiplayer viram a feature `lan`.
+
+**Revisão de 23/10/2026.** A D1 e o registro de configurações do #151 (OPT-01), que a nova interface consome, são o mesmo trabalho: a tabela `SettingSpec` é esse registro e alimenta quatro consumidores, o jogo, o launcher antigo, as páginas novas do launcher e as janelas de configuração do menu Esc. Hoje são 23 chamadas a `Settings::load()` e 362 usos de `Value`/`json!` no `omsi-launcher-core`. Os PRs `fix/launcher-*` abertos (#244 a #280) corrigem à mão, um por um, divergências que a D1 elimina por construção; como correção não espera refatoração, eles entram antes. A lógica de domínio que mora na interface do launcher vai para o `omsi-launcher-core` no passo AP6 da Trilha App.
 
 ### D2. Registro de variáveis `OMSI_*`
 
@@ -480,7 +529,7 @@ Ordem, das áreas com menos dependências para as com mais. Cada extração é u
 | --- | --- | --- | --- |
 | `omsi-html` | `omsi-sim/src/htmlengine` (DOM, layout, canvas, interpretador JS) | \~5.000 | nenhum; não é simulação |
 | `omsi-input` | `controllers.rs`, `dinput.rs`, `evdev_*`, `mac_hid.rs`, `mac_game_controller.rs`, `touch.rs`, `headtrack.rs`, `hpattern.rs`, `ffb_calibration.rs`, `keys.rs`, `stock_keys.rs` | \~8.500 | C2 (estado de entrada fora do `App`) |
-| `omsi-launcher` | `launcher/` | \~13.000 | D1 e D3 ajudam, não são obrigatórios |
+| `omsi-launcher` | `launcher/` | \~13.000 | D1 e D3 ajudam, não são obrigatórios. **Substituída em 23/10/2026:** o launcher já roda como processo próprio e sai do app para `omsi-launcher-ui` e `omsi-launcher-core` (Trilha App, AP6), sem crate novo |
 | `omsi-gameplay` | `traffic.rs`, `schedule.rs`, `schedule_paper.rs`, `humans.rs`, `humans_pax.rs`, `career.rs`, `driver.rs`, `duty_start.rs`, `journey.rs`, `money.rs`, `bus_service.rs` | \~29.000 | B4 e E1 |
 | `omsi-world` (opcional) | `scene.rs`, `tiles.rs`, `world_load.rs`, `placing.rs` | \~18.000 | E1; só se `omsi-gameplay` precisar de `World` sem o resto do app |
 
@@ -557,17 +606,23 @@ Quebrar a refatoração por crate funciona bem para 19 dos 21 crates. Não basta
 
 Em vez de fases em sequência, trilhas com portão próprio. Todas as branches de refatoração são `feat/<nome>`; mudanças de comportamento, inclusive a retirada de compensações, são `fix/<nome>`.
 
-Situação em 16/10/2026:
+Dois padrões valem para toda trilha que reorganiza um crate (decisões do mantenedor, 23/10/2026):
+
+- **Testes fora de `src/`.** Nenhum `#[cfg(test)]`, `#[test]` ou `tests.rs` em `src/`: um binário de teste por crate, com um módulo por domínio, os auxílios em `tests/support/` e o que é interno alcançado por um módulo `testing` atrás da feature `test-support`, como a Trilha S fez no `omsi-sim`. Os crates já reorganizados levam os testes para fora quando forem mexidos de novo.
+- **Pacotes por domínio em três partes**, no modelo de `omsi-sim/src/physics/`: `domain/` com os objetos, `interface/` com a entrada (`input.rs`, o que o resto do jogo chama) e a saída (`output.rs`, o que o domínio devolve e o que ele precisa de fora) e `implementation/` com os procedimentos. A trilha que cria a pasta de um domínio já a reorganiza assim. O detalhe está em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md#princípios-aplicados-a-este-crate).
+
+Situação em 23/10/2026:
 
 | Trilha | Situação |
 | --- | --- |
-| 0, caracterização | Concluída em 12/10/2026 (PRs #62 a #64). Pendente: tornar `offscreen-golden` bloqueante depois de três execuções verdes seguidas no main. O `offscreen-traces` passou a bloquear no F0 |
+| 0, caracterização | Concluída em 12/10/2026 (PRs #62 a #64). Pendente: tornar `offscreen-golden` bloqueante depois de três execuções verdes seguidas no main (em 23/10/2026 ainda é informativo). O `offscreen-traces` passou a bloquear no F0 |
 | 1, crates frios | Concluída em 12/10/2026 (PRs #65 a #80), mais a divisão do `omsi-render` em domínios e camadas (T1.6, PRs #79 a #111), com a checagem de camadas bloqueante. Ficou de fora o `FrameContext`, que passa para a Frente C5 |
 | 2, grupos mornos | Concluída em 13/10/2026 (PRs #82 a #128): A1, C3, D2, imports explícitos e `vehicle.rs` em submódulos |
-| F, física de veículo, segunda rodada | Nova, a próxima. Detalhe abaixo |
-| 3, frios e mornos da auditoria | Nova, depois da F |
-| 4, áreas quentes | A antiga trilha 3, ampliada com os itens da auditoria, depois da F |
-| S, `omsi-sim` por domínio | Nova (18/10/2026), em paralelo à 3. Detalhe em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md) |
+| F, física de veículo, segunda rodada | Concluída em 17/10/2026 (F0 a F3, PRs #144 a #178). A equalização com o OMSI 2 continua em PRs `fix/`. Detalhe abaixo |
+| 3, frios e mornos da auditoria | Começou em 17/10/2026. D5, D6, C5 e o passo 3 da C6 concluídos; faltam o fix-25 e o passo 1 da C6, reescrito em 23/10/2026 |
+| 4, áreas quentes | A antiga trilha 3, ampliada com os itens da auditoria. Não começou; desde 23/10/2026 é a fase 2 da Trilha App |
+| S, `omsi-sim` por domínio | Concluída em 23/10/2026 (S1 a S5, PRs #311 a #386). Detalhe em [`OMSI_SIM_REFACTOR.md`](OMSI_SIM_REFACTOR.md) |
+| App, `omsi-app` por domínio | Nova (23/10/2026). A fase 1 (formatação, testes, nova interface, saída gráfica, HUD, launcher e pastas por domínio) pode correr em paralelo; a fase 2 é a Trilha 4. Detalhe em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md) |
 
 Os bugs B1 a B7 não esperam nenhuma trilha.
 
@@ -632,11 +687,13 @@ Depois da Trilha F. São crates com poucos commits ou trechos pequenos, que anda
 - **C6** passos 1 e 3, kit de widgets em `omsi-ui` (fix-22) e `navigator.rs` em `nav/` (fix-23). O passo 2 depende da tabela de D1 e vai para a Trilha 4.
 - **fix-25**, comentários `SAFETY`, `bytemuck` e testes, em qualquer crate que outro item não esteja mexendo.
 
-Portão: nenhum caminho `~/.depot` ou gravação atômica fora do `omsi-cfg`, `gamectrler.cfg` só em `omsi-content`, nenhum Camera ou vertex de tela cheia copiado em WGSL, `api/` só com métodos curtos e o menu do jogo desenhado pelo kit de `omsi-ui`.
+Situação em 23/10/2026: D5 (#184 a #207), D6 (#208 a #303), C5 (#304 a #395) e o passo 3 da C6 (#182, #183) concluídos. No fix-25 só o `omsi-render` está feito (#398); faltam os `unsafe` do `omsi-app` (124, com 22 `SAFETY`), do `omsi-plugin` (18 e 3), do `omsi-launcher-core` (12 e 3) e os 5 do `omsi-render-d3d9`, e o `bytemuck`. A parte do `omsi-app` vem depois do rustfmt dele (AP1 da Trilha App), para não conflitar. O passo 1 da C6 foi reescrito (ver a C6).
+
+Portão: nenhum caminho `~/.depot` ou gravação atômica fora do `omsi-cfg`, `gamectrler.cfg` só em `omsi-content`, nenhum Camera ou vertex de tela cheia copiado em WGSL, `api/` só com métodos curtos e o menu do jogo desenhado pelo kit de `omsi-ui` (cumprido pela nova interface; o resto do HUD fica com a C6 reescrita).
 
 ### Trilha 4: áreas quentes, por janelas
 
-A antiga trilha 3, com o mesmo método de janelas curtas e anunciadas, agora com esta ordem:
+A antiga trilha 3, com o mesmo método de janelas curtas e anunciadas, agora com esta ordem. Desde 23/10/2026 ela é a fase 2 da [Trilha App](#trilha-app-omsi-app-por-domínio): o conteúdo não muda, e a linha `omsi-launcher` da E2 dá lugar ao passo AP6 de lá.
 
 1. **Perfil por escopo** (`enum Stage` e a guarda única de C2), porque a fase de performance do mapa depende dele.
 2. **Frente B** (fix-11), com a montagem e o passo compartilhados e as três divergências resolvidas em B6. Ela sobe para o começo porque, até terminar, o golden e o B0 não cobrem a janela, e as outras frentes desta trilha dependem deles como prova.
@@ -656,6 +713,23 @@ Pedida pelo mantenedor em 18/10/2026, com três objetivos: testes e auxílios de
 Em resumo, cinco PRs: rustfmt do crate, as quatro funções sem uso removidas e as cópias de `angle_diff`, do xorshift e do smoothstep trocadas (S1); todos os testes de `src/` para `tests/`, um apoio de testes só (`tests/support/`), o que é interno alcançado pela feature `test-support` e traços novos do motorista da IA e da pose das pessoas (S2); `traffic/` (S3); `people/` (S4); e `host/`, `automation/`, `collision/`, `textures/` e `vehicle/coupled/` (S5), cada um já com os imports do app nos caminhos novos. Ela não tem arquivo em comum com a Trilha 3 e prepara o `omsi-gameplay` da Trilha 4.
 
 Portão: nenhum teste em `src/`, nenhum auxílio de teste copiado, nenhuma API só de teste no jogo, nenhum arquivo funcional do `omsi-sim` acima de 800 linhas, e os traços da física, da IA, do tráfego e das pessoas idênticos em todos os PRs.
+
+### Trilha App: `omsi-app` por domínio
+
+Pedida pelo mantenedor em 23/10/2026: uma trilha só para o `omsi-app`, que cubra o código que entrou depois da revisão de 16/10/2026 e inclua a formatação do crate, que ainda é informativa. O plano completo, com o diagnóstico por domínio, a árvore alvo e a sequência de PRs, está em [`OMSI_APP_REFACTOR.md`](OMSI_APP_REFACTOR.md).
+
+O crate tem hoje 144,3 mil linhas em 155 arquivos, 109 deles na raiz de `src/`, cerca de 19,6 mil linhas de testes dentro do código, e três partes que nenhuma frente deste plano cobria: a nova interface (`new_ui*.rs`, 6,8 mil linhas), o launcher (`launcher/`, 19,2 mil, que já roda como processo próprio) e a saída pelo Direct3D 9Ex (`d3d9_output.rs`, com a escolha do backend espalhada por uma dúzia de arquivos).
+
+Em duas fases:
+
+1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `interface/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
+2. **Áreas quentes.** A Trilha 4, com o mesmo conteúdo e as mesmas janelas.
+
+Cada pasta de domínio criada na fase 1 já sai como pacote com `domain/`, `interface/` (entrada e saída) e `implementation/`. Decidido pelo mantenedor em 23/10/2026: os testes saem de `src/` (padrão do projeto), a trilha começa já pela AP1, o launcher vai para `omsi-launcher-ui` e `omsi-launcher-core`, e a pasta da nova interface se chama `interface/`.
+
+Aposentar o desenho em CPU do HUD (o passo 1 da C6, reescrito, porque o menu do jogo já é desenhado pelo `omsi-ui`) muda o que aparece na tela e fica com a trilha da nova interface, fora desta.
+
+Portão da fase 1: `fmt --check` bloqueante no `omsi-app` e nos três crates, nenhum arquivo de código na raiz além de `lib.rs` e `main.rs`, a nova interface sem dependência do desenho em CPU do HUD, o backend gráfico escolhido num ponto e o launcher fora do app, a não ser a ligação com o processo do jogo. O portão da fase 2 é o da Trilha 4.
 
 ## Preparação para implementação: trilhas 0 e 1
 
@@ -721,11 +795,16 @@ Nenhuma destas decisões bloqueia a paridade nem a triagem. A recomendação vem
 | Onde mora a matemática pequena (D5) | `omsi-geometry::util`, com a psicrometria em `omsi-content::weather` | Um `omsi-cfg::math` | `omsi-app`, `omsi-render` e `omsi-sim`, onde as cópias estão, já dependem dele |
 | Onde mora a tabela `SettingSpec` (D1) | Em `omsi-launcher-core`, junto com o `Settings` | Em `omsi-cfg` | Mantém a recomendação de D1 e um crate a menos |
 | A pilha de UI em CPU de `ui.rs` (C6) | Parar de usá-la no menu e deixá-la atrás de uma feature quando não sobrar uso | Mantê-la ativa ao lado de `omsi-ui` | Duas pilhas desenham o mesmo menu de dois jeitos |
+| Passo 1 da C6 depois da nova interface (23/10/2026) | Reescrever: separar dados e desenho do HUD na Trilha App e aposentar o desenho em CPU na trilha da nova interface | Dar o passo 1 por encerrado | O menu já é do `omsi-ui`, mas o resto do HUD ainda tem dois caminhos |
+| D1 e o #151 (23/10/2026) | Um registro só de configurações | Dois trabalhos separados | A nova interface já consome o registro do #151 |
+| PRs `fix/launcher-*` abertos e a D1 (23/10/2026) | Mesclar antes da D1 | Fechá-los e deixar a D1 resolver | Correção não espera refatoração |
+| Contrato do Direct3D 9 (C7) | Manter o `omsi-render` contabilizando e entregando o plano, documentado e testado | Um trait de backend comum | Só há duas implementações, e a segunda já funciona assim |
 
 ## Riscos e critério de sucesso
 
 - **Regressão silenciosa de comportamento.** Muitos testes pulam sem `OMSI_ROOT`, e as imagens do golden ainda não rodam no CI. Mitigação: o traço de estado B0 no CI, os traços da física (bloqueantes) e `omsi-check` antes e depois de cada fase, como o CONTRIBUTING já pede.
 - **A rede de segurança não cobre a janela** (auditoria de 16/10/2026). O golden e o B0 rodam o offscreen, que hoje tem a sua própria cópia da montagem e do passo. Uma refatoração que quebre só o caminho da janela passa no CI. Mitigação: a Frente B no começo da Trilha 4, e até lá testar manualmente no jogo cada PR que mexa no frame da janela.
+- **O Direct3D 9 fora da rede de segurança** (23/10/2026). O golden e o B0 rodam sobre o wgpu, e os testes de dispositivo do `omsi-render-d3d9` só no Windows com driver. Mitigação: a C7 e o job do Windows verde em todo PR que toque a saída gráfica.
 - **Golden dependente de máquina.** As imagens só batem no mesmo adaptador gráfico. Mitigação: o B0 compara estado, não pixels, e roda em qualquer máquina; o golden fica para as Frentes C1 e o render.
 - **Conflito com paridade e triagem.** As áreas quentes da refatoração são as mesmas onde os bugs são corrigidos. Mitigação: as regras de trabalho em paralelo (a refatoração cede, PRs curtos, reserva visível, quem move porta) e as áreas quentes só por janelas anunciadas.
 - **Branches paralelas.** Sem upstream, o conflito que importa é entre branches do próprio depot. Cada movimentação grande (A2, C1, E2) é anunciada e mergeada rápido, num momento sem branches longas abertas; o `CHANGELOG.md`, que já conflita em quase todo merge, pode passar a usar fragmentos por PR.
