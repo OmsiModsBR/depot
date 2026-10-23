@@ -234,6 +234,7 @@ fn joint_angles_on_one_sloping_plane_bend_only_alpha() {
                     lead,
                     Mat4::from_quat(plane * yaw(own)),
                     own,
+                    false,
                 );
                 assert!(beta.abs() < 1e-3, "beta {beta} at {own}° bent {bend}°");
                 assert!((alpha - bend).abs() < 1e-3, "alpha {alpha} for {bend}°");
@@ -255,12 +256,12 @@ fn joint_angles_on_level_ground_and_turned_models() {
                 10.0,
                 body_rotation(10.0, own_pitch, 0.0, reversed),
                 10.0,
+                false,
             );
             let want = (lead_pitch - own_pitch) as f64;
             assert!(alpha.abs() < 1e-3, "alpha {alpha}");
             assert!(
-                // (asin of the rise over the run: 3.004 for 3°)
-                (beta - want).abs() < 0.01,
+                (beta - want).abs() < 1e-3,
                 "beta {beta} for {want} ({reversed})"
             );
         }
@@ -269,8 +270,82 @@ fn joint_angles_on_level_ground_and_turned_models() {
             40.0,
             body_rotation(10.0, 0.0, 0.0, reversed),
             10.0,
+            false,
         );
         assert!((alpha - 30.0).abs() < 1e-3, "alpha {alpha} ({reversed})");
         assert!(beta.abs() < 1e-3, "beta {beta} ({reversed})");
+    }
+}
+
+/// Bent both ways at once - round a bend over a dip or a crest, on level ground or on a slope -
+/// a puller's rear section is the part in front turned by beta about its own transverse axis
+/// and then by alpha about the vertical of the part in front (`physics::Joint`). Its alpha and
+/// beta are those two turns, so that the bellows' last ring, turned by them in the same order
+/// (beta, then alpha), lands on the rear section. Read the pusher's way, beta came out short by
+/// the cosine of alpha (3.28° for 4° at 35°): the last ring stood off the rear section by
+/// several centimetres.
+#[test]
+fn joint_angles_bent_both_ways_rebuild_the_rear_section() {
+    use glam::{Mat4, Quat, Vec3};
+    use omsi_sim::vehicle::joint_angles;
+    let yaw = |h: f64| Quat::from_rotation_z((-h).to_radians() as f32);
+    let pitch = |p: f64| Quat::from_rotation_x(p.to_radians() as f32);
+    for plane in [
+        Quat::IDENTITY,
+        Quat::from_rotation_x(0.06f32.atan()),
+        Quat::from_rotation_y(0.04f32.atan()),
+    ] {
+        for lead_h in [0.0, 120.0, 250.0] {
+            for (bend, rise) in [(35.0, 4.0), (-45.0, -3.0), (50.0, -6.0), (-20.0, 8.0)] {
+                let lead = plane * yaw(lead_h);
+                // (alpha grows as the rear section turns left of the front, beta as it
+                // pitches down against it)
+                let own = lead * yaw(-bend) * pitch(-rise);
+                let own_h = lead_h - bend;
+                let (alpha, beta) = joint_angles(
+                    Mat4::from_quat(lead),
+                    lead_h,
+                    Mat4::from_quat(own),
+                    own_h,
+                    false,
+                );
+                assert!((alpha - bend).abs() < 1e-3, "alpha {alpha} for {bend}°");
+                assert!(
+                    (beta - rise).abs() < 1e-3,
+                    "beta {beta} for {rise}° at {bend}°"
+                );
+                // the last ring, beta and then alpha about the ball, on the rear section
+                let ring = lead * yaw(-alpha) * pitch(-beta);
+                for corner in [Vec3::new(1.25, 0.0, 3.0), Vec3::new(-1.25, 0.0, 0.0)] {
+                    let off = (ring * corner - own * corner).length();
+                    assert!(off < 1e-4, "ring {off} m off at {bend}°/{rise}°");
+                }
+            }
+        }
+    }
+}
+
+/// A pusher (`[coupling_pitch_offset]`) yaws about its own vertical and pitches about the
+/// transverse axis of the part in front: its beta is still read off the front's forward axis
+/// in the rear section's frame.
+#[test]
+fn joint_angles_of_a_pusher_bent_both_ways() {
+    use glam::{Mat4, Quat};
+    use omsi_sim::vehicle::joint_angles;
+    let yaw = |h: f64| Quat::from_rotation_z((-h).to_radians() as f32);
+    let pitch = |p: f64| Quat::from_rotation_x(p.to_radians() as f32);
+    for (bend, rise) in [(35.0, 4.0), (-45.0, -3.0)] {
+        let lead = yaw(30.0);
+        let own = lead * pitch(-rise) * yaw(-bend);
+        let (alpha, beta) = joint_angles(
+            Mat4::from_quat(lead),
+            30.0,
+            Mat4::from_quat(own),
+            30.0 - bend,
+            true,
+        );
+        assert!((alpha - bend).abs() < 1e-3, "alpha {alpha} for {bend}°");
+        // (asin of the rise over the run: 4.01 for 4°)
+        assert!((beta - rise).abs() < 0.02, "beta {beta} for {rise}°");
     }
 }
