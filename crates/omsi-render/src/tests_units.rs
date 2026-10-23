@@ -299,14 +299,23 @@ fn shaders_validate_and_match_the_uniforms() {
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
         ("snow", snow_shader_source()),
-        ("post", include_str!("shaders/post/post.wgsl").to_string()),
-        ("ssao", include_str!("shaders/post/ssao.wgsl").to_string()),
+        (
+            "post",
+            with_fullscreen(include_str!("shaders/post/post.wgsl")),
+        ),
+        (
+            "ssao",
+            with_fullscreen(include_str!("shaders/post/ssao.wgsl")),
+        ),
         ("puddles", puddles::shader_source()),
         (
             "upscale",
-            include_str!("shaders/output/upscale.wgsl").to_string(),
+            with_fullscreen(include_str!("shaders/output/upscale.wgsl")),
         ),
-        ("mip", include_str!("shaders/assets/mip.wgsl").to_string()),
+        (
+            "mip",
+            with_fullscreen(include_str!("shaders/assets/mip.wgsl")),
+        ),
         (
             "xr_ui",
             include_str!("shaders/output/xr_ui.wgsl").to_string(),
@@ -384,23 +393,6 @@ fn shaders_validate_and_match_the_uniforms() {
         let mut layouter = naga::proc::Layouter::default();
         layouter.update(module.to_ctx()).expect("layout");
         for (ty_name, rust) in sizes {
-            if *ty_name == "Camera" && *name == "corona" {
-                // Corona owns just the prefix through `cam_up`.  It must still include
-                // every member in that prefix: a missing `world_origin`, for example,
-                // makes a subsequently-added lighting use read the wrong vec4.
-                if let Some((h, _)) = module
-                    .types
-                    .iter()
-                    .find(|(_, t)| t.name.as_deref() == Some(*ty_name))
-                {
-                    assert_eq!(
-                        layouter[h].size as usize,
-                        std::mem::offset_of!(CameraUniform, clouds),
-                        "corona: Camera prefix"
-                    );
-                }
-                continue;
-            }
             if let Some((h, _)) = module
                 .types
                 .iter()
@@ -412,6 +404,75 @@ fn shaders_validate_and_match_the_uniforms() {
         }
     }
     assert_eq!(checked.len(), sizes.len(), "structs checked: {checked:?}");
+}
+
+/// `common/camera.wgsl` lays the camera out field for field as `CameraUniform`, and its
+/// light grid holds as many lights per cell as the Rust side fills.
+#[test]
+fn camera_wgsl_matches_camera_uniform() {
+    use wgpu::naga;
+    macro_rules! offsets {
+        ($($field:ident),* $(,)?) => {
+            [$((stringify!($field), std::mem::offset_of!(CameraUniform, $field))),*]
+        };
+    }
+    let rust = offsets!(
+        view_proj,
+        cam_pos,
+        world_origin,
+        sun_dir,
+        ambient,
+        fog,
+        sun_color,
+        sky_color,
+        light_grid,
+        sky,
+        cam_right,
+        cam_up,
+        clouds,
+        light_view_proj,
+        light_view_proj_far,
+        shadow,
+        post,
+        inside_a,
+        inside_b,
+        inside_c,
+        flags,
+        light_view_proj_close,
+        wind,
+        lamp_view_proj,
+        lamp_shadow,
+        tree_wind,
+    );
+    let src = include_str!("shaders/common/camera.wgsl");
+    let module =
+        naga::front::wgsl::parse_str(src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(src)));
+    let (_, camera) = module
+        .types
+        .iter()
+        .find(|(_, t)| t.name.as_deref() == Some("Camera"))
+        .expect("Camera");
+    let naga::TypeInner::Struct { members, span } = &camera.inner else {
+        panic!("Camera is not a struct");
+    };
+    let wgsl: Vec<(&str, usize)> = members
+        .iter()
+        .map(|m| (m.name.as_deref().unwrap_or(""), m.offset as usize))
+        .collect();
+    assert_eq!(wgsl, rust.to_vec());
+    assert_eq!(*span as usize, std::mem::size_of::<CameraUniform>());
+    let cell_cap = module
+        .constants
+        .iter()
+        .find(|(_, c)| c.name.as_deref() == Some("CELL_CAP"))
+        .map(|(_, c)| &module.global_expressions[c.init]);
+    assert!(
+        matches!(
+            cell_cap,
+            Some(naga::Expression::Literal(naga::Literal::U32(n))) if *n as usize == LIGHT_CELL_CAP
+        ),
+        "CELL_CAP: {cell_cap:?}"
+    );
 }
 
 /// The scene module as the OpenGL backend gets it translates to GLSL ES 3.10 and desktop

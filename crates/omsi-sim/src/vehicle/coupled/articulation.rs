@@ -7,10 +7,10 @@
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle.
 
-use super::trailer::{body_reversed, TrailerPart, ARTICULATION_SIGN};
-use crate::physics::{BodyInputs, Joint, RigidBody};
 use crate::vehicle::physics_bridge::PartWheelVars;
+use super::trailer::{body_reversed, joint_angles, TrailerPart, ARTICULATION_SIGN};
 use crate::vehicle::VehicleInstance;
+use crate::physics::{BodyInputs, Joint, RigidBody};
 use glam::{DVec3, Mat4, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
@@ -292,30 +292,9 @@ impl TrailerPart {
         // about the vertical axis - the stock articulation.osc's jackknife protection brakes
         // at |alpha| > 47° - and beta about the transverse axis. (The horizontal angle went
         // to beta: the protection never engaged, the bellows turned in the wrong plane.)
-        // The part in front is drawn pitched, this one level: beta is that difference, the
-        // part in front's pitch less this one's. (Taken the other way round, the Agora L's
-        // joint arch and bellows - `anim_rot articulation_0_beta` - tilted away from the rear
-        // section instead of towards it, twice the angle apart at the far ring.)
-        // (the pitch of the part in front as it travels, read off its rotation: forward along
-        // its heading, whichever way its model is turned)
-        let lead_pitch = {
-            let f = lead_rot.transform_vector3(Vec3::Y);
-            let h = lead_heading.to_radians();
-            let along = f.x as f64 * h.sin() + f.y as f64 * h.cos();
-            (f.z as f64)
-                .atan2(along.abs().max(1e-6) * along.signum())
-                .to_degrees()
-        };
-        let lead_pitch = if lead_pitch.abs() > 90.0 {
-            lead_pitch - 180.0 * lead_pitch.signum()
-        } else {
-            lead_pitch
-        };
-        let alpha = ((lead_heading - self.heading + 540.0) % 360.0) - 180.0;
-        // (the part in front's pitch less this one's, as OMSI 2's beta runs (it
-        // grows as the rear axle sinks): taken the other way round the bellows bent away
-        // from the rear section on any grade, their folds sheared and a gap opened at one end)
-        let beta = lead_pitch - self.pitch as f64;
+        // Both are read off this part, not off the world: see `joint_angles`.
+        let (alpha, beta) =
+            joint_angles(lead_rot, lead_heading, self.body_rotation(), self.heading);
         if let Some(id) = self.v_alpha {
             main.state.vars[id as usize] = (alpha * ARTICULATION_SIGN) as f32;
         }

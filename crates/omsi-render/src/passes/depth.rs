@@ -5,6 +5,7 @@ use crate::gpu::{
     depth_texture_entry, fullscreen_pipeline, pass_timer, uniform_entry, DEPTH_FORMAT,
 };
 use crate::scene::{Camera, Scene};
+use crate::shaders::with_fullscreen;
 use crate::targets::TargetCache;
 use glam::Mat4;
 
@@ -109,7 +110,9 @@ pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
     log::info!("renderer: compiling the SSAO shaders");
     let ssao_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("ssao"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/post/ssao.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(
+            with_fullscreen(include_str!("../shaders/post/ssao.wgsl")).into(),
+        ),
     });
     let ao_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("ssao"),

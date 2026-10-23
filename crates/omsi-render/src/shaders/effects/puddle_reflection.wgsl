@@ -27,15 +27,10 @@ struct PuddleParams {
 @group(0) @binding(7) var t_hit_depth: texture_depth_2d;
 @group(0) @binding(8) var t_vehicle: texture_2d<f32>;
 
-struct PuddleVertex {
-    @builtin(position) clip: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
+alias PuddleVertex = FullscreenVertex;
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> PuddleVertex {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    return PuddleVertex(vec4<f32>(x, y, 0.0, 1.0), vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5));
+    return fullscreen_vertex(i);
 }
 
 fn scene_pixel(uv: vec2<f32>) -> vec2<i32> {
