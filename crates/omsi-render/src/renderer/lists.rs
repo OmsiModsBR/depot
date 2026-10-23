@@ -28,8 +28,11 @@ fn kind_of(alpha: AlphaMode) -> u8 {
 
 /// The depth prepass's draws of what is in view: opaque and alpha-tested, single-sampled, as
 /// a draw list of their own and their batches over it.
-fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)]) -> (Vec<u32>, Vec<Batch>) {
-    let mut items: Vec<DrawItem> = Vec::new();
+fn prepass_items(
+    scene: &Scene,
+    visible: &[(usize, f32, bool)],
+    items: &mut Vec<DrawItem>,
+) -> (Vec<u32>, Vec<Batch>) {
     let mut list: Vec<u32> = Vec::new();
     let mut batches: Vec<Batch> = Vec::new();
     for &(i, _, _) in visible {
@@ -60,7 +63,7 @@ fn prepass_items(scene: &Scene, visible: &[(usize, f32, bool)]) -> (Vec<u32>, Ve
             }
         }
     }
-    batch_items(scene, &mut items, true, &mut list, &mut batches);
+    batch_items(scene, items, true, &mut list, &mut batches);
     (list, batches)
 }
 
@@ -81,6 +84,12 @@ impl Renderer {
         let glass_on = f.features.glass_on;
         let mut list = std::mem::take(&mut self.scratch.list);
         list.clear();
+        let mut items = std::mem::take(&mut self.scratch.items);
+        items.clear();
+        let mut cab_items = std::mem::take(&mut self.scratch.cab_items);
+        cab_items.clear();
+        let mut prepass_buf = std::mem::take(&mut self.scratch.prepass_items);
+        prepass_buf.clear();
         clock.stage(self, "setup", "mirror.setup");
         let shadow_batches = self.shadow_casters(scene, f, &mut list);
         clock.stage(self, "shadow items", "mirror.shadow items");
@@ -122,9 +131,17 @@ impl Renderer {
             if prepass_on {
                 let slot = &mut prepass_found;
                 let visible = &visible;
-                scope.spawn(move |_| *slot = Some(prepass_items(scene_ref, visible)));
+                let buf = &mut prepass_buf;
+                scope.spawn(move |_| *slot = Some(prepass_items(scene_ref, visible, buf)));
             }
-            main = self.main_items(scene_ref, f, &visible, &mut list);
+            main = self.main_items(
+                scene_ref,
+                f,
+                &visible,
+                &mut list,
+                &mut items,
+                &mut cab_items,
+            );
         });
         let (mut main_batches, mut cab_batches, main_draws) = main;
         let mut prepass_batches: Vec<Batch> = Vec::new();
@@ -227,6 +244,9 @@ impl Renderer {
         }
         self.upload_draw_list(scene, &list);
         clock.stage(self, "upload", "mirror.upload");
+        self.scratch.items = items;
+        self.scratch.cab_items = cab_items;
+        self.scratch.prepass_items = prepass_buf;
         DrawLists {
             list,
             shadow_batches,
@@ -512,15 +532,15 @@ impl Renderer {
         f: &FrameContext,
         visible: &[(usize, f32, bool)],
         list: &mut Vec<u32>,
+        items: &mut Vec<DrawItem>,
+        cab_items: &mut Vec<DrawItem>,
     ) -> (Vec<Batch>, Vec<Batch>, [usize; 2]) {
         let (camera, lighting) = (f.camera, f.lighting);
         let exclude_texture = f.exclude_texture;
         let ro = f.ro;
         let cam_rel = f.cam_rel;
-        let mut items: Vec<DrawItem> = Vec::new();
         let mut main_batches: Vec<Batch> = Vec::new();
         let mut cab_batches: Vec<Batch> = Vec::new();
-        let mut cab_items: Vec<DrawItem> = Vec::new();
         let mut main_draws = [0usize; 2];
         let mut by_phase: [Vec<(usize, f32, bool)>; RenderPhase::COUNT] =
             std::array::from_fn(|_| Vec::new());
@@ -570,7 +590,7 @@ impl Renderer {
                         });
                     }
                 }
-                batch_items(scene, &mut items, true, list, &mut main_batches);
+                batch_items(scene, items, true, list, &mut main_batches);
             }
             let visible = &by_phase[phase as usize];
             items.clear();
@@ -609,7 +629,7 @@ impl Renderer {
                 }
             }
             main_draws[0] += items.len();
-            batch_items(scene, &mut items, true, list, &mut main_batches);
+            batch_items(scene, items, true, list, &mut main_batches);
             // Blended draws: objects far to near by the distance of their nearest blended
             // mesh (see `near_by_origin` below - not the single local origin all of an
             // object's meshes share), and within an object in creation order - the
@@ -798,7 +818,7 @@ impl Renderer {
                 }
             }
             main_draws[1] += items.len();
-            batch_items(scene, &mut items, false, list, &mut main_batches);
+            batch_items(scene, items, false, list, &mut main_batches);
         }
         // Omsi.exe draws the vehicle the camera sits in last of all, with the view mask
         // of its inside (0x6f1520 -> 0x6f0430), after every phase of the map, the other
@@ -807,7 +827,7 @@ impl Renderer {
         // all of that. Its items wait here and are drawn after the coronas and the smoke
         // (see `cab_batches` in the main pass).
         main_draws[1] += cab_items.len();
-        batch_items(scene, &mut cab_items, false, list, &mut cab_batches);
+        batch_items(scene, cab_items, false, list, &mut cab_batches);
         (main_batches, cab_batches, main_draws)
     }
 
