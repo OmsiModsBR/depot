@@ -98,14 +98,6 @@ impl App {
                 }
                 // `weather`: the next weather, as the admin menu's "Next weather"
                 "weather" => self.next_weather(),
-                // `rawmouse dx`: the mouse moved by dx device units (past the window's edge
-                // too, as mouse steering takes it)
-                "rawmouse" => {
-                    let (dx, _) = xy();
-                    if self.mouse_drive && self.game_menu.is_none() {
-                        self.mouse_past_edge(dx);
-                    }
-                }
                 "drag" => {
                     let (dx, dy) = xy();
                     let (x, y) = self.cursor;
