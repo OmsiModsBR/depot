@@ -202,7 +202,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     // and the other way: the game takes NaN, the launcher saves the default over it
     ("volume", "launcher>game", "NaN leaves the key empty"),
     // the launcher keeps whole numbers where the game keeps fractions
-    ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
     ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
     // the two sides read the same text differently
 ];

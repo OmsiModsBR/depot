@@ -3340,12 +3340,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .unwrap_or(0.65))
             }
             "vr_head_smoothing_ms" => {
-                v[&k] = json!(val
+                v[&k] = val
                     .parse::<f64>()
                     .ok()
                     .filter(|x| x.is_finite())
-                    .map(|x| x.clamp(0.0, 30.0) as i64)
-                    .unwrap_or(0))
+                    .map(|x| x.clamp(0.0, 30.0))
+                    .map(|x| {
+                        if x.fract() == 0.0 {
+                            json!(x as i64)
+                        } else {
+                            json!(x)
+                        }
+                    })
+                    .unwrap_or(json!(0))
             }
             "vr_mirror_rate" => {
                 v[&k] = val
