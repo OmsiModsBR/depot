@@ -164,11 +164,66 @@ struct Words {
 
 fn words(lang: &str) -> Words {
     match lang.to_ascii_uppercase().as_str() {
-        "DEU" | "DE" | "GER" => Words { kmh: "km/h", days: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], off_route: "Abseits der Route", rerouting: "Route wird neu berechnet", recalculated: "Route neu berechnet", jam: "Stau", slow: "Zähfließend", no_duty: "Freie Fahrt", last_stop: "Endhaltestelle", on_time: "pünktlich" },
-        "FRA" | "FR" => Words { kmh: "km/h", days: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], off_route: "Hors itinéraire", rerouting: "Recalcul de l'itinéraire", recalculated: "Itinéraire recalculé", jam: "Bouchon", slow: "Ralentissement", no_duty: "Conduite libre", last_stop: "Terminus", on_time: "à l'heure" },
-        "RUS" | "RU" => Words { kmh: "км/ч", days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], off_route: "Вне маршрута", rerouting: "Перестроение маршрута", recalculated: "Маршрут перестроен", jam: "Пробка", slow: "Затруднено", no_duty: "Свободная езда", last_stop: "Конечная", on_time: "по графику" },
-        "PTB" | "PT" | "POR" | "BRA" => Words { kmh: "km/h", days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"], off_route: "Fora da rota", rerouting: "Recalculando a rota", recalculated: "Rota recalculada", jam: "Congestionamento", slow: "Trânsito lento", no_duty: "Direção livre", last_stop: "Ponto final", on_time: "no horário" },
-        _ => Words { kmh: "km/h", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], off_route: "Off route", rerouting: "Recalculating route", recalculated: "Route recalculated", jam: "Traffic jam", slow: "Slow traffic", no_duty: "Free drive", last_stop: "Final stop", on_time: "on time" },
+        "DEU" | "DE" | "GER" => Words {
+            kmh: "km/h",
+            days: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+            off_route: "Abseits der Route",
+            rerouting: "Route wird neu berechnet",
+            recalculated: "Route neu berechnet",
+            jam: "Stau",
+            slow: "Zähfließend",
+            no_duty: "Freie Fahrt",
+            last_stop: "Endhaltestelle",
+            on_time: "pünktlich",
+        },
+        "FRA" | "FR" => Words {
+            kmh: "km/h",
+            days: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+            off_route: "Hors itinéraire",
+            rerouting: "Recalcul de l'itinéraire",
+            recalculated: "Itinéraire recalculé",
+            jam: "Bouchon",
+            slow: "Ralentissement",
+            no_duty: "Conduite libre",
+            last_stop: "Terminus",
+            on_time: "à l'heure",
+        },
+        "RUS" | "RU" => Words {
+            kmh: "км/ч",
+            days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+            off_route: "Вне маршрута",
+            rerouting: "Перестроение маршрута",
+            recalculated: "Маршрут перестроен",
+            jam: "Пробка",
+            slow: "Затруднено",
+            no_duty: "Свободная езда",
+            last_stop: "Конечная",
+            on_time: "по графику",
+        },
+        "PTB" | "PT" | "POR" | "BRA" => Words {
+            kmh: "km/h",
+            days: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+            off_route: "Fora da rota",
+            rerouting: "Recalculando a rota",
+            recalculated: "Rota recalculada",
+            jam: "Congestionamento",
+            slow: "Trânsito lento",
+            no_duty: "Direção livre",
+            last_stop: "Ponto final",
+            on_time: "no horário",
+        },
+        _ => Words {
+            kmh: "km/h",
+            days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            off_route: "Off route",
+            rerouting: "Recalculating route",
+            recalculated: "Route recalculated",
+            jam: "Traffic jam",
+            slow: "Slow traffic",
+            no_duty: "Free drive",
+            last_stop: "Final stop",
+            on_time: "on time",
+        },
     }
 }
 
@@ -337,7 +392,15 @@ pub struct Navigator {
     /// The small map's surface mesh (buffer 6): the surface version and anchor it was built for, and its size.
     surface_mesh: Option<(u64, DVec2, u32)>,
     #[allow(clippy::type_complexity)]
-    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets, Option<crate::map_surface::MapSurface>, Vec<std::path::PathBuf>)>>,
+    building: Option<
+        std::sync::mpsc::Receiver<(
+            Network,
+            HashMap<i64, DVec3>,
+            Streets,
+            Option<crate::map_surface::MapSurface>,
+            Vec<std::path::PathBuf>,
+        )>,
+    >,
     pub global_version: u64,
     roads: Option<Roads>,
     route: Route,
@@ -386,18 +449,43 @@ pub struct Navigator {
 /// The duty as the navigator shows it: line, terminus, the stops from the next one on,
 /// and the current trip (a key that changes with it, and its name).
 #[allow(clippy::type_complexity)]
-pub fn duty_parts(duty: Option<&crate::schedule::PlayerDuty>) -> (Option<String>, Option<String>, Vec<NavStop>, Option<(String, String)>) {
-    let Some(d) = duty else { return (None, None, Vec::new(), None) };
-    let Some(trip) = d.trips.get(d.trip_index) else { return (None, None, Vec::new(), None) };
-    let line = if trip.line.trim().is_empty() { d.line.trim() } else { trip.line.trim() };
+pub fn duty_parts(
+    duty: Option<&crate::schedule::PlayerDuty>,
+) -> (
+    Option<String>,
+    Option<String>,
+    Vec<NavStop>,
+    Option<(String, String)>,
+) {
+    let Some(d) = duty else {
+        return (None, None, Vec::new(), None);
+    };
+    let Some(trip) = d.trips.get(d.trip_index) else {
+        return (None, None, Vec::new(), None);
+    };
+    let line = if trip.line.trim().is_empty() {
+        d.line.trim()
+    } else {
+        trip.line.trim()
+    };
     let stops = trip
         .stops
         .iter()
         .skip(d.next_stop)
         .filter(|s| s.stops)
-        .map(|s| NavStop { object_id: s.object_id, position: s.position.unwrap_or(DVec3::ZERO), name: s.name.clone(), arrival: s.arr })
+        .map(|s| NavStop {
+            object_id: s.object_id,
+            position: s.position.unwrap_or(DVec3::ZERO),
+            name: s.name.clone(),
+            arrival: s.arr,
+        })
         .collect();
-    (Some(line.to_string()), Some(trip.terminus.clone()), stops, Some((format!("{}/{}", d.trip_index, trip.name), trip.name.clone())))
+    (
+        Some(line.to_string()),
+        Some(trip.terminus.clone()),
+        stops,
+        Some((format!("{}/{}", d.trip_index, trip.name), trip.name.clone())),
+    )
 }
 
 /// Screen position of a world point (relative to the anchor) in target pixels.
@@ -407,7 +495,10 @@ fn project(vp: Mat4, viewport: [f32; 4], p: Vec3) -> Option<Vec2> {
         return None;
     }
     let n = c.truncate() / c.w;
-    Some(Vec2::new(viewport[0] + (n.x * 0.5 + 0.5) * viewport[2], viewport[1] + (0.5 - n.y * 0.5) * viewport[3]))
+    Some(Vec2::new(
+        viewport[0] + (n.x * 0.5 + 0.5) * viewport[2],
+        viewport[1] + (0.5 - n.y * 0.5) * viewport[3],
+    ))
 }
 
 fn angle_diff(a: f64, b: f64) -> f64 {
@@ -433,12 +524,44 @@ pub(crate) fn placed_at(corner: &str) -> Option<[f32; 2]> {
 
 /// The GPS is a separate render texture composed after the scene's post AA.
 fn map_samples(format: wgpu::TextureFormat) -> u32 {
-    if format.guaranteed_format_features(wgpu::Features::empty()).flags.sample_count_supported(4) { 4 } else { 1 }
+    if format
+        .guaranteed_format_features(wgpu::Features::empty())
+        .flags
+        .sample_count_supported(4)
+    {
+        4
+    } else {
+        1
+    }
 }
 
 impl<'a> NavFrame<'a> {
     fn clone_ref(&self) -> NavFrame<'a> {
-        NavFrame { traffic: self.traffic, players: self.players.clone(), bus: self.bus, heading: self.heading, speed_kmh: self.speed_kmh, outside_temp: self.outside_temp, inside_temp: self.inside_temp, line: self.line.clone(), terminus: self.terminus.clone(), stops: self.stops.clone(), delay: self.delay, passengers: self.passengers, time: self.time, weekday: self.weekday, date: self.date, car_line: self.car_line, language: self.language, screen: self.screen, ui_scale: self.ui_scale, follow_window: self.follow_window, dt: self.dt, stop_requested: self.stop_requested, info_rect: self.info_rect }
+        NavFrame {
+            traffic: self.traffic,
+            players: self.players.clone(),
+            bus: self.bus,
+            heading: self.heading,
+            speed_kmh: self.speed_kmh,
+            outside_temp: self.outside_temp,
+            inside_temp: self.inside_temp,
+            line: self.line.clone(),
+            terminus: self.terminus.clone(),
+            stops: self.stops.clone(),
+            delay: self.delay,
+            passengers: self.passengers,
+            time: self.time,
+            weekday: self.weekday,
+            date: self.date,
+            car_line: self.car_line,
+            language: self.language,
+            screen: self.screen,
+            ui_scale: self.ui_scale,
+            follow_window: self.follow_window,
+            dt: self.dt,
+            stop_requested: self.stop_requested,
+            info_rect: self.info_rect,
+        }
     }
 }
 
@@ -471,7 +594,10 @@ pub struct CityMap {
     phi: f64,
     /// Where the compass is this frame (it is drawn after the buttons are listed, and takes its place in the list on the next one).
     compass: Option<Rect>,
-    hover_cache: Option<((i64, i64, i64, bool), (Option<crate::map_surface::Street>, Option<f32>))>,
+    hover_cache: Option<(
+        (i64, i64, i64, bool),
+        (Option<crate::map_surface::Street>, Option<f32>),
+    )>,
     target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.
     roads: Option<(u64, u32, DVec2)>,

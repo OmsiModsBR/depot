@@ -25,7 +25,11 @@ pub(crate) fn parts(template: &str) -> Vec<String> {
 /// not that template.
 pub(crate) fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>> {
     let (first, last) = (parts.first()?, parts.last()?);
-    if parts.len() < 2 || text.len() < first.len() + last.len() || !text.starts_with(first.as_str()) || !text.ends_with(last.as_str()) {
+    if parts.len() < 2
+        || text.len() < first.len() + last.len()
+        || !text.starts_with(first.as_str())
+        || !text.ends_with(last.as_str())
+    {
         return None;
     }
     let mut mid = &text[first.len()..text.len() - last.len()];
@@ -41,7 +45,12 @@ pub(crate) fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>
 
 /// Enough words around the values to tell the template apart ("%{a}: %{b}" is not).
 pub(crate) fn telling(parts: &[String]) -> bool {
-    parts.len() >= 2 && parts.iter().map(|s| s.trim().chars().count()).sum::<usize>() >= 4
+    parts.len() >= 2
+        && parts
+            .iter()
+            .map(|s| s.trim().chars().count())
+            .sum::<usize>()
+            >= 4
 }
 
 /// The placeholders' names, in order: "%{done} of %{total}" has `done`, `total`.
@@ -87,11 +96,17 @@ fn templates(lang: &str) -> Arc<Vec<Template>> {
             let parts = parts(&k);
             // (a short one, "Gear %{n}", is filled in by its caller: with so few words it
             // would also take texts that are not it)
-            let letters = parts.iter().flat_map(|s| s.chars()).filter(|c| c.is_alphabetic()).count();
+            let letters = parts
+                .iter()
+                .flat_map(|s| s.chars())
+                .filter(|c| c.is_alphabetic())
+                .count();
             let one_side = parts.len() == 2 && (parts[0].is_empty() || parts[1].is_empty());
             let names: Vec<String> = names(&k).into_iter().map(str::to_string).collect();
             (letters >= 8).then(|| Template {
-                number: one_side && letters < 20 && names.iter().all(|n| COUNTS.contains(&n.as_str())),
+                number: one_side
+                    && letters < 20
+                    && names.iter().all(|n| COUNTS.contains(&n.as_str())),
                 weight: parts.iter().map(|s| s.chars().count()).sum(),
                 names,
                 parts,
@@ -108,7 +123,8 @@ fn templates(lang: &str) -> Arc<Vec<Template>> {
 /// the tables have is translated too ("Weather: Custom weather").
 pub(crate) fn fill(lang: &str, text: &str) -> Option<String> {
     // (what was asked in this language, found or not: the painter asks every frame)
-    static SEEN: Mutex<(String, Option<HashMap<String, Option<String>>>)> = Mutex::new((String::new(), None));
+    static SEEN: Mutex<(String, Option<HashMap<String, Option<String>>>)> =
+        Mutex::new((String::new(), None));
     {
         let mut s = SEEN.lock();
         if s.0 != lang {
@@ -131,7 +147,9 @@ pub(crate) fn fill(lang: &str, text: &str) -> Option<String> {
         .map(|(t, v)| {
             let mut out = t.text.clone();
             for (name, value) in t.names.iter().zip(v) {
-                let value = crate::_rust_i18n_try_translate(lang, value).map(|x| x.into_owned()).unwrap_or_else(|| value.to_string());
+                let value = crate::_rust_i18n_try_translate(lang, value)
+                    .map(|x| x.into_owned())
+                    .unwrap_or_else(|| value.to_string());
                 out = out.replace(&format!("%{{{name}}}"), &value);
             }
             out
@@ -153,7 +171,10 @@ mod tests {
     fn a_text_is_cut_at_its_values() {
         let p = parts("Loading map tiles (first area) \u{b7} %{done} of %{total}");
         assert_eq!(p, ["Loading map tiles (first area) \u{b7} ", " of ", ""]);
-        assert_eq!(values(&p, "Loading map tiles (first area) \u{b7} 62 of 100"), Some(vec!["62", "100"]));
+        assert_eq!(
+            values(&p, "Loading map tiles (first area) \u{b7} 62 of 100"),
+            Some(vec!["62", "100"])
+        );
         assert_eq!(values(&p, "Loading map tiles (first area) \u{b7} 62"), None);
         assert_eq!(values(&parts("Gear %{n}"), "Gear 3"), Some(vec!["3"]));
         assert_eq!(names("%{done} of %{total}"), ["done", "total"]);
@@ -164,17 +185,31 @@ mod tests {
 
     #[test]
     fn a_formatted_text_is_found_through_its_template() {
-        assert_eq!(fill("de", "Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"), None);
+        assert_eq!(
+            fill(
+                "de",
+                "Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"
+            ),
+            None
+        );
         assert_eq!(
             fill("de", "Loading map tiles (first area) \u{b7} 62 of 100").as_deref(),
             Some("Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100")
         );
         assert_eq!(fill("de", "Back to my bus"), None);
         // (too few words to tell it apart: its caller fills it in)
-        assert!(templates("de").iter().all(|t| t.parts != parts("Line %{line}")));
-        assert_eq!(fill("de", "Loading map tiles (first area) \u{b7}  of 100"), None);
+        assert!(templates("de")
+            .iter()
+            .all(|t| t.parts != parts("Line %{line}")));
+        assert_eq!(
+            fill("de", "Loading map tiles (first area) \u{b7}  of 100"),
+            None
+        );
         // (a name without digits is still a value; a count without them is not)
-        assert_eq!(fill("de", "Stop skipped: Hauptbahnhof").as_deref(), Some("Haltestelle ausgelassen: Hauptbahnhof"));
+        assert_eq!(
+            fill("de", "Stop skipped: Hauptbahnhof").as_deref(),
+            Some("Haltestelle ausgelassen: Hauptbahnhof")
+        );
         assert_eq!(fill("de", "Clear all placed vehicles"), None);
     }
 }
