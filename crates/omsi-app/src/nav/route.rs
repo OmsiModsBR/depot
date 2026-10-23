@@ -1,14 +1,15 @@
+use super::draw::{level, ARROW, LEVEL};
 use glam::{DVec2, DVec3, Vec2, Vec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKind, Network};
 use omsi_ui::Painter;
-use super::draw::{ARROW, LEVEL, level};
-
 
 /// `OMSI_NAV_PROBE=x,y[,r]`: the lanes of the map's network that start or end within r
 /// metres (25) of a point - how they link, to see why a route cannot reach a place.
 pub(super) fn probe_lanes(net: &Network) {
-    let Some(v) = omsi_cfg::flags::NAV_PROBE.text() else { return };
+    let Some(v) = omsi_cfg::flags::NAV_PROBE.text() else {
+        return;
+    };
     let f: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
     if f.len() < 2 {
         return;
@@ -17,7 +18,12 @@ pub(super) fn probe_lanes(net: &Network) {
     let r = f.get(2).copied().unwrap_or(25.0);
     for (i, l) in net.lanes.iter().enumerate() {
         let (s, e) = (l.start(), l.end());
-        if (s.truncate() - c).length() > r && (e.truncate() - c).length() > r && l.nearest_point(DVec3::new(c.x, c.y, s.z)).map(|p| p.1 > r).unwrap_or(true) {
+        if (s.truncate() - c).length() > r
+            && (e.truncate() - c).length() > r
+            && l.nearest_point(DVec3::new(c.x, c.y, s.z))
+                .map(|p| p.1 > r)
+                .unwrap_or(true)
+        {
             continue;
         }
         let prev = net.prev.get(i).cloned().unwrap_or_default();
@@ -42,7 +48,9 @@ pub(super) struct RouteStyle {
 /// is in, counted from the kerb (0 = the kerb lane: the rightmost, the leftmost on a
 /// left-hand-traffic map).
 pub(super) fn lane_from_right(net: &Network, lane: usize, bus: DVec3) -> usize {
-    let Some(mut cur) = net.lanes.get(lane).map(|_| lane) else { return 0 };
+    let Some(mut cur) = net.lanes.get(lane).map(|_| lane) else {
+        return 0;
+    };
     let kerb = |l: &omsi_sim::traffic::Lane| if net.left_hand { l.left } else { l.right };
     let away = |l: &omsi_sim::traffic::Lane| if net.left_hand { l.right } else { l.left };
     for _ in 0..6 {
@@ -73,7 +81,16 @@ pub(super) fn lane_from_right(net: &Network, lane: usize, bus: DVec3) -> usize {
 /// The route from the bus on: one band, coloured stretch by stretch by how busy the road
 /// is (`jam`: congestion per lane), with arrows along it in a colour that stands out.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], anchor: DVec2, s0: f32, jam: &HashMap<usize, f32>, style: &RouteStyle, bus_lane: usize) {
+pub(super) fn build_route(
+    p: &mut Painter,
+    net: &Network,
+    lanes: &[usize],
+    anchor: DVec2,
+    s0: f32,
+    jam: &HashMap<usize, f32>,
+    style: &RouteStyle,
+    bus_lane: usize,
+) {
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
     // runs of one colour: the lanes' points joined up, the first lane cut where the bus is
     let mut runs: Vec<(Vec<Vec3>, f32, usize)> = Vec::new();
@@ -106,7 +123,11 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
     let shown = |k: usize, l: usize| -> usize {
         let side = turn_after(k);
         let step = |cur: usize, left: bool| -> Option<usize> {
-            let n = if left { net.lanes[cur].left } else { net.lanes[cur].right }?;
+            let n = if left {
+                net.lanes[cur].left
+            } else {
+                net.lanes[cur].right
+            }?;
             (n < net.lanes.len() && net.lanes[n].kind == LaneKind::Street).then_some(n)
         };
         let mut cur = l;
@@ -158,7 +179,11 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
             }
             _ => {
                 // (a new colour starts where the last one ended)
-                let mut start = runs.last().and_then(|r| r.0.last().copied()).map(|q| vec![q]).unwrap_or_default();
+                let mut start = runs
+                    .last()
+                    .and_then(|r| r.0.last().copied())
+                    .map(|q| vec![q])
+                    .unwrap_or_default();
                 start.extend(pts);
                 runs.push((start, w, lv));
             }
@@ -200,4 +225,3 @@ pub(super) fn build_route(p: &mut Painter, net: &Network, lanes: &[usize], ancho
         p.world_shape(rel(q), &[tip, br, br + t, tip + t], sm, spx, c);
     }
 }
-
