@@ -1,7 +1,10 @@
 //! The launcher's pages, in the order of the sidebar.
 
-/// A page of the launcher. The first ten sit in the sidebar's list, `Settings` and `Setup`
-/// at its foot.
+/// A page of the launcher. The first eight sit in the sidebar's list, `Settings` and `Setup`
+/// at its foot. `Drive` is no longer listed: a session starts from Maps (the bus and the
+/// line are chosen inside the game, as in OMSI 2); the phone's launcher still has it.
+/// Neither is `Sessions`: the games open now are on Profile / Sessions, as they belong to
+/// the driver (the phone's launcher still has it as a page of its own).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Drive,
@@ -21,28 +24,28 @@ pub enum Page {
 impl Page {
     /// Every page, the list first, then the foot.
     pub const ALL: [Page; 12] = [
-        Page::Drive,
-        Page::Vehicles,
         Page::Maps,
+        Page::Vehicles,
         Page::Mods,
         Page::Timetable,
-        Page::Sessions,
         Page::Profile,
         Page::Controls,
         Page::Tutorials,
         Page::Diagnostics,
         Page::Settings,
         Page::Setup,
+        Page::Drive,
+        Page::Sessions,
     ];
 
     /// The pages of the sidebar's list.
     pub fn listed() -> &'static [Page] {
-        &Page::ALL[..10]
+        &Page::ALL[..8]
     }
 
     /// The pages at the sidebar's foot.
     pub fn foot() -> &'static [Page] {
-        &Page::ALL[10..]
+        &Page::ALL[8..10]
     }
 
     pub fn title(self) -> &'static str {
@@ -53,7 +56,7 @@ impl Page {
             Page::Mods => "Mods",
             Page::Timetable => "Timetable",
             Page::Sessions => "Sessions",
-            Page::Profile => "Profile",
+            Page::Profile => "Profile / Sessions",
             Page::Controls => "Controls",
             Page::Tutorials => "Tutorials",
             Page::Diagnostics => "Diagnostics",
@@ -68,24 +71,24 @@ impl Page {
         match self {
             Page::Drive => None,
             Page::Vehicles => Some((
-                "Preview",
+                "Library",
                 "Choose and check your bus",
-                "Inspect the bus with its paint and the author's description before starting the map.",
+                "Look at a bus with its paint and the author's description. Pick one to have it ready when you start from Maps.",
             )),
             Page::Maps => Some((
-                "Map & duty",
-                "Choose your map and duty",
-                "Check the map and its description, then pick where to start and which line to drive.",
+                "Start",
+                "Choose your map and start",
+                "Pick the map, the date and the kind of session, then where to start. The line and the bus are chosen inside the game.",
             )),
             Page::Mods => Some((
                 "Install & content",
                 "Add buses, maps and scenery",
-                "A folder or a .zip, read in place from Archives. The original OMSI 2 folder is never written to.",
+                "Add a .zip, used in place from Archives. The original OMSI 2 folder is never written to.",
             )),
             Page::Timetable => Some((
-                "Lines & tours",
+                "Plan",
                 "Plan a map's lines and tours",
-                "When each trip leaves, saved as the line's .ttl in the content folder. OMSI 2's own files stay as they are.",
+                "See the lines on the map, see which lines serve a stop, draw them as a diagram, and edit when each trip leaves. Saved in the content folder; OMSI 2's own files stay as they are.",
             )),
             Page::Sessions => Some((
                 "Running games",
@@ -94,8 +97,8 @@ impl Page {
             )),
             Page::Profile => Some((
                 "Personnel file",
-                "Your driver and their record",
-                "The driver whose personnel file the game writes: hours, kilometres, punctuality, tickets.",
+                "Your driver, their record and your open sessions",
+                "The driver whose personnel file the game keeps: level, hours, kilometres, punctuality, the drives already finished, and the sessions open right now.",
             )),
             Page::Controls => Some((
                 "Keyboard",
@@ -115,39 +118,45 @@ impl Page {
             Page::Settings => Some((
                 "Graphics, sound & driving",
                 "Set up the game",
-                "Every change is saved at once; the game reads them when it starts.",
+                "Pick a section on the left or search every option. A dot marks what you changed; the line under each option says when a change takes effect.",
             )),
             Page::Setup => Some((
                 "Folders",
                 "Find the original game",
-                "Where the original OMSI 2 is, and the program of this game.",
+                "Where the original OMSI 2 is, where this game's program is, and where the Depot keeps its own files.",
             )),
         }
     }
 
-    /// The icon, by its name in `omsi-ui`.
+    /// The icon, by its name in `omsi-ui` (thin outlines, as Windows 11 draws them).
     pub fn icon(self) -> &'static str {
         match self {
-            Page::Drive => "home",
-            Page::Vehicles => "airport_shuttle",
-            Page::Maps => "map",
-            Page::Mods => "extension",
-            Page::Timetable => "schedule",
-            Page::Sessions => "play_arrow",
-            Page::Profile => "person",
-            Page::Controls => "sports_esports",
-            Page::Tutorials => "help",
-            Page::Diagnostics => "monitor",
-            Page::Settings => "settings",
-            Page::Setup => "folder_open",
+            Page::Drive => "o-home",
+            Page::Vehicles => "o-bus",
+            Page::Maps => "o-map",
+            Page::Mods => "o-package",
+            Page::Timetable => "o-clock",
+            Page::Sessions => "o-play",
+            Page::Profile => "o-user",
+            Page::Controls => "o-gamepad",
+            Page::Tutorials => "o-help",
+            Page::Diagnostics => "o-pulse",
+            Page::Settings => "o-gear",
+            Page::Setup => "o-folder",
         }
     }
 
-    /// The page called `name` (as `--page` and the sidebar's ids spell it), any case.
+    /// The page called `name` (as `--page` and the sidebar's ids spell it), any case; a page
+    /// of two names ("Profile / Sessions") by its first too.
     pub fn named(name: &str) -> Option<Page> {
-        Page::ALL
-            .into_iter()
-            .find(|p| p.title().eq_ignore_ascii_case(name.trim()))
+        let name = name.trim();
+        Page::ALL.into_iter().find(|p| {
+            p.title().eq_ignore_ascii_case(name)
+                || p.title()
+                    .split(" / ")
+                    .next()
+                    .is_some_and(|first| first.eq_ignore_ascii_case(name))
+        })
     }
 }
 
@@ -181,11 +190,23 @@ mod tests {
         }
     }
 
+    /// Every page is in the list or at the foot once, Drive (sessions start from Maps) and
+    /// Sessions (on Profile / Sessions) aside.
     #[test]
     fn the_list_and_the_foot_cover_every_page_once() {
-        let mut all: Vec<_> = Page::listed().iter().chain(Page::foot()).copied().collect();
+        let mut all: Vec<_> = Page::listed()
+            .iter()
+            .chain(Page::foot())
+            .chain([&Page::Drive, &Page::Sessions])
+            .copied()
+            .collect();
         assert_eq!(all.len(), Page::ALL.len());
         all.dedup();
         assert_eq!(all.len(), Page::ALL.len());
+        assert_eq!(Page::listed()[0], Page::Maps);
+        assert!(!Page::listed().contains(&Page::Drive));
+        assert!(!Page::listed().contains(&Page::Sessions));
+        assert_eq!(Page::named("profile"), Some(Page::Profile));
+        assert_eq!(Page::named("sessions"), Some(Page::Sessions));
     }
 }

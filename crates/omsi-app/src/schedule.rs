@@ -75,127 +75,7 @@ struct RunningTrip {
     station_steps: Vec<Option<usize>>,
 }
 
-/// When a trip's bus is at each of its stations, as OMSI's timetable has it: the profile
-/// gives the trip's duration and, for some stations, the minute the bus arrives or leaves
-/// (`[profile_man_arr_time]`, `[profile_man_dep_time]`, minutes after the trip's start);
-/// the stations in between are timed by the lengths of the station links (Spandau's line 5
-/// gives nearly every station its minute; these used to be ignored for the whole duration
-/// split by the link lengths, and the tours ran their first profile whatever `[addtrip]`
-/// said). A station marked `[profile_otherstopping] 2` is passed without a stop (every
-/// station of a depot run).
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct TripTimes {
-    /// Seconds after the trip's departure: (arrival, departure) per station.
-    pub stations: Vec<(f64, f64)>,
-    /// Whether the bus stops at the station.
-    pub stops: Vec<bool>,
-    /// `[profile_otherstopping]` per station (0 when not given): 1 and 4 stop whoever
-    /// wants to get on or off, 2 is passed, 3 is served when the bus would be more than 20 s
-    /// early (as in OMSI; see `bus_service::BusService::must_serve`).
-    pub kinds: Vec<u8>,
-    /// Seconds from the departure to the arrival at the last station.
-    pub duration: f64,
-}
-
-impl TripTimes {
-    pub fn new(
-        stations: &[i64],
-        profile: Option<&omsi_timetable::TripProfile>,
-        link_length: &dyn Fn(i64, i64) -> Option<f64>,
-    ) -> TripTimes {
-        let n = stations.len();
-        let duration = profile
-            .map(|p| p.factor as f64 * 60.0)
-            .filter(|d| *d > 0.0)
-            .unwrap_or(600.0);
-        let mut arr: Vec<Option<f64>> = vec![None; n];
-        let mut dep: Vec<Option<f64>> = vec![None; n];
-        let mut stops = vec![true; n];
-        let mut kinds = vec![0u8; n];
-        if let Some(p) = profile {
-            let at = |i: i32| usize::try_from(i).ok().filter(|i| *i < n);
-            for (i, m) in &p.man_arr_time {
-                if let Some(i) = at(*i) {
-                    arr[i] = Some(*m as f64 * 60.0);
-                }
-            }
-            for (i, m) in &p.man_dep_time {
-                if let Some(i) = at(*i) {
-                    dep[i] = Some(*m as f64 * 60.0);
-                }
-            }
-            for (i, v) in &p.other_stopping {
-                if let Some(i) = at(*i) {
-                    kinds[i] = (*v).clamp(0, 255) as u8;
-                    if *v == 2 {
-                        stops[i] = false;
-                    }
-                }
-            }
-        }
-        // the trip leaves its first station at its departure and reaches the last one after
-        // the profile's duration, unless the profile times them itself
-        if n > 0 && arr[0].is_none() && dep[0].is_none() {
-            dep[0] = Some(0.0);
-        }
-        if n > 1 && arr[n - 1].is_none() && dep[n - 1].is_none() {
-            arr[n - 1] = Some(duration);
-        }
-        // the distance to every station along the links (a missing link counts 500 m)
-        let mut along = vec![0.0f64; n];
-        for i in 1..n {
-            along[i] = along[i - 1]
-                + link_length(stations[i - 1], stations[i])
-                .unwrap_or(500.0)
-                .max(1.0);
-        }
-        let timed: Vec<usize> = (0..n)
-            .filter(|&i| arr[i].is_some() || dep[i].is_some())
-            .collect();
-        let mut out = Vec::with_capacity(n);
-        let mut last = 0.0f64;
-        for i in 0..n {
-            let (a, d) = match (arr[i], dep[i]) {
-                (Some(a), Some(d)) => (a, d.max(a)),
-                (Some(a), None) => (a, a),
-                (None, Some(d)) => (d, d),
-                (None, None) => {
-                    let p = timed.iter().rev().find(|&&k| k < i).copied();
-                    let q = timed.iter().find(|&&k| k > i).copied();
-                    let t = match (p, q) {
-                        (Some(p), Some(q)) => {
-                            let t0 = dep[p].or(arr[p]).unwrap_or(0.0);
-                            let t1 = arr[q].or(dep[q]).unwrap_or(t0);
-                            let span = along[q] - along[p];
-                            if span > 0.0 {
-                                t0 + (t1 - t0) * (along[i] - along[p]) / span
-                            } else {
-                                t0
-                            }
-                        }
-                        (Some(p), None) => dep[p].or(arr[p]).unwrap_or(0.0),
-                        (None, Some(q)) => arr[q].or(dep[q]).unwrap_or(0.0),
-                        (None, None) => 0.0,
-                    };
-                    (t, t)
-                }
-            };
-            // never back in time
-            let a = a.max(last);
-            let d = d.max(a);
-            last = d;
-            out.push((a, d));
-        }
-        // a trip with a route of stations lasts until it reaches the last one
-        let duration = if n > 1 { out[n - 1].0 } else { duration };
-        TripTimes {
-            stations: out,
-            stops,
-            kinds,
-            duration: duration.max(1.0),
-        }
-    }
-}
+pub use omsi_timetable::TripTimes;
 
 /// The stations a trip calls at: its `[station_typ2]` objects, or the objects of the older
 /// `[station]` records the trains, the ferry and the U-Bahn of Spandau still use (their first
@@ -4042,6 +3922,20 @@ pub struct PlayerDuty {
     /// Where the bus was at the last update: how far along the way to the next stop it is,
     /// for the delay on the way (`delay`).
     position: Option<glam::DVec3>,
+    /// The stops the driver skipped, and the ones marked to skip when they come.
+    skips: Skips,
+}
+
+/// The stops the driver skips on purpose (the Alt bar's timetable window, the game menu's
+/// "Skip the next stop", Ctrl+Shift+H): a deliberate improvement, as the original has no way
+/// to say a stop was left out for a reason. A skipped stop counts with no mark in the
+/// evaluation: neither missed nor late.
+#[derive(Clone, Debug, Default)]
+struct Skips {
+    /// Given up: (the trip's place in the duty, the stop's place in the trip).
+    done: Vec<(usize, usize)>,
+    /// To be given up when the duty is due at them.
+    marked: Vec<(usize, usize)>,
 }
 
 impl Schedule {
@@ -4410,6 +4304,7 @@ impl Schedule {
             heading: 0.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         })
     }
 
@@ -5113,6 +5008,11 @@ impl PlayerDuty {
         }
         let last = self.trip().stops.len().checked_sub(1)?;
         let name = self.trip().stops[self.next_stop.min(last)].name.trim().to_string();
+        let at = (self.trip_index, self.next_stop.min(last));
+        self.skips.marked.retain(|m| *m != at);
+        if !self.skips.done.contains(&at) {
+            self.skips.done.push(at);
+        }
         if self.next_stop >= last {
             self.at_stop = false;
             self.arrived_late = None;
@@ -5120,6 +5020,47 @@ impl PlayerDuty {
             return Some(name);
         }
         self.skip_to(self.next_stop + 1).then_some(name)
+    }
+
+    /// The stops skipped so far: (the trip's place in the duty, the stop's in the trip).
+    pub fn skipped_stops(&self) -> &[(usize, usize)] {
+        &self.skips.done
+    }
+
+    /// Whether stop `k` of the current trip is marked to be skipped when it comes.
+    pub fn skip_marked(&self, k: usize) -> bool {
+        self.skips.marked.contains(&(self.trip_index, k))
+    }
+
+    /// The timetable window's "Skip this stop" on stop `k` of the current trip: the stop due
+    /// now is skipped at once (as [`PlayerDuty::skip_next`]); one still to come is marked,
+    /// and skipped as soon as it becomes the next stop (the bus has left the one before it,
+    /// so the IBIS never announces it) - a second press takes the mark off. Returns
+    /// the stop's name and whether it is skipped now (true) or marked or unmarked (false);
+    /// None for a stop behind the bus, or once the trip is over.
+    pub fn toggle_skip(&mut self, k: usize) -> Option<(String, bool)> {
+        if self.done || k < self.next_stop || k >= self.trip().stops.len() {
+            return None;
+        }
+        if k == self.next_stop {
+            return self.skip_next().map(|n| (n, true));
+        }
+        let at = (self.trip_index, k);
+        if let Some(i) = self.skips.marked.iter().position(|m| *m == at) {
+            self.skips.marked.remove(i);
+        } else {
+            self.skips.marked.push(at);
+        }
+        Some((self.trip().stops[k].name.trim().to_string(), false))
+    }
+
+    /// The stop due now was marked to be skipped and the bus is not standing at it: skip it
+    /// (as [`PlayerDuty::skip_next`]); its name.
+    pub fn skip_marked_next(&mut self) -> Option<String> {
+        if self.done || self.at_stop || !self.skip_marked(self.next_stop) {
+            return None;
+        }
+        self.skip_next()
     }
 
     fn set_trip(&mut self, index: usize) {
@@ -6167,6 +6108,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         }
     }
 
@@ -6234,6 +6176,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // jump from the first stop to the last: the script will +1 once, so leave 1 behind
         duty.next_stop = 2;
@@ -6273,6 +6216,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // late for the trip, standing at stop 2 whose place is known
         d.place(glam::DVec3::new(20.0, 0.0, 0.0), 250.0);
@@ -6571,6 +6515,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // The same name appears twice. Its saved ordinal, rather than its name or the
         // bus's position far from any stop, selects the second occurrence.
@@ -6686,6 +6631,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
         d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -6727,6 +6673,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
         d.advance(glam::DVec3::new(100.0, 0.0, 0.0), 10.0);
@@ -6764,6 +6711,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         d.advance(glam::DVec3::new(800.0, 0.0, 0.0), 345.0);
         assert_eq!(d.trip_index, 0);
@@ -6774,7 +6722,7 @@ pub(crate) mod tests {
     fn the_next_stop_can_be_skipped() {
         let trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
         let next = planned(400.0, &[(1040.0, 400.0, 400.0), (1500.0, 500.0, 500.0)]);
-        let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, picked: true, first_update: None, heading: 90.0, position: None, jumped: false };
+        let mut d = PlayerDuty { line: "5".into(), tour: "1".into(), trips: vec![trip, next], trip_index: 0, first_trip: 0, next_stop: 0, at_stop: false, arrived_late: None, done: false, served_terminus: None, left_late: None, held_back: false, placed: true, trip_changed: false, skipped: None, picked: true, first_update: None, heading: 90.0, position: None, jumped: false, skips: Default::default() };
         // at the first stop and away from it: the next is s1
         d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
         d.advance(glam::DVec3::new(50.0, 0.0, 0.0), 10.0);
@@ -6827,6 +6775,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         assert!(d.skip_to(2));
         assert_eq!(d.next_stop, 2);
@@ -6880,6 +6829,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // at stop 0, then leaving east
         d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
@@ -6916,6 +6866,7 @@ pub(crate) mod tests {
             heading: 90.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
         d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
@@ -6987,6 +6938,7 @@ pub(crate) mod tests {
             heading: 0.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // 200 m from the first stop two minutes before the departure: early, next stop the first
         assert_eq!(d.advance(glam::DVec3::new(300.0, 0.0, 0.0), now), None);
@@ -7041,6 +6993,7 @@ pub(crate) mod tests {
             heading: 0.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         // 4 km away two minutes before the 15:07 leaves: the duty begins with the 16:01
         let mut d = duty(trips.clone());
@@ -7086,6 +7039,7 @@ pub(crate) mod tests {
             heading: 0.0,
             position: None,
             jumped: false,
+            skips: Default::default(),
         };
         let (trip, stop) = d.trip_for_ibis();
         assert_eq!(trip.line, "5E");

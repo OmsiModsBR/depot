@@ -1,21 +1,5 @@
 // Light coronas ([light_enh]): camera-facing additive sprites.
-struct Camera {
-    view_proj: mat4x4<f32>,
-    cam_pos: vec4<f32>,
-    // This remains part of the shared camera layout even though coronas only use
-    // `view_proj` and `cam_pos` today.  Keeping the prefix aligned prevents later
-    // corona effects from reading every lighting field one vec4 too early.
-    world_origin: vec4<f32>,
-    sun_dir: vec4<f32>,
-    ambient: vec4<f32>,
-    fog: vec4<f32>,
-    sun_color: vec4<f32>,
-    sky_color: vec4<f32>,
-    light_grid: vec4<f32>,
-    sky: vec4<f32>,
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-};
+
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var t_corona: texture_2d<f32>;
 @group(1) @binding(1) var s_corona: sampler;

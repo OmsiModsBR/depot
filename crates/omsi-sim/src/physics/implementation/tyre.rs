@@ -6,7 +6,7 @@ use super::ground::{track_walls, tyre_line};
 use super::wheel::{sign, TyreFrame};
 use crate::physics::domain::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
-    GRIPPED_ALONG, HOLD_REACH, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
+    GRIPPED_ALONG, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
 use crate::physics::domain::{GroundProbe, Impact, RigidBody};
 use glam::{Quat, Vec2, Vec3};
@@ -177,6 +177,8 @@ impl RigidBody {
                     let j = excess / self.inv_mass_at(r_hub, n);
                     let before = self.kinetic_energy();
                     self.apply_impulse(r_hub, n * j);
+                    // (a wheel struck: the tyres let go, as in OMSI 2)
+                    self.holding = false;
                     let lost = (before - self.kinetic_energy()).max(0.0);
                     self.wheels[i].step_force += j / h * n.dot(fwd_h);
                     match self.wheel_impacts.iter_mut().find(|m| m.obstacle == i) {
@@ -372,12 +374,23 @@ impl RigidBody {
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: OMSI 2 drops the holding state there)
         let airborne = self.wheels.iter().any(|w| !w.on_ground);
-        if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne) {
+        // (and the body knocked sideways: holding, its point on the `[rot_pnt_long]` line
+        // moves straight along it whatever the steering does, so speed across there is a
+        // push from outside, which the tyres do not take outright)
+        let on_line = rot.mul_vec3(Vec3::new(-self.cog.x, self.rot_pnt_long - self.cog.y, 0.0));
+        let knocked = (v + rot.mul_vec3(w).cross(on_line))
+            .dot(rot.mul_vec3(Vec3::X))
+            .abs()
+            > GRIPPED_ACROSS;
+        if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne || knocked)
+        {
             self.holding = false;
         }
-        // (holding, a tyre may pass several times its grip for the moment it takes
-        // the body to follow a quick turn of the wheel: OMSI sets the yaw rate outright)
-        let reach = if self.holding { HOLD_REACH } else { 1.0 };
+        // (holding, the tyres take whatever keeps them rolling where they point: the body
+        // turns about the `[rot_pnt_long]` line at once, as in OMSI 2, which sets the yaw
+        // rate v κ and the direction of the velocity outright; the bend's pull above lets
+        // them go)
+        let reach = if self.holding { f32::INFINITY } else { 1.0 };
         l.j.clear();
         l.j.resize(lat.len(), 0.0);
         (l.v, l.w, l.reach, l.gripped, l.slipping, l.m, l.mt) =

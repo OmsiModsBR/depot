@@ -6,7 +6,7 @@ use super::train::step_train;
 use super::tyre::Substep;
 use crate::collision::Obb;
 use crate::physics::domain::params::{
-    BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, MAX_STEER, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
+    BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
 use crate::physics::domain::{BodyInputs, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
 use glam::{DVec3, Quat, Vec3};
@@ -148,9 +148,7 @@ impl RigidBody {
         let Some(w) = self.wheels.get(i) else {
             return 0.0;
         };
-        ((w.attach.y - self.rot_pnt_long) * self.kappa)
-            .atan()
-            .clamp(-MAX_STEER, MAX_STEER)
+        ((w.attach.y - self.rot_pnt_long) * self.kappa).atan()
     }
 
     /// Forward speed (m/s) in the body frame.
@@ -270,15 +268,10 @@ impl RigidBody {
             // scrub ate the drive, 60 % steering left a twentieth of the push and full lock
             // none ("the engine revs but the bus gets slower the more I steer")
             let across = (1.0 - w.attach.x * kappa).max(0.2);
-            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across)
-                .atan()
-                .clamp(-MAX_STEER, MAX_STEER);
+            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across).atan();
             w.steered = w.steer != 0.0;
         }
-        self.steer_deg = ((front - self.rot_pnt_long) * kappa)
-            .atan()
-            .clamp(-MAX_STEER, MAX_STEER)
-            .to_degrees();
+        self.steer_deg = ((front - self.rot_pnt_long) * kappa).atan().to_degrees();
     }
 
     /// The body moved on by the substep under what acts on it.

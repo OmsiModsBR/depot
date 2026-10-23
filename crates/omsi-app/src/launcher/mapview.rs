@@ -34,9 +34,9 @@ use std::time::Instant;
 // line's route in the map's own red - so the two maps are the same picture.
 use crate::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
 const STOP: Color = Color::rgba(240, 240, 240, 1.0);
-/// Entry points wear the launcher's own amber; the one under the mouse a grey ring, the
-/// chosen one a white (a click on the map takes the place of a name in a list of seventy).
-const ENTRY: Color = Color::rgba(232, 160, 48, 1.0);
+// Entry points wear the launcher's accent (`omsi_ui::theme::accent`); the one under the mouse
+// a grey ring, the chosen one a white (a click on the map takes the place of a name in a list
+// of seventy).
 const ENTRY_HOVER: Color = Color::rgba(160, 160, 160, 1.0);
 const ENTRY_HERE: Color = Color::rgba(255, 255, 255, 1.0);
 /// A road is at least this wide on the screen when the map is far out, its own metres when
@@ -124,6 +124,9 @@ struct Roads {
     entries: Vec<Entry>,
     /// Every placed object's world place: the trip's stops are found here.
     objects: HashMap<i64, DVec2>,
+    /// The streets the map's name signs name, each once (any case), with where its first
+    /// sign stands: the Timetable page's search finds them.
+    streets: Vec<(String, DVec2)>,
 }
 
 /// What a worker read.
@@ -312,6 +315,68 @@ impl MapView {
     pub fn take_clicked(&mut self) -> Option<usize> {
         let drawn = self.clicked.take()?;
         Some(self.roads.as_deref()?.entries.get(drawn)?.index)
+    }
+
+    /// Whether the map is read (its roads and objects are known, or it could not be read).
+    pub fn ready(&self) -> bool {
+        self.loading.is_none() && (self.roads.is_some() || self.error.is_some())
+    }
+
+    /// The streets the map's name signs name, with where each stands (see `Roads::streets`).
+    pub fn streets(&self) -> &[(String, DVec2)] {
+        self.roads.as_deref().map(|r| r.streets.as_slice()).unwrap_or_default()
+    }
+
+    /// Look at world point `p`, near enough to read the streets round it.
+    pub fn look_at(&mut self, p: DVec2) {
+        self.center = p;
+        self.mpp = self.mpp.clamp(MPP_MIN, 0.8);
+        self.fit = false;
+        self.manual = true;
+    }
+
+    /// Zoom in (`by` above 1) or out round the middle of the window.
+    pub fn zoom(&mut self, by: f64) {
+        self.mpp = (self.mpp / by).clamp(MPP_MIN, self.max_mpp());
+        self.manual = true;
+        self.wheeled = Some(Instant::now());
+    }
+
+    /// Show the whole map again.
+    pub fn refit(&mut self) {
+        self.fit = true;
+        self.manual = false;
+    }
+
+    /// Which reading of the map's roads is shown: another number, other roads.
+    pub fn roads_key(&self) -> usize {
+        self.roads.as_ref().map(|r| Arc::as_ptr(r) as usize).unwrap_or(0)
+    }
+
+    /// The lanes the game drives for `pieces` (see `Roads::routes_of`), in world metres and
+    /// with what the eye cannot tell apart taken out; and how many of the pieces the map does
+    /// not have. Nothing before the map is read.
+    pub fn lanes_of(&self, pieces: &[omsi_launcher_lib::RoadPiece]) -> (Vec<Vec<DVec2>>, usize) {
+        let Some(roads) = self.roads.as_deref() else { return (Vec::new(), 0) };
+        let (mut out, mut missing) = (Vec::new(), 0);
+        for piece in pieces {
+            let lanes = roads.routes_of(piece);
+            missing += usize::from(lanes.is_empty());
+            for i in lanes {
+                let Some(l) = roads.net.lanes.get(i) else { continue };
+                let v: Vec<Vec3> = l.points.iter().map(|q| Vec3::new((q.x - roads.origin.x) as f32, (q.y - roads.origin.y) as f32, 0.0)).collect();
+                let v = simplify(&v, 0.25);
+                if v.len() >= 2 {
+                    out.push(v.iter().map(|q| roads.origin + DVec2::new(q.x as f64, q.y as f64)).collect());
+                }
+            }
+        }
+        (out, missing)
+    }
+
+    /// Where the map's object `id` stands (a stop of the timetable), once the map is read.
+    pub fn place_of(&self, id: i64) -> Option<DVec2> {
+        self.roads.as_deref()?.objects.get(&id).copied()
     }
 
     /// Where a world point lies in the picture (interface pixels, `rect`'s own coordinates).
@@ -710,7 +775,7 @@ impl MapView {
         }
         let chosen = self.chosen();
         for (i, e) in roads.entries.iter().enumerate() {
-            p.world_disc(at(e.at), 0.0, ENTRY_PX * k, ENTRY);
+            p.world_disc(at(e.at), 0.0, ENTRY_PX * k, omsi_ui::theme::accent());
             if self.hover == Some(i) {
                 ring(&mut p, at(e.at), (ENTRY_PX + 3.0) * k, 2.0 * k, ENTRY_HOVER, mpp);
             }
@@ -816,7 +881,7 @@ fn read_map(look: &Look) -> Roads {
         .filter(|t| omsi_cfg::vfs::is_file(&t.2))
         .collect();
     let t0 = std::time::Instant::now();
-    let crate::scene::NavigationMap { lanes, road_surfaces, places, signs: _ } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
+    let crate::scene::NavigationMap { lanes, road_surfaces, places, signs } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
     let (roads, net) = crate::nav::city_roads(lanes, &road_surfaces);
     // the lanes the timetable can name, and the lanes of every spline behind them
     let mut by_path = HashMap::new();
@@ -880,7 +945,14 @@ fn read_map(look: &Look) -> Roads {
         min.x, min.y, max.x, max.y,
         lo.x, lo.y, hi.x, hi.y
     );
-    Roads { roads, net: Arc::new(net), lanes: by_path, splines: by_spline, origin, lo, hi, entries, objects }
+    let mut streets: Vec<(String, DVec2)> = Vec::new();
+    for (at, _, name) in signs {
+        if !streets.iter().any(|s| s.0.eq_ignore_ascii_case(&name)) {
+            streets.push((name, at.truncate()));
+        }
+    }
+    streets.sort_by_key(|s| s.0.to_lowercase());
+    Roads { roads, net: Arc::new(net), lanes: by_path, splines: by_spline, origin, lo, hi, entries, objects, streets }
 }
 
 #[cfg(test)]

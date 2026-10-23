@@ -27,15 +27,10 @@ struct PuddleParams {
 @group(0) @binding(7) var t_hit_depth: texture_depth_2d;
 @group(0) @binding(8) var t_vehicle: texture_2d<f32>;
 
-struct PuddleVertex {
-    @builtin(position) clip: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
+alias PuddleVertex = FullscreenVertex;
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> PuddleVertex {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    return PuddleVertex(vec4<f32>(x, y, 0.0, 1.0), vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5));
+    return fullscreen_vertex(i);
 }
 
 fn scene_pixel(uv: vec2<f32>) -> vec2<i32> {
@@ -53,8 +48,7 @@ fn clip_uv(c: vec4<f32>) -> vec2<f32> {
     return vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
 }
 fn finite_colour(c: vec3<f32>) -> vec3<f32> {
-    let exponent = bitcast<vec3<u32>>(c) & vec3<u32>(0x7f800000u);
-    return select(vec3<f32>(0.0), clamp(c, vec3<f32>(0.0), vec3<f32>(65000.0)), all(exponent != vec3<u32>(0x7f800000u)));
+    return finite_clamped(c, 65000.0);
 }
 fn reflection_colour(c: vec3<f32>) -> vec3<f32> {
     return select(c, srgb_encode(c), abs(p.vehicle_info.w) < 0.5);

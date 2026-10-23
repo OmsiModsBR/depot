@@ -94,6 +94,16 @@ pub fn is_writable(dir: &Path) -> bool {
     ok
 }
 
+/// The content folder's marker, as written by versions that installed loose folders anywhere.
+const MARKER_OLD: &str = "This folder holds Project Depot's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n";
+/// The inbox's README, as written by versions that installed loose folders anywhere.
+const README_OLD: &str = "Put a mod here (a folder or a .zip) and start the launcher: it works out what the mod is\n(a bus, a map, scenery objects, splines, textures, fonts ...) and sorts it into the folders\nnext to this one. The original OMSI 2 folder is never written to.\n";
+
+/// The marker: the launcher installs a .zip only, loose folders are copied by hand.
+const MARKER_TEXT: &str = "This folder holds Project Depot's own content and installed mods, laid out like the original game.\nDrop a mod's .zip into Mods/ and the launcher installs it; loose folders are copied here by hand.\n";
+/// The inbox's README: a .zip only, loose folders copied by hand.
+const README_TEXT: &str = "Put a mod's .zip here and start the launcher: it works out what the mod is (a bus, a map,\nscenery objects, splines, textures, fonts ...) and installs it next to this folder, read in\nplace and never unpacked. The original OMSI 2 folder is never written to.\n\nLoose folders (not a .zip) are not installed from here. Copy them yourself: into the original\nOMSI 2 folder (the mod then works in OMSI 2 and in the Depot), or into the folders next to\nthis one (the Depot only). The Mods page has a button that opens each folder.\n";
+
 /// Create the content folder layout at `dir` (idempotent).
 pub fn ensure_content_layout(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
@@ -108,14 +118,24 @@ pub fn ensure_content_layout(dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir.join(f))?;
     }
     std::fs::create_dir_all(dir.join("Mods"))?;
-    let marker = dir.join(CONTENT_MARKER);
-    if !marker.exists() {
-        std::fs::write(&marker, "This folder holds Project Depot's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n")?;
-    }
-    let readme = dir.join("Mods").join("README.txt");
-    if !readme.exists() {
-        std::fs::write(&readme, "Put a mod here (a folder or a .zip) and start the launcher: it works out what the mod is\n(a bus, a map, scenery objects, splines, textures, fonts ...) and sorts it into the folders\nnext to this one. The original OMSI 2 folder is never written to.\n")?;
-    }
+    // (rewritten when it still holds what an older version wrote: that promised folders on a
+    // computer; a file the player changed stays as it is)
+    let write = |path: &Path, text: &str, older: &[&str]| -> std::io::Result<()> {
+        let now = std::fs::read_to_string(path).ok();
+        if now
+            .as_deref()
+            .is_none_or(|t| older.contains(&t) && t != text)
+        {
+            std::fs::write(path, text)?;
+        }
+        Ok(())
+    };
+    write(&dir.join(CONTENT_MARKER), MARKER_TEXT, &[MARKER_OLD])?;
+    write(
+        &dir.join("Mods").join("README.txt"),
+        README_TEXT,
+        &[README_OLD],
+    )?;
     Ok(())
 }
 
@@ -150,5 +170,24 @@ mod tests {
         std::fs::create_dir_all(dir.join("Vehicles").join("MAN_SD200")).unwrap();
         assert!(!is_programs_folder(&dir));
         std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+    }
+
+    /// The inbox's README is written once, and an older version's (which promised folder
+    /// installs) is brought up to date; one the player wrote stays.
+    #[test]
+    fn an_older_readme_is_rewritten_a_players_kept() {
+        let dir = std::env::temp_dir().join(format!("omsi-readme-{}", std::process::id()));
+        let readme = dir.join("Mods").join("README.txt");
+        std::fs::create_dir_all(dir.join("Mods")).unwrap();
+        std::fs::write(&readme, README_OLD).unwrap();
+        ensure_content_layout(&dir).unwrap();
+        let first = std::fs::read_to_string(&readme).unwrap();
+        std::fs::write(&readme, "my notes").unwrap();
+        ensure_content_layout(&dir).unwrap();
+        let kept = std::fs::read_to_string(&readme).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(first, README_TEXT);
+        assert_eq!(kept, "my notes");
+        assert!(!README_TEXT.contains("a folder or a .zip"));
     }
 }

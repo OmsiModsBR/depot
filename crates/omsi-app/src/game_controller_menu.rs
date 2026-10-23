@@ -217,7 +217,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             let action = d.buttons.get(*b).map(|x| x.0.as_str()).unwrap_or("");
             let names = crate::describe::names(&app.args.root, &app.settings.language);
             let value = if action.is_empty() { "Unassigned".into() } else { names.control(action) };
-            out.push(crate::game_lists::opens(&format!("Action: {value}"), "Choose an OMSI event or game action", "choose_action"));
+            out.push(crate::game_lists::opens(&omsi_ui::tr("Action: %{action}").replace("%{action}", &value), "Choose an OMSI event or game action", "choose_action"));
             out.push((crate::game_lists::row("Latching switch", 's', if d.latching.contains(b) { "on" } else { "off" }, "Switch back when a physical switch is released", None), format!("latching {b}")));
             out.push(crate::game_lists::button("Clear assignment", "Clear", "Leave this button without an action", "bind "));
         }
@@ -228,7 +228,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
         ListKind::ControllerButton(name, b) => {
             let d = index(&devices, name).map(|i| devices[i].clone()).unwrap_or_default();
             out.extend(action_rows(event_names(app, &d)));
-            out.push((format!("Clear {}", button_label(*b)), "bind ".into()));
+            out.push((omsi_ui::tr("Clear %{button}").replace("%{button}", &button_label(*b)), "bind ".into()));
             out.push(("Back".into(), "back".into()));
         }
         _ => {}
@@ -239,9 +239,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
 pub(crate) fn button_label(b: usize) -> String {
     if b >= crate::controllers::HAT_BUTTONS {
         let h = b - crate::controllers::HAT_BUTTONS;
-        format!("Hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4])
+        omsi_ui::tr("Hat %{n} %{dir}").replace("%{n}", &(h / 4 + 1).to_string()).replace("%{dir}", &omsi_ui::tr(["up", "right", "down", "left"][h % 4]))
     } else {
-        format!("Button {}", b + 1)
+        omsi_ui::tr("Button %{n}").replace("%{n}", &(b + 1).to_string())
     }
 }
 

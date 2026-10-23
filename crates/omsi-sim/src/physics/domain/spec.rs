@@ -50,8 +50,9 @@ pub struct PhysicsSpec {
     pub kinematic_mass_kg: f32,
     /// Moments of inertia (kg m²) about the body's right, forward and up axes: pitch, roll and
     /// yaw, from the file's t m² with no unit guess and no minimum. `[momentofintertia]` gives
-    /// them in that order - about the lateral, the longitudinal and the vertical axis, as the
-    /// SDK's comment says ("um x, y und z-Achse, also Quer-, Längs- und Hochachse").
+    /// them in OMSI's y-up body frame: the first about the lateral axis (pitch), the second
+    /// about the vertical one (yaw) and the third about the longitudinal one (roll), whatever
+    /// order the SDK's comment names (the in-game check is in issue #49).
     pub inertia: Vec3,
     /// Centre of gravity (m, right, forward, up from the model origin). Its height is
     /// `[schwerpunkt]`, the lever the weight shifts by as OMSI has it, and none for a file

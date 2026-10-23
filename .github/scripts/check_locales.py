@@ -16,7 +16,9 @@ Warnings (shown on the pull request, the check passes):
 * an existing translation is changed - often a correction, sometimes another contributor's
   text overwritten by mistake;
 * a new key is not a text the code uses (a typo, a missing `...`, a trailing space), so it
-  is never shown.
+  is never shown. A key with `%{x}` placeholders is also used when the code formats the
+  same text with `{...}` in their place (`format!("Gear {}", n)` for "Gear %{n}"): the
+  game finds the template of such a text when it is drawn.
 
 Annotations go to stdout in the GitHub Actions format, a summary to $GITHUB_STEP_SUMMARY.
 """
@@ -63,8 +65,17 @@ def code_strings(root: Path) -> set[str]:
     out = set()
     for p in root.glob("crates/**/*.rs"):
         for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', p.read_text(encoding="utf-8", errors="replace")):
+            lit = re.sub(r"\\u\{([0-9a-fA-F]+)\}", lambda m: chr(int(m.group(1), 16)), lit)
             out.add(lit.replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\"))
     return out
+
+
+def formatted(key: str, code: set[str]) -> bool:
+    """Does the code format `key`'s text, with `{...}` where it has `%{x}`?"""
+    if "%{" not in key:
+        return False
+    pattern = re.compile("".join(r"\{[^{}]*\}" if p.startswith("%{") else re.escape(p) for p in re.split(r"(%\{\w+\})", key)))
+    return any(pattern.fullmatch(lit) for lit in code if "{" in lit)
 
 
 def line_of(lines: list[str], key: str, lang: str | None = None) -> int:
@@ -112,7 +123,7 @@ def main() -> int:
             if lang in old:
                 changed_langs[lang] = changed_langs.get(lang, 0) + 1
                 warnings.append((line_of(lines, key, lang), f"{lang}: an existing translation of {key!r} is changed from {old[lang]!r} to {text!r}"))
-        if key not in before and key not in code:
+        if key not in before and key not in code and not formatted(key, code):
             warnings.append((line_of(lines, key), f"{key!r} is not a text the code uses, so this entry is never shown"))
     for key in before:
         if key not in after and key in code:

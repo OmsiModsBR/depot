@@ -4,7 +4,7 @@
 use super::state::{fmt_bytes, hhmm, short_map};
 use super::theme::*;
 use super::ui::{id_of, matches, ButtonKind, Ui};
-use super::{Launcher, Page};
+use super::Launcher;
 use omsi_launcher_ui::Page as UiPage;
 use glam::Vec2;
 use omsi_launcher_lib as core;
@@ -16,6 +16,10 @@ use serde_json::{json, Value};
 pub struct PagesView {
     pub new_driver: String,
     pub confirm_delete: Option<std::time::Instant>,
+    /// The drive chosen on Profile / Sessions (the driver's drives, most recent first).
+    pub drive: usize,
+    /// Its details window is open.
+    pub drive_details: bool,
     /// The "reset every setting" dialog is open.
     pub confirm_reset: bool,
     pub kb_filter: [String; 2],
@@ -24,14 +28,16 @@ pub struct PagesView {
     /// (section, index) of the binding waiting for a key.
     pub capturing: Option<(usize, usize)>,
     pub drop_hover: bool,
-    pub setup_root: Option<String>,
-    pub setup_game: Option<String>,
+    /// The Setup page's folders as edited, and its Content card (`setup`).
+    pub setup: super::setup::SetupView,
     /// The Controls page's tab: 0 the keyboard, 1 the game controllers.
     pub controls_tab: usize,
-    /// The Settings page's tab (see `SETTINGS_TABS`).
-    pub settings_tab: usize,
+    /// The Settings page's section and search (`settings`).
+    pub set: super::settings::SettingsView,
     pub pads: PadsView,
     pub tt: super::timetable::TimetableView,
+    /// The keyboard tab on a computer (`keyboard`).
+    pub kb: super::keyboard::KeyboardView,
 }
 
 /// The game controllers tab: the devices `gamectrler.cfg` sets up, the ones connected now,
@@ -100,11 +106,33 @@ fn release_feedback(io: &mut Option<crate::controllers::Devices>, active: &mut b
 
 pub fn profile(l: &mut Launcher, area: Rect) {
     let body = l.page_title(area, UiPage::Profile);
-    let left_w = (body.w * 0.56).min(700.0);
-    let left = Rect::new(body.x, body.y, left_w, body.h);
-    let right = Rect::new(body.x + left_w + GAP * 2.0, body.y, body.w - left_w - GAP * 2.0, body.h);
-    // driver chooser
+    if super::mobile::mobile() {
+        // (a phone: the driver and the record on the left, the drives on the right; its games
+        // running have a page of their own)
+        let left_w = (body.w * 0.56).min(700.0);
+        let left = Rect::new(body.x, body.y, left_w, body.h);
+        let right = Rect::new(body.x + left_w + GAP * 2.0, body.y, body.w - left_w - GAP * 2.0, body.h);
+        let top = Rect::new(left.x, left.y, left.w, 132.0);
+        driver_card(l, top);
+        record_card(l, Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, left.h - top.h - GAP * 1.5));
+        recent_drives(l, right);
+        return;
+    }
+    // (as the concept: the driver and their record on the left, the drives finished on the
+    // right, and the games open now along the foot - they belong to the driver too)
+    let open = open_sessions_h(l, body.h);
+    let upper = (body.h - open - GAP * 1.5).max(0.0);
+    let right_w = omsi_launcher_ui::kit::fit(440.0, body.w);
+    let left = Rect::new(body.x, body.y, body.w - right_w - GAP * 1.5, upper);
     let top = Rect::new(left.x, left.y, left.w, 132.0);
+    driver_card(l, top);
+    record_card(l, Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, (left.h - top.h - GAP * 1.5).max(0.0)));
+    recent_drives(l, Rect::new(left.right() + GAP * 1.5, body.y, right_w, upper));
+    open_sessions(l, Rect::new(body.x, body.y + upper + GAP * 1.5, body.w, open));
+}
+
+/// The driver: the one chosen, deleting them, and a new one.
+fn driver_card(l: &mut Launcher, top: Rect) {
     l.ui.panel(top);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(top.x + 18.0, top.y + 14.0, top.w - 36.0, top.h - 28.0), "Driver");
     let names = l.state.profiles.clone();
@@ -115,6 +143,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
         let _ = core::save_config(&l.state.config);
         l.state.load_profile();
         l.state.touched();
+        l.pages.drive = 0;
     }
     let danger_armed = l.pages.confirm_delete.map(|t| t.elapsed().as_secs() < 4).unwrap_or(false);
     // (no driver yet: nothing to delete)
@@ -126,7 +155,7 @@ pub fn profile(l: &mut Launcher, area: Rect) {
                     l.state.profile = None;
                     l.state.config.profile.clear();
                     let _ = core::save_config(&l.state.config);
-                    l.state.set_status(format!("Personnel file of {name} deleted."), false);
+                    l.state.set_status(omsi_ui::tr("Personnel file of %{name} deleted.").replace("%{name}", &name), false);
                     l.state.load_profiles();
                 }
                 Err(e) => l.state.set_status(format!("{e:#}"), true),
@@ -148,88 +177,278 @@ pub fn profile(l: &mut Launcher, area: Rect) {
                     let _ = core::save_config(&l.state.config);
                     l.pages.new_driver.clear();
                     l.state.load_profiles();
-                    l.state.set_status(format!("Driver {name} created."), false);
+                    l.state.set_status(omsi_ui::tr("Driver %{name} created.").replace("%{name}", &name), false);
                 }
                 Err(e) => l.state.set_status(format!("{e:#}"), true),
             }
         }
     }
-    // level and stats
-    let card = Rect::new(left.x, top.bottom() + GAP * 1.5, left.w, left.h - top.h - GAP * 1.5);
-    l.ui.panel(card);
-    let Some(p) = l.state.profile.clone() else {
-        l.ui.text_in("Create a driver to start a personnel file.", card.pad(20.0, 20.0), 14.0, Weight::Medium, TEXT_DIM, Align::Left);
-        return;
-    };
-    let c = Vec2::new(card.x + 70.0, card.y + 76.0);
-    let prev = ((p.level - 1) * (p.level - 1) * 250) as f64;
-    let frac = ((p.xp as f64 - prev) / (p.next_level_xp as f64 - prev).max(1.0)).clamp(0.0, 1.0) as f32;
-    let shown = l.ui.anim(id_of("xp-ring"), frac, 0.6);
-    l.ui.p().circle(c, 50.0, Color::rgba(28, 31, 37, 1.0));
-    l.ui.p().arc(c, 44.0, 52.0, 0.0, std::f32::consts::TAU, Color::WHITE.alpha(0.08));
-    let a0 = -std::f32::consts::FRAC_PI_2;
-    l.ui.p().arc(c, 44.0, 52.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), ACCENT);
-    l.ui.text_in(&p.level.to_string(), Rect::new(c.x - 40.0, c.y - 26.0, 80.0, 40.0), 34.0, Weight::Black, TEXT, Align::Center);
-    l.ui.text_in("LEVEL", Rect::new(c.x - 40.0, c.y + 12.0, 80.0, 16.0), 10.0, Weight::Black, TEXT_DIM, Align::Center);
-    let tx = card.x + 142.0;
-    l.ui.text_in(&format!("{}{}", p.name, if p.exists { "" } else { " (no personnel file yet)" }), Rect::new(tx, card.y + 34.0, card.w - 160.0, 30.0), 24.0, Weight::Black, TEXT, Align::Left);
-    l.ui.progress(Rect::new(tx, card.y + 76.0, card.w - 170.0, 10.0), shown, false);
-    l.ui.text_in(&format!("{} XP · {} to level {}", p.xp, (p.next_level_xp - p.xp).max(0), p.level + 1), Rect::new(tx, card.y + 94.0, card.w - 160.0, 18.0), 12.5, Weight::Medium, TEXT_DIM, Align::Left);
-    let hours = |h: f64| format!("{} h {:02} min", h.floor() as i64, ((h - h.floor()) * 60.0).round() as i64);
-    let stats = [
+}
+
+/// What the driver's record says, as the tiles of the Profile page show it: (icon, value, what).
+fn record_tiles(p: &core::Profile) -> [(&'static str, String, &'static str); 12] {
+    let hours = |h: f64| omsi_ui::tr("%{h} h %{m} min").replace("%{h}", &(h.floor() as i64).to_string()).replace("%{m}", &format!("{:02}", ((h - h.floor()) * 60.0).round() as i64));
+    let on_time = (p.stops - p.early - p.late).max(0);
+    [
         ("schedule", hours(p.hours), "hours driven"),
         ("route", format!("{:.1} km", p.km), "distance"),
         ("location_on", p.stops.to_string(), "stops served"),
-        ("timer", format!("{} / {}", p.early, p.late), "early / late"),
+        ("timer", format!("{on_time} / {} / {}", p.early, p.late), "on time / early / late"),
         ("confirmation_number", format!("{:.0}", p.tickets), "tickets sold"),
         ("payments", format!("{:.2}", p.cash), "takings"),
         ("warning", p.crashes.to_string(), "crashes"),
         ("person", p.hurt.to_string(), "pedestrians hurt"),
         ("speed", format!("{:.0} %", p.rating_driving), "driving"),
         ("airport_shuttle", format!("{:.0} %", p.rating_comfort), "comfort"),
-        ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket selling"),
-        ("history", p.sessions.len().to_string(), "runs"),
-    ];
-    let grid = Rect::new(card.x + 18.0, card.y + 150.0, card.w - 36.0, card.h - 170.0);
-    let cols = 3;
-    let cw = (grid.w - GAP * (cols as f32 - 1.0)) / cols as f32;
-    let ch = 68.0;
-    for (k, (icon, v, label)) in stats.iter().enumerate() {
+        ("receipt_long", format!("{:.0} %", p.rating_tickets), "ticket sales"),
+        ("history", p.drives.to_string(), "trips"),
+    ]
+}
+
+/// The driver's level and record.
+fn record_card(l: &mut Launcher, card: Rect) {
+    l.ui.panel(card);
+    let Some(p) = l.state.profile.clone() else {
+        l.ui.text_in("Create a driver to start a personnel file.", card.pad(20.0, 20.0), 14.0, Weight::Medium, TEXT_DIM, Align::Left);
+        return;
+    };
+    let c = Vec2::new(card.x + 64.0, card.y + 64.0);
+    let prev = ((p.level - 1) * (p.level - 1) * 250) as f64;
+    let frac = ((p.xp as f64 - prev) / (p.next_level_xp as f64 - prev).max(1.0)).clamp(0.0, 1.0) as f32;
+    let shown = l.ui.anim(id_of("xp-ring"), frac, 0.6);
+    l.ui.p().circle(c, 46.0, Color::rgba(28, 31, 37, 1.0));
+    l.ui.p().arc(c, 39.0, 46.0, 0.0, std::f32::consts::TAU, Color::WHITE.alpha(0.08));
+    let a0 = -std::f32::consts::FRAC_PI_2;
+    l.ui.p().arc(c, 39.0, 46.0, a0, a0 + std::f32::consts::TAU * shown.max(0.01), accent());
+    l.ui.text_in(&p.level.to_string(), Rect::new(c.x - 40.0, c.y - 24.0, 80.0, 36.0), 30.0, Weight::Black, TEXT, Align::Center);
+    l.ui.text_in("LEVEL", Rect::new(c.x - 40.0, c.y + 10.0, 80.0, 16.0), 10.0, Weight::Black, TEXT_DIM, Align::Center);
+    let tx = card.x + 130.0;
+    l.ui.text_in(&format!("{}{}", p.name, if p.exists { "" } else { " (no personnel file yet)" }), Rect::new(tx, card.y + 26.0, card.w - 148.0, 30.0), 20.0, Weight::Bold, TEXT, Align::Left);
+    l.ui.progress(Rect::new(tx, card.y + 62.0, card.w - 152.0, 8.0), shown, false);
+    l.ui.text_in(&omsi_ui::tr("%{xp} XP · %{left} to level %{level}").replace("%{xp}", &p.xp.to_string()).replace("%{left}", &(p.next_level_xp - p.xp).max(0).to_string()).replace("%{level}", &(p.level + 1).to_string()), Rect::new(tx, card.y + 78.0, card.w - 148.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+    let grid = Rect::new(card.x + 18.0, card.y + 126.0, card.w - 36.0, card.h - 140.0);
+    let gap = 10.0;
+    // (three across as the concept has them; four across, three rows, where four rows do not
+    // fit - a 720 p window - and the tiles a little lower still if need be)
+    let cols = if grid.h >= 4.0 * 62.0 + 3.0 * gap || grid.w < 560.0 { 3 } else { 4 };
+    let rows = 12_usize.div_ceil(cols);
+    let cw = (grid.w - gap * (cols as f32 - 1.0)) / cols as f32;
+    let ch = ((grid.h - gap * (rows as f32 - 1.0)) / rows as f32).clamp(48.0, 62.0);
+    for (k, (icon, v, label)) in record_tiles(&p).iter().enumerate() {
         let (cx, cy) = ((k % cols) as f32, (k / cols) as f32);
-        let r = Rect::new(grid.x + cx * (cw + GAP), grid.y + cy * (ch + 10.0), cw, ch);
+        let r = Rect::new(grid.x + cx * (cw + gap), grid.y + cy * (ch + gap), cw, ch);
         if r.bottom() > card.bottom() - 6.0 {
             break;
         }
-        l.ui.p().rounded(r, 10.0, Color::WHITE.alpha(0.04));
-        l.ui.icon(icon, Vec2::new(r.x + 22.0, r.y + 22.0), 18.0, ACCENT);
-        l.ui.text_in(v, Rect::new(r.x + 40.0, r.y + 8.0, r.w - 48.0, 28.0), 18.0, Weight::Black, TEXT, Align::Left);
-        l.ui.text_in(label, Rect::new(r.x + 14.0, r.y + 42.0, r.w - 20.0, 18.0), 11.5, Weight::Medium, TEXT_DIM, Align::Left);
+        let top = r.y + (ch - 48.0) * 0.4;
+        l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
+        l.ui.p().rounded_border(r, 6.0, 1.0, EDGE);
+        l.ui.icon(icon, Vec2::new(r.x + 22.0, top + 18.0), 15.0, accent());
+        l.ui.text_in(v, Rect::new(r.x + 36.0, top + 5.0, r.w - 44.0, 26.0), 16.5, Weight::Bold, TEXT, Align::Left);
+        l.ui.text_in(label, Rect::new(r.x + 14.0, r.bottom() - 24.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
     }
-    // recent runs
+}
+
+/// The drive's title in the lists: its line (and tour) or a free drive, and the map.
+fn drive_title(s: &core::Session) -> String {
+    match &s.line {
+        Some(line) => omsi_ui::tr("Line %{line} · %{map}").replace("%{line}", &format!("{line}{}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).replace("%{map}", &short_map(&s.map)),
+        None => omsi_ui::tr("Free drive · %{map}").replace("%{map}", &short_map(&s.map)),
+    }
+}
+
+/// The drives the driver finished, most recent first: one chosen, its details in a window.
+fn recent_drives(l: &mut Launcher, right: Rect) {
     l.ui.panel(right);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent runs");
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(right.x + 18.0, right.y + 14.0, right.w - 36.0, right.h - 28.0), "Recent drives");
+    let Some(p) = l.state.profile.clone() else { return };
+    if !super::mobile::mobile() {
+        let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, &omsi_ui::tr("%{name} · most recent first").replace("%{name}", &p.name), 12.0, inner.w - 150.0);
+        l.ui.text_in(&note, Rect::new(inner.x, right.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+    }
     let sessions = p.sessions.clone();
-    l.ui.scroll_area("runs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
+    let foot = !sessions.is_empty() && !super::mobile::mobile();
+    let list_h = if foot { inner.h - 58.0 } else { inner.h };
+    let chosen = l.pages.drive.min(sessions.len().saturating_sub(1));
+    let mut picked = None;
+    let mut open = false;
+    l.ui.scroll_area("runs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, list_h), &mut |ui, v| {
         if sessions.is_empty() {
-            ui.text_in("No runs yet. Drive a duty and it shows up here.", Rect::new(v.x + 8.0, v.y, v.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in("No drives yet. Start one from Maps and it shows up here.", Rect::new(v.x + 8.0, v.y, v.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
             return 30.0;
         }
-        let rh = 62.0;
+        let rh = 74.0;
         for (k, s) in sessions.iter().enumerate() {
-            let r = Rect::new(v.x + 6.0, v.y + k as f32 * rh, v.w - 16.0, rh - 6.0);
-            ui.p().rounded(r, 9.0, Color::WHITE.alpha(0.04));
-            let title = match &s.line {
-                Some(line) => format!("Line {line}{} · {}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default(), short_map(&s.map)),
-                None => format!("Free drive · {}", short_map(&s.map)),
-            };
-            ui.text_in(&title, Rect::new(r.x + 12.0, r.y + 6.0, r.w - 130.0, 20.0), 13.0, Weight::Bold, TEXT, Align::Left);
-            ui.text_in(&format!("{} · {:.1} km · {} stops · {} tickets · {} crashes", s.bus.rsplit('/').next().unwrap_or(""), s.metres / 1000.0, s.stops, s.tickets, s.crashes), Rect::new(r.x + 12.0, r.y + 28.0, r.w - 130.0, 18.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
-            let when = chrono_like(s.time);
-            ui.text_in(&when, Rect::new(r.right() - 120.0, r.y + 6.0, 110.0, 20.0), 11.5, Weight::Medium, TEXT_SOFT, Align::Right);
-            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 120.0, r.y + 28.0, 110.0, 18.0), 11.5, Weight::Medium, ACCENT, Align::Right);
+            let r = Rect::new(v.x + 6.0, v.y + k as f32 * rh, v.w - 16.0, rh - 8.0);
+            let (hover, _, clicked) = ui.interact_key(id_of(&format!("drive-{k}")), r);
+            let on = k == chosen;
+            ui.p().rounded(r, 6.0, if on { accent().alpha(0.12) } else if hover { Color::WHITE.alpha(0.06) } else { Color::WHITE.alpha(0.0) });
+            if on {
+                ui.p().rounded_border(r, 6.0, 1.0, accent().alpha(0.6));
+            }
+            if clicked {
+                // (a click on the one chosen opens its details)
+                open = on;
+                picked = Some(k);
+            }
+            ui.text_in(&drive_title(s), Rect::new(r.x + 10.0, r.y + 6.0, r.w - 80.0, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+            ui.text_in(&hours_short(s.seconds / 3600.0), Rect::new(r.right() - 80.0, r.y + 6.0, 70.0, 20.0), 12.0, Weight::Bold, accent(), Align::Right);
+            ui.text_in(&omsi_ui::tr("%{bus} · %{km} km · %{stops} stops · %{tickets} tickets · %{crashes} crashes").replace("%{bus}", s.bus.rsplit('/').next().unwrap_or("")).replace("%{km}", &format!("{:.1}", s.metres / 1000.0)).replace("%{stops}", &s.stops.to_string()).replace("%{tickets}", &s.tickets.to_string()).replace("%{crashes}", &s.crashes.to_string()), Rect::new(r.x + 10.0, r.y + 26.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            ui.text_in(&chrono_like(s.time), Rect::new(r.x + 10.0, r.y + 44.0, r.w - 20.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         }
         sessions.len() as f32 * rh
     });
+    if let Some(k) = picked {
+        l.pages.drive = k;
+    }
+    if foot {
+        let line_y = inner.y + list_h + 8.0;
+        l.ui.p().rect(Rect::new(right.x + 1.0, line_y, right.w - 2.0, 1.0), EDGE);
+        if l.ui.button("drive-details", Rect::new(inner.x, line_y + 12.0, inner.w, 34.0), "Open details", None, ButtonKind::Normal) {
+            open = true;
+        }
+    }
+    if open {
+        l.pages.drive_details = true;
+    }
+}
+
+/// The open sessions card's height for a page `body_h` high: a row for each game, the log
+/// under its row when open, a third of the page at most.
+fn open_sessions_h(l: &Launcher, body_h: f32) -> f32 {
+    let rows = l.state.instances.len().max(1) as f32;
+    let logs = l.state.instances.iter().filter(|i| l.state.open_logs.contains(&i.pid)).count() as f32;
+    (52.0 + rows * 62.0 + logs * 190.0).min((body_h * 0.36).max(118.0))
+}
+
+/// The games open now (and those that ended since the launcher started): their log and stop.
+fn open_sessions(l: &mut Launcher, r: Rect) {
+    l.ui.panel(r);
+    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), "Open sessions");
+    l.ui.text_in("games running now", Rect::new(inner.x, r.y + 14.0, inner.w, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
+    let list = l.state.instances.clone();
+    if list.is_empty() {
+        l.ui.text_in("No game started from here is running. Start one from Maps.", Rect::new(inner.x, inner.y, inner.w, 30.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        return;
+    }
+    let names: std::collections::HashMap<String, String> = l.state.vehicles.iter().map(|v| (v.file.clone(), v.name.clone())).collect();
+    let short_bus = |b: &str| names.get(b).cloned().unwrap_or_else(|| b.rsplit('/').next().unwrap_or("").trim_end_matches(".bus").to_string());
+    let mut actions: Vec<(u32, &str)> = Vec::new();
+    let stopping = l.state.stopping.clone();
+    let open_logs = l.state.open_logs.clone();
+    let logs = l.state.logs.clone();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    l.ui.scroll_area("open-sessions", Rect::new(inner.x - 4.0, inner.y - 4.0, inner.w + 8.0, inner.h + 8.0), &mut |ui, v| {
+        let mut y = v.y + 4.0;
+        for i in &list {
+            let row = Rect::new(v.x + 4.0, y, v.w - 16.0, 52.0);
+            ui.p().rounded(row, 6.0, Color::WHITE.alpha(0.04));
+            let running = i.running;
+            ui.p().circle(Vec2::new(row.x + 16.0, row.center().y), 4.5, if running { OK } else { TEXT_FAINT });
+            let on_line = i.line.as_ref().map(|ln| omsi_ui::tr(" on line %{line}").replace("%{line}", &format!("{ln}{}", i.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default()))).unwrap_or_default();
+            let bus = if i.bus.is_empty() { omsi_ui::tr("on foot").into_owned() } else { short_bus(&i.bus) };
+            let bw = 96.0;
+            let buttons = if running { bw * 2.0 + 8.0 } else { bw };
+            let tw = row.w - 40.0 - buttons - 16.0;
+            ui.text_in(&format!("{} · {bus}{on_line}", short_map(&i.map)), Rect::new(row.x + 30.0, row.y + 7.0, tw, 20.0), 13.5, Weight::Medium, TEXT, Align::Left);
+            let status = if running {
+                if stopping.contains(&i.pid) || i.stopping.is_some() {
+                    omsi_ui::tr("stopping - saving the drive…").into_owned()
+                } else {
+                    let t = now.saturating_sub(i.started);
+                    omsi_ui::tr("running %{time}").replace("%{time}", &format!("{:02}:{:02}:{:02}", t / 3600, (t / 60) % 60, t % 60))
+                }
+            } else {
+                let how = if i.exit_code == Some(0) { String::new() } else if i.killed { omsi_ui::tr(" (killed - it did not end by itself, the drive is not saved)").into_owned() } else { i.exit_code.map(|c| omsi_ui::tr(" (exit code %{code})").replace("%{code}", &c.to_string())).unwrap_or_default() };
+                omsi_ui::tr("ended%{how}").replace("%{how}", &how)
+            };
+            ui.text_in(&format!("{} · {status}", i.profile), Rect::new(row.x + 30.0, row.y + 27.0, tw, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+            let log_open = open_logs.contains(&i.pid);
+            let mut bx = row.right() - 10.0 - bw;
+            if running {
+                let busy = stopping.contains(&i.pid);
+                if ui.button(&format!("stop-{}", i.pid), Rect::new(bx, row.y + 10.0, bw, 32.0), if busy { "Stopping…" } else { "Stop" }, None, ButtonKind::Danger) && !busy {
+                    actions.push((i.pid, "stop"));
+                }
+                bx -= bw + 8.0;
+            }
+            if ui.button(&format!("log-{}", i.pid), Rect::new(bx, row.y + 10.0, bw, 32.0), if log_open { "Hide log" } else { "Open log" }, None, ButtonKind::Normal) {
+                actions.push((i.pid, "log"));
+            }
+            y += 60.0;
+            if log_open {
+                let lr = Rect::new(row.x, y - 2.0, row.w, 180.0);
+                ui.p().rounded(lr, 6.0, Color::rgba(6, 8, 10, 0.9));
+                let lines = logs.get(&i.pid).cloned().unwrap_or_default();
+                for (k, line) in lines.iter().rev().take(9).rev().enumerate() {
+                    ui.text_in(line, Rect::new(lr.x + 10.0, lr.y + 6.0 + k as f32 * 18.0, lr.w - 20.0, 18.0), 11.0, Weight::Regular, if line.contains("ERROR") { DANGER } else if line.contains("WARN") { WARN } else { TEXT_DIM }, Align::Left);
+                }
+                y += 190.0;
+            }
+        }
+        y - v.y
+    });
+    for (pid, what) in actions {
+        match what {
+            "stop" => l.state.stop(pid),
+            _ => {
+                if !l.state.open_logs.remove(&pid) {
+                    l.state.open_logs.insert(pid);
+                    l.state.log_tail(pid);
+                }
+            }
+        }
+    }
+}
+
+/// What a drive's details window lists: (what, the value).
+fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
+    let on_time = (s.stops - s.early - s.late).max(0);
+    vec![
+        ("Map", short_map(&s.map)),
+        ("Bus", s.bus.rsplit('/').next().unwrap_or("").to_string()),
+        ("Line", s.line.as_ref().map(|l| format!("{l}{}", s.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).unwrap_or_else(|| "Free drive".into())),
+        ("Started", chrono_like(s.time)),
+        ("Time driven", hours_short(s.seconds / 3600.0)),
+        ("Distance", format!("{:.1} km", s.metres / 1000.0)),
+        ("Stops served", s.stops.to_string()),
+        ("On time / early / late", format!("{on_time} / {} / {}", s.early, s.late)),
+        ("Tickets sold", s.tickets.to_string()),
+        ("Takings", format!("{:.2}", s.cash)),
+        ("Crashes", s.crashes.to_string()),
+        ("Pedestrians hurt", s.hurt.to_string()),
+        ("Jolts", s.jolts.to_string()),
+        ("Driving", format!("{:.0} %", s.driving)),
+        ("Comfort", format!("{:.0} %", s.comfort)),
+        ("Ticket sales", format!("{:.0} %", s.ticketing)),
+    ]
+}
+
+/// The window over Profile / Sessions with the chosen drive's details.
+pub fn drive_dialog(l: &mut Launcher) {
+    let s = l.state.profile.as_ref().and_then(|p| p.sessions.get(l.pages.drive.min(p.sessions.len().saturating_sub(1)))).cloned();
+    let Some(s) = s else {
+        l.pages.drive_details = false;
+        return;
+    };
+    if l.ui.input.keys.contains(&super::ui::Key::Escape) {
+        l.pages.drive_details = false;
+        return;
+    }
+    let rows = drive_rows(&s);
+    let inside = super::start::dialog(l, 520.0, 56.0 + rows.len() as f32 * 26.0 + 90.0, &drive_title(&s), "as saved after the drive");
+    let (buttons, body) = super::start::dialog_foot(l, inside);
+    for (k, (what, value)) in rows.iter().enumerate() {
+        let y = body.y + k as f32 * 26.0;
+        if y + 22.0 > body.bottom() {
+            break;
+        }
+        l.ui.text_in(what, Rect::new(body.x, y, 200.0, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Left);
+        l.ui.text_in(value, Rect::new(body.x + 200.0, y, body.w - 200.0, 22.0), 13.0, Weight::Medium, TEXT, Align::Left);
+    }
+    if l.ui.button("drive-close", Rect::new(buttons.right() - 110.0, buttons.y, 110.0, 34.0), "Close", None, ButtonKind::Normal) {
+        l.pages.drive_details = false;
+    }
 }
 
 fn hours_short(h: f64) -> String {
@@ -262,965 +481,6 @@ fn chrono_like(t: u64) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02} UTC", secs / 3600, (secs % 3600) / 60)
 }
 
-// --- settings ---------------------------------------------------------------------------------
-
-/// A value of the settings as the pages show it.
-fn get<'a>(v: &'a Value, k: &str) -> &'a Value {
-    v.get(k).unwrap_or(&Value::Null)
-}
-
-/// The window sizes the settings offer (`resolution`).
-pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[("auto", "Automatic"), ("1280x720", "1280 x 720"), ("1280x800", "1280 x 800 (Steam Deck)"), ("1366x768", "1366 x 768"), ("1600x900", "1600 x 900"), ("1920x1080", "1920 x 1080"), ("1920x1200", "1920 x 1200"), ("2560x1440", "2560 x 1440"), ("3840x2160", "3840 x 2160")];
-
-fn sel_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, name: &str, r: Rect, label: &str, key: &str, options: &[(&str, &str)]) {
-    ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), label);
-    let cur = match get(s, key) {
-        Value::String(x) => x.clone(),
-        Value::Bool(b) => (*b as u8).to_string(),
-        Value::Number(n) => n.to_string(),
-        _ => String::new(),
-    };
-    let mut labels: Vec<String> = options.iter().map(|o| o.1.to_string()).collect();
-    let mut values: Vec<String> = options.iter().map(|o| o.0.to_string()).collect();
-    let mut sel = values.iter().position(|v| *v == cur || v.parse::<f64>().ok().zip(cur.parse::<f64>().ok()).map(|(a, b)| (a - b).abs() < 1e-6).unwrap_or(false));
-    if sel.is_none() && !cur.is_empty() {
-        // a value written by hand gets an entry of its own
-        labels.push(cur.clone());
-        values.push(cur.clone());
-        sel = Some(values.len() - 1);
-    }
-    let mut sel = sel.unwrap_or(0);
-    if ui.select(name, Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &mut sel, &labels) {
-        let v = &values[sel];
-        s[key] = match get(s, key) {
-            Value::Bool(_) => json!(v == "1"),
-            Value::Number(_) => v.parse::<f64>().map(|f| if f.fract() == 0.0 { json!(f as i64) } else { json!(f) }).unwrap_or(json!(v)),
-            _ => json!(v),
-        };
-        *dirty = 0.3;
-    }
-}
-
-fn toggle_setting(ui: &mut Ui, s: &mut Value, dirty: &mut f32, r: Rect, label: &str, key: &str) {
-    let mut v = get(s, key).as_bool().unwrap_or(false);
-    if ui.toggle(&format!("set-{key}"), r, &mut v, label) {
-        s[key] = json!(v);
-        *dirty = 0.3;
-    }
-}
-
-/// The settings page's tabs: what one has come to change.
-pub const SETTINGS_TABS: [&str; 6] = ["Graphics", "Driving", "Camera", "Sound", "Gameplay", "General"];
-
-/// What the tabs show of the launcher and ask of it (they see only the settings): the
-/// "Reset all settings" and the Controls page at one of its tabs.
-struct Outside {
-    reset: bool,
-    controls: Option<usize>,
-}
-
-thread_local! {
-    /// How high each tab's two columns came out (the stacked layout's heights, and how far
-    /// the page scrolls).
-    static SETTINGS_COL_H: std::cell::Cell<[[f32; 2]; SETTINGS_TABS.len()]> = const { std::cell::Cell::new([[0.0; 2]; SETTINGS_TABS.len()]) };
-}
-
-pub fn settings(l: &mut Launcher, area: Rect) {
-    // (where on the page: the tab shown)
-    let (_, title, line) = UiPage::Settings.heading().unwrap_or_default();
-    let place = SETTINGS_TABS[l.pages.settings_tab.min(SETTINGS_TABS.len() - 1)];
-    let body = l.page_title_with(area, UiPage::Settings.title(), (place, title, line));
-    // (one tab at a time: the whole page in three columns was taller than two screens, and a
-    // setting was found by reading all of it)
-    let bar = Rect::new(body.x, body.y, body.w.min(660.0), 36.0);
-    let mut tab = l.pages.settings_tab;
-    if l.ui.segmented("settings-tab", bar, &mut tab, &SETTINGS_TABS) {
-        l.pages.settings_tab = tab;
-    }
-    let body = Rect::new(body.x, bar.bottom() + 18.0, body.w, (body.bottom() - bar.bottom() - 18.0).max(0.0));
-    let s = &mut l.state.settings;
-    let dirty = &mut l.state.settings_dirty;
-    let mut out = Outside { reset: false, controls: None };
-    // (two columns side by side; where they would be too narrow to read - a phone - one
-    // under the other, each as high as it was the frame before)
-    let stacked = body.w < 900.0;
-    // (each tab scrolled where it was left, not where another one was)
-    l.ui.scroll_area(&format!("settings-page-{tab}"), body, &mut |ui, v| {
-        let hs = SETTINGS_COL_H.with(|c| c.get())[tab];
-        let w = v.w - 8.0;
-        let (cols, h) = if stacked {
-            ([Rect::new(v.x, v.y, w, hs[0]), Rect::new(v.x, v.y + hs[0] + GAP * 2.0, w, hs[1])], hs[0] + hs[1] + GAP * 2.0)
-        } else {
-            let cw = (w - GAP * 2.0) / 2.0;
-            let h = v.h.max(hs[0]).max(hs[1]);
-            ([Rect::new(v.x, v.y, cw, h), Rect::new(v.x + cw + GAP * 2.0, v.y, cw, h)], h)
-        };
-        let used = settings_tab(ui, tab, s, dirty, &mut out, cols);
-        SETTINGS_COL_H.with(|c| {
-            let mut all = c.get();
-            all[tab] = used;
-            c.set(all);
-        });
-        h
-    });
-    if out.reset {
-        l.pages.confirm_reset = true;
-    }
-    if let Some(t) = out.controls {
-        l.pages.controls_tab = t;
-        l.go(Page::Controls);
-    }
-}
-
-/// The dialog that asks before every setting goes back to how it came.
-pub fn reset_dialog(l: &mut Launcher) {
-    let size = l.ui.size;
-    let full = Rect::new(0.0, 0.0, size.x, size.y);
-    l.ui.solid(full);
-    l.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
-    let w = (size.x - 48.0).min(520.0);
-    let h = 190.0;
-    let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
-    l.ui.panel(r);
-    let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
-    l.ui.icon("restart_alt", Vec2::new(inner.x + 14.0, inner.y + 14.0), 26.0, DANGER);
-    l.ui.text_in("Reset every setting?", Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0), 18.0, Weight::Bold, TEXT, Align::Left);
-    l.ui.paragraph("Graphics, sound, controllers and game settings go back to how they came. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
-    let by = inner.bottom() - 38.0;
-    if l.ui.button("reset-no", Rect::new(inner.right() - 250.0, by, 110.0, 38.0), "Cancel", None, ButtonKind::Normal) {
-        l.pages.confirm_reset = false;
-    }
-    if l.ui.button("reset-yes", Rect::new(inner.right() - 130.0, by, 130.0, 38.0), "Reset", Some("restart_alt"), ButtonKind::Danger) {
-        let language = l.state.settings.get("language").cloned();
-        l.state.settings = core::settings_from_text(None);
-        if let Some(lang) = language {
-            l.state.settings["language"] = lang;
-        }
-        l.state.settings_dirty = 0.3;
-        l.pages.confirm_reset = false;
-        l.state.set_status("Every setting is back to how it came.", false);
-    }
-}
-
-/// A column of a settings tab: its panel, and the rows and sections laid down it.
-struct Col {
-    top: f32,
-    inner: Rect,
-    y: f32,
-}
-
-impl Col {
-    /// The column in `r`, under the title of its first section.
-    fn new(ui: &mut Ui, r: Rect, title: &str) -> Col {
-        ui.panel(r);
-        let inner = Launcher::card_title(ui, Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0), title);
-        Col { top: r.y, inner, y: inner.y }
-    }
-
-    /// The next row.
-    fn row(&mut self) -> Rect {
-        let r = Rect::new(self.inner.x, self.y, self.inner.w, ROW - 2.0);
-        self.y += ROW + 4.0;
-        r
-    }
-
-    /// Another section, under its title.
-    fn section(&mut self, ui: &mut Ui, title: &str) {
-        self.y += 6.0;
-        Launcher::part_title(ui, Rect::new(self.inner.x, self.y, self.inner.w, 28.0), title);
-        self.y += 32.0;
-    }
-
-    /// How high the column came out.
-    fn used(&self) -> f32 {
-        self.y - self.top + 14.0
-    }
-}
-
-/// Tab `tab` of the settings in its two columns. Returns the height each column needed (0
-/// for one the tab leaves empty).
-fn settings_tab(ui: &mut Ui, tab: usize, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
-    match tab {
-        0 => graphics_tab(ui, s, dirty, cols),
-        1 => driving_tab(ui, s, dirty, out, cols),
-        2 => camera_tab(ui, s, dirty, out, cols),
-        3 => sound_tab(ui, s, dirty, cols),
-        4 => gameplay_tab(ui, s, dirty, cols),
-        _ => general_tab(ui, s, dirty, out, cols),
-    }
-}
-
-/// The saved graphics profiles' part of the Graphics tab: the list, the name being typed.
-#[derive(Default)]
-struct GfxProfileUi {
-    name: String,
-    sel: usize,
-    list: Option<Vec<String>>,
-    msg: String,
-}
-
-thread_local! {
-    static GFX_PROFILES: std::cell::RefCell<GfxProfileUi> = std::cell::RefCell::new(GfxProfileUi::default());
-}
-
-/// Save, load and delete the graphics settings as named profiles.
-fn graphics_profiles_block(ui: &mut Ui, s: &mut Value, dirty: &mut f32, c: &mut Col) {
-    GFX_PROFILES.with(|g| {
-        let mut g = g.borrow_mut();
-        let g = &mut *g;
-        let names: Vec<String> = g.list.get_or_insert_with(|| core::graphics_profiles().into_keys().collect()).clone();
-        g.sel = g.sel.min(names.len().saturating_sub(1));
-        let labels: Vec<String> = if names.is_empty() { vec!["No saved profiles".to_string()] } else { names.clone() };
-        let r = c.row();
-        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Saved profile");
-        if ui.select("s-gp-sel", Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &mut g.sel, &labels) && !names.is_empty() {
-            g.name = names[g.sel].clone();
-        }
-        let r = c.row();
-        let half = (r.w - GAP) * 0.5;
-        if ui.button("s-gp-load", Rect::new(r.x, r.y, half, r.h), "Load", Some("download"), ButtonKind::Normal) && !names.is_empty() {
-            let name = names[g.sel].clone();
-            match core::graphics_profiles().get(&name) {
-                Some(p) => {
-                    core::apply_graphics_profile(p, s);
-                    *dirty = 0.3;
-                    g.msg = format!("Loaded \"{name}\".");
-                }
-                None => g.msg = format!("\"{name}\" is gone."),
-            }
-        }
-        if ui.button("s-gp-del", Rect::new(r.x + half + GAP, r.y, half, r.h), "Delete", Some("delete"), ButtonKind::Danger) && !names.is_empty() {
-            let name = names[g.sel].clone();
-            g.msg = match core::delete_graphics_profile(&name) {
-                Ok(()) => format!("Deleted \"{name}\"."),
-                Err(e) => format!("{e:#}"),
-            };
-            g.list = None;
-        }
-        let r = c.row();
-        ui.text_input("s-gp-name", r, &mut g.name, "Profile name", None);
-        let r = c.row();
-        if ui.button("s-gp-save", r, "Save current graphics as profile", Some("save"), ButtonKind::Primary) {
-            g.msg = match core::save_graphics_profile(&g.name, s) {
-                Ok(name) => {
-                    g.name = name.clone();
-                    g.list = None;
-                    if let Some(i) = core::graphics_profiles().keys().position(|k| *k == name) {
-                        g.sel = i;
-                    }
-                    format!("Saved \"{name}\".")
-                }
-                Err(e) => format!("{e:#}"),
-            };
-        }
-        if !g.msg.is_empty() {
-            c.y += ui.paragraph(&g.msg, Vec2::new(c.inner.x, c.y), c.inner.w, 12.5, Weight::Regular, TEXT_DIM) + 8.0;
-        }
-    });
-}
-
-/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
-/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    let vr = get(s, "vr").as_bool().unwrap_or(false) || omsi_cfg::flags::OPENXR.is_set();
-    cfg!(windows) && get(s, "graphics_api").as_str() == Some("d3d9") && !vr
-}
-
-/// How the game looks and how fast it runs.
-fn graphics_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Graphics");
-    // Quality presets, first: they set most of what follows. (OMSI's own
-    // option_presets/*.oop are named after the PCs of their day - "PC 2006", "X10 high",
-    // "Chicago Recommended" - which read as random words here.)
-    let presets: [(&str, serde_json::Value); 4] = [
-        ("Low", json!({"msaa": 1, "anisotropy": 2, "shadow_size": 1024, "ssao": false, "shadows": false, "detail_textures": false, "clouds": false, "view_distance": "600", "min_obj_size": 0.03, "max_obj_dist": "500", "mirror_size": 128, "mirror_refresh": "eco", "render_scale": "0.75", "texture_memory": 800})),
-        ("Medium", json!({"msaa": 2, "anisotropy": 4, "shadow_size": 2048, "ssao": false, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "900", "min_obj_size": 0.02, "max_obj_dist": "750", "mirror_size": 256, "mirror_refresh": "eco", "render_scale": "auto", "texture_memory": 1200})),
-        ("High", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 2048, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "auto", "min_obj_size": 0.013, "max_obj_dist": "auto", "mirror_size": 256, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
-        ("Ultra", json!({"msaa": 4, "anisotropy": 8, "shadow_size": 4096, "ssao": true, "shadows": true, "detail_textures": true, "clouds": true, "view_distance": "2000", "min_obj_size": 0.005, "max_obj_dist": "1500", "mirror_size": 512, "mirror_refresh": "full", "render_scale": "auto", "texture_memory": 0})),
-    ];
-    {
-        // the preset the settings match now, else "Custom"
-        let matches = |p: &serde_json::Value| p.as_object().map(|o| o.iter().all(|(k, v)| {
-            let cur = get(s, k);
-            cur == v || cur.as_f64().zip(v.as_f64()).map(|(a, b)| (a - b).abs() < 1e-6).unwrap_or(false) || cur.as_str().zip(v.as_f64()).map(|(a, b)| a.parse::<f64>().map(|a| (a - b).abs() < 1e-6).unwrap_or(false)).unwrap_or(false) || cur.as_f64().zip(v.as_str()).map(|(a, b)| b.parse::<f64>().map(|b| (a - b).abs() < 1e-6).unwrap_or(false)).unwrap_or(false)
-        })).unwrap_or(false);
-        let mut labels: Vec<String> = presets.iter().map(|p| p.0.to_string()).collect();
-        labels.push("Custom".to_string());
-        let mut sel = presets.iter().position(|p| matches(&p.1)).unwrap_or(presets.len());
-        let r = c.row();
-        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Quality preset");
-        if ui.select("s-preset", Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), &mut sel, &labels) && sel < presets.len() {
-            if let Some(obj) = presets[sel].1.as_object() {
-                for (k, v) in obj {
-                    s[k.as_str()] = v.clone();
-                }
-                *dirty = 0.3;
-            }
-        }
-    }
-    // "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no graphics improvements to choose,
-    // Vanilla and fixed (the saved choice comes back with another graphics API)
-    let fixed = d3d9_fixes_vanilla(s);
-    if fixed {
-        let r = c.row();
-        ui.label(Rect::new(r.x, r.y, r.w * 0.45, r.h), "Graphics");
-        ui.label(Rect::new(r.x + r.w * 0.45, r.y, r.w * 0.55, r.h), "Vanilla (as OMSI 2), fixed with DirectX9 (D3D9Ex)");
-    } else {
-        sel_setting(ui, s, dirty, "s-graphics", c.row(), "Graphics", "graphics", &[("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced"), ("enhanced_plus", "Enhanced+")]);
-    }
-    // Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain
-    let classic = fixed || get(s, "graphics").as_str() == Some("vanilla");
-    let traced = !fixed && get(s, "graphics").as_str() == Some("enhanced_plus");
-    sel_setting(ui, s, dirty, "s-msaa", c.row(), "Anti-aliasing", "msaa", &[("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]);
-    sel_setting(ui, s, dirty, "s-scale", c.row(), "Render scale", "render_scale", &[("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")]);
-    sel_setting(ui, s, dirty, "s-af", c.row(), "Anisotropic", "anisotropy", &[("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")]);
-    if !classic {
-        sel_setting(ui, s, dirty, "s-shadow", c.row(), "Shadow map", "shadow_size", &[("1024", "1024"), ("2048", "2048"), ("4096", "4096")]);
-        // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
-        if !traced {
-            toggle_setting(ui, s, dirty, c.row(), "Ambient occlusion", "ssao");
-            toggle_setting(ui, s, dirty, c.row(), "Sun shadows", "shadows");
-        }
-        sel_setting(ui, s, dirty, "s-casters", c.row(), "Shadows cast by", "shadow_casters", &[("all", "Every solid mesh"), ("omsi", "[shadow] meshes, as OMSI")]);
-        toggle_setting(ui, s, dirty, c.row(), "Detail texturing up close", "detail_textures");
-        let mut night = get(s, "night_brightness").as_f64().unwrap_or(0.0) as f32;
-        if ui.slider("s-night", c.row(), &mut night, 0.0, 3.0, 0.25, "Night brightness", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") }) {
-            s["night_brightness"] = json!((night / 0.25).round() * 0.25);
-            *dirty = 0.3;
-        }
-        // (an LED panel's dots are its own light: how bright they burn, and how much of the
-        // mip chain the panel's picture and its mask are held at - 0 point-samples them,
-        // the sharpest dots and the worst shimmer; higher holds them at the level the
-        // screen footprint asks for at most)
-        let mut led = get(s, "led_glow").as_i64().unwrap_or(6) as f32;
-        if ui.slider("s-led", c.row(), &mut led, 0.0, 15.0, 1.0, "LED glow", &|v| if v < 0.5 { "Off".to_string() } else { format!("{}", v as i64) }) {
-            s["led_glow"] = json!(led.round() as i64);
-            *dirty = 0.3;
-        }
-        let mut mip = get(s, "led_mips").as_f64().unwrap_or(1.3) as f32;
-        if ui.slider("s-led-mip", c.row(), &mut mip, 0.0, 4.0, 0.05, "LED mip strength", &|v| if v < 0.005 { "Off".to_string() } else { format!("{v:.2}") }) {
-            s["led_mips"] = json!((mip / 0.05).round() * 0.05);
-            *dirty = 0.3;
-        }
-    }
-    // (the models' `[isshadow]` blob is what OMSI draws under a vehicle in every graphics
-    // mode, the vanilla one included, so its switch is not part of the extras above)
-    toggle_setting(ui, s, dirty, c.row(), "OMSI's shadow meshes (under vehicles)", "shadow_blobs");
-    if !traced {
-        toggle_setting(ui, s, dirty, c.row(), "Reflection maps (paint, chrome, glass)", "reflections");
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Clouds", "clouds");
-    toggle_setting(ui, s, dirty, c.row(), "Windy trees", "windy_trees");
-    let left = c.used();
-    let mut c = Col::new(ui, cols[1], "Display");
-    toggle_setting(ui, s, dirty, c.row(), "Fullscreen", "fullscreen");
-    // (the window's own size in pixels; a Steam Deck's Gaming Mode and other odd screens,
-    // #904 - "Automatic" fits the screen, and fills it under gamescope)
-    sel_setting(ui, s, dirty, "s-res", c.row(), "Window size", "resolution", RESOLUTIONS);
-    toggle_setting(ui, s, dirty, c.row(), "V-sync", "vsync");
-    sel_setting(ui, s, dirty, "s-fps", c.row(), "Frame limit", "max_fps", &[("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps"), ("144", "144 fps"), ("1000", "Unlimited")]);
-    // (a Mac has Metal only; elsewhere a driver's Vulkan that misbehaves, or a card without
-    // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
-    // renderer, Windows only and never chosen by "Automatic")
-    if cfg!(windows) {
-        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("dx12", "DirectX 12"), ("gl", "OpenGL"), ("d3d9", "DirectX9 (D3D9Ex)")]);
-    } else if !cfg!(target_os = "macos") {
-        sel_setting(ui, s, dirty, "s-api", c.row(), "Graphics API", "graphics_api", &[("auto", "Automatic"), ("vulkan", "Vulkan"), ("gl", "OpenGL")]);
-    }
-    c.section(ui, "World & memory");
-    sel_setting(ui, s, dirty, "s-view", c.row(), "View distance", "view_distance", &[("auto", "Default (1200 m)"), ("600", "600 m - fastest"), ("900", "900 m"), ("1200", "1200 m"), ("1500", "1500 m"), ("2000", "2000 m"), ("2500", "2500 m")]);
-    sel_setting(ui, s, dirty, "s-maxobj", c.row(), "Object distance", "max_obj_dist", &[("auto", "Automatic"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]);
-    sel_setting(ui, s, dirty, "s-minobj", c.row(), "Small objects", "min_obj_size", &[("0.005", "All"), ("0.013", "Normal"), ("0.02", "Fewer (faster)"), ("0.03", "Few (fastest)")]);
-    sel_setting(ui, s, dirty, "s-mirror", c.row(), "Mirrors", "mirror_size", &[("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]);
-    sel_setting(ui, s, dirty, "s-mirror-refresh", c.row(), "Real-time reflections", "mirror_refresh", &[("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full")]);
-    // (the game takes the smaller of an eighth of the memory and what the graphics
-    // adapter is taken to hold, see `memory::texture_budget`)
-    let adapter_mb = omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64;
-    let auto_mb = match (get(s, "texture_memory_auto").as_i64().unwrap_or(0), adapter_mb) {
-        (m, 0) => m,
-        (0, a) => a,
-        (m, a) => m.min(a),
-    };
-    let auto_label = if auto_mb > 0 { format!("Automatic ({} here)", mb(auto_mb)) } else { "Automatic".to_string() };
-    let opts: Vec<(&str, &str)> = vec![("0", auto_label.as_str()), ("500", "500 MB"), ("1000", "1 GB"), ("1500", "1.5 GB"), ("2000", "2 GB"), ("3000", "3 GB"), ("4000", "4 GB"), ("6000", "6 GB")];
-    sel_setting(ui, s, dirty, "s-texmem", c.row(), "Texture memory", "texture_memory", &opts);
-    toggle_setting(ui, s, dirty, c.row(), "Compress textures on loading", "texture_compression");
-    c.section(ui, "Profiles");
-    graphics_profiles_block(ui, s, dirty, &mut c);
-    [left, c.used()]
-}
-
-/// How the bus answers the keys, the mouse, a wheel and pedals (which key does what: the
-/// Controls page).
-fn driving_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Keyboard & mouse");
-    sel_setting(ui, s, dirty, "s-keys", c.row(), "Driving keys", "drive_keys", &[("omsi", "Custom controls (Controls page)"), ("simple", "W A S D + arrows"), ("wasd", "W A S D only"), ("arrows", "Arrow keys only")]);
-    toggle_setting(ui, s, dirty, c.row(), "Steering linearity (keys at OMSI's steady pace)", "steering_linear");
-    toggle_setting(ui, s, dirty, c.row(), "Old Steering (the wheel stays, turn it back yourself)", "old_steering");
-    toggle_setting(ui, s, dirty, c.row(), "Dynamic steering (slower keys at speed, OMSI's redSteerSpd)", "red_steer_spd");
-    let mut ms = get(s, "mouse_sens").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-mouse", c.row(), &mut ms, 0.1, 3.0, 0.05, "Mouse steering sensitivity (O)", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }) {
-        s["mouse_sens"] = json!((ms * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Smooth mouse steering (off: the wheel follows the cursor at once, as in OMSI)", "mouse_smooth");
-    toggle_setting(ui, s, dirty, c.row(), "A right click ends the mouse steering (as in OMSI)", "mouse_right_off");
-    toggle_setting(ui, s, dirty, c.row(), "Indicators cancel themselves (as the bus's script does)", "blinker_cancel");
-    toggle_setting(ui, s, dirty, c.row(), "The keyboard brake stays on until the throttle (as in OMSI)", "brake_hold");
-    toggle_setting(ui, s, dirty, c.row(), "Automatic clutch (manual gearboxes)", "auto_clutch");
-    // (it was in the game's menu only, #1780)
-    toggle_setting(ui, s, dirty, c.row(), "Automated manual gearbox (shifts a manual gearbox for you by the engine speed)", "auto_shift");
-    if ui.button("s-go-keys", c.row(), "Change the keys", Some("keyboard"), ButtonKind::Normal) {
-        out.controls = Some(0);
-    }
-    let left = c.used();
-    let mut c = Col::new(ui, cols[1], "Game controllers");
-    toggle_setting(ui, s, dirty, c.row(), "H-pattern shifter: return to neutral when the gear is released", "momentary_gears");
-    // steering wheels: the wheel's own rotation and how much of it is the bus's full lock
-    // (a real bus: about two and a half turns), force feedback the other way round
-    let mut range = get(s, "wheel_range").as_f64().unwrap_or(900.0) as f32;
-    if ui.slider("s-wrange", c.row(), &mut range, 180.0, 1800.0, 30.0, "Wheel rotation", &|v| format!("{v:.0}°")) {
-        s["wheel_range"] = json!(range.round());
-        *dirty = 0.3;
-    }
-    let mut lock = get(s, "wheel_lock").as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-wlock", c.row(), &mut lock, 0.0, 1800.0, 30.0, "Full lock at", &|v| if v < 45.0 { "OMSI".to_string() } else { format!("{v:.0}°") }) {
-        s["wheel_lock"] = json!(if lock < 45.0 { 0.0 } else { lock.round() });
-        *dirty = 0.3;
-    }
-    // a gamepad stick's steering, eased onto where the stick points (0: as it reads)
-    let mut pad_smooth = get(s, "pad_steer_smooth").as_f64().unwrap_or(120.0) as f32;
-    if ui.slider("s-pad-steer-smooth", c.row(), &mut pad_smooth, 0.0, 300.0, 10.0, "Stick steering smoothing", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }) {
-        s["pad_steer_smooth"] = json!(pad_smooth.round());
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Stick steers like a wheel (a wheel seen as a gamepad)", "pad_steer_linear");
-    toggle_setting(ui, s, dirty, c.row(), "Arrow keys switch the cameras with a wheel too (no glance)", "arrows_switch_cams");
-    // the pedals' response: softer (below 1) or stronger (above 1) than the pedal reads
-    for (key, label, id) in [("pedal_throttle", "Throttle pedal strength", "s-pedt"), ("pedal_brake", "Brake pedal strength", "s-pedb")] {
-        let mut v = get(s, key).as_f64().unwrap_or(1.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.5, 2.0, 0.05, label, &|v| if (v - 1.0).abs() < 0.01 { "Normal".to_string() } else if v < 1.0 { format!("Softer x{v:.2}") } else { format!("Stronger x{v:.2}") }) {
-            s[key] = json!((v * 100.0).round() / 100.0);
-            *dirty = 0.3;
-        }
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Force feedback and vibration", "ff_enabled");
-    toggle_setting(ui, s, dirty, c.row(), "Invert force feedback by default", "ff_invert");
-    c.y += ui.paragraph("Wheels with a saved direction use their own setting under Controls → Game controllers.", Vec2::new(c.inner.x, c.y), c.inner.w, 12.5, Weight::Regular, TEXT_DIM) + 8.0;
-    // what the wheel feels all the time while the bus runs: the road's grain and the
-    // engine's buzz, and how long a jolt eases away once it is over
-    for (key, label, id) in [("ff_road_vib", "Road texture vibration", "s-ffroad"), ("ff_engine_vib", "Engine vibration", "s-ffeng")] {
-        let mut v = get(s, key).as_f64().unwrap_or(1.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.0, 4.0, 0.05, label, &|v| if v < 0.01 { "Off".to_string() } else if (v - 1.0).abs() < 0.01 { "Normal".to_string() } else { format!("{:.0}%", v * 100.0) }) {
-            s[key] = json!((v * 20.0).round() / 20.0);
-            *dirty = 0.3;
-        }
-    }
-    let mut fade = get(s, "ff_fade").as_f64().unwrap_or(0.28) as f32;
-    if ui.slider("s-fffade", c.row(), &mut fade, 0.0, 1.5, 0.05, "Vibration fade-out", &|v| if v < 0.01 { "Off".to_string() } else { format!("{:.0} ms", (v * 1000.0).round() as i32) }) {
-        s["ff_fade"] = json!((fade * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    if ui.button("s-wreset", c.row(), "Reset wheel settings", Some("restart_alt"), ButtonKind::Normal) {
-        s["wheel_range"] = json!(900.0);
-        s["wheel_lock"] = json!(0.0);
-        s["ff_invert"] = json!(false);
-        s["ff_enabled"] = json!(true);
-        s["ff_road_vib"] = json!(1.0);
-        s["ff_engine_vib"] = json!(1.0);
-        s["ff_fade"] = json!(0.28);
-        *dirty = 0.3;
-    }
-    if ui.button("s-go-pads", c.row(), "Set up a wheel or pedals", Some("sports_esports"), ButtonKind::Normal) {
-        out.controls = Some(1);
-    }
-    [left, c.used()]
-}
-
-/// What the driver sees: the seat, the views from it and around the bus, head tracking, VR.
-fn camera_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Driver's view");
-    // the driver's eye, moved from the bus's own camera
-    c.section(ui, "Seat position");
-    for (key, label, id) in [("seat_y", "Seat forward / back", "s-seaty"), ("seat_z", "Seat up / down", "s-seatz"), ("seat_x", "Seat right / left", "s-seatx")] {
-        let mut v = get(s, key).as_f64().unwrap_or(0.0) as f32;
-        if ui.slider(id, c.row(), &mut v, -0.6, 0.6, 0.01, label, &|v| format!("{:+.0} cm", v * 100.0)) {
-            s[key] = json!((v * 100.0).round() / 100.0);
-            *dirty = 0.3;
-        }
-    }
-    let mut seat_pitch = get(s, "seat_pitch_deg").as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-seat-pitch", c.row(), &mut seat_pitch, -45.0, 45.0, 1.0, "Head pitch", &|v| format!("{v:+.0}°")) {
-        s["seat_pitch_deg"] = json!(seat_pitch.round());
-        *dirty = 0.3;
-    }
-    if ui.button("s-seatreset", c.row(), "Reset the seat position", Some("restart_alt"), ButtonKind::Normal) {
-        for k in ["seat_x", "seat_y", "seat_z"] {
-            s[k] = json!(0.0);
-        }
-        s["seat_pitch_deg"] = json!(0.0);
-        *dirty = 0.3;
-    }
-    let fov_key = if get(s, "triple_screen").as_bool().unwrap_or(false)
-        && !get(s, "vr").as_bool().unwrap_or(false)
-    {
-        "triple_fov_deg"
-    } else {
-        "fov"
-    };
-    let mut fov = get(s, fov_key).as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-fov", c.row(), &mut fov, 0.0, 120.0, 1.0, "Field of view", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }) {
-        s[fov_key] = json!(if fov < 20.0 { 0.0 } else { fov.round() });
-        *dirty = 0.3;
-    }
-    let mut outside = get(s, "outside_fov").as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-outside-fov", c.row(), &mut outside, 0.0, 120.0, 1.0, "Outside view field of view (F3)", &|v| if v < 20.0 { "Auto".to_string() } else { format!("{v:.0}°") }) {
-        s["outside_fov"] = json!(if outside < 20.0 { 0.0 } else { outside.round() });
-        *dirty = 0.3;
-    }
-    let mut look = get(s, "look_sens").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-look-sens", c.row(), &mut look, 0.1, 2.0, 0.05, "Mouse look sensitivity", &|v| if (v - 1.0).abs() < 0.01 { "OMSI".to_string() } else { format!("{:.0}%", v * 100.0) }) {
-        s["look_sens"] = json!((look * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Right stick turns the view", "right_stick_look");
-    let mut smooth = get(s, "look_smoothing_ms").as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-look-smoothing", c.row(), &mut smooth, 0.0, 200.0, 10.0, "Smooth the mouse look", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }) {
-        s["look_smoothing_ms"] = json!(smooth.round());
-        *dirty = 0.3;
-    }
-    c.section(ui, "A head at rest");
-    let mut idle = get(s, "head_idle").as_f64().unwrap_or(0.0) as f32;
-    if ui.slider("s-head-idle", c.row(), &mut idle, 0.0, 1.0, 0.05, "Head sway at a standstill", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }) {
-        s["head_idle"] = json!((idle * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    let mut pace = get(s, "head_idle_pace").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-head-idle-pace", c.row(), &mut pace, 0.5, 2.0, 0.05, "Sway pace", &|v| format!("{:.0}%", v * 100.0)) {
-        s["head_idle_pace"] = json!((pace * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Driver's view turns with the steering", "steer_look");
-    let mut angle = get(s, "steer_look_angle").as_f64().unwrap_or(30.0) as f32;
-    if ui.slider("s-steer-look-angle", c.row(), &mut angle, 0.0, 60.0, 1.0, "Steering view angle", &|v| format!("{v:.0}°")) {
-        s["steer_look_angle"] = json!(angle);
-        *dirty = 0.3;
-    }
-    let mut response = get(s, "steer_look_response").as_f64().unwrap_or(0.25) as f32;
-    if ui.slider("s-steer-look-response", c.row(), &mut response, 0.05, 1.0, 0.05, "Steering view response", &|v| format!("{:.0} ms", v * 1000.0)) {
-        s["steer_look_response"] = json!(response);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Head moves with the bus", "head_movement");
-    toggle_setting(ui, s, dirty, c.row(), "Camera glides between viewpoints", "driverview_smooth");
-    toggle_setting(ui, s, dirty, c.row(), "Driver's hands in the cab view", "hands_in_cab");
-    toggle_setting(ui, s, dirty, c.row(), "Right mouse button turns the view, Shift+right zooms (off: right zooms as in OMSI, the wheel button turns)", "alt_view");
-    toggle_setting(ui, s, dirty, c.row(), "Precision mouse zoom (FOV curve instead of the linear way)", "precision_zoom");
-    let left = c.used();
-    let mut c = Col::new(ui, cols[1], "Outside views");
-    toggle_setting(ui, s, dirty, c.row(), "Camera collisions (outside view)", "camera_collision");
-    toggle_setting(ui, s, dirty, c.row(), "Driver at the wheel (outside views)", "driver");
-    c.section(ui, "Head tracking");
-    toggle_setting(ui, s, dirty, c.row(), "Head tracking (native TrackIR / OpenTrack)", "head_tracking");
-
-    // TrackIR axis controls. Values are stored as user-facing percentages:
-    // 0% disables an axis; 100% (the default) is 1:1.
-    c.section(ui, "Rotation");
-    for (key, id, label) in [
-        ("head_tracking_yaw_sens", "s-trackir-yaw", "Yaw sensitivity (left / right)"),
-        ("head_tracking_pitch_sens", "s-trackir-pitch", "Pitch sensitivity (up / down)"),
-        ("head_tracking_roll_sens", "s-trackir-roll", "Roll sensitivity"),
-    ] {
-        let mut v = get(s, key).as_f64().unwrap_or(100.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.0, 100.0, 1.0, label, &|v| {
-            if v <= 0.0 { "Off".to_string() } else { format!("{v:.0}%") }
-        }) {
-            s[key] = json!(v.round().clamp(0.0, 100.0));
-            *dirty = 0.3;
-        }
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Invert yaw", "head_tracking_invert_yaw");
-    toggle_setting(ui, s, dirty, c.row(), "Invert pitch", "head_tracking_invert_pitch");
-    toggle_setting(ui, s, dirty, c.row(), "Invert roll", "head_tracking_invert_roll");
-
-    c.section(ui, "Position");
-    for (key, id, label) in [
-        ("head_tracking_x_sens", "s-trackir-x", "X sensitivity (left / right)"),
-        ("head_tracking_y_sens", "s-trackir-y", "Y sensitivity (up / down)"),
-        ("head_tracking_z_sens", "s-trackir-z", "Z sensitivity (forward / back)"),
-    ] {
-        let mut v = get(s, key).as_f64().unwrap_or(100.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.0, 100.0, 1.0, label, &|v| {
-            if v <= 0.0 { "Off".to_string() } else { format!("{v:.0}%") }
-        }) {
-            s[key] = json!(v.round().clamp(0.0, 100.0));
-            *dirty = 0.3;
-        }
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Invert X", "head_tracking_invert_x");
-    toggle_setting(ui, s, dirty, c.row(), "Invert Y", "head_tracking_invert_y");
-    toggle_setting(ui, s, dirty, c.row(), "Invert Z", "head_tracking_invert_z");
-
-    if ui.button("s-trackir-reset", c.row(), "Reset head-tracking axes", Some("restart_alt"), ButtonKind::Normal) {
-        for key in [
-            "head_tracking_yaw_sens", "head_tracking_pitch_sens", "head_tracking_roll_sens",
-            "head_tracking_x_sens", "head_tracking_y_sens", "head_tracking_z_sens",
-        ] {
-            s[key] = json!(15.0);
-        }
-        for key in [
-            "head_tracking_invert_yaw", "head_tracking_invert_pitch", "head_tracking_invert_roll",
-            "head_tracking_invert_x", "head_tracking_invert_y", "head_tracking_invert_z",
-        ] {
-            s[key] = json!(false);
-        }
-        *dirty = 0.3;
-    }
-    c.section(ui, "Triple screen");
-    toggle_setting(
-        ui,
-        s,
-        dirty,
-        c.row(),
-        "Three screen projections",
-        "triple_screen",
-    );
-    toggle_setting(
-        ui,
-        s,
-        dirty,
-        c.row(),
-        "Span three monitors at startup",
-        "triple_span",
-    );
-    toggle_setting(
-        ui,
-        s,
-        dirty,
-        c.row(),
-        "HUD on centre screen",
-        "triple_hud_center",
-    );
-    if get(s, "triple_screen").as_bool().unwrap_or(false) {
-        ui.label(
-            c.row(),
-            "Three equal screens in a horizontal row. OpenXR takes priority.",
-        );
-        let mut value = get(s, "triple_width_mm").as_f64().unwrap_or(600.0) as f32;
-        if ui.slider(
-            "s-triple-width_mm",
-            c.row(),
-            &mut value,
-            200.0,
-            2000.0,
-            10.0,
-            "Visible width of one panel",
-            &|v| format!("{v:.0} mm"),
-        ) {
-            s["triple_width_mm"] = json!(value);
-            *dirty = 0.3;
-        }
-        let mut value = get(s, "triple_distance_mm").as_f64().unwrap_or(650.0) as f32;
-        if ui.slider(
-            "s-triple-distance_mm",
-            c.row(),
-            &mut value,
-            200.0,
-            3000.0,
-            10.0,
-            "Eye to centre screen",
-            &|v| format!("{v:.0} mm"),
-        ) {
-            s["triple_distance_mm"] = json!(value);
-            s["triple_fov_deg"] = json!(0.0);
-            *dirty = 0.3;
-        }
-        let mut value = get(s, "triple_bezel_mm").as_f64().unwrap_or(0.0) as f32;
-        if ui.slider(
-            "s-triple-bezel_mm",
-            c.row(),
-            &mut value,
-            0.0,
-            100.0,
-            1.0,
-            "Both frames at each join",
-            &|v| format!("{v:.0} mm"),
-        ) {
-            s["triple_bezel_mm"] = json!(value);
-            *dirty = 0.3;
-        }
-        let mut value = get(s, "triple_left_angle_deg").as_f64().unwrap_or(45.0) as f32;
-        if ui.slider(
-            "s-triple-left_angle_deg",
-            c.row(),
-            &mut value,
-            0.0,
-            90.0,
-            1.0,
-            "Left screen inward angle",
-            &|v| format!("{v:.0}°"),
-        ) {
-            s["triple_left_angle_deg"] = json!(value);
-            *dirty = 0.3;
-        }
-        let mut value = get(s, "triple_right_angle_deg").as_f64().unwrap_or(45.0) as f32;
-        if ui.slider(
-            "s-triple-right_angle_deg",
-            c.row(),
-            &mut value,
-            0.0,
-            90.0,
-            1.0,
-            "Right screen inward angle",
-            &|v| format!("{v:.0}°"),
-        ) {
-            s["triple_right_angle_deg"] = json!(value);
-            *dirty = 0.3;
-        }
-        let mut value = get(s, "triple_eye_height_mm").as_f64().unwrap_or(0.0) as f32;
-        if ui.slider(
-            "s-triple-eye_height_mm",
-            c.row(),
-            &mut value,
-            -500.0,
-            500.0,
-            1.0,
-            "Eye above screen centre",
-            &|v| format!("{v:.0} mm"),
-        ) {
-            s["triple_eye_height_mm"] = json!(value);
-            *dirty = 0.3;
-        }
-    }
-    if cfg!(windows) {
-        c.section(ui, "Virtual reality");
-        toggle_setting(ui, s, dirty, c.row(), "Use OpenXR headset", "vr");
-        if get(s, "vr").as_bool().unwrap_or(false) {
-            sel_setting(ui, s, dirty, "s-vr-scale", c.row(), "Eye resolution", "vr_scale", &[("0.5", "50%"), ("0.65", "65%"), ("0.8", "80%"), ("1", "100%")]);
-            sel_setting(ui, s, dirty, "s-vr-head-smoothing", c.row(), "Head tracking smoothing", "vr_head_smoothing_ms", &[("0", "Off"), ("5", "5 ms"), ("10", "10 ms"), ("20", "20 ms"), ("30", "30 ms")]);
-            sel_setting(ui, s, dirty, "s-vr-mirror-rate", c.row(), "Bus mirror refresh", "vr_mirror_rate", &[("0", "Off"), ("8", "8/s"), ("16", "16/s"), ("24", "24/s"), ("32", "32/s"), ("48", "48/s"), ("60", "60/s"), ("90", "90/s"), ("120", "120/s"), ("180", "180/s"), ("240", "240/s"), ("360", "360/s"), ("-1", "Every frame")]);
-            c.y += ui.paragraph("The rate is shared by all bus mirrors. Higher rates can reduce game FPS.", Vec2::new(c.inner.x, c.y), c.inner.w, 12.0, Weight::Regular, TEXT_DIM) + 8.0;
-            toggle_setting(ui, s, dirty, c.row(), "Show headset picture on monitor", "vr_desktop_mirror");
-            // (the VR keys head the Controls page's game list)
-            if ui.button("s-go-vr-keys", c.row(), "Change the VR keys", Some("keyboard"), ButtonKind::Normal) {
-                out.controls = Some(0);
-            }
-        }
-    }
-    [left, c.used()]
-}
-
-/// How loud the bus, the traffic and the surroundings are, and what passengers say.
-fn sound_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Volume");
-    let mut vol = get(s, "volume").as_f64().unwrap_or(0.6) as f32;
-    if ui.slider("s-vol", c.row(), &mut vol, 0.0, 1.0, 0.05, "Volume", &|v| format!("{:.0}%", v * 100.0)) {
-        s["volume"] = json!((vol * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    for (key, label, id) in [("vol_ai", "Traffic", "s-volai"), ("vol_scenery", "Surroundings", "s-volsc")] {
-        let mut v = get(s, key).as_f64().unwrap_or(1.0) as f32;
-        if ui.slider(id, c.row(), &mut v, 0.0, 1.0, 0.05, label, &|v| format!("{:.0}%", v * 100.0)) {
-            s[key] = json!((v * 100.0).round() / 100.0);
-            *dirty = 0.3;
-        }
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Doppler effect", "doppler");
-    toggle_setting(ui, s, dirty, c.row(), "Muffle outside sounds", "muffle_outside");
-    sel_setting(ui, s, dirty, "s-voices", c.row(), "Passenger voices", "pax_voices", &[("all", "Greetings and tickets"), ("tickets", "Only the ticket asked for"), ("off", "Silent")]);
-    [c.used(), radio_stations(ui, cols[1])]
-}
-
-thread_local! {
-    /// The radio stations as the Sound settings edit them (`radio.cfg`, read the first time).
-    static RADIO: std::cell::RefCell<Option<Vec<(String, String)>>> = const { std::cell::RefCell::new(None) };
-}
-
-/// The bus radios' internet stations (`radio.cfg`, see `radio`): each with its name and
-/// address, removed or added here, saved at once (#857). Returns the column's height.
-fn radio_stations(ui: &mut Ui, r: Rect) -> f32 {
-    let mut c = Col::new(ui, r, "Radio stations");
-    c.y += ui.paragraph("A radio's station button n plays the n-th station, a cassette player the first; Shift+R steps through them. An address is an MP3, AAC or Ogg stream or an .m3u/.pls playlist.", Vec2::new(c.inner.x, c.y), c.inner.w, 12.5, Weight::Regular, TEXT_DIM) + 8.0;
-    RADIO.with(|cell| {
-        let mut cell = cell.borrow_mut();
-        let list = cell.get_or_insert_with(crate::radio::own_stations);
-        let mut changed = false;
-        let mut remove = None;
-        for (k, (name, address)) in list.iter_mut().enumerate() {
-            let row = c.row();
-            let nw = (row.w * 0.3).round();
-            changed |= ui.text_input(&format!("radio-name-{k}"), Rect::new(row.x, row.y, nw, row.h), name, "Name", None);
-            changed |= ui.text_input(&format!("radio-url-{k}"), Rect::new(row.x + nw + 8.0, row.y, row.w - nw - 8.0 - 36.0, row.h), address, "https://…", None);
-            if ui.icon_button(&format!("radio-del-{k}"), Vec2::new(row.right() - 16.0, row.center().y), 14.0, "delete", "Remove this station") {
-                remove = Some(k);
-            }
-        }
-        if let Some(k) = remove {
-            list.remove(k);
-            changed = true;
-        }
-        if ui.button("radio-add", c.row(), "Add a station", Some("add"), ButtonKind::Normal) {
-            list.push((String::new(), String::new()));
-        }
-        if changed {
-            if let Err(e) = crate::radio::save_stations(list) {
-                log::warn!("radio.cfg: {e}");
-            }
-        }
-    });
-    c.used()
-}
-
-/// How the world behaves: passengers, traffic, collisions, wear, the clock.
-fn gameplay_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Passengers");
-    sel_setting(ui, s, dirty, "s-board", c.row(), "Boarding", "boarding", &[("auto", "Pay and take the ticket"), ("pay", "The driver sells the ticket"), ("walk", "Just walk in")]);
-    toggle_setting(ui, s, dirty, c.row(), "Passengers pay the exact fare", "exact_fare");
-    let mut pd = get(s, "pax_density").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-pax", c.row(), &mut pd, 0.0, 2.0, 0.1, "How many passengers", &|v| format!("{:.0}%", v * 100.0)) {
-        s["pax_density"] = json!((pd * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Ability to get up (Ctrl+Shift+G)", "get_up");
-    c.section(ui, "Traffic");
-    sel_setting(ui, s, dirty, "s-unsched", c.row(), "Random traffic", "ai_unsched_factor", &[("25", "25%"), ("50", "50%"), ("75", "75%"), ("100", "100%"), ("150", "150%"), ("200", "200%")]);
-    sel_setting(ui, s, dirty, "s-maxsched", c.row(), "Timetable vehicles", "ai_max_scheduled", &[("0", "All"), ("10", "At most 10"), ("25", "At most 25"), ("50", "At most 50")]);
-    sel_setting(ui, s, dirty, "s-maxpark", c.row(), "Parked cars", "ai_max_parked", &[("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")]);
-    sel_setting(ui, s, dirty, "s-autosave", c.row(), "Autosave", "autosave_minutes", &[("0", "Off"), ("2", "Every 2 minutes"), ("5", "Every 5 minutes"), ("10", "Every 10 minutes"), ("15", "Every 15 minutes")]);
-    sel_setting(ui, s, dirty, "s-maxhumans", c.row(), "People", "ai_max_humans", &[("50", "At most 50"), ("100", "At most 100"), ("200", "At most 200"), ("400", "At most 400"), ("800", "At most 800")]);
-    let left = c.used();
-    // OMSI's own options (options.cfg)
-    let mut c = Col::new(ui, cols[1], "Simulation");
-    sel_setting(ui, s, dirty, "s-maint", c.row(), "Maintenance", "maintenance", &[("0", "Infinite (no wear)"), ("1", "Very bad"), ("2", "Bad"), ("3", "Normal"), ("4", "Good")]);
-    toggle_setting(ui, s, dirty, c.row(), "Collisions with vehicles", "collision_vehicles");
-    toggle_setting(ui, s, dirty, c.row(), "Collisions with objects (walls, poles)", "collision_objects");
-    toggle_setting(ui, s, dirty, c.row(), "Collisions with people", "collision_pedestrians");
-    toggle_setting(ui, s, dirty, c.row(), "Start at the real time", "use_real_time");
-    toggle_setting(ui, s, dirty, c.row(), "Start on today's date", "use_real_date");
-    // the game's clock follows this device's (the host's in multiplayer); the time cannot be set
-    toggle_setting(ui, s, dirty, c.row(), "Sync the clock with the real time (locks the time)", "time_sync");
-    // the weather follows the METAR report of the airport nearest the map; it cannot be changed then
-    toggle_setting(ui, s, dirty, c.row(), "Sync the weather with METAR (locks the weather)", "metar_sync");
-    // (in multiplayer the host's or the server's speed counts)
-    sel_setting(ui, s, dirty, "s-timespeed", c.row(), "Time speed (not in multiplayer or with the real-time sync)", "time_speed", &[("1", "Real time"), ("2", "x2"), ("4", "x4"), ("8", "x8"), ("15", "x15"), ("30", "x30")]);
-    [left, c.used()]
-}
-
-/// The language, what the screen shows besides the bus, online, the navigator, the version.
-fn general_tab(ui: &mut Ui, s: &mut Value, dirty: &mut f32, out: &mut Outside, cols: [Rect; 2]) -> [f32; 2] {
-    let mut c = Col::new(ui, cols[0], "Interface & online");
-    {
-        let langs: Vec<(&str, &str)> = core::LANGUAGES.iter().map(|l| (l.0, l.1)).collect();
-        sel_setting(ui, s, dirty, "s-lang", c.row(), "Language", "language", &langs);
-    }
-    // (the launcher speaks the chosen language at once)
-    crate::ui_language(get(s, "language").as_str().unwrap_or("ENG"));
-    // (texts nobody has translated: translated on this machine, see `mt`)
-    let was = get(s, "machine_translation").as_bool().unwrap_or(false);
-    toggle_setting(ui, s, dirty, c.row(), "Translate the remaining texts automatically (offline, downloads 620 MB once)", "machine_translation");
-    let now = get(s, "machine_translation").as_bool().unwrap_or(false);
-    if now != was {
-        crate::mt::enable(now);
-    }
-    let st = crate::mt::status();
-    if now && !st.is_empty() && st != "Ready" {
-        ui.text_in(&st, Rect::new(c.inner.x + 12.0, c.y - 6.0, c.inner.w - 24.0, 16.0), 11.5, omsi_ui::Weight::Regular, TEXT_FAINT, omsi_ui::paint::Align::Left);
-        c.y += 14.0;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "The launcher rests while a game runs (gives the graphics card to the game)", "launcher_rest");
-    toggle_setting(ui, s, dirty, c.row(), "Voice chat through GreenTeaSpeak (multiplayer)", "voice_chat");
-    let help_height = ui.paragraph(
-        "Players near you are heard from where they stand, when GreenTeaSpeak runs with the Project Depot plugin and the server names a voice server.",
-        Vec2::new(c.inner.x + 12.0, c.y - 5.0),
-        c.inner.w - 24.0,
-        11.5,
-        omsi_ui::Weight::Regular,
-        TEXT_FAINT,
-    );
-    c.y += help_height + 3.0;
-    // (the texts over the picture, the menu, the timetable and the navigator: larger for
-    // those who find them hard to read, smaller for more of the picture; on a window taller
-    // than 1080p they grow with it as well, and the launcher grows with its window anyway)
-    let mut size = get(s, "ui_scale").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-uiscale", c.row(), &mut size, 0.5, 2.0, 0.05, "Game interface size", &|v| format!("{:.0}%", v * 100.0)) {
-        s["ui_scale"] = json!((size * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Interface grows with the window", "ui_scale_window");
-    // (the backgrounds of the whole interface - the navigator, the menu, the timetable, the
-    // notes' plates - the texts staying solid; 85 % as designed)
-    let mut op = get(s, "ui_opacity").as_f64().unwrap_or(0.85) as f32;
-    if ui.slider("s-uiop", c.row(), &mut op, 0.2, 1.0, 0.05, "Interface opacity", &|v| format!("{:.0}%", v * 100.0)) {
-        s["ui_opacity"] = json!((op * 100.0).round() / 100.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Name of the button under the mouse", "tooltips");
-    toggle_setting(ui, s, dirty, c.row(), "Frame rate in the corner", "show_fps");
-    toggle_setting(ui, s, dirty, c.row(), "Notes in the top-left corner", "notes");
-    toggle_setting(ui, s, dirty, c.row(), "Chat in online games", "chat");
-    // (the chat's own size on top of the interface's; Ctrl + the wheel over it in the game)
-    let mut chat = get(s, "chat_size").as_f64().unwrap_or(1.0) as f32;
-    if ui.slider("s-chatsize", c.row(), &mut chat, 0.5, 3.0, 0.1, "Chat size", &|v| format!("{:.0}%", v * 100.0)) {
-        s["chat_size"] = json!((chat * 10.0).round() / 10.0);
-        *dirty = 0.3;
-    }
-    toggle_setting(ui, s, dirty, c.row(), "Other players' names above their buses", "name_tags");
-    c.section(ui, "Navigator");
-    toggle_setting(ui, s, dirty, c.row(), "Navigator (Shift+N: map, schedule, off)", "navigator");
-    toggle_setting(ui, s, dirty, c.row(), "Route arrows (as in OMSI 2)", "nav_arrows");
-    toggle_setting(ui, s, dirty, c.row(), "AI vehicles on the map", "nav_ai");
-    // the corner: a little screen with four corners to click
-    let r = Rect::new(c.inner.x, c.y, c.inner.w, 70.0);
-    ui.label(Rect::new(r.x, r.y, r.w * 0.45, 24.0), "Corner");
-    let screen = Rect::new(r.x + r.w * 0.45, r.y, 110.0, 64.0);
-    ui.p().rounded(screen, 6.0, Color::WHITE.alpha(0.05));
-    ui.p().rounded_border(screen, 6.0, 1.0, Color::WHITE.alpha(0.12));
-    let cur = get(s, "navigator_corner").as_str().unwrap_or("bottom-left").to_string();
-    for (name, x, yy) in [("top-left", 0.0, 0.0), ("top-right", 1.0, 0.0), ("bottom-left", 0.0, 1.0), ("bottom-right", 1.0, 1.0)] {
-        let cell = Rect::new(screen.x + 5.0 + x * (screen.w * 0.5), screen.y + 5.0 + yy * (screen.h * 0.5), screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0);
-        let (h, _, clicked) = ui.interact(id_of(&format!("corner-{name}")), cell);
-        if clicked {
-            s["navigator_corner"] = json!(name);
-            *dirty = 0.3;
-        }
-        let on = cur == name;
-        ui.p().rounded(cell, 3.0, if on { ACCENT } else { Color::WHITE.alpha(if h { 0.2 } else { 0.08 }) });
-    }
-    // (dragged somewhere else in the game, #940: that place, until a corner is chosen)
-    if let Some(a) = crate::nav::placed_at(&cur) {
-        let (cw, ch) = (screen.w * 0.5 - 10.0, screen.h * 0.5 - 10.0);
-        let cell = Rect::new(screen.x + 5.0 + a[0] * (screen.w - 10.0 - cw), screen.y + 5.0 + a[1] * (screen.h - 10.0 - ch), cw, ch);
-        ui.p().rounded(cell, 3.0, ACCENT);
-    }
-    c.y += 74.0;
-    let left = c.used();
-    // this build's version and the project's release page (in-app updating is disabled, see
-    // docs/removed/UPDATER_DISABLED.md; the link opens only on a click)
-    let mut c = Col::new(ui, cols[1], "About");
-    {
-        let r = c.row();
-        ui.text_in(&format!("This is Project Depot {}", crate::about::current_version()), r, 12.5, omsi_ui::Weight::Regular, TEXT_DIM, omsi_ui::paint::Align::Left);
-    }
-    if ui.button("s-about-releases", c.row(), "github.com/OmsiModsBR/depot/releases", Some("open_in_new"), ButtonKind::Ghost) {
-        crate::about::open_url(crate::about::RELEASES_URL);
-    }
-    // every setting at once: here at the end, not first on the page where it was the
-    // control one saw before any other
-    c.section(ui, "Reset");
-    if ui.button("s-reset", c.row(), "Reset all settings...", Some("restart_alt"), ButtonKind::Danger) {
-        out.reset = true;
-    }
-    [left, c.used()]
-}
-
-fn mb(v: i64) -> String {
-    if v >= 1000 {
-        format!("{:.1} GB", v as f64 / 1000.0)
-    } else {
-        format!("{v} MB")
-    }
-}
-
 // --- controls ---------------------------------------------------------------------------------
 
 /// The game's own actions a controller's button can be given, besides the bus's: the doors
@@ -1229,17 +489,17 @@ fn mb(v: i64) -> String {
 /// which a controller could not bring back to the first camera (#1167).
 const PAD_GAME_ACTIONS: [&str; 26] = ["doors_all", "door_4", "door_3", "door_2", "door_1", "gear_up", "gear_down", "view_look_left", "view_look_right", "view_look_up", "view_look_down", "view_reset_direction", "view_reset_all_directions", "view_interiorcam_plus", "view_interiorcam_minus", "view_toggle_viewpoint", "view_toggle_interior", "view_set_driver", "view_set_passenger", "view_set_outside", "sim_pause", "screenshot", "quicksave", "toggel_mouse_ctrl", "toggel_ctrler", "voice_radio"];
 
-fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
+pub(super) fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
     known_action(a).unwrap_or_else(|| names.control(a))
 }
 
-fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
+pub(super) fn control_names(l: &Launcher) -> &'static crate::describe::ControlNames {
     crate::describe::names(std::path::Path::new(&l.state.config.root), l.state.settings.get("language").and_then(|x| x.as_str()).unwrap_or("ENG"))
 }
 
 fn known_action(a: &str) -> Option<String> {
     if let Some(gear) = a.strip_prefix("kw_s_").and_then(|s| s.strip_suffix("_fest")) {
-        return Some(format!("Gear {gear} (H-pattern)"));
+        return Some(omsi_ui::tr("Gear %{gear} (H-pattern)").replace("%{gear}", &gear.to_string()));
     }
     let known: &[(&str, &str)] = &[
         ("throttle", "Throttle"),
@@ -1304,6 +564,23 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 { ("Keyboard", keys_line) } else { ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.") };
+    if !super::mobile::mobile() {
+        // (a computer, as the Windows 11 concept: the tabs under the heading, the keyboard in
+        // groups with the chosen action beside it)
+        let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
+        let mut tab = l.pages.controls_tab;
+        if l.ui.segmented("controls-tab", Rect::new(body.x, body.y, 330.0, 36.0), &mut tab, &["Keyboard", "Game controllers"]) {
+            l.pages.controls_tab = tab;
+        }
+        let body = Rect::new(body.x, body.y + 50.0, body.w, (body.h - 50.0).max(0.0));
+        if l.pages.controls_tab == 1 {
+            game_controllers(l, body);
+        } else {
+            l.pages.pads.cancel_feedback_test();
+            super::keyboard::draw(l, body);
+        }
+        return;
+    }
     let body = l.page_title_beside(area, UiPage::Controls.title(), (place, title, line), 320.0);
     let mut tab = l.pages.controls_tab;
     if l.ui.segmented("controls-tab", l.title_tabs(body, 320.0), &mut tab, &["Keyboard", "Game controllers"]) {
@@ -1352,13 +629,13 @@ pub fn controls(l: &mut Launcher, area: Rect) {
             _ => "W A S D + arrows",
         };
         let bw = if body.w < 700.0 { 150.0 } else { 200.0 };
-        let text = format!("Driving keys: {name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.");
+        let text = omsi_ui::tr("Driving keys: %{name} (Settings). Those keys drive the bus and win over the list below. Change any key here and your own layout (Custom controls) is used from then on.").replace("%{name}", &omsi_ui::tr(name));
         let tw = body.w - bw - 70.0;
         let th = l.ui.paragraph_height(&text, tw, 12.5, Weight::Medium);
         let bar = Rect::new(body.x, body.y, body.w, (th + 22.0).max(54.0));
-        l.ui.p().rounded(bar, 8.0, ACCENT.alpha(0.1));
-        l.ui.p().rounded_border(bar, 8.0, 1.0, ACCENT.alpha(0.45));
-        l.ui.icon("info", Vec2::new(bar.x + 22.0, bar.center().y), 20.0, ACCENT);
+        l.ui.p().rounded(bar, 8.0, accent().alpha(0.1));
+        l.ui.p().rounded_border(bar, 8.0, 1.0, accent().alpha(0.45));
+        l.ui.icon("info", Vec2::new(bar.x + 22.0, bar.center().y), 20.0, accent());
         l.ui.paragraph(&text, Vec2::new(bar.x + 42.0, bar.center().y - th * 0.5), tw, 12.5, Weight::Medium, TEXT_SOFT);
         if l.ui.button("kb-use-custom", Rect::new(bar.right() - bw - 10.0, bar.center().y - 18.0, bw, 36.0), "Use these keys", Some("keyboard"), ButtonKind::Primary) {
             use_custom_keys(l);
@@ -1448,7 +725,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         let new_action = filter.trim();
         let mut list_top = inner.y + 62.0;
         if shown.is_empty() && new_action.len() > 1 && new_action.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            if l.ui.button(&format!("kb-add-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &format!("Add \"{new_action}\" and give it a key"), Some("add"), ButtonKind::Normal) {
+            if l.ui.button(&format!("kb-add-{sec}"), Rect::new(inner.x, list_top, inner.w, 36.0), &omsi_ui::tr("Add \"%{action}\" and give it a key").replace("%{action}", new_action), Some("add"), ButtonKind::Normal) {
                 if let Some(a) = l.state.keybindings.get_mut(*key).and_then(|a| a.as_array_mut()) {
                     a.push(json!({ "action": new_action, "scan_code": 0, "modifier": 0 }));
                     l.pages.capturing = Some((sec, a.len() - 1));
@@ -1471,7 +748,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 // same key pressed for each)
                 let pr = Rect::new(rr.right() - 222.0, rr.y + 5.0, 26.0, rr.h - 10.0);
                 let (hp, _, cp) = ui.interact(id_of(&format!("kb-{sec}-{i}-more")), pr);
-                ui.icon("add", pr.center(), 16.0, if hp { ACCENT } else { TEXT_FAINT });
+                ui.icon("add", pr.center(), 16.0, if hp { accent() } else { TEXT_FAINT });
                 if cp {
                     more = Some(*i);
                 }
@@ -1482,9 +759,9 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 if c {
                     clicked = Some((*i, false));
                 }
-                let base = if waiting { ACCENT.alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
+                let base = if waiting { accent().alpha(0.25 + 0.15 * (time * 6.0).sin().abs()) } else if *clash { DANGER.alpha(0.22) } else { Color::WHITE.alpha(if h { 0.12 } else { 0.07 }) };
                 ui.p().rounded(kr, 6.0, base);
-                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { ACCENT } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
+                ui.p().rounded_border(kr, 6.0, 1.0, if waiting { accent() } else if *clash { DANGER } else { Color::WHITE.alpha(0.1) });
                 ui.text_in(if waiting { "press a key…" } else { keyn }, kr, 12.0, Weight::Bold, if *clash { DANGER.lighten(0.3) } else { TEXT }, Align::Center);
                 let xr = Rect::new(rr.right() - 32.0, rr.y + 5.0, 26.0, rr.h - 10.0);
                 let (hx, _, cx) = ui.interact(id ^ 1, xr);
@@ -1597,7 +874,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             }
             for c in connected.iter().filter(|c| !devices.iter().any(|d| crate::controllers::names_match(&d.name, &c.name))) {
                 let r = Rect::new(v.x + 6.0, y, v.w - 12.0, 38.0);
-                if ui.button(&format!("pad-add-{}", c.name), r, &format!("Set up {}", c.name), Some("add"), ButtonKind::Primary) {
+                if ui.button(&format!("pad-add-{}", c.name), r, &omsi_ui::tr("Set up %{name}").replace("%{name}", &c.name), Some("add"), ButtonKind::Primary) {
                     add = Some(c.name.clone());
                 }
                 y += 44.0;
@@ -1641,9 +918,9 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
         match save_gamectrler(devices) {
             Ok(p) => {
                 pv.dirty = false;
-                l.state.set_status(format!("Game controllers saved to {}", p.display()), false);
+                l.state.set_status(omsi_ui::tr("Game controllers saved to %{path}").replace("%{path}", &p.display().to_string()), false);
             }
-            Err(e) => l.state.set_status(format!("Not saved: {e}"), true),
+            Err(e) => l.state.set_status(omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()), true),
         }
     }
     // the device shown
@@ -1763,7 +1040,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
             if let Some((_, v)) = live.iter().find(|(k, _)| *k == a) {
                 let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, ACCENT);
+                ui.p().rounded(Rect::new(x - 2.0, bar.y - 3.0, 4.0, bar.h + 6.0), 2.0, accent());
             }
             let mut sel = (Func::code(d.axes[a].map(|x| x.0)) + 1) as usize;
             if ui.select(&format!("pad-axis-{a}"), Rect::new(bar.right() + GAP, r.y, sel_w, r.h), &mut sel, &funcs) {
@@ -1803,11 +1080,11 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             let (col, row) = (b / rows.max(1), b % rows.max(1));
             let r = Rect::new(x0 + col as f32 * (cw + GAP), y + row as f32 * per_row, cw, ROW);
             let label = match b.checked_sub(crate::controllers::HAT_BUTTONS) {
-                Some(h) => format!("Hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4]),
-                None => format!("Button {}", b + 1),
+                Some(h) => omsi_ui::tr("Hat %{n} %{dir}").replace("%{n}", &(h / 4 + 1).to_string()).replace("%{dir}", &omsi_ui::tr(["up", "right", "down", "left"][h % 4])),
+                None => omsi_ui::tr("Button %{n}").replace("%{n}", &(b + 1).to_string()),
             };
             if lit == Some(b) {
-                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, ACCENT.alpha(0.28));
+                ui.p().rounded(Rect::new(r.x - 4.0, r.y - 2.0, r.w + 8.0, r.h + 4.0), 6.0, accent().alpha(0.28));
             }
             ui.label(Rect::new(r.x, r.y, 90.0, r.h), &label);
             // (a latching switch - a turn signal lever, a lit hazard button - also switches
@@ -1850,12 +1127,12 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             pv.last_pressed = Some((n, std::time::Instant::now()));
             let now = d.buttons.get(n).map(|b| b.0.clone()).filter(|a| !a.is_empty());
             let label = match n.checked_sub(crate::controllers::HAT_BUTTONS) {
-                Some(h) => format!("hat {} {}", h / 4 + 1, ["up", "right", "down", "left"][h % 4]),
-                None => format!("button {}", n + 1),
+                Some(h) => omsi_ui::tr("hat %{n} %{dir}").replace("%{n}", &(h / 4 + 1).to_string()).replace("%{dir}", &omsi_ui::tr(["up", "right", "down", "left"][h % 4])),
+                None => omsi_ui::tr("button %{n}").replace("%{n}", &(n + 1).to_string()),
             };
             l.state.set_status(match now {
-                Some(a) => format!("{name}: {label} - {} (lit in the list: choose another there)", action_text(names, &a)),
-                None => format!("{name}: {label} - nothing yet (lit in the list: choose what it does)"),
+                Some(a) => omsi_ui::tr("%{name}: %{label} - %{action} (lit in the list: choose another there)").replace("%{name}", &name).replace("%{label}", &label).replace("%{action}", &action_text(names, &a)),
+                None => omsi_ui::tr("%{name}: %{label} - nothing yet (lit in the list: choose what it does)").replace("%{name}", &name).replace("%{label}", &label),
             }, false);
         }
     }
@@ -1877,7 +1154,7 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
             pv.last_pressed = None;
             pv.confirm_remove = None;
             pv.dirty = true;
-            l.state.set_status(format!("{name} removed: press Save to keep it so."), false);
+            l.state.set_status(omsi_ui::tr("%{name} removed: press Save to keep it so.").replace("%{name}", &name), false);
         } else {
             pv.confirm_remove = Some(std::time::Instant::now());
         }
@@ -1905,7 +1182,7 @@ const WIZARD_STEPS: [(&str, &str); 5] = [
 /// when the player gave up.
 fn wizard(ui: &mut Ui, r: Rect, w: &mut Wizard, d: &mut crate::controllers::DeviceCfg, live: &[(usize, f32)], connected: bool, feedback: bool) -> Option<bool> {
     let (title, text) = WIZARD_STEPS[w.step];
-    ui.text_in(&format!("Step {} of {}: {title}", w.step + 1, WIZARD_STEPS.len()), Rect::new(r.x, r.y, r.w, 26.0), 17.0, Weight::Bold, TEXT, Align::Left);
+    ui.text_in(&omsi_ui::tr("Step %{n} of %{total}: %{title}").replace("%{n}", &(w.step + 1).to_string()).replace("%{total}", &WIZARD_STEPS.len().to_string()).replace("%{title}", &omsi_ui::tr(title)), Rect::new(r.x, r.y, r.w, 26.0), 17.0, Weight::Bold, TEXT, Align::Left);
     let mut y = r.y + 34.0;
     y += ui.paragraph(text, Vec2::new(r.x, y), r.w, 13.5, Weight::Regular, TEXT_SOFT) + 10.0;
     if !connected {
@@ -1920,7 +1197,7 @@ fn wizard(ui: &mut Ui, r: Rect, w: &mut Wizard, d: &mut crate::controllers::Devi
         ui.text_in(["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider 1", "Slider 2"][*k], Rect::new(r.x, y, 84.0, 24.0), 12.0, Weight::Medium, TEXT_DIM, Align::Left);
         ui.p().rounded(bar, 4.0, Color::WHITE.alpha(0.06));
         let x = bar.x + (v.clamp(-1.0, 1.0) + 1.0) * 0.5 * bar.w;
-        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, ACCENT);
+        ui.p().rounded(Rect::new(x - 2.0, bar.y - 4.0, 4.0, bar.h + 8.0), 2.0, accent());
         y += 26.0;
     }
     let now = |live: &[(usize, f32)]| {
@@ -2121,7 +1398,7 @@ fn save_gamectrler(devices: &[crate::controllers::DeviceCfg]) -> Result<std::pat
 }
 
 /// Settings → Driving keys: "Custom controls", the keys of the Controls page.
-fn use_custom_keys(l: &mut Launcher) -> bool {
+pub(super) fn use_custom_keys(l: &mut Launcher) -> bool {
     if l.state.settings.get("drive_keys").and_then(|v| v.as_str()) == Some("omsi") {
         return false;
     }
@@ -2131,7 +1408,7 @@ fn use_custom_keys(l: &mut Launcher) -> bool {
     true
 }
 
-fn save_keys(l: &mut Launcher, vr_binding: bool) {
+pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
     match core::save_keybindings(&l.state.keybindings) {
         Ok(()) => {
             l.state.keybindings_error.clear();
@@ -2161,9 +1438,9 @@ fn ago(t: u64) -> String {
     if s < 60 {
         format!("{s} s")
     } else if s < 3600 {
-        format!("{} min", s / 60)
+        omsi_ui::tr("%{m} min").replace("%{m}", &(s / 60).to_string())
     } else {
-        format!("{} h {} min", s / 3600, (s / 60) % 60)
+        omsi_ui::tr("%{h} h %{m} min").replace("%{h}", &(s / 3600).to_string()).replace("%{m}", &((s / 60) % 60).to_string())
     }
 }
 
@@ -2215,15 +1492,15 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
             l.ui.p().circle(c, 6.0 + 3.0 * pulse, OK.alpha(0.25));
         }
         l.ui.p().circle(c, 6.0, if running { OK } else { TEXT_FAINT });
-        let duty = i.line.as_ref().map(|ln| format!(" · line {ln}{}", i.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default())).unwrap_or_default();
+        let duty = i.line.as_ref().map(|ln| omsi_ui::tr(" · line %{line}").replace("%{line}", &format!("{ln}{}", i.tour.as_ref().map(|t| format!(" / {t}")).unwrap_or_default()))).unwrap_or_default();
         l.ui.text_in(&format!("{} · {}{duty}", short_map(&i.map), short_bus(&i.bus)), Rect::new(r.x + 42.0, r.y + 16.0, r.w - 260.0, 24.0), 16.0, Weight::Black, TEXT, Align::Left);
         let status = if running {
-            if l.state.stopping.contains(&i.pid) || i.stopping.is_some() { "stopping - saving the run…".to_string() } else { format!("running for {}", ago(i.started)) }
+            if l.state.stopping.contains(&i.pid) || i.stopping.is_some() { omsi_ui::tr("stopping - saving the run…").into_owned() } else { omsi_ui::tr("running for %{time}").replace("%{time}", &ago(i.started)) }
         } else {
-            let how = if i.exit_code == Some(0) { String::new() } else if i.killed { " (killed - it did not end by itself, the run is not saved)".into() } else { i.exit_code.map(|c| format!(" (exit code {c})")).unwrap_or_default() };
-            format!("ended{how}")
+            let how = if i.exit_code == Some(0) { String::new() } else if i.killed { omsi_ui::tr(" (killed - it did not end by itself, the run is not saved)").into_owned() } else { i.exit_code.map(|c| omsi_ui::tr(" (exit code %{code})").replace("%{code}", &c.to_string())).unwrap_or_default() };
+            omsi_ui::tr("ended%{how}").replace("%{how}", &how)
         };
-        l.ui.text_in(&format!("{status} · driver {}", i.profile), Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
+        l.ui.text_in(&omsi_ui::tr("%{status} · driver %{name}").replace("%{status}", &status).replace("%{name}", &i.profile), Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
         l.ui.text_in(&i.last_line, Rect::new(r.x + 42.0, r.y + 62.0, r.w - 60.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
         // buttons
         let bw = 110.0;
@@ -2240,9 +1517,9 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         if role == "host" {
             let code = lan.get("code").and_then(|x| x.as_str()).unwrap_or("").to_string();
             let box_r = Rect::new(r.x + 20.0, yy, r.w - 40.0, 84.0);
-            l.ui.p().rounded(box_r, 10.0, ACCENT.alpha(0.10));
-            l.ui.p().rounded_border(box_r, 10.0, 1.0, ACCENT.alpha(0.5));
-            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, ACCENT, Align::Left);
+            l.ui.p().rounded(box_r, 10.0, accent().alpha(0.10));
+            l.ui.p().rounded_border(box_r, 10.0, 1.0, accent().alpha(0.5));
+            l.ui.text_in("SESSION CODE", Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0), 10.5, Weight::Black, accent(), Align::Left);
             l.ui.text_in(&code, Rect::new(box_r.x + 16.0, box_r.y + 26.0, box_r.w - 170.0, 30.0), 20.0, Weight::Condensed, TEXT, Align::Left);
             l.ui.text_in("Your friends paste it into Multiplayer → Connect by Code.", Rect::new(box_r.x + 16.0, box_r.y + 58.0, box_r.w - 170.0, 18.0), 11.5, Weight::Regular, TEXT_DIM, Align::Left);
             if l.ui.button(&format!("copy-{}", i.pid), Rect::new(box_r.right() - 146.0, box_r.y + 24.0, 130.0, 36.0), "Copy code", Some("content_copy"), ButtonKind::Primary) {
@@ -2252,13 +1529,13 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
         } else if role == "client" {
             let connected = lan.get("connected").and_then(|x| x.as_bool()).unwrap_or(false);
             let text = if let Some(rej) = lan.get("rejected").and_then(|x| x.as_str()) {
-                format!("not connected: {rej}")
+                omsi_ui::tr("not connected: %{reason}").replace("%{reason}", &rej.to_string())
             } else if connected {
-                format!("connected to {}", lan.get("host_name").and_then(|x| x.as_str()).unwrap_or(""))
+                omsi_ui::tr("connected to %{host}").replace("%{host}", lan.get("host_name").and_then(|x| x.as_str()).unwrap_or(""))
             } else {
                 "connecting…".to_string()
             };
-            l.ui.text_in(&format!("Multiplayer: {text}"), Rect::new(r.x + 42.0, yy, r.w - 60.0, 20.0), 12.5, Weight::Medium, if connected { OK } else { WARN }, Align::Left);
+            l.ui.text_in(&omsi_ui::tr("Multiplayer: %{text}").replace("%{text}", &text), Rect::new(r.x + 42.0, yy, r.w - 60.0, 20.0), 12.5, Weight::Medium, if connected { OK } else { WARN }, Align::Left);
             yy += 24.0;
         }
         if !players.is_empty() {
@@ -2268,7 +1545,7 @@ pub fn sessions(l: &mut Launcher, area: Rect) {
                 let s = |k: &str| p.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
                 let pax = p.get("passengers").and_then(|x| x.as_i64()).unwrap_or(0);
                 let dest = if s("destination").is_empty() { String::new() } else { format!(" · {} → {}", s("line"), s("destination")) };
-                l.ui.text_in(&format!("{} · {}{dest}{} · {}", s("name"), short_bus(&s("bus")), if pax > 0 { format!(" · {pax} passengers") } else { String::new() }, s("where")), Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Left);
+                l.ui.text_in(&format!("{} · {}{dest}{} · {}", s("name"), short_bus(&s("bus")), if pax > 0 { omsi_ui::tr(" · %{n} passengers").replace("%{n}", &pax.to_string()) } else { String::new() }, s("where")), Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Left);
                 yy += 20.0;
             }
         }
@@ -2327,81 +1604,110 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.state.load_mods();
     }
     let body = l.page_title(area, UiPage::Mods);
-    let cols = 3;
-    let cw = (body.w - GAP * 2.0 * (cols as f32 - 1.0)) / cols as f32;
-    let colr = |k: usize| Rect::new(body.x + k as f32 * (cw + GAP * 2.0), body.y, cw, body.h);
+    let phone = super::mobile::mobile();
+    // (three columns: installing, the installs, the content folder - on a phone of one width)
+    let (w0, w2) = if phone {
+        let cw = (body.w - GAP * 4.0) / 3.0;
+        (cw, cw)
+    } else {
+        (420.0f32.min(body.w * 0.36), 340.0f32.min(body.w * 0.28))
+    };
+    let c0 = Rect::new(body.x, body.y, w0, body.h);
+    let c2 = Rect::new(body.right() - w2, body.y, w2, body.h);
+    let c1 = Rect::new(c0.right() + GAP * 2.0, body.y, c2.x - GAP * 2.0 - (c0.right() + GAP * 2.0), body.h);
     // install
-    let c0 = colr(0);
     l.ui.panel(c0);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c0.x + 18.0, c0.y + 14.0, c0.w - 36.0, c0.h - 28.0), "Install a mod");
     let mut y = inner.y;
-    let half = (inner.w - GAP) * 0.5;
-    if l.ui.button("mod-folder", Rect::new(inner.x, y, half, 40.0), "Choose a folder", Some("folder_open"), ButtonKind::Primary) {
-        if super::mobile::mobile() {
-            l.browse(super::mobile::Purpose::ModFolder, "");
-        } else if let Some(p) = core::pick_mod(false) {
+    // (a .zip only, everywhere: loose files are copied by hand, see below)
+    if l.ui.button("mod-zip", Rect::new(inner.x, y, inner.w, 42.0), "Choose a .zip file", Some("o-package"), ButtonKind::Primary) {
+        if let Some(p) = core::pick_mod() {
             l.state.install(p.to_string_lossy().to_string());
         }
     }
-    if l.ui.button("mod-zip", Rect::new(inner.x + half + GAP, y, half, 40.0), "Choose archive", Some("inventory_2"), ButtonKind::Normal) {
-        if super::mobile::mobile() {
-            l.browse(super::mobile::Purpose::ModZip, "");
-        } else if let Some(p) = core::pick_mod(true) {
-            l.state.install(p.to_string_lossy().to_string());
-        }
-    }
-    y += 52.0;
-    let drop = Rect::new(inner.x, y, inner.w, 110.0);
+    y += 54.0;
+    let drop = Rect::new(inner.x, y, inner.w, 130.0);
     let hot = l.pages.drop_hover;
     let t = l.ui.anim(id_of("drop"), if hot { 1.0 } else { 0.0 }, 0.1);
-    l.ui.p().rounded(drop, 12.0, ACCENT.alpha(0.05 + 0.12 * t));
+    l.ui.p().rounded(drop, 8.0, accent().alpha(0.08 + 0.12 * t));
     // a dashed edge
     let per = 2.0 * (drop.w + drop.h);
-    let n = (per / 14.0) as usize;
+    let n = (per / 9.0) as usize;
     for k in 0..n {
         let s = k as f32 * per / n as f32;
-        let p = if s < drop.w {
-            Vec2::new(drop.x + s, drop.y)
+        let (p, horizontal) = if s < drop.w {
+            (Vec2::new(drop.x + s, drop.y), true)
         } else if s < drop.w + drop.h {
-            Vec2::new(drop.right(), drop.y + s - drop.w)
+            (Vec2::new(drop.right(), drop.y + s - drop.w), false)
         } else if s < 2.0 * drop.w + drop.h {
-            Vec2::new(drop.right() - (s - drop.w - drop.h), drop.bottom())
+            (Vec2::new(drop.right() - (s - drop.w - drop.h), drop.bottom()), true)
         } else {
-            Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h))
+            (Vec2::new(drop.x, drop.bottom() - (s - 2.0 * drop.w - drop.h)), false)
         };
-        l.ui.p().circle(p, 1.3, ACCENT.alpha(0.35 + 0.5 * t));
+        let dash = if horizontal { Rect::new(p.x - 2.5, p.y - 0.75, 5.0, 1.5) } else { Rect::new(p.x - 0.75, p.y - 2.5, 1.5, 5.0) };
+        l.ui.p().rect(dash, accent().alpha(0.45 + 0.45 * t));
     }
-    l.ui.icon("upload", Vec2::new(drop.center().x, drop.y + 38.0), 30.0, ACCENT.alpha(0.6 + 0.4 * t));
-    l.ui.text_in("…or drop a mod folder or .zip onto this window", Rect::new(drop.x, drop.y + 62.0, drop.w, 30.0), 12.5, Weight::Medium, TEXT_SOFT, Align::Center);
-    y += 122.0;
+    l.ui.icon("o-plus", Vec2::new(drop.center().x, drop.center().y - 12.0), 20.0, TEXT_SOFT);
+    l.ui.text_in("…or drop a .zip onto this window", Rect::new(drop.x, drop.center().y + 4.0, drop.w, 24.0), 13.0, Weight::Regular, TEXT_SOFT, Align::Center);
+    y += 142.0;
     if !l.state.mod_path.is_empty() {
         let p = l.state.mod_path.clone();
         y += l.ui.paragraph(&p, Vec2::new(inner.x, y), inner.w, 11.5, Weight::Regular, TEXT_FAINT);
         match l.state.mod_info.clone() {
             Some(Ok(i)) if i.is_archive => {
-                let place = if i.in_place_ok { "can be used in place".to_string() } else { i.in_place.clone() };
-                y += l.ui.paragraph(&format!("{} archive, {} files - {place}", fmt_bytes(i.archive_bytes), i.files), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.in_place_ok { TEXT_DIM } else { WARN });
+                let place = if i.in_place_ok { omsi_ui::tr("can be used in place").into_owned() } else { i.in_place.clone() };
+                y += l.ui.paragraph(&omsi_ui::tr("%{size} archive, %{n} files - %{place}").replace("%{size}", &fmt_bytes(i.archive_bytes)).replace("%{n}", &i.files.to_string()).replace("%{place}", &place), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, if i.in_place_ok { TEXT_DIM } else { WARN });
             }
             Some(Err(e)) => {
                 y += l.ui.paragraph(&e, Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, DANGER);
             }
             _ => {}
         }
+        y += 6.0;
     }
-    y += 10.0;
-    if let Some(m) = l.state.mods.clone() {
-        Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "The Mods folder");
-        y += 30.0;
-        y += l.ui.paragraph(&format!("Anything put into {} is installed by itself once it has finished copying.", m.inbox), Vec2::new(inner.x, y), inner.w, 12.0, Weight::Regular, TEXT_DIM);
+    y += l.ui.paragraph("The .zip is kept as it is in the Archives folder and read in place; nothing is unpacked.", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+    let mods = l.state.mods.clone();
+    if let Some(m) = &mods {
+        y += 4.0 + l.ui.paragraph(&omsi_ui::tr("A .zip put into %{folder} is installed by itself once it has finished copying.").replace("%{folder}", &m.inbox.to_string()), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
         if !m.inbox_items.is_empty() {
-            l.ui.paragraph(&format!("In it now: {}", m.inbox_items.join(", ")), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
+            // (a long name with no spaces is cut to the card, not run past it)
+            let now: Vec<String> = m.inbox_items.iter().map(|n| omsi_launcher_ui::kit::fit_text(&mut l.ui, n, 12.0, inner.w - 80.0)).collect();
+            let now = now.join(", ");
+            y += 4.0 + l.ui.paragraph(&omsi_ui::tr("In it now: %{list}").replace("%{list}", &now), Vec2::new(inner.x, y + 4.0), inner.w, 12.0, Weight::Regular, TEXT_SOFT);
         }
     }
+    y += 18.0;
+    Launcher::part_title(&mut l.ui, Rect::new(inner.x, y, inner.w, 28.0), "Loose files (not a .zip)");
+    y += 32.0;
+    y += l.ui.paragraph("The launcher does not install loose folders. If you want to install them, copy them yourself:", Vec2::new(inner.x, y), inner.w, 13.0, Weight::Regular, TEXT_SOFT) + 10.0;
+    let content = mods.as_ref().map(|m| m.content_dir.clone()).unwrap_or_default();
+    let places = [
+        ("mods-open-root", "In your original OMSI 2 folder", "The mod works in OMSI 2 and in the Depot.", TEXT_DIM, l.state.config.root.clone()),
+        ("mods-open-content", "In the Depot content folder", "The mod will not be available in OMSI 2.", WARN, content),
+    ];
+    for (id, title, note, note_c, folder) in places {
+        let r = Rect::new(inner.x, y, inner.w, 50.0);
+        l.ui.p().rounded(r, 6.0, Color::WHITE.alpha(0.04));
+        l.ui.icon("o-folder", Vec2::new(r.x + 20.0, r.center().y), 18.0, TEXT_SOFT);
+        let bw = 104.0;
+        let tw = r.w - 40.0 - bw - 20.0;
+        let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, title, 13.5, tw);
+        l.ui.text_in(&title, Rect::new(r.x + 40.0, r.y + 7.0, tw, 20.0), 13.5, Weight::Bold, TEXT, Align::Left);
+        let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, note, 12.0, tw);
+        l.ui.text_in(&note, Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0), 12.0, Weight::Regular, note_c, Align::Left);
+        let b = Rect::new(r.right() - 10.0 - bw, r.y + 11.0, bw, 28.0);
+        if l.ui.button(id, b, "Open folder", None, ButtonKind::Normal) {
+            if folder.trim().is_empty() || !core::open_folder(std::path::Path::new(&folder)) {
+                let msg = if id == "mods-open-root" { "Choose the OMSI 2 folder under Setup first." } else { "The content folder is not there yet." };
+                l.state.set_status(msg, true);
+            }
+        }
+        y += 60.0;
+    }
     // installs
-    let c1 = colr(1);
     l.ui.panel(c1);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c1.x + 18.0, c1.y + 14.0, c1.w - 36.0, c1.h - 28.0), "Installs");
-    if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 130.0, c1.y + 12.0, 130.0, 30.0), "Clear finished", None, ButtonKind::Ghost) {
+    if l.ui.button("jobs-clear", Rect::new(c1.right() - 18.0 - 120.0, c1.y + 12.0, 120.0, 28.0), "Clear finished", None, ButtonKind::Normal) {
         core::install::clear_finished();
         l.state.poll_now();
     }
@@ -2409,7 +1715,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
     let mut cancel = None;
     l.ui.scroll_area("jobs", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
         if jobs.is_empty() {
-            ui.paragraph("Nothing installed since the launcher started. Big archives are checked against the free disk space before anything is unpacked; a cancelled or failed install leaves nothing behind.", Vec2::new(v.x + 6.0, v.y), v.w - 12.0, 12.5, Weight::Regular, TEXT_DIM);
+            ui.paragraph("Nothing installed since the launcher started. A .zip is checked before it is used; a cancelled or failed install leaves nothing behind.", Vec2::new(v.x + 6.0, v.y), v.w - 12.0, 12.5, Weight::Regular, TEXT_DIM);
             return 60.0;
         }
         let mut y = v.y;
@@ -2424,14 +1730,14 @@ pub fn mods(l: &mut Launcher, area: Rect) {
                 "done" => OK,
                 "failed" => DANGER,
                 "cancelled" => TEXT_DIM,
-                _ => ACCENT,
+                _ => accent(),
             };
             ui.badge(Vec2::new(r.right() - 90.0, r.y + 10.0), &j.state.to_uppercase(), sc);
             let mut yy = r.y + 34.0;
             if running {
                 let frac = if j.bytes_total > 0 { j.bytes_done as f32 / j.bytes_total as f32 } else if j.files_total > 0 { j.files_done as f32 / j.files_total as f32 } else { 0.0 };
                 ui.progress(Rect::new(r.x + 12.0, yy, r.w - 24.0, 8.0), frac, true);
-                ui.text_in(&format!("{} / {} files · {} / {}", j.files_done, j.files_total, fmt_bytes(j.bytes_done), fmt_bytes(j.bytes_total)), Rect::new(r.x + 12.0, yy + 10.0, r.w - 24.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
+                ui.text_in(&omsi_ui::tr("%{done} / %{total} files · %{bytes} / %{size}").replace("%{done}", &j.files_done.to_string()).replace("%{total}", &j.files_total.to_string()).replace("%{bytes}", &fmt_bytes(j.bytes_done)).replace("%{size}", &fmt_bytes(j.bytes_total)), Rect::new(r.x + 12.0, yy + 10.0, r.w - 24.0, 16.0), 11.0, Weight::Regular, TEXT_DIM, Align::Left);
                 yy += 30.0;
             }
             yy += ui.paragraph(&j.message, Vec2::new(r.x + 12.0, yy), r.w - 24.0, 12.0, Weight::Regular, if j.state == "failed" { DANGER } else { TEXT_SOFT });
@@ -2451,26 +1757,26 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         l.state.poll_now();
     }
     // content folder
-    let c2 = colr(2);
     l.ui.panel(c2);
     let inner = Launcher::card_title(&mut l.ui, Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, c2.h - 28.0), "Content folder");
-    let Some(m) = l.state.mods.clone() else {
+    let Some(m) = mods else {
         l.ui.text_in("Reading…", Rect::new(inner.x, inner.y, inner.w, 20.0), 12.5, Weight::Regular, TEXT_DIM, Align::Left);
         return;
     };
+    // (the free space beside the title, warm: what installs are checked against)
+    l.ui.text_in(&omsi_ui::tr("%{size} free").replace("%{size}", &fmt_bytes(m.free_bytes)), Rect::new(c2.x + 18.0, c2.y + 14.0, c2.w - 36.0, 24.0), 13.0, Weight::Medium, WARN, Align::Right);
     // (scrolled: a long list of archives or buses waiting would run past the card)
     l.ui.scroll_area("mods-content", Rect::new(inner.x - 6.0, inner.y, inner.w + 12.0, inner.h), &mut |ui, v| {
         let (x, w) = (v.x + 6.0, v.w - 16.0);
         let mut y = v.y;
-        y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 12.0, Weight::Medium, TEXT_SOFT);
-        y += 6.0;
-        ui.text_in(&format!("{} free on this disk", fmt_bytes(m.free_bytes)), Rect::new(x, y, w, 20.0), 13.0, Weight::Bold, ACCENT, Align::Left);
-        y += 30.0;
+        y += ui.paragraph(&m.content_dir, Vec2::new(x, y), w, 11.5, Weight::Regular, TEXT_FAINT);
+        y += 8.0;
         for (f, n) in &m.folders {
-            ui.icon("folder_open", Vec2::new(x + 9.0, y + 10.0), 16.0, TEXT_DIM);
-            ui.text_in(f, Rect::new(x + 26.0, y, w * 0.6, 20.0), 12.5, Weight::Medium, TEXT, Align::Left);
-            ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Right);
-            y += 24.0;
+            ui.p().rect(Rect::new(x, y, w, 1.0), EDGE);
+            ui.icon("o-folder", Vec2::new(x + 9.0, y + 16.0), 16.0, TEXT_SOFT);
+            ui.text_in(f, Rect::new(x + 26.0, y + 5.0, w * 0.6, 22.0), 13.0, Weight::Regular, TEXT, Align::Left);
+            ui.text_in(&format!("{n} {}", if *n == 1 { "entry" } else { "entries" }), Rect::new(x, y + 5.0, w, 22.0), 13.0, Weight::Regular, TEXT_DIM, Align::Right);
+            y += 31.0;
         }
         if !m.archives.is_empty() {
             y += 8.0;
@@ -2483,7 +1789,7 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         }
         if !m.waiting.is_empty() {
             y += 8.0;
-            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Waiting for their bus");
+            Launcher::part_title(ui, Rect::new(x, y, w, 28.0), "Kept aside by an older version (copy by hand)");
             y += 30.0;
             for item in &m.waiting {
                 ui.text_in(item, Rect::new(x, y, w, 20.0), 12.0, Weight::Regular, TEXT_DIM, Align::Left);
@@ -2493,86 +1799,6 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         y - v.y
     });
 }
-
-// --- setup -----------------------------------------------------------------------------------------
-
-pub fn setup(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, UiPage::Setup);
-    let r = Rect::new(body.x, body.y, body.w.min(820.0), 300.0);
-    l.ui.panel(r);
-    let inner = Launcher::card_title(&mut l.ui, Rect::new(r.x + 20.0, r.y + 16.0, r.w - 40.0, r.h - 32.0), "Folders");
-    let mut root = l.pages.setup_root.clone().unwrap_or_else(|| l.state.config.root.clone());
-    let mut game = l.pages.setup_game.clone().unwrap_or_else(|| l.state.config.game.clone());
-    let mut y = inner.y;
-    l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "OMSI 2 folder");
-    if l.ui.text_input("cfg-root", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut root, "/path/to/OMSI 2", Some("folder_open")) {
-        l.pages.setup_root = Some(root.clone());
-    }
-    if l.ui.button("browse-root", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-        if super::mobile::mobile() {
-            let start = root.clone();
-            l.browse(super::mobile::Purpose::Root, &start);
-        } else if let Some(p) = core::pick_folder("The OMSI 2 folder (with maps and Vehicles in it)") {
-            l.pages.setup_root = Some(p.to_string_lossy().to_string());
-        }
-    }
-    y += ROW + 10.0;
-    if core::IN_PROCESS_GAMES {
-        // (a phone: the game is this app itself)
-        y += l.ui.paragraph("Copy the whole OMSI 2 folder (with maps and Vehicles in it) onto the phone - by cable, from a PC or a USB stick - for example as depot/OMSI 2 in the internal storage, then choose it here with Browse. Mods go into depot/Mods or are installed from the Mods page.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
-    } else {
-        l.ui.label(Rect::new(inner.x, y, 150.0, ROW), "Game binary");
-        if l.ui.text_input("cfg-game", Rect::new(inner.x + 150.0, y, inner.w - 150.0 - 110.0, ROW), &mut game, "depot", Some("terminal")) {
-            l.pages.setup_game = Some(game.clone());
-        }
-        if l.ui.button("browse-game", Rect::new(inner.right() - 100.0, y, 100.0, ROW), "Browse", None, ButtonKind::Normal) {
-            if let Some(p) = core::pick_file("The depot program") {
-                l.pages.setup_game = Some(p.to_string_lossy().to_string());
-            }
-        }
-        y += ROW + 16.0;
-        y += l.ui.paragraph("The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation). The game binary is the depot program; it is found by itself when it sits next to the launcher.", Vec2::new(inner.x, y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
-    }
-    y += 12.0;
-    if l.ui.button("cfg-save", Rect::new(inner.x, y, 180.0, 42.0), "Save", Some("save"), ButtonKind::Primary) {
-        let chosen = root.trim().to_string();
-        // A folder that is no complete installation is said so, with what it lacks, and
-        // nothing is saved: it was saved, then quietly replaced by the installation found
-        // before, while the page said "Saved" (#1656).
-        let missing = if chosen.is_empty() { Vec::new() } else { omsi_cfg::missing_original_essentials(std::path::Path::new(&chosen)) };
-        if !missing.is_empty() {
-            let shown: Vec<&str> = missing.iter().map(String::as_str).take(6).collect();
-            let more = if missing.len() > shown.len() { format!(" and {} more", missing.len() - shown.len()) } else { String::new() };
-            l.state.set_status(format!("Not saved: {chosen} is not a complete OMSI 2 installation - it lacks {}{more}", shown.join(", ")), true);
-        } else {
-            l.state.config.root = chosen.clone();
-            l.state.config.game = game.trim().to_string();
-            match core::save_config(&l.state.config) {
-                Ok(()) => {
-                    // (what was read of the folders before is forgotten: a folder copied or
-                    // changed while the launcher ran is read as it is now)
-                    omsi_cfg::content_changed();
-                    l.state.config = core::load_config();
-                    l.pages.setup_root = None;
-                    l.pages.setup_game = None;
-                    let same = chosen.is_empty() || std::path::Path::new(&chosen) == std::path::Path::new(&l.state.config.root);
-                    if same {
-                        l.state.set_status("Saved. Reading the content again…", false);
-                    } else {
-                        l.state.set_status(format!("Saved, but the OMSI 2 folder used is {}", l.state.config.root), true);
-                    }
-                    // (a phone: the gallery is kept out of the folder chosen at once, before
-                    // its media scanner lists its textures as photos, #1632)
-                    #[cfg(target_os = "android")]
-                    crate::android::hide_content_from_gallery();
-                    l.state.load_content();
-                }
-                Err(e) => l.state.set_status(format!("{e:#}"), true),
-            }
-        }
-    }
-}
-
 
 // --- tutorials --------------------------------------------------------------------------------
 
@@ -2730,223 +1956,6 @@ mod wizard_tests {
 }
 
 #[cfg(test)]
-mod settings_tests {
-    use super::*;
-
-    /// Every clickable thing of the settings page by the tab it is on (switches are named
-    /// `set-<key>`). Taken from the page as it was before the tabs: nothing may go missing.
-    fn by_tab() -> Vec<Vec<&'static str>> {
-        let mut graphics = vec![
-            "s-gp-sel", "s-gp-load", "s-gp-del", "s-gp-name", "s-gp-save",
-            "s-preset", "s-graphics", "s-msaa", "s-scale", "s-af", "s-shadow", "set-ssao", "set-shadows", "s-casters", "set-detail_textures", "s-night", "s-led", "s-led-mip", "set-shadow_blobs", "set-reflections", "set-clouds", "set-windy_trees",
-            "set-fullscreen", "s-res", "set-vsync", "s-fps", "s-view", "s-maxobj", "s-minobj", "s-mirror", "s-mirror-refresh", "s-texmem", "set-texture_compression",
-        ];
-        if !cfg!(target_os = "macos") {
-            graphics.push("s-api");
-        }
-        let driving = vec![
-            "s-keys", "set-steering_linear", "set-old_steering", "set-red_steer_spd", "s-mouse", "set-mouse_smooth", "set-mouse_right_off", "set-blinker_cancel", "set-brake_hold", "set-auto_clutch", "set-auto_shift", "set-momentary_gears", "s-go-keys",
-            "s-wrange", "s-wlock", "s-pad-steer-smooth", "set-pad_steer_linear", "set-arrows_switch_cams", "s-pedt", "s-pedb", "set-ff_enabled", "set-ff_invert", "s-ffroad", "s-ffeng", "s-fffade", "s-wreset", "s-go-pads",
-        ];
-        let mut camera = vec![
-            "s-seaty",
-            "s-seatz",
-            "s-seatx",
-            "s-seat-pitch",
-            "s-seatreset",
-            "s-fov",
-            "s-outside-fov",
-            "s-look-sens",
-            "set-right_stick_look",
-            "s-look-smoothing",
-            "s-head-idle",
-            "s-head-idle-pace",
-            "set-steer_look",
-            "s-steer-look-angle",
-            "s-steer-look-response",
-            "set-head_movement",
-            "set-driverview_smooth",
-            "set-hands_in_cab",
-            "set-alt_view",
-            "set-precision_zoom",
-            "set-camera_collision",
-            "set-driver",
-            "set-head_tracking",
-            "s-trackir-yaw", "s-trackir-pitch", "s-trackir-roll",
-            "set-head_tracking_invert_yaw", "set-head_tracking_invert_pitch", "set-head_tracking_invert_roll",
-            "s-trackir-x", "s-trackir-y", "s-trackir-z",
-            "set-head_tracking_invert_x", "set-head_tracking_invert_y", "set-head_tracking_invert_z",
-            "s-trackir-reset",
-            "set-triple_screen",
-            "set-triple_span",
-            "set-triple_hud_center",
-            "s-triple-width_mm",
-            "s-triple-distance_mm",
-            "s-triple-bezel_mm",
-            "s-triple-left_angle_deg",
-            "s-triple-right_angle_deg",
-            "s-triple-eye_height_mm",
-        ];
-        if cfg!(windows) {
-            camera.extend(["set-vr", "s-vr-scale", "s-vr-head-smoothing", "s-vr-mirror-rate", "set-vr_desktop_mirror", "s-go-vr-keys"]);
-        }
-        // (the radio stations: one, see `frame`)
-        let sound = vec!["s-vol", "s-volai", "s-volsc", "set-doppler", "set-muffle_outside", "s-voices", "radio-name-0", "radio-url-0", "radio-del-0", "radio-add"];
-        let gameplay = vec![
-            "s-board", "set-exact_fare", "s-pax", "set-get_up", "s-unsched", "s-maxsched", "s-maxpark", "s-autosave", "s-maxhumans",
-            "s-maint", "set-collision_vehicles", "set-collision_objects", "set-collision_pedestrians", "set-use_real_time", "set-use_real_date", "set-time_sync", "set-metar_sync", "s-timespeed",
-        ];
-        let general = vec![
-            "s-lang", "set-machine_translation", "set-launcher_rest", "set-voice_chat", "s-uiscale", "set-ui_scale_window", "s-uiop", "set-tooltips", "set-show_fps", "set-notes", "set-chat", "s-chatsize", "set-name_tags",
-            "set-navigator", "set-nav_arrows", "set-nav_ai", "corner-top-left", "corner-top-right", "corner-bottom-left", "corner-bottom-right",
-            "s-about-releases", "s-reset",
-        ];
-        vec![graphics, driving, camera, sound, gameplay, general]
-    }
-
-    /// Settings that show every row: Enhanced (Vanilla hides the shadows and effects), VR on.
-    fn all_rows() -> Value {
-        let mut s = core::settings_from_text(None);
-        s["triple_screen"] = json!(true);
-        s["graphics"] = json!("enhanced");
-        s["vr"] = json!(true);
-        s
-    }
-
-    fn outside() -> Outside {
-        Outside { reset: false, controls: None }
-    }
-
-    /// One frame of tab `tab`, its two columns tall enough that nothing is cut off. The Sound
-    /// tab lists one radio station (not the radio.cfg of whoever runs the tests).
-    fn frame(ui: &mut Ui, tab: usize, s: &mut Value, out: &mut Outside) {
-        RADIO.with(|r| {
-            r.borrow_mut().get_or_insert_with(|| vec![("One".into(), "https://example.org/one.mp3".into())]);
-        });
-        ui.begin(Vec2::new(1200.0, 2000.0), 1.0, 1.0 / 60.0);
-        let mut dirty = 0.0;
-        settings_tab(ui, tab, s, &mut dirty, out, [Rect::new(0.0, 0.0, 580.0, 2000.0), Rect::new(620.0, 0.0, 580.0, 2000.0)]);
-    }
-
-    /// Click the widget `name` on tab `tab`: the mouse goes down over it and comes up again.
-    fn click(tab: usize, name: &str, s: &mut Value) -> Outside {
-        let mut ui = Ui::new();
-        let mut out = outside();
-        frame(&mut ui, tab, s, &mut out);
-        let r = *ui.drawn.get(&id_of(name)).unwrap_or_else(|| panic!("{name} is not on the {} tab", SETTINGS_TABS[tab]));
-        ui.input.mouse = r.center();
-        ui.input.pressed = true;
-        ui.input.down = true;
-        frame(&mut ui, tab, s, &mut out);
-        ui.input.pressed = false;
-        ui.input.down = false;
-        ui.input.released = true;
-        frame(&mut ui, tab, s, &mut out);
-        out
-    }
-
-    #[test]
-    fn every_setting_is_on_exactly_one_tab() {
-        let tabs = by_tab();
-        assert_eq!(tabs.len(), SETTINGS_TABS.len());
-        let mut seen = std::collections::HashSet::new();
-        for name in tabs.iter().flatten() {
-            assert!(seen.insert(*name), "{name} is listed on two tabs");
-        }
-        for (tab, names) in tabs.iter().enumerate() {
-            let mut ui = Ui::new();
-            frame(&mut ui, tab, &mut all_rows(), &mut outside());
-            for name in names {
-                assert!(ui.drawn.contains_key(&id_of(name)), "{name} is not on the {} tab", SETTINGS_TABS[tab]);
-            }
-            assert_eq!(ui.drawn.len(), names.len(), "the {} tab has a clickable thing more than the list names", SETTINGS_TABS[tab]);
-        }
-    }
-
-    /// "DirectX9 (D3D9Ex)" is the "same as OMSI 2" renderer: no Vanilla/Vanilla+/Enhanced to
-    /// choose and none of Enhanced's rows, and the saved choice stays for the other APIs.
-    #[test]
-    fn d3d9_hides_the_graphics_choice_and_keeps_it_saved() {
-        let drawn = |s: &mut Value| {
-            let mut ui = Ui::new();
-            frame(&mut ui, 0, s, &mut outside());
-            ui
-        };
-        let mut s = all_rows();
-        assert_eq!(s["graphics"], json!("enhanced"));
-        let ui = drawn(&mut s);
-        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
-        assert!(ui.drawn.contains_key(&id_of("s-shadow")));
-
-        // (`all_rows` has VR on, which takes DirectX 12 instead)
-        s["vr"] = json!(false);
-        s["graphics_api"] = json!("d3d9");
-        let ui = drawn(&mut s);
-        assert_eq!(ui.drawn.contains_key(&id_of("s-graphics")), !cfg!(windows));
-        assert_eq!(ui.drawn.contains_key(&id_of("s-shadow")), !cfg!(windows));
-        assert_eq!(s["graphics"], json!("enhanced"));
-
-        // (VR takes DirectX 12 instead: the choice stays)
-        s["vr"] = json!(true);
-        let ui = drawn(&mut s);
-        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
-        s["vr"] = json!(false);
-
-        s["graphics_api"] = json!("vulkan");
-        let ui = drawn(&mut s);
-        assert!(ui.drawn.contains_key(&id_of("s-graphics")));
-        assert_eq!(s["graphics"], json!("enhanced"));
-    }
-
-    #[test]
-    fn right_stick_look_switch_toggles_and_saves_from_the_camera_tab() {
-        let mut s = all_rows();
-        assert_eq!(s["right_stick_look"], json!(true));
-
-        click(2, "set-right_stick_look", &mut s);
-        assert_eq!(s["right_stick_look"], json!(false));
-        let saved = core::settings_to_text(&s, None);
-        assert_eq!(
-            core::settings_from_text(Some(&saved))["right_stick_look"],
-            json!(false)
-        );
-
-        click(2, "set-right_stick_look", &mut s);
-        assert_eq!(s["right_stick_look"], json!(true));
-    }
-
-    #[test]
-    fn the_driving_tab_leads_to_the_keys_and_the_controllers() {
-        let mut s = all_rows();
-        assert_eq!(click(1, "s-go-keys", &mut s).controls, Some(0));
-        assert_eq!(click(1, "s-go-pads", &mut s).controls, Some(1));
-    }
-
-    /// The mouse steering's smoothing is on unless switched off, and the switch is kept (#1092).
-    #[test]
-    fn smooth_mouse_steering_switches_off_and_is_saved() {
-        let mut s = all_rows();
-        assert_eq!(s["mouse_smooth"], json!(true));
-        click(1, "set-mouse_smooth", &mut s);
-        assert_eq!(s["mouse_smooth"], json!(false));
-        let saved = core::settings_to_text(&s, None);
-        assert!(saved.contains("mouse_smooth=0\n"), "{saved}");
-        assert_eq!(core::settings_from_text(Some(&saved))["mouse_smooth"], json!(false));
-        assert!(!crate::settings::Settings::from_text(&saved).mouse_smooth);
-        assert!(crate::settings::Settings::from_text("").mouse_smooth);
-    }
-
-    #[test]
-    fn reset_asks_first_and_changes_nothing() {
-        let mut s = all_rows();
-        let before = s.clone();
-        let out = click(5, "s-reset", &mut s);
-        assert!(out.reset);
-        assert_eq!(s, before);
-    }
-}
-
-#[cfg(test)]
 mod pad_action_tests {
     /// Every game action a button can be given is one the game carries out from a
     /// controller (app_events: `view_look_*` / `voice_radio` while held, the gears by name,
@@ -2992,3 +2001,23 @@ mod pad_remove_tests {
         assert!(names(&cfg_text(&devices)).is_empty());
     }
 }
+
+#[cfg(test)]
+mod profile_tests {
+    fn drive() -> super::core::Session {
+        serde_json::from_value(serde_json::json!({"time":0,"driver":"T","map":"maps/Spandau/global.cfg","bus":"Vehicles/X/a.bus","line":"136","tour":"2","seconds":1500.0,"metres":8400.0,"stops":14,"early":1,"late":2,"tickets":4,"cash":7.5,"crashes":0,"hurt":0,"jolts":2,"driving":96.0,"comfort":88.0,"ticketing":100.0})).unwrap()
+    }
+
+    /// The stops on time are the ones served neither early nor late (the personnel file
+    /// counts all of them, and of those the early and the late ones).
+    #[test]
+    fn a_drives_details_count_the_stops_on_time() {
+        let rows = super::drive_rows(&drive());
+        let get = |k: &str| rows.iter().find(|r| r.0 == k).map(|r| r.1.clone()).unwrap();
+        assert_eq!(get("On time / early / late"), "11 / 1 / 2");
+        assert_eq!(get("Line"), "136 / 2");
+        assert_eq!(get("Distance"), "8.4 km");
+        assert_eq!(super::drive_title(&drive()), "Line 136 / 2 · Spandau");
+    }
+}
+

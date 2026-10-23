@@ -131,8 +131,9 @@ impl App {
                         q.vehicle.update(1.0 / 30.0);
                     }
                     let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
-                    let how = if self.player.is_some() { "Esc menu: Drive the next vehicle" } else { "G at its driver's door" };
-                    self.service_msg = Some((format!("Placed: {} ({how} to drive it)", name.trim()), 5.0));
+                    let name = name.trim();
+                    let msg = if self.player.is_some() { format!("Placed: {name} (Esc menu: Drive the next vehicle to drive it)") } else { format!("Placed: {name} (G at its driver's door to drive it)") };
+                    self.service_msg = Some((msg, 5.0));
                 }
             }
             (Some(_), true) => self.service_msg = Some(("It would stand in another vehicle here".into(), 2.0)),
