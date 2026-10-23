@@ -27,5 +27,7 @@ pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResource
 #[cfg(test)]
 pub(crate) use post::PostUniform;
 pub(crate) use post::{encode_enhanced_post, post_pipelines, Exposure, PostParts, PostPipelines};
-pub(crate) use shadow::{ShadowResources, ShadowSchedule, SHADOW_CLOSE_MAX};
+pub(crate) use shadow::{
+    shadow_pipe, ShadowResources, ShadowSchedule, LAMP_CASCADE, SHADOW_CLOSE_MAX,
+};
 pub use shadow::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};

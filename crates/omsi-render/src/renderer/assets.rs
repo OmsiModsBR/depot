@@ -50,26 +50,6 @@ impl Renderer {
 }
 
 impl Renderer {
-    pub(crate) fn add_material_full(
-        &self,
-        scene: &mut Scene,
-        texture: Option<TextureId>,
-        alpha: AlphaMode,
-        color: [f32; 4],
-        unlit: bool,
-        transmap: Option<(TextureId, bool)>,
-        terrain: Option<(f32, f32)>,
-        nightmap: Option<TextureId>,
-        lightmap: Option<TextureId>,
-        envmap: Option<(TextureId, f32)>,
-        emissive: [f32; 3],
-    ) -> MaterialId {
-        self.add_material_wet(
-            scene, texture, alpha, color, unlit, transmap, terrain, nightmap, lightmap, envmap,
-            emissive, 0.0,
-        )
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_material_inner(
         &self,

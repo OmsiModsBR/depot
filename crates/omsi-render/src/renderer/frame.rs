@@ -353,7 +353,8 @@ impl Renderer {
             lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
-                && self.shadows.shadow_pipelines.len() > 6,
+                && self.shadows.shadow_pipelines.len()
+                    > crate::passes::shadow_pipe(crate::passes::LAMP_CASCADE, 0),
         );
         self.prepare_coronas(
             scene,
