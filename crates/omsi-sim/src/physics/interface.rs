@@ -33,9 +33,7 @@ pub use super::implementation::{
 };
 
 // The constants the rest of the game measures against.
-pub(crate) use super::domain::params::{
-    AI_AXLE_STEER_MAX, AI_STEER_ARM_MIN, AI_STEER_RATE, AI_STEER_RATE_HEAVY, KINEMATIC_DT_MAX,
-};
+pub(crate) use super::domain::params::{AI_STEER_RATE, AI_STEER_RATE_HEAVY, KINEMATIC_DT_MAX};
 pub use super::domain::params::{
     BUMP, CLIMB, CRASH_SPEED, DEFAULT_INERTIA_INV, DROOP, HUB_REACH, WALL_HEIGHT,
 };

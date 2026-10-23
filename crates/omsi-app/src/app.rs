@@ -774,10 +774,8 @@ impl App {
                             // once, it explains dark displays and missing devices
                             if !p.vehicle.ty.missing_packs.is_empty() {
                                 let packs: Vec<String> = p.vehicle.ty.missing_packs.iter().map(|(n, _)| n.clone()).collect();
-                                let msg = format!(
-                                    "This bus takes parts from vehicle pack(s) that are not installed: {} (install them for its displays and devices)",
-                                    packs.join(", ")
-                                );
+                                let msg = omsi_ui::tr("This bus takes parts from vehicle pack(s) that are not installed: %{packs} (install them for its displays and devices)")
+                                    .replace("%{packs}", &packs.join(", "));
                                 self.service_msg = Some(match self.service_msg.take() {
                                     Some((m, _)) => (format!("{m}   |   {msg}"), 12.0),
                                     None => (msg, 12.0),
@@ -937,7 +935,7 @@ impl App {
                                 }
                                 Err(e) => {
                                     log::warn!("no player duty: {e}");
-                                    self.service_msg = Some((format!("No duty: {e}"), 20.0));
+                                    self.service_msg = Some((omsi_ui::tr("No duty: %{error}").replace("%{error}", &e.to_string()), 20.0));
                                     None
                                 }
                             };
@@ -1221,15 +1219,21 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
     let objects = files.iter().filter(|(_, w)| *w != "spline").count();
     let splines = files.len() - objects;
     let addons: Vec<&String> = by_addon.keys().take(4).collect();
-    let more = if by_addon.len() > 4 { format!(" and {} more", by_addon.len() - 4) } else { String::new() };
+    let more = by_addon.len().saturating_sub(4);
     log::warn!("missing content: {objects} objects, {splines} splines, {} textures (list: {})", textures.len(), path.display());
     if !files.is_empty() {
+        let text = if more > 0 {
+            "This map uses %{objects} objects and %{splines} splines that are not installed (add-ons: %{addons} and %{more} more). The list is in %{path}"
+        } else {
+            "This map uses %{objects} objects and %{splines} splines that are not installed (add-ons: %{addons}). The list is in %{path}"
+        };
         *msg = Some((
-            format!(
-                "This map uses {objects} objects and {splines} splines that are not installed (add-ons: {}{more}). The list is in {}",
-                addons.iter().map(|a| a.as_str()).collect::<Vec<_>>().join(", "),
-                path.display()
-            ),
+            omsi_ui::tr(text)
+                .replace("%{objects}", &objects.to_string())
+                .replace("%{splines}", &splines.to_string())
+                .replace("%{addons}", &addons.iter().map(|a| a.as_str()).collect::<Vec<_>>().join(", "))
+                .replace("%{more}", &more.to_string())
+                .replace("%{path}", &path.display().to_string()),
             15.0,
         ));
     }

@@ -4,7 +4,7 @@
 //! usage: human_rig <root> [more roots...]   (every Humans/*/*.hum below each root)
 use glam::Vec3;
 use glam::{DVec2, DVec3};
-use omsi_sim::human::{Activity, HumanType, Pose, PoseInput};
+use omsi_sim::people::{Activity, HumanType, Pose, PoseInput};
 use std::path::Path;
 
 fn main() {

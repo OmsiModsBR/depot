@@ -28,6 +28,9 @@ pub enum Msg {
     Stopped { pid: u32, result: Result<bool, String> },
     LogTail { pid: u32, lines: Vec<String> },
     Mods(Result<core::ModsStatus, String>),
+    /// What the content takes on disk and how much of it there is (Setup), for the reading
+    /// of that number.
+    Usage(u64, core::disk::Usage),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -129,6 +132,9 @@ pub struct Choice {
     pub lan_addr: String,
     /// 2: `entry` may be -1 (automatic); older files had a fixed entry point there.
     pub version: u32,
+    /// The kind of session the Maps page starts: "new", "saved" (a situation the game saved)
+    /// or "without_bus" (on foot at the start point).
+    pub session: String,
 }
 
 impl Default for Choice {
@@ -157,7 +163,8 @@ impl Default for Choice {
             on_foot: false,
             lan_mode: "off".into(),
             lan_addr: String::new(),
-            version: 2,
+            version: 3,
+            session: "new".into(),
         }
     }
 }
@@ -167,6 +174,30 @@ fn choice_path() -> std::path::PathBuf {
 }
 
 impl Choice {
+    /// The bus "Use for the next start" was clicked for, with what its card held (after
+    /// `State::select_bus`, which picks the bus and its automatic depot file).
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.bus = u.file;
+        self.paint = u.paint;
+        self.hof_manual = u.hof.is_some();
+        if let Some(hof) = u.hof {
+            self.hof = hof;
+        }
+        self.number = u.number.unwrap_or_default();
+        self.plate = u.plate;
+    }
+
+    /// No bus picked for the next start: the whole preselection goes, no depot file, number
+    /// or plate picked for it stays behind for the game (the depot file goes back to the
+    /// automatic one, which the caller sets).
+    pub fn clear_bus(&mut self) {
+        self.bus.clear();
+        self.paint.clear();
+        self.number.clear();
+        self.plate.clear();
+        self.hof_manual = false;
+    }
+
     pub fn load() -> Choice {
         let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         Self::fresh(c)
@@ -184,6 +215,18 @@ impl Choice {
             // the start was always the map's first entry point: now it is automatic
             c.entry = -1;
             c.version = 2;
+        }
+        if c.version < 3 {
+            // the Drive page always held a bus; on a computer the bus of a start is now only one
+            // picked on Vehicles ("Use this bus"), so the old one is no preselection
+            if !super::mobile::mobile() {
+                c.bus.clear();
+                c.paint.clear();
+                c.number.clear();
+                c.plate.clear();
+                c.hof_manual = false;
+            }
+            c.version = 3;
         }
         // (older launchers took a vehicle line of a broken ailists.cfg for the map's depot)
         if c.hof.to_ascii_lowercase().contains(".bus") || c.hof.to_ascii_lowercase().contains(".ovh") {
@@ -233,6 +276,9 @@ pub struct State {
     /// game started (its process, once it is known), 15 s at most.
     pub launch_hold: Option<std::time::Instant>,
     launched_pid: Option<u32>,
+    /// The last game started from this launcher (its process), until the launcher has put
+    /// itself away for it: a game that already ran when the launcher opened is not one.
+    pub started_here: Option<u32>,
     /// A game started from here ended on an error: what it said, and the end of its log
     /// (see `crash_of`), for the dialog that asks to report it.
     pub crash: Option<(String, String)>,
@@ -242,6 +288,13 @@ pub struct State {
     pub jobs: Vec<core::install::Progress>,
     pub mods: Option<core::ModsStatus>,
     pub mods_asked: bool,
+    /// What the content takes on disk (Setup), read when the page opens; the reading asked
+    /// last (an earlier one that ends after it is not taken).
+    pub usage: Option<core::disk::Usage>,
+    pub usage_asked: bool,
+    usage_gen: u64,
+    /// Counts the readings of the content that brought other files than before.
+    pub content_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
@@ -311,11 +364,16 @@ impl State {
             queued_launch: None,
             launch_hold: None,
             launched_pid: None,
+            started_here: None,
             crash: None,
             disconnected: None,
             jobs: Vec::new(),
             mods: None,
             mods_asked: false,
+            usage: None,
+            usage_asked: false,
+            usage_gen: 0,
+            content_gen: 0,
             mod_info: None,
             mod_path: String::new(),
             ibis: None,
@@ -483,6 +541,26 @@ impl State {
         self.spawn(|| Msg::Mods(core::mods_status().map_err(|e| format!("{e:#}"))));
     }
 
+    /// Reads what the OMSI 2 folder and the content folder take on disk (Setup's Content
+    /// card), in the background.
+    pub fn load_usage(&mut self) {
+        self.usage_asked = true;
+        self.usage = None;
+        self.usage_gen += 1;
+        let gen = self.usage_gen;
+        let root = std::path::PathBuf::from(&self.config.root);
+        self.spawn(move || {
+            let mut folders = Vec::new();
+            if !root.as_os_str().is_empty() {
+                folders.push(("OMSI 2 folder".to_string(), root));
+            }
+            if let Some(c) = core::content_dir() {
+                folders.push(("Depot content folder".to_string(), c));
+            }
+            Msg::Usage(gen, core::disk::scan(&folders))
+        });
+    }
+
     #[cfg(feature = "lan")]
     pub fn check_join(&mut self) {
         // (multiplayer is disabled: nothing is looked up)
@@ -580,7 +658,7 @@ impl State {
             // The Drive page needs a map of this installation chosen, so the choice stays
             // as it is then: `duty()` starts the game on the server's map anyway.
             if !self.maps.is_empty() && !self.maps.iter().any(|m| m.file.eq_ignore_ascii_case(&info.map)) {
-                self.set_status(format!("The server plays {}, which is not installed here: it is fetched from the server on joining.", info.map), false);
+                self.set_status(omsi_ui::tr("The server plays %{map}, which is not installed here: it is fetched from the server on joining.").replace("%{map}", &info.map), false);
             } else {
                 self.choice.map = info.map.clone();
             }
@@ -589,11 +667,11 @@ impl State {
         self.choice.lan_addr = lan_addr;
         self.joined_server = Some(address.to_string());
         let name = info.as_ref().map(|i| i.name.clone()).unwrap_or_else(|| address.to_string());
-        self.join = (true, format!("the server {name}"));
+        self.join = (true, omsi_ui::tr("the server %{name}").replace("%{name}", &name));
         self.join_checked = address.to_string();
         self.touched();
-        let how = if proto == JoinProto::Udp { " over UDP" } else { "" };
-        self.set_status(format!("Joined {name}{how} - choose your bus and duty, then Start the duty"), false);
+        let how = if proto == JoinProto::Udp { omsi_ui::tr(" over UDP").into_owned() } else { String::new() };
+        self.set_status(omsi_ui::tr("Joined %{name}%{how} - choose your bus and duty, then Start the duty").replace("%{name}", &name).replace("%{how}", &how), false);
     }
 
     /// Back to playing alone (the Drive page's "Leave Server").
@@ -621,7 +699,13 @@ impl State {
     }
 
     pub fn install(&mut self, path: String) {
-        // (a .zip is only ever used in place, from Archives; a folder is copied)
+        // (a .zip only: loose files are copied by hand, into the OMSI 2 folder or the content
+        // folder - the Mods page says where)
+        if !is_zip(&path) {
+            self.set_status("The launcher installs a .zip only. Copy loose files yourself: the Mods page shows where.", true);
+            return;
+        }
+        // (a .zip is only ever used in place, from Archives)
         let mode = "inplace".to_string();
         self.mod_path = path.clone();
         let p2 = path.clone();
@@ -630,6 +714,12 @@ impl State {
     }
 
     pub fn launch(&mut self) {
+        self.launch_with(|_| {});
+    }
+
+    /// Start a session with the duty the choice makes, as `adjust` changes it (Maps: a start
+    /// without a bus leaves the bus out of the duty, not out of the choice kept for the next).
+    pub fn launch_with(&mut self, adjust: impl FnOnce(&mut core::Duty)) {
         if !self.save_pending_settings() {
             return;
         }
@@ -637,7 +727,8 @@ impl State {
             self.set_status("A session needs the original OMSI 2: choose its folder under Setup first.", true);
             return;
         }
-        let d = self.duty();
+        let mut d = self.duty();
+        adjust(&mut d);
         self.set_status("Starting the game…", false);
         self.queued_launch = Some(d);
     }
@@ -765,7 +856,7 @@ impl State {
                 true
             }
             Err(e) => {
-                self.set_status(format!("Could not save settings: {e:#}"), true);
+                self.set_status(omsi_ui::tr("Could not save settings: %{error}").replace("%{error}", &format!("{e:#}")), true);
                 false
             }
         }
@@ -841,7 +932,7 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
-                self.set_status(format!("Reading the content stopped on an error: {why}"), true);
+                self.set_status(omsi_ui::tr("Reading the content stopped on an error: %{error}").replace("%{error}", &why.to_string()), true);
             }
             #[cfg(feature = "lan")]
             Msg::Server { address, info } => {
@@ -857,7 +948,7 @@ impl State {
                                 self.choice.tour = None;
                                 self.choice.entry = 0;
                                 self.touched();
-                                self.set_status(format!("The host drives on {name}: that map is chosen"), false);
+                                self.set_status(omsi_ui::tr("The host drives on %{map}: that map is chosen").replace("%{map}", &name), false);
                             }
                         }
                     }
@@ -874,7 +965,7 @@ impl State {
                 self.weathers = weathers;
                 self.pick_map();
                 self.load_lines();
-                self.set_status(format!("{} maps - reading the buses…", self.maps.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps - reading the buses…").replace("%{maps}", &self.maps.len().to_string()), false);
             }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
@@ -882,7 +973,7 @@ impl State {
                 }
                 crate::mt::protect(batch.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(batch.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
                 self.vehicles.extend(batch);
-                self.set_status(format!("{} maps, {} buses - reading the vehicle folders: {done} of {total}", self.maps.len(), self.vehicles.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
                 // (names of things, not the interface: never machine-translated)
@@ -897,14 +988,30 @@ impl State {
                         }
                     }
                 }
-                self.set_status(format!("{} maps, {} buses, {} weathers", maps.len(), vehicles.len(), weathers.len()), false);
+                self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses, %{weathers} weathers").replace("%{maps}", &maps.len().to_string()).replace("%{buses}", &vehicles.len().to_string()).replace("%{weathers}", &weathers.len().to_string()), false);
+                // (other files than before - another content folder chosen under Setup: the
+                // Maps and Vehicles pages take the new lists even when as many came)
+                let same = self.maps.iter().map(|m| &m.file).eq(maps.iter().map(|m| &m.file)) && self.vehicles.iter().map(|v| &v.file).eq(vehicles.iter().map(|v| &v.file));
+                if !same {
+                    self.content_gen += 1;
+                }
                 self.maps = maps;
                 self.vehicles = vehicles;
                 self.weathers = weathers;
                 self.loading_content = false;
-                // what was chosen last time, where it still exists
+                // what was chosen last time, where it still exists (the phone's Drive page always
+                // has a bus; on a computer none is preselected unless Vehicles picked one)
                 if !self.vehicles.iter().any(|v| v.file == self.choice.bus) {
-                    if let Some(v) = self.vehicles.first() {
+                    if !super::mobile::mobile() {
+                        if !self.choice.bus.is_empty() {
+                            self.choice.bus.clear();
+                            self.choice.paint.clear();
+                            self.choice.number.clear();
+                            self.choice.plate.clear();
+                            self.choice.hof_manual = false;
+                            self.choice.hof = self.default_hof();
+                        }
+                    } else if let Some(v) = self.vehicles.first() {
                         self.choice.bus = v.file.clone();
                         self.choice.paint.clear();
                         self.choice.hof = self.default_hof();
@@ -924,7 +1031,7 @@ impl State {
                 self.content_first = false;
                 self.content_done();
                 if omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root)).is_empty() {
-                    self.set_status(format!("{e}\nSet the OMSI 2 folder under Setup."), true);
+                    self.set_status(omsi_ui::tr("%{error}\nSet the OMSI 2 folder under Setup.").replace("%{error}", &e.to_string()), true);
                 } else {
                     self.set_status(root_problem(&self.config.root), true);
                 }
@@ -944,7 +1051,7 @@ impl State {
                         if let Some(line) = self.choice.line.clone() {
                             match self.lines.iter().find(|x| x.name == line) {
                                 None => {
-                                    note = format!(" - line {line} does not run on {}", self.choice.date);
+                                    note = omsi_ui::tr(" - line %{line} does not run on %{date}").replace("%{line}", &line.to_string()).replace("%{date}", &self.choice.date.to_string());
                                     self.choice.line = None;
                                     self.choice.tour = None;
                                 }
@@ -952,14 +1059,14 @@ impl State {
                                     if let Some(t) = &self.choice.tour {
                                         match l.tours.iter().find(|x| &x.number == t) {
                                             None => self.choice.tour = None,
-                                            Some(t) if !t.runs => note = format!(" - tour {} of line {line} does not run that day ({})", t.number, t.days),
+                                            Some(t) if !t.runs => note = omsi_ui::tr(" - tour %{tour} of line %{line} does not run that day (%{days})").replace("%{tour}", &t.number).replace("%{line}", &line.to_string()).replace("%{days}", &super::days_text(&t.days)),
                                             _ => {}
                                         }
                                     }
                                 }
                             }
                         }
-                        self.set_status(format!("{} lines on {}{note}", self.lines.len(), self.choice.date), !note.is_empty());
+                        self.set_status(omsi_ui::tr("%{n} lines on %{date}%{note}").replace("%{n}", &self.lines.len().to_string()).replace("%{date}", &self.choice.date.to_string()).replace("%{note}", &note), !note.is_empty());
                     }
                     Err(e) => {
                         self.lines.clear();
@@ -976,7 +1083,7 @@ impl State {
                             core::log_to_file(&format!("inbox: installing {s}"));
                         }
                         if !p.started.is_empty() {
-                            self.set_status(format!("Installing from the Mods folder: {}", p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
+                            self.set_status(omsi_ui::tr("Installing from the Mods folder: %{list}").replace("%{list}", &p.started.iter().map(|x| x.rsplit('/').next().unwrap_or(x)).collect::<Vec<_>>().join(", ")), false);
                         }
                         let mut installed = false;
                         for j in &p.jobs {
@@ -1069,7 +1176,8 @@ impl State {
             Msg::Launched(Ok(l)) => {
                 core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
                 self.launched_pid = Some(l.pid);
-                self.set_status(format!("Game started (process {}), log {}{}", l.pid, l.log, if l.others > 0 { format!(" - {} other game(s) keep running", l.others) } else { String::new() }), false);
+                self.started_here = Some(l.pid);
+                self.set_status(omsi_ui::tr("Game started (process %{pid}), log %{log}%{others}").replace("%{pid}", &l.pid.to_string()).replace("%{log}", &l.log.to_string()).replace("%{others}", &if l.others > 0 { omsi_ui::tr(" - %{n} other game(s) keep running").replace("%{n}", &l.others.to_string()) } else { String::new() }), false);
                 self.poll_now();
             }
             Msg::Launched(Err(e)) => {
@@ -1079,8 +1187,8 @@ impl State {
             Msg::Stopped { pid, result } => {
                 self.stopping.remove(&pid);
                 match result {
-                    Ok(true) => self.set_status(format!("Game {pid} ended by itself."), false),
-                    Ok(false) => self.set_status(format!("Game {pid} did not end by itself and was killed - this run is not saved."), true),
+                    Ok(true) => self.set_status(omsi_ui::tr("Game %{pid} ended by itself.").replace("%{pid}", &pid.to_string()), false),
+                    Ok(false) => self.set_status(omsi_ui::tr("Game %{pid} did not end by itself and was killed - this run is not saved.").replace("%{pid}", &pid.to_string()), true),
                     Err(e) => self.set_status(e, true),
                 }
                 self.poll_now();
@@ -1096,6 +1204,8 @@ impl State {
                 self.mods = Some(m);
             }
             Msg::Mods(Err(e)) => self.set_status(e, true),
+            Msg::Usage(gen, u) if gen == self.usage_gen => self.usage = Some(u),
+            Msg::Usage(..) => {}
             Msg::ModInfo(r) => {
                 self.mod_info = Some(r);
             }
@@ -1171,6 +1281,23 @@ impl State {
             .unwrap_or_default()
     }
 
+    /// The bus "Use for the next start" was clicked for on Vehicles.
+    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
+        self.select_bus(&u.file);
+        self.choice.use_bus(u);
+        if !self.choice.hof_manual {
+            self.choice.hof = self.default_hof();
+        }
+        self.touched();
+    }
+
+    /// No bus for the next start (the Start card's Clear).
+    pub fn clear_bus(&mut self) {
+        self.choice.clear_bus();
+        self.choice.hof = self.default_hof();
+        self.touched();
+    }
+
     pub fn select_bus(&mut self, file: &str) {
         if self.choice.bus == file {
             return;
@@ -1198,6 +1325,25 @@ impl State {
         self.choice.hof = self.default_hof();
         self.lines.clear();
         self.load_lines();
+        self.touched();
+    }
+
+    /// The season `season` ("auto": by the date) chosen for the start: the date moves into it
+    /// (its timetable days with it), and a weather preset that does not fit it any more goes.
+    pub fn set_season(&mut self, season: &str) {
+        self.choice.season = season.to_string();
+        let months = [("spring", "04"), ("summer", "07"), ("autumn", "10"), ("winter", "01")];
+        if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
+            let date = self.choice.date.clone();
+            self.choice.date = date_in_month(&date, month);
+            self.load_lines();
+        }
+        let w = self.choice.weather.clone();
+        if let Some(wi) = self.weathers.iter().find(|x| x.file == w).cloned() {
+            if !self.weather_fits(&wi) {
+                self.choice.weather.clear();
+            }
+        }
         self.touched();
     }
 
@@ -1280,6 +1426,25 @@ pub fn hhmm(seconds: f64) -> String {
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
 }
 
+/// `date` (`YYYY-MM-DD`) moved into `month` (`04`, `07`, `10` or `01`, a season's), the day
+/// kept within the month: 31 March into spring is 30 April.
+fn date_in_month(date: &str, month: &str) -> String {
+    let yy = date.get(0..4).unwrap_or("1989");
+    let last = if month == "04" { 30 } else { 31 };
+    let dd = date.get(8..10).and_then(|d| d.parse::<u32>().ok()).unwrap_or(15).clamp(1, last);
+    format!("{yy}-{month}-{dd:02}")
+}
+
+#[cfg(test)]
+mod season_date_tests {
+    #[test]
+    fn a_season_keeps_the_day_within_its_month() {
+        assert_eq!(super::date_in_month("2026-03-31", "04"), "2026-04-30");
+        assert_eq!(super::date_in_month("2026-03-31", "07"), "2026-07-31");
+        assert_eq!(super::date_in_month("2026-11-05", "01"), "2026-01-05");
+    }
+}
+
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
     if b >= (1u64 << 30) as f64 {
@@ -1293,6 +1458,22 @@ pub fn fmt_bytes(b: u64) -> String {
 
 pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
+}
+
+/// Whether `path` is a .zip file (what the Mods page installs): `core::is_zip`.
+pub fn is_zip(path: &str) -> bool {
+    core::is_zip(std::path::Path::new(path))
+}
+
+/// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
+/// and plate left out, and the depot file the map and the date give (not one picked for a bus).
+pub fn without_bus(d: &mut core::Duty, default_hof: Option<String>) {
+    d.bus.clear();
+    d.paint = None;
+    d.number = None;
+    d.plate = None;
+    d.hof = default_hof.filter(|h| !h.is_empty());
+    d.on_foot = Some(true);
 }
 
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
@@ -1418,6 +1599,39 @@ mod choice_tests {
         assert_eq!(super::Choice::fresh(host).lan_mode, "host");
     }
 
+    /// A choice the Drive page left (it always held a bus) is no preselection on a computer:
+    /// only a bus picked on Vehicles is.
+    #[test]
+    fn the_drive_pages_bus_is_not_a_preselection() {
+        let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","paint":"Red","number":"12","plate":"AB","hof":"H","hof_manual":true,"version":2}"#).unwrap();
+        let c = super::Choice::fresh(old);
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str(), c.hof_manual), ("", "", "", "", false));
+        assert_eq!(c.version, 3);
+        // (one picked since stays)
+        let mut now = super::Choice::default();
+        now.bus = "Vehicles/y.bus".into();
+        assert_eq!(super::Choice::fresh(now).bus, "Vehicles/y.bus");
+    }
+
+    /// "Use for the next start" puts the card's choices in the next start, a depot file
+    /// picked by hand among them; Clear leaves nothing of it, the hand-picked depot file
+    /// included, so the duty carries the automatic one.
+    #[test]
+    fn a_used_bus_and_its_clear() {
+        let mut c = super::Choice::default();
+        c.hof = "Automatic".into();
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: "Red".into(), hof: Some("Picked".into()), number: Some("3201".into()), plate: "B-V 1".into() });
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.hof.as_str(), c.number.as_str(), c.plate.as_str()), ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1"));
+        assert!(c.hof_manual);
+        c.clear_bus();
+        assert_eq!((c.bus.as_str(), c.paint.as_str(), c.number.as_str(), c.plate.as_str()), ("", "", "", ""));
+        assert!(!c.hof_manual);
+        // (automatic depot file and no number: nothing picked by hand)
+        c.use_bus(omsi_launcher_ui::vehicles::UseBus { file: "Vehicles/A/a.bus".into(), paint: String::new(), hof: None, number: None, plate: String::new() });
+        assert!(!c.hof_manual);
+        assert_eq!(c.number, "");
+    }
+
     #[test]
     fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
         let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","map":"maps/x/global.cfg"}"#).unwrap();
@@ -1521,4 +1735,22 @@ mod crash_tests {
 
 fn read_settings_file() -> Option<String> {
     std::fs::read_to_string(core::data_dir().join("settings.cfg")).ok()
+}
+
+#[cfg(test)]
+mod mods_tests {
+    /// The Mods page installs a .zip only; loose folders are copied by hand.
+    #[test]
+    fn only_a_zip_is_installed_from_the_page() {
+        let dir = std::env::temp_dir().join(format!("depot-is-zip-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Folder.zip")).unwrap();
+        std::fs::create_dir_all(dir.join("Example bus")).unwrap();
+        for f in ["Example bus.zip", "Map.ZIP", "pack.rar"] {
+            std::fs::write(dir.join(f), b"PK").unwrap();
+        }
+        let is = |name: &str| super::is_zip(&dir.join(name).to_string_lossy());
+        let seen = (is("Example bus.zip"), is("Map.ZIP"), is("Example bus"), is("pack.rar"), is("Folder.zip"), is("Missing.zip"));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(seen, (true, true, false, false, false, false));
+    }
 }

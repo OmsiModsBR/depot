@@ -30,7 +30,7 @@ use omsi_net::world::{
 };
 use omsi_net::{LanSession, Role};
 use omsi_render::{Renderer, Scene};
-use omsi_sim::human::Activity;
+use omsi_sim::people::Activity;
 use omsi_sim::vehicle::AiFrame;
 use omsi_sim::VehicleType;
 use std::io::Write;

@@ -1,6 +1,7 @@
 //! The sky's passes: a face of the enhanced sky cube, and the reflection probe with its
 //! blurred mip chain.
 
+use super::draw::PostPass;
 use crate::gpu::pass_timer;
 use crate::scene::Scene;
 use crate::sky::{SkyResources, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS};
@@ -64,30 +65,18 @@ impl SkyResources {
                 }
                 probe.cube_filled = true;
                 for (f, round, history) in draws {
-                    let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("sky cube"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &probe.cube_faces[f as usize],
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: if history > 0.0 {
-                                    wgpu::LoadOp::Load
-                                } else {
-                                    wgpu::LoadOp::Clear(wgpu::Color::BLACK)
-                                },
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: if single {
+                    let mut pass = PostPass::new("sky cube", &probe.cube_faces[f as usize])
+                        .load(if history > 0.0 {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                        })
+                        .timer(if single {
                             pass_timer(tset.as_ref(), timed, "sky cube")
                         } else {
                             None
-                        },
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
+                        })
+                        .begin(prepass_encoder);
                     pass.set_pipeline(&probe.cube_pipeline);
                     pass.set_blend_constant(wgpu::Color {
                         r: history,

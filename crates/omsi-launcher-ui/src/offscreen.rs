@@ -10,6 +10,24 @@ use std::path::Path;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
+#[cfg(test)]
+mod logo_tests {
+    #[test]
+    fn the_logo_is_clear_round_its_letters_and_wears_the_accent() {
+        let blue = omsi_ui::theme::Accent::Blue.color();
+        let img = super::logo_pixels(blue).unwrap();
+        // (the wordmark's black background is gone)
+        assert_eq!(img.get_pixel(0, 0).0[3], 0);
+        let opaque: Vec<_> = img.pixels().filter(|p| p.0[3] == 255).collect();
+        assert!(opaque
+            .iter()
+            .any(|p| p.0[0] > 250 && p.0[1] > 250 && p.0[2] > 250));
+        // (no orange is left: the coloured letters are the accent's)
+        assert!(!opaque.iter().any(|p| p.0[0] > 200 && p.0[2] < 60));
+        assert!(opaque.iter().any(|p| p.0[2] > 230 && p.0[0] < 110));
+    }
+}
+
 /// The adapter and device, for the picture.
 pub fn device(instance: &wgpu::Instance) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (_, device, queue) = adapter_device(instance, None)?;
@@ -33,15 +51,44 @@ pub fn adapter_device(
     Ok((adapter, device, queue))
 }
 
-/// The logo into `gpu`: its texture and its height over its width.
+/// The logo into `gpu`, in the accent in use: its texture and its height over its width.
 pub fn load_logo(
     gpu: &mut Gpu,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> Option<(usize, f32)> {
-    let img = image::load_from_memory(LOGO).ok()?.to_rgba8();
+    let img = logo_pixels(omsi_ui::theme::accent())?;
     let tex = gpu.add_image(device, queue, img.width(), img.height(), img.as_raw());
     Some((tex, img.height() as f32 / img.width() as f32))
+}
+
+/// The logo's texture `tex` drawn again in the accent in use (after the player chose another).
+pub fn tint_logo(gpu: &mut Gpu, device: &wgpu::Device, queue: &wgpu::Queue, tex: usize) {
+    if let Some(img) = logo_pixels(omsi_ui::theme::accent()) {
+        gpu.update_image(device, queue, tex, img.width(), img.height(), img.as_raw());
+    }
+}
+
+/// The wordmark (white "Project", coloured "Depot" on black) on a clear background, its
+/// coloured part in `accent`: how bright a pixel is becomes how opaque it is, how coloured it
+/// is how much of the accent it takes.
+pub fn logo_pixels(accent: omsi_ui::Color) -> Option<image::RgbaImage> {
+    let mut img = image::load_from_memory(LOGO).ok()?.to_rgba8();
+    let a = accent.0;
+    for p in img.pixels_mut() {
+        let [r, g, b, alpha] = p.0;
+        let mx = r.max(g).max(b) as f32;
+        let mn = r.min(g).min(b) as f32;
+        if mx <= 0.0 {
+            p.0 = [0, 0, 0, 0];
+            continue;
+        }
+        // (the wordmark's orange is about 0.95 saturated)
+        let k = ((mx - mn) / mx / 0.9).min(1.0);
+        let c = |i: usize| ((1.0 - k + k * a[i]) * 255.0).round() as u8;
+        p.0 = [c(0), c(1), c(2), (mx * alpha as f32 / 255.0).round() as u8];
+    }
+    Some(img)
 }
 
 #[allow(clippy::too_many_arguments)]
