@@ -187,22 +187,40 @@ const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
     // the launcher keeps these texts as written; the game reads them to its own choices
-    ("render_scale", "launcher>game", "kept as text; the game makes 0 or less auto, takes more than 1.5 as a percentage and clamps to 0.5-1"),
-    ("pax_voices", "launcher>game", "kept as text; the game reads anything but tickets and off as all"),
-    ("drive_keys", "launcher>game", "kept as text; the game keeps simple unless it is wasd, arrows, omsi or simple"),
-    ("boarding", "launcher>game", "kept as written; the game lowercases it"),
+    (
+        "pax_voices",
+        "launcher>game",
+        "kept as text; the game reads anything but tickets and off as all",
+    ),
+    (
+        "drive_keys",
+        "launcher>game",
+        "kept as text; the game keeps simple unless it is wasd, arrows, omsi or simple",
+    ),
+    (
+        "boarding",
+        "launcher>game",
+        "kept as written; the game lowercases it",
+    ),
     // `NaN` is a number to the launcher here; the game falls back to the default
     ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
-    ("pedal_throttle", "launcher>game", "NaN leaves the key empty"),
+    (
+        "pedal_throttle",
+        "launcher>game",
+        "NaN leaves the key empty",
+    ),
     ("pedal_brake", "launcher>game", "NaN leaves the key empty"),
     ("seat_y", "launcher>game", "NaN leaves the key empty"),
     ("seat_z", "launcher>game", "NaN leaves the key empty"),
     // and the other way: the game takes NaN, the launcher saves the default over it
     ("volume", "launcher>game", "NaN leaves the key empty"),
     // the launcher keeps whole numbers where the game keeps fractions
-    ("vr_head_smoothing_ms", "game>launcher", "the launcher cuts the fraction of a millisecond"),
-    ("max_obj_dist", "game>launcher", "the launcher rounds to whole metres (0.001 m becomes 0, no limit)"),
+    (
+        "max_obj_dist",
+        "game>launcher",
+        "the launcher rounds to whole metres (0.001 m becomes 0, no limit)",
+    ),
     // the two sides read the same text differently
 ];
 
