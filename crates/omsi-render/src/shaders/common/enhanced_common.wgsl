@@ -53,8 +53,6 @@ struct Enhanced {
 @group(0) @binding(13) var s_lin: sampler;
 @group(0) @binding(14) var t_sky_lut: texture_2d<f32>;
 
-const PI: f32 = 3.14159265;
-
 // Irradiance from the sky and the ground on a surface facing n.
 fn sh_irradiance(n: vec3<f32>) -> vec3<f32> {
     let c = enh.sh;

@@ -66,7 +66,7 @@ pub(crate) fn open_world(args: &Args) -> Result<(World, Camera, DVec3)> {
     // centre the loaded area on the spawn point (a requested vehicle's entry point, unless a
     // camera is given too)
     let spawn = spawn_point(args, Some(&world));
-    if let (None, true, None) = (spawn, args.bus.is_some(), &args.spawn) {
+    if let (None, true, None) = (spawn, args.bus.is_some() || args.on_foot, &args.spawn) {
         if let Some(ep) = world
             .global
             .entry_points
@@ -88,8 +88,9 @@ pub(crate) fn open_world(args: &Args) -> Result<(World, Camera, DVec3)> {
     Ok((world, camera, center))
 }
 
-/// Where the vehicle starts: `--spawn`, else the requested bus's entry point (None without
-/// either, or when the entry point's object is not in the map). The height is not known.
+/// Where the vehicle starts: `--spawn`, else the requested bus's entry point, or the entry
+/// point the player starts at on foot without a bus (None without any of them, or when the
+/// entry point's object is not in the map). The height is not known.
 pub(crate) fn spawn_point(args: &Args, world: Option<&World>) -> Option<DVec3> {
     if let Some(sp) = &args.spawn {
         let v: Vec<f64> = sp
@@ -100,7 +101,9 @@ pub(crate) fn spawn_point(args: &Args, world: Option<&World>) -> Option<DVec3> {
             return Some(DVec3::new(v[0], v[1], 0.0));
         }
     }
-    args.bus.as_ref()?;
+    if args.bus.is_none() && !args.on_foot {
+        return None;
+    }
     let world = world?;
     let ep = world
         .global
@@ -201,4 +204,42 @@ pub(crate) fn load_world(args: &Args, renderer: &Renderer, scene: &mut Scene) ->
         stats.empty_spaces
     );
     Ok((world, camera))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    /// On foot without a bus (the launcher's "Without bus"), the player starts at the entry
+    /// point chosen, not under the map's editor camera; with neither a bus nor on foot there is
+    /// no spawn point.
+    #[test]
+    fn on_foot_without_a_bus_starts_at_the_entry_point() {
+        let dir = std::env::temp_dir().join(format!("depot-spawn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("maps/Spawn")).unwrap();
+        // (two entry points with an object id no object has: their recorded places count)
+        let entry = |i: &str, x: &str, y: &str, name: &str| {
+            [i, "99", "0", x, "0", y, "0", "0", "0", "1", "0", name].join("\n") + "\n"
+        };
+        std::fs::write(
+            dir.join("maps/Spawn/global.cfg"),
+            format!(
+                "[name]\nSpawn\n\n[entrypoints]\n2\n{}{}[map]\n0\n0\ntile_0_0.map\n",
+                entry("0", "10", "20", "First"),
+                entry("1", "148.25", "70", "Second")
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("maps/Spawn/tile_0_0.map"), "[version]\n14\n").unwrap();
+        let world = World::open(&dir, &dir.join("maps/Spawn/global.cfg"), 20261021).unwrap();
+        let mut args = Args::parse_from(["depot"]);
+        args.entry = 1;
+        assert_eq!(spawn_point(&args, Some(&world)), None);
+        args.on_foot = true;
+        let p = spawn_point(&args, Some(&world)).expect("the entry point's place");
+        assert!((p.x - 148.25).abs() < 1e-6 && (p.y - 70.0).abs() < 1e-6, "{p:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

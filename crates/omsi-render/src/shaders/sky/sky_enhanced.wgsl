@@ -435,9 +435,7 @@ struct FsIn {
 
 @vertex
 fn vs_probe(@builtin(vertex_index) i: u32) -> FsIn {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    return FsIn(vec4<f32>(x, y, 0.0, 1.0));
+    return FsIn(fullscreen_vertex(i).clip);
 }
 
 fn probe_sky(f: i32, uv: vec2<f32>) -> vec4<f32> {

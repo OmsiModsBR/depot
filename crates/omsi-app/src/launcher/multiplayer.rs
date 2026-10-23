@@ -219,7 +219,7 @@ fn servers(l: &mut Launcher, r: Rect) {
                 l.ui.icon("signal_cellular_alt", Vec2::new(rr.right() - 206.0, rr.y + 21.0), 16.0, OK);
             }
             Some(Err(err)) => {
-                l.ui.text_in(&format!("Can't reach the server: {err}"), Rect::new(x, rr.y + 32.0, rr.w - 320.0, 18.0), 12.0, Weight::Regular, DANGER, Align::Left);
+                l.ui.text_in(&omsi_ui::tr("Can't reach the server: %{error}").replace("%{error}", &err.to_string()), Rect::new(x, rr.y + 32.0, rr.w - 320.0, 18.0), 12.0, Weight::Regular, DANGER, Align::Left);
                 l.ui.text_in(&e.address, Rect::new(x, rr.y + 52.0, rr.w - 320.0, 18.0), 11.5, Weight::Regular, TEXT_FAINT, Align::Left);
             }
             None => {

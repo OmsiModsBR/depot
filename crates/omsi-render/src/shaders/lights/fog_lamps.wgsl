@@ -4,35 +4,7 @@
 // drawn picture before its glow and its metering. Once per pixel over the depth prepass: worked out in
 // the main pass it was paid again for every layer drawn over a pixel (painted ground,
 // decals), several milliseconds a frame in a foggy night.
-struct Camera {
-    view_proj: mat4x4<f32>,
-    cam_pos: vec4<f32>,
-    // (kept in lockstep with `CameraUniform` in lib.rs, as sky.wgsl's)
-    world_origin: vec4<f32>,
-    sun_dir: vec4<f32>,
-    ambient: vec4<f32>,
-    fog: vec4<f32>,
-    sun_color: vec4<f32>,
-    sky_color: vec4<f32>,
-    light_grid: vec4<f32>,
-    sky: vec4<f32>,
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    clouds: vec4<f32>,
-    light_view_proj: mat4x4<f32>,
-    light_view_proj_far: mat4x4<f32>,
-    shadow: vec4<f32>,
-    post: vec4<f32>,
-    inside_a: vec4<f32>,
-    inside_b: vec4<f32>,
-    inside_c: vec4<f32>,
-    flags: vec4<f32>,
-    light_view_proj_close: mat4x4<f32>,
-    wind: vec4<f32>,
-    lamp_view_proj: array<mat4x4<f32>, 4>,
-    lamp_shadow: vec4<f32>,
-    tree_wind: vec4<f32>,
-};
+
 @group(0) @binding(0) var<uniform> camera: Camera;
 
 struct FogLampParams {
@@ -53,11 +25,7 @@ struct FogVsOut {
 
 @vertex
 fn vs_fog_lamps(@builtin(vertex_index) i: u32) -> FogVsOut {
-    let x = f32(i32(i & 1u) * 4 - 1);
-    let y = f32(i32(i >> 1u) * 4 - 1);
-    var out: FogVsOut;
-    out.clip = vec4<f32>(x, y, 0.0, 1.0);
-    return out;
+    return FogVsOut(fullscreen_vertex(i).clip);
 }
 
 // The camera, the direction through a full-size pixel position and the distance to what

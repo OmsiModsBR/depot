@@ -10,33 +10,69 @@ use crate::scene::{Instance, MaterialId, RenderPhase, Scene};
 use glam::{DVec3, Vec3};
 use std::collections::HashMap;
 
-/// One single-sampled full-screen pass.
-pub(crate) fn post_pass(
-    encoder: &mut wgpu::CommandEncoder,
-    view: &wgpu::TextureView,
-    timer: Option<wgpu::RenderPassTimestampWrites<'_>>,
-    pipeline: &wgpu::RenderPipeline,
-    bg: &wgpu::BindGroup,
-) {
-    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("post"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+/// A single-sampled full-screen pass: one colour target, no depth, cleared to black unless
+/// told otherwise, and untimed unless given a timer.
+pub(crate) struct PostPass<'a> {
+    label: &'a str,
+    view: &'a wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+    timer: Option<wgpu::RenderPassTimestampWrites<'a>>,
+}
+
+impl<'a> PostPass<'a> {
+    pub(crate) fn new(label: &'a str, view: &'a wgpu::TextureView) -> Self {
+        Self {
+            label,
             view,
-            depth_slice: None,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: timer,
-        occlusion_query_set: None,
-        multiview_mask: None,
-    });
-    pass.set_pipeline(pipeline);
-    pass.set_bind_group(0, bg, &[]);
-    pass.draw(0..3, 0..1);
+            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+            timer: None,
+        }
+    }
+
+    pub(crate) fn load(mut self, load: wgpu::LoadOp<wgpu::Color>) -> Self {
+        self.load = load;
+        self
+    }
+
+    pub(crate) fn timer(mut self, timer: Option<wgpu::RenderPassTimestampWrites<'a>>) -> Self {
+        self.timer = timer;
+        self
+    }
+
+    /// Open the pass, for callers that draw more than the one triangle.
+    pub(crate) fn begin<'e>(self, encoder: &'e mut wgpu::CommandEncoder) -> wgpu::RenderPass<'e> {
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(self.label),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: self.view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: self.load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: self.timer,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        })
+    }
+
+    /// Draw the full-screen triangle with `pipeline`, the bind groups from slot 0 on.
+    pub(crate) fn draw(
+        self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::RenderPipeline,
+        bind_groups: &[&wgpu::BindGroup],
+    ) {
+        let mut pass = self.begin(encoder);
+        pass.set_pipeline(pipeline);
+        for (slot, bg) in bind_groups.iter().enumerate() {
+            pass.set_bind_group(slot as u32, *bg, &[]);
+        }
+        pass.draw(0..3, 0..1);
+    }
 }
 
 pub(crate) fn origin_key(origin: DVec3) -> [u64; 3] {
