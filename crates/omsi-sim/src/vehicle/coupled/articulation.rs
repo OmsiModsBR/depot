@@ -7,10 +7,10 @@
 //! AI's vehicles, of other players' over the LAN and of a train on rails follow kinematically,
 //! hung on their coupling and pitched towards the ground under their axle.
 
-use crate::vehicle::physics_bridge::PartWheelVars;
 use super::trailer::{body_reversed, joint_angles, TrailerPart, ARTICULATION_SIGN};
-use crate::vehicle::VehicleInstance;
 use crate::physics::{BodyInputs, Joint, RigidBody};
+use crate::vehicle::physics_bridge::PartWheelVars;
+use crate::vehicle::VehicleInstance;
 use glam::{DVec3, Mat4, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
