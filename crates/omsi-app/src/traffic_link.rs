@@ -2,13 +2,13 @@
 
 use crate::app::App;
 use crate::humans;
+#[cfg(feature = "lan")]
+use crate::lan;
 use crate::player::Player;
 use crate::scene::World;
 use crate::traffic;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};
-#[cfg(feature = "lan")]
-use crate::lan;
 
 /// Position, heading, half extents and speed of the player's vehicle for the AI's
 /// obstacle checks.
@@ -37,7 +37,10 @@ pub(crate) fn vehicle_outline(v: &omsi_sim::VehicleInstance, speed: f32) -> traf
 /// the front section and drove into the back of a turning GN92), and the vehicles placed
 /// by hand from the vehicle list, with their trailers - under ids of their own beside the
 /// LAN players'.
-pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u32, traffic::PlayerBox)> {
+pub(crate) fn own_outlines(
+    player: Option<&Player>,
+    placed: &[Player],
+) -> Vec<(u32, traffic::PlayerBox)> {
     let mut out = Vec::new();
     let mut add = |v: &omsi_sim::VehicleInstance, base: u32, whole: bool| {
         let speed = v.motion().speed;
@@ -45,7 +48,9 @@ pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u
             out.push((base, vehicle_outline(v, speed)));
         }
         for (k, t) in v.trailers.iter().enumerate() {
-            let Some(bb) = t.ty.def.bounding_box else { continue };
+            let Some(bb) = t.ty.def.bounding_box else {
+                continue;
+            };
             let h = t.heading.to_radians();
             let centre = t.position
                 + DVec3::new(
@@ -53,7 +58,10 @@ pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u
                     -(bb[3] as f64) * h.sin() + (bb[4] as f64) * h.cos(),
                     0.0,
                 );
-            out.push((base + 1 + k as u32, (centre, t.heading, bb[1] * 0.5, bb[0] * 0.5, speed)));
+            out.push((
+                base + 1 + k as u32,
+                (centre, t.heading, bb[1] * 0.5, bb[0] * 0.5, speed),
+            ));
         }
     };
     if let Some(p) = player {
@@ -184,10 +192,18 @@ pub(crate) fn indicator(v: &omsi_sim::VehicleInstance) -> u8 {
 /// configured random traffic target will populate the roads again normally.
 pub(crate) fn clear_ai_traffic(app: &mut App) {
     if app.is_lan_client() {
-        app.service_msg = Some(("In a LAN session only the host can clear AI traffic".into(), 3.0));
+        app.service_msg = Some((
+            "In a LAN session only the host can clear AI traffic".into(),
+            3.0,
+        ));
         return;
     }
-    if let (Some(t), Some(w), Some(r), Some(scene)) = (app.traffic.as_mut(), app.world.as_ref(), app.renderer.as_ref(), app.scene.as_mut()) {
+    if let (Some(t), Some(w), Some(r), Some(scene)) = (
+        app.traffic.as_mut(),
+        app.world.as_ref(),
+        app.renderer.as_ref(),
+        app.scene.as_mut(),
+    ) {
         let removed = t.clear_random(w, r, scene);
         app.service_msg = Some((format!("{removed} AI vehicles taken off the road"), 3.0));
     }

@@ -56,10 +56,19 @@ pub fn water_at(x: f64, y: f64, wet_road: f32) -> Water {
     }
     // `world_pattern_xy`: the map coordinate, which the shader takes modulo the pattern's
     // period (a whole number of cells of every octave)
-    let (px, py) = (x.rem_euclid(PATTERN_PERIOD) as f32, y.rem_euclid(PATTERN_PERIOD) as f32);
-    let pn = vnoise_f(px, py, 0.35, 17.3, -9.1) * 0.6 + vnoise_f(px, py, 1.6, -4.0, 8.0) * 0.3 + vnoise_f(px, py, 5.0, 2.7, 11.3) * 0.1;
+    let (px, py) = (
+        x.rem_euclid(PATTERN_PERIOD) as f32,
+        y.rem_euclid(PATTERN_PERIOD) as f32,
+    );
+    let pn = vnoise_f(px, py, 0.35, 17.3, -9.1) * 0.6
+        + vnoise_f(px, py, 1.6, -4.0, 8.0) * 0.3
+        + vnoise_f(px, py, 5.0, 2.7, 11.3) * 0.1;
     let t = 1.0 - wet_road * PUDDLE_SPREAD;
-    Water { puddle: smoothstep(t - 0.02, t + 0.02, pn), depth: ((pn - t) / 0.15).clamp(0.0, 1.0), wet: wet_road }
+    Water {
+        puddle: smoothstep(t - 0.02, t + 0.02, pn),
+        depth: ((pn - t) / 0.15).clamp(0.0, 1.0),
+        wet: wet_road,
+    }
 }
 
 /// `hash_cell` of `shader.wgsl`: the lattice cell as an exact integer modulo the lattice's
@@ -150,7 +159,9 @@ impl Body {
     /// Whether a point is inside the box, `margin` metres round it included.
     pub fn contains(&self, p: DVec3, margin: f32) -> bool {
         let l = self.local(p).abs();
-        l.x < self.bb[0] * 0.5 + margin && l.y < self.bb[1] * 0.5 + margin && l.z < self.bb[2] * 0.5 + margin
+        l.x < self.bb[0] * 0.5 + margin
+            && l.y < self.bb[1] * 0.5 + margin
+            && l.z < self.bb[2] * 0.5 + margin
     }
 }
 
@@ -181,7 +192,9 @@ fn spray_look() -> ([f32; 3], f32) {
 /// stock vehicles' `tire_wet_freq` / `tire_wet_live` variables drive.
 pub fn has_own_tyre_spray(set: &omsi_sim::particles::ParticleSet) -> bool {
     let wet = |v: &omsi_model::PsValue| matches!(v, omsi_model::PsValue::Var(n) if n.to_ascii_lowercase().starts_with("tire_wet"));
-    set.emitters.iter().any(|e| wet(&e.def.freq.0) || wet(&e.def.life.0))
+    set.emitters
+        .iter()
+        .any(|e| wet(&e.def.freq.0) || wet(&e.def.life.0))
 }
 
 /// How much more water a vehicle of this mass throws than a car: 1 up to 1.3 t, twice as
@@ -204,7 +217,11 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
     let heavy = heaviness(v.mass_kg());
     let mut n = 0u64;
     // (every wheel keeps its number, whether it touches the road this frame or not)
-    let mut part = |origin: DVec3, rot: Mat4, own_spray: bool, wheels: &mut dyn Iterator<Item = Option<Vec3>>, out: &mut Vec<Tyre>| {
+    let mut part = |origin: DVec3,
+                    rot: Mat4,
+                    own_spray: bool,
+                    wheels: &mut dyn Iterator<Item = Option<Vec3>>,
+                    out: &mut Vec<Tyre>| {
         let (fwd, right) = level_axes(rot);
         let travel = if speed < 0.0 { -fwd } else { fwd };
         for local in wheels {
@@ -229,14 +246,30 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
             v.position,
             rot,
             own,
-            &mut rb.wheels().iter().map(|w| w.on_ground().then(|| w.attach() + Vec3::Z * (w.compression().max(-omsi_sim::physics::DROOP) - w.radius()))),
+            &mut rb.wheels().iter().map(|w| {
+                w.on_ground().then(|| {
+                    w.attach()
+                        + Vec3::Z * (w.compression().max(-omsi_sim::physics::DROOP) - w.radius())
+                })
+            }),
             out,
         ),
         // an AI vehicle's (a LAN player's copy too): its axles on the plane its body is
         // placed over
         None => {
             let lift = v.ai_rest_offset().0;
-            part(v.position, rot, own, &mut v.motion().wheels.iter().flatten().map(|w| Some(Vec3::new(w.lat, w.long, -lift))), out)
+            part(
+                v.position,
+                rot,
+                own,
+                &mut v
+                    .motion()
+                    .wheels
+                    .iter()
+                    .flatten()
+                    .map(|w| Some(Vec3::new(w.lat, w.long, -lift))),
+                out,
+            )
         }
     }
     for t in &v.trailers {
@@ -246,7 +279,9 @@ pub fn vehicle_tyres(v: &omsi_sim::VehicleInstance, key: u64, out: &mut Vec<Tyre
             t.position,
             t.body_rotation(),
             has_own_tyre_spray(&t.particles),
-            &mut axles.iter().flat_map(|a| [-0.5, 0.5].map(|s| Some(Vec3::new(a.max_width * s, a.long, -lift)))),
+            &mut axles
+                .iter()
+                .flat_map(|a| [-0.5, 0.5].map(|s| Some(Vec3::new(a.max_width * s, a.long, -lift)))),
             out,
         );
     }
@@ -335,10 +370,19 @@ impl Puff {
     /// road.
     fn opacity(&self) -> f32 {
         let t = self.t();
-        let a = self.alpha * smoothstep(0.0, 0.08, self.age) * (1.0 - t).powf(1.3) * (0.4 + 0.6 * self.size0 / self.size().max(0.01));
+        let a = self.alpha
+            * smoothstep(0.0, 0.08, self.age)
+            * (1.0 - t).powf(1.3)
+            * (0.4 + 0.6 * self.size0 / self.size().max(0.01));
         match self.kind {
             Kind::Mist => a,
-            Kind::Sheet => a * smoothstep(0.2, 0.7, (self.pos.z - self.ground) as f32 / self.size().max(0.01)),
+            Kind::Sheet => {
+                a * smoothstep(
+                    0.2,
+                    0.7,
+                    (self.pos.z - self.ground) as f32 / self.size().max(0.01),
+                )
+            }
         }
     }
 }
@@ -372,7 +416,14 @@ impl Default for Spray {
 
 impl Spray {
     pub fn new() -> Spray {
-        Spray { puffs: Vec::new(), tyres: hashbrown::HashMap::new(), bodies: Vec::new(), rng: 0xD00D_F00D_1234_5678, tyres_wet: 0, tyres_in_puddle: 0 }
+        Spray {
+            puffs: Vec::new(),
+            tyres: hashbrown::HashMap::new(),
+            bodies: Vec::new(),
+            rng: 0xD00D_F00D_1234_5678,
+            tyres_wet: 0,
+            tyres_in_puddle: 0,
+        }
     }
 
     /// 0..1
@@ -392,7 +443,14 @@ impl Spray {
     /// One frame of the vehicles near the camera: their tyres and bodies (see
     /// [`vehicle_tyres`], [`rain::vehicle_boxes`](crate::rain::vehicle_boxes)), then
     /// [`Spray::update`].
-    pub fn frame(&mut self, dt: f32, vehicles: &[(u64, &omsi_sim::VehicleInstance)], eye: DVec3, wind: Vec3, water: &dyn Fn(f64, f64) -> Water) {
+    pub fn frame(
+        &mut self,
+        dt: f32,
+        vehicles: &[(u64, &omsi_sim::VehicleInstance)],
+        eye: DVec3,
+        wind: Vec3,
+        water: &dyn Fn(f64, f64) -> Water,
+    ) {
         let mut tyres = Vec::new();
         let mut bodies = std::mem::take(&mut self.bodies);
         bodies.clear();
@@ -401,7 +459,13 @@ impl Spray {
                 continue;
             }
             vehicle_tyres(v, key, &mut tyres);
-            bodies.extend(crate::rain::vehicle_boxes(v).into_iter().map(|(origin, heading, bb)| Body { origin, heading, bb }));
+            bodies.extend(crate::rain::vehicle_boxes(v).into_iter().map(
+                |(origin, heading, bb)| Body {
+                    origin,
+                    heading,
+                    bb,
+                },
+            ));
         }
         self.bodies = bodies;
         self.update(dt, &tyres, eye, wind, water);
@@ -410,7 +474,14 @@ impl Spray {
     /// One frame: age and move the spray in the air, and throw new spray from `tyres`.
     /// `eye` is the camera (the tyres near it throw the most), `wind` the air's motion at
     /// the ground, `water` the water on the road at a world (x, y) - see [`water_at`].
-    pub fn update(&mut self, dt: f32, tyres: &[Tyre], eye: DVec3, wind: Vec3, water: &dyn Fn(f64, f64) -> Water) {
+    pub fn update(
+        &mut self,
+        dt: f32,
+        tyres: &[Tyre],
+        eye: DVec3,
+        wind: Vec3,
+        water: &dyn Fn(f64, f64) -> Water,
+    ) {
         if dt <= 0.0 {
             return;
         }
@@ -426,7 +497,13 @@ impl Spray {
         // a tyre that left (a vehicle gone, a wheel off the road) owes nothing
         self.tyres.retain(|_, s| s.seen);
         if omsi_cfg::flags::DEBUG_RAIN.is_set() && (self.tyres_wet > 0 || !self.puffs.is_empty()) {
-            log::info!("spray: {} of {} tyres throwing water, {} in a puddle, {} puffs", self.tyres_wet, tyres.len(), self.tyres_in_puddle, self.puffs.len());
+            log::info!(
+                "spray: {} of {} tyres throwing water, {} in a puddle, {} puffs",
+                self.tyres_wet,
+                tyres.len(),
+                self.tyres_in_puddle,
+                self.puffs.len()
+            );
         }
     }
 
@@ -488,7 +565,11 @@ impl Spray {
         // standing water, more of it deeper in; a road wet through only lends a film, which
         // a vehicle with its own `[smoke]` spray already throws
         let puddle = w.puddle * (0.45 + 0.55 * w.depth);
-        let film = if tyre.own_spray { 0.0 } else { smoothstep(0.55, 1.0, w.wet) * FILM };
+        let film = if tyre.own_spray {
+            0.0
+        } else {
+            smoothstep(0.55, 1.0, w.wet) * FILM
+        };
         // with the square of the speed: next to nothing at walking pace; the film needs
         // real speed before a tyre lifts it at all
         let sp = (v / REF_SPEED).powi(2).min(3.0) * smoothstep(1.5, 5.0, v);
@@ -502,7 +583,11 @@ impl Spray {
             self.tyres_in_puddle += 1;
         }
         // fewer, bigger puffs far from the camera
-        let lod = if dist < FULL_DETAIL { 1.0 } else { 1.0 - 0.75 * ((dist - FULL_DETAIL) / (SPAWN_RANGE - FULL_DETAIL)) as f32 };
+        let lod = if dist < FULL_DETAIL {
+            1.0
+        } else {
+            1.0 - 0.75 * ((dist - FULL_DETAIL) / (SPAWN_RANGE - FULL_DETAIL)) as f32
+        };
         let grow = 1.0 + (1.0 - lod) * 0.6;
         // the far tyres may only fill half the budget: the near ones always have room
         let limit = ((MAX_PUFFS as f64) * (1.0 - 0.5 * dist / SPAWN_RANGE)) as usize;
@@ -523,11 +608,15 @@ impl Spray {
             mist -= 1.0;
             let r: [f32; 6] = std::array::from_fn(|_| self.rand());
             // from the back of the contact patch, just outside the tread
-            let pos = tyre.contact + (back * (0.3 + 0.4 * r[0]) + tyre.out * (0.05 + 0.2 * r[1])).as_dvec3() + DVec3::Z * (0.15 + 0.25 * r[2]) as f64;
+            let pos = tyre.contact
+                + (back * (0.3 + 0.4 * r[0]) + tyre.out * (0.05 + 0.2 * r[1])).as_dvec3()
+                + DVec3::Z * (0.15 + 0.25 * r[2]) as f64;
             // the wake behind the vehicle carries it along for a moment - it lags the vehicle
             // from the start, but stays close behind it - lifts it and draws it in behind
             // the body as much as out to the side
-            let vel = tyre.travel * v * (0.3 + 0.4 * r[3]) + tyre.out * v * (-0.08 + 0.14 * r[4]) + Vec3::Z * (0.4 + 0.1 * v) * (0.5 + 0.5 * r[5]) * up;
+            let vel = tyre.travel * v * (0.3 + 0.4 * r[3])
+                + tyre.out * v * (-0.08 + 0.14 * r[4])
+                + Vec3::Z * (0.4 + 0.1 * v) * (0.5 + 0.5 * r[5]) * up;
             let r2: [f32; 4] = std::array::from_fn(|_| self.rand());
             let fast = (v / REF_SPEED).min(1.6);
             self.puffs.push(Puff {
@@ -537,7 +626,10 @@ impl Spray {
                 age: 0.0,
                 life: 1.0 + 1.0 * r2[0] + 0.05 * v,
                 size0: 0.25 + 0.15 * r2[1],
-                size1: (0.55 + 0.45 * r2[2]) * (0.75 + 0.25 * fast) * (0.85 + 0.15 * tyre.heavy) * grow,
+                size1: (0.55 + 0.45 * r2[2])
+                    * (0.75 + 0.25 * fast)
+                    * (0.85 + 0.15 * tyre.heavy)
+                    * grow,
                 // (the smoke picture is faint: a puff at its most covers a sixth of what is
                 // behind it, and the spray is the many of them together)
                 alpha: (0.7 + 0.3 * r2[3]) * (0.55 + 0.45 * (amount / tyre.heavy).min(1.0)),
@@ -553,14 +645,22 @@ impl Spray {
                 sheet -= 1.0;
             }
             let r: [f32; 8] = std::array::from_fn(|_| self.rand());
-            let pos = tyre.contact + (back * (0.2 + 0.25 * r[0]) * (!side as i32 as f32) + tyre.out * (0.05 + 0.1 * r[1])).as_dvec3() + DVec3::Z * 0.05;
+            let pos = tyre.contact
+                + (back * (0.2 + 0.25 * r[0]) * (!side as i32 as f32)
+                    + tyre.out * (0.05 + 0.1 * r[1]))
+                    .as_dvec3()
+                + DVec3::Z * 0.05;
             let vel = if side {
                 // the bow wave: out and forward, with the vehicle but slower than it
-                tyre.travel * v * (0.25 + 0.25 * r[2]) + tyre.out * v * (0.15 + 0.2 * r[3]) + Vec3::Z * v * (0.1 + 0.15 * r[4]) * up
+                tyre.travel * v * (0.25 + 0.25 * r[2])
+                    + tyre.out * v * (0.15 + 0.2 * r[3])
+                    + Vec3::Z * v * (0.1 + 0.15 * r[4]) * up
             } else {
                 // the fan behind the tyre: back (it hardly keeps up with the vehicle), up,
                 // and a little outwards
-                tyre.travel * v * (0.05 + 0.2 * r[2]) + tyre.out * v * (0.02 + 0.1 * r[3]) + Vec3::Z * v * (0.12 + 0.16 * r[4]) * up
+                tyre.travel * v * (0.05 + 0.2 * r[2])
+                    + tyre.out * v * (0.02 + 0.1 * r[3])
+                    + Vec3::Z * v * (0.12 + 0.16 * r[4]) * up
             };
             self.puffs.push(Puff {
                 kind: Kind::Sheet,
@@ -583,8 +683,16 @@ impl Spray {
     /// above the wheels; and a puff the camera is about to pass through fades away rather
     /// than filling the picture.
     pub fn sprites(&self, eye: DVec3, out: &mut Vec<SmokeParticle>) {
-        let cab: Vec<&Body> = self.bodies.iter().filter(|b| b.contains(eye, 0.0)).collect();
-        let near: Vec<&Body> = self.bodies.iter().filter(|b| (b.origin - eye).length() < SPAWN_RANGE + 40.0).collect();
+        let cab: Vec<&Body> = self
+            .bodies
+            .iter()
+            .filter(|b| b.contains(eye, 0.0))
+            .collect();
+        let near: Vec<&Body> = self
+            .bodies
+            .iter()
+            .filter(|b| (b.origin - eye).length() < SPAWN_RANGE + 40.0)
+            .collect();
         let (color, strength) = spray_look();
         out.reserve(self.puffs.len());
         for p in &self.puffs {
@@ -618,7 +726,13 @@ impl Spray {
                 continue;
             }
             // (it keeps its own way of lying on the road, see `age`: no fade into the ground)
-            out.push(SmokeParticle { position: p.pos, size, color, alpha: alpha * strength, ..Default::default() });
+            out.push(SmokeParticle {
+                position: p.pos,
+                size,
+                color,
+                alpha: alpha * strength,
+                ..Default::default()
+            });
         }
     }
 }
@@ -633,29 +747,55 @@ mod tests {
 
     /// A car tyre at the origin going north (+y) at `speed`, its outside to the east.
     fn tyre(speed: f32) -> Tyre {
-        Tyre { key: 1, contact: DVec3::new(0.0, 0.0, 33.0), travel: Vec3::Y, out: Vec3::X, speed, heavy: 1.0, own_spray: false }
+        Tyre {
+            key: 1,
+            contact: DVec3::new(0.0, 0.0, 33.0),
+            travel: Vec3::Y,
+            out: Vec3::X,
+            speed,
+            heavy: 1.0,
+            own_spray: false,
+        }
     }
 
     fn puddle(_: f64, _: f64) -> Water {
-        Water { puddle: 1.0, depth: 1.0, wet: 1.0 }
+        Water {
+            puddle: 1.0,
+            depth: 1.0,
+            wet: 1.0,
+        }
     }
 
     fn wet_road(_: f64, _: f64) -> Water {
-        Water { puddle: 0.0, depth: 0.0, wet: 1.0 }
+        Water {
+            puddle: 0.0,
+            depth: 0.0,
+            wet: 1.0,
+        }
     }
 
     /// Puffs thrown by `tyres` over `secs` (the tyre standing where it is, the camera beside it).
     fn run(tyres: &[Tyre], secs: f32, water: &dyn Fn(f64, f64) -> Water) -> Spray {
         let mut s = Spray::new();
         for _ in 0..(secs * 30.0) as usize {
-            s.update(1.0 / 30.0, tyres, DVec3::new(5.0, 0.0, 34.0), Vec3::ZERO, water);
+            s.update(
+                1.0 / 30.0,
+                tyres,
+                DVec3::new(5.0, 0.0, 34.0),
+                Vec3::ZERO,
+                water,
+            );
         }
         s
     }
 
     #[test]
     fn coverage_is_zero_off_the_moisture_mask_and_grows_with_wetness() {
-        assert_eq!(puddle_coverage(1000.0, 2000.0, 0.0), 0.0, "no [moisture] under the wheel: never a puddle");
+        assert_eq!(
+            puddle_coverage(1000.0, 2000.0, 0.0),
+            0.0,
+            "no [moisture] under the wheel: never a puddle"
+        );
         // scan a stretch of road for a spot the mask calls a puddle at full wetness, and
         // check it grows monotonically as the road dries back out from there
         let mut best = None;
@@ -667,7 +807,8 @@ mod tests {
                 break;
             }
         }
-        let (x, full) = best.expect("some spot along 520 m of road should read as a puddle at full wetness");
+        let (x, full) =
+            best.expect("some spot along 520 m of road should read as a puddle at full wetness");
         let half = puddle_coverage(x, 500.0, 0.5);
         let dry = puddle_coverage(x, 500.0, 0.05);
         assert!(full >= half && half >= dry && full > dry, "a puddle should shrink as the road dries: {full} (wet) vs {half} (half) vs {dry} (drier)");
@@ -676,10 +817,21 @@ mod tests {
     #[test]
     fn a_road_wet_through_has_puddles_in_patches() {
         // water stands in the low spots; the road between them is wet asphalt, not a mirror
-        let covered = |wet: f32| (0..4000).map(|i| puddle_coverage(i as f64 * 0.77, i as f64 * 1.9, wet)).sum::<f32>() / 4000.0;
+        let covered = |wet: f32| {
+            (0..4000)
+                .map(|i| puddle_coverage(i as f64 * 0.77, i as f64 * 1.9, wet))
+                .sum::<f32>()
+                / 4000.0
+        };
         let (soaked, half) = (covered(1.0), covered(0.5));
-        assert!((0.15..0.5).contains(&soaked), "puddles cover {soaked} of a soaked road");
-        assert!(half < soaked * 0.5, "puddles cover {half} of a half wet road, {soaked} of a soaked one");
+        assert!(
+            (0.15..0.5).contains(&soaked),
+            "puddles cover {soaked} of a soaked road"
+        );
+        assert!(
+            half < soaked * 0.5,
+            "puddles cover {half} of a half wet road, {soaked} of a soaked one"
+        );
     }
 
     #[test]
@@ -689,7 +841,10 @@ mod tests {
         for (x, y) in [(891_700.3, 4_193_450.8), (12.5, 640.0), (-37.0, 999.9)] {
             let a = water_at(x, y, 1.0);
             let b = water_at(x + 1000.0, y - 3000.0, 1.0);
-            assert!((a.puddle - b.puddle).abs() < 1e-3 && (a.depth - b.depth).abs() < 1e-3, "{x}, {y}: {a:?} vs {b:?}");
+            assert!(
+                (a.puddle - b.puddle).abs() < 1e-3 && (a.depth - b.depth).abs() < 1e-3,
+                "{x}, {y}: {a:?} vs {b:?}"
+            );
         }
         // and the hash is the shader's integer one: cells a period apart are the same cell
         assert_eq!(hash_cell(3.0, 5.0, 220.0), hash_cell(223.0, -215.0, 220.0));
@@ -702,9 +857,15 @@ mod tests {
         let slow = run(&[tyre(7.0)], 1.0, &puddle).len();
         let city = run(&[tyre(13.9)], 1.0, &puddle).len();
         assert!(walk == 0, "a tyre at walking pace throws nothing: {walk}");
-        assert!(city > 40, "a tyre at 50 km/h in a puddle throws a cloud: {city} puffs");
+        assert!(
+            city > 40,
+            "a tyre at 50 km/h in a puddle throws a cloud: {city} puffs"
+        );
         // twice the speed, about four times the spray (the fan's drops land meanwhile)
-        assert!(city as f32 > 2.8 * slow as f32, "50 km/h: {city} puffs, 25 km/h: {slow}");
+        assert!(
+            city as f32 > 2.8 * slow as f32,
+            "50 km/h: {city} puffs, 25 km/h: {slow}"
+        );
     }
 
     /// A tyre rolling on along its `travel` for `secs`, the camera beside it.
@@ -713,7 +874,13 @@ mod tests {
         let dt = 1.0 / 30.0;
         for _ in 0..(secs * 30.0) as usize {
             t.contact += (t.travel * t.speed * dt).as_dvec3();
-            s.update(dt, &[t], t.contact + DVec3::new(5.0, 0.0, 1.0), Vec3::ZERO, &puddle);
+            s.update(
+                dt,
+                &[t],
+                t.contact + DVec3::new(5.0, 0.0, 1.0),
+                Vec3::ZERO,
+                &puddle,
+            );
         }
         (s, t)
     }
@@ -731,15 +898,34 @@ mod tests {
             let rel = s.puffs.iter().map(|p| p.vel - travel * 13.9).sum::<Vec3>() / n;
             let (along, side) = (rel.dot(travel), rel.dot(t.out));
             assert!(along < -8.0, "going {travel}, the spray falls back from the vehicle: mean relative velocity {rel:?}");
-            assert!(along.abs() > 4.0 * side.abs(), "back, not out to the side: {along} along, {side} sideways");
+            assert!(
+                along.abs() > 4.0 * side.abs(),
+                "back, not out to the side: {along} along, {side} sideways"
+            );
             // and all of it is behind the tyre that threw it, a fan just outside its track
             for p in &s.puffs {
                 let d = (p.pos - t.contact).as_vec3();
-                assert!(d.dot(travel) < 0.0, "a puff {:.2} m ahead of the tyre", d.dot(travel));
-                assert!(d.dot(t.out) > -1.0, "a puff {:.2} m inside the track", -d.dot(t.out));
+                assert!(
+                    d.dot(travel) < 0.0,
+                    "a puff {:.2} m ahead of the tyre",
+                    d.dot(travel)
+                );
+                assert!(
+                    d.dot(t.out) > -1.0,
+                    "a puff {:.2} m inside the track",
+                    -d.dot(t.out)
+                );
             }
-            let mean_out = s.puffs.iter().map(|p| (p.pos - t.contact).as_vec3().dot(t.out)).sum::<f32>() / n;
-            assert!(mean_out > 0.0, "it spreads outwards rather than in: {mean_out}");
+            let mean_out = s
+                .puffs
+                .iter()
+                .map(|p| (p.pos - t.contact).as_vec3().dot(t.out))
+                .sum::<f32>()
+                / n;
+            assert!(
+                mean_out > 0.0,
+                "it spreads outwards rather than in: {mean_out}"
+            );
         }
     }
 
@@ -748,23 +934,48 @@ mod tests {
         let haze = run(&[tyre(16.0)], 2.0, &wet_road).len();
         let cloud = run(&[tyre(16.0)], 2.0, &puddle).len();
         assert!(haze > 0, "a road wet through hazes at 58 km/h");
-        assert!(cloud > 5 * haze, "a puddle throws far more: {cloud} puffs vs {haze}");
+        assert!(
+            cloud > 5 * haze,
+            "a puddle throws far more: {cloud} puffs vs {haze}"
+        );
         // only at speed on a mere film, and not at all on a damp road
-        assert_eq!(run(&[tyre(5.0)], 2.0, &wet_road).len(), 0, "a film at 18 km/h throws nothing");
-        let damp = |_: f64, _: f64| Water { puddle: 0.0, depth: 0.0, wet: 0.4 };
-        assert_eq!(run(&[tyre(16.0)], 2.0, &damp).len(), 0, "a damp road throws nothing");
+        assert_eq!(
+            run(&[tyre(5.0)], 2.0, &wet_road).len(),
+            0,
+            "a film at 18 km/h throws nothing"
+        );
+        let damp = |_: f64, _: f64| Water {
+            puddle: 0.0,
+            depth: 0.0,
+            wet: 0.4,
+        };
+        assert_eq!(
+            run(&[tyre(16.0)], 2.0, &damp).len(),
+            0,
+            "a damp road throws nothing"
+        );
         // a vehicle spraying through its own [smoke] keeps only what the puddles add
         let mut own = tyre(16.0);
         own.own_spray = true;
-        assert_eq!(run(&[own], 2.0, &wet_road).len(), 0, "no second haze over its own [smoke] spray");
-        assert!(run(&[own], 2.0, &puddle).len() as f32 > 0.8 * cloud as f32, "but the puddles' spray all the same");
+        assert_eq!(
+            run(&[own], 2.0, &wet_road).len(),
+            0,
+            "no second haze over its own [smoke] spray"
+        );
+        assert!(
+            run(&[own], 2.0, &puddle).len() as f32 > 0.8 * cloud as f32,
+            "but the puddles' spray all the same"
+        );
     }
 
     #[test]
     fn a_vehicle_facing_east_throws_to_the_west() {
         // a body turned as `VehicleInstance::body_rotation` turns one with heading 90°
         let (fwd, right) = level_axes(Mat4::from_rotation_z((-90f32).to_radians()));
-        assert!((fwd - Vec3::X).length() < 1e-5 && (right + Vec3::Y).length() < 1e-5, "{fwd} {right}");
+        assert!(
+            (fwd - Vec3::X).length() < 1e-5 && (right + Vec3::Y).length() < 1e-5,
+            "{fwd} {right}"
+        );
         // nose up on a hill, the travel stays level
         let (fwd, _) = level_axes(Mat4::from_rotation_x(0.2));
         assert!((fwd - Vec3::Y).length() < 1e-5, "{fwd}");
@@ -776,7 +987,10 @@ mod tests {
         bus.heavy = heaviness(11_000.0);
         let car = run(&[tyre(13.9)], 1.0, &puddle).len();
         let bus = run(&[bus], 1.0, &puddle).len();
-        assert!(bus as f32 > 1.6 * car as f32, "bus tyre {bus} puffs, car tyre {car}");
+        assert!(
+            bus as f32 > 1.6 * car as f32,
+            "bus tyre {bus} puffs, car tyre {car}"
+        );
         assert_eq!(heaviness(1100.0), 1.0);
     }
 
@@ -787,13 +1001,22 @@ mod tests {
             t.contact.x = d;
             let mut s = Spray::new();
             for _ in 0..30 {
-                s.update(1.0 / 30.0, &[t], DVec3::new(0.0, 0.0, 34.0), Vec3::ZERO, &puddle);
+                s.update(
+                    1.0 / 30.0,
+                    &[t],
+                    DVec3::new(0.0, 0.0, 34.0),
+                    Vec3::ZERO,
+                    &puddle,
+                );
             }
             s.len()
         };
         let (near, mid, far) = (at(5.0), at(80.0), at(130.0));
         assert_eq!(far, 0, "nothing beyond {SPAWN_RANGE} m");
-        assert!(mid > 0 && (mid as f32) < 0.6 * near as f32, "at 80 m {mid} puffs, at 5 m {near}");
+        assert!(
+            mid > 0 && (mid as f32) < 0.6 * near as f32,
+            "at 80 m {mid} puffs, at 5 m {near}"
+        );
     }
 
     #[test]
@@ -811,7 +1034,11 @@ mod tests {
             .collect();
         let s = run(&tyres, 4.0, &puddle);
         assert!(s.len() <= MAX_PUFFS, "{} puffs", s.len());
-        assert!(s.len() > MAX_PUFFS / 2, "the cap is used: {} puffs", s.len());
+        assert!(
+            s.len() > MAX_PUFFS / 2,
+            "the cap is used: {} puffs",
+            s.len()
+        );
     }
 
     #[test]
@@ -821,10 +1048,23 @@ mod tests {
         s.sprites(DVec3::new(30.0, 0.0, 35.0), &mut sprites);
         assert!(!sprites.is_empty());
         for p in &s.puffs {
-            assert!(p.pos.z >= 33.0 - 1e-6, "a puff under the road at {:?}", p.pos);
+            assert!(
+                p.pos.z >= 33.0 - 1e-6,
+                "a puff under the road at {:?}",
+                p.pos
+            );
             if p.kind == Kind::Mist {
-                assert!(p.pos.z - 33.0 >= (GROUND_HOLD * p.size()) as f64 - 1e-4, "a mist puff sunk into the road: {:?} size {}", p.pos, p.size());
-                assert!(p.pos.z - 33.0 < 3.5, "a mist puff floating away at {:?}", p.pos);
+                assert!(
+                    p.pos.z - 33.0 >= (GROUND_HOLD * p.size()) as f64 - 1e-4,
+                    "a mist puff sunk into the road: {:?} size {}",
+                    p.pos,
+                    p.size()
+                );
+                assert!(
+                    p.pos.z - 33.0 < 3.5,
+                    "a mist puff floating away at {:?}",
+                    p.pos
+                );
             }
         }
         for sp in &sprites {
@@ -836,22 +1076,41 @@ mod tests {
     fn no_spray_in_the_cab_the_camera_sits_in() {
         let mut s = Spray::new();
         // a bus 12 m long facing north round the origin, its rear wheels 3 m from its tail
-        s.bodies = vec![Body { origin: DVec3::new(0.0, 0.0, 33.0), heading: 0.0, bb: [2.5, 12.0, 3.2, 0.0, 0.0, 1.6] }];
+        s.bodies = vec![Body {
+            origin: DVec3::new(0.0, 0.0, 33.0),
+            heading: 0.0,
+            bb: [2.5, 12.0, 3.2, 0.0, 0.0, 1.6],
+        }];
         let mut t = tyre(13.9);
         t.contact = DVec3::new(1.1, -3.0, 33.0);
         for _ in 0..45 {
-            s.update(1.0 / 30.0, &[t], DVec3::new(0.0, 4.0, 35.0), Vec3::ZERO, &puddle);
+            s.update(
+                1.0 / 30.0,
+                &[t],
+                DVec3::new(0.0, 4.0, 35.0),
+                Vec3::ZERO,
+                &puddle,
+            );
         }
         let mut cab = Vec::new();
         s.sprites(DVec3::new(-0.5, 4.5, 35.0), &mut cab);
         for p in &cab {
             let outside = s.bodies[0].outside(p.position);
-            assert!(outside > 0.6 * p.size, "a puff {outside:.2} m outside the cab, {:.2} m wide, seen from the driver's seat", p.size * 2.0);
+            assert!(
+                outside > 0.6 * p.size,
+                "a puff {outside:.2} m outside the cab, {:.2} m wide, seen from the driver's seat",
+                p.size * 2.0
+            );
         }
         // the same spray from outside: what trails behind the bus is seen
         let mut street = Vec::new();
         s.sprites(DVec3::new(6.0, -20.0, 34.5), &mut street);
-        assert!(street.len() > cab.len() && !cab.is_empty(), "{} puffs from the street, {} from the cab", street.len(), cab.len());
+        assert!(
+            street.len() > cab.len() && !cab.is_empty(),
+            "{} puffs from the street, {} from the cab",
+            street.len(),
+            cab.len()
+        );
     }
 
     #[test]
@@ -859,15 +1118,33 @@ mod tests {
         let mut s = Spray::new();
         let t = [tyre(13.9)];
         for _ in 0..10 {
-            s.update(1.0 / 30.0, &t, DVec3::new(5.0, 0.0, 34.0), Vec3::ZERO, &puddle);
+            s.update(
+                1.0 / 30.0,
+                &t,
+                DVec3::new(5.0, 0.0, 34.0),
+                Vec3::ZERO,
+                &puddle,
+            );
         }
         assert_eq!(s.tyres_in_puddle, 1);
         let n = s.len();
-        s.update(1.0 / 30.0, &t, DVec3::new(5.0, 0.0, 34.0), Vec3::ZERO, &|_, _| Water::default());
+        s.update(
+            1.0 / 30.0,
+            &t,
+            DVec3::new(5.0, 0.0, 34.0),
+            Vec3::ZERO,
+            &|_, _| Water::default(),
+        );
         assert_eq!(s.tyres_wet, 0);
         assert!(s.len() <= n, "nothing new off the water");
         // and a vehicle gone from the list leaves no debt behind
-        s.update(1.0 / 30.0, &[], DVec3::new(5.0, 0.0, 34.0), Vec3::ZERO, &puddle);
+        s.update(
+            1.0 / 30.0,
+            &[],
+            DVec3::new(5.0, 0.0, 34.0),
+            Vec3::ZERO,
+            &puddle,
+        );
         assert!(s.tyres.is_empty());
     }
 }

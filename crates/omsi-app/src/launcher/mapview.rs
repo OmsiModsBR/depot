@@ -49,7 +49,12 @@ const STOP_PX: f32 = 2.8;
 const ENTRY_PX: f32 = 3.4;
 /// The map's own background: the dark the window is cleared to, so the rail, the panels and
 /// the map meet without a seam.
-const BACKDROP: wgpu::Color = wgpu::Color { r: 0.0056, g: 0.0056, b: 0.0056, a: 1.0 };
+const BACKDROP: wgpu::Color = wgpu::Color {
+    r: 0.0056,
+    g: 0.0056,
+    b: 0.0056,
+    a: 1.0,
+};
 /// The closest the map goes in, in metres a pixel.
 const MPP_MIN: f64 = 0.15;
 /// A press that travelled less than this many pixels is a click on what stands under it.
@@ -252,7 +257,12 @@ impl MapView {
             "Reading the map…"
         } else if self.error.is_some() {
             "The map cannot be read"
-        } else if self.roads.as_deref().map(|r| r.roads.is_empty()).unwrap_or(false) {
+        } else if self
+            .roads
+            .as_deref()
+            .map(|r| r.roads.is_empty())
+            .unwrap_or(false)
+        {
             "This map has no roads"
         } else {
             ""
@@ -295,7 +305,11 @@ impl MapView {
 
     /// The name of a drawn entry point, as `global.cfg` writes it.
     pub fn entry_name(&self, i: usize) -> Option<&str> {
-        self.roads.as_deref()?.entries.get(i).map(|e| e.name.as_str())
+        self.roads
+            .as_deref()?
+            .entries
+            .get(i)
+            .map(|e| e.name.as_str())
     }
 
     /// Where a drawn entry point stands, in the picture's own pixels.
@@ -307,7 +321,11 @@ impl MapView {
     /// placed - there is no marker to ring).
     pub fn shown_of(&self, choice: i32) -> Option<usize> {
         let choice = usize::try_from(choice).ok()?;
-        self.roads.as_deref()?.entries.iter().position(|e| e.index == choice)
+        self.roads
+            .as_deref()?
+            .entries
+            .iter()
+            .position(|e| e.index == choice)
     }
 
     /// The entry point a click took this frame, as its own place in `global.cfg`'s list (the
@@ -324,7 +342,10 @@ impl MapView {
 
     /// The streets the map's name signs name, with where each stands (see `Roads::streets`).
     pub fn streets(&self) -> &[(String, DVec2)] {
-        self.roads.as_deref().map(|r| r.streets.as_slice()).unwrap_or_default()
+        self.roads
+            .as_deref()
+            .map(|r| r.streets.as_slice())
+            .unwrap_or_default()
     }
 
     /// Look at world point `p`, near enough to read the streets round it.
@@ -350,24 +371,45 @@ impl MapView {
 
     /// Which reading of the map's roads is shown: another number, other roads.
     pub fn roads_key(&self) -> usize {
-        self.roads.as_ref().map(|r| Arc::as_ptr(r) as usize).unwrap_or(0)
+        self.roads
+            .as_ref()
+            .map(|r| Arc::as_ptr(r) as usize)
+            .unwrap_or(0)
     }
 
     /// The lanes the game drives for `pieces` (see `Roads::routes_of`), in world metres and
     /// with what the eye cannot tell apart taken out; and how many of the pieces the map does
     /// not have. Nothing before the map is read.
     pub fn lanes_of(&self, pieces: &[omsi_launcher_lib::RoadPiece]) -> (Vec<Vec<DVec2>>, usize) {
-        let Some(roads) = self.roads.as_deref() else { return (Vec::new(), 0) };
+        let Some(roads) = self.roads.as_deref() else {
+            return (Vec::new(), 0);
+        };
         let (mut out, mut missing) = (Vec::new(), 0);
         for piece in pieces {
             let lanes = roads.routes_of(piece);
             missing += usize::from(lanes.is_empty());
             for i in lanes {
-                let Some(l) = roads.net.lanes.get(i) else { continue };
-                let v: Vec<Vec3> = l.points.iter().map(|q| Vec3::new((q.x - roads.origin.x) as f32, (q.y - roads.origin.y) as f32, 0.0)).collect();
+                let Some(l) = roads.net.lanes.get(i) else {
+                    continue;
+                };
+                let v: Vec<Vec3> = l
+                    .points
+                    .iter()
+                    .map(|q| {
+                        Vec3::new(
+                            (q.x - roads.origin.x) as f32,
+                            (q.y - roads.origin.y) as f32,
+                            0.0,
+                        )
+                    })
+                    .collect();
                 let v = simplify(&v, 0.25);
                 if v.len() >= 2 {
-                    out.push(v.iter().map(|q| roads.origin + DVec2::new(q.x as f64, q.y as f64)).collect());
+                    out.push(
+                        v.iter()
+                            .map(|q| roads.origin + DVec2::new(q.x as f64, q.y as f64))
+                            .collect(),
+                    );
                 }
             }
         }
@@ -401,7 +443,10 @@ impl MapView {
 
     /// The picture's size in physical pixels.
     fn size(&self) -> (f32, f32) {
-        ((self.rect.w * self.scale).max(1.0), (self.rect.h * self.scale).max(1.0))
+        (
+            (self.rect.w * self.scale).max(1.0),
+            (self.rect.h * self.scale).max(1.0),
+        )
     }
 
     /// The part of the picture no panel lies over, in the target's own pixels.
@@ -418,7 +463,8 @@ impl MapView {
     /// Called before the picture is drawn, so the labels the page writes over the map stand
     /// where the roads are this frame.
     pub fn think(&mut self, rect: Rect, window: Rect, scale: f32, p: Pointer) {
-        let moved_window = (self.window.w - window.w).abs() > 8.0 || (self.window.h - window.h).abs() > 8.0;
+        let moved_window =
+            (self.window.w - window.w).abs() > 8.0 || (self.window.h - window.h).abs() > 8.0;
         self.rect = rect;
         self.window = window;
         self.scale = scale;
@@ -483,9 +529,18 @@ impl MapView {
                     // whole new trip): the map opens on the trip's own route, and the
                     // timetable arrives a moment after the page does, so the first read of a
                     // map often has no trip at all
-                    let before = self.shown.as_ref().map(|s| (s.global.clone(), s.date.clone(), s.trip.clone()));
-                    let another = before.as_ref().map(|(g, d, _)| g != &r.look.global || d != &r.look.date).unwrap_or(true);
-                    let another_trip = before.as_ref().map(|(_, _, t)| t != &r.look.trip).unwrap_or(true);
+                    let before = self
+                        .shown
+                        .as_ref()
+                        .map(|s| (s.global.clone(), s.date.clone(), s.trip.clone()));
+                    let another = before
+                        .as_ref()
+                        .map(|(g, d, _)| g != &r.look.global || d != &r.look.date)
+                        .unwrap_or(true);
+                    let another_trip = before
+                        .as_ref()
+                        .map(|(_, _, t)| t != &r.look.trip)
+                        .unwrap_or(true);
                     if let Some(roads) = r.roads {
                         self.roads = Some(roads);
                     }
@@ -506,23 +561,37 @@ impl MapView {
                 }
             }
         }
-        let Some(want) = self.want.clone() else { return };
+        let Some(want) = self.want.clone() else {
+            return;
+        };
         if self.shown.as_ref() == Some(&want) {
             return;
         }
         // only the ring moved: nothing has to be read again
-        if self.shown.as_ref().map(|s| s.map == want.map && s.date == want.date && s.trip == want.trip).unwrap_or(false) {
+        if self
+            .shown
+            .as_ref()
+            .map(|s| s.map == want.map && s.date == want.date && s.trip == want.trip)
+            .unwrap_or(false)
+        {
             self.shown = Some(want);
             return;
         }
         // the tiles of the map are read once; another trip on the same map only walks the
         // timetable again
-        let have = self.roads.clone().filter(|_| self.shown.as_ref().map(|s| s.global == want.global && s.date == want.date).unwrap_or(false));
+        let have = self.roads.clone().filter(|_| {
+            self.shown
+                .as_ref()
+                .map(|s| s.global == want.global && s.date == want.date)
+                .unwrap_or(false)
+        });
         let (tx, rx) = channel();
         let w = want.clone();
-        let spawned = std::thread::Builder::new().name("launcher map".into()).spawn(move || {
-            let _ = tx.send(read(w, have));
-        });
+        let spawned = std::thread::Builder::new()
+            .name("launcher map".into())
+            .spawn(move || {
+                let _ = tx.send(read(w, have));
+            });
         match spawned {
             Ok(_) => self.loading = Some(rx),
             Err(e) => {
@@ -537,7 +606,9 @@ impl MapView {
     fn place(&mut self) {
         self.stops.clear();
         self.route_box = None;
-        let Some(roads) = self.roads.clone() else { return };
+        let Some(roads) = self.roads.clone() else {
+            return;
+        };
         for (i, id) in self.trip.stops.iter().enumerate() {
             if let Some(q) = roads.objects.get(id) {
                 self.stops.push((*q, i));
@@ -549,7 +620,9 @@ impl MapView {
             let lanes = roads.routes_of(piece);
             found += usize::from(!lanes.is_empty());
             for i in lanes {
-                let Some(l) = roads.net.lanes.get(i) else { continue };
+                let Some(l) = roads.net.lanes.get(i) else {
+                    continue;
+                };
                 for q in &l.points {
                     lo = lo.min(q.truncate());
                     hi = hi.max(q.truncate());
@@ -559,7 +632,10 @@ impl MapView {
         if found < self.trip.route.len() {
             // (a map whose timetable still names splines it no longer has: the game's own
             // routing skips the same pieces, so the picture is right even where it is short)
-            log::info!("launcher map: the route - {found} of {} pieces are on the map", self.trip.route.len());
+            log::info!(
+                "launcher map: the route - {found} of {} pieces are on the map",
+                self.trip.route.len()
+            );
         }
         if lo.x != f64::MAX {
             self.route_box = Some((lo, hi));
@@ -578,7 +654,9 @@ impl MapView {
 
     /// The closest zoom that still holds the whole map in the window.
     fn max_mpp(&self) -> f64 {
-        let Some((lo, hi)) = self.content() else { return 64.0 };
+        let Some((lo, hi)) = self.content() else {
+            return 64.0;
+        };
         let vis = self.visible();
         let span = (hi - lo).max(DVec2::splat(1.0));
         let fit = (span.x / vis.w.max(1.0) as f64).max(span.y / vis.h.max(1.0) as f64);
@@ -587,7 +665,9 @@ impl MapView {
 
     /// Fit what the map shows into the part of the window no panel covers.
     fn fit_to(&mut self) {
-        let Some((lo, hi)) = self.content() else { return };
+        let Some((lo, hi)) = self.content() else {
+            return;
+        };
         let vis = self.visible();
         let span = (hi - lo).max(DVec2::splat(1.0));
         // (a little air around it: a route that touches the frame reads as if it runs on)
@@ -626,15 +706,25 @@ impl MapView {
     pub fn picture(&mut self, renderer: &super::gfx::Gfx) -> Option<wgpu::TextureView> {
         let (w, h) = self.size();
         let (w, h) = (w as u32, h as u32);
-        if self.target.as_ref().map(|t| (t.2, t.3) != (w, h)).unwrap_or(true) {
+        if self
+            .target
+            .as_ref()
+            .map(|t| (t.2, t.3) != (w, h))
+            .unwrap_or(true)
+        {
             let tex = renderer.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("launcher map"),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: renderer.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let view = tex.create_view(&Default::default());
@@ -644,22 +734,40 @@ impl MapView {
         }
         let roads = self.roads.clone()?;
         let tolerance = self.tolerance();
-        let key = Key { global: self.shown.as_ref().map(|s| s.global.clone()).unwrap_or_default(), trip: self.trip_name(), tolerance: tolerance.to_bits() };
+        let key = Key {
+            global: self
+                .shown
+                .as_ref()
+                .map(|s| s.global.clone())
+                .unwrap_or_default(),
+            trip: self.trip_name(),
+            tolerance: tolerance.to_bits(),
+        };
         if self.plan_is_stale(&key) {
             let (verts, points) = self.build(&roads, tolerance);
             let count = verts.len() as u32;
             log::info!("map: the plan rebuilt - {points} points of {} roads in its {count} vertices, {:.1} m per pixel", roads.roads.len(), self.mpp);
-            self.plan = Some(Plan { key, verts, count, uploaded: false });
+            self.plan = Some(Plan {
+                key,
+                verts,
+                count,
+                uploaded: false,
+            });
         }
         // everything the drawing needs is read before the GPU is borrowed (the markers are
         // built every frame: the mouse moves what they look like)
         let marks = self.mark_vertices(&roads);
-        let (count, marks_len) = (self.plan.as_ref().map(|p| p.count).unwrap_or(0), marks.len() as u32);
+        let (count, marks_len) = (
+            self.plan.as_ref().map(|p| p.count).unwrap_or(0),
+            marks.len() as u32,
+        );
         let (proj, px_scale) = (self.projection(), self.mpp as f32);
         let target = self.target.as_ref()?.1.clone();
         let device = &renderer.device;
         let queue = &renderer.queue;
-        let gpu = self.gpu.get_or_insert_with(|| Gpu::new(device, renderer.format(), 1, 64));
+        let gpu = self
+            .gpu
+            .get_or_insert_with(|| Gpu::new(device, renderer.format(), 1, 64));
         if let Some(p) = self.plan.as_mut() {
             if !p.uploaded {
                 gpu.upload(device, queue, 0, &p.verts);
@@ -667,20 +775,51 @@ impl MapView {
             }
         }
         gpu.upload(device, queue, 1, &marks);
-        let layer = Layer { view_proj: proj, viewport: [0.0, 0.0, w as f32, h as f32], clip: [0.0, 0.0, w as f32, h as f32], radius: 0.0, opacity: 1.0, px_scale };
+        let layer = Layer {
+            view_proj: proj,
+            viewport: [0.0, 0.0, w as f32, h as f32],
+            clip: [0.0, 0.0, w as f32, h as f32],
+            radius: 0.0,
+            opacity: 1.0,
+            px_scale,
+        };
         let draws = [
-            Draw { buffer: 0, range: 0..count, layer: 0, texture: 0 },
-            Draw { buffer: 1, range: 0..marks_len, layer: 0, texture: 0 },
+            Draw {
+                buffer: 0,
+                range: 0..count,
+                layer: 0,
+                texture: 0,
+            },
+            Draw {
+                buffer: 1,
+                range: 0..marks_len,
+                layer: 0,
+                texture: 0,
+            },
         ];
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("launcher map") });
-        gpu.render(device, queue, &mut enc, &target, (w, h), Some(BACKDROP), &[layer], &draws);
+        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("launcher map"),
+        });
+        gpu.render(
+            device,
+            queue,
+            &mut enc,
+            &target,
+            (w, h),
+            Some(BACKDROP),
+            &[layer],
+            &draws,
+        );
         queue.submit([enc.finish()]);
         Some(target)
     }
 
     /// The name of the trip whose route is drawn (the plan is built again when it changes).
     fn trip_name(&self) -> String {
-        self.shown.as_ref().map(|s| s.trip.clone()).unwrap_or_default()
+        self.shown
+            .as_ref()
+            .map(|s| s.trip.clone())
+            .unwrap_or_default()
     }
 
     /// Whether the plan has to be built again: another map, another trip, or another band of
@@ -703,7 +842,9 @@ impl MapView {
 
     /// The wheel has been still for `ZOOM_SETTLE`: the plan may be built again.
     fn wheel_settled(&self) -> bool {
-        self.wheeled.map(|t| t.elapsed() >= ZOOM_SETTLE).unwrap_or(true)
+        self.wheeled
+            .map(|t| t.elapsed() >= ZOOM_SETTLE)
+            .unwrap_or(true)
     }
 
     /// The camera as a matrix: `center` lands at the middle of the visible window. `roads`'
@@ -724,7 +865,13 @@ impl MapView {
     /// (the camera only moves a matrix over it).
     fn build(&self, roads: &Roads, tolerance: f32) -> (Vec<Vertex>, usize) {
         let k = self.scale;
-        let rel = |q: DVec3| Vec3::new((q.x - roads.origin.x) as f32, (q.y - roads.origin.y) as f32, 0.0);
+        let rel = |q: DVec3| {
+            Vec3::new(
+                (q.x - roads.origin.x) as f32,
+                (q.y - roads.origin.y) as f32,
+                0.0,
+            )
+        };
         let mut p = Painter::new();
         let mut points = 0usize;
         // what a road is drawn from: its own metres, at least a hair of a pixel
@@ -744,7 +891,13 @@ impl MapView {
                 if pass == 0 {
                     band(&mut p, &r.points, r.width + 2.0, CASING_PX * k, ROAD_CASING);
                 } else {
-                    band(&mut p, &r.points, r.width, ROAD_PX * k, if r.main { ROAD_MAIN } else { ROAD });
+                    band(
+                        &mut p,
+                        &r.points,
+                        r.width,
+                        ROAD_PX * k,
+                        if r.main { ROAD_MAIN } else { ROAD },
+                    );
                 }
             }
         }
@@ -752,7 +905,9 @@ impl MapView {
         // road and not down the middle of it
         for piece in &self.trip.route {
             for i in roads.routes_of(piece) {
-                let Some(l) = roads.net.lanes.get(i) else { continue };
+                let Some(l) = roads.net.lanes.get(i) else {
+                    continue;
+                };
                 let v: Vec<Vec3> = l.points.iter().map(|q| rel(*q)).collect();
                 let v = simplify(&v, tolerance);
                 points += v.len();
@@ -768,7 +923,13 @@ impl MapView {
     fn mark_vertices(&self, roads: &Roads) -> Vec<Vertex> {
         let k = self.scale;
         let mpp = self.mpp as f32;
-        let at = |q: DVec2| Vec3::new((q.x - roads.origin.x) as f32, (q.y - roads.origin.y) as f32, 0.0);
+        let at = |q: DVec2| {
+            Vec3::new(
+                (q.x - roads.origin.x) as f32,
+                (q.y - roads.origin.y) as f32,
+                0.0,
+            )
+        };
         let mut p = Painter::new();
         for (q, _) in &self.stops {
             p.world_disc(at(*q), 0.0, STOP_PX * k, STOP);
@@ -777,11 +938,25 @@ impl MapView {
         for (i, e) in roads.entries.iter().enumerate() {
             p.world_disc(at(e.at), 0.0, ENTRY_PX * k, omsi_ui::theme::accent());
             if self.hover == Some(i) {
-                ring(&mut p, at(e.at), (ENTRY_PX + 3.0) * k, 2.0 * k, ENTRY_HOVER, mpp);
+                ring(
+                    &mut p,
+                    at(e.at),
+                    (ENTRY_PX + 3.0) * k,
+                    2.0 * k,
+                    ENTRY_HOVER,
+                    mpp,
+                );
             }
             // (the choice counts `global.cfg`'s list, which the marker's own place names)
             if chosen == e.index as i32 {
-                ring(&mut p, at(e.at), (ENTRY_PX + 6.5) * k, 2.0 * k, ENTRY_HERE, mpp);
+                ring(
+                    &mut p,
+                    at(e.at),
+                    (ENTRY_PX + 6.5) * k,
+                    2.0 * k,
+                    ENTRY_HERE,
+                    mpp,
+                );
             }
         }
         p.verts
@@ -793,10 +968,16 @@ impl Roads {
     /// a map whose timetable still names a spline it no longer has - every lane of that
     /// spline, so a hole in the map's own data is not a hole in the picture.
     fn routes_of(&self, piece: &omsi_launcher_lib::RoadPiece) -> Vec<usize> {
-        if let Some(&i) = self.lanes.get(&(piece.tile_x, piece.tile_y, piece.spline, piece.path)) {
+        if let Some(&i) = self
+            .lanes
+            .get(&(piece.tile_x, piece.tile_y, piece.spline, piece.path))
+        {
             return vec![i];
         }
-        self.splines.get(&(piece.tile_x, piece.tile_y, piece.spline)).cloned().unwrap_or_default()
+        self.splines
+            .get(&(piece.tile_x, piece.tile_y, piece.spline))
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
@@ -808,7 +989,11 @@ fn ring(p: &mut Painter, at: Vec3, r_px: f32, w_px: f32, c: Color, mpp: f32) {
     let v: Vec<Vec3> = (0..=n)
         .map(|i| {
             let a = std::f64::consts::TAU * i as f64 / n as f64;
-            Vec3::new(at.x + (r * a.cos()) as f32, at.y + (r * a.sin()) as f32, 0.0)
+            Vec3::new(
+                at.x + (r * a.cos()) as f32,
+                at.y + (r * a.sin()) as f32,
+                0.0,
+            )
         })
         .collect();
     p.ribbon(&v, 0.0, w_px, c, false);
@@ -823,7 +1008,12 @@ fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
 /// Read a map the way the map needs it: the roads the game's city map draws, the entry
 /// points, the objects - and the chosen trip's route with them.
 fn read(look: Look, have: Option<Arc<Roads>>) -> Reply {
-    let mut reply = Reply { look, roads: None, trip: Default::default(), error: None };
+    let mut reply = Reply {
+        look,
+        roads: None,
+        trip: Default::default(),
+        error: None,
+    };
     if let Some(r) = have {
         reply.trip = trip_of(&reply.look);
         reply.roads = Some(r);
@@ -858,12 +1048,18 @@ fn trip_of(look: &Look) -> omsi_launcher_lib::TripPath {
 /// widths. `look.global` is the map's `global.cfg`; the tiles stand beside it and the assets
 /// the map names under the installation it belongs to.
 fn read_map(look: &Look) -> Roads {
-    let Ok(global) = omsi_map::GlobalCfg::load(&look.global) else { return Roads::default() };
+    let Ok(global) = omsi_map::GlobalCfg::load(&look.global) else {
+        return Roads::default();
+    };
     // everything that turns a tile index and a place in the tile into world metres needs
     // this first (`[worldcoordinates]` maps use another grid)
     omsi_map::configure_grid(&global);
-    let Some(map_dir) = look.global.parent().map(Path::to_path_buf) else { return Roads::default() };
-    let chrono = omsi_map::date_code(&look.date).map(|c| omsi_map::active_chrono_dirs(&map_dir, c)).unwrap_or_default();
+    let Some(map_dir) = look.global.parent().map(Path::to_path_buf) else {
+        return Roads::default();
+    };
+    let chrono = omsi_map::date_code(&look.date)
+        .map(|c| omsi_map::active_chrono_dirs(&map_dir, c))
+        .unwrap_or_default();
     let size = omsi_map::tile_size();
     // the installation the map belongs to: what its `.sli` and `.sco` files are named from.
     // A map is a folder under a content root's `maps` (that is where the launcher's list came
@@ -872,7 +1068,12 @@ fn read_map(look: &Look) -> Roads {
     let root = omsi_cfg::content_roots()
         .into_iter()
         .find(|r| map_dir.starts_with(r))
-        .or_else(|| map_dir.parent().and_then(|p| p.parent()).map(Path::to_path_buf))
+        .or_else(|| {
+            map_dir
+                .parent()
+                .and_then(|p| p.parent())
+                .map(Path::to_path_buf)
+        })
         .unwrap_or_else(|| map_dir.clone());
     let tiles: Vec<(i32, i32, PathBuf)> = global
         .tiles
@@ -881,7 +1082,12 @@ fn read_map(look: &Look) -> Roads {
         .filter(|t| omsi_cfg::vfs::is_file(&t.2))
         .collect();
     let t0 = std::time::Instant::now();
-    let crate::scene::NavigationMap { lanes, road_surfaces, places, signs } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
+    let crate::scene::NavigationMap {
+        lanes,
+        road_surfaces,
+        places,
+        signs,
+    } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
     let (roads, net) = crate::nav::city_roads(lanes, &road_surfaces);
     // the lanes the timetable can name, and the lanes of every spline behind them
     let mut by_path = HashMap::new();
@@ -889,7 +1095,10 @@ fn read_map(look: &Look) -> Roads {
     for (i, l) in net.lanes.iter().enumerate() {
         let Some(key) = l.key else { continue };
         by_path.insert((key.tile.0, key.tile.1, key.id, key.path), i);
-        by_spline.entry((key.tile.0, key.tile.1, key.id)).or_default().push(i);
+        by_spline
+            .entry((key.tile.0, key.tile.1, key.id))
+            .or_default()
+            .push(i);
     }
     // the entry points: on the tile the record names, else at their object (`World::
     // entry_point_place` reads them the same way)
@@ -903,7 +1112,11 @@ fn read_map(look: &Look) -> Roads {
         // the marker carries where it stands in `global.cfg`'s list, so one left out here
         // (no tile, no object) does not shift the ones after it
         if let Some(p) = p {
-            entries.push(Entry { at: p, name: ep.name.clone(), index });
+            entries.push(Entry {
+                at: p,
+                name: ep.name.clone(),
+                index,
+            });
         }
     }
     let objects: HashMap<i64, DVec2> = places.iter().map(|(k, v)| (*k, v.truncate())).collect();
@@ -924,15 +1137,26 @@ fn read_map(look: &Look) -> Roads {
     // piece of the next town) would shrink everything else to a dot, so the map opens on the
     // 1 - 99 % box of what the roads cover instead of the extremes (the far ones are still
     // there to be dragged to).
-    let mut xs: Vec<f32> = roads.iter().flat_map(|r| r.points.iter()).map(|q| q.x as f32).collect();
-    let mut ys: Vec<f32> = roads.iter().flat_map(|r| r.points.iter()).map(|q| q.y as f32).collect();
+    let mut xs: Vec<f32> = roads
+        .iter()
+        .flat_map(|r| r.points.iter())
+        .map(|q| q.x as f32)
+        .collect();
+    let mut ys: Vec<f32> = roads
+        .iter()
+        .flat_map(|r| r.points.iter())
+        .map(|q| q.y as f32)
+        .collect();
     xs.sort_by(f32::total_cmp);
     ys.sort_by(f32::total_cmp);
     let (lo, hi) = if xs.is_empty() {
         (min, max)
     } else {
         let at = |v: &Vec<f32>, t: f64| v[((v.len() - 1) as f64 * t) as usize] as f64;
-        (DVec2::new(at(&xs, 0.01), at(&ys, 0.01)), DVec2::new(at(&xs, 0.99), at(&ys, 0.99)))
+        (
+            DVec2::new(at(&xs, 0.01), at(&ys, 0.01)),
+            DVec2::new(at(&xs, 0.99), at(&ys, 0.99)),
+        )
     };
     log::info!(
         "map: {} roads from {} lanes in {} tiles, {} objects, {} entry points, read in {:.2} s; roads cover ({:.0}, {:.0}) - ({:.0}, {:.0}), opened at the 1 - 99 % box ({:.0}, {:.0}) - ({:.0}, {:.0})",
@@ -952,7 +1176,18 @@ fn read_map(look: &Look) -> Roads {
         }
     }
     streets.sort_by_key(|s| s.0.to_lowercase());
-    Roads { roads, net: Arc::new(net), lanes: by_path, splines: by_spline, origin, lo, hi, entries, objects, streets }
+    Roads {
+        roads,
+        net: Arc::new(net),
+        lanes: by_path,
+        splines: by_spline,
+        origin,
+        lo,
+        hi,
+        entries,
+        objects,
+        streets,
+    }
 }
 
 #[cfg(test)]
@@ -965,8 +1200,16 @@ mod tests {
         let mut m = MapView::new();
         m.roads = Some(Arc::new(Roads {
             entries: vec![
-                Entry { at: DVec2::new(0.0, 0.0), name: "Depot".into(), index: 0 },
-                Entry { at: DVec2::new(100.0, 0.0), name: "Station".into(), index: 2 },
+                Entry {
+                    at: DVec2::new(0.0, 0.0),
+                    name: "Depot".into(),
+                    index: 0,
+                },
+                Entry {
+                    at: DVec2::new(100.0, 0.0),
+                    name: "Station".into(),
+                    index: 2,
+                },
             ],
             ..Default::default()
         }));
@@ -1004,7 +1247,10 @@ mod tests {
         let mut m = MapView::new();
         m.mpp = 4.0;
         let band = m.tolerance();
-        assert_eq!(band, 2.0, "half of four metres a pixel, which is a power of two");
+        assert_eq!(
+            band, 2.0,
+            "half of four metres a pixel, which is a power of two"
+        );
         // a band is a factor of two wide: a wheel notch moves the metres a pixel by 12 %, and
         // six or seven of them, a whole gesture, stay inside the one the plan was built for
         for factor in [1.12, 1.25, 1.12 * 1.12, 0.88, 0.8, 0.88 * 0.88] {
@@ -1028,9 +1274,23 @@ mod tests {
     #[test]
     fn a_zoom_in_progress_keeps_the_plan_it_has() {
         let mut m = map();
-        let built = Key { global: PathBuf::from("maps/Grundorf/global.cfg"), trip: String::new(), tolerance: 2.0f32.to_bits() };
-        let finer = Key { tolerance: 1.0f32.to_bits(), ..built.clone() };
-        let plan = || Some(Plan { key: built.clone(), verts: Vec::new(), count: 0, uploaded: true });
+        let built = Key {
+            global: PathBuf::from("maps/Grundorf/global.cfg"),
+            trip: String::new(),
+            tolerance: 2.0f32.to_bits(),
+        };
+        let finer = Key {
+            tolerance: 1.0f32.to_bits(),
+            ..built.clone()
+        };
+        let plan = || {
+            Some(Plan {
+                key: built.clone(),
+                verts: Vec::new(),
+                count: 0,
+                uploaded: true,
+            })
+        };
         m.plan = plan();
         // (whatever the zoom now asks for, while the wheel is still turning)
         m.wheeled = Some(Instant::now());

@@ -578,8 +578,17 @@ impl App {
                 title: "Cancel the timetable?".into(),
                 // (one text with the line in its place, so every language can put it where
                 // its own word order wants it)
-                text: omsi_ui::tr("The bus stops following line {}. This does not change the saved timetable.")
-                    .replacen("{}", self.duty.as_ref().map(|d| d.line.trim()).unwrap_or_default(), 1),
+                text: omsi_ui::tr(
+                    "The bus stops following line {}. This does not change the saved timetable.",
+                )
+                .replacen(
+                    "{}",
+                    self.duty
+                        .as_ref()
+                        .map(|d| d.line.trim())
+                        .unwrap_or_default(),
+                    1,
+                ),
                 ok: "Yes, cancel it".into(),
                 cancel: "Keep it".into(),
             }),
@@ -666,7 +675,11 @@ impl App {
                 let s = &trip.stops[k];
                 let t = hm(if k == 0 { s.dep } else { s.arr });
                 let marked = d.skip_marked(k);
-                let served = || self.journey.as_ref().is_some_and(|j| j.served((d.trip_index, k)));
+                let served = || {
+                    self.journey
+                        .as_ref()
+                        .is_some_and(|j| j.served((d.trip_index, k)))
+                };
                 let state = if done || k < d.next_stop {
                     if served() {
                         aw::RunStop::Done
@@ -959,7 +972,11 @@ impl App {
             ToolWindow::Tour(_) => self.tour_event(e),
             ToolWindow::Running => match e {
                 Event::Row(_, i) => {
-                    if let Some(k) = self.duty.as_ref().and_then(|d| running_stops(d).get(i).copied()) {
+                    if let Some(k) = self
+                        .duty
+                        .as_ref()
+                        .and_then(|d| running_stops(d).get(i).copied())
+                    {
                         self.skip_stop_at(k);
                     }
                 }

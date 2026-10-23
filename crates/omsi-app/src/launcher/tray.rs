@@ -82,12 +82,18 @@ mod imp {
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION, NOTIFYICONDATAW, NOTIFYICONDATAW_0, NOTIFYICON_VERSION};
+    use windows::Win32::UI::Shell::{
+        Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION,
+        NOTIFYICONDATAW, NOTIFYICONDATAW_0, NOTIFYICON_VERSION,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, LoadImageW, PostMessageW,
-        PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TrackPopupMenu, TranslateMessage, HICON, IDI_APPLICATION, IMAGE_ICON, LR_SHARED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG,
-        SM_CXSMICON, SM_CYSMICON, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_LBUTTONDBLCLK, WM_NULL, WM_RBUTTONUP, WM_USER,
-        WNDCLASSW,
+        AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
+        DispatchMessageW, GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, LoadImageW,
+        PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow,
+        TrackPopupMenu, TranslateMessage, HICON, IDI_APPLICATION, IMAGE_ICON, LR_SHARED, MF_GRAYED,
+        MF_SEPARATOR, MF_STRING, MSG, SM_CXSMICON, SM_CYSMICON, TPM_BOTTOMALIGN, TPM_RETURNCMD,
+        TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_CONTEXTMENU,
+        WM_DESTROY, WM_LBUTTONDBLCLK, WM_NULL, WM_RBUTTONUP, WM_USER, WNDCLASSW,
     };
 
     /// The message the icon sends its window.
@@ -142,7 +148,9 @@ mod imp {
                 let _done = done_tx;
                 let opened = unsafe { open(&tip) };
                 let sent = ready_tx.send(opened.map(|(h, ..)| h.0 as isize)).is_ok();
-                let Some((hwnd, icon, versioned)) = opened else { return };
+                let Some((hwnd, icon, versioned)) = opened else {
+                    return;
+                };
                 if !sent {
                     // (the launcher gave up waiting: nobody owns this icon, so it goes now)
                     unsafe {
@@ -150,7 +158,14 @@ mod imp {
                     }
                     return;
                 }
-                OWN.with(|o| *o.borrow_mut() = Some(Own { tx, head: shared, icon, versioned }));
+                OWN.with(|o| {
+                    *o.borrow_mut() = Some(Own {
+                        tx,
+                        head: shared,
+                        icon,
+                        versioned,
+                    })
+                });
                 let mut msg = MSG::default();
                 unsafe {
                     while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -194,15 +209,39 @@ mod imp {
         };
         // (registered once a process: a second icon finds the class there)
         RegisterClassW(&wc);
-        TASKBAR_CREATED.store(RegisterWindowMessageW(w!("TaskbarCreated")), Ordering::Relaxed);
-        let hwnd = CreateWindowExW(WINDOW_EX_STYLE(0), class, w!("Project Depot"), WINDOW_STYLE(0), 0, 0, 0, 0, None, None, Some(instance), None).ok()?;
+        TASKBAR_CREATED.store(
+            RegisterWindowMessageW(w!("TaskbarCreated")),
+            Ordering::Relaxed,
+        );
+        let hwnd = CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            class,
+            w!("Project Depot"),
+            WINDOW_STYLE(0),
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(instance),
+            None,
+        )
+        .ok()?;
         // the program's own icon (the executable's first icon resource), small; shared, so
         // the system keeps it and there is nothing to free
         let (cx, cy) = (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-        let icon = LoadImageW(Some(instance), PCWSTR(1 as *const u16), IMAGE_ICON, cx, cy, LR_SHARED)
-            .map(|h| HICON(h.0))
-            .or_else(|_| LoadIconW(None, IDI_APPLICATION))
-            .unwrap_or_default();
+        let icon = LoadImageW(
+            Some(instance),
+            PCWSTR(1 as *const u16),
+            IMAGE_ICON,
+            cx,
+            cy,
+            LR_SHARED,
+        )
+        .map(|h| HICON(h.0))
+        .or_else(|_| LoadIconW(None, IDI_APPLICATION))
+        .unwrap_or_default();
         let mut nid = NOTIFYICONDATAW {
             cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
@@ -226,7 +265,9 @@ mod imp {
     /// Ask for the newer icon behaviour (keyboard selection, the menu by `WM_CONTEXTMENU`).
     unsafe fn set_version(nid: &NOTIFYICONDATAW) -> bool {
         let v = NOTIFYICONDATAW {
-            Anonymous: NOTIFYICONDATAW_0 { uVersion: NOTIFYICON_VERSION },
+            Anonymous: NOTIFYICONDATAW_0 {
+                uVersion: NOTIFYICON_VERSION,
+            },
             ..*nid
         };
         Shell_NotifyIconW(NIM_SETVERSION, &v).as_bool()
@@ -242,10 +283,19 @@ mod imp {
 
     unsafe fn menu(hwnd: HWND) {
         let Ok(m) = CreatePopupMenu() else { return };
-        let head = OWN.with(|o| o.borrow().as_ref().and_then(|o| o.head.lock().ok().map(|h| h.clone()))).unwrap_or_else(|| wide("Project Depot"));
+        let head = OWN
+            .with(|o| {
+                o.borrow()
+                    .as_ref()
+                    .and_then(|o| o.head.lock().ok().map(|h| h.clone()))
+            })
+            .unwrap_or_else(|| wide("Project Depot"));
         let _ = AppendMenuW(m, MF_STRING | MF_GRAYED, 0, PCWSTR(head.as_ptr()));
         let _ = AppendMenuW(m, MF_SEPARATOR, 0, PCWSTR::null());
-        let labels: Vec<Vec<u16>> = MENU.iter().map(|x| wide(omsi_ui::tr(x.1).as_ref())).collect();
+        let labels: Vec<Vec<u16>> = MENU
+            .iter()
+            .map(|x| wide(omsi_ui::tr(x.1).as_ref()))
+            .collect();
         for (k, (cmd, _)) in MENU.iter().enumerate() {
             if cmd.is_some() {
                 let _ = AppendMenuW(m, MF_STRING, k + 1, PCWSTR(labels[k].as_ptr()));
@@ -257,15 +307,33 @@ mod imp {
         let _ = GetCursorPos(&mut at);
         // (the menu closes when clicked away from only if its window is in front)
         let _ = SetForegroundWindow(hwnd);
-        let chosen = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, at.x, at.y, None, hwnd, None).0 as usize;
+        let chosen = TrackPopupMenu(
+            m,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
+            at.x,
+            at.y,
+            None,
+            hwnd,
+            None,
+        )
+        .0 as usize;
         let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(m);
-        if let Some(cmd) = chosen.checked_sub(1).and_then(|k| MENU.get(k)).and_then(|x| x.0) {
+        if let Some(cmd) = chosen
+            .checked_sub(1)
+            .and_then(|k| MENU.get(k))
+            .and_then(|x| x.0)
+        {
             send(cmd);
         }
     }
 
-    unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe extern "system" fn proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
         match msg {
             WM_TRAY => {
                 let versioned = OWN.with(|o| o.borrow().as_ref().is_some_and(|o| o.versioned));
@@ -316,7 +384,15 @@ mod tests {
     #[test]
     fn the_menu_has_each_line_once() {
         let cmds: Vec<TrayCmd> = MENU.iter().filter_map(|x| x.0).collect();
-        assert_eq!(cmds, [TrayCmd::Show, TrayCmd::OpenLog, TrayCmd::StopGame, TrayCmd::Quit]);
+        assert_eq!(
+            cmds,
+            [
+                TrayCmd::Show,
+                TrayCmd::OpenLog,
+                TrayCmd::StopGame,
+                TrayCmd::Quit
+            ]
+        );
         assert!(MENU[2].0.is_none());
     }
 }

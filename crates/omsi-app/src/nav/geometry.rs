@@ -1,14 +1,20 @@
+use super::{ROAD, ROAD_CASING, ROAD_MAIN, ROAD_RADIUS};
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKey, LaneKind, Network};
 use omsi_ui::{Color, Painter};
-use super::{ROAD, ROAD_CASING, ROAD_MAIN, ROAD_RADIUS};
 
 /// Congestion of the traffic's lanes carried over to the same paths of `net`.
-pub(super) fn congestion_on(net: &Network, traffic: &Network, c: &HashMap<usize, f32>) -> HashMap<usize, f32> {
+pub(super) fn congestion_on(
+    net: &Network,
+    traffic: &Network,
+    c: &HashMap<usize, f32>,
+) -> HashMap<usize, f32> {
     let mut out = HashMap::new();
     for (&l, &v) in c {
-        let Some(lane) = traffic.lanes.get(l) else { continue };
+        let Some(lane) = traffic.lanes.get(l) else {
+            continue;
+        };
         let Some(key) = lane.key else { continue };
         if let Some(cands) = net.by_key.get(&key) {
             for &g in cands {
@@ -45,8 +51,14 @@ pub(super) fn visible_road_lanes(net: &Network) -> Vec<(usize, &omsi_sim::traffi
 /// asphalt, then grouped into carriageways with their real widths. The navigator's city map
 /// and the launcher's map picture draw the same roads this way, so the two cannot drift
 /// apart; the second value is the linked network the caller may walk (a trip's own lanes).
-pub(crate) fn city_roads(lanes: Vec<omsi_sim::traffic::Lane>, surfaces: &[(Vec<DVec3>, f32)]) -> (Vec<MapRoad>, Network) {
-    let mut net = Network { lanes, ..Default::default() };
+pub(crate) fn city_roads(
+    lanes: Vec<omsi_sim::traffic::Lane>,
+    surfaces: &[(Vec<DVec3>, f32)],
+) -> (Vec<MapRoad>, Network) {
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
     net.link(1.5);
     confirm_road_surfaces(&mut net, surfaces);
     let roads = road_geometry(&net);
@@ -77,56 +89,98 @@ pub(super) fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, 
             let (x1, y1) = Network::grid_cell(hi.extend(0.0));
             let i = segments.len();
             segments.push((a, b, margin));
-            for x in x0..=x1 { for y in y0..=y1 { grid.entry((x, y)).or_default().push(i); } }
+            for x in x0..=x1 {
+                for y in y0..=y1 {
+                    grid.entry((x, y)).or_default().push(i);
+                }
+            }
         }
     }
-    for lane in net.lanes.iter_mut().filter(|l| l.invisible && l.kind == LaneKind::Street) {
+    for lane in net
+        .lanes
+        .iter_mut()
+        .filter(|l| l.invisible && l.kind == LaneKind::Street)
+    {
         let n = (lane.length() / 8.0).ceil().max(1.0) as usize;
         let mut covered = 0;
         for k in 0..n {
             let (p, _) = lane.at(lane.length() * (k as f32 + 0.5) / n as f32);
-            let on_surface = grid.get(&Network::grid_cell(p)).map(|ids| ids.iter().any(|&i| {
-                let (a, b, margin) = segments[i];
-                let ab = (b - a).truncate();
-                let t = ((p - a).truncate().dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
-                let q = a.lerp(b, t);
-                (p - q).truncate().length() <= margin && (p.z - q.z).abs() <= 2.0
-            })).unwrap_or(false);
-            if on_surface { covered += 1; }
+            let on_surface = grid
+                .get(&Network::grid_cell(p))
+                .map(|ids| {
+                    ids.iter().any(|&i| {
+                        let (a, b, margin) = segments[i];
+                        let ab = (b - a).truncate();
+                        let t = ((p - a).truncate().dot(ab) / ab.length_squared().max(1e-6))
+                            .clamp(0.0, 1.0);
+                        let q = a.lerp(b, t);
+                        (p - q).truncate().length() <= margin && (p.z - q.z).abs() <= 2.0
+                    })
+                })
+                .unwrap_or(false);
+            if on_surface {
+                covered += 1;
+            }
         }
-        if covered * 4 >= n * 3 { lane.invisible = false; }
+        if covered * 4 >= n * 3 {
+            lane.invisible = false;
+        }
     }
     // Crossings made of objects can have no asphalt spline. Keep helpers joining two
     // corroborated roads; an isolated invisible helper still does not become a street.
     let mut prev = vec![Vec::new(); net.lanes.len()];
-    for (i, lane) in net.lanes.iter().enumerate().filter(|(_, l)| l.kind == LaneKind::Street) {
+    for (i, lane) in net
+        .lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.kind == LaneKind::Street)
+    {
         for &j in &lane.next {
-            if net.lanes.get(j).map(|l| l.kind == LaneKind::Street).unwrap_or(false) { prev[j].push(i); }
+            if net
+                .lanes
+                .get(j)
+                .map(|l| l.kind == LaneKind::Street)
+                .unwrap_or(false)
+            {
+                prev[j].push(i);
+            }
         }
     }
     let mut seen = vec![false; net.lanes.len()];
     let mut keep = Vec::new();
     for seed in 0..net.lanes.len() {
-        if seen[seed] || !net.lanes[seed].invisible || net.lanes[seed].kind != LaneKind::Street { continue; }
+        if seen[seed] || !net.lanes[seed].invisible || net.lanes[seed].kind != LaneKind::Street {
+            continue;
+        }
         let mut queue = vec![seed];
         let mut component = Vec::new();
         let mut anchors = hashbrown::HashSet::new();
         while let Some(i) = queue.pop() {
-            if seen[i] { continue; }
+            if seen[i] {
+                continue;
+            }
             seen[i] = true;
             component.push(i);
             for &j in net.lanes[i].next.iter().chain(prev[i].iter()) {
-                let Some(l) = net.lanes.get(j).filter(|l| l.kind == LaneKind::Street) else { continue };
+                let Some(l) = net.lanes.get(j).filter(|l| l.kind == LaneKind::Street) else {
+                    continue;
+                };
                 if l.invisible {
-                    if !seen[j] { queue.push(j); }
+                    if !seen[j] {
+                        queue.push(j);
+                    }
                 } else {
                     anchors.insert((l.key, l.source, if l.key.is_none() { j } else { 0 }));
                 }
             }
         }
-        if anchors.len() >= 2 { keep.extend(component); }
+        if anchors.len() >= 2 {
+            keep.extend(component);
+        }
     }
-    for i in keep { net.lanes[i].invisible = false; }
+    for i in keep {
+        net.lanes[i].invisible = false;
+    }
 }
 
 /// Traffic paths are lane centres, not separate streets. Adjacent paths on one spline
@@ -134,12 +188,17 @@ pub(super) fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, 
 /// opposing directions before averaging so bends, mirrors and ramps retain their shape.
 pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
     let mut roads = Vec::new();
-    let mut splines = std::collections::BTreeMap::<((i32, i32), i64), Vec<&omsi_sim::traffic::Lane>>::new();
+    let mut splines =
+        std::collections::BTreeMap::<((i32, i32), i64), Vec<&omsi_sim::traffic::Lane>>::new();
     for (_, lane) in visible_road_lanes(net) {
         if let Some(key) = lane.key.filter(|_| lane.source == 1) {
             splines.entry((key.tile, key.id)).or_default().push(lane);
         } else {
-            roads.push(MapRoad { points: lane.points.clone(), width: lane.width.max(2.6), main: lane.speed_limit_kmh >= 55.0 });
+            roads.push(MapRoad {
+                points: lane.points.clone(),
+                width: lane.width.max(2.6),
+                main: lane.speed_limit_kmh >= 55.0,
+            });
         }
     }
     for mut lanes in splines.into_values() {
@@ -152,30 +211,75 @@ pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
             let mut end = start + 1;
             while end < lanes.len() {
                 let b = lanes[end];
-                if b.points.len() != a.points.len() || b.offset - b.width.max(2.6) * 0.5 > hi + 0.65 { break; }
+                if b.points.len() != a.points.len() || b.offset - b.width.max(2.6) * 0.5 > hi + 0.65
+                {
+                    break;
+                }
                 let mid = a.points.len() / 2;
-                let za = a.points[if a.reversed { a.points.len() - 1 - mid } else { mid }].z;
-                let zb = b.points[if b.reversed { b.points.len() - 1 - mid } else { mid }].z;
-                if (za - zb).abs() > 1.5 { break; }
+                let za = a.points[if a.reversed {
+                    a.points.len() - 1 - mid
+                } else {
+                    mid
+                }]
+                .z;
+                let zb = b.points[if b.reversed {
+                    b.points.len() - 1 - mid
+                } else {
+                    mid
+                }]
+                .z;
+                if (za - zb).abs() > 1.5 {
+                    break;
+                }
                 hi = hi.max(b.offset + b.width.max(2.6) * 0.5);
                 end += 1;
             }
             let b = lanes[end - 1];
             let span = b.offset - a.offset;
-            let t = if span.abs() > 0.01 { (((lo + hi) * 0.5 - a.offset) / span) as f64 } else { 0.0 };
-            let point = |l: &omsi_sim::traffic::Lane, i: usize| l.points[if l.reversed { l.points.len() - 1 - i } else { i }];
-            let points = (0..a.points.len()).map(|i| point(a, i).lerp(point(b, i), t)).collect();
-            roads.push(MapRoad { points, width: hi - lo, main: lanes[start..end].iter().any(|l| l.speed_limit_kmh >= 55.0) });
+            let t = if span.abs() > 0.01 {
+                (((lo + hi) * 0.5 - a.offset) / span) as f64
+            } else {
+                0.0
+            };
+            let point = |l: &omsi_sim::traffic::Lane, i: usize| {
+                l.points[if l.reversed {
+                    l.points.len() - 1 - i
+                } else {
+                    i
+                }]
+            };
+            let points = (0..a.points.len())
+                .map(|i| point(a, i).lerp(point(b, i), t))
+                .collect();
+            roads.push(MapRoad {
+                points,
+                width: hi - lo,
+                main: lanes[start..end].iter().any(|l| l.speed_limit_kmh >= 55.0),
+            });
             start = end;
         }
     }
     // Bridge only explicit graph connections within the map's placement tolerance.
-    for lane in net.lanes.iter().filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2) {
+    for lane in net
+        .lanes
+        .iter()
+        .filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2)
+    {
         for &j in &lane.next {
-            let Some(next) = net.lanes.get(j).filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2) else { continue };
+            let Some(next) = net
+                .lanes
+                .get(j)
+                .filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2)
+            else {
+                continue;
+            };
             let distance = lane.end().distance(next.start());
             if distance > 0.05 && distance <= 2.0 {
-                roads.push(MapRoad { points: vec![lane.end(), next.start()], width: lane.width.min(next.width).max(2.6), main: lane.speed_limit_kmh >= 55.0 && next.speed_limit_kmh >= 55.0 });
+                roads.push(MapRoad {
+                    points: vec![lane.end(), next.start()],
+                    width: lane.width.min(next.width).max(2.6),
+                    main: lane.speed_limit_kmh >= 55.0 && next.speed_limit_kmh >= 55.0,
+                });
             }
         }
     }
@@ -187,7 +291,11 @@ pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
 /// The colours roads are drawn in: edge, side street, main road (the light look has pale roads with a grey edge on the light ground).
 pub(super) fn road_colors(light: bool) -> (Color, Color, Color) {
     if light {
-        (Color::hex(0xa8a397), Color::hex(0xffffff), Color::hex(0xf3d98b))
+        (
+            Color::hex(0xa8a397),
+            Color::hex(0xffffff),
+            Color::hex(0xf3d98b),
+        )
     } else {
         (ROAD_CASING, ROAD, ROAD_MAIN)
     }
@@ -198,14 +306,27 @@ pub(super) fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2, light: 
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
     let lanes: Vec<(MapRoad, Vec<Vec3>)> = road_geometry(net)
         .into_iter()
-        .filter(|l| l.points.iter().any(|q| (q.truncate() - anchor).length() < ROAD_RADIUS))
-        .map(|l| { let pts = simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), 0.12); (l, pts) })
+        .filter(|l| {
+            l.points
+                .iter()
+                .any(|q| (q.truncate() - anchor).length() < ROAD_RADIUS)
+        })
+        .map(|l| {
+            let pts = simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), 0.12);
+            (l, pts)
+        })
         .collect();
     for (l, pts) in &lanes {
         p.ribbon(pts, l.width + 1.6, 3.6, casing, true);
     }
     for (l, pts) in &lanes {
-        p.ribbon(pts, l.width + 0.2, 2.4, if l.main { main } else { road }, true);
+        p.ribbon(
+            pts,
+            l.width + 0.2,
+            2.4,
+            if l.main { main } else { road },
+            true,
+        );
     }
 }
 
@@ -237,7 +358,11 @@ pub(crate) fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
             stack.push((worst.1, b));
         }
     }
-    pts.iter().zip(keep).filter(|(_, k)| *k).map(|(p, _)| *p).collect()
+    pts.iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(p, _)| *p)
+        .collect()
 }
 
 /// The map's turn (radians) one frame of `dt` seconds on its way to `target`: the short way round, easing out, and
