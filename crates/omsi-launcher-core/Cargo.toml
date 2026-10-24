@@ -22,6 +22,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 rayon.workspace = true
 zip.workspace = true
+flate2.workspace = true
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-map = { path = "../omsi-map" }
 omsi-vehicle = { path = "../omsi-vehicle" }
@@ -38,7 +39,7 @@ lan = ["dep:omsi-net"]
 libc.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_SystemInformation", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_Security"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

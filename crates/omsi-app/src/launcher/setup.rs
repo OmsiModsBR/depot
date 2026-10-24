@@ -392,10 +392,56 @@ fn set(v: &mut SetupView, f: usize, s: String) {
     }
 }
 
-/// The "Free up space" card (Disk usage): what the content takes. Compressing it is not
-/// offered yet.
+/// The repositories to point to when the original OMSI 2 is compressed.
+const OMSILAUNCH_URL: &str = "https://github.com/OmsiModsBR/OmsiLaunch";
+const OMSI_PREFETCH_URL: &str = "https://github.com/OmsiModsBR/omsi-prefetch";
+
+/// Text height (or, drawing, text) in a card: returns the height.
+#[allow(clippy::too_many_arguments)]
+fn para(
+    l: &mut Launcher,
+    draw: bool,
+    text: &str,
+    x: f32,
+    y: f32,
+    w: f32,
+    px: f32,
+    weight: Weight,
+    c: Color,
+) -> f32 {
+    if draw {
+        l.ui.paragraph(text, Vec2::new(x, y), w, px, weight, c)
+    } else {
+        l.ui.paragraph_height(text, w, px, weight)
+    }
+}
+
+/// Why a folder cannot be compressed, as a sentence.
+fn unsupported_text(u: &core::compress::Unsupported) -> String {
+    use core::compress::Unsupported as U;
+    match u {
+        U::System => omsi_ui::tr("Not available here: compression only works on Windows.").into(),
+        U::Cloud => omsi_ui::tr("Not available here: the folder is in a cloud-sync folder.").into(),
+        U::NotFixed => {
+            omsi_ui::tr("Not available here: the folder is not on a fixed local disk.").into()
+        }
+        U::NotNtfs(fs) => omsi_ui::tr("Not available here: the disk is %{fs}, not NTFS.")
+            .replace("%{fs}", if fs.is_empty() { "?" } else { fs }),
+        U::Unreadable => omsi_ui::tr("Not available here: the disk could not be read.").into(),
+    }
+}
+
+/// The "Free up space" card (Disk usage): what the content takes, and compressing it with
+/// NTFS (LZX) - the folders to do it in, an estimate of what it frees, the warnings that go
+/// with it, and the job running in the background.
 fn free_space(l: &mut Launcher, at: Rect) -> f32 {
-    let r = Rect::new(at.x, at.y, at.w, 186.0);
+    if !l.state.squeeze.asked {
+        l.state.load_squeeze();
+    }
+    let inner_w = at.w - 36.0;
+    // (laid out once to know the card's height, then drawn)
+    let h = 40.0 + squeeze_body(l, false, Rect::new(at.x + 18.0, at.y + 40.0, inner_w, 0.0)) + 14.0;
+    let r = Rect::new(at.x, at.y, at.w, h);
     l.ui.panel(r);
     let inner = Launcher::card_title(
         &mut l.ui,
@@ -403,58 +449,400 @@ fn free_space(l: &mut Launcher, at: Rect) -> f32 {
         "Free up space",
     );
     chip(&mut l.ui, r.right() - 18.0, r.y + 22.0, "Experimental");
-    let half = inner.w * 0.5;
+    squeeze_body(l, true, inner);
+    r.bottom()
+}
+
+/// The card's contents from `inner` down; true `draw` paints and handles the controls, false
+/// only measures. Returns the height used below `inner`'s top.
+fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
+    use super::state::Squeezed;
+    use core::compress::Disk;
+    use std::sync::atomic::Ordering::Relaxed;
+    let x = inner.x;
+    let w = inner.w;
+    // (the title's own height is added for the measuring pass: the drawn inner starts below it)
+    let top = inner.y;
+    let mut y = top;
+    let half = w * 0.5;
+    let folders = l.state.squeeze.folders.clone().unwrap_or_default();
+    let busy = l.state.squeeze.job.clone();
+    let saved: u64 = folders.iter().map(|f| f.compressed.1).sum();
     let total = l
         .state
         .usage
         .as_ref()
         .map(|u| fmt_size(u.tree.bytes))
         .unwrap_or_else(|| "Counting…".into());
-    l.ui.text_in(
-        "Content found (both folders)",
-        Rect::new(inner.x, inner.y, half, 18.0),
-        12.5,
+    let right = if busy.is_some() {
+        omsi_ui::tr("In progress").to_string()
+    } else if saved > 0 {
+        omsi_ui::tr("%{size} saved").replace("%{size}", &fmt_size(saved))
+    } else if folders.iter().all(|f| f.disk.is_err()) && l.state.squeeze.folders.is_some() {
+        omsi_ui::tr("Not available").to_string()
+    } else {
+        omsi_ui::tr("Nothing compressed").to_string()
+    };
+    if draw {
+        l.ui.text_in(
+            "Content found (both folders)",
+            Rect::new(x, y, half, 18.0),
+            12.5,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
+        l.ui.text_in(
+            &total,
+            Rect::new(x, y + 18.0, half, 30.0),
+            22.0,
+            Weight::Bold,
+            TEXT,
+            Align::Left,
+        );
+        l.ui.text_in(
+            "Compression with NTFS (LZX)",
+            Rect::new(x + half, y, half, 18.0),
+            12.5,
+            Weight::Regular,
+            TEXT_DIM,
+            Align::Left,
+        );
+        l.ui.text_in(
+            &right,
+            Rect::new(x + half, y + 18.0, half, 30.0),
+            22.0,
+            Weight::Bold,
+            if saved > 0 { OK } else { TEXT },
+            Align::Left,
+        );
+    }
+    y += 60.0;
+
+    // the folders: a switch each, and what is known of it
+    let mut any_chosen = false;
+    let mut any_undo = false;
+    let mut files = 0usize;
+    let mut freed = 0u64;
+    let mut hdd = false;
+    let mut original = false;
+    let mut need = 0u64;
+    let mut low_space = false;
+    for f in &folders {
+        let i = super::state::Squeeze::index(f.name);
+        let fits = f.disk.is_ok();
+        if fits {
+            let mut on = l.state.squeeze.chosen[i];
+            if draw {
+                let locked = busy.is_some() || l.state.squeeze.confirm.is_some();
+                let mut v = on;
+                if l.ui.toggle(
+                    &format!("squeeze-{i}"),
+                    Rect::new(x, y, w, 30.0),
+                    &mut v,
+                    f.name,
+                ) && !locked
+                {
+                    l.state.squeeze.chosen[i] = v;
+                    on = v;
+                }
+            }
+            if on {
+                any_chosen = true;
+                files += f.estimate.files;
+                freed += f.estimate.saved;
+                hdd |= f.disk == Ok(Disk::Hdd);
+                original |= i == 1;
+                if f.compressed.0 > 0 {
+                    any_undo = true;
+                    need += f.compressed.1;
+                    low_space |= f.free.is_some_and(|free| free < f.compressed.1);
+                    low_space |= f.free.is_none();
+                }
+            }
+            y += 34.0;
+            let line = if f.estimate.files == 0 {
+                omsi_ui::tr("No files to compress here.").to_string()
+            } else {
+                omsi_ui::tr("%{files} files can be compressed (%{size}); about %{saved} could be freed (estimate).")
+                    .replace("%{files}", &f.estimate.files.to_string())
+                    .replace("%{size}", &fmt_size(f.estimate.bytes))
+                    .replace("%{saved}", &fmt_size(f.estimate.saved))
+            };
+            y += para(l, draw, &line, x, y, w, 12.0, Weight::Regular, TEXT_DIM) + 2.0;
+            if f.compressed.0 > 0 {
+                let line = omsi_ui::tr("Compressed now: %{files} files, %{size} saved.")
+                    .replace("%{files}", &f.compressed.0.to_string())
+                    .replace("%{size}", &fmt_size(f.compressed.1));
+                y += para(l, draw, &line, x, y, w, 12.0, Weight::Regular, OK) + 2.0;
+            }
+            y += 8.0;
+        } else if let Err(why) = &f.disk {
+            if draw {
+                l.ui.text_in(
+                    f.name,
+                    Rect::new(x, y, w, 20.0),
+                    13.0,
+                    Weight::Medium,
+                    TEXT_DIM,
+                    Align::Left,
+                );
+            }
+            y += 22.0;
+            y += para(
+                l,
+                draw,
+                &unsupported_text(why),
+                x,
+                y,
+                w,
+                12.0,
+                Weight::Regular,
+                WARN,
+            ) + 10.0;
+        }
+    }
+    y += para(
+        l,
+        draw,
+        "Files the game writes, archives (.zip) and media that are already compressed are left as they are.",
+        x,
+        y,
+        w,
+        12.0,
         Weight::Regular,
-        TEXT_DIM,
-        Align::Left,
-    );
-    l.ui.text_in(
-        &total,
-        Rect::new(inner.x, inner.y + 18.0, half, 30.0),
-        22.0,
-        Weight::Bold,
-        TEXT,
-        Align::Left,
-    );
-    l.ui.text_in(
-        "Compression with NTFS (LZX)",
-        Rect::new(inner.x + half, inner.y, half, 18.0),
-        12.5,
-        Weight::Regular,
-        TEXT_DIM,
-        Align::Left,
-    );
-    l.ui.text_in(
-        "Not available yet",
-        Rect::new(inner.x + half, inner.y + 18.0, half, 30.0),
-        22.0,
-        Weight::Bold,
-        WARN,
-        Align::Left,
-    );
-    let y = inner.y + 60.0;
-    dim_button(
-        &mut l.ui,
-        Rect::new(inner.x, y, 220.0, 34.0),
-        "Compress with NTFS (LZX)...",
-    );
-    dim_button(
-        &mut l.ui,
-        Rect::new(inner.x + 230.0, y, 160.0, 34.0),
-        "Undo compression",
-    );
-    l.ui.paragraph("How compressing the content should work is still being decided; nothing is compressed for now.", Vec2::new(inner.x, y + 44.0), inner.w, 12.0, Weight::Regular, TEXT_FAINT);
-    r.bottom()
+        TEXT_FAINT,
+    ) + 10.0;
+
+    // what comes next: the job, the confirmation, or the buttons
+    if let Some((job, undo)) = busy {
+        let (done, tot) = (job.done.load(Relaxed), job.total.load(Relaxed));
+        let t = omsi_ui::tr(if undo {
+            "Undoing the compression… %{done} of %{total}"
+        } else {
+            "Compressing… %{done} of %{total}"
+        })
+        .replace("%{done}", &fmt_size(done))
+        .replace("%{total}", &fmt_size(tot));
+        y += para(l, draw, &t, x, y, w, 13.0, Weight::Medium, TEXT) + 6.0;
+        if draw {
+            l.ui.progress(
+                Rect::new(x, y, w, 8.0),
+                if tot > 0 {
+                    done as f32 / tot as f32
+                } else {
+                    0.0
+                },
+                true,
+            );
+        }
+        y += 18.0;
+        if draw {
+            let cancelling = job.cancel.load(Relaxed);
+            if cancelling {
+                dim_button(&mut l.ui, Rect::new(x, y, 160.0, 34.0), "Cancel");
+            } else if l.ui.button(
+                "squeeze-cancel",
+                Rect::new(x, y, 160.0, 34.0),
+                "Cancel",
+                None,
+                ButtonKind::Normal,
+            ) {
+                job.cancel.store(true, Relaxed);
+            }
+        }
+        return y + 34.0 - top;
+    }
+    if let Some(undo) = l.state.squeeze.confirm {
+        if undo {
+            let t = omsi_ui::tr("Undo the compression in the chosen folders? Their files will take their full size on disk again: %{need} are needed, and the disk has %{free} free.")
+                .replace("%{need}", &fmt_size(need))
+                .replace(
+                    "%{free}",
+                    &folders
+                        .iter()
+                        .filter(|f| l.state.squeeze.chosen[super::state::Squeeze::index(f.name)])
+                        .filter_map(|f| f.free)
+                        .min()
+                        .map(fmt_size)
+                        .unwrap_or_else(|| "?".into()),
+                );
+            y += para(l, draw, &t, x, y, w, 13.0, Weight::Regular, TEXT) + 8.0;
+            if low_space {
+                y += para(
+                    l,
+                    draw,
+                    "There is not enough free space on the disk to undo it.",
+                    x,
+                    y,
+                    w,
+                    13.0,
+                    Weight::Medium,
+                    DANGER,
+                ) + 8.0;
+            }
+        } else {
+            let t = omsi_ui::tr("Compress %{files} files in the chosen folders? About %{saved} could be freed. This is an estimate from a sample; the real result will differ, and you can undo it.")
+                .replace("%{files}", &files.to_string())
+                .replace("%{saved}", &fmt_size(freed));
+            y += para(l, draw, &t, x, y, w, 13.0, Weight::Regular, TEXT) + 8.0;
+            if original {
+                y += para(
+                    l,
+                    draw,
+                    "Strong recommendation for the original OMSI 2 folder: play it through OmsiLaunch with the Omsi Prefetch module. OMSI 2 makes tens of millions of tiny reads, and compressed files make each one cost more; Omsi Prefetch keeps the files in memory and answers them from larger blocks. Without it, loading can become much slower. It needs about 4 GB of free memory.",
+                    x,
+                    y,
+                    w,
+                    12.5,
+                    Weight::Regular,
+                    WARN,
+                ) + 8.0;
+                if draw {
+                    if l.ui.button(
+                        "squeeze-link-launch",
+                        Rect::new(x, y, 190.0, 32.0),
+                        "Open the OmsiLaunch page",
+                        None,
+                        ButtonKind::Normal,
+                    ) {
+                        crate::about::open_url(OMSILAUNCH_URL);
+                    }
+                    if l.ui.button(
+                        "squeeze-link-prefetch",
+                        Rect::new(x + 200.0, y, 210.0, 32.0),
+                        "Open the Omsi Prefetch page",
+                        None,
+                        ButtonKind::Normal,
+                    ) {
+                        crate::about::open_url(OMSI_PREFETCH_URL);
+                    }
+                }
+                y += 32.0 + 10.0;
+            }
+            if hdd {
+                y += para(
+                    l,
+                    draw,
+                    "A chosen folder is on a hard disk, or on a disk that could not be identified. Compressed files can load much more slowly from a hard disk.",
+                    x,
+                    y,
+                    w,
+                    12.5,
+                    Weight::Regular,
+                    DANGER,
+                ) + 8.0;
+                if draw {
+                    let mut v = l.state.squeeze.hdd_ok;
+                    if l.ui.toggle(
+                        "squeeze-hdd",
+                        Rect::new(x, y, w, 30.0),
+                        &mut v,
+                        "I understand it can be much slower on a hard disk",
+                    ) {
+                        l.state.squeeze.hdd_ok = v;
+                    }
+                }
+                y += 38.0;
+            }
+        }
+        if draw {
+            let go = if undo {
+                !low_space
+            } else {
+                any_chosen && files > 0 && (!hdd || l.state.squeeze.hdd_ok)
+            };
+            let label = if undo {
+                "Undo compression"
+            } else {
+                "Start compression"
+            };
+            if go {
+                if l.ui.button(
+                    "squeeze-go",
+                    Rect::new(x, y, 190.0, 34.0),
+                    label,
+                    None,
+                    ButtonKind::Primary,
+                ) {
+                    l.state.start_squeeze(undo);
+                    l.state.squeeze.confirm = None;
+                }
+            } else {
+                dim_button(&mut l.ui, Rect::new(x, y, 190.0, 34.0), label);
+            }
+            if l.ui.button(
+                "squeeze-back",
+                Rect::new(x + 200.0, y, 120.0, 34.0),
+                "Cancel",
+                None,
+                ButtonKind::Normal,
+            ) {
+                l.state.squeeze.confirm = None;
+                l.state.squeeze.hdd_ok = false;
+            }
+        }
+        return y + 34.0 - top;
+    }
+    if draw {
+        let can = any_chosen && files > 0;
+        if can {
+            if l.ui.button(
+                "squeeze-ask",
+                Rect::new(x, y, 250.0, 34.0),
+                "Compress with NTFS (LZX)...",
+                None,
+                ButtonKind::Normal,
+            ) {
+                l.state.squeeze.confirm = Some(false);
+                l.state.squeeze.hdd_ok = false;
+            }
+        } else {
+            dim_button(
+                &mut l.ui,
+                Rect::new(x, y, 250.0, 34.0),
+                "Compress with NTFS (LZX)...",
+            );
+        }
+        if any_undo {
+            if l.ui.button(
+                "squeeze-undo",
+                Rect::new(x + 260.0, y, 190.0, 34.0),
+                "Undo compression",
+                None,
+                ButtonKind::Normal,
+            ) {
+                l.state.squeeze.confirm = Some(true);
+            }
+        } else {
+            dim_button(
+                &mut l.ui,
+                Rect::new(x + 260.0, y, 190.0, 34.0),
+                "Undo compression",
+            );
+        }
+    }
+    y += 34.0 + 10.0;
+    if let Some(done) = l.state.squeeze.done.clone() {
+        let (t, c) = match done {
+            Squeezed::Done(0) => (omsi_ui::tr("Done.").to_string(), OK),
+            Squeezed::Done(n) => (
+                omsi_ui::tr("Done, but %{n} steps could not change some files (in use or not allowed). Try again with the game closed.")
+                    .replace("%{n}", &n.to_string()),
+                WARN,
+            ),
+            Squeezed::Cancelled => (
+                omsi_ui::tr("Stopped. What was already compressed stays compressed; use Undo compression to restore it.").to_string(),
+                WARN,
+            ),
+            Squeezed::Error(e) => (
+                omsi_ui::tr("It could not be done: %{why}").replace("%{why}", &e),
+                DANGER,
+            ),
+        };
+        y += para(l, draw, &t, x, y, w, 12.5, Weight::Regular, c) + 4.0;
+    }
+    y - top
 }
 
 /// A button that cannot be pressed.

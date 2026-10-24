@@ -3220,6 +3220,7 @@ name = "omsi-launcher-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "libc",
  "omsi-cfg",
  "omsi-content",
