@@ -274,6 +274,12 @@ pub(crate) enum ToolWindow {
         selected: Option<usize>,
         real: bool,
         real_label: String,
+        /// (ICAO code, name) of the airports the real weather can follow, the first being
+        /// "the nearest the map" (no code).
+        stations: Vec<(String, String)>,
+        station: Option<usize>,
+        /// The station when the window opened.
+        station_before: Option<usize>,
     },
     /// Game controller, mouse, keyboard only, head tracking: each applies at once.
     Controls,
@@ -287,6 +293,8 @@ pub(crate) enum ToolWindow {
     Service,
     /// The timetable evaluation and the driver profile.
     DriverMenu,
+    /// The driver's personnel file, as it is saved.
+    Profile,
     /// The timetable evaluation of the tour being driven, at trip `trip` of the duty.
     Evaluation {
         trip: usize,
@@ -308,9 +316,10 @@ impl ToolWindow {
             ToolWindow::Tour(_) | ToolWindow::Running | ToolWindow::EndTour => "tour",
             ToolWindow::Destination(_) => "destination",
             ToolWindow::Service => "service",
-            ToolWindow::DriverMenu | ToolWindow::Evaluation { .. } | ToolWindow::Driver { .. } => {
-                "driver"
-            }
+            ToolWindow::DriverMenu
+            | ToolWindow::Profile
+            | ToolWindow::Evaluation { .. }
+            | ToolWindow::Driver { .. } => "driver",
         }
     }
 
@@ -487,11 +496,26 @@ impl App {
                     omsi_ui::tr("Real weather (METAR)"),
                     self.metar_station()
                 );
+                let mut stations = vec![(
+                    String::new(),
+                    omsi_ui::tr("Automatic (nearest the map)").to_string(),
+                )];
+                stations.extend(crate::weather_setup::metar_airports(&self.args.root));
+                let own = &self.settings.metar_station;
+                let station = Some(
+                    stations
+                        .iter()
+                        .position(|s| !own.is_empty() && s.0.eq_ignore_ascii_case(own))
+                        .unwrap_or(0),
+                );
                 ToolWindow::Weather {
                     files,
                     selected,
                     real: self.settings.metar_sync,
                     real_label,
+                    stations,
+                    station,
+                    station_before: station,
                 }
             }
             "controls" => ToolWindow::Controls,
@@ -565,11 +589,16 @@ impl App {
                 selected,
                 real,
                 real_label,
+                stations,
+                station,
+                ..
             } => View::Weather(aw::Weather {
                 real: *real,
                 real_label: real_label.clone(),
                 presets: files.iter().map(|f| f.0.clone()).collect(),
                 selected: *selected,
+                stations: stations.iter().map(|s| s.1.clone()).collect(),
+                station: *station,
             }),
             ToolWindow::Controls => View::Menu(self.controls_menu()),
             ToolWindow::Tour(f) => View::Tour(f.view()),
@@ -616,9 +645,16 @@ impl App {
                         disabled: crate::input::on_server(&self.args)
                             .then(|| "Not on a server".to_string()),
                     },
+                    aw::Entry {
+                        label: "Change the current driver profile".into(),
+                        checked: None,
+                        disabled: crate::input::on_server(&self.args)
+                            .then(|| "Not on a server".to_string()),
+                    },
                 ],
                 hint: "Each trip's report opens at its last stop".into(),
             }),
+            ToolWindow::Profile => View::Profile(self.profile_view()),
             ToolWindow::Driver { names, selected } => View::Pick(aw::Pick {
                 title: "Driver profile".into(),
                 head: "Driver".into(),
@@ -633,6 +669,57 @@ impl App {
             view,
             key: self.new_ui.tool.opened,
         })
+    }
+
+    /// The driver's personnel file as it is saved (what the launcher's Profile page adds up
+    /// from the same file), for the driver profile window.
+    fn profile_view(&self) -> aw::Profile {
+        let c = &self.career;
+        let mut rows: Vec<(String, String)> = Vec::new();
+        let name = c
+            .driver
+            .as_ref()
+            .map(|d| d.name.clone())
+            .or_else(|| {
+                c.path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map(|s| s.to_string_lossy().to_string())
+            })
+            .unwrap_or_default();
+        let mut row = |k: &str, v: String| rows.push((omsi_ui::tr(k).to_string(), v));
+        row("Driver", name);
+        if let Some(d) = c.driver.as_ref() {
+            let served = d.bus_stops[0];
+            let (early, late) = (d.bus_stops[1], d.bus_stops[2]);
+            row("Distance", format!("{:.1} km", d.hektom / 10.0));
+            row("Stops served", served.to_string());
+            row(
+                "On time / early / late",
+                format!("{} / {early} / {late}", (served - early - late).max(0)),
+            );
+            row("Tickets sold", format!("{:.0}", d.tickets[0]));
+            row("Takings", format!("{:.2}", d.tickets[1]));
+            row("Crashes", d.crashes[0].to_string());
+            row("Pedestrians hurt", d.crashes[1].to_string());
+            // (the rating's counters as the file keeps them: the penalty, the people content,
+            // the tickets asked for and their points, the people who stepped in)
+            let r = &d.rating;
+            let per = |num: f64, den: f64| if den > 0.0 { 100.0 * num / den } else { 100.0 };
+            row(
+                "Driving",
+                format!("{:.0} %", 100.0 * (1.0 - r[0].clamp(0.0, 1.0))),
+            );
+            row("Comfort", format!("{:.0} %", per(r[1], r[4])));
+            row("Ticket sales", format!("{:.0} %", per(r[3], 2.0 * r[2])));
+        } else {
+            row("Driving", format!("{:.0} %", c.driving_rating()));
+        }
+        aw::Profile {
+            title: "Driver profile".into(),
+            rows,
+            hint: "as saved after the drive".into(),
+        }
     }
 
     /// The wash and the pump as they are now: each ticked while it runs, dim away from a
@@ -950,16 +1037,28 @@ impl App {
                 files,
                 selected,
                 real,
+                stations,
+                station,
+                station_before,
                 ..
             } => match e {
-                Event::Row(_, i) => *selected = Some(i),
+                Event::Row(0, i) => *selected = Some(i),
+                Event::Row(_, i) => *station = Some(i),
                 Event::Check(_) => *real = !*real,
                 Event::Ok => {
                     let (real, file) = (
                         *real,
                         selected.and_then(|i| files.get(i)).map(|f| f.1.clone()),
                     );
+                    // (the airport, when the player chose another: "" is the automatic one)
+                    let airport = (*station != *station_before)
+                        .then(|| station.and_then(|i| stations.get(i)))
+                        .flatten()
+                        .map(|s| s.0.clone());
                     self.new_ui.close_tool();
+                    if let Some(code) = airport {
+                        game_lists::dropdown_apply(self, &format!("metar_src {code}"));
+                    }
                     self.apply_weather(real, file);
                 }
                 _ => {}
@@ -1018,6 +1117,8 @@ impl App {
                     *trip = (*trip as i64 + by as i64).clamp(0, last as i64) as usize;
                 }
             }
+            // (it only shows: Close is handled with every window's Cancel)
+            ToolWindow::Profile => {}
             ToolWindow::DriverMenu => {
                 if e == Event::Check(0) {
                     if let Some(d) = self.duty.as_ref() {
@@ -1025,6 +1126,8 @@ impl App {
                         self.new_ui.tool.open(ToolWindow::Evaluation { trip });
                     }
                 } else if e == Event::Check(1) {
+                    self.new_ui.tool.open(ToolWindow::Profile);
+                } else if e == Event::Check(2) {
                     let names = game_lists::driver_names(self);
                     let now = self
                         .career
@@ -1446,6 +1549,9 @@ mod tests {
                     selected: None,
                     real: false,
                     real_label: String::new(),
+                    stations: vec![],
+                    station: None,
+                    station_before: None,
                 },
                 "weather",
             ),
@@ -1455,6 +1561,7 @@ mod tests {
             (ToolWindow::Destination(DestForm::default()), "destination"),
             (ToolWindow::Service, "service"),
             (ToolWindow::DriverMenu, "driver"),
+            (ToolWindow::Profile, "driver"),
             (ToolWindow::Evaluation { trip: 0 }, "driver"),
             (
                 ToolWindow::Driver {

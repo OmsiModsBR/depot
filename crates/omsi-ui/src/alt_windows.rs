@@ -84,6 +84,9 @@ pub struct Weather {
     pub real_label: String,
     pub presets: Vec<String>,
     pub selected: Option<usize>,
+    /// The airports the real weather can follow (the first: the one nearest the map).
+    pub stations: Vec<String>,
+    pub station: Option<usize>,
 }
 
 /// One entry of a [`Menu`].
@@ -190,6 +193,15 @@ pub struct RunRow {
     pub skip: Option<String>,
 }
 
+/// What a driver's personnel file says: a title and the facts, each its name and value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Profile {
+    pub title: String,
+    pub rows: Vec<(String, String)>,
+    /// What the figures are ("as saved after the drive").
+    pub hint: String,
+}
+
 /// The timetable being driven: the trip's stops, each still to come with a button to skip
 /// it (a deliberate improvement: the original has no such list).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -213,6 +225,7 @@ pub enum View {
     Destination(Destination),
     Evaluation(Evaluation),
     Running(Running),
+    Profile(Profile),
 }
 
 /// A window of `w` x `h` points in the middle of a picture of `size` points.
@@ -233,7 +246,7 @@ impl View {
         let (w, h) = match self {
             View::Pick(_) => (540.0, 560.0),
             View::Time(_) => (620.0, 340.0),
-            View::Weather(_) => (560.0, 580.0),
+            View::Weather(_) => (900.0, 580.0),
             View::Menu(m) => (
                 460.0,
                 TITLE_H + 1.0 + 16.0 + m.entries.len() as f32 * CHECK_H + FOOT_H,
@@ -243,6 +256,10 @@ impl View {
             View::Destination(_) => (560.0, 600.0),
             View::Evaluation(_) => (900.0, 620.0),
             View::Running(_) => (700.0, 470.0),
+            View::Profile(p) => (
+                520.0,
+                TITLE_H + 1.0 + 16.0 + p.rows.len() as f32 * ROW_H + FOOT_H,
+            ),
         };
         centred(size, w, h)
     }
@@ -262,6 +279,7 @@ impl View {
             View::Destination(v) => destination(ui, r, v, key),
             View::Evaluation(v) => evaluation(ui, r, v, key),
             View::Running(v) => running(ui, r, v),
+            View::Profile(v) => profile(ui, r, v),
         }
     }
 }
@@ -438,13 +456,18 @@ fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
     }
     let y = row.bottom() + 4.0;
     ui.p().rect(Rect::new(r.x + 1.0, y, r.w - 2.0, 1.0), LINE);
-    head(ui, "Ready-made weather", body.x + 16.0, y + 18.0);
-    let area = Rect::new(
-        body.x + 4.0,
-        y + 35.0,
-        body.w - 8.0,
-        lists_bottom(r) - y - 35.0,
+    // two lists: the ready-made weather (set by hand) and the airport the real weather
+    // follows (the one in use only while the real weather is on)
+    let w0 = (body.w * 0.5).floor();
+    let x1 = body.x + w0 + 1.0;
+    ui.p().rect(
+        Rect::new(x1 - 1.0, y + 6.0, 1.0, lists_bottom(r) - y - 6.0),
+        LINE,
     );
+    head(ui, "Ready-made weather", body.x + 16.0, y + 18.0);
+    head(ui, "Airport for the real weather", x1 + 16.0, y + 18.0);
+    let top = y + 35.0;
+    let h = lists_bottom(r) - top;
     let look = ListLook {
         enabled: !v.real,
         as_is: true,
@@ -452,8 +475,20 @@ fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
         ..Default::default()
     };
     let name = format!("tool:{key}:weather");
+    let area = Rect::new(body.x + 4.0, top, w0 - 8.0, h);
     if let Some(i) = list_rows(ui, &name, area, &v.presets, v.selected, &look) {
         event = Some(Event::Row(0, i));
+    }
+    let look = ListLook {
+        enabled: v.real,
+        as_is: true,
+        empty: "No airport list found",
+        ..Default::default()
+    };
+    let name = format!("tool:{key}:stations");
+    let area = Rect::new(x1 + 4.0, top, body.right() - x1 - 8.0, h);
+    if let Some(i) = list_rows(ui, &name, area, &v.stations, v.station, &look) {
+        event = Some(Event::Row(1, i));
     }
     let hint = if v.real {
         "The weather follows the airport's report"
@@ -731,6 +766,18 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
         event = Some(Event::Cancel);
     }
     event
+}
+
+/// A driver's personnel file: the figures it holds. It only shows: its one button closes it.
+fn profile(ui: &mut Ui, r: Rect, v: &Profile) -> Option<Event> {
+    let body = ingame::window(ui, r, &v.title, NOTE);
+    let rows: Vec<(&str, String, Option<Color>)> = v
+        .rows
+        .iter()
+        .map(|(k, val)| (k.as_str(), val.clone(), None))
+        .collect();
+    ingame::key_values(ui, Rect::new(body.x, body.y + 8.0, body.w, 0.0), &rows);
+    foot_close(ui, "tool", r, &v.hint).then_some(Event::Cancel)
 }
 
 /// The height of a stop's row in [`Running`].
@@ -1108,6 +1155,39 @@ mod tests {
     }
 
     #[test]
+    fn the_profile_window_only_shows_and_closes() {
+        let view = View::Profile(Profile {
+            title: "Driver profile".into(),
+            rows: vec![("Driver".into(), "Nero".into())],
+            hint: String::new(),
+        });
+        let mut ui = Ui::new();
+        assert_eq!(run(&mut ui, &view, None), None);
+        let close = at(&ui, "tool:btn:0");
+        assert_eq!(run(&mut ui, &view, Some(close)), Some(Event::Cancel));
+    }
+
+    #[test]
+    fn the_weather_window_lists_airports_next_to_the_weather() {
+        let v = Weather {
+            real: true,
+            real_label: "Real weather".into(),
+            presets: vec!["Calm".into(), "Rain".into()],
+            stations: vec!["Automatic".into(), "EDDB - Berlin".into()],
+            station: Some(0),
+            ..Default::default()
+        };
+        let mut ui = Ui::new();
+        let view = View::Weather(v);
+        run(&mut ui, &view, None);
+        // (with the real weather on only the airports answer; the presets are dim)
+        let station = at(&ui, "tool:1:stations:row:1");
+        assert_eq!(run(&mut ui, &view, Some(station)), Some(Event::Row(1, 1)));
+        let preset = at(&ui, "tool:1:weather:row:1");
+        assert_eq!(run(&mut ui, &view, Some(preset)), None);
+    }
+
+    #[test]
     fn every_window_fits_a_small_picture() {
         let views = [
             View::Pick(Pick::default()),
@@ -1121,6 +1201,15 @@ mod tests {
             View::Confirm(Confirm::default()),
             View::Destination(Destination::default()),
             View::Evaluation(Evaluation::default()),
+            View::Profile(Profile {
+                rows: vec![("Distance".into(), "12.0 km".into()); 10],
+                ..Default::default()
+            }),
+            View::Weather(Weather {
+                stations: vec!["EDDB".into(); 40],
+                station: Some(3),
+                ..Default::default()
+            }),
         ];
         // (the smallest picture: 960 x 540 pixels at the least scale)
         let small = Vec2::new(1280.0, 720.0);
