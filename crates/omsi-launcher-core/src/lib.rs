@@ -3473,7 +3473,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
-                if k != "navigator_corner" && k != "drive_keys" && k != "drive_keys" && k != "render_scale" =>
+                if k != "navigator_corner" && k != "drive_keys" && k != "pax_voices" && k != "render_scale" =>
             {
                 v[&k] = json!(val)
             }
