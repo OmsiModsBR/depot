@@ -10,6 +10,10 @@ use std::path::Path;
 
 const LOGO: &[u8] = include_bytes!("../../../assets/logos/wordmark-on-dark.png");
 
+/// The logo is shrunk to this width before it goes to the GPU (about twice what the launcher
+/// draws at its widest scale).
+const LOGO_WIDTH: u32 = 640;
+
 #[cfg(test)]
 mod logo_tests {
     #[test]
@@ -73,7 +77,14 @@ pub fn tint_logo(gpu: &mut Gpu, device: &wgpu::Device, queue: &wgpu::Queue, tex:
 /// coloured part in `accent`: how bright a pixel is becomes how opaque it is, how coloured it
 /// is how much of the accent it takes.
 pub fn logo_pixels(accent: omsi_ui::Color) -> Option<image::RgbaImage> {
-    let mut img = image::load_from_memory(LOGO).ok()?.to_rgba8();
+    // (the picture is far bigger than the screens draw it, and the sampler has no mip levels:
+    // shrunk by the sampler alone its edges are jagged, so it is shrunk here with a good
+    // filter, before the colours are worked out)
+    let src = image::load_from_memory(LOGO).ok()?;
+    let h = (src.height() as u64 * LOGO_WIDTH as u64 / src.width().max(1) as u64).max(1) as u32;
+    let mut img = src
+        .resize_exact(LOGO_WIDTH, h, image::imageops::FilterType::Lanczos3)
+        .to_rgba8();
     let a = accent.0;
     for p in img.pixels_mut() {
         let [r, g, b, alpha] = p.0;
