@@ -637,9 +637,8 @@ fn content(l: &mut Launcher, r: Rect) {
         trail.join(" › ")
     };
     let line = format!("{line} · {}", fmt_size(bytes));
-    let lh =
-        l.ui.paragraph_height(&line, inner.w, 12.0, Weight::Regular)
-            .min(TRAIL_H);
+    // (a name long enough for more than the reserved lines pushes the legend down, not under it)
+    let lh = l.ui.paragraph_height(&line, inner.w, 12.0, Weight::Regular);
     l.ui.paragraph(
         &line,
         Vec2::new(inner.x, chart_r.bottom() + 6.0),
