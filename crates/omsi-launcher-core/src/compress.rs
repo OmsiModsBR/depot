@@ -80,13 +80,25 @@ fn walk(dir: &Path, skip: &[PathBuf], out: &mut Vec<(PathBuf, u64)>) {
             continue;
         }
         if meta.is_dir() {
-            if !game_folder(&name) && !skip.iter().any(|k| k == &e.path()) {
+            if !game_folder(&name) && !skip.iter().any(|k| same_path(k, &e.path())) {
                 walk(&e.path(), skip, out);
             }
         } else if meta.len() >= MIN_FILE && may_compress_name(&name) {
             out.push((e.path(), meta.len()));
         }
     }
+}
+
+/// Whether two paths name the same place, by their text: case, `/` against `\\` and a
+/// trailing separator do not matter.
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| {
+        p.to_string_lossy()
+            .replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    };
+    norm(a) == norm(b)
 }
 
 /// An ordinary file or folder: not a link, not a cloud placeholder. A file stored compressed
@@ -388,7 +400,9 @@ mod sys {
     /// The path for a call that may meet a long one (beyond MAX_PATH).
     fn wide_long(p: &Path) -> Vec<u16> {
         let s = p.to_string_lossy();
-        if p.is_absolute() && !s.starts_with("\\\\") {
+        let s = s.replace('/', "\\");
+        if p.is_absolute() && !s.starts_with("\\\\") && !s.contains("\\..") && !s.contains("\\.\\")
+        {
             wide(Path::new(&format!("\\\\?\\{s}")))
         } else {
             wide(p)
@@ -530,10 +544,7 @@ mod sys {
         let size: u64 = batch.iter().map(|f| f.1).sum();
         loop {
             match child.try_wait() {
-                Ok(Some(st)) => {
-                    let _ = st;
-                    break;
-                }
+                Ok(Some(_)) => break,
                 Ok(None) if job.cancel.load(Ordering::Relaxed) => {
                     let _ = child.kill();
                     let _ = child.wait();

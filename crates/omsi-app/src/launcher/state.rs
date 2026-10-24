@@ -332,7 +332,11 @@ impl Squeeze {
         root: &std::path::Path,
     ) -> (Option<std::path::PathBuf>, Option<std::path::PathBuf>) {
         let root = (!root.as_os_str().is_empty() && root.is_dir()).then(|| root.to_path_buf());
-        let content = core::content_dir().filter(|c| root.as_deref() != Some(c.as_path()));
+        let content = core::content_dir().filter(|c| {
+            !root
+                .as_deref()
+                .is_some_and(|r| core::compress::same_path(r, c))
+        });
         (content, root)
     }
 
@@ -714,7 +718,8 @@ impl State {
             let (content, root) = Squeeze::dirs(&root);
             let mut folders = Vec::new();
             if let Some(c) = &content {
-                folders.push(core::compress::inspect(Squeeze::DEPOT, c, &[]));
+                let skip: Vec<_> = root.iter().cloned().collect();
+                folders.push(core::compress::inspect(Squeeze::DEPOT, c, &skip));
             }
             if let Some(r) = &root {
                 // (the Depot's folder often sits inside the original's: not counted twice)
@@ -729,6 +734,7 @@ impl State {
     /// a reading still on its way is not taken.
     pub fn reset_squeeze(&mut self) {
         self.squeeze.folders = None;
+        self.squeeze.chosen_set = false;
         self.squeeze.confirm = None;
         self.squeeze.hdd_ok = false;
         self.load_squeeze();
@@ -743,18 +749,12 @@ impl State {
         let Some(folders) = self.squeeze.folders.clone() else {
             return;
         };
-        // (the folders under Setup may have changed since they were read)
-        let (content, root) = Squeeze::dirs(std::path::Path::new(&self.config.root));
-        let now = |name: &str| {
-            if name == Squeeze::ORIGINAL {
-                root.clone()
-            } else {
-                content.clone()
-            }
-        };
+        // (the original folder under Setup may have changed since it was read; the content
+        // folder's change comes through `reset_squeeze` when Setup saves)
+        let root = std::path::Path::new(&self.config.root);
         if folders
             .iter()
-            .any(|f| now(f.name).as_deref() != Some(f.dir.as_path()))
+            .any(|f| f.name == Squeeze::ORIGINAL && !core::compress::same_path(&f.dir, root))
         {
             self.reset_squeeze();
             return;
@@ -784,11 +784,21 @@ impl State {
                 },
                 files.len()
             ));
-            let r = core::compress::run(&files, undo, &job);
             use std::sync::atomic::Ordering::Relaxed;
+            // (a panic ends the job with its message, so that the card does not wait for ever)
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                core::compress::run(&files, undo, &job)
+            }))
+            .unwrap_or_else(|_| Err("the compression stopped unexpectedly".into()));
             Msg::SqueezeDone(match r {
                 Err(e) => Squeezed::Error(e),
-                Ok(()) if job.cancel.load(Relaxed) => Squeezed::Cancelled,
+                // (a cancel that came after the last batch changed nothing)
+                Ok(())
+                    if job.cancel.load(Relaxed)
+                        && job.done.load(Relaxed) < job.total.load(Relaxed) =>
+                {
+                    Squeezed::Cancelled
+                }
                 Ok(()) => Squeezed::Done(job.failed.load(Relaxed)),
             })
         });
@@ -1299,9 +1309,6 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
-                if self.squeeze.job.take().is_some() {
-                    self.squeeze.done = Some(Squeezed::Error(why.to_string()));
-                }
                 self.set_status(
                     omsi_ui::tr("Reading the content stopped on an error: %{error}")
                         .replace("%{error}", &why.to_string()),
