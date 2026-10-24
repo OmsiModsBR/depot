@@ -181,7 +181,7 @@ pub fn right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: 
 #[allow(clippy::too_many_arguments)]
 pub fn clipped(ui: &mut Ui, s: &str, x: f32, cy: f32, w: f32, px: f32, weight: Weight, c: Color) {
     let px = px * TEXT_SCALE;
-    ui.text_in(
+    ui.text_in_tip(
         s,
         Rect::new(x, cy - px, w, px * 2.0),
         px,

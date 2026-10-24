@@ -996,7 +996,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
                 let cy = rr.center().y;
                 let lw = ui.width(&row.label, 13.5, Weight::Regular);
                 let room = kx - inner.x - 20.0;
-                ui.text_in(
+                ui.text_in_tip(
                     &row.label,
                     Rect::new(rr.x + 8.0, rr.y, room, rr.h),
                     13.5,

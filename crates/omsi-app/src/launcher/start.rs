@@ -178,9 +178,8 @@ fn opener(l: &mut Launcher, id: &str, r: Rect, icon: &str, text: &str) -> bool {
     l.ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
     l.ui.icon(icon, Vec2::new(r.x + 18.0, r.center().y), 16.0, TEXT_SOFT);
     let room = r.w - 36.0 - 30.0;
-    let shown = omsi_launcher_ui::kit::fit_text(&mut l.ui, text, 13.5, room);
-    l.ui.text_in(
-        &shown,
+    l.ui.text_in_tip(
+        text,
         Rect::new(r.x + 36.0, r.y, room, r.h),
         13.5,
         Weight::Regular,

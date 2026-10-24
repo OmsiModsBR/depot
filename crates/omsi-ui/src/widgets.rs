@@ -629,6 +629,32 @@ impl Ui {
             .text_in(atlas, fonts, text, px, weight, r, align, c)
     }
 
+    /// [`Ui::text_in`], and when the text does not fit `r` (it is cut), resting the mouse on
+    /// `r` shows the whole of it in a tooltip. Use it for any name or text that may be longer
+    /// than its box.
+    pub fn text_in_tip(
+        &mut self,
+        text: &str,
+        r: Rect,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+    ) -> f32 {
+        let cut = self.fonts.width_as_is(&crate::tr(text), px, weight) > r.w + 0.5;
+        let drawn = self.text_in(text, r, px, weight, c, align);
+        if cut {
+            self.tooltip_whole(r, text);
+        }
+        drawn
+    }
+
+    /// A tooltip with the whole of `text` (a cut name's), after the mouse rests on `r`: not
+    /// translated (it is a name), and as wide as the screen has room for.
+    pub fn tooltip_whole(&mut self, r: Rect, text: &str) {
+        self.tooltip(r, text);
+    }
+
     /// Text on its baseline with `tracking` pixels more between its letters (the small
     /// letter-spaced capitals of headings and labels); returns its width. Drawn as it is (the
     /// caller translates the text before it makes it capitals), letter by letter, each where
@@ -1103,7 +1129,7 @@ impl Ui {
         self.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
         field_line(self, r, open);
         let txt = options.get(*selected).cloned().unwrap_or_default();
-        self.text_in(
+        self.text_in_tip(
             &txt,
             Rect::new(r.x + 12.0, r.y, r.w - 40.0, r.h),
             13.0,
@@ -1416,6 +1442,13 @@ impl Ui {
             );
         }
         self.pop_clip();
+        // (a value wider than the box, with no caret to follow: the whole of it on hover)
+        if !focused
+            && !value.is_empty()
+            && self.fonts.width_as_is(value, px, Weight::Regular) > inner.w
+        {
+            self.tooltip_whole(r, value);
+        }
         *value != before
     }
 
@@ -1873,15 +1906,16 @@ impl Ui {
             } else if h {
                 self.p().rounded(cell, 5.0, HOVER);
             }
-            self.text_in(
-                o,
-                Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h),
-                13.0,
-                Weight::Regular,
-                TEXT,
-                Align::Left,
-            );
+            let text_r = Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h);
+            self.text_in(o, text_r, 13.0, Weight::Regular, TEXT, Align::Left);
             if h {
+                // (an option cut to the list's width: the whole of it, once the mouse rests)
+                if self.fonts.width_as_is(&crate::tr(o), 13.0, Weight::Regular) > text_r.w + 0.5 {
+                    let t = self.anim(id_of(&format!("poptip{k}")) ^ 0x55, 1.0, 0.4);
+                    if t > 0.9 {
+                        self.tooltip = Some((o.clone(), self.input.mouse));
+                    }
+                }
                 self.cursor = winit::window::CursorIcon::Pointer;
                 if self.input.released && !fresh {
                     p.picked = Some(k);
@@ -2184,6 +2218,26 @@ mod tests {
         assert!(ui.rect_visible(Rect::new(10.0, 90.0, 200.0, 54.0)));
         ui.pop_clip();
         assert!(ui.rect_visible(Rect::new(10.0, 50.0, 200.0, 20.0)));
+    }
+
+    /// A text cut to its box shows its whole once the mouse rests on it; one that fits does not.
+    #[test]
+    fn a_cut_text_shows_its_whole_in_a_tooltip() {
+        let long = "A name that is far too long for the little box it is drawn in";
+        let r = Rect::new(10.0, 10.0, 80.0, 20.0);
+        let mut frames = |text: &str| {
+            let mut ui = Ui::new();
+            let mut tip = None;
+            for _ in 0..20 {
+                ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.1);
+                ui.input.mouse = Vec2::new(40.0, 20.0);
+                ui.text_in_tip(text, r, 13.0, Weight::Regular, TEXT, Align::Left);
+                tip = ui.tooltip.clone().map(|t| t.0);
+            }
+            tip
+        };
+        assert_eq!(frames(long).as_deref(), Some(long));
+        assert_eq!(frames("Short"), None);
     }
 
     #[test]
