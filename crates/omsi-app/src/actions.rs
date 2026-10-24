@@ -274,6 +274,7 @@ impl App {
         // (the "Add vehicle" window closes: a press it took has no release coming, and
         // the overlay would go on dragging what was under it)
         self.new_ui.close_add();
+        self.new_ui.add_taken.clear();
         // (the Alt bar's other windows stay, but forget a press and the keys whose releases
         // will not come)
         if self.new_ui.tool.window.is_some() {
@@ -396,11 +397,13 @@ impl App {
     }
 
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {
-        self.place_vehicle_with(bus, paint, hof, None, None);
+        // (the vehicle takes the startup number and plate, as before)
+        let (number, plate) = (self.args.number.clone(), self.args.plate.clone());
+        self.place_vehicle_with(bus, paint, hof, number, plate);
     }
 
     /// `place_vehicle` with the fleet number and the registration the player picked (`None`:
-    /// the vehicle's own).
+    /// the vehicle's own rules, not the startup arguments').
     pub(crate) fn place_vehicle_with(
         &mut self,
         bus: &str,
@@ -465,8 +468,8 @@ impl App {
             autostart: false,
             paint,
             hof: hof.or(self.args.hof.clone()),
-            number: number.or(self.args.number.clone()),
-            plate: plate.or(self.args.plate.clone()),
+            number,
+            plate,
             ..self.args.clone()
         };
         match spawn_player(&one, &w, r, scene) {
