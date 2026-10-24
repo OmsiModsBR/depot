@@ -3234,9 +3234,21 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             // (a count the game can read, else its default 4)
             "msaa" => v[&k] = json!(val.parse::<u32>().map(i64::from).unwrap_or(4)),
             "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "min_obj_size"
-                if k != "vol_ai" && k != "min_obj_size" && k != "vol_scenery" =>
+                if k != "vol_ai"
+                    && k != "min_obj_size"
+                    && k != "vol_scenery"
+                    && k != "ui_opacity" =>
             {
                 v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
+            }
+            // (0.2 to 1, and 0.85 for what is no finite number, as the game reads it)
+            "ui_opacity" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.2, 1.0))
+                    .unwrap_or(0.85))
             }
             // (0 to 0.2, as the game reads it)
             "min_obj_size" => {
@@ -3461,7 +3473,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
-                if k != "navigator_corner" && k != "pax_voices" && k != "render_scale" =>
+                if k != "navigator_corner" && k != "drive_keys" && k != "drive_keys" && k != "render_scale" =>
             {
                 v[&k] = json!(val)
             }
@@ -3473,6 +3485,13 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "tickets" => "tickets",
                     "off" | "0" | "none" => "off",
                     _ => "all",
+                  })
+            }
+            // (wasd, arrows, omsi or simple, else simple, as the game reads it)
+            "drive_keys" => {
+                v[&k] = json!(match val.to_ascii_lowercase().as_str() {
+                    "wasd" | "arrows" | "omsi" | "simple" => val.to_ascii_lowercase(),
+                    _ => "simple".into(),
                 })
             }
             // (auto, or 0.5 to 1 (a value above 1.5 is a percentage), else auto, as the game reads it)
@@ -3665,8 +3684,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.25, 4.0))
                     .unwrap_or(1.0))
             }
-            "ff_road_vib" | "ff_engine_vib" if k != "ff_engine_vib" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0))
+            // (what is no finite number is the default, as the game reads it)
+            "ff_road_vib" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 4.0))
+                    .unwrap_or(1.0))
             }
             // (what is no finite number is the default, as the game reads it)
             "ff_engine_vib" => {
@@ -3683,7 +3708,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 1.5))
                     .unwrap_or(0.28))
             }
-            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" => {
+            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" && k != "seat_y" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .map(|x| x.clamp(-1.5, 1.5))
@@ -3691,6 +3716,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             // (what is no finite number is the default, as the game reads it)
             "seat_x" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(-1.5, 1.5))
+                    .unwrap_or(0.0))
+            }
+            // (what is no finite number is the default, as the game reads it)
+            "seat_y" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .ok()

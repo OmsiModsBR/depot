@@ -331,8 +331,9 @@ impl RigidBody {
 
     /// The tyres' hold across (see [`Self::lateral_pass`]) set up over the substep: the
     /// velocities the body would have without it, and whether the tyres hold or slide, into
-    /// `l`.
-    pub(super) fn lateral_start(&mut self, s: &Substep, h: f32, l: &mut Lateral) {
+    /// `l`. `steered`: the steering sets the bend the body turns on (the front section), not
+    /// its joint (a section behind).
+    pub(super) fn lateral_start(&mut self, s: &Substep, h: f32, l: &mut Lateral, steered: bool) {
         let (rot, body_fwd, towed, force, torque, contacts) =
             (s.rot, s.body_fwd, s.towed, s.force, s.torque, &s.contacts);
         let (m, mt) = (self.mass, self.mass + towed);
@@ -382,15 +383,31 @@ impl RigidBody {
             .dot(rot.mul_vec3(Vec3::X))
             .abs()
             > GRIPPED_ACROSS;
-        if self.holding && (m * v_fwd * v_fwd * kappa > grip_all || slipping || airborne || knocked)
-        {
+        // (what the tyres take across: the bend's pull, towards the side the body turns to,
+        // less what a joint pushes it with - the rear section of an articulated bus pushes
+        // the front one sideways at its back, and the tyres let go when they cannot take
+        // that too)
+        let right = rot.mul_vec3(Vec3::X);
+        let inward = rot
+            .mul_vec3(self.omega)
+            .cross(self.velocity)
+            .dot(right)
+            .signum();
+        let across = m * v_fwd * v_fwd * kappa * inward - self.joint_across;
+        if self.holding && (across.abs() > grip_all || slipping || airborne || knocked) {
             self.holding = false;
         }
         // (holding, the tyres take whatever keeps them rolling where they point: the body
         // turns about the `[rot_pnt_long]` line at once, as in OMSI 2, which sets the yaw
         // rate v κ and the direction of the velocity outright; the bend's pull above lets
-        // them go)
-        let reach = if self.holding { f32::INFINITY } else { 1.0 };
+        // them go. A section behind turns as its joint bends it, and its tyres hold by what
+        // the road takes: taking any force, the driven axle of a pusher's rear section held
+        // its line whatever pushed it sideways and folded the bus in two on uneven ground)
+        let reach = if self.holding && steered {
+            f32::INFINITY
+        } else {
+            1.0
+        };
         l.j.clear();
         l.j.resize(lat.len(), 0.0);
         (l.v, l.w, l.reach, l.gripped, l.slipping, l.m, l.mt) =
@@ -466,5 +483,10 @@ impl RigidBody {
             s.force += l.joint_p / h;
             s.torque += l.joint_l / h;
         }
+        self.joint_across = if l.jointed {
+            (l.joint_p / h).dot(rot.mul_vec3(Vec3::X))
+        } else {
+            0.0
+        };
     }
 }
