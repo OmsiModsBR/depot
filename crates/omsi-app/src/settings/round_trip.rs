@@ -184,14 +184,6 @@ const EDGES: &[&str] = &[
 /// then read by the game; `launcher>game`: the launcher's file, read by the game and
 /// written by it, then read by the launcher), with what goes wrong.
 const KNOWN: &[(&str, &str, &str)] = &[
-    // the launcher reads these numbers without the range or the fallback the game has (its
-    // page then shows a value the game does not use)
-    // the launcher keeps these texts as written; the game reads them to its own choices
-    (
-        "boarding",
-        "launcher>game",
-        "kept as written; the game lowercases it",
-    ),
     (
         "pedal_throttle",
         "launcher>game",
