@@ -92,18 +92,17 @@ fn main() {
                     logo: Some(logo),
                     bus: Some(Card {
                         title: "Example bus A",
-                        sub: "Example Maker \u{b7} v1.2 \u{b7} Default paint",
-                        description: "Author's description, first lines as written by the \
-                                      author (example text).",
+                        sub: "Example Maker",
+                        detail: "Livery: Default paint",
                         icon: "directions_bus",
+                        thumb: None,
                     }),
                     map: Some(Card {
                         title: "Example map",
                         sub: "Example City",
-                        description: "Map description from the map folder (example text, a \
-                                      few lines). A long description is cut at a word so it \
-                                      keeps to its two lines.",
+                        detail: "",
                         icon: "map",
+                        thumb: None,
                     }),
                     slides: &slides[..shown],
                 };

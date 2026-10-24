@@ -408,6 +408,8 @@ pub(crate) struct State {
     slides: Vec<crate::new_ui_loading::Decoded>,
     /// The bus's block of the loading card, once its file has been read.
     bus_card: Option<crate::new_ui_loading::CardText>,
+    /// The map's own picture for its block of the card, decoded and not yet in the GPU.
+    map_picture: Option<crate::new_ui_loading::Decoded>,
     /// Which loading the screenshots and the bus card being read belong to (one more each
     /// time a loading is over).
     loading_gen: u64,
@@ -432,6 +434,8 @@ struct Overlay {
     last: Instant,
     /// The loading screen's pictures in the GPU, and how far its slideshow is.
     slide_tex: Vec<omsi_ui::loading::Slide>,
+    /// The map's picture in the GPU for the card's thumbnail.
+    map_tex: Option<omsi_ui::loading::Slide>,
     show: omsi_ui::loading::Slideshow,
     /// The loading those pictures belong to (`State::loading_gen`).
     gen: u64,
@@ -452,6 +456,7 @@ impl Overlay {
             logo: None,
             last: Instant::now(),
             slide_tex: Vec::new(),
+            map_tex: None,
             show: omsi_ui::loading::Slideshow::new(0),
             gen: 0,
         }
@@ -465,33 +470,51 @@ impl Overlay {
         view: &wgpu::TextureView,
         (w, h): (u32, u32),
     ) {
-        let (menu, page, alt, add, tool, report, win_input, loading, mouse, arrived, gen, area) =
-            match self.shared.lock() {
-                Ok(mut s) => {
-                    let arrived = std::mem::take(&mut s.slides);
-                    let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
-                        s.win_input.pop_front()
-                    } else {
-                        s.win_input.clear();
-                        None
-                    };
-                    (
-                        s.menu.clone(),
-                        s.page.clone(),
-                        s.alt.clone(),
-                        s.add.clone(),
-                        s.tool.clone(),
-                        s.report.clone(),
-                        input,
-                        s.loading.clone(),
-                        s.mouse,
-                        arrived,
-                        s.loading_gen,
-                        s.area,
-                    )
-                }
-                Err(_) => return,
-            };
+        let (
+            menu,
+            page,
+            alt,
+            add,
+            tool,
+            report,
+            win_input,
+            loading,
+            mouse,
+            (arrived, map_picture),
+            gen,
+            area,
+        ) = match self.shared.lock() {
+            Ok(mut s) => {
+                let arrived = std::mem::take(&mut s.slides);
+                let map_picture = s.map_picture.take();
+                let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
+                    s.win_input.pop_front()
+                } else {
+                    s.win_input.clear();
+                    None
+                };
+                (
+                    s.menu.clone(),
+                    s.page.clone(),
+                    s.alt.clone(),
+                    s.add.clone(),
+                    s.tool.clone(),
+                    s.report.clone(),
+                    input,
+                    s.loading.clone(),
+                    s.mouse,
+                    (arrived, map_picture),
+                    s.loading_gen,
+                    s.area,
+                )
+            }
+            Err(_) => return,
+        };
+        if (loading.is_none() || gen != self.gen) && self.map_tex.is_some() {
+            if let (Some(gpu), Some(t)) = (self.gpu.as_mut(), self.map_tex.take()) {
+                gpu.free(t.tex);
+            }
+        }
         if (loading.is_none() || gen != self.gen) && !self.slide_tex.is_empty() {
             // (the loading screen is over, or another one began: its pictures leave the GPU)
             if let Some(gpu) = self.gpu.as_mut() {
@@ -568,17 +591,26 @@ impl Overlay {
                     aspect: d.w as f32 / d.h as f32,
                 });
             }
+            if let (Some(d), None) = (map_picture, self.map_tex) {
+                let tex = gpu.add_image(device, queue, d.w, d.h, &d.rgba);
+                self.map_tex = Some(omsi_ui::loading::Slide {
+                    tex,
+                    aspect: d.w as f32 / d.h.max(1) as f32,
+                });
+            }
             self.show.set_count(self.slide_tex.len());
             self.show.update(dt);
             fn card<'a>(
                 c: &'a Option<crate::new_ui_loading::CardText>,
                 icon: &'a str,
+                thumb: Option<omsi_ui::loading::Slide>,
             ) -> Option<omsi_ui::loading::Card<'a>> {
                 c.as_ref().map(|c| omsi_ui::loading::Card {
                     title: &c.title,
                     sub: &c.sub,
-                    description: &c.description,
+                    detail: &c.detail,
                     icon,
+                    thumb: thumb.map(|t| (t.tex, t.aspect)),
                 })
             }
             let view = omsi_ui::loading::View {
@@ -588,8 +620,8 @@ impl Overlay {
                 activity: &l.activity,
                 progress: l.progress,
                 logo: self.logo,
-                bus: card(&l.bus, "directions_bus"),
-                map: card(&l.map, "map"),
+                bus: card(&l.bus, "directions_bus", None),
+                map: card(&l.map, "map", self.map_tex),
                 slides: &self.slide_tex,
             };
             omsi_ui::loading::draw(&mut self.ui, &view, &self.show);
@@ -665,6 +697,7 @@ pub(crate) struct NewUi {
     installed: bool,
     slides_started: bool,
     bus_started: bool,
+    map_picture_started: bool,
     pub(crate) alt: crate::new_ui_alt::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
@@ -721,9 +754,11 @@ impl NewUi {
     pub(crate) fn reset_loading(&mut self) {
         self.slides_started = false;
         self.bus_started = false;
+        self.map_picture_started = false;
         if let Ok(mut s) = self.shared.lock() {
             s.loading = None;
             s.slides.clear();
+            s.map_picture = None;
             s.bus_card = None;
             s.loading_gen = s.loading_gen.wrapping_add(1);
         }
@@ -757,6 +792,28 @@ impl NewUi {
                             Ok(mut s) if s.loading_gen == gen => s.slides.push(d),
                             _ => return,
                         }
+                    }
+                }
+            });
+    }
+
+    /// Once per loading: read the map's own picture on a thread of its own, for the thumbnail
+    /// of the map's block of the card.
+    pub(crate) fn start_map_picture(&mut self, root: &std::path::Path, map: &str) {
+        if self.map_picture_started {
+            return;
+        }
+        self.map_picture_started = true;
+        let shared = self.shared.clone();
+        let gen = self.loading_gen();
+        let (root, map) = (root.to_path_buf(), map.to_string());
+        let _ = std::thread::Builder::new()
+            .name("loading-map-picture".into())
+            .spawn(move || {
+                if let Some(d) = crate::new_ui_loading::map_picture(&root, &map) {
+                    match shared.lock() {
+                        Ok(mut s) if s.loading_gen == gen => s.map_picture = Some(d),
+                        _ => {}
                     }
                 }
             });

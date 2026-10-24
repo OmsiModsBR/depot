@@ -2547,7 +2547,7 @@ mod page_tests {
 /// The picture in a map's folder (`picture.jpg` and the like, as a map ships it), for the
 /// Maps page: read and made smaller on a thread, then put on the GPU.
 #[derive(Default)]
-struct MapPicture {
+pub(crate) struct MapPicture {
     /// The map file it is of.
     file: String,
     reading: Option<std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
@@ -2588,7 +2588,7 @@ impl MapPicture {
     }
 
     /// The folder of the map `file`, found through the content roots as the map list found it.
-    pub(super) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
+    pub(crate) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
         let global = omsi_cfg::find_in_roots(file)
             .map(|(_, p)| p)
             .unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
@@ -2596,7 +2596,7 @@ impl MapPicture {
     }
 
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
-    pub(super) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    pub(crate) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
             .into_iter()
             .filter(|(_, is_dir)| !is_dir)
@@ -2617,7 +2617,7 @@ impl MapPicture {
     /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
     /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
     /// on any card).
-    pub(super) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+    pub(crate) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
         if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
             return None;
         }

@@ -14,13 +14,14 @@ use std::path::{Path, PathBuf};
 pub(crate) const MAX_SLIDES: usize = 6;
 /// A picture wider than this is shrunk to it before it goes to the GPU.
 const SLIDE_WIDTH: u32 = 1280;
-const DESCRIPTION_CHARS: usize = 240;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct CardText {
     pub title: String,
+    /// The make (the bus), the map's folder.
     pub sub: String,
-    pub description: String,
+    /// The last, quieter line: the bus's livery.
+    pub detail: String,
 }
 
 /// What the screen says in this frame.
@@ -70,9 +71,10 @@ pub(crate) fn activity(done: usize) -> &'static str {
     }
 }
 
-/// The bus's block of the card from its file: its type as the title, the maker and the paint
-/// under it, the author's description. `folder` names it when the file gives no name; a paint
-/// asked for by its number is left out (the file's default one is shown then).
+/// The bus's block of the card from its file: its model as the title, the make under it and
+/// the livery on the last line. `folder` names it when the file gives no name; a paint asked
+/// for by its number is left out (the file's default one is shown then). The author's long
+/// description is not part of the card.
 pub(crate) fn bus_card(v: &omsi_vehicle::Vehicle, folder: &str, paint: Option<&str>) -> CardText {
     let title = [v.type_name.trim(), folder.trim()]
         .into_iter()
@@ -83,15 +85,14 @@ pub(crate) fn bus_card(v: &omsi_vehicle::Vehicle, folder: &str, paint: Option<&s
         .map(str::trim)
         .filter(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit()))
         .unwrap_or(v.default_paint.trim());
-    let sub = [v.manufacturer.trim(), paint]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" \u{b7} ");
     CardText {
         title,
-        sub,
-        description: short(&v.description, DESCRIPTION_CHARS),
+        sub: v.manufacturer.trim().to_string(),
+        detail: if paint.is_empty() {
+            String::new()
+        } else {
+            omsi_ui::tr("Livery: %{name}").replace("%{name}", paint)
+        },
     }
 }
 
@@ -100,16 +101,6 @@ pub(crate) fn stage(done: usize, total: usize) -> String {
     omsi_ui::tr("Loading map tiles (first area) · %{done} of %{total}")
         .replace("%{done}", &done.to_string())
         .replace("%{total}", &total.to_string())
-}
-
-/// The author's text on one line, cut to `max` characters.
-pub(crate) fn short(text: &str, max: usize) -> String {
-    let one: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if one.chars().count() <= max {
-        return one;
-    }
-    let cut: String = one.chars().take(max.saturating_sub(1)).collect();
-    format!("{}\u{2026}", cut.trim_end())
 }
 
 /// The last `n` of `paths` (screenshots, oldest first), still oldest first.
@@ -135,6 +126,18 @@ pub(crate) fn decode(path: &Path) -> Option<Decoded> {
     })
 }
 
+/// The map's own picture (`picture.jpg` and the like in its folder), as the launcher's Maps
+/// page reads it; `None` when the map ships none.
+pub(crate) fn map_picture(root: &Path, map: &str) -> Option<Decoded> {
+    let dir = crate::launcher::MapPicture::folder(root, map)?;
+    let img = crate::launcher::MapPicture::read(&crate::launcher::MapPicture::find(&dir)?)?;
+    Some(Decoded {
+        w: img.width(),
+        h: img.height(),
+        rgba: img.into_raw(),
+    })
+}
+
 /// The game's name for a folder in a path (`Maps/Grundorf/global.cfg` is `Grundorf`).
 fn folder(path: &str) -> String {
     crate::screenshot_name::folder_of(path).unwrap_or_default()
@@ -155,11 +158,13 @@ impl App {
         self.new_ui.install(renderer, mirror);
         let map_folder = folder(&self.args.map);
         self.new_ui.start_slides(&map_folder);
+        self.new_ui
+            .start_map_picture(&self.args.root, &self.args.map);
         if let Some(b) = self.args.bus.as_deref() {
             self.new_ui
                 .start_bus(&self.args.root, b, self.args.paint.as_deref());
         }
-        let (name, description) = self
+        let name = self
             .world
             .as_ref()
             .map(|w| {
@@ -169,7 +174,7 @@ impl App {
                 } else {
                     g.friendly_name.clone()
                 };
-                (name, g.description.clone())
+                name
             })
             .unwrap_or_default();
         // (the folder's name until the bus's file has been read)
@@ -177,7 +182,7 @@ impl App {
             self.new_ui.bus_card().unwrap_or_else(|| CardText {
                 title: folder(b),
                 sub: String::new(),
-                description: String::new(),
+                detail: String::new(),
             })
         });
         let frame = LoadingFrame {
@@ -194,7 +199,7 @@ impl App {
                 } else {
                     map_folder
                 },
-                description: short(&description, DESCRIPTION_CHARS),
+                detail: String::new(),
             }),
         };
         self.new_ui.set_loading(Some(frame));
@@ -236,31 +241,18 @@ mod tests {
         };
         let c = bus_card(&v, "EXAMPLE_BUS", None);
         assert_eq!(c.title, "Example bus A");
-        assert_eq!(c.sub, "Example Maker \u{b7} Default paint");
-        assert_eq!(c.description, "Author's description, first lines.");
+        assert_eq!(c.sub, "Example Maker");
+        assert_eq!(c.detail, "Livery: Default paint");
         // a paint asked for by name is shown, by number the default one
-        assert_eq!(
-            bus_card(&v, "", Some("Red")).sub,
-            "Example Maker \u{b7} Red"
-        );
-        assert_eq!(
-            bus_card(&v, "", Some("3")).sub,
-            "Example Maker \u{b7} Default paint"
-        );
+        assert_eq!(bus_card(&v, "", Some("Red")).detail, "Livery: Red");
+        assert_eq!(bus_card(&v, "", Some("3")).detail, "Livery: Default paint");
         // a file with no name: the folder's
         let bare = omsi_vehicle::Vehicle::default();
         let c = bus_card(&bare, "EXAMPLE_BUS", None);
-        assert_eq!((c.title.as_str(), c.sub.as_str()), ("EXAMPLE_BUS", ""));
-    }
-
-    #[test]
-    fn a_description_is_one_line_cut_at_the_limit() {
-        assert_eq!(short("a  b\n\nc", 20), "a b c");
-        let long = "word ".repeat(100);
-        let s = short(&long, 40);
-        assert!(s.chars().count() <= 40, "{s}");
-        assert!(s.ends_with('\u{2026}'));
-        assert_eq!(short("", 10), "");
+        assert_eq!(
+            (c.title.as_str(), c.sub.as_str(), c.detail.as_str()),
+            ("EXAMPLE_BUS", "", "")
+        );
     }
 
     #[test]
