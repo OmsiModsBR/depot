@@ -89,7 +89,7 @@ Duas regras próprias do app:
 
 ## Arquitetura alvo
 
-Só a primeira camada; o detalhe de cada pasta é decidido no PR dela, medido na hora. Cada pasta abaixo é um pacote com `domain/`, `interface/` (`input.rs` e `output.rs`) e `implementation/`, como na regra 3 dos princípios. A pasta da nova interface se chama `interface/` (decisão do mantenedor), então a camada de entrada e saída dela fica em `interface/interface/`.
+Só a primeira camada; o detalhe de cada pasta é decidido no PR dela, medido na hora. Cada pasta abaixo é um pacote com `domain/`, `interface/` (`input.rs` e `output.rs`) e `implementation/`, como na regra 3 dos princípios. A pasta da nova interface se chama `ui/` (decisão do mantenedor), para que a camada de entrada e saída dela fique em `ui/interface/`, sem repetir o nome.
 
 ```
 src/
@@ -99,7 +99,7 @@ src/
   offscreen/            run_offscreen, o traço de estado e as verificações de mapa (diagnostics/map_checks.rs)
   output/               a saída gráfica: Backend { Wgpu, D3d9 } escolhido num ponto, d3d9.rs, xr/ (openxr,
                         vr_navigator), mirrors/ (mirror_hud), camera/ (camera_arm, camera_util, head_idle)
-  interface/            a nova interface: mod.rs (NewUi, Shared, o gancho de overlay), esc_menu.rs, pages.rs,
+  ui/                   a nova interface: mod.rs (NewUi, Shared, o gancho de overlay), esc_menu.rs, pages.rs,
                         alt/ (barra e janelas), add_vehicle.rs, trip_report.rs, loading.rs
   hud/                  o HUD: frame.rs (os dados e os retângulos de clique que as duas interfaces usam),
                         legacy/ (o desenho em CPU de ui.rs, depois atrás de uma feature), hud.rs, menu.rs,
@@ -135,7 +135,7 @@ Duas fases. A primeira é de estrutura, em arquivos mornos, e pode começar já.
 | --- | --- | --- | --- |
 | AP1 | `feat/app-fmt` | (1) `scripts/fmt-merge.sh` (merge do commit anterior ao fmt, `cargo fmt` na própria branch, merge do commit de fmt com `-s ours`) e a configuração de git recomendada no CONTRIBUTING (`merge.conflictStyle = zdiff3`, `rerere.enabled = true`, `diff.renameLimit` alto); (2) `omsi-render-d3d9`, `omsi-launcher-core` e `omsi-launcher-ui` formatados e na lista bloqueante; (3) `cargo fmt -p omsi-app` sozinho, o crate na lista bloqueante e o passo informativo do workspace atualizado em `docs/QUALITY.md`; (4) `.git-blame-ignore-revs` com o hash do commit (3) | `fmt --check` bloqueante no `omsi-app` e nos três crates; testes, `offscreen-traces` e golden iguais |
 | AP2 | `feat/app-testes-*` | Os testes de `src/` para `tests/`, como na [convenção de testes](#convenção-de-testes); um PR por grupo de domínios (gameplay; mundo e cena; interface, HUD e launcher; entrada e o resto), porque são cerca de 19,6 mil linhas. O teste de 662 linhas da nova interface vira um teste por página | Nenhum teste em `src/`; a mesma lista de testes, pelos nomes; `cargo build -p omsi-app` sem a feature não tem `testing` |
-| AP3 | `feat/app-interface` | `interface/` com os sete `new_ui*.rs`, divididos por tela no pacote (`domain/` com o estado de cada tela, `interface/` com o que o frame chama e o que a interface pede ao jogo, `implementation/` com o desenho e o clique); `hud/frame.rs` com `Frame`, `MenuKind`, `DropdownView`, `Preview` e os retângulos de clique, tirados de `ui.rs`, para que a nova interface deixe de depender do desenho antigo | Nenhum `new_ui*.rs` na raiz; `interface/` não importa `hud::legacy` |
+| AP3 | `feat/app-ui` | `ui/` com os sete `new_ui*.rs`, divididos por tela no pacote (`domain/` com o estado de cada tela, `interface/` com o que o frame chama e o que a interface pede ao jogo, `implementation/` com o desenho e o clique); `hud/frame.rs` com `Frame`, `MenuKind`, `DropdownView`, `Preview` e os retângulos de clique, tirados de `ui.rs`, para que a nova interface deixe de depender do desenho antigo | Nenhum `new_ui*.rs` na raiz; `ui/` não importa `hud::legacy` |
 | AP4 | `feat/app-saida` | `output/` como pacote, com `d3d9_output.rs`, `openxr.rs`, `vr_navigator.rs`, `mirror_hud.rs` e a câmera em `implementation/`; um `Backend { Wgpu, D3d9 }` em `interface/output.rs`, decidido uma vez na abertura da janela, no lugar das checagens espalhadas por `app.rs`, `startup.rs`, `app_events.rs` e pelos menus | Menções ao Direct3D 9 fora de `output/` e das opções de configuração só por `Backend`; o job do Windows verde no PR (é ele que compila esse código) |
 | AP5 | `feat/app-hud` | `hud/` como pacote, com `ui.rs` dividido em texto, chat e avisos, informações e a lista de escolha; `game_lists.rs` dividido por assunto em `hud/lists/`; `nav/` dentro de `hud/` | Nenhum arquivo de `hud/` acima de 1.500 linhas |
 | AP6 | `feat/app-launcher-*` | Em passos: (a) a lógica de domínio que mora na interface do launcher (`Choice::to_duty`, `default_hof`, estação, escolha de viagem, gravação do horário, favoritos, aeroporto mais próximo) para `omsi-launcher-core`, com testes; (b) o jogo deixa de importar `launcher` (`weather_time.rs`, `game_lists.rs`, `server.rs`, `android.rs`); (c) as páginas para `omsi-launcher-ui`, uma por PR, cortando as importações de módulos do jogo; (d) o que sobrar em `omsi-app/src/launcher/` é a ligação com o processo do jogo | `launcher/` no app abaixo de 2 mil linhas; `omsi-launcher-ui` sem dependência do `omsi-app` |
@@ -175,7 +175,7 @@ Tomadas pelo mantenedor em 23/10/2026:
 - **Testes:** fora de `src/`, como padrão do projeto (ver a [convenção de testes](#convenção-de-testes)).
 - **Quando começa:** já, pela AP1.
 - **Destino do launcher:** `omsi-launcher-ui` para a interface e `omsi-launcher-core` para a lógica, sem crate novo.
-- **Nome da pasta da nova interface:** `interface/`, com o HUD antigo em `hud/legacy/`.
+- **Nome da pasta da nova interface:** `ui/`, com o HUD antigo em `hud/legacy/` (antes `interface/`, trocado para evitar `interface/interface/`).
 - **Hierarquia dos pacotes:** cada domínio criado já sai reestruturado em `domain/`, `interface/` (entrada e saída) e `implementation/` (regra 3 dos princípios).
 
 ## Critério de sucesso

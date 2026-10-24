@@ -1076,14 +1076,10 @@ impl ApplicationHandler for App {
                     let k_v = 1.0 - (-dt / 0.4).exp();
                     self.mouse_kmh += (raw_kmh - self.mouse_kmh) * k_v;
                     let kmh = self.mouse_kmh;
-                    let base = (crate::player::mouse_steering(self.cursor.0, w, kmh)
+                    // (the window's edge is the most the mouse steers, as in OMSI)
+                    let target = (crate::player::mouse_steering(self.cursor.0, w, kmh)
                         * self.settings.mouse_sens)
                         .clamp(-1.0, 1.0);
-                    // (what the mouse added at the edge, up to the full lock)
-                    self.mouse_edge = self
-                        .mouse_edge
-                        .clamp((-1.0 - base).min(0.0), (1.0 - base).max(0.0));
-                    let target = (base + self.mouse_edge).clamp(-1.0, 1.0);
                     // the pedals as OMSI has them: from the middle of the window to its
                     // top edge the throttle, to the bottom one the brake, straight on
                     let y = (2.0 * self.cursor.1 / h.max(1.0) - 1.0).clamp(-1.0, 1.0);
@@ -4122,8 +4118,6 @@ impl ApplicationHandler for App {
                         self.look_by(delta.0 as f32 * k, delta.1 as f32 * k);
                     }
                 }
-            } else if self.mouse_drive && self.game_menu.is_none() {
-                self.mouse_past_edge(delta.0 as f32);
             }
         }
     }
@@ -4145,9 +4139,6 @@ impl ApplicationHandler for App {
             return;
         }
         crate::game_lists::flush_settings(false);
-        if self.mouse_edge != 0.0 && !self.mouse_drive {
-            self.mouse_edge = 0.0;
-        }
         if let Some(w) = &self.window {
             w.request_redraw();
         }

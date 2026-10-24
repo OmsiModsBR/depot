@@ -699,38 +699,6 @@ impl App {
         }
     }
 
-    /// Mouse steering beyond the window's edge: with the cursor pinned at the left or right
-    /// edge, the mouse moving on outwards turns the wheel further (the whole width per full
-    /// lock, as standing); moving back gives that back first, the cursor held at the edge
-    /// until it is used up, so the wheel never jumps.
-    pub(crate) fn mouse_past_edge(&mut self, dx: f32) {
-        let Some(w) = self.surface.as_ref().map(|s| s.config.width as f32) else {
-            return;
-        };
-        let per_px = 2.0 / w.max(1.0);
-        let (at_left, at_right) = (self.cursor.0 <= 2.0, self.cursor.0 >= w - 3.0);
-        let before = self.mouse_edge;
-        if (at_right && dx > 0.0) || (at_left && dx < 0.0) {
-            self.mouse_edge = (self.mouse_edge + dx * per_px).clamp(-2.0, 2.0);
-        } else if (self.mouse_edge > 0.0 && dx < 0.0) || (self.mouse_edge < 0.0 && dx > 0.0) {
-            let m = self.mouse_edge + dx * per_px;
-            self.mouse_edge = if m.signum() != before.signum() {
-                0.0
-            } else {
-                m
-            };
-            // (the cursor stays where it was: the move went into the wheel)
-            if let Some(win) = self.window.as_ref() {
-                let x = if before > 0.0 { w - 2.0 } else { 1.0 };
-                let _ = win.set_cursor_position(winit::dpi::PhysicalPosition::new(
-                    x as f64,
-                    self.cursor.1 as f64,
-                ));
-                self.cursor.0 = x;
-            }
-        }
-    }
-
     /// Take the cursor's new place; false when the move was someone else's (the object
     /// editor's drag, the city map) and no switch is to be named.
     pub(crate) fn move_cursor(&mut self, x: f32, y: f32) -> bool {
