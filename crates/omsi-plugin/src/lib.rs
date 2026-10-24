@@ -165,6 +165,8 @@ impl Library {
                 None => format!("LoadLibrary failed: {e}"),
             }
         })?;
+        // SAFETY: each procedure is copied out as a fn pointer with the signature the plugin
+        // contract gives it; `_lib` keeps the library mapped for as long as they are called
         unsafe {
             let start = *lib.get::<StartFn>(b"PluginStart\0").map_err(|_| "procedure \"PluginStart\" not found".to_string())?;
             let finalize = *lib.get::<FinalizeFn>(b"PluginFinalize\0").map_err(|_| "procedure \"PluginFinalize\" not found".to_string())?;
@@ -182,10 +184,12 @@ impl Library {
 
     /// `PluginStart(AOwner)`; there is no Delphi application to own the plugin's forms here.
     pub fn start(&self) {
+        // SAFETY: the library is still loaded (`_lib`); the owner is null, as documented above
         unsafe { (self.start)(std::ptr::null_mut()) }
     }
 
     pub fn finalize(&self) {
+        // SAFETY: the library is still loaded (`_lib`) and takes no arguments
         unsafe { (self.finalize)() }
     }
 
@@ -197,6 +201,8 @@ impl Library {
                 .map(|&(i, v)| {
                     let Some(func) = func else { return None };
                     let (mut value, mut write) = (v, 0u8);
+                    // SAFETY: `value` and `write` are live locals for the whole call, of the
+                    // types the access procedure is declared with
                     unsafe { func(i, &mut value, &mut write) };
                     (write != 0).then_some(value)
                 })
@@ -216,6 +222,9 @@ impl Library {
                 let size = (buf.len() + 1).max(STRING_BUFFER);
                 buf.resize(size, 0);
                 let mut write = 0u8;
+                // SAFETY: `buf` holds at least `length + 1` zeroed u16s and lives through the
+                // call; `write` is a live local. The plugin is trusted not to write past
+                // the length OMSI would have given it
                 unsafe { func(*i, buf.as_mut_ptr(), &mut write) };
                 if write == 0 {
                     return None;
@@ -230,6 +239,7 @@ impl Library {
             .map(|&i| {
                 let Some(func) = self.trigger else { return false };
                 let mut active = 0u8;
+                // SAFETY: `active` is a live local of the type the trigger procedure takes
                 unsafe { func(i, &mut active) };
                 active != 0
             })
