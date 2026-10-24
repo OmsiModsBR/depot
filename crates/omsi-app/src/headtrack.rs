@@ -190,7 +190,8 @@ mod freetrack {
         announced: bool,
     }
 
-    // (the view is only read, from the head tracking thread)
+    // SAFETY: the view is a read-only mapping of opentrack's shared memory that is never
+    // unmapped, and the reader only reads it, from the head tracking thread
     unsafe impl Send for Reader {}
 
     impl Reader {
@@ -310,6 +311,8 @@ mod npclient {
 
     impl Drop for Native {
         fn drop(&mut self) {
+            // SAFETY: the two procedures come from `_dll`, which is still loaded here: fields
+            // drop after this body runs
             unsafe {
                 let _ = (self.stop_transmission)();
                 let _ = (self.unregister_window)();
@@ -355,6 +358,8 @@ mod npclient {
             let mut kind = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
             let mut len = bytes.len() as u32;
 
+            // SAFETY: the key and value names are static wide strings; `bytes` holds `len`
+            // bytes (4096 going in, the real size coming back), and `kind` and `len` are live
             let result = unsafe {
                 RegGetValueW(
                     HKEY_CURRENT_USER,
@@ -418,6 +423,8 @@ mod npclient {
                     .encode_utf16()
                     .chain(std::iter::once(0))
                     .collect();
+                // SAFETY: `wide` is a NUL-terminated path that lives through the call; loading
+                // the NPClient DLL runs its initialisers, as TrackIR's own install expects
                 if let Ok(dll) = unsafe { LoadLibraryW(PCWSTR(wide.as_ptr())) } {
                     return Some((dll, path));
                 }
@@ -425,6 +432,9 @@ mod npclient {
             None
         }
 
+        // SAFETY (for callers): `name` is a NUL-terminated name and `T` must be the function
+        // pointer type that export has; the callers only pass the NP_* types declared above,
+        // which are pointer-sized like the `FARPROC` they are copied from
         unsafe fn symbol<T: Copy>(dll: HMODULE, name: windows::core::PCSTR) -> Option<T> {
             let proc = GetProcAddress(dll, name)?;
             Some(transmute_copy(&proc))
@@ -446,6 +456,8 @@ mod npclient {
             self.tried = Some(Instant::now());
 
             let (dll, path) = Self::load_path()?;
+            // SAFETY: `dll` was loaded just above and is kept by `Native` once every symbol
+            // resolves; the names are static strings
             let symbols = unsafe {
                 Some((
                     Self::symbol::<RegisterWindowHandle>(dll, s!("NP_RegisterWindowHandle"))?,
@@ -477,35 +489,43 @@ mod npclient {
                 .hwnd
                 .map(|h| h as *mut c_void)
                 .unwrap_or(std::ptr::null_mut());
+            // SAFETY: `hwnd` is this game's window handle, or null; NPClient only stores it
             let register_result = unsafe { register_window(hwnd) };
             if register_result != 0 {
                 return None;
             }
 
             let mut version = 0u16;
+            // SAFETY: `version` is a live u16 local that the call writes
             let version_result = unsafe { query_version(&mut version) };
             if version_result != 0 {
+                // SAFETY: the window was registered by the call above
                 unsafe {
                     let _ = unregister_window();
                 }
                 return None;
             }
 
+            // SAFETY: `PROFILE_ID` is a plain u16; the call takes no pointers
             let profile_result = unsafe { register_profile(PROFILE_ID) };
             if profile_result != 0 {
                 log::warn!("head tracking: TrackIR NPClient rejected profile ID {PROFILE_ID} (result {profile_result})");
             }
 
+            // SAFETY: `NP_REQUEST` is a plain u16 bit mask; the call takes no pointers
             let request_result = unsafe { request_data(NP_REQUEST) };
             if request_result != 0 {
+                // SAFETY: the window was registered above
                 unsafe {
                     let _ = unregister_window();
                 }
                 return None;
             }
 
+            // SAFETY: the call takes no arguments; the window is registered above
             let start_result = unsafe { start_transmission() };
             if start_result != 0 {
+                // SAFETY: the window was registered above
                 unsafe {
                     let _ = unregister_window();
                 }
@@ -536,6 +556,8 @@ mod npclient {
             let native = self.native.as_mut()?;
 
             let mut data = TrackIrData::default();
+            // SAFETY: `data` is a live, zeroed `TrackIrData` (repr(C), NPClient's layout), and
+            // `native` keeps the DLL that `get_data` comes from loaded
             let result = unsafe { (native.get_data)(&mut data) };
             if result != 0 {
                 return None;
