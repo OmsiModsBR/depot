@@ -3038,23 +3038,23 @@ pub fn corners_name(name: &str) -> &'static str {
     }
 }
 
-/// Where the launcher lists its pages (`ui_nav=`): "top" (a bar along the top), or
-/// "sidebar" for anything else.
+/// Where the launcher lists its pages (`ui_nav=`): "sidebar", or "top" (a bar along the
+/// top) for anything else.
 pub fn nav_name(name: &str) -> &'static str {
-    if name.trim().eq_ignore_ascii_case("top") {
-        "top"
-    } else {
+    if name.trim().eq_ignore_ascii_case("sidebar") {
         "sidebar"
+    } else {
+        "top"
     }
 }
 
-/// What lies behind the launcher's pages (`ui_background=`): "scene" (a blurred picture),
-/// or "plain" (dark) for anything else.
+/// What lies behind the launcher's pages (`ui_background=`): "plain" (dark), or "scene" (a
+/// blurred picture) for anything else.
 pub fn background_name(name: &str) -> &'static str {
-    if name.trim().eq_ignore_ascii_case("scene") {
-        "scene"
-    } else {
+    if name.trim().eq_ignore_ascii_case("plain") {
         "plain"
+    } else {
+        "scene"
     }
 }
 
@@ -3105,11 +3105,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["ui_accent"] = json!(ACCENTS[0]);
     // the launcher's corners: "rounded" (the default) or "square"
     v["ui_corners"] = json!("rounded");
-    // the launcher's pages in a sidebar ("sidebar", the default) or a bar along the top ("top")
-    v["ui_nav"] = json!("sidebar");
-    // behind the launcher's pages: "plain" dark (the default) or a blurred "scene", darkened
-    // by `ui_dimming` percent
-    v["ui_background"] = json!("plain");
+    // the launcher's pages in a bar along the top ("top", the default) or a sidebar ("sidebar")
+    v["ui_nav"] = json!("top");
+    // behind the launcher's pages: a blurred "scene" (the default, plain dark when there is no
+    // picture) or "plain" dark, darkened by `ui_dimming` percent
+    v["ui_background"] = json!("scene");
     v["ui_dimming"] = json!(62);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
@@ -5746,21 +5746,27 @@ mod tests {
         assert!(settings_to_text(&sq, None)
             .lines()
             .any(|l| l == "ui_corners=square"));
-        // (the layout: a sidebar on plain dark unless chosen, the dimming kept within bounds)
+        // (the layout: a top bar on the scene unless chosen, the dimming kept within bounds)
         let d = settings_from_text(None);
         assert_eq!(
             (&d["ui_nav"], &d["ui_background"], &d["ui_dimming"]),
-            (&json!("sidebar"), &json!("plain"), &json!(62))
+            (&json!("top"), &json!("scene"), &json!(62))
         );
-        let top = settings_from_text(Some("ui_nav=Top\nui_background=SCENE\nui_dimming=75\n"));
+        // (a choice already saved is kept)
+        let kept = settings_from_text(Some("ui_nav=sidebar\nui_background=plain\n"));
+        assert_eq!(
+            (&kept["ui_nav"], &kept["ui_background"]),
+            (&json!("sidebar"), &json!("plain"))
+        );
+        let top = settings_from_text(Some("ui_nav=Sidebar\nui_background=PLAIN\nui_dimming=75\n"));
         let text = settings_to_text(&top, None);
-        for l in ["ui_nav=top", "ui_background=scene", "ui_dimming=75"] {
+        for l in ["ui_nav=sidebar", "ui_background=plain", "ui_dimming=75"] {
             assert!(text.lines().any(|x| x == l), "{l}");
         }
         let odd = settings_from_text(Some("ui_nav=left\nui_background=red\nui_dimming=5\n"));
         assert_eq!(
             (&odd["ui_nav"], &odd["ui_background"], &odd["ui_dimming"]),
-            (&json!("sidebar"), &json!("plain"), &json!(30))
+            (&json!("top"), &json!("scene"), &json!(30))
         );
         // (a hand-written dimming with decimals is still read)
         assert_eq!(

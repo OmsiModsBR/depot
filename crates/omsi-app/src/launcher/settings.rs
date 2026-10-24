@@ -3790,7 +3790,7 @@ mod tests {
         assert!(keys("corners", &st).contains(&"ui_corners"));
         drop(st);
         s["ui_corners"] = json!("square");
-        s["ui_background"] = json!("scene");
+        s["ui_nav"] = json!("sidebar");
         s["ui_dimming"] = json!(40);
         let mut st = Store {
             s: &mut s,
@@ -3800,7 +3800,7 @@ mod tests {
         };
         let changed_keys: Vec<&str> = listed(0, "", true, &st).iter().map(|o| o.key).collect();
         assert!(
-            ["ui_corners", "ui_background", "ui_dimming"]
+            ["ui_corners", "ui_nav", "ui_dimming"]
                 .iter()
                 .all(|k| changed_keys.contains(k)),
             "{changed_keys:?}"
