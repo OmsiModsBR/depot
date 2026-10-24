@@ -1840,7 +1840,7 @@ impl App {
             &map,
             vehicle.as_deref(),
         ));
-        self.service_msg = Some((format!("Screenshot: {}", path.display()), 4.0));
+        // (the notice with the path is shown once the picture is taken, never inside it)
         self.shot = Some((path, false));
     }
 
