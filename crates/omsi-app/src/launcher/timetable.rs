@@ -1118,7 +1118,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
     let over = placed
         .iter()
         .position(|p| map.contains(p.at) && p.at.distance(mouse) < 9.0)
-        .filter(|_| !in_list && !l.ui.over_ui);
+        .filter(|_| !in_list);
     let chosen = l.pages.tt.stop.clone();
     let few = placed.len() <= 30;
     // (the chosen and the hovered stop's names first, then the rest where they fit)
@@ -1224,7 +1224,9 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         released: l.ui.input.released,
         down: l.ui.input.down,
         wheel: l.ui.input.wheel.y,
-        blocked: l.ui.over_ui || in_list || !map.contains(mouse),
+        // (the card around the map is a panel, which claims the mouse over it: the map's own
+        // rectangle and the search results over it are what count here)
+        blocked: in_list || !map.contains(mouse),
     };
     l.mapview.think(map, map, l.ui.scale, p);
     let _ = l.mapview.take_clicked();

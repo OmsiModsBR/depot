@@ -678,7 +678,7 @@ fn start_point(l: &mut Launcher) {
         close(l, true);
         return;
     }
-    l.map_interact(map, map);
+    l.map_interact_in_window(map, map);
 }
 
 fn weather(l: &mut Launcher) {
@@ -821,7 +821,7 @@ fn explore(l: &mut Launcher) {
     }
     // (looking only: a pin clicked here does not change the start)
     let entry = l.state.choice.entry;
-    l.map_interact(map, map);
+    l.map_interact_in_window(map, map);
     if l.state.choice.entry != entry {
         l.state.choice.entry = entry;
     }
