@@ -340,11 +340,15 @@ pub fn export_glb(
 }
 
 fn bytemuck_cast(v: &[[f32; 3]]) -> &[u8] {
+    // SAFETY: `[f32; 3]` has no padding, so the `len * 12` bytes are all initialised; the
+    // view borrows `v` and cannot outlive it
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 12) }
 }
 fn bytemuck_cast2(v: &[[f32; 2]]) -> &[u8] {
+    // SAFETY: as `bytemuck_cast`: no padding, `len * 8` initialised bytes, borrowed from `v`
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 8) }
 }
 fn bytemuck_u32(v: &[u32]) -> &[u8] {
+    // SAFETY: as `bytemuck_cast`: no padding, `len * 4` initialised bytes, borrowed from `v`
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 4) }
 }
