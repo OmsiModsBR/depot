@@ -57,6 +57,18 @@ impl TrailerPart {
         self.body.as_ref().map(|b| &b.rb)
     }
 
+    fn rigid_mut(&mut self) -> Option<&mut RigidBody> {
+        self.body.as_mut().map(|b| &mut b.rb)
+    }
+
+    /// Sets what the part's own body carries (kg, see [`RigidBody::set_payload`]); a part
+    /// without a body of its own carries nothing.
+    pub fn set_payload(&mut self, kg: f32) {
+        if let Some(rb) = self.rigid_mut() {
+            rb.set_payload(kg);
+        }
+    }
+
     /// The part's body is to be hung on its joint again at the next step.
     pub(in crate::vehicle) fn unplace(&mut self) {
         if let Some(b) = self.body.as_mut() {
