@@ -183,12 +183,27 @@ pub fn setup(l: &mut Launcher, area: Rect) {
         },
         main.h,
     );
-    let mut y = folders(l, left);
+    // (the left column scrolls: on a short window the Depot's own files used to sit under the
+    // foot, out of reach)
+    let off =
+        l.ui.scroll
+            .get(&id_of("setup-left"))
+            .copied()
+            .unwrap_or(0.0);
+    let top = left.y - off;
+    l.ui.push_clip(left, 0.0);
+    let shifted = Rect::new(left.x, top, left.w, left.h);
+    let mut y = folders(l, shifted);
     if !phone {
         if l.pages.setup.tab == 1 {
             y = free_space(l, Rect::new(left.x, y + GAP, left.w, 0.0));
         }
         own_files(l, Rect::new(left.x, y + GAP, left.w, 0.0));
+        y += GAP + OWN_FILES_H;
+    }
+    l.ui.pop_clip();
+    l.ui.scroll_keep("setup-left", left, y - top);
+    if !phone {
         content(l, Rect::new(left.right() + GAP, main.y, right_w, main.h));
     }
     foot(l, Rect::new(body.x, body.bottom() - foot_h, body.w, foot_h));
@@ -459,8 +474,11 @@ fn chip(ui: &mut Ui, right: f32, cy: f32, label: &str) {
 }
 
 /// The Depot's own files: its folder (logs, previews, settings), and a button to open it.
+/// The height of the card of the Depot's own files.
+const OWN_FILES_H: f32 = 128.0;
+
 fn own_files(l: &mut Launcher, at: Rect) {
-    let r = Rect::new(at.x, at.y, at.w, 128.0);
+    let r = Rect::new(at.x, at.y, at.w, OWN_FILES_H);
     l.ui.panel(r);
     let inner = Launcher::card_title(
         &mut l.ui,
@@ -608,11 +626,28 @@ fn content(l: &mut Launcher, r: Rect) {
     let legend = disk::by_type(&usage.tree);
     let legend_h = legend.len().div_ceil(2) as f32 * 22.0;
     let side = (inner.w)
-        .min(inner.bottom() - y - legend_h - 24.0)
+        .min(inner.bottom() - y - legend_h - 24.0 - TRAIL_H)
         .max(120.0);
     let chart_r = Rect::new(inner.x + (inner.w - side) * 0.5, y, side, side);
-    chart(&mut l.ui, chart_r, &usage.tree, &mut l.pages.setup.focus);
-    let mut ly = chart_r.bottom() + 18.0;
+    let (trail, bytes) = chart(&mut l.ui, chart_r, &usage.tree, &mut l.pages.setup.focus);
+    // what the slice under the mouse (or the one in the middle) is, with its whole names
+    let line = if trail.is_empty() {
+        omsi_ui::tr("Everything in both folders").to_string()
+    } else {
+        trail.join(" › ")
+    };
+    let line = format!("{line} · {}", fmt_size(bytes));
+    // (a name long enough for more than the reserved lines pushes the legend down, not under it)
+    let lh = l.ui.paragraph_height(&line, inner.w, 12.0, Weight::Regular);
+    l.ui.paragraph(
+        &line,
+        Vec2::new(inner.x, chart_r.bottom() + 6.0),
+        inner.w,
+        12.0,
+        Weight::Regular,
+        TEXT_SOFT,
+    );
+    let mut ly = chart_r.bottom() + 12.0 + lh.max(TRAIL_H) + 6.0;
     let cw = (inner.w - GAP) * 0.5;
     for (k, (name, bytes)) in legend.iter().enumerate() {
         let x = inner.x + (k % 2) as f32 * (cw + GAP);
@@ -639,6 +674,9 @@ fn content(l: &mut Launcher, r: Rect) {
         );
     }
 }
+
+/// The room under the chart for the whole names of the part it shows (three lines).
+const TRAIL_H: f32 = 48.0;
 
 /// A size as the chart says it: whole gigabytes from 10 GB, else one decimal.
 pub fn fmt_size(b: u64) -> String {
@@ -691,7 +729,7 @@ fn node_at<'a>(tree: &'a Node, path: &mut Vec<usize>) -> (&'a Node, Option<&'a s
 
 /// The disk usage as rings around the middle (a sunburst): the part looked into in the
 /// middle, its parts around it, theirs further out.
-fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
+fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) -> (Vec<String>, u64) {
     let (top, top_ty) = node_at(tree, focus);
     let depth0 = focus.len();
     let rings = 4usize.saturating_sub(depth0).max(1);
@@ -789,6 +827,12 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
         Some(k) => (slices[k].node.name.clone(), slices[k].node.bytes),
         None => (top.name.clone(), top.bytes),
     };
+    // (the whole names, from the folder down: the middle only has room for the end of one)
+    let trail_path: &[usize] = match hovered {
+        Some(k) => &slices[k].path,
+        None => focus,
+    };
+    let trail = trail_names(tree, trail_path);
     let size = fmt_size(bytes);
     ui.text_in(
         &size,
@@ -816,6 +860,23 @@ fn chart(ui: &mut Ui, r: Rect, tree: &Node, focus: &mut Vec<usize>) {
             _ => {}
         }
     }
+    (trail, bytes)
+}
+
+/// The names along `path` from the top of `tree`, whole.
+fn trail_names(tree: &Node, path: &[usize]) -> Vec<String> {
+    let mut n = tree;
+    let mut out = Vec::new();
+    for &k in path {
+        match n.kids.get(k) {
+            Some(c) => {
+                out.push(c.name.clone());
+                n = c;
+            }
+            None => break,
+        }
+    }
+    out
 }
 
 /// The foot: when changes apply, Revert and Save.
