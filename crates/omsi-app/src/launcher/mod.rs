@@ -2033,7 +2033,10 @@ impl Launcher {
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
                 // (counted again each time the page opens: a mod installed meanwhile counts)
-                Page::Setup => self.state.usage_asked = false,
+                Page::Setup => {
+                    self.state.usage_asked = false;
+                    self.state.squeeze.asked = false;
+                }
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();

@@ -60,6 +60,10 @@ pub enum Msg {
     /// What the content takes on disk and how much of it there is (Setup), for the reading
     /// of that number.
     Usage(u64, core::disk::Usage),
+    /// The folders of the Free up space card, read (the reading asked last counts).
+    Squeeze(u64, std::sync::Arc<Vec<core::compress::Folder>>),
+    /// A compression or an undo ended.
+    SqueezeDone(Squeezed),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -290,6 +294,57 @@ impl Choice {
     }
 }
 
+/// How a compression or an undo ended.
+#[derive(Debug, Clone)]
+pub enum Squeezed {
+    /// Ended; this many calls of the system tool failed (files in use or not allowed).
+    Done(u64),
+    Cancelled,
+    Error(String),
+}
+
+/// The Free up space card: what was read of the folders, what is ticked, the step the
+/// person is at and the job running.
+#[derive(Default)]
+pub struct Squeeze {
+    pub folders: Option<std::sync::Arc<Vec<core::compress::Folder>>>,
+    /// The ticks were set from the first reading (and are kept over the next ones).
+    chosen_set: bool,
+    pub asked: bool,
+    gen: u64,
+    /// Ticked: [the Depot's content, the original OMSI 2].
+    pub chosen: [bool; 2],
+    /// Asking to confirm: Some(false) a compression, Some(true) an undo.
+    pub confirm: Option<bool>,
+    /// "I understand it can be slower on a hard disk" is ticked.
+    pub hdd_ok: bool,
+    pub job: Option<(std::sync::Arc<core::compress::Job>, bool)>,
+    pub done: Option<Squeezed>,
+}
+
+impl Squeeze {
+    pub const DEPOT: &'static str = "Depot content folder";
+    pub const ORIGINAL: &'static str = "OMSI 2 folder";
+
+    /// The Depot's content folder and the original OMSI 2 folder as they are now. The
+    /// content folder is left out when it is the original folder itself.
+    pub fn dirs(
+        root: &std::path::Path,
+    ) -> (Option<std::path::PathBuf>, Option<std::path::PathBuf>) {
+        let root = (!root.as_os_str().is_empty() && root.is_dir()).then(|| root.to_path_buf());
+        let content = core::content_dir().filter(|c| {
+            !root
+                .as_deref()
+                .is_some_and(|r| core::compress::same_path(r, c))
+        });
+        (content, root)
+    }
+
+    pub fn index(name: &str) -> usize {
+        usize::from(name == Self::ORIGINAL)
+    }
+}
+
 pub struct State {
     pub config: core::Config,
     pub maps: Vec<core::MapInfo>,
@@ -342,6 +397,8 @@ pub struct State {
     pub usage: Option<core::disk::Usage>,
     pub usage_asked: bool,
     usage_gen: u64,
+    /// The Free up space card's folders, choices and the job running.
+    pub squeeze: Squeeze,
     /// Counts the readings of the content that brought other files than before.
     pub content_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
@@ -437,6 +494,7 @@ impl State {
             usage: None,
             usage_asked: false,
             usage_gen: 0,
+            squeeze: Squeeze::default(),
             content_gen: 0,
             mod_info: None,
             mod_path: String::new(),
@@ -645,6 +703,104 @@ impl State {
                 folders.push(("Depot content folder".to_string(), c));
             }
             Msg::Usage(gen, core::disk::scan(&folders))
+        });
+    }
+
+    /// Reads the folders of the Free up space card (the Depot's content and the original
+    /// OMSI 2): their disks, the files that may be compressed, the estimate and what is
+    /// compressed now - in the background.
+    pub fn load_squeeze(&mut self) {
+        self.squeeze.asked = true;
+        self.squeeze.gen += 1;
+        let gen = self.squeeze.gen;
+        let root = std::path::PathBuf::from(&self.config.root);
+        self.spawn(move || {
+            let (content, root) = Squeeze::dirs(&root);
+            let mut folders = Vec::new();
+            if let Some(c) = &content {
+                let skip: Vec<_> = root.iter().cloned().collect();
+                folders.push(core::compress::inspect(Squeeze::DEPOT, c, &skip));
+            }
+            if let Some(r) = &root {
+                // (the Depot's folder often sits inside the original's: not counted twice)
+                let skip: Vec<_> = content.iter().cloned().collect();
+                folders.push(core::compress::inspect(Squeeze::ORIGINAL, r, &skip));
+            }
+            Msg::Squeeze(gen, std::sync::Arc::new(folders))
+        });
+    }
+
+    /// Forgets what was read of the folders (they were changed under Setup) and reads again;
+    /// a reading still on its way is not taken.
+    pub fn reset_squeeze(&mut self) {
+        self.squeeze.folders = None;
+        self.squeeze.chosen_set = false;
+        self.squeeze.confirm = None;
+        self.squeeze.hdd_ok = false;
+        self.load_squeeze();
+    }
+
+    /// Compresses the ticked folders (or, with `undo`, stores their files as they were), in
+    /// the background; `squeeze.job` tells how far it is and cancels it.
+    pub fn start_squeeze(&mut self, undo: bool) {
+        if self.squeeze.job.is_some() {
+            return;
+        }
+        let Some(folders) = self.squeeze.folders.clone() else {
+            return;
+        };
+        // (the original folder under Setup may have changed since it was read; the content
+        // folder's change comes through `reset_squeeze` when Setup saves)
+        let root = std::path::Path::new(&self.config.root);
+        if folders
+            .iter()
+            .any(|f| f.name == Squeeze::ORIGINAL && !core::compress::same_path(&f.dir, root))
+        {
+            self.reset_squeeze();
+            return;
+        }
+        self.squeeze.hdd_ok = false;
+        let chosen = self.squeeze.chosen;
+        let job = core::compress::Job::new();
+        self.squeeze.job = Some((job.clone(), undo));
+        self.squeeze.done = None;
+        self.spawn(move || {
+            let mut files = Vec::new();
+            for f in folders.iter().filter(|f| f.disk.is_ok()) {
+                if chosen[Squeeze::index(f.name)] {
+                    if undo {
+                        files.extend(core::compress::compressed_of(&f.files));
+                    } else {
+                        files.extend(f.files.iter().cloned());
+                    }
+                }
+            }
+            core::log_to_file(&format!(
+                "{} {} files",
+                if undo {
+                    "undoing compression of"
+                } else {
+                    "compressing"
+                },
+                files.len()
+            ));
+            use std::sync::atomic::Ordering::Relaxed;
+            // (a panic ends the job with its message, so that the card does not wait for ever)
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                core::compress::run(&files, undo, &job)
+            }))
+            .unwrap_or_else(|_| Err("the compression stopped unexpectedly".into()));
+            Msg::SqueezeDone(match r {
+                Err(e) => Squeezed::Error(e),
+                // (a cancel that came after the last batch changed nothing)
+                Ok(())
+                    if job.cancel.load(Relaxed)
+                        && job.done.load(Relaxed) < job.total.load(Relaxed) =>
+                {
+                    Squeezed::Cancelled
+                }
+                Ok(()) => Squeezed::Done(job.failed.load(Relaxed)),
+            })
         });
     }
 
@@ -1589,6 +1745,23 @@ impl State {
             Msg::Mods(Err(e)) => self.set_status(e, true),
             Msg::Usage(gen, u) if gen == self.usage_gen => self.usage = Some(u),
             Msg::Usage(..) => {}
+            Msg::Squeeze(gen, folders) if gen == self.squeeze.gen => {
+                if !self.squeeze.chosen_set {
+                    // (the Depot's own content is ticked, the original OMSI 2 is not)
+                    self.squeeze.chosen_set = true;
+                    self.squeeze.chosen = [true, false];
+                }
+                self.squeeze.folders = Some(folders);
+            }
+            Msg::Squeeze(..) => {}
+            Msg::SqueezeDone(r) => {
+                self.squeeze.job = None;
+                self.squeeze.confirm = None;
+                self.squeeze.done = Some(r);
+                // (what was read before the job is not what is on the disk now)
+                self.squeeze.folders = None;
+                self.load_squeeze();
+            }
             Msg::ModInfo(r) => {
                 self.mod_info = Some(r);
             }
