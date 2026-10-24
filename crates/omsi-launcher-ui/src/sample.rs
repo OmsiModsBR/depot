@@ -10,7 +10,7 @@ fn bus(name: &str, maker: &str, kind: &str, installed: bool, paints: &[&str]) ->
         type_name: kind.into(),
         file: format!("Vehicles/{name}/{name}.bus"),
         folder: name.into(),
-        description: "Technical sheet\nEngine, power, gearbox, maximum speed, length and weight, as the author wrote them (example text).\n\nCredits\nModelling and conversion, as credited by the author (example text).".into(),
+        description: format!("Technical sheet\nEngine, power, gearbox, maximum speed, length and weight, as the author wrote them (example text).\n\n{}Credits\nModelling and conversion, as credited by the author (example text).", "More of what the author wrote, line after line, so that the text is longer than any limit once put on it (example text).\n".repeat(24)),
         default_paint: paints.first().map(|p| p.to_string()).unwrap_or_default(),
         // the first is the bus's own livery; the rest are repaints, as the catalog lists them
         paints: paints.iter().skip(1).map(|p| p.to_string()).collect(),

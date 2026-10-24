@@ -3,7 +3,7 @@
 //! Maps - optional: in the game the ALT menu adds and changes vehicles as always. The catalog
 //! is read by the launcher core on a thread of its own, so the window never waits for the disk.
 
-use crate::kit::{self, card, clipped, dot, shorten, subheading, text, Status};
+use crate::kit::{self, card, clipped, dot, right, shorten, subheading, text, Status};
 use crate::look::*;
 use crate::shell::BODY_TOP;
 use omsi_launcher_lib::VehicleInfo;
@@ -12,9 +12,6 @@ use omsi_ui::widgets::{matches, ButtonKind, Ui};
 use omsi_ui::{Rect, Weight};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
-
-/// The longest description drawn: third-party text, bounded.
-const DESCRIPTION_CHARS: usize = 1200;
 
 enum Catalog {
     NotStarted,
@@ -47,6 +44,10 @@ pub struct VehiclesView {
     /// was this frame.
     picture: Option<Picture>,
     preview_area: Option<Rect>,
+    /// The paint tiles in view this frame, as (bus file, paint name), and the small pictures
+    /// the host made for them (`set_paint_thumb`).
+    visible_paints: Vec<(String, String)>,
+    paint_thumbs: std::collections::HashMap<(String, String), usize>,
 }
 
 /// The bus to start with from Maps, as the "Use for the next start" card has it.
@@ -94,6 +95,8 @@ impl Default for VehiclesView {
             current: None,
             picture: None,
             preview_area: None,
+            visible_paints: Vec::new(),
+            paint_thumbs: Default::default(),
         }
     }
 }
@@ -115,6 +118,25 @@ impl VehiclesView {
     /// Where the preview's picture goes this frame (in interface points), once drawn.
     pub fn preview_area(&self) -> Option<Rect> {
         self.preview_area
+    }
+
+    /// The paint tiles in view, as (bus file, paint name; empty for the bus's own livery): the
+    /// host makes a small picture for each from the picture it kept of that paint.
+    pub fn visible_paints(&self) -> &[(String, String)] {
+        &self.visible_paints
+    }
+
+    /// The small picture (texture) of a bus's paint; None takes it away.
+    pub fn set_paint_thumb(&mut self, file: &str, paint: &str, tex: Option<usize>) {
+        let key = (file.to_string(), paint.to_string());
+        match tex {
+            Some(t) => {
+                self.paint_thumbs.insert(key, t);
+            }
+            None => {
+                self.paint_thumbs.remove(&key);
+            }
+        }
     }
 
     /// What the host has to show of `current` (None: the page says the Drive page shows it).
@@ -257,9 +279,10 @@ impl VehiclesView {
         matches!(self.catalog, Catalog::Loading(_))
     }
 
-    /// Indices of the vehicles the search shows.
+    /// Indices of the vehicles the search shows, by manufacturer and then model (the order
+    /// the library lists them in, under a heading for each manufacturer).
     fn shown(&self, list: &[VehicleInfo]) -> Vec<usize> {
-        (0..list.len())
+        let mut out: Vec<usize> = (0..list.len())
             .filter(|&i| {
                 let v = &list[i];
                 self.query.trim().is_empty()
@@ -268,7 +291,14 @@ impl VehiclesView {
                         &self.query,
                     )
             })
-            .collect()
+            .collect();
+        out.sort_by(|&a, &b| {
+            let (a, b) = (&list[a], &list[b]);
+            natural_cmp(&maker_key(a), &maker_key(b))
+                .then_with(|| natural_cmp(&model_label(a), &model_label(b)))
+                .then_with(|| a.file.cmp(&b.file))
+        });
+        out
     }
 
     /// The Vehicles page in the body area `body` (the sidebar is outside it).
@@ -378,42 +408,68 @@ impl VehiclesView {
         let selected = self.selected;
         ui.scroll_area("vehicles:list", area, &mut |ui, view| {
             let mut y = view.y;
+            let mut group = String::new();
             for &i in shown {
                 let v = &list[i];
-                let row = Rect::new(view.x, y, view.w - 8.0, 84.0);
+                // (a heading over the first model of each manufacturer, with how many it has)
+                let key = maker_key(v);
+                if key != group {
+                    let head = Rect::new(view.x, y, view.w - 8.0, GROUP_H);
+                    if ui.rect_visible(head) {
+                        let n = shown
+                            .iter()
+                            .filter(|&&j| maker_key(&list[j]) == key)
+                            .count();
+                        let name = maker_label(v);
+                        right(
+                            ui,
+                            &n.to_string(),
+                            head.right() - 16.0,
+                            head.y + GROUP_H - 12.0,
+                            12.0,
+                            Weight::Regular,
+                            MUTED,
+                        );
+                        clipped(
+                            ui,
+                            &omsi_ui::tr(&name).to_uppercase(),
+                            head.x + 16.0,
+                            head.y + GROUP_H - 12.0,
+                            head.w - 56.0,
+                            11.5,
+                            Weight::Bold,
+                            MUTED,
+                        );
+                        ui.p().rect(
+                            Rect::new(head.x + 12.0, head.bottom() - 2.0, head.w - 24.0, 1.0),
+                            LINE,
+                        );
+                    }
+                    y += GROUP_H;
+                    group = key;
+                }
+                let row = Rect::new(view.x, y, view.w - 8.0, ROW_H);
                 if ui.row(&format!("vehicles:row:{i}"), row, i == selected) {
                     picked = Some(i);
                 }
                 if ui.rect_visible(row) {
-                    let name = omsi_launcher_lib::display_bus_name(&v.name);
                     clipped(
                         ui,
-                        &name,
+                        &model_label(v),
                         row.x + 16.0,
-                        row.y + 24.0,
+                        row.y + 22.0,
                         row.w - 40.0,
                         15.0,
                         Weight::Bold,
                         FG,
                     );
-                    let sub = format!("{} \u{b7} {}", v.type_name, v.manufacturer);
-                    clipped(
-                        ui,
-                        &sub,
-                        row.x + 16.0,
-                        row.y + 46.0,
-                        row.w - 40.0,
-                        12.0,
-                        Weight::Regular,
-                        MUTED,
-                    );
                     let (status, label) = vehicle_status(v);
-                    dot(ui, row.x + 21.0, row.y + 66.0, status);
+                    dot(ui, row.x + 21.0, row.y + 44.0, status);
                     text(
                         ui,
                         label,
                         row.x + 34.0,
-                        row.y + 66.0,
+                        row.y + 44.0,
                         12.0,
                         Weight::Regular,
                         status.color(),
@@ -425,7 +481,7 @@ impl VehiclesView {
                         MUTED,
                     );
                 }
-                y += 84.0;
+                y += ROW_H;
             }
             y - view.y
         });
@@ -533,89 +589,76 @@ impl VehiclesView {
             .map(|(label, _, note)| format!("{label}: {note}"))
             .collect();
         ui.tooltip(badge, &tip.join("\n"));
-        let name = omsi_launcher_lib::display_bus_name(&v.name);
+        // (the model in bold, the maker under it; the folder and the file are under the mouse)
+        let name = model_label(v);
         let name_w = badge.x - 12.0 - (r.x + 19.0);
+        let title = Rect::new(r.x + 19.0, r.y + 46.0, name_w, 50.0);
         clipped(
             ui,
             &name,
             r.x + 19.0,
             r.y + 62.0,
             name_w,
-            15.0,
+            16.0,
             Weight::Bold,
             FG,
         );
         clipped(
             ui,
-            &v.manufacturer,
+            &omsi_ui::tr(&maker_label(v)),
             r.x + 19.0,
-            r.y + 82.0,
+            r.y + 84.0,
             name_w,
-            12.0,
+            12.5,
             Weight::Regular,
             MUTED,
         );
-        let mut rows = vec![
-            ("Type", v.type_name.clone()),
-            ("Folder", v.folder.clone()),
-            // (the bus's own livery and its repaints, as the Paints card counts them)
-            ("Paints", (v.paints.len() + 1).to_string()),
-            ("Depot files", v.hofs.len().to_string()),
-            ("Fleet numbers", v.numbers.len().to_string()),
-        ];
+        ui.tooltip(
+            title,
+            &format!(
+                "{}\n{}\n{}",
+                v.name,
+                v.folder,
+                v.file.rsplit('/').next().unwrap_or("")
+            ),
+        );
+        // (a bus that borrows from a pack that is not installed says so before anything else)
+        let mut top = r.y + 104.0;
         if !v.missing_packs.is_empty() {
-            rows.push(("Missing packs", v.missing_packs.join(", ")));
+            top = detail_rows(
+                ui,
+                r.x,
+                r.w,
+                top,
+                &[("Missing packs", v.missing_packs.join(", "))],
+            );
         }
-        let desc = shorten(v.description.trim(), DESCRIPTION_CHARS);
+        // the author's description is what the card is for: the rest of it, whole, scrolling
+        let desc = v.description.trim();
         let desc = if desc.is_empty() {
             "The author wrote no description.".to_string()
         } else {
-            desc
+            desc.to_string()
         };
-        // (the rows, then the description in a box of its own that scrolls; on a short window,
-        // where that box would be under DESCRIPTION_MIN, the rows and the description scroll
-        // together)
-        let top = r.y + 102.0;
+        ui.p().rect(Rect::new(r.x + 1.0, top, r.w - 2.0, 1.0), LINE);
+        subheading(
+            ui,
+            Rect::new(r.x + 18.0, top + 16.0, r.w - 36.0, 20.0),
+            "Author's description",
+        );
+        let box_ = Rect::new(r.x + 15.0, top + 40.0, r.w - 30.0, r.bottom() - top - 48.0);
         let id = format!("vehicles:about:{}", v.file);
-        if r.bottom() - (top + rows.len() as f32 * ROW) - 54.0 >= DESCRIPTION_MIN {
-            let y = detail_rows(ui, r.x, r.w, top, &rows);
-            subheading(
-                ui,
-                Rect::new(r.x + 18.0, y + 20.0, r.w - 36.0, 20.0),
-                "Author's description",
+        ui.scroll_area(&id, box_, &mut |ui, view| {
+            let h = ui.paragraph(
+                &desc,
+                glam::Vec2::new(view.x + 4.0, view.y + 6.0),
+                view.w - 18.0,
+                13.0 * TEXT_SCALE,
+                Weight::Regular,
+                FG,
             );
-            let box_ = Rect::new(r.x + 15.0, y + 46.0, r.w - 30.0, r.bottom() - y - 54.0);
-            ui.scroll_area(&id, box_, &mut |ui, view| {
-                let h = ui.paragraph(
-                    &desc,
-                    glam::Vec2::new(view.x + 4.0, view.y + 12.0),
-                    view.w - 16.0,
-                    12.5 * TEXT_SCALE,
-                    Weight::Regular,
-                    FG,
-                );
-                h + 20.0
-            });
-        } else {
-            let area = Rect::new(r.x + 1.0, top - 2.0, r.w - 2.0, r.bottom() - top - 6.0);
-            ui.scroll_area(&id, area, &mut |ui, view| {
-                let y = detail_rows(ui, view.x - 1.0, view.w + 2.0, view.y + 2.0, &rows);
-                subheading(
-                    ui,
-                    Rect::new(view.x + 17.0, y + 20.0, view.w - 36.0, 20.0),
-                    "Author's description",
-                );
-                let h = ui.paragraph(
-                    &desc,
-                    glam::Vec2::new(view.x + 18.0, y + 58.0),
-                    view.w - 40.0,
-                    12.5 * TEXT_SCALE,
-                    Weight::Regular,
-                    FG,
-                );
-                y + 58.0 + h + 16.0 - view.y
-            });
-        }
+            h + 20.0
+        });
     }
 
     fn paints(&mut self, ui: &mut Ui, r: Rect, v: Option<&VehicleInfo>) {
@@ -627,45 +670,73 @@ impl VehiclesView {
             "Paints",
             Some(&omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string())),
         );
+        self.visible_paints.clear();
         let Some(v) = v else { return };
         let area = Rect::new(r.x + 12.0, r.y + 44.0, r.w - 24.0, r.h - 52.0);
         let mut picked = None;
         let chosen = self.paint;
+        let mut seen = Vec::new();
+        let thumbs = &self.paint_thumbs;
         ui.scroll_area("vehicles:paints", area, &mut |ui, view| {
-            let (mut x, mut y) = (view.x, view.y);
-            let chips = std::iter::once((
-                None,
-                shorten(default_livery(v), 28),
-                "vehicles:paint:default".to_string(),
-            ))
-            .chain(
+            let (mut x, mut y) = (view.x + 2.0, view.y + 2.0);
+            let tiles = std::iter::once((None, default_livery(v).to_string())).chain(
                 v.paints
                     .iter()
                     .enumerate()
-                    .map(|(i, p)| (Some(i), shorten(p, 28), format!("vehicles:paint:{i}"))),
+                    .map(|(i, p)| (Some(i), p.clone())),
             );
-            for (i, label, id) in chips {
-                let w = ui.width(&label, 13.0 * TEXT_SCALE, Weight::Medium) + 28.0;
-                if x + w > view.right() - 8.0 {
-                    x = view.x;
-                    y += 42.0;
+            for (i, label) in tiles {
+                if x + TILE_W > view.right() - 6.0 && x > view.x + 2.0 {
+                    x = view.x + 2.0;
+                    y += TILE_H + 10.0;
                 }
-                let chip = Rect::new(x, y, w, 34.0);
-                if ui.row(&id, chip, i == chosen) {
+                let tile = Rect::new(x, y, TILE_W, TILE_H);
+                x += TILE_W + 10.0;
+                if !ui.rect_visible(tile) {
+                    continue;
+                }
+                let paint = i.and_then(|i| v.paints.get(i)).cloned().unwrap_or_default();
+                let id = match i {
+                    Some(i) => format!("vehicles:paint:{i}"),
+                    None => "vehicles:paint:default".to_string(),
+                };
+                if ui.row(&id, tile, i == chosen) {
                     picked = Some(i);
                 }
-                ui.text_in(
+                // (the picture the preview kept of this paint, or an empty frame with its initial
+                // until the paint has been looked at)
+                let pic = Rect::new(tile.x + 4.0, tile.y + 4.0, TILE_W - 8.0, THUMB_H);
+                match thumbs.get(&(v.file.clone(), paint.clone())) {
+                    Some(&tex) => ui.image(pic, tex, 4.0),
+                    None => {
+                        ui.p().rounded(pic, 4.0, PANEL_2);
+                        let initial: String = label.chars().next().into_iter().collect();
+                        ui.text_in(
+                            &initial.to_uppercase(),
+                            pic,
+                            22.0 * TEXT_SCALE,
+                            Weight::Bold,
+                            MUTED.alpha(0.5),
+                            Align::Center,
+                        );
+                    }
+                }
+                clipped(
+                    ui,
                     &label,
-                    chip,
-                    13.0 * TEXT_SCALE,
+                    tile.x + 8.0,
+                    pic.bottom() + 17.0,
+                    TILE_W - 16.0,
+                    12.5,
                     Weight::Medium,
                     if i == chosen { FG } else { MUTED },
-                    Align::Center,
                 );
-                x += w + 8.0;
+                ui.tooltip(tile, &label);
+                seen.push((v.file.clone(), paint));
             }
-            y + 42.0 - view.y
+            y + TILE_H + 8.0 - view.y
         });
+        self.visible_paints = seen;
         if let Some(i) = picked {
             self.paint = i;
         }
@@ -685,6 +756,13 @@ impl VehiclesView {
         let mut y = r.y + 50.0;
         label(ui, "Paint", x1, y);
         label(ui, "Garage", x2, y);
+        // (how many each list has, in the corner over it)
+        let found = |n: usize| omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string());
+        let corner = |ui: &mut Ui, n: usize, x_right: f32, y: f32| {
+            right(ui, &found(n), x_right, y, 12.0, Weight::Regular, MUTED);
+        };
+        corner(ui, v.paints.len() + 1, x1 + col, y);
+        corner(ui, v.hofs.len(), x2 + col, y);
         y += 10.0;
         let paints: Vec<String> = std::iter::once(default_livery(v).to_string())
             .chain(v.paints.iter().cloned())
@@ -710,6 +788,9 @@ impl VehiclesView {
         y += 46.0;
         label(ui, "Fleet number", x1, y);
         label(ui, "Plate", x2, y);
+        if !v.numbers.is_empty() {
+            corner(ui, v.numbers.len(), x1 + col, y);
+        }
         y += 10.0;
         let numbers: Vec<String> = if v.numbers.is_empty() {
             vec!["None listed".to_string()]
@@ -833,8 +914,68 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
 
 /// A detail row's height.
 const ROW: f32 = 29.0;
-/// The least room the author's description keeps under the rows before they scroll with it.
-const DESCRIPTION_MIN: f32 = 80.0;
+/// A library row's and a manufacturer heading's height.
+const ROW_H: f32 = 62.0;
+const GROUP_H: f32 = 36.0;
+/// A paint tile's size, and the picture in it (the shape of the small pictures the host makes).
+const TILE_W: f32 = 148.0;
+const THUMB_H: f32 = 84.0;
+const TILE_H: f32 = THUMB_H + 8.0 + 30.0;
+
+/// The manufacturer a bus is listed under, to group by (case and spaces do not matter).
+fn maker_key(v: &VehicleInfo) -> String {
+    omsi_launcher_lib::display_bus_name(&v.manufacturer).to_lowercase()
+}
+
+/// The manufacturer's name as the library shows it.
+fn maker_label(v: &VehicleInfo) -> String {
+    match omsi_launcher_lib::display_bus_name(&v.manufacturer) {
+        m if m.is_empty() => "Unknown manufacturer".to_string(),
+        m => m,
+    }
+}
+
+/// The model's name (its type, as the bus file gives it; the full name when there is none).
+fn model_label(v: &VehicleInfo) -> String {
+    match omsi_launcher_lib::display_bus_name(&v.type_name) {
+        t if t.is_empty() => omsi_launcher_lib::display_bus_name(&v.name),
+        t => t,
+    }
+}
+
+/// Order by text with numbers by value, ignoring case ("Citaro 2" before "Citaro 10").
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let (mut a, mut b) = (a.chars().peekable(), b.chars().peekable());
+    loop {
+        match (a.peek().copied(), b.peek().copied()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, _) => return std::cmp::Ordering::Less,
+            (_, None) => return std::cmp::Ordering::Greater,
+            (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
+                let num = |it: &mut std::iter::Peekable<std::str::Chars>| {
+                    let mut n: u128 = 0;
+                    while let Some(d) = it.peek().and_then(|c| c.to_digit(10)) {
+                        n = n.saturating_mul(10).saturating_add(d as u128);
+                        it.next();
+                    }
+                    n
+                };
+                let o = num(&mut a).cmp(&num(&mut b));
+                if o != std::cmp::Ordering::Equal {
+                    return o;
+                }
+            }
+            (Some(x), Some(y)) => {
+                let o = x.to_lowercase().cmp(y.to_lowercase());
+                if o != std::cmp::Ordering::Equal {
+                    return o;
+                }
+                a.next();
+                b.next();
+            }
+        }
+    }
+}
 
 /// The detail rows (name and value, a line above each) of a card at `x` `w` wide, the first
 /// line at `y`; returns where the last row ends.
@@ -882,7 +1023,8 @@ mod tests {
     fn the_search_keeps_the_vehicles_that_match() {
         let list = sample::vehicles();
         let mut v = VehiclesView::with_catalog(list.clone());
-        assert_eq!(v.shown(&list), vec![0, 1, 2]);
+        // (by manufacturer, then model: the articulated bus before the city bus of its maker)
+        assert_eq!(v.shown(&list), vec![0, 2, 1]);
         v.query = "articulated".into();
         assert_eq!(v.shown(&list), vec![2]);
         v.query = "no such bus".into();
@@ -890,5 +1032,37 @@ mod tests {
         // and then no vehicle is chosen, not the first one
         let shown = v.shown(&list);
         assert!(kit::chosen(&list, &shown, v.selected).is_none());
+    }
+
+    #[test]
+    fn the_library_groups_by_maker_and_orders_models_naturally() {
+        let mut list = sample::vehicles();
+        list[0].manufacturer = "Zeta".into();
+        list[1].manufacturer = "alpha ".into();
+        list[2].manufacturer = "Alpha".into();
+        list[1].type_name = "Citaro 10".into();
+        list[2].type_name = "Citaro 2".into();
+        let v = VehiclesView::with_catalog(list.clone());
+        // one group for "alpha " and "Alpha", then the other maker; Citaro 2 before Citaro 10
+        assert_eq!(v.shown(&list), vec![2, 1, 0]);
+        assert_eq!(maker_key(&list[1]), maker_key(&list[2]));
+        list[0].manufacturer = " ".into();
+        assert_eq!(maker_label(&list[0]), "Unknown manufacturer");
+        list[0].type_name.clear();
+        assert_eq!(model_label(&list[0]), "Example bus A");
+    }
+
+    #[test]
+    fn natural_order_reads_numbers_by_value() {
+        use std::cmp::Ordering::*;
+        assert_eq!(natural_cmp("Citaro 2", "citaro 10"), Less);
+        assert_eq!(natural_cmp("a", "A"), Equal);
+        assert_eq!(natural_cmp("a1", "a"), Greater);
+    }
+
+    #[test]
+    fn a_long_description_is_kept_whole() {
+        let list = sample::vehicles();
+        assert!(list[0].description.chars().count() > 2000);
     }
 }

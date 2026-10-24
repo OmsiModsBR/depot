@@ -1,7 +1,7 @@
 //! The "Add vehicle" window of the new interface, opened by the Alt bar's first button.
 //!
-//! It lists what the game menu's "Place a vehicle" list offers (the vehicles, then a
-//! vehicle's liveries and depot files) in one window, and "Place" does what the end of that
+//! It lists what the game menu's "Place a vehicle" list offers (the manufacturers, then a
+//! manufacturer's models, then a model's liveries and depot files) in one window, and "Place" does what the end of that
 //! list does: the vehicle follows the mouse until a click puts it down. The window never
 //! pauses the game. Esc closes it; a click outside it goes to the game as usual.
 //!
@@ -29,6 +29,8 @@ pub(crate) enum WinInput {
 /// What the overlay draws of the window, owned so that it can cross to the renderer.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct AddFrame {
+    makers: Vec<String>,
+    maker: Option<usize>,
     vehicles: Vec<String>,
     vehicle: Option<usize>,
     liveries: Vec<String>,
@@ -43,6 +45,8 @@ impl AddFrame {
             ui,
             size,
             &AddVehicle {
+                makers: &self.makers,
+                maker: self.maker,
                 vehicles: &self.vehicles,
                 vehicle: self.vehicle,
                 liveries: &self.liveries,
@@ -57,8 +61,10 @@ impl AddFrame {
 /// The window's state on the game's side.
 #[derive(Debug, Default)]
 pub(crate) struct AddWindow {
-    /// (label, vehicle file) as the place list has them.
-    vehicles: Vec<(String, String)>,
+    /// The manufacturers with their models as (label, vehicle file), as the place list has them.
+    makers: Vec<(String, Vec<(String, String)>)>,
+    maker: Option<usize>,
+    /// The chosen model, among the chosen manufacturer's.
     vehicle: Option<usize>,
     /// The chosen vehicle's liveries by name; the first line is "Random livery".
     liveries: Vec<String>,
@@ -76,9 +82,9 @@ pub(crate) const PLACING: &str = "Put down the vehicle on the mouse first";
 const MAP_DEPOT: &str = "The map's depot file";
 
 impl AddWindow {
-    pub(crate) fn new(vehicles: Vec<(String, String)>) -> AddWindow {
+    pub(crate) fn new(makers: Vec<(String, Vec<(String, String)>)>) -> AddWindow {
         AddWindow {
-            vehicles,
+            makers,
             liveries: vec![RANDOM_LIVERY.to_string()],
             depots: vec![(MAP_DEPOT.to_string(), String::new())],
             ..Default::default()
@@ -87,7 +93,9 @@ impl AddWindow {
 
     pub(crate) fn frame(&self) -> AddFrame {
         AddFrame {
-            vehicles: self.vehicles.iter().map(|v| v.0.clone()).collect(),
+            makers: self.makers.iter().map(|m| m.0.clone()).collect(),
+            maker: self.maker,
+            vehicles: self.models().iter().map(|v| v.0.clone()).collect(),
             vehicle: self.vehicle,
             liveries: self.liveries.clone(),
             livery: self.livery,
@@ -96,7 +104,31 @@ impl AddWindow {
         }
     }
 
-    /// Choose the vehicle at `i` with its `liveries` and `depots` (as the place list reads
+    /// The chosen manufacturer's models (none before one is chosen).
+    fn models(&self) -> &[(String, String)] {
+        self.maker
+            .and_then(|m| self.makers.get(m))
+            .map(|m| m.1.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Choose the manufacturer at `i`: no model is chosen then, and the livery and the depot
+    /// file go back to the first lines. Returns the model's index when the manufacturer has
+    /// only one (the window chooses it for the player).
+    pub(crate) fn choose_maker(&mut self, i: usize) -> Option<usize> {
+        if i >= self.makers.len() {
+            return None;
+        }
+        self.maker = Some(i);
+        self.vehicle = None;
+        self.liveries = vec![RANDOM_LIVERY.to_string()];
+        self.depots = vec![(MAP_DEPOT.to_string(), String::new())];
+        self.livery = 0;
+        self.depot = 0;
+        (self.models().len() == 1).then_some(0)
+    }
+
+    /// Choose the model at `i` of the chosen manufacturer with its `liveries` and `depots` (as the place list reads
     /// them); the livery and the depot file go back to the first line.
     pub(crate) fn choose(
         &mut self,
@@ -104,7 +136,7 @@ impl AddWindow {
         liveries: Vec<String>,
         depots: Vec<(String, String)>,
     ) {
-        if i >= self.vehicles.len() {
+        if i >= self.models().len() {
             return;
         }
         self.vehicle = Some(i);
@@ -119,7 +151,7 @@ impl AddWindow {
     }
 
     pub(crate) fn vehicle_file(&self, i: usize) -> Option<&str> {
-        self.vehicles.get(i).map(|v| v.1.as_str())
+        self.models().get(i).map(|v| v.1.as_str())
     }
 
     pub(crate) fn set_livery(&mut self, i: usize) {
@@ -137,7 +169,7 @@ impl AddWindow {
     /// What "Place" puts down: the vehicle's file, its livery (`None`: random) and its depot
     /// file (`None`: the map's).
     pub(crate) fn placement(&self) -> Option<(String, Option<String>, Option<String>)> {
-        let (_, file) = self.vehicles.get(self.vehicle?)?;
+        let (_, file) = self.models().get(self.vehicle?)?;
         let livery = (self.livery > 0).then(|| self.liveries[self.livery].clone());
         let depot = (self.depot > 0).then(|| self.depots[self.depot].1.clone());
         Some((file.clone(), livery, depot))
@@ -165,7 +197,7 @@ impl App {
         }
         self.load_vehicle_list();
         let vehicles = crate::game_lists::place_choices(self);
-        if vehicles.is_empty() {
+        if vehicles.iter().all(|m| m.1.is_empty()) {
             self.service_msg = Some(("No vehicles found".into(), 3.0));
             return;
         }
@@ -249,6 +281,20 @@ impl App {
                 return;
             };
             match e {
+                AddVehicleEvent::Maker(i) => {
+                    // (a manufacturer with one model has it chosen: nothing else to pick)
+                    let only = win.choose_maker(i);
+                    if let Some(m) = only {
+                        let Some(file) = win.vehicle_file(m).map(String::from) else {
+                            continue;
+                        };
+                        let liveries = crate::game_lists::place_liveries(self, &file);
+                        let depots = crate::game_lists::place_depots(self, &file);
+                        if let Some(win) = self.new_ui.add.as_mut() {
+                            win.choose(m, liveries, depots);
+                        }
+                    }
+                }
                 AddVehicleEvent::Vehicle(i) => {
                     let Some(file) = win.vehicle_file(i).map(String::from) else {
                         continue;
@@ -288,10 +334,36 @@ mod tests {
     use super::*;
 
     fn window() -> AddWindow {
-        AddWindow::new(vec![
-            ("Maker  ·  Bus A".into(), "Vehicles/A/a.bus".into()),
-            ("Maker  ·  Bus B".into(), "Vehicles/B/b.bus".into()),
-        ])
+        let mut w = AddWindow::new(vec![
+            (
+                "Maker".into(),
+                vec![
+                    ("Bus A".into(), "Vehicles/A/a.bus".into()),
+                    ("Bus B".into(), "Vehicles/B/b.bus".into()),
+                ],
+            ),
+            (
+                "Other".into(),
+                vec![("Bus C".into(), "Vehicles/C/c.bus".into())],
+            ),
+        ]);
+        w.choose_maker(0);
+        w
+    }
+
+    #[test]
+    fn the_models_are_those_of_the_chosen_manufacturer() {
+        let mut w = window();
+        assert_eq!(w.frame().makers, vec!["Maker".to_string(), "Other".into()]);
+        assert_eq!(w.frame().vehicles, vec!["Bus A".to_string(), "Bus B".into()]);
+        // another manufacturer: its models, and no model chosen yet; one model is offered to
+        // be chosen at once
+        w.choose(1, vec!["Red".into()], vec![]);
+        assert_eq!(w.choose_maker(1), Some(0));
+        assert_eq!(w.frame().vehicles, vec!["Bus C".to_string()]);
+        assert_eq!(w.placement(), None);
+        assert_eq!(w.frame().liveries, vec![RANDOM_LIVERY.to_string()]);
+        assert_eq!(w.choose_maker(7), None);
     }
 
     #[test]

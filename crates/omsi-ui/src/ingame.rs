@@ -648,9 +648,13 @@ fn fit_as_is(ui: &Ui, s: &str, px: f32, max: f32) -> String {
     String::new()
 }
 
-/// The "Add vehicle" window: the vehicles, the chosen one's liveries and depot files, and
-/// the buttons. Every list is the game's own; this only shows them.
+/// The "Add vehicle" window: the manufacturers, the chosen one's models, the chosen model's
+/// liveries and depot files, and the buttons. Every list is the game's own; this only shows
+/// them.
 pub struct AddVehicle<'a> {
+    pub makers: &'a [String],
+    pub maker: Option<usize>,
+    /// The models of the manufacturer chosen.
     pub vehicles: &'a [String],
     pub vehicle: Option<usize>,
     pub liveries: &'a [String],
@@ -662,6 +666,7 @@ pub struct AddVehicle<'a> {
 /// What a click in the "Add vehicle" window asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AddVehicleEvent {
+    Maker(usize),
     Vehicle(usize),
     Livery(usize),
     Depot(usize),
@@ -695,9 +700,17 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     let head = |ui: &mut Ui, s: &str, x: f32, y: f32| {
         text(ui, s, x + 16.0, y + 17.0, 12.0, Weight::Regular, MUTED)
     };
-    // the vehicles at the left, the livery and the depot file at the right
-    head(ui, "Vehicle", body.x, body.y);
-    let vehicles = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, lists_h);
+    // the manufacturers and their models at the left (as the original's lists by manufacturer
+    // and then model), the livery and the depot file at the right
+    let half = ((lists_h - 34.0) * 0.5).floor();
+    head(ui, "Manufacturer", body.x, body.y);
+    let makers = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, half);
+    if let Some(i) = list(ui, "add:makers", makers, v.makers, v.maker) {
+        event = Some(AddVehicleEvent::Maker(i));
+    }
+    let ym = makers.bottom() + 4.0;
+    head(ui, "Model", body.x, ym);
+    let vehicles = Rect::new(body.x + 4.0, ym + 34.0, left_w - 8.0, half);
     if let Some(i) = list(ui, "add:vehicles", vehicles, v.vehicles, v.vehicle) {
         event = Some(AddVehicleEvent::Vehicle(i));
     }
@@ -705,7 +718,6 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
         Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot_h - 8.0),
         LINE,
     );
-    let half = ((lists_h - 34.0) * 0.5).floor();
     head(ui, "Livery", right_x, body.y);
     let liveries = Rect::new(right_x + 4.0, body.y + 34.0, right_w - 8.0, half);
     if let Some(i) = list(ui, "add:liveries", liveries, v.liveries, Some(v.livery)) {
@@ -942,12 +954,15 @@ mod tests {
     #[test]
     fn the_add_vehicle_window_reports_its_clicks() {
         let vehicles: Vec<String> = (0..40).map(|i| format!("Bus {i}")).collect();
+        let makers = vec!["Maker A".to_string(), "Maker B".to_string()];
         let liveries = vec!["Random livery".to_string(), "Red".to_string()];
         let depots = vec!["The map's depot file".to_string()];
         let size = Vec2::new(1672.0, 941.0);
         let mut ui = Ui::new();
         let run = |ui: &mut Ui, chosen: Option<usize>, click: Option<Vec2>| {
             let view = AddVehicle {
+                makers: &makers,
+                maker: Some(0),
                 vehicles: &vehicles,
                 vehicle: chosen,
                 liveries: &liveries,
@@ -972,6 +987,11 @@ mod tests {
             frame(ui)
         };
         run(&mut ui, None, None);
+        let maker = ui.drawn[&id_of("add:makers:row:1")].center();
+        assert_eq!(
+            run(&mut ui, None, Some(maker)),
+            Some(AddVehicleEvent::Maker(1))
+        );
         let row = ui.drawn[&id_of("add:vehicles:row:2")].center();
         assert_eq!(
             run(&mut ui, None, Some(row)),

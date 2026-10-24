@@ -88,6 +88,14 @@ impl Thumbs {
         }
     }
 
+    /// Ask again for `key` when what was made of it was nothing (the picture it reads was not
+    /// there yet and is now).
+    pub fn retry(&mut self, key: &str) {
+        if matches!(self.kept.get(key), Some(None)) {
+            self.kept.remove(key);
+        }
+    }
+
     /// The device went (or was given to the game): the textures with it, made again when asked.
     pub fn forget_textures(&mut self) {
         self.kept.clear();

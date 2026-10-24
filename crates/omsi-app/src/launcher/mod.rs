@@ -189,6 +189,8 @@ pub struct Launcher {
     map_pic: MapPicture,
     /// The small pictures of the Maps library's rows.
     thumbs: thumbs::Thumbs,
+    /// The picture the preview helper kept last (`paint_thumbs`).
+    paint_kept: Option<(u64, preview::Shape)>,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
     /// The Maps page's start: its typed date and time, and the window open over the page.
@@ -301,6 +303,7 @@ impl Launcher {
             preview_tex: None,
             map_pic: MapPicture::default(),
             thumbs: thumbs::Thumbs::default(),
+            paint_kept: None,
             backdrop: backdrop::Backdrop::default(),
             start: start::StartView::default(),
             mapview: mapview::MapView::new(),
@@ -2251,9 +2254,42 @@ impl Launcher {
                 }
             }
         }
+        self.paint_thumbs();
         if let Some(u) = self.vehicles.take_use() {
             self.state.use_bus(u);
             self.go(Page::Maps);
+        }
+    }
+
+    /// The small pictures of the paint tiles in view: each is the picture the preview kept of
+    /// that paint (kept when the paint was looked at), made small on the thumbnails' thread. A
+    /// paint that has not been looked at yet shows its initial, and its picture comes in once
+    /// the preview has kept it.
+    fn paint_thumbs(&mut self) {
+        let Some(shape) = self.preview.shape() else {
+            return;
+        };
+        // (a picture just kept: the paint's small one, empty so far, is made again)
+        let kept = self.preview.kept();
+        if kept != self.paint_kept {
+            if let Some((tag, shape)) = kept {
+                self.thumbs.retry(&preview::kept_key_of(tag, shape));
+            }
+            self.paint_kept = kept;
+        }
+        let root = std::path::PathBuf::from(&self.state.config.root);
+        for (bus, paint) in self.vehicles.visible_paints().to_vec() {
+            let look = showroom::Look {
+                root: root.clone(),
+                bus: bus.clone(),
+                paint: paint.clone(),
+                ..Default::default()
+            };
+            let key = preview::kept_key(&look, shape);
+            self.thumbs
+                .want(&key, move || preview::kept_picture(&look, shape));
+            self.vehicles
+                .set_paint_thumb(&bus, &paint, self.thumbs.get(&key));
         }
     }
 

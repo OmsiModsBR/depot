@@ -221,6 +221,23 @@ fn fingerprint(dir: &std::path::Path) -> String {
     format!("{}:{}:{}", acc.0, acc.1, acc.2)
 }
 
+/// The picture kept for `look`'s bus and paint at `shape`, if there is one (read off the
+/// launcher's thread: it reads a file and walks the bus's folder).
+pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
+    image::open(cache_file(look, shape)).ok().map(|i| i.to_rgba8())
+}
+
+/// What names the kept picture of `look`'s bus and paint at `shape` for the launcher's own
+/// small copies of it (the same on every run; not the file's name, which needs the disk).
+pub fn kept_key(look: &Look, shape: Shape) -> String {
+    kept_key_of(tag(look), shape)
+}
+
+/// `kept_key` from the tag the helper reports when it has kept a picture.
+pub fn kept_key_of(tag: u64, shape: Shape) -> String {
+    format!("paint:{tag:016x}:{}:{}", shape.0, shape.1)
+}
+
 /// The widest picture kept (a bigger preview is kept smaller: the live one replaces it).
 const KEEP_W: u32 = 1280;
 
@@ -803,6 +820,16 @@ impl Preview {
         if let Some(l) = self.link.as_ref() {
             let _ = l.cmds.send(Cmd::Zoom(k));
         }
+    }
+
+    /// The shape the preview is drawn for now (None until a page has shown it).
+    pub fn shape(&self) -> Option<Shape> {
+        self.size.map(|(w, h)| Shape::of(w, h, self.focus_x))
+    }
+
+    /// The bus and shape of the picture the helper kept last.
+    pub fn kept(&self) -> Option<(u64, Shape)> {
+        self.kept
     }
 
     /// The page shows a picture, not the live view (see `want_picture`).

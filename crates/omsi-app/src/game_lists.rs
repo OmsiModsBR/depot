@@ -299,9 +299,10 @@ fn place_types(mut types: Vec<(String, String)>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Every vehicle of the place list as (manufacturer · type, path), by manufacturer and then
-/// type: the new interface's "Add vehicle" window lists them in one column.
-pub(crate) fn place_choices(app: &App) -> Vec<(String, String)> {
+/// The place list's vehicles by manufacturer as (manufacturer, its models as (type, path)),
+/// the manufacturers and the models each sorted as the place list sorts them: the new
+/// interface's "Add vehicle" window lists the manufacturers, then the chosen one's models.
+pub(crate) fn place_choices(app: &App) -> Vec<(String, Vec<(String, String)>)> {
     let all = place_vehicles(app, "Unknown manufacturer");
     let mut makers: Vec<(String, String)> = Vec::new();
     for v in &all {
@@ -310,20 +311,17 @@ pub(crate) fn place_choices(app: &App) -> Vec<(String, String)> {
         }
     }
     makers.sort_by(|a, b| bus_cmp(&a.1, &b.1).then_with(|| a.0.cmp(&b.0)));
-    let mut out = Vec::new();
-    for (key, name) in makers {
-        let types = all
-            .iter()
-            .filter(|v| v.0 == key)
-            .map(|v| (v.2.clone(), v.3.clone()))
-            .collect();
-        out.extend(
-            place_types(types)
-                .into_iter()
-                .map(|(t, path)| (format!("{name}  ·  {t}"), path)),
-        );
-    }
-    out
+    makers
+        .into_iter()
+        .map(|(key, name)| {
+            let types = all
+                .iter()
+                .filter(|v| v.0 == key)
+                .map(|v| (v.2.clone(), v.3.clone()))
+                .collect();
+            (name, place_types(types))
+        })
+        .collect()
 }
 
 /// A vehicle's liveries by name, alphabetical (the place list puts "Random livery" first).

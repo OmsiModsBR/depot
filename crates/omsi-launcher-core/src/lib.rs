@@ -1119,6 +1119,10 @@ fn read_map(d: &Path, folder: &str, lang: &str) -> Option<MapInfo> {
     })
 }
 
+/// The most characters of an author's description kept: only a guard against a runaway file,
+/// well past any real description (the page scrolls it whole; it was cut at 600 before).
+const VEHICLE_DESCRIPTION_MAX: usize = 20_000;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VehicleInfo {
     pub name: String,
@@ -1578,7 +1582,7 @@ fn read_vehicle_folder(
             type_name: v.type_name.trim().to_string(),
             file: rel,
             folder: folder.to_string(),
-            description: description.chars().take(600).collect(),
+            description: description.chars().take(VEHICLE_DESCRIPTION_MAX).collect(),
             default_paint: v.default_paint.trim().to_string(),
             paints,
             hofs,
@@ -3482,10 +3486,10 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
-                if k != "navigator_corner" 
-                    && k != "boarding" 
-                    && k != "drive_keys" 
-                    && k != "pax_voices" 
+                if k != "navigator_corner"
+                    && k != "boarding"
+                    && k != "drive_keys"
+                    && k != "pax_voices"
                     && k != "render_scale" =>
             {
                 v[&k] = json!(val)
@@ -3500,7 +3504,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "tickets" => "tickets",
                     "off" | "0" | "none" => "off",
                     _ => "all",
-                  })
+                })
             }
             // (wasd, arrows, omsi or simple, else simple, as the game reads it)
             "drive_keys" => {
