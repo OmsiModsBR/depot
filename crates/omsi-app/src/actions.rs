@@ -396,6 +396,19 @@ impl App {
     }
 
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {
+        self.place_vehicle_with(bus, paint, hof, None, None);
+    }
+
+    /// `place_vehicle` with the fleet number and the registration the player picked (`None`:
+    /// the vehicle's own).
+    pub(crate) fn place_vehicle_with(
+        &mut self,
+        bus: &str,
+        paint: Option<String>,
+        hof: Option<String>,
+        number: Option<String>,
+        plate: Option<String>,
+    ) {
         // (in the driven vehicle's place, see `swap_pending`)
         let swap = std::mem::take(&mut self.swap_pending) && self.player.is_some();
         let name = self
@@ -452,6 +465,8 @@ impl App {
             autostart: false,
             paint,
             hof: hof.or(self.args.hof.clone()),
+            number: number.or(self.args.number.clone()),
+            plate: plate.or(self.args.plate.clone()),
             ..self.args.clone()
         };
         match spawn_player(&one, &w, r, scene) {
