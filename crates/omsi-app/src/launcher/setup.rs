@@ -925,6 +925,10 @@ fn save_folders(l: &mut Launcher) {
         }
     }
     let content_moved = content != cfg.content;
+    // (another installation: the pictures of its vehicles are drawn once its content is read)
+    if chosen != cfg.root {
+        l.prerender.looking();
+    }
     l.state.config.root = chosen.clone();
     l.state.config.game = game;
     l.state.config.content = content;

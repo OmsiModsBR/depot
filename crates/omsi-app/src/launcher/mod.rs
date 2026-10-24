@@ -23,6 +23,7 @@ mod multiplayer;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod preview;
+mod prerender;
 pub(crate) mod settings;
 pub(crate) mod setup;
 mod showroom;
@@ -189,8 +190,10 @@ pub struct Launcher {
     map_pic: MapPicture,
     /// The small pictures of the Maps library's rows.
     thumbs: thumbs::Thumbs,
-    /// The picture the preview helper kept last (`paint_thumbs`).
-    paint_kept: Option<(u64, preview::Shape)>,
+    /// The pictures of the library's vehicles drawn ahead of time, and how many were made
+    /// when the small pictures were last asked for again (`paint_thumbs`).
+    prerender: prerender::Prerender,
+    prerender_seen: usize,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
     /// The Maps page's start: its typed date and time, and the window open over the page.
@@ -303,7 +306,8 @@ impl Launcher {
             preview_tex: None,
             map_pic: MapPicture::default(),
             thumbs: thumbs::Thumbs::default(),
-            paint_kept: None,
+            prerender: prerender::Prerender::default(),
+            prerender_seen: 0,
             backdrop: backdrop::Backdrop::default(),
             start: start::StartView::default(),
             mapview: mapview::MapView::new(),
@@ -1307,6 +1311,7 @@ impl Launcher {
                 )
             });
         self.preview.update(dt, shown);
+        self.prerender_step(dt);
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
         let Some(renderer) = self.gfx.as_mut() else {
@@ -2255,6 +2260,17 @@ impl Launcher {
             }
         }
         self.paint_thumbs();
+        self.vehicles.set_prerender(self.prerender.status());
+        match self.vehicles.take_prerender() {
+            Some(omsi_launcher_ui::vehicles::PrerenderRequest::Start) => {
+                // (the content is read again first: new vehicles are found, the others come
+                // from the index)
+                self.prerender.looking();
+                self.state.load_content();
+            }
+            Some(omsi_launcher_ui::vehicles::PrerenderRequest::Cancel) => self.prerender.cancel(),
+            None => {}
+        }
         if let Some(u) = self.vehicles.take_use() {
             self.state.use_bus(u);
             self.go(Page::Maps);
@@ -2266,31 +2282,72 @@ impl Launcher {
     /// paint that has not been looked at yet shows its initial, and its picture comes in once
     /// the preview has kept it.
     fn paint_thumbs(&mut self) {
-        let Some(shape) = self.preview.shape() else {
-            return;
-        };
-        // (a picture just kept: the paint's small one, empty so far, is made again)
-        let kept = self.preview.kept();
-        if kept != self.paint_kept {
-            if let Some((tag, shape)) = kept {
-                self.thumbs.retry(&preview::kept_key_of(tag, shape));
-            }
-            self.paint_kept = kept;
-        }
+        let shape = prerender::shape();
         let root = std::path::PathBuf::from(&self.state.config.root);
-        for (bus, paint) in self.vehicles.visible_paints().to_vec() {
-            let look = showroom::Look {
+        let looks: Vec<showroom::Look> = self
+            .vehicles
+            .visible_paints()
+            .iter()
+            .map(|(bus, paint)| showroom::Look {
                 root: root.clone(),
                 bus: bus.clone(),
                 paint: paint.clone(),
                 ..Default::default()
-            };
+            })
+            .collect();
+        // (a picture just drawn: the small ones of the paints in view, empty so far, are made
+        // again)
+        let progress = self.prerender.progress();
+        let again = progress != self.prerender_seen;
+        self.prerender_seen = progress;
+        for look in looks {
             let key = preview::kept_key(&look, shape);
+            if again {
+                self.thumbs.retry(&key);
+            }
+            let (bus, paint) = (look.bus.clone(), look.paint.clone());
             self.thumbs
                 .want(&key, move || preview::kept_picture(&look, shape));
             self.vehicles
                 .set_paint_thumb(&bus, &paint, self.thumbs.get(&key));
         }
+    }
+
+    /// Drawing the vehicles' pictures ahead of time: starts a run once the content is read
+    /// (after another OMSI 2 folder was saved, or the page's button), follows what the page's
+    /// buttons ask for, and gives the page how it stands.
+    fn prerender_step(&mut self, dt: f32) {
+        if self.prerender.after_content
+            && !self.state.loading_content
+            && !self.state.vehicles.is_empty()
+        {
+            let c = &self.state.choice;
+            // (the light the pictures are drawn in: the chosen map, else the first there is)
+            let map = if c.map.is_empty() {
+                self.state.maps.first().map(|m| m.file.clone())
+            } else {
+                Some(c.map.clone())
+            };
+            match map {
+                Some(map) => {
+                    let scene = showroom::Look {
+                        root: std::path::PathBuf::from(&self.state.config.root),
+                        map,
+                        weather: c.weather.clone(),
+                        time: c.time,
+                        date: c.date.clone(),
+                        ..Default::default()
+                    };
+                    let vehicles = self.state.vehicles.clone();
+                    self.prerender.start(&vehicles, scene);
+                }
+                None => {
+                    log::warn!("launcher: no map to draw the vehicles' pictures on");
+                    self.prerender.cancel();
+                }
+            }
+        }
+        self.prerender.update(dt, self.state.in_game());
     }
 
     /// The Maps page: the library, the chosen map's picture and description, and the start

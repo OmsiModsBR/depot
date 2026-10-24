@@ -48,6 +48,39 @@ pub struct VehiclesView {
     /// the host made for them (`set_paint_thumb`).
     visible_paints: Vec<(String, String)>,
     paint_thumbs: std::collections::HashMap<(String, String), usize>,
+    /// The host's drawing of the pictures, and what the buttons asked for (`take_prerender`).
+    prerender: PrerenderStatus,
+    prerender_asked: Option<PrerenderRequest>,
+    /// The manufacturers whose models the library keeps folded away (a search shows all).
+    folded: std::collections::HashSet<String>,
+}
+
+/// How the background drawing of the vehicles' pictures stands (the host's, shown beside the
+/// page's heading).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PrerenderPhase {
+    #[default]
+    Idle,
+    /// Reading the content again for new vehicles.
+    Looking,
+    Running,
+    /// The last run ended: every picture is made (or could not be).
+    Done,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct PrerenderStatus {
+    pub phase: PrerenderPhase,
+    pub done: usize,
+    pub total: usize,
+    pub failed: usize,
+}
+
+/// What the button and the cancel button asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrerenderRequest {
+    Start,
+    Cancel,
 }
 
 /// The bus to start with from Maps, as the "Use for the next start" card has it.
@@ -97,6 +130,9 @@ impl Default for VehiclesView {
             preview_area: None,
             visible_paints: Vec::new(),
             paint_thumbs: Default::default(),
+            prerender: PrerenderStatus::default(),
+            prerender_asked: None,
+            folded: Default::default(),
         }
     }
 }
@@ -137,6 +173,16 @@ impl VehiclesView {
                 self.paint_thumbs.remove(&key);
             }
         }
+    }
+
+    /// How the drawing of the pictures stands, for the page to show.
+    pub fn set_prerender(&mut self, s: PrerenderStatus) {
+        self.prerender = s;
+    }
+
+    /// What the page's button asked for, once.
+    pub fn take_prerender(&mut self) -> Option<PrerenderRequest> {
+        self.prerender_asked.take()
     }
 
     /// What the host has to show of `current` (None: the page says the Drive page shows it).
@@ -369,6 +415,7 @@ impl VehiclesView {
             details.x - lib.right() - 28.0,
             upper_h,
         );
+        self.prerender_bar(ui, body);
         self.library(ui, lib, &list, &shown);
         let chosen = kit::chosen(&list, &shown, self.selected);
         self.current = chosen.map(|v| (v.file.clone(), self.paint_name(v)));
@@ -386,6 +433,81 @@ impl VehiclesView {
         let next = Rect::new(details.x, y2, side_w, lower_h);
         self.paints(ui, paints, chosen);
         self.next_start(ui, next, chosen);
+    }
+
+    /// The button that looks for new vehicles and draws the pictures still missing, or while
+    /// that runs how far it is, with Cancel, at the right of the page's heading.
+    fn prerender_bar(&mut self, ui: &mut Ui, body: Rect) {
+        let st = self.prerender;
+        let y = body.y + 56.0;
+        let right_edge = body.right();
+        let cancel = |ui: &mut Ui, x_right: f32, asked: &mut Option<PrerenderRequest>| {
+            let label = omsi_ui::tr("Cancel");
+            let w = ui.width(&label, 13.0 * TEXT_SCALE, Weight::Medium) + 36.0;
+            let r = Rect::new(x_right - w, y, w, 34.0);
+            if ui.button(
+                "vehicles:prerender-cancel",
+                r,
+                "Cancel",
+                None,
+                ButtonKind::Normal,
+            ) {
+                *asked = Some(PrerenderRequest::Cancel);
+            }
+            r.x
+        };
+        match st.phase {
+            PrerenderPhase::Idle | PrerenderPhase::Done => {
+                let label = "Detect new vehicles and pre-render images";
+                let w = ui.width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Medium) + 44.0;
+                let r = Rect::new(right_edge - w, y, w, 34.0);
+                if st.phase == PrerenderPhase::Done {
+                    let note = omsi_ui::tr("All vehicle pictures are ready");
+                    right(
+                        ui,
+                        &note,
+                        r.x - 14.0,
+                        y + 17.0,
+                        12.5,
+                        Weight::Regular,
+                        MUTED,
+                    );
+                }
+                if ui.button("vehicles:prerender", r, label, None, ButtonKind::Normal) {
+                    self.prerender_asked = Some(PrerenderRequest::Start);
+                }
+                ui.tooltip(
+                    r,
+                    "Reads the content again for new vehicles and draws the pictures that are missing. The pictures already made are kept.",
+                );
+            }
+            PrerenderPhase::Looking | PrerenderPhase::Running => {
+                let x = cancel(ui, right_edge, &mut self.prerender_asked);
+                let text_s = if st.phase == PrerenderPhase::Looking {
+                    omsi_ui::tr("Looking for new vehicles\u{2026}").into_owned()
+                } else {
+                    omsi_ui::tr("Pre-rendering %{done} of %{total}")
+                        .replace("%{done}", &st.done.to_string())
+                        .replace("%{total}", &st.total.to_string())
+                };
+                right(
+                    ui,
+                    &text_s,
+                    x - 14.0,
+                    y + 10.0,
+                    12.5,
+                    Weight::Regular,
+                    MUTED,
+                );
+                let bar = Rect::new(x - 14.0 - 220.0, y + 22.0, 220.0, 4.0);
+                let frac = if st.total > 0 {
+                    st.done as f32 / st.total as f32
+                } else {
+                    0.0
+                };
+                ui.progress(bar, frac, st.phase == PrerenderPhase::Looking);
+            }
+        }
     }
 
     fn library(&mut self, ui: &mut Ui, r: Rect, list: &[VehicleInfo], shown: &[usize]) {
@@ -406,6 +528,9 @@ impl VehiclesView {
         let area = Rect::new(r.x + 8.0, r.y + 92.0, r.w - 16.0, r.h - 100.0);
         let mut picked = None;
         let selected = self.selected;
+        let searching = !self.query.trim().is_empty();
+        let folded = &mut self.folded;
+        let mut toggled = None;
         ui.scroll_area("vehicles:list", area, &mut |ui, view| {
             let mut y = view.y;
             let mut group = String::new();
@@ -415,7 +540,22 @@ impl VehiclesView {
                 let key = maker_key(v);
                 if key != group {
                     let head = Rect::new(view.x, y, view.w - 8.0, GROUP_H);
+                    // (a click on the heading folds the manufacturer's models away or back)
+                    let is_folded = !searching && folded.contains(&key);
+                    if ui.row(&format!("vehicles:group:{key}"), head, false) {
+                        toggled = Some(key.clone());
+                    }
                     if ui.rect_visible(head) {
+                        ui.icon(
+                            if is_folded {
+                                "chevron_right"
+                            } else {
+                                "expand_more"
+                            },
+                            glam::Vec2::new(head.x + 20.0, head.y + GROUP_H - 15.0),
+                            16.0,
+                            MUTED,
+                        );
                         let n = shown
                             .iter()
                             .filter(|&&j| maker_key(&list[j]) == key)
@@ -433,9 +573,9 @@ impl VehiclesView {
                         clipped(
                             ui,
                             &omsi_ui::tr(&name).to_uppercase(),
-                            head.x + 16.0,
+                            head.x + 36.0,
                             head.y + GROUP_H - 12.0,
-                            head.w - 56.0,
+                            head.w - 76.0,
                             11.5,
                             Weight::Bold,
                             MUTED,
@@ -447,6 +587,9 @@ impl VehiclesView {
                     }
                     y += GROUP_H;
                     group = key;
+                }
+                if !searching && folded.contains(&group) {
+                    continue;
                 }
                 let row = Rect::new(view.x, y, view.w - 8.0, ROW_H);
                 if ui.row(&format!("vehicles:row:{i}"), row, i == selected) {
@@ -485,6 +628,11 @@ impl VehiclesView {
             }
             y - view.y
         });
+        if let Some(k) = toggled {
+            if !self.folded.remove(&k) {
+                self.folded.insert(k);
+            }
+        }
         if let Some(i) = picked {
             self.selected = i;
             self.paint = None;

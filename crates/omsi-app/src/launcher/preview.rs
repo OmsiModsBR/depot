@@ -176,11 +176,20 @@ pub fn tag(look: &Look) -> u64 {
 /// the bus elsewhere: a picture kept for one page was shown stretched on the other).
 fn cache_file(look: &Look, shape: Shape) -> PathBuf {
     let bus = look.root.join(&look.bus);
+    cache_file_with(
+        look,
+        shape,
+        &bus.parent().map(fingerprint).unwrap_or_default(),
+    )
+}
+
+/// `cache_file` with the fingerprint of the bus's folder already read.
+fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf {
     let h = fnv(&[
         &look.root.to_string_lossy(),
         &look.bus,
         &look.paint,
-        &bus.parent().map(fingerprint).unwrap_or_default(),
+        fingerprint,
         crate::BUILD,
         &format!("{}:{}", shape.0, shape.1),
     ]);
@@ -221,6 +230,24 @@ fn fingerprint(dir: &std::path::Path) -> String {
     format!("{}:{}:{}", acc.0, acc.1, acc.2)
 }
 
+/// Which of `looks` (paints of one bus) have no kept picture at `shape` yet. Reads the bus's
+/// folder once, off the launcher's thread.
+pub fn missing_kept(looks: Vec<Look>, shape: Shape) -> Vec<Look> {
+    let Some(first) = looks.first() else {
+        return looks;
+    };
+    let fp = first
+        .root
+        .join(&first.bus)
+        .parent()
+        .map(fingerprint)
+        .unwrap_or_default();
+    looks
+        .into_iter()
+        .filter(|l| !cache_file_with(l, shape, &fp).exists())
+        .collect()
+}
+
 /// The picture kept for `look`'s bus and paint at `shape`, if there is one (read off the
 /// launcher's thread: it reads a file and walks the bus's folder).
 pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
@@ -256,7 +283,7 @@ impl Shape {
 }
 
 /// How many kept pictures there are at most (the oldest go).
-const KEEP: usize = 300;
+const KEEP: usize = 2000;
 
 /// Only the `keep` newest pictures in `dir`.
 fn prune(dir: &std::path::Path, keep: usize) {
@@ -822,9 +849,10 @@ impl Preview {
         }
     }
 
-    /// The shape the preview is drawn for now (None until a page has shown it).
-    pub fn shape(&self) -> Option<Shape> {
-        self.size.map(|(w, h)| Shape::of(w, h, self.focus_x))
+    /// The helper could not draw the bus wanted (it could not be started, or stopped on its own
+    /// on every interface).
+    pub fn gave_up(&self) -> bool {
+        self.broken.is_some() && self.broken == self.wanted
     }
 
     /// The bus and shape of the picture the helper kept last.
@@ -1439,6 +1467,40 @@ mod tests {
             shape,
             Shape::of(1284, 722, 0.51),
             "a few pixels more is the same shape"
+        );
+    }
+
+    #[test]
+    fn only_the_paints_with_no_kept_picture_are_missing() {
+        let root = std::env::temp_dir().join(format!("depot-missing-kept-{}", std::process::id()));
+        let look = |paint: &str| Look {
+            root: root.clone(),
+            bus: "Vehicles/A/a.bus".into(),
+            paint: paint.into(),
+            ..Default::default()
+        };
+        let shape = Shape::of(336, 208, 0.5);
+        let all = vec![look(""), look("Red"), look("Blue")];
+        // nothing kept: all three; with the Red one kept: the other two
+        assert_eq!(missing_kept(all.clone(), shape).len(), 3);
+        let file = cache_file(&look("Red"), shape);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"png").unwrap();
+        let left = missing_kept(all.clone(), shape);
+        let _ = std::fs::remove_file(&file);
+        assert_eq!(
+            left.iter().map(|l| l.paint.as_str()).collect::<Vec<_>>(),
+            vec!["", "Blue"]
+        );
+        assert!(missing_kept(Vec::new(), shape).is_empty());
+        // (the small pictures of the page are named by bus, paint and shape)
+        assert_ne!(
+            kept_key(&look("Red"), shape),
+            kept_key(&look("Blue"), shape)
+        );
+        assert_ne!(
+            kept_key(&look("Red"), shape),
+            kept_key(&look("Red"), Shape::of(1600, 720, 0.5))
         );
     }
 }
