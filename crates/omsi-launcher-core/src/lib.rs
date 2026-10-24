@@ -3704,9 +3704,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 4.0))
                     .unwrap_or(1.0))
             }
+            // (what is no finite number is the default, as the game reads it)
             "ff_fade" => {
                 v[&k] = json!(val
                     .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
                     .map(|x| x.clamp(0.0, 1.5))
                     .unwrap_or(0.28))
             }
