@@ -435,7 +435,7 @@ fn unsupported_text(u: &core::compress::Unsupported) -> String {
 /// NTFS (LZX) - the folders to do it in, an estimate of what it frees, the warnings that go
 /// with it, and the job running in the background.
 fn free_space(l: &mut Launcher, at: Rect) -> f32 {
-    if !l.state.squeeze.asked {
+    if !l.state.squeeze.asked && l.state.squeeze.job.is_none() {
         l.state.load_squeeze();
     }
     let inner_w = at.w - 36.0;
@@ -527,8 +527,8 @@ fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
     let mut hdd = false;
     let mut original = false;
     let mut need = 0u64;
-    let mut low_space = false;
-    for f in &folders {
+    let mut least_free: Option<u64> = None;
+    for f in folders.iter() {
         let i = super::state::Squeeze::index(f.name);
         let fits = f.disk.is_ok();
         if fits {
@@ -556,8 +556,10 @@ fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
                 if f.compressed.0 > 0 {
                     any_undo = true;
                     need += f.compressed.1;
-                    low_space |= f.free.is_some_and(|free| free < f.compressed.1);
-                    low_space |= f.free.is_none();
+                    least_free = match (least_free, f.free) {
+                        (Some(a), Some(b)) => Some(a.min(b)),
+                        (a, b) => a.or(b),
+                    };
                 }
             }
             y += 34.0;
@@ -602,6 +604,8 @@ fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
             ) + 10.0;
         }
     }
+    // (the files take their full size again: the disk with the least room must hold the sum)
+    let low_space = least_free.is_some_and(|free| free < need);
     y += para(
         l,
         draw,
@@ -659,13 +663,7 @@ fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
                 .replace("%{need}", &fmt_size(need))
                 .replace(
                     "%{free}",
-                    &folders
-                        .iter()
-                        .filter(|f| l.state.squeeze.chosen[super::state::Squeeze::index(f.name)])
-                        .filter_map(|f| f.free)
-                        .min()
-                        .map(fmt_size)
-                        .unwrap_or_else(|| "?".into()),
+                    &least_free.map(fmt_size).unwrap_or_else(|| "?".into()),
                 );
             y += para(l, draw, &t, x, y, w, 13.0, Weight::Regular, TEXT) + 8.0;
             if low_space {
@@ -827,9 +825,9 @@ fn squeeze_body(l: &mut Launcher, draw: bool, inner: Rect) -> f32 {
         let (t, c) = match done {
             Squeezed::Done(0) => (omsi_ui::tr("Done.").to_string(), OK),
             Squeezed::Done(n) => (
-                omsi_ui::tr("Done, but %{n} steps could not change some files (in use or not allowed). Try again with the game closed.")
+                omsi_ui::tr("Done. %{n} files were left as they were (in use, not allowed, or not worth compressing).")
                     .replace("%{n}", &n.to_string()),
-                WARN,
+                TEXT_DIM,
             ),
             Squeezed::Cancelled => (
                 omsi_ui::tr("Stopped. What was already compressed stays compressed; use Undo compression to restore it.").to_string(),
@@ -1417,6 +1415,7 @@ fn save_folders(l: &mut Launcher) {
             l.state.load_content();
             if !super::mobile::mobile() {
                 l.state.load_usage();
+                l.state.reset_squeeze();
             }
         }
         Err(e) => l.state.set_status(format!("{e:#}"), true),

@@ -38,13 +38,16 @@ const GAME_FOLDERS: [&str; 7] = [
 ];
 
 /// Extensions never compressed: the game writes them, or they are compressed already.
-const SKIPPED: [&str; 14] = [
-    "zip", "log", "sav", "tmp", "exe", "dll", "sys", "ogg", "mp3", "jpg", "jpeg", "png", "7z",
-    "rar",
+const SKIPPED: [&str; 21] = [
+    "zip", "log", "sav", "tmp", "bak", "exe", "dll", "sys", "ocx", "scr", "drv", "cpl", "asi",
+    "bat", "ogg", "mp3", "jpg", "jpeg", "png", "7z", "rar",
 ];
 
 /// Whether `file` (a name) may be compressed, by its extension.
 pub fn may_compress_name(file: &str) -> bool {
+    if file.eq_ignore_ascii_case("logfile.txt") {
+        return false;
+    }
     match file.rsplit_once('.') {
         Some((_, e)) => !SKIPPED.contains(&e.to_ascii_lowercase().as_str()),
         None => true,
@@ -56,14 +59,15 @@ fn game_folder(name: &str) -> bool {
     GAME_FOLDERS.contains(&n.as_str()) || n.contains("cache")
 }
 
-/// The files of `dir` that may be compressed, with their sizes.
-pub fn eligible(dir: &Path) -> Vec<(PathBuf, u64)> {
+/// The files of `dir` that may be compressed, with their sizes. Folders in `skip` (another
+/// folder listed on its own that sits inside this one) are not entered.
+pub fn eligible(dir: &Path, skip: &[PathBuf]) -> Vec<(PathBuf, u64)> {
     let mut out = Vec::new();
-    walk(dir, &mut out);
+    walk(dir, skip, &mut out);
     out
 }
 
-fn walk(dir: &Path, out: &mut Vec<(PathBuf, u64)>) {
+fn walk(dir: &Path, skip: &[PathBuf], out: &mut Vec<(PathBuf, u64)>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
@@ -76,8 +80,8 @@ fn walk(dir: &Path, out: &mut Vec<(PathBuf, u64)>) {
             continue;
         }
         if meta.is_dir() {
-            if !game_folder(&name) {
-                walk(&e.path(), out);
+            if !game_folder(&name) && !skip.iter().any(|k| k == &e.path()) {
+                walk(&e.path(), skip, out);
             }
         } else if meta.len() >= MIN_FILE && may_compress_name(&name) {
             out.push((e.path(), meta.len()));
@@ -85,13 +89,17 @@ fn walk(dir: &Path, out: &mut Vec<(PathBuf, u64)>) {
     }
 }
 
-/// An ordinary file or folder: not a link, not a cloud placeholder.
+/// An ordinary file or folder: not a link, not a cloud placeholder. A file stored compressed
+/// by `compact` carries a reparse point of its own (the system's WOF one), so a reparse point
+/// on a file is let through unless it is a link; on a folder it is a junction and is not.
 #[cfg(windows)]
 fn ordinary(m: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
-    // reparse point, offline, recall on open / on data access
-    const NOT: u32 = 0x400 | 0x1000 | 0x4_0000 | 0x40_0000;
-    m.file_attributes() & NOT == 0
+    const REPARSE: u32 = 0x400;
+    // offline, recall on open / on data access
+    const CLOUD: u32 = 0x1000 | 0x4_0000 | 0x40_0000;
+    let a = m.file_attributes();
+    a & CLOUD == 0 && !m.file_type().is_symlink() && (a & REPARSE == 0 || m.is_file())
 }
 
 #[cfg(not(windows))]
@@ -131,7 +139,7 @@ pub fn estimate(files: &[(PathBuf, u64)]) -> Estimate {
         }
     }
     let mut read = 0u64;
-    let stride = (files.len() / 400).max(1);
+    let stride = (files.len() / (SAMPLE_TOTAL as usize / SAMPLE_EACH)).max(1);
     for (p, len) in files.iter().step_by(stride) {
         if read >= SAMPLE_TOTAL {
             break;
@@ -234,10 +242,10 @@ pub struct Folder {
 }
 
 /// Reads a folder for the card: its disk, its files, the estimate and what is compressed now.
-pub fn inspect(name: &'static str, dir: &Path) -> Folder {
+pub fn inspect(name: &'static str, dir: &Path, skip: &[PathBuf]) -> Folder {
     let disk = check(dir);
     let (files, estimate, compressed) = if disk.is_ok() {
-        let files = eligible(dir);
+        let files = eligible(dir, skip);
         let estimate = estimate(&files);
         let compressed = measure(&files);
         (files, estimate, compressed)
@@ -283,7 +291,8 @@ pub struct Job {
     /// Bytes of files handled so far, and in all.
     pub done: AtomicU64,
     pub total: AtomicU64,
-    /// Files the system refused (in use, no right to write).
+    /// Files left as they were when their batch ended (in use, not allowed, or not worth
+    /// compressing: the system tool does not say which).
     pub failed: AtomicU64,
     pub cancel: AtomicBool,
     pub finished: AtomicBool,
@@ -314,6 +323,7 @@ pub fn run(files: &[(PathBuf, u64)], undo: bool, job: &Job) -> Result<(), String
         let c = f.0.as_os_str().len() + 3;
         if !batch.is_empty() && (chars + c > LINE_MAX || bytes + f.1 > BATCH_BYTES) {
             result = sys::compact(&batch, undo, job);
+            left(&batch, undo, job);
             batch.clear();
             (chars, bytes) = (0, 0);
             if result.is_err() || job.cancel.load(Ordering::Relaxed) {
@@ -326,9 +336,22 @@ pub fn run(files: &[(PathBuf, u64)], undo: bool, job: &Job) -> Result<(), String
     }
     if result.is_ok() && !batch.is_empty() && !job.cancel.load(Ordering::Relaxed) {
         result = sys::compact(&batch, undo, job);
+        left(&batch, undo, job);
     }
     job.finished.store(true, Ordering::Relaxed);
     result
+}
+
+/// Counts the files of a batch that its run left as they were.
+fn left(batch: &[&(PathBuf, u64)], undo: bool, job: &Job) {
+    if job.cancel.load(Ordering::Relaxed) {
+        return;
+    }
+    let n = batch
+        .iter()
+        .filter(|(p, len)| (sys::on_disk(p, *len) < *len) == undo)
+        .count();
+    job.failed.fetch_add(n as u64, Ordering::Relaxed);
 }
 
 /// The files of `files` that are stored compressed now, for the undo.
@@ -346,7 +369,7 @@ mod sys {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::process::CommandExt;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Foundation::{CloseHandle, GetLastError, SetLastError, WIN32_ERROR};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, GetCompressedFileSizeW, GetDiskFreeSpaceExW, GetDriveTypeW,
         GetVolumeInformationW, GetVolumePathNameW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
@@ -360,6 +383,16 @@ mod sys {
 
     fn wide(p: &Path) -> Vec<u16> {
         p.as_os_str().encode_wide().chain(Some(0)).collect()
+    }
+
+    /// The path for a call that may meet a long one (beyond MAX_PATH).
+    fn wide_long(p: &Path) -> Vec<u16> {
+        let s = p.to_string_lossy();
+        if p.is_absolute() && !s.starts_with("\\\\") {
+            wide(Path::new(&format!("\\\\?\\{s}")))
+        } else {
+            wide(p)
+        }
     }
 
     fn root_of(dir: &Path) -> Option<Vec<u16>> {
@@ -395,7 +428,13 @@ mod sys {
     /// SSD when the disk says it has no seek penalty; anything not certain is a hard disk.
     fn disk_kind(root: &[u16]) -> Disk {
         let s = String::from_utf16_lossy(root);
-        let letter = s.chars().next().filter(|c| c.is_ascii_alphabetic());
+        // (only a disk's own letter, "X:\\"; a volume mounted in a folder is not looked up)
+        let letter = s
+            .trim_end_matches('\0')
+            .strip_suffix(":\\")
+            .filter(|d| d.len() == 1)
+            .and_then(|d| d.chars().next())
+            .filter(|c| c.is_ascii_alphabetic());
         let Some(l) = letter else {
             return Disk::Hdd;
         };
@@ -446,10 +485,13 @@ mod sys {
     }
 
     pub fn on_disk(p: &Path, len: u64) -> u64 {
-        let w = wide(p);
+        let w = wide_long(p);
         let mut high = 0u32;
-        let low = unsafe { GetCompressedFileSizeW(PCWSTR(w.as_ptr()), Some(&mut high)) };
-        if low == u32::MAX {
+        let low = unsafe {
+            SetLastError(WIN32_ERROR(0));
+            GetCompressedFileSizeW(PCWSTR(w.as_ptr()), Some(&mut high))
+        };
+        if low == u32::MAX && unsafe { GetLastError() }.0 != 0 {
             return len;
         }
         ((high as u64) << 32) | low as u64
@@ -464,7 +506,12 @@ mod sys {
 
     /// One `compact` call over `batch`, waiting for it and watching the cancel flag.
     pub fn compact(batch: &[&(PathBuf, u64)], undo: bool, job: &Job) -> Result<(), String> {
-        let mut cmd = std::process::Command::new("compact.exe");
+        // (the system's own, not whatever the search finds first)
+        let tool = std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("System32").join("compact.exe"))
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| PathBuf::from("compact.exe"));
+        let mut cmd = std::process::Command::new(tool);
         if undo {
             cmd.args(["/U", "/EXE"]);
         } else {
@@ -484,9 +531,7 @@ mod sys {
         loop {
             match child.try_wait() {
                 Ok(Some(st)) => {
-                    if !st.success() {
-                        job.failed.fetch_add(1, Ordering::Relaxed);
-                    }
+                    let _ = st;
                     break;
                 }
                 Ok(None) if job.cancel.load(Ordering::Relaxed) => {
@@ -546,7 +591,7 @@ mod tests {
         file(&d.join("Maps/Town/tile_0_0.map"), 100_000, 7);
         file(&d.join("Maps/Town/log.log"), 100_000, 7);
         file(&d.join("Maps/Town/tiny.cfg"), 100, 7);
-        let mut names: Vec<String> = eligible(&d)
+        let mut names: Vec<String> = eligible(&d, &[])
             .into_iter()
             .map(|(p, _)| {
                 p.strip_prefix(&d)
@@ -568,6 +613,17 @@ mod tests {
     }
 
     #[test]
+    fn a_folder_listed_on_its_own_is_not_counted_twice() {
+        let d = std::env::temp_dir().join(format!("depot-skip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        file(&d.join("Vehicles/a.o3d"), 10_000, 1);
+        file(&d.join("depot/Vehicles/b.o3d"), 10_000, 1);
+        assert_eq!(eligible(&d, &[]).len(), 2);
+        assert_eq!(eligible(&d, &[d.join("depot")]).len(), 1);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
     fn the_estimate_follows_how_well_the_files_compress() {
         let d = std::env::temp_dir().join(format!("depot-estimate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
@@ -580,7 +636,7 @@ mod tests {
             *b = (x >> 24) as u8;
         }
         std::fs::write(d.join("b.dds"), noise).unwrap();
-        let files = eligible(&d);
+        let files = eligible(&d, &[]);
         let e = estimate(&files);
         assert_eq!((e.files, e.bytes), (2, 800_000));
         assert!(e.saved > 350_000 && e.saved < 450_000, "{}", e.saved);

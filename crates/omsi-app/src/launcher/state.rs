@@ -61,7 +61,7 @@ pub enum Msg {
     /// of that number.
     Usage(u64, core::disk::Usage),
     /// The folders of the Free up space card, read (the reading asked last counts).
-    Squeeze(u64, Vec<core::compress::Folder>),
+    Squeeze(u64, std::sync::Arc<Vec<core::compress::Folder>>),
     /// A compression or an undo ended.
     SqueezeDone(Squeezed),
     ModInfo(Result<core::install::SourceInfo, String>),
@@ -307,7 +307,9 @@ pub enum Squeezed {
 /// person is at and the job running.
 #[derive(Default)]
 pub struct Squeeze {
-    pub folders: Option<Vec<core::compress::Folder>>,
+    pub folders: Option<std::sync::Arc<Vec<core::compress::Folder>>>,
+    /// The ticks were set from the first reading (and are kept over the next ones).
+    chosen_set: bool,
     pub asked: bool,
     gen: u64,
     /// Ticked: [the Depot's content, the original OMSI 2].
@@ -323,6 +325,16 @@ pub struct Squeeze {
 impl Squeeze {
     pub const DEPOT: &'static str = "Depot content folder";
     pub const ORIGINAL: &'static str = "OMSI 2 folder";
+
+    /// The Depot's content folder and the original OMSI 2 folder as they are now. The
+    /// content folder is left out when it is the original folder itself.
+    pub fn dirs(
+        root: &std::path::Path,
+    ) -> (Option<std::path::PathBuf>, Option<std::path::PathBuf>) {
+        let root = (!root.as_os_str().is_empty() && root.is_dir()).then(|| root.to_path_buf());
+        let content = core::content_dir().filter(|c| root.as_deref() != Some(c.as_path()));
+        (content, root)
+    }
 
     pub fn index(name: &str) -> usize {
         usize::from(name == Self::ORIGINAL)
@@ -699,23 +711,55 @@ impl State {
         let gen = self.squeeze.gen;
         let root = std::path::PathBuf::from(&self.config.root);
         self.spawn(move || {
+            let (content, root) = Squeeze::dirs(&root);
             let mut folders = Vec::new();
-            if let Some(c) = core::content_dir() {
-                folders.push(core::compress::inspect(Squeeze::DEPOT, &c));
+            if let Some(c) = &content {
+                folders.push(core::compress::inspect(Squeeze::DEPOT, c, &[]));
             }
-            if !root.as_os_str().is_empty() && root.is_dir() {
-                folders.push(core::compress::inspect(Squeeze::ORIGINAL, &root));
+            if let Some(r) = &root {
+                // (the Depot's folder often sits inside the original's: not counted twice)
+                let skip: Vec<_> = content.iter().cloned().collect();
+                folders.push(core::compress::inspect(Squeeze::ORIGINAL, r, &skip));
             }
-            Msg::Squeeze(gen, folders)
+            Msg::Squeeze(gen, std::sync::Arc::new(folders))
         });
+    }
+
+    /// Forgets what was read of the folders (they were changed under Setup) and reads again;
+    /// a reading still on its way is not taken.
+    pub fn reset_squeeze(&mut self) {
+        self.squeeze.folders = None;
+        self.squeeze.confirm = None;
+        self.squeeze.hdd_ok = false;
+        self.load_squeeze();
     }
 
     /// Compresses the ticked folders (or, with `undo`, stores their files as they were), in
     /// the background; `squeeze.job` tells how far it is and cancels it.
     pub fn start_squeeze(&mut self, undo: bool) {
+        if self.squeeze.job.is_some() {
+            return;
+        }
         let Some(folders) = self.squeeze.folders.clone() else {
             return;
         };
+        // (the folders under Setup may have changed since they were read)
+        let (content, root) = Squeeze::dirs(std::path::Path::new(&self.config.root));
+        let now = |name: &str| {
+            if name == Squeeze::ORIGINAL {
+                root.clone()
+            } else {
+                content.clone()
+            }
+        };
+        if folders
+            .iter()
+            .any(|f| now(f.name).as_deref() != Some(f.dir.as_path()))
+        {
+            self.reset_squeeze();
+            return;
+        }
+        self.squeeze.hdd_ok = false;
         let chosen = self.squeeze.chosen;
         let job = core::compress::Job::new();
         self.squeeze.job = Some((job.clone(), undo));
@@ -1255,6 +1299,9 @@ impl State {
                 log::error!("launcher: a background job stopped: {why}");
                 self.loading_content = false;
                 self.loading_lines = false;
+                if self.squeeze.job.take().is_some() {
+                    self.squeeze.done = Some(Squeezed::Error(why.to_string()));
+                }
                 self.set_status(
                     omsi_ui::tr("Reading the content stopped on an error: %{error}")
                         .replace("%{error}", &why.to_string()),
@@ -1692,8 +1739,9 @@ impl State {
             Msg::Usage(gen, u) if gen == self.usage_gen => self.usage = Some(u),
             Msg::Usage(..) => {}
             Msg::Squeeze(gen, folders) if gen == self.squeeze.gen => {
-                if self.squeeze.folders.is_none() {
+                if !self.squeeze.chosen_set {
                     // (the Depot's own content is ticked, the original OMSI 2 is not)
+                    self.squeeze.chosen_set = true;
                     self.squeeze.chosen = [true, false];
                 }
                 self.squeeze.folders = Some(folders);
@@ -1703,6 +1751,8 @@ impl State {
                 self.squeeze.job = None;
                 self.squeeze.confirm = None;
                 self.squeeze.done = Some(r);
+                // (what was read before the job is not what is on the disk now)
+                self.squeeze.folders = None;
                 self.load_squeeze();
             }
             Msg::ModInfo(r) => {
