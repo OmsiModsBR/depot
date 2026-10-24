@@ -24,13 +24,16 @@
 //! - [`skin`]: skinning and the hands.
 //! - [`omsi_anim`]: the original's own animation of its people.
 //! - [`crowd`]: people on foot as a crowd.
+//! - [`aboard`]: what the people aboard a vehicle weigh on its sections.
 
+pub mod aboard;
 pub mod crowd;
 pub mod omsi_anim;
 pub(crate) mod pose;
 pub(crate) mod rig;
 pub(crate) mod skin;
 
+pub use aboard::payload_by_section;
 pub use pose::{run_factor, Activity, Pose, PoseInput, Posed};
 pub use rig::{
     slot_of, HumanMesh, HumanType, Influence, Joints, Rig, BONE_HAND_L, BONE_HAND_R, BONE_HEAD,

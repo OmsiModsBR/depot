@@ -475,3 +475,78 @@ fn a_joint_without_coupling_front_character_is_a_free_ball() {
     assert_eq!(j.alpha_max, 0.0);
     assert_eq!(j.beta_min, 5f32.to_radians());
 }
+
+/// Ground waving a few centimetres up and down, as open terrain does.
+fn uneven(x: f64, y: f64, top: f64) -> GroundProbe {
+    let z = 0.04
+        * ((x * 1.3).sin() * (y * 0.9).cos()
+            + 0.7 * (0.7 * x + 2.1 * y).sin()
+            + 0.5 * (3.1 * x - 1.7 * y).sin());
+    if z <= top {
+        GroundProbe {
+            below: Some(z),
+            above: None,
+        }
+    } else {
+        GroundProbe {
+            below: Some(z.min(0.0)),
+            above: Some(z),
+        }
+    }
+}
+
+/// A pusher thrown into a bend on uneven ground keeps its joint bent as the bend bends it:
+/// the wheel turned at once as far as mouse steering turns it at the speed (a tenth of the
+/// lock per 10 km/h above 10), at 30, 40 and 50 km/h, the rear section's tyres hold no
+/// more than the road takes and the bus does not fold in two.
+#[test]
+fn a_pusher_thrown_into_a_bend_does_not_fold() {
+    let (front, rear) = gn92(false);
+    let mass = 15_200.0;
+    for kmh in [30.0f32, 40.0, 50.0] {
+        let mut t = Train::new(&front, &rear);
+        t.run(1.0, &none, [5000.0; 2], &none, &uneven);
+        t.run(8.0, &cruise(kmh / 3.6, mass), [0.0; 2], &none, &uneven);
+        let mut worst = 0.0f32;
+        for _ in 0..360 {
+            let steer = 1.0 / (t.front().forward_speed() * 0.36).max(1.0);
+            t.run(
+                1.0 / 60.0,
+                &cruise(kmh / 3.6, mass),
+                [0.0; 2],
+                &|_| steer,
+                &uneven,
+            );
+            worst = worst.max(t.alpha.abs().to_degrees());
+        }
+        eprintln!("{kmh} km/h: the joint bent {worst:.1}°");
+        assert!(worst < 30.0, "{kmh} km/h: the joint folded to {worst}°");
+    }
+}
+
+/// The front section's tyres let go when the rear one pushes them sideways harder than they
+/// grip, not only when the bend's own pull is too much: a pusher at full lock from 10 km/h,
+/// its rear axle driving hard, slides at the front before the speed alone would make it
+/// (some 26 km/h, counting the bend alone).
+#[test]
+fn a_pusher_pushing_hard_in_a_bend_slides_at_the_front() {
+    let (front, rear) = gn92(false);
+    let mass = 15_200.0;
+    let flat = road(1e9, 0.0);
+    let mut t = Train::new(&front, &rear);
+    t.run(1.0, &none, [5000.0; 2], &none, &flat);
+    t.run(6.0, &cruise(10.0 / 3.6, mass), [0.0; 2], &none, &flat);
+    t.run(3.0, &cruise(10.0 / 3.6, mass), [0.0; 2], &|_| 1.0, &flat);
+    assert!(t.front().holding());
+    let mut let_go = None;
+    for _ in 0..120 {
+        t.run(1.0 / 60.0, &|_| 40_000.0, [0.0; 2], &|_| 1.0, &flat);
+        if !t.front().holding() {
+            let_go = Some(t.front().forward_speed() * 3.6);
+            break;
+        }
+    }
+    let kmh = let_go.expect("the front section never let go");
+    eprintln!("the front section let go at {kmh:.1} km/h");
+    assert!(kmh < 24.0, "the front section held until {kmh} km/h");
+}

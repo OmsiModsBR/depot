@@ -33,7 +33,12 @@ pub struct CoupledPart {
 
 #[derive(Debug, Clone)]
 pub struct RigidBody {
+    /// The mass the body moves with (kg): its own and what it carries (`payload`).
     pub(crate) mass: f32,
+    /// The body's own mass (kg, the `.bus` file's `[mass]`) and the mass it carries (kg: the
+    /// people aboard the section), which weighs on it as its own does.
+    pub(crate) empty_mass: f32,
+    pub(crate) payload: f32,
     /// Body-frame inertia (diagonal, kg m²).
     pub(crate) inertia: Vec3,
     /// Centre of gravity relative to the model origin (m).
@@ -58,11 +63,16 @@ pub struct RigidBody {
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
     /// sin(x)/x a frame with x = 1.5 of it times the frame.
     pub(crate) body_freq: f32,
+    /// `body_freq` with the body empty (the springs stay, the mass grows with the payload).
+    pub(crate) empty_body_freq: f32,
     /// OMSI's two states of the tyres across: holding - the bus follows
     /// its wheels however quickly they are turned, as long as the bend asks no more than
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
     pub(crate) holding: bool,
+    /// The force (N) a joint pushed the body with across it over the last substep (to its
+    /// right): the tyres take it besides the bend's pull while they hold.
+    pub(crate) joint_across: f32,
     pub(crate) rolling_resistance: f32,
     /// Body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
     pub(crate) accel_body: Vec3,
@@ -92,9 +102,19 @@ pub struct RigidBody {
 }
 
 impl RigidBody {
-    /// The body's mass (kg).
+    /// The body's mass (kg): its own and its payload's.
     pub fn mass(&self) -> f32 {
         self.mass
+    }
+
+    /// The mass the body carries (kg, see [`RigidBody::set_payload`]).
+    pub fn payload(&self) -> f32 {
+        self.payload
+    }
+
+    /// The body's own frequency on its springs (1/s, see `body_freq`), with its payload.
+    pub fn body_freq(&self) -> f32 {
+        self.body_freq
     }
 
     /// The body-frame inertia (diagonal, kg m²).
@@ -207,8 +227,9 @@ impl RigidBody {
         &mut self.coupled
     }
 
-    /// Sets the mass (kg).
+    /// Sets the body's own mass (kg); it carries its payload on top.
     pub fn set_mass(&mut self, mass: f32) {
-        self.mass = mass;
+        self.empty_mass = mass;
+        self.mass = mass + self.payload;
     }
 }

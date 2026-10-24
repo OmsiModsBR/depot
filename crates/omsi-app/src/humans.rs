@@ -834,8 +834,8 @@ struct BusNow {
     served: Option<i64>,
 }
 
-/// What passengers feel stepping into a bus (OMSI reads the same fields: the vehicle's
-/// `Cabinair_Temp` and `Cabinair_relHum`, the weather's temperature and the daylight).
+/// What passengers feel stepping into a bus: the vehicle's `Cabinair_Temp`,
+/// `Cabinair_relHum` and `AI_Interiorlight`, and the weather's temperature.
 #[derive(Debug, Clone, Copy, Default)]
 struct CabinAir {
     /// °C, when the bus keeps its cabin air (every bus does: its script or the engine).
@@ -844,8 +844,10 @@ struct CabinAir {
     rel_hum: f32,
     /// The temperature outside (°C).
     outside: f32,
-    /// `Envir_Brightness`: the daylight, 0 dark .. 1.
-    brightness: f32,
+    /// `AI_Interiorlight`: whether the saloon is lit (0 .. 1). The bus scripts write it
+    /// for the player's bus (the engine only for the buses the AI drives); a script that
+    /// does not leaves it at 0, a dark saloon.
+    saloon_lit: f32,
 }
 
 impl CabinAir {
@@ -857,7 +859,10 @@ impl CabinAir {
                 .filter(|h| h.is_finite())
                 .unwrap_or(0.0),
             outside: v.host.temperature,
-            brightness: v.var("Envir_Brightness").unwrap_or(1.0),
+            saloon_lit: v
+                .var("AI_Interiorlight")
+                .filter(|l| l.is_finite())
+                .unwrap_or(0.0),
         }
     }
 }
@@ -1743,6 +1748,9 @@ pub struct Humans {
     pub density: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
+    /// The daylight outside, 0 dark .. 1 (the sky's light, without the street lamps'
+    /// light maps; set by the app): boarding passengers may find the bus too dark.
+    pub daylight: f32,
     /// How late the player's bus is on its duty (s; set by the app): over five minutes,
     /// boarding passengers may say so.
     pub delay: f64,
@@ -2030,6 +2038,7 @@ impl Humans {
             footfalls: Vec::new(),
             density: 1.0,
             time_of_day: 12.0 * 3600.0,
+            daylight: 1.0,
             delay: 0.0,
             root: root.to_path_buf(),
             voice_lines: Vec::new(),
@@ -2351,6 +2360,24 @@ impl Humans {
             .iter()
             .filter(|p| p.inside(BusId::Player))
             .count()
+    }
+
+    /// What the people in the player's bus weigh on each of its sections (kg, the front one
+    /// first, see [`omsi_sim::people::payload_by_section`]): each person's `.hum` `[mass]` on
+    /// the section of the cabin they are in.
+    pub fn player_payload(&self) -> Vec<f32> {
+        let joints: Vec<f32> = self
+            .player_cabin
+            .as_ref()
+            .map(|c| c.parts.iter().skip(1).map(|p| p.joint_y).collect())
+            .unwrap_or_default();
+        omsi_sim::people::payload_by_section(
+            &joints,
+            self.people.iter().filter_map(|p| match p.place {
+                Place::Bus(BusId::Player, local) => Some((local.y, p.ty.def.mass)),
+                _ => None,
+            }),
+        )
     }
 
     /// People walking the footpaths of the traffic network: (lane, distance along it). The

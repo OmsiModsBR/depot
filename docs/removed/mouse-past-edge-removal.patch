@@ -1,0 +1,130 @@
+diff --git a/crates/omsi-app/src/app.rs b/crates/omsi-app/src/app.rs
+index eac9894..ae26264 100644
+--- a/crates/omsi-app/src/app.rs
++++ b/crates/omsi-app/src/app.rs
+@@ -245,11 +245,6 @@ pub(crate) struct App {
+     /// Mouse steering: the steering it gives (fraction of the full lock) and how long (s)
+     /// it still eases in after being switched on (OMSI: a second, see app_events).
+     pub(crate) mouse_steer: (f32, f32),
+-    /// Mouse steering past the window's edge: the lock the mouse added while the cursor stood
+-    /// pinned at the left or right edge (-1..1 of full lock). OMSI divides the width by the
+-    /// speed, and at 30 km/h the edge of the screen was a third of the lock, with nowhere
+-    /// further to move.
+-    pub(crate) mouse_edge: f32,
+     /// Where the cursor steered when the right button began to look round: it goes back
+     /// there when the button is let go, so the wheel does not jump to where looking left it.
+     pub(crate) steer_cursor: Option<(f32, f32)>,
+diff --git a/crates/omsi-app/src/app_events.rs b/crates/omsi-app/src/app_events.rs
+index aa63c9e..e3e5235 100644
+--- a/crates/omsi-app/src/app_events.rs
++++ b/crates/omsi-app/src/app_events.rs
+@@ -1076,14 +1076,10 @@ impl ApplicationHandler for App {
+                     let k_v = 1.0 - (-dt / 0.4).exp();
+                     self.mouse_kmh += (raw_kmh - self.mouse_kmh) * k_v;
+                     let kmh = self.mouse_kmh;
+-                    let base = (crate::player::mouse_steering(self.cursor.0, w, kmh)
++                    // (the window's edge is the most the mouse steers, as in OMSI)
++                    let target = (crate::player::mouse_steering(self.cursor.0, w, kmh)
+                         * self.settings.mouse_sens)
+                         .clamp(-1.0, 1.0);
+-                    // (what the mouse added at the edge, up to the full lock)
+-                    self.mouse_edge = self
+-                        .mouse_edge
+-                        .clamp((-1.0 - base).min(0.0), (1.0 - base).max(0.0));
+-                    let target = (base + self.mouse_edge).clamp(-1.0, 1.0);
+                     // the pedals as OMSI has them: from the middle of the window to its
+                     // top edge the throttle, to the bottom one the brake, straight on
+                     let y = (2.0 * self.cursor.1 / h.max(1.0) - 1.0).clamp(-1.0, 1.0);
+@@ -4122,8 +4118,6 @@ impl ApplicationHandler for App {
+                         self.look_by(delta.0 as f32 * k, delta.1 as f32 * k);
+                     }
+                 }
+-            } else if self.mouse_drive && self.game_menu.is_none() {
+-                self.mouse_past_edge(delta.0 as f32);
+             }
+         }
+     }
+@@ -4145,9 +4139,6 @@ impl ApplicationHandler for App {
+             return;
+         }
+         crate::game_lists::flush_settings(false);
+-        if self.mouse_edge != 0.0 && !self.mouse_drive {
+-            self.mouse_edge = 0.0;
+-        }
+         if let Some(w) = &self.window {
+             w.request_redraw();
+         }
+diff --git a/crates/omsi-app/src/input/mouse.rs b/crates/omsi-app/src/input/mouse.rs
+index 241a85d..4a12158 100644
+--- a/crates/omsi-app/src/input/mouse.rs
++++ b/crates/omsi-app/src/input/mouse.rs
+@@ -699,38 +699,6 @@ impl App {
+         }
+     }
+ 
+-    /// Mouse steering beyond the window's edge: with the cursor pinned at the left or right
+-    /// edge, the mouse moving on outwards turns the wheel further (the whole width per full
+-    /// lock, as standing); moving back gives that back first, the cursor held at the edge
+-    /// until it is used up, so the wheel never jumps.
+-    pub(crate) fn mouse_past_edge(&mut self, dx: f32) {
+-        let Some(w) = self.surface.as_ref().map(|s| s.config.width as f32) else {
+-            return;
+-        };
+-        let per_px = 2.0 / w.max(1.0);
+-        let (at_left, at_right) = (self.cursor.0 <= 2.0, self.cursor.0 >= w - 3.0);
+-        let before = self.mouse_edge;
+-        if (at_right && dx > 0.0) || (at_left && dx < 0.0) {
+-            self.mouse_edge = (self.mouse_edge + dx * per_px).clamp(-2.0, 2.0);
+-        } else if (self.mouse_edge > 0.0 && dx < 0.0) || (self.mouse_edge < 0.0 && dx > 0.0) {
+-            let m = self.mouse_edge + dx * per_px;
+-            self.mouse_edge = if m.signum() != before.signum() {
+-                0.0
+-            } else {
+-                m
+-            };
+-            // (the cursor stays where it was: the move went into the wheel)
+-            if let Some(win) = self.window.as_ref() {
+-                let x = if before > 0.0 { w - 2.0 } else { 1.0 };
+-                let _ = win.set_cursor_position(winit::dpi::PhysicalPosition::new(
+-                    x as f64,
+-                    self.cursor.1 as f64,
+-                ));
+-                self.cursor.0 = x;
+-            }
+-        }
+-    }
+-
+     /// Take the cursor's new place; false when the move was someone else's (the object
+     /// editor's drag, the city map) and no switch is to be named.
+     pub(crate) fn move_cursor(&mut self, x: f32, y: f32) -> bool {
+diff --git a/crates/omsi-app/src/input_script.rs b/crates/omsi-app/src/input_script.rs
+index c8784fb..2360851 100644
+--- a/crates/omsi-app/src/input_script.rs
++++ b/crates/omsi-app/src/input_script.rs
+@@ -98,14 +98,6 @@ impl App {
+                 }
+                 // `weather`: the next weather, as the admin menu's "Next weather"
+                 "weather" => self.next_weather(),
+-                // `rawmouse dx`: the mouse moved by dx device units (past the window's edge
+-                // too, as mouse steering takes it)
+-                "rawmouse" => {
+-                    let (dx, _) = xy();
+-                    if self.mouse_drive && self.game_menu.is_none() {
+-                        self.mouse_past_edge(dx);
+-                    }
+-                }
+                 "drag" => {
+                     let (dx, dy) = xy();
+                     let (x, y) = self.cursor;
+diff --git a/crates/omsi-app/src/lib.rs b/crates/omsi-app/src/lib.rs
+index df507bb..a7cf1f7 100644
+--- a/crates/omsi-app/src/lib.rs
++++ b/crates/omsi-app/src/lib.rs
+@@ -686,7 +686,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
+         controllers: None,
+         mouse_drive: false,
+         mouse_steer: (0.0, 0.0),
+-        mouse_edge: 0.0,
+         steer_cursor: None,
+         center_cursor: false,
+         cursor_hidden: None,
