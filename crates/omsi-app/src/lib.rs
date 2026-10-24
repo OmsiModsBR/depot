@@ -686,7 +686,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         controllers: None,
         mouse_drive: false,
         mouse_steer: (0.0, 0.0),
-        mouse_edge: 0.0,
         steer_cursor: None,
         center_cursor: false,
         cursor_hidden: None,

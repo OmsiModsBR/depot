@@ -622,7 +622,7 @@ fn slice(
             );
         }
         for i in 0..n {
-            bodies[i].lateral_start(&subs[i], h, &mut lats[i]);
+            bodies[i].lateral_start(&subs[i], h, &mut lats[i], steers[i].is_some());
         }
         rows.clear();
         rows.extend(
