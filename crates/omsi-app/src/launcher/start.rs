@@ -351,7 +351,7 @@ pub fn card(l: &mut Launcher, r: Rect) {
     let mut foot = go.y - 12.0;
     if session != "saved" {
         let hint = if session == "new" {
-            "Without one, add or change vehicles in the game with the ALT menu."
+            "No vehicle selected. Add or change vehicles in the game with the ALT menu."
         } else {
             "You start on foot at the start point; place a vehicle in the game with the ALT menu."
         };
