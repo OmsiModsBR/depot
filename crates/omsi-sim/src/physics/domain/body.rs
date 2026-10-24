@@ -63,6 +63,9 @@ pub struct RigidBody {
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
     pub(crate) holding: bool,
+    /// The force (N) a joint pushed the body with across it over the last substep (to its
+    /// right): the tyres take it besides the bend's pull while they hold.
+    pub(crate) joint_across: f32,
     pub(crate) rolling_resistance: f32,
     /// Body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
     pub(crate) accel_body: Vec3,

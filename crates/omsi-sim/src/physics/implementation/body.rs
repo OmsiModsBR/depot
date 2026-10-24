@@ -85,6 +85,7 @@ impl RigidBody {
             inv_min_turn_radius: spec.inv_min_turn_radius,
             body_freq: spec.body_freq,
             holding: true,
+            joint_across: 0.0,
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
             friction: DRY_GRIP,
