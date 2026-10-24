@@ -186,12 +186,6 @@ const EDGES: &[&str] = &[
 const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
-    // the launcher keeps these texts as written; the game reads them to its own choices
-    (
-        "boarding",
-        "launcher>game",
-        "kept as written; the game lowercases it",
-    ),
     // `NaN` is a number to the launcher here; the game falls back to the default
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
     (
