@@ -19,6 +19,11 @@ fn backends() -> wgpu::Backends {
 #[test]
 #[ignore = "diagnostic: requires a graphics adapter; see issue #324"]
 fn renderer_starts_on_the_selected_backend() {
+    // (the renderer's own stage messages - before the device request and the shader builds -
+    // tell where inside `Renderer::new_with` a crash happens)
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .is_test(false)
+        .init();
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = backends();
     eprintln!("probe: backends {:?}", descriptor.backends);
