@@ -186,11 +186,6 @@ const EDGES: &[&str] = &[
 const KNOWN: &[(&str, &str, &str)] = &[
     // the launcher reads these numbers without the range or the fallback the game has (its
     // page then shows a value the game does not use)
-    (
-        "ui_opacity",
-        "launcher>game",
-        "no 0.2-1 range, and 0 instead of 0.85 for what is no number",
-    ),
     // the launcher keeps these texts as written; the game reads them to its own choices
     (
         "pax_voices",
