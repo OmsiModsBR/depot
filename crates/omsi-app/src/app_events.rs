@@ -3543,14 +3543,30 @@ impl ApplicationHandler for App {
                                     image::ColorType::Rgba8,
                                 )
                             } {
-                                Ok(()) => log::info!(
-                                    "input script: window picture written to {}",
-                                    path.display()
-                                ),
-                                Err(e) => log::warn!(
-                                    "input script: {} could not be written: {e}",
-                                    path.display()
-                                ),
+                                Ok(()) => {
+                                    log::info!(
+                                        "input script: window picture written to {}",
+                                        path.display()
+                                    );
+                                    // (a player's screenshot: the notice comes only now, after
+                                    // the capture, so it is never part of the saved picture)
+                                    if !include_touch {
+                                        self.service_msg =
+                                            Some(crate::screenshot_name::notice(&path));
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!(
+                                        "input script: {} could not be written: {e}",
+                                        path.display()
+                                    );
+                                    if !include_touch {
+                                        self.service_msg = Some((
+                                            format!("Screenshot could not be saved: {e}"),
+                                            4.0,
+                                        ));
+                                    }
+                                }
                             },
                             Err(e) => log::warn!(
                                 "input script: the window picture could not be rendered: {e}"
