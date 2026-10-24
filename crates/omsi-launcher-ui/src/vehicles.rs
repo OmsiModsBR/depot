@@ -898,19 +898,9 @@ impl VehiclesView {
         let gap = 10.0;
         let col = (r.w - 34.0 - gap) / 2.0;
         let (x1, x2) = (r.x + 17.0, r.x + 17.0 + col + gap);
-        let label = |ui: &mut Ui, s: &str, x: f32, y: f32| {
-            text(ui, s, x, y, 12.0, Weight::Regular, MUTED);
-        };
         let mut y = r.y + 50.0;
-        label(ui, "Paint", x1, y);
-        label(ui, "Garage", x2, y);
-        // (how many each list has, in the corner over it)
-        let found = |n: usize| omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string());
-        let corner = |ui: &mut Ui, n: usize, x_right: f32, y: f32| {
-            right(ui, &found(n), x_right, y, 12.0, Weight::Regular, MUTED);
-        };
-        corner(ui, v.paints.len() + 1, x1 + col, y);
-        corner(ui, v.hofs.len(), x2 + col, y);
+        field_label(ui, "Paint", Some(v.paints.len() + 1), x1, y, col);
+        field_label(ui, "Garage", Some(v.hofs.len()), x2, y, col);
         y += 10.0;
         let paints: Vec<String> = std::iter::once(default_livery(v).to_string())
             .chain(v.paints.iter().cloned())
@@ -934,11 +924,15 @@ impl VehiclesView {
             &garages,
         );
         y += 46.0;
-        label(ui, "Fleet number", x1, y);
-        label(ui, "Plate", x2, y);
-        if !v.numbers.is_empty() {
-            corner(ui, v.numbers.len(), x1 + col, y);
-        }
+        field_label(
+            ui,
+            "Fleet number",
+            Some(v.numbers.len()).filter(|&n| n > 0),
+            x1,
+            y,
+            col,
+        );
+        field_label(ui, "Plate", None, x2, y, col);
         y += 10.0;
         let numbers: Vec<String> = if v.numbers.is_empty() {
             vec!["None listed".to_string()]
@@ -990,6 +984,30 @@ impl VehiclesView {
             Weight::Regular,
             MUTED,
         );
+    }
+}
+
+/// The label over a field of `col` points at `x`, and in its corner how many the list has
+/// (`count`). The label is cut, with its whole text under the mouse, to leave the count its
+/// room; when the label would be left too short the count is not drawn (a long translation on
+/// the narrowest window), so the two never overlap.
+fn field_label(ui: &mut Ui, label: &str, count: Option<usize>, x: f32, y: f32, col: f32) {
+    let px = 12.0 * TEXT_SCALE;
+    let shown = count.map(|n| omsi_ui::tr("%{n} found").replace("%{n}", &n.to_string()));
+    let mut room = col;
+    if let Some(s) = &shown {
+        let cw = ui.width(s, px, Weight::Regular);
+        let left = col - cw - 10.0;
+        // (under about eight characters of the label there is no point in keeping the count)
+        if left >= 8.0 * px * 0.55 {
+            room = left;
+            right(ui, s, x + col, y, 12.0, Weight::Regular, MUTED);
+        }
+    }
+    let name = omsi_ui::tr(label);
+    clipped(ui, &name, x, y, room, 12.0, Weight::Regular, MUTED);
+    if ui.width(&name, px, Weight::Regular) > room {
+        ui.tooltip(Rect::new(x, y - px, room, px * 2.0), &name);
     }
 }
 
@@ -1212,5 +1230,30 @@ mod tests {
     fn a_long_description_is_kept_whole() {
         let list = sample::vehicles();
         assert!(list[0].description.chars().count() > 2000);
+    }
+
+    #[test]
+    fn a_long_label_never_overlaps_the_count_beside_it() {
+        // (the label is drawn in the room the count leaves it, however long its translation)
+        let mut shell = crate::Shell::new(crate::Page::Vehicles);
+        shell.vehicles = VehiclesView::with_catalog(sample::vehicles());
+        let mut ui = Ui::new();
+        for _ in 0..2 {
+            ui.begin(glam::Vec2::new(1280.0, 720.0), 1.0, 0.016);
+            shell.draw(&mut ui);
+            ui.finish();
+        }
+        // a very narrow field: the count gives way to the label
+        ui.begin(glam::Vec2::new(1280.0, 720.0), 1.0, 0.016);
+        field_label(
+            &mut ui,
+            "Fleet number with a very long name",
+            Some(15),
+            10.0,
+            40.0,
+            60.0,
+        );
+        field_label(&mut ui, "Fleet number", Some(15), 10.0, 80.0, 220.0);
+        ui.finish();
     }
 }
