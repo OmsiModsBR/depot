@@ -1899,6 +1899,8 @@ impl ApplicationHandler for App {
                         // (OMSI's `AIPassFactor`, the passengers setting in per cent)
                         * self.settings.pax_density;
                     h.time_of_day = self.clock.time;
+                    h.daylight =
+                        omsi_sim::Daylight::compute(&self.clock, self.envir.as_ref()).light_a;
                     h.delay = self
                         .duty
                         .as_ref()
