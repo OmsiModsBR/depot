@@ -602,7 +602,7 @@ pub fn list_rows(
             let mut x = r.x + 12.0;
             if let Some(lead) = look.leads.get(i) {
                 let lr = Rect::new(x, r.y, look.lead_w, r.h);
-                ui.text_in(lead, lr, 14.0 * TS, Weight::Medium, fg, Align::Left);
+                ui.text_in_tip(lead, lr, 14.0 * TS, Weight::Medium, fg, Align::Left);
             }
             if !look.leads.is_empty() {
                 x += look.lead_w;
@@ -611,6 +611,10 @@ pub fn list_rows(
             if look.as_is {
                 let px = 14.0 * TS;
                 let fit = fit_as_is(ui, label, px, lr.w);
+                // (a name cut to the row: the whole of it once the mouse rests)
+                if fit != *label {
+                    ui.tooltip_whole(lr, label);
+                }
                 let base = r.center().y + ui.fonts.cap_height(px, Weight::Regular) * 0.5;
                 ui.text_as_is(
                     &fit,
@@ -621,7 +625,7 @@ pub fn list_rows(
                     Align::Left,
                 );
             } else {
-                ui.text_in(label, lr, 14.0 * TS, Weight::Regular, fg, Align::Left);
+                ui.text_in_tip(label, lr, 14.0 * TS, Weight::Regular, fg, Align::Left);
             }
             if click && look.enabled && area.contains(ui.input.mouse) {
                 clicked = Some(i);

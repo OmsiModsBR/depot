@@ -3237,18 +3237,16 @@ pub fn mods(l: &mut Launcher, area: Rect) {
         );
         let bw = 104.0;
         let tw = r.w - 40.0 - bw - 20.0;
-        let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, title, 13.5, tw);
-        l.ui.text_in(
-            &title,
+        l.ui.text_in_tip(
+            title,
             Rect::new(r.x + 40.0, r.y + 7.0, tw, 20.0),
             13.5,
             Weight::Bold,
             TEXT,
             Align::Left,
         );
-        let note = omsi_launcher_ui::kit::fit_text(&mut l.ui, note, 12.0, tw);
-        l.ui.text_in(
-            &note,
+        l.ui.text_in_tip(
+            note,
             Rect::new(r.x + 40.0, r.y + 26.0, tw, 18.0),
             12.0,
             Weight::Regular,
