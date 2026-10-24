@@ -90,7 +90,18 @@ pub struct Showroom {
 
 /// Names the bus whose preview is being read and placed, until it is in the picture.
 fn placing_mark() -> PathBuf {
-    omsi_launcher_lib::data_dir().join("showroom-placing.txt")
+    // (a helper started for the pictures drawn ahead of time has a mark of its own, so that it
+    // and the page's live helper do not take each other's for a bus that hung)
+    let name = std::env::var("DEPOT_PLACING_MARK")
+        .ok()
+        .filter(|n| n.starts_with("showroom-placing") && !n.contains(['/', '\\']))
+        .unwrap_or_else(|| "showroom-placing.txt".to_string());
+    omsi_launcher_lib::data_dir().join(name)
+}
+
+/// The mark file called `name` taken away (a helper's own, see `preview::Link`).
+pub fn clear_mark(name: &str) {
+    let _ = std::fs::remove_file(omsi_launcher_lib::data_dir().join(name));
 }
 
 /// The mark taken away (the helper reading the bus was ended by the launcher, see

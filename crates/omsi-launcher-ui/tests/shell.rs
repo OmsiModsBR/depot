@@ -88,6 +88,36 @@ fn a_click_on_a_vehicle_row_and_a_paint_chooses_them() {
 }
 
 #[test]
+fn a_click_on_a_maker_heading_folds_its_models_away_and_back() {
+    use omsi_launcher_ui::vehicles::VehiclesView;
+    let mut shell = Shell::new(Page::Vehicles);
+    shell.vehicles = VehiclesView::with_catalog(omsi_launcher_ui::sample::vehicles());
+    let mut ui = Ui::new();
+    frame(&mut shell, &mut ui, None);
+    let id = |n: &str| omsi_ui::widgets::id_of(n);
+    assert!(ui.drawn.contains_key(&id("vehicles:row:0")));
+    let head = ui.drawn[&id("vehicles:group:maker one")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(head.x + 30.0, head.y + 10.0)),
+    );
+    frame(&mut shell, &mut ui, None);
+    // (the sample's first bus is the only one of "Maker One": its row is gone, the other
+    // maker's are still there)
+    assert!(!ui.drawn.contains_key(&id("vehicles:row:0")));
+    assert!(ui.drawn.contains_key(&id("vehicles:row:1")));
+    let head = ui.drawn[&id("vehicles:group:maker one")];
+    frame(
+        &mut shell,
+        &mut ui,
+        Some(Vec2::new(head.x + 30.0, head.y + 10.0)),
+    );
+    frame(&mut shell, &mut ui, None);
+    assert!(ui.drawn.contains_key(&id("vehicles:row:0")));
+}
+
+#[test]
 fn a_click_on_a_map_row_chooses_it_and_explore_map_is_reported_once() {
     use omsi_launcher_ui::maps::MapsView;
     let mut shell = Shell::new(Page::Maps);

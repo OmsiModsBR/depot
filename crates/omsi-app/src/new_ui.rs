@@ -701,6 +701,8 @@ pub(crate) struct NewUi {
     pub(crate) alt: crate::new_ui_alt::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
+    /// Keys the "Add vehicle" window's registration field took: their release is its too.
+    pub(crate) add_taken: std::collections::HashSet<winit::keyboard::KeyCode>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
     /// The headset's picture of the menu and the page (a render texture of the window's size,

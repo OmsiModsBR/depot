@@ -652,23 +652,41 @@ fn fit_as_is(ui: &Ui, s: &str, px: f32, max: f32) -> String {
     String::new()
 }
 
-/// The "Add vehicle" window: the vehicles, the chosen one's liveries and depot files, and
-/// the buttons. Every list is the game's own; this only shows them.
+/// The "Add vehicle" window: the manufacturers, the chosen one's models, the chosen model's
+/// liveries and depot files, and the buttons. Every list is the game's own; this only shows
+/// them.
 pub struct AddVehicle<'a> {
+    pub makers: &'a [String],
+    pub maker: Option<usize>,
+    /// The models of the manufacturer chosen.
     pub vehicles: &'a [String],
     pub vehicle: Option<usize>,
     pub liveries: &'a [String],
     pub livery: usize,
     pub depots: &'a [String],
     pub depot: usize,
+    /// The chosen vehicle's fleet numbers (its prefixes), as the window shows them; with fewer
+    /// than two there is nothing to step through.
+    pub numbers: &'a [String],
+    pub number: usize,
+    /// The registration typed (empty: the vehicle's own), whether its field has the keyboard,
+    /// and what the field says while it is empty.
+    pub plate: &'a str,
+    pub plate_focused: bool,
+    pub plate_hint: &'a str,
 }
 
 /// What a click in the "Add vehicle" window asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AddVehicleEvent {
+    Maker(usize),
     Vehicle(usize),
     Livery(usize),
     Depot(usize),
+    /// The fleet number one step down (-1) or up (1).
+    Number(i32),
+    /// The registration's field was clicked.
+    Plate,
     Place,
     Cancel,
 }
@@ -699,9 +717,20 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     let head = |ui: &mut Ui, s: &str, x: f32, y: f32| {
         text(ui, s, x + 16.0, y + 17.0, 12.0, Weight::Regular, MUTED)
     };
-    // the vehicles at the left, the livery and the depot file at the right
-    head(ui, "Vehicle", body.x, body.y);
-    let vehicles = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, lists_h);
+    // the manufacturers and their models at the left (as the original's lists by manufacturer
+    // and then model), the livery and the depot file at the right
+    let half = ((lists_h - 34.0) * 0.5).floor();
+    // (the right column gives its foot to the fleet number and the registration)
+    let strip_h = 62.0;
+    let half_r = ((lists_h - 34.0 - strip_h) * 0.5).floor();
+    head(ui, "Manufacturer", body.x, body.y);
+    let makers = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, half);
+    if let Some(i) = list(ui, "add:makers", makers, v.makers, v.maker) {
+        event = Some(AddVehicleEvent::Maker(i));
+    }
+    let ym = makers.bottom() + 4.0;
+    head(ui, "Model", body.x, ym);
+    let vehicles = Rect::new(body.x + 4.0, ym + 34.0, left_w - 8.0, half);
     if let Some(i) = list(ui, "add:vehicles", vehicles, v.vehicles, v.vehicle) {
         event = Some(AddVehicleEvent::Vehicle(i));
     }
@@ -709,17 +738,50 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
         Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot_h - 8.0),
         LINE,
     );
-    let half = ((lists_h - 34.0) * 0.5).floor();
     head(ui, "Livery", right_x, body.y);
-    let liveries = Rect::new(right_x + 4.0, body.y + 34.0, right_w - 8.0, half);
+    let liveries = Rect::new(right_x + 4.0, body.y + 34.0, right_w - 8.0, half_r);
     if let Some(i) = list(ui, "add:liveries", liveries, v.liveries, Some(v.livery)) {
         event = Some(AddVehicleEvent::Livery(i));
     }
     let y2 = liveries.bottom() + 4.0;
     head(ui, "Depot file", right_x, y2);
-    let depots = Rect::new(right_x + 4.0, y2 + 34.0, right_w - 8.0, half);
+    let depots = Rect::new(right_x + 4.0, y2 + 34.0, right_w - 8.0, half_r);
     if let Some(i) = list(ui, "add:depots", depots, v.depots, Some(v.depot)) {
         event = Some(AddVehicleEvent::Depot(i));
+    }
+    // the fleet number (the prefix) and the registration (the plate)
+    let sy = depots.bottom() + 6.0;
+    let half_w = ((right_w - 8.0 - 12.0) * 0.5).floor();
+    head(ui, "Prefix", right_x, sy - 4.0);
+    head(ui, "Plate", right_x + half_w + 12.0, sy - 4.0);
+    let has_numbers = v.vehicle.is_some() && v.numbers.len() > 1;
+    let label = v.numbers.get(v.number).map(String::as_str).unwrap_or("-");
+    let by = stepper(
+        ui,
+        "add:number",
+        Rect::new(right_x + 16.0, sy + 18.0, half_w - 12.0, 30.0),
+        label,
+        has_numbers,
+    );
+    if has_numbers && by != 0 {
+        event = Some(AddVehicleEvent::Number(by));
+    }
+    if v.vehicle.is_some()
+        && text_field(
+            ui,
+            "add:plate",
+            Rect::new(
+                right_x + half_w + 12.0 + 16.0,
+                sy + 18.0,
+                half_w - 12.0,
+                30.0,
+            ),
+            v.plate,
+            v.plate_focused,
+            v.plate_hint,
+        )
+    {
+        event = Some(AddVehicleEvent::Plate);
     }
     let labels: &[(&str, bool)] = if v.vehicle.is_some() {
         &[("Place", true), ("Cancel", true)]
@@ -946,18 +1008,27 @@ mod tests {
     #[test]
     fn the_add_vehicle_window_reports_its_clicks() {
         let vehicles: Vec<String> = (0..40).map(|i| format!("Bus {i}")).collect();
+        let makers = vec!["Maker A".to_string(), "Maker B".to_string()];
         let liveries = vec!["Random livery".to_string(), "Red".to_string()];
         let depots = vec!["The map's depot file".to_string()];
+        let numbers = vec!["4711".to_string(), "4712".to_string()];
         let size = Vec2::new(1672.0, 941.0);
         let mut ui = Ui::new();
         let run = |ui: &mut Ui, chosen: Option<usize>, click: Option<Vec2>| {
             let view = AddVehicle {
+                makers: &makers,
+                maker: Some(0),
                 vehicles: &vehicles,
                 vehicle: chosen,
                 liveries: &liveries,
                 livery: 0,
                 depots: &depots,
                 depot: 0,
+                numbers: &numbers,
+                number: 0,
+                plate: "",
+                plate_focused: false,
+                plate_hint: "Automatic",
             };
             let frame = |ui: &mut Ui| {
                 ui.begin(size, 1.0, 0.016);
@@ -976,6 +1047,11 @@ mod tests {
             frame(ui)
         };
         run(&mut ui, None, None);
+        let maker = ui.drawn[&id_of("add:makers:row:1")].center();
+        assert_eq!(
+            run(&mut ui, None, Some(maker)),
+            Some(AddVehicleEvent::Maker(1))
+        );
         let row = ui.drawn[&id_of("add:vehicles:row:2")].center();
         assert_eq!(
             run(&mut ui, None, Some(row)),
@@ -997,6 +1073,17 @@ mod tests {
         assert_eq!(
             run(&mut ui, Some(2), Some(red)),
             Some(AddVehicleEvent::Livery(1))
+        );
+        // the fleet number steps and the plate's field is clicked, once a vehicle is chosen
+        let next = ui.drawn[&(id_of("add:number") ^ 2)].center();
+        assert_eq!(
+            run(&mut ui, Some(2), Some(next)),
+            Some(AddVehicleEvent::Number(1))
+        );
+        let plate = ui.drawn[&id_of("add:plate")].center();
+        assert_eq!(
+            run(&mut ui, Some(2), Some(plate)),
+            Some(AddVehicleEvent::Plate)
         );
     }
 
