@@ -460,6 +460,8 @@ impl Launcher {
         self.gpu = None;
         self.preview_tex = None;
         self.preview = preview::Preview::new();
+        // (the helper drawing pictures ahead of time is not left up for the game)
+        self.prerender.suspend();
         self.map_tex = None;
         self.map_pic = MapPicture::default();
         self.thumbs.forget_textures();
@@ -847,6 +849,7 @@ impl ApplicationHandler for Launcher {
             self.state.update(dt);
             // (no page shows the preview while the window is hidden: its helper ends at once)
             self.preview.stop();
+            self.prerender.suspend();
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.gfx.is_none() && !self.state.in_game() {
@@ -2277,10 +2280,9 @@ impl Launcher {
         }
     }
 
-    /// The small pictures of the paint tiles in view: each is the picture the preview kept of
-    /// that paint (kept when the paint was looked at), made small on the thumbnails' thread. A
-    /// paint that has not been looked at yet shows its initial, and its picture comes in once
-    /// the preview has kept it.
+    /// The small pictures of the paint tiles in view: each is the picture drawn ahead of time
+    /// for that paint (`prerender`), made smaller on the thumbnails' thread. A paint with no
+    /// picture yet shows its initial, and its picture comes in once it has been drawn.
     fn paint_thumbs(&mut self) {
         let shape = prerender::shape();
         let root = std::path::PathBuf::from(&self.state.config.root);
@@ -2317,10 +2319,15 @@ impl Launcher {
     /// (after another OMSI 2 folder was saved, or the page's button), follows what the page's
     /// buttons ask for, and gives the page how it stands.
     fn prerender_step(&mut self, dt: f32) {
-        if self.prerender.after_content
-            && !self.state.loading_content
-            && !self.state.vehicles.is_empty()
-        {
+        if mobile::mobile() {
+            // (a phone's helper is a thread of the launcher, not a process of its own)
+            self.prerender.cancel();
+            return;
+        }
+        if self.prerender.content_ready(
+            self.state.loading_content,
+            self.state.vehicles.is_empty(),
+        ) {
             let c = &self.state.choice;
             // (the light the pictures are drawn in: the chosen map, else the first there is)
             let map = if c.map.is_empty() {

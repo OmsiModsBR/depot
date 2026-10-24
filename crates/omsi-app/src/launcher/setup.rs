@@ -925,10 +925,6 @@ fn save_folders(l: &mut Launcher) {
         }
     }
     let content_moved = content != cfg.content;
-    // (another installation: the pictures of its vehicles are drawn once its content is read)
-    if chosen != cfg.root {
-        l.prerender.looking();
-    }
     l.state.config.root = chosen.clone();
     l.state.config.game = game;
     l.state.config.content = content;
@@ -937,6 +933,11 @@ fn save_folders(l: &mut Launcher) {
             // (what was read of the folders before is forgotten: a folder copied or
             // changed while the launcher ran is read as it is now)
             omsi_cfg::content_changed();
+            // (another installation: the pictures of its vehicles are drawn once its content
+            // has been read)
+            if chosen != cfg.root {
+                l.prerender.looking();
+            }
             l.state.config = core::load_config();
             l.pages.setup = SetupView {
                 tab: l.pages.setup.tab,

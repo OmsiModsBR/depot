@@ -3,10 +3,12 @@
 //!
 //! The pictures are drawn by a preview helper of their own (`preview::Preview`, so the
 //! interface fallback and the watchdog on a helper that says nothing are the same ones the
-//! page's live preview has), one vehicle paint after another, in the background and never while
-//! a game runs. Each is kept by the helper as any settled picture is, at one fixed shape
-//! (`shape`), so the page finds it whatever the size of its own preview: only what is not kept
-//! yet is drawn. The run starts when another OMSI 2 folder is saved under Setup (once the
+//! page's live preview has; it keeps its own mark of the bus it reads, so it and the live
+//! helper never take each other's for a bus that hung), one vehicle paint after another, in the
+//! background. It is stopped when a game starts and while the window is hidden (`suspend`), and
+//! goes on afterwards. Each picture is kept by the helper as any settled picture is, small and
+//! at one fixed shape (`preview::thumb_shape`), in a folder of its own, so the page finds it
+//! whatever the size of its own preview: only what is not kept yet is drawn. The run starts when another OMSI 2 folder is saved under Setup (once the
 //! content is read) and from the Vehicles page's button, which reads the content again first
 //! so that new vehicles are found; it can be cancelled.
 
@@ -17,8 +19,8 @@ use std::collections::VecDeque;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
-/// The size the pictures are drawn at (the small pictures are cut from them).
-const SIZE: (u32, u32) = (336, 208);
+/// How long the content may take to start being read after a run was asked for.
+const READING_STARTS: Duration = Duration::from_secs(20);
 
 /// A picture that takes longer than this is given up (the preview helper's own watchdog ends
 /// a helper that says nothing for 240 s; this one is for a helper that talks but never settles).
@@ -26,7 +28,7 @@ const PER_PICTURE: Duration = Duration::from_secs(300);
 
 /// The shape of every picture drawn here.
 pub fn shape() -> Shape {
-    Shape::of(SIZE.0, SIZE.1, 0.5)
+    preview::thumb_shape()
 }
 
 pub struct Prerender {
@@ -34,6 +36,11 @@ pub struct Prerender {
     /// Start a run as soon as the content has been read (the folder was just chosen, or the
     /// button asked for a new reading).
     pub after_content: bool,
+    /// The content was seen being read since the run was asked for, and when it was asked.
+    seen_reading: bool,
+    asked_at: Instant,
+    /// The helper was stopped for a game or a hidden window (the picture in flight starts over).
+    paused: bool,
     scan: Option<Receiver<Vec<Look>>>,
     queue: VecDeque<Look>,
     current: Option<(Look, Instant)>,
@@ -46,8 +53,11 @@ pub struct Prerender {
 impl Default for Prerender {
     fn default() -> Self {
         Prerender {
-            preview: Preview::new(),
+            preview: Preview::for_prerender(),
             after_content: false,
+            seen_reading: false,
+            asked_at: Instant::now(),
+            paused: false,
             scan: None,
             queue: VecDeque::new(),
             current: None,
@@ -78,6 +88,43 @@ impl Prerender {
     pub fn looking(&mut self) {
         self.phase = PrerenderPhase::Looking;
         self.after_content = true;
+        self.seen_reading = false;
+        self.asked_at = Instant::now();
+    }
+
+    /// Whether the content has been read since the run was asked for, so that the run can
+    /// start on the new list (`loading`: it is being read now; `empty`: it has no vehicles).
+    /// A reading that never starts, or ends with nothing, drops the request.
+    pub fn content_ready(&mut self, loading: bool, empty: bool) -> bool {
+        if !self.after_content {
+            return false;
+        }
+        if loading {
+            self.seen_reading = true;
+        } else if self.seen_reading {
+            self.after_content = false;
+            if empty {
+                self.phase = PrerenderPhase::Idle;
+                return false;
+            }
+            return true;
+        } else if self.asked_at.elapsed() > READING_STARTS {
+            self.cancel();
+        }
+        false
+    }
+
+    /// Stop the helper for a game or a hidden window: what is drawn stays, the run goes on
+    /// from the picture in flight when it can (`update`).
+    pub fn suspend(&mut self) {
+        if self.preview_in_use() {
+            self.preview.stop();
+        }
+        self.paused = true;
+    }
+
+    fn preview_in_use(&self) -> bool {
+        self.phase == PrerenderPhase::Running
     }
 
     /// Stop the run: what is made stays.
@@ -87,6 +134,7 @@ impl Prerender {
         self.queue.clear();
         self.current = None;
         self.phase = PrerenderPhase::Idle;
+        self.paused = false;
         self.preview.stop();
     }
 
@@ -122,6 +170,8 @@ impl Prerender {
                     .collect();
                 missing.extend(preview::missing_kept(looks, shape()));
             }
+            // (so many that a run could prune its own pictures: the rest is for the next run)
+            missing.truncate(preview::RUN_MAX);
             let _ = tx.send(missing);
         });
         self.scan = Some(rx);
@@ -150,9 +200,19 @@ impl Prerender {
             }
         }
         if self.phase != PrerenderPhase::Running || game_running {
-            // (the helper of a run that ended or was paused lets go after a moment)
+            // (nothing is drawn while a game runs, and the helper is not left up for it)
+            if game_running && !self.paused {
+                self.suspend();
+            }
+            // (the helper of a run that ended lets go after a moment)
             self.preview.update(dt, None);
             return;
+        }
+        if std::mem::take(&mut self.paused) {
+            // (the time the helper was stopped is not the picture's)
+            if let Some(c) = self.current.as_mut() {
+                c.1 = Instant::now();
+            }
         }
         if self.current.is_none() {
             let Some(look) = self.queue.pop_front() else {
@@ -163,7 +223,7 @@ impl Prerender {
             self.preview.want_picture(look.clone());
             self.current = Some((look, Instant::now()));
         }
-        self.preview.update(dt, Some(SIZE));
+        self.preview.update(dt, Some(preview::THUMB_SIZE));
         // (the frames are not shown: the pictures are kept by the helper)
         let _ = self.preview.take_frame();
         let Some((look, since)) = self.current.clone() else {
@@ -217,5 +277,49 @@ mod tests {
         p.cancel();
         assert_eq!(p.status().phase, PrerenderPhase::Idle);
         assert!(!p.after_content);
+    }
+
+    #[test]
+    fn a_run_waits_for_the_reading_it_asked_for_and_drops_an_empty_one() {
+        let mut p = Prerender::default();
+        // (nothing asked: nothing to start)
+        assert!(!p.content_ready(false, false));
+        p.looking();
+        // the old list is not the new one: while no reading was seen, the run waits
+        assert!(!p.content_ready(false, false));
+        assert!(p.after_content);
+        assert!(!p.content_ready(true, false));
+        assert!(p.content_ready(false, false));
+        assert!(!p.after_content);
+        // a reading that ends with no vehicles drops the request, and the page stops saying
+        // it looks
+        p.looking();
+        assert!(!p.content_ready(true, true));
+        assert!(!p.content_ready(false, true));
+        assert!(!p.after_content);
+        assert_eq!(p.status().phase, PrerenderPhase::Idle);
+        // a reading that never starts drops it too
+        p.looking();
+        p.asked_at = Instant::now() - READING_STARTS - Duration::from_secs(1);
+        assert!(!p.content_ready(false, false));
+        assert_eq!(p.status().phase, PrerenderPhase::Idle);
+    }
+
+    #[test]
+    fn a_game_stops_the_helper_and_the_picture_in_flight_starts_its_time_again() {
+        let mut p = Prerender::default();
+        p.phase = PrerenderPhase::Running;
+        let look = Look {
+            bus: "Vehicles/A/a.bus".into(),
+            ..Default::default()
+        };
+        p.current = Some((look, Instant::now() - PER_PICTURE - Duration::from_secs(60)));
+        p.update(0.016, true);
+        assert!(p.paused);
+        assert_eq!(p.status().phase, PrerenderPhase::Running);
+        // the game is over: the time of the picture is counted from now, not given up on
+        p.update(0.016, false);
+        assert_eq!(p.status().failed, 0);
+        assert!(p.current.as_ref().unwrap().1.elapsed() < Duration::from_secs(5));
     }
 }
