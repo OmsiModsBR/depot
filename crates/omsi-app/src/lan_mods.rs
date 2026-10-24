@@ -724,6 +724,7 @@ fn process_alive(pid: u32) -> bool {
     }
     #[cfg(unix)]
     {
+        // SAFETY: signal 0 sends nothing; the call only asks whether the process exists
         unsafe { libc::kill(pid as i32, 0) == 0 }
     }
     #[cfg(not(unix))]
@@ -756,6 +757,8 @@ fn free_space(dir: &Path) -> Option<u64> {
     use std::os::unix::ffi::OsStrExt;
     let c = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
     let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a NUL-terminated path that lives through the call; `st` is a zeroed
+    // `statvfs` the call fills in
     if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
         return None;
     }

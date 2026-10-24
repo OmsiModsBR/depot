@@ -118,6 +118,9 @@ impl Wheel {
         };
         effect.replay[0] = milliseconds;
         effect.params[0] = level as u16 as u64;
+        // SAFETY: `effect` is a live `FfEffect`, laid out like the kernel's `ff_effect`
+        // (repr(C)); the ioctl reads it and writes back the new id; the fd is the
+        // device file `self.file` keeps open
         let r = unsafe {
             libc::ioctl(
                 self.file.as_raw_fd(),
@@ -144,6 +147,9 @@ impl Wheel {
             code,
             value,
         };
+        // SAFETY: `ev` is a live repr(C) `InputEvent` matching the kernel's `input_event`;
+        // its fields fill all `size_of` bytes on the targets built (no padding after the
+        // timeval, two u16 and an i32), so the byte view reads no uninitialised memory
         let bytes = unsafe {
             std::slice::from_raw_parts(
                 &ev as *const InputEvent as *const u8,
@@ -158,6 +164,8 @@ impl Drop for Wheel {
     fn drop(&mut self) {
         if self.id >= 0 {
             self.send(self.id as u16, 0);
+            // SAFETY: the fd is still open (`self.file`), and `id` is an effect this wheel
+            // uploaded and has not removed yet
             unsafe {
                 libc::ioctl(
                     self.file.as_raw_fd(),
