@@ -349,3 +349,37 @@ fn joint_angles_of_a_pusher_bent_both_ways() {
         assert!((beta - rise).abs() < 0.02, "beta {beta} for {rise}°");
     }
 }
+
+/// The people aboard an articulated bus weigh on the section they are in: the front and
+/// the rear section each carry their own share on top of their own mass, and get it back
+/// when the people get off.
+#[test]
+fn each_section_carries_the_people_in_it() {
+    let (front, rear) = sections();
+    let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+    v.contact = Some(flat());
+    v.attach_trailer(rear);
+    v.enable_rigid_body();
+    frames(&mut v, 1.0 / 60.0, &|_| 0.0);
+    let masses = |v: &VehicleInstance| {
+        (
+            v.rigid().expect("the front section has a body").mass(),
+            v.trailers[0]
+                .rigid()
+                .expect("the rear section has a body")
+                .mass(),
+        )
+    };
+    assert_eq!(masses(&v), (8_000.0, 7_200.0));
+    v.set_payload(&[1_500.0, 750.0]);
+    assert_eq!(masses(&v), (9_500.0, 7_950.0));
+    assert_eq!(v.mass_kg(), 9_500.0);
+    // stepping keeps it
+    frames(&mut v, 1.0, &|_| 0.0);
+    assert_eq!(masses(&v), (9_500.0, 7_950.0));
+    // everybody off: a section left out carries nothing
+    v.set_payload(&[300.0]);
+    assert_eq!(masses(&v), (8_300.0, 7_200.0));
+    v.set_payload(&[]);
+    assert_eq!(masses(&v), (8_000.0, 7_200.0));
+}

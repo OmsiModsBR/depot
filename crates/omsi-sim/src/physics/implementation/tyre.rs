@@ -98,11 +98,13 @@ impl RigidBody {
     ) {
         let rot = self.orientation;
         let mut force = Vec3::new(0.0, 0.0, -GRAVITY * self.mass);
-        // the air: ½ ρ cw A v² (cw 0.6, the front a bus's or a car's by the mass). Without it
-        // a bus rolling downhill without its brakes ran on to any speed
+        // the air: ½ ρ cw A v² (cw 0.6, the front a bus's or a car's by its own mass, the
+        // people aboard aside). Without it a bus rolling downhill without its brakes ran on
+        // to any speed
         if air {
             let v = self.velocity;
-            let area = (self.mass / MASS_PER_FRONT_AREA).clamp(FRONT_AREA_MIN, FRONT_AREA_MAX);
+            let area =
+                (self.empty_mass / MASS_PER_FRONT_AREA).clamp(FRONT_AREA_MIN, FRONT_AREA_MAX);
             force -= v * v.length() * (0.5 * AIR_DENSITY * DRAG_COEFFICIENT * area);
         }
         let mut torque = Vec3::ZERO; // body frame

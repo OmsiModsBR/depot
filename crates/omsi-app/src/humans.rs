@@ -2353,6 +2353,24 @@ impl Humans {
             .count()
     }
 
+    /// What the people in the player's bus weigh on each of its sections (kg, the front one
+    /// first, see [`omsi_sim::people::payload_by_section`]): each person's `.hum` `[mass]` on
+    /// the section of the cabin they are in.
+    pub fn player_payload(&self) -> Vec<f32> {
+        let joints: Vec<f32> = self
+            .player_cabin
+            .as_ref()
+            .map(|c| c.parts.iter().skip(1).map(|p| p.joint_y).collect())
+            .unwrap_or_default();
+        omsi_sim::people::payload_by_section(
+            &joints,
+            self.people.iter().filter_map(|p| match p.place {
+                Place::Bus(BusId::Player, local) => Some((local.y, p.ty.def.mass)),
+                _ => None,
+            }),
+        )
+    }
+
     /// People walking the footpaths of the traffic network: (lane, distance along it). The
     /// traffic gives way to them at crossings and presses the pedestrian lights' buttons
     /// for them.
