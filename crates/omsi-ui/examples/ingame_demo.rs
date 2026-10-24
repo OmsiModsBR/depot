@@ -246,6 +246,11 @@ fn main() {
                 livery: 2,
                 depots: &depots,
                 depot: 0,
+                numbers: &["4711".to_string(), "4712".to_string()],
+                number: 1,
+                plate: "",
+                plate_focused: false,
+                plate_hint: "Automatic",
             },
         );
     });

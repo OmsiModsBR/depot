@@ -196,7 +196,7 @@ impl ApplicationHandler for App {
                         _ => None,
                     };
                     if let Some(text) = event.text.as_deref() {
-                        if self.tool_text(text, code) {
+                        if self.add_text(text, code) || self.tool_text(text, code) {
                             return;
                         }
                     }

@@ -332,6 +332,19 @@ pub(crate) fn place_liveries(app: &App, bus: &str) -> Vec<String> {
     names
 }
 
+/// A vehicle's fleet numbers (its `[number]` list), as the "Add vehicle" window steps
+/// through them.
+pub(crate) fn place_numbers(app: &App, bus: &str) -> Vec<String> {
+    bus_def(app, bus)
+        .map(|d| {
+            d.numbers_with_plates()
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// A vehicle's depot files as (label, file name), alphabetical (the place list puts the
 /// map's depot file first).
 pub(crate) fn place_depots(app: &App, bus: &str) -> Vec<(String, String)> {

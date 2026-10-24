@@ -37,6 +37,10 @@ pub(crate) struct AddFrame {
     livery: usize,
     depots: Vec<String>,
     depot: usize,
+    numbers: Vec<String>,
+    number: usize,
+    plate: String,
+    plate_focused: bool,
 }
 
 impl AddFrame {
@@ -53,6 +57,11 @@ impl AddFrame {
                 livery: self.livery,
                 depots: &self.depots,
                 depot: self.depot,
+                numbers: &self.numbers,
+                number: self.number,
+                plate: &self.plate,
+                plate_focused: self.plate_focused,
+                plate_hint: &omsi_ui::tr("Automatic"),
             },
         )
     }
@@ -72,10 +81,18 @@ pub(crate) struct AddWindow {
     /// The chosen vehicle's depot files as (label, file name); the first line is the map's.
     depots: Vec<(String, String)>,
     depot: usize,
+    /// The chosen vehicle's fleet numbers (its `[number]` list) and the one picked.
+    numbers: Vec<String>,
+    number: usize,
+    /// The registration typed (empty: the vehicle's own) and whether its field has the keyboard.
+    plate: String,
+    plate_focused: bool,
     /// A press over the window was taken: its release goes to the window too.
     pressed: bool,
 }
 
+/// The longest registration the field takes.
+const PLATE_MAX: usize = 16;
 const RANDOM_LIVERY: &str = "Random livery";
 /// Why no vehicle is added now.
 pub(crate) const PLACING: &str = "Put down the vehicle on the mouse first";
@@ -101,6 +118,10 @@ impl AddWindow {
             livery: self.livery,
             depots: self.depots.iter().map(|d| d.0.clone()).collect(),
             depot: self.depot,
+            numbers: self.numbers.clone(),
+            number: self.number,
+            plate: self.plate.clone(),
+            plate_focused: self.plate_focused,
         }
     }
 
@@ -125,6 +146,7 @@ impl AddWindow {
         self.depots = vec![(MAP_DEPOT.to_string(), String::new())];
         self.livery = 0;
         self.depot = 0;
+        self.set_numbers(Vec::new());
         (self.models().len() == 1).then_some(0)
     }
 
@@ -148,6 +170,48 @@ impl AddWindow {
             .collect();
         self.livery = 0;
         self.depot = 0;
+        self.set_numbers(Vec::new());
+    }
+
+    /// The fleet numbers of the vehicle just chosen; the first is picked and the typed
+    /// registration goes (it belonged to the other vehicle).
+    pub(crate) fn set_numbers(&mut self, numbers: Vec<String>) {
+        self.numbers = numbers;
+        self.number = 0;
+        self.plate.clear();
+        self.plate_focused = false;
+    }
+
+    /// Step the fleet number by `by`, wrapping around the list.
+    pub(crate) fn step_number(&mut self, by: i32) {
+        let n = self.numbers.len() as i32;
+        if n > 1 {
+            self.number = (self.number as i32 + by).rem_euclid(n) as usize;
+        }
+    }
+
+    pub(crate) fn focus_plate(&mut self) {
+        self.plate_focused = true;
+    }
+
+    /// Text typed into the registration's field. True when the field took it.
+    pub(crate) fn type_plate(&mut self, text: &str) -> bool {
+        if !self.plate_focused {
+            return false;
+        }
+        for c in text.chars().filter(|c| !c.is_control()) {
+            if self.plate.chars().count() < PLATE_MAX {
+                self.plate.push(c);
+            }
+        }
+        true
+    }
+
+    /// The fleet number and the registration to put down (`None`: the vehicle's own).
+    pub(crate) fn identity(&self) -> (Option<String>, Option<String>) {
+        let number = self.numbers.get(self.number).cloned();
+        let plate = Some(self.plate.trim().to_string()).filter(|p| !p.is_empty());
+        (number, plate)
     }
 
     pub(crate) fn vehicle_file(&self, i: usize) -> Option<&str> {
@@ -267,10 +331,51 @@ impl App {
 
     /// Esc closes the window (it does not open the Esc menu then).
     pub(crate) fn add_key(&mut self, code: KeyCode, pressed: bool) -> bool {
-        if !(self.add_window_active() && pressed && code == KeyCode::Escape) {
+        if !pressed {
+            // (the release of a key the field took does not reach the game either)
+            return self.new_ui.add_taken.remove(&code);
+        }
+        if !self.add_window_active() {
             return false;
         }
-        self.new_ui.close_add();
+        if code == KeyCode::Escape {
+            self.new_ui.close_add();
+            return true;
+        }
+        let Some(win) = self.new_ui.add.as_mut().filter(|w| w.plate_focused) else {
+            return false;
+        };
+        match code {
+            KeyCode::ShiftLeft
+            | KeyCode::ShiftRight
+            | KeyCode::ControlLeft
+            | KeyCode::ControlRight
+            | KeyCode::AltLeft
+            | KeyCode::AltRight => return false,
+            KeyCode::Enter | KeyCode::NumpadEnter => win.plate_focused = false,
+            KeyCode::Backspace | KeyCode::Delete => {
+                win.plate.pop();
+            }
+            _ => {}
+        }
+        self.new_ui.add_taken.insert(code);
+        true
+    }
+
+    /// Text typed while the registration's field has the keyboard. True when it took it.
+    pub(crate) fn add_text(&mut self, text: &str, code: Option<KeyCode>) -> bool {
+        if !self.add_window_active() || !text.chars().any(|c| !c.is_control()) {
+            return false;
+        }
+        let Some(win) = self.new_ui.add.as_mut() else {
+            return false;
+        };
+        if !win.type_plate(text) {
+            return false;
+        }
+        if let Some(code) = code {
+            self.new_ui.add_taken.insert(code);
+        }
         true
     }
 
@@ -290,8 +395,10 @@ impl App {
                         };
                         let liveries = crate::game_lists::place_liveries(self, &file);
                         let depots = crate::game_lists::place_depots(self, &file);
+                        let numbers = crate::game_lists::place_numbers(self, &file);
                         if let Some(win) = self.new_ui.add.as_mut() {
                             win.choose(m, liveries, depots);
+                            win.set_numbers(numbers);
                         }
                     }
                 }
@@ -301,22 +408,27 @@ impl App {
                     };
                     let liveries = crate::game_lists::place_liveries(self, &file);
                     let depots = crate::game_lists::place_depots(self, &file);
+                    let numbers = crate::game_lists::place_numbers(self, &file);
                     if let Some(win) = self.new_ui.add.as_mut() {
                         win.choose(i, liveries, depots);
+                        win.set_numbers(numbers);
                     }
                 }
                 AddVehicleEvent::Livery(i) => win.set_livery(i),
                 AddVehicleEvent::Depot(i) => win.set_depot(i),
+                AddVehicleEvent::Number(by) => win.step_number(by),
+                AddVehicleEvent::Plate => win.focus_plate(),
                 AddVehicleEvent::Place => {
                     if self.placing.is_some() {
                         self.service_msg = Some((PLACING.into(), 3.0));
                         continue;
                     }
                     let placement = win.placement();
+                    let (number, plate) = win.identity();
                     self.new_ui.close_add();
                     if let Some((bus, livery, depot)) = placement {
                         self.swap_pending = false;
-                        self.place_vehicle(&bus, livery, depot);
+                        self.place_vehicle_with(&bus, livery, depot, number, plate);
                     }
                     return;
                 }
@@ -355,7 +467,10 @@ mod tests {
     fn the_models_are_those_of_the_chosen_manufacturer() {
         let mut w = window();
         assert_eq!(w.frame().makers, vec!["Maker".to_string(), "Other".into()]);
-        assert_eq!(w.frame().vehicles, vec!["Bus A".to_string(), "Bus B".into()]);
+        assert_eq!(
+            w.frame().vehicles,
+            vec!["Bus A".to_string(), "Bus B".into()]
+        );
         // another manufacturer: its models, and no model chosen yet; one model is offered to
         // be chosen at once
         w.choose(1, vec!["Red".into()], vec![]);
@@ -400,5 +515,25 @@ mod tests {
         w.set_livery(5);
         w.choose(9, vec![], vec![]);
         assert_eq!(w.placement(), Some(("Vehicles/A/a.bus".into(), None, None)));
+    }
+
+    #[test]
+    fn the_number_steps_and_the_plate_is_typed() {
+        let mut w = window();
+        w.set_numbers(vec!["10".into(), "11".into(), "12".into()]);
+        w.step_number(-1);
+        assert_eq!(w.identity(), (Some("12".into()), None));
+        w.step_number(1);
+        assert!(
+            !w.type_plate("ab"),
+            "the field has no keyboard before it is clicked"
+        );
+        w.focus_plate();
+        assert!(w.type_plate(" B-XY 12\n"));
+        assert_eq!(w.identity(), (Some("10".into()), Some("B-XY 12".into())));
+        // another vehicle forgets both
+        w.set_numbers(vec!["7".into()]);
+        assert_eq!(w.identity(), (Some("7".into()), None));
+        assert!(!w.plate_focused);
     }
 }
