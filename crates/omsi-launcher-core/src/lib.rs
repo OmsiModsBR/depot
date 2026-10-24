@@ -3680,14 +3680,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.5, 2.0))
                     .unwrap_or(1.0))
             }
-            "pedal_throttle" | "pedal_brake" if k != "pedal_throttle" => {
+            "pedal_throttle" => {
                 v[&k] = json!(val
                     .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
                     .map(|x| x.clamp(0.25, 4.0))
                     .unwrap_or(1.0))
             }
-            // (what is no finite number is the default, as the game reads it)
-            "pedal_throttle" => {
+            "pedal_brake" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .ok()
