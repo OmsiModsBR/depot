@@ -184,22 +184,34 @@ pub fn body_rotation(heading: f64, pitch: f32, bank: f32, reversed: bool) -> Mat
 
 /// `articulation_<n>_alpha` and `_beta` (degrees) of a joint, from the rotations of the part
 /// in front (`lead_rot`) and of the part behind (`own_rot`), each travelling along its
-/// `*_heading` (a model turned round points the other way). The part in front's forward axis
-/// is read in the frame of the part behind: alpha is its angle in that part's floor plane,
-/// clockwise, the part in front's heading less this one's on level ground; beta is how far it
-/// rises out of that plane, the part in front's pitch less this one's (it grows as the rear
-/// axle sinks: taken the other way round, the Agora L's joint arch and bellows - `anim_rot
-/// articulation_0_beta` - tilted away from the rear section instead of towards it).
+/// `*_heading` (a model turned round points the other way). Both are read off the two parts,
+/// not off the world: alpha is the bend about the vertical axis, clockwise, the part in
+/// front's heading less this one's on level ground; beta the bend about the transverse axis,
+/// the part in front's pitch less this one's (it grows as the rear axle sinks: taken the other
+/// way round, the Agora L's joint arch and bellows - `anim_rot articulation_0_beta` - tilted
+/// away from the rear section instead of towards it).
+///
+/// They are the two turns that take the part in front onto this one, in the order its joint
+/// bends (`pusher`: `[coupling_pitch_offset]`, see `physics::Joint`), so that a bellows ring
+/// turned by beta and then by alpha about the ball - the order a cfg's `[newanim]` blocks give
+/// - lands on this part. A puller pitches about its own transverse axis and yaws about the
+/// vertical of the part in front: beta is the climb of this part's forward axis out of the
+/// floor plane of the part in front, alpha its angle in that plane. A pusher yaws about its
+/// own vertical and pitches about the transverse axis of the part in front: beta is the climb
+/// of the front's forward axis out of this part's floor plane, alpha its angle in this one.
 ///
 /// Measured against the world instead, as headings and pitches each against the horizon,
 /// the two sections lying on one sloping plane made a beta out of the bend alone: 2° on a 6%
 /// grade at 35°, 0.8° on a 2.5% crossfall, with nothing bent up or down - and the bellows
-/// opened a gap at their far ring on any crowned road through a curve.
+/// opened a gap at their far ring on any crowned road through a curve. Measured the pusher's
+/// way on a puller, beta came out short by the cosine of alpha (3.3° for 4° at 35°), and the
+/// last ring stood off the rear section on any bend over a dip or a crest.
 pub fn joint_angles(
     lead_rot: Mat4,
     lead_heading: f64,
     own_rot: Mat4,
     own_heading: f64,
+    pusher: bool,
 ) -> (f64, f64) {
     // (+1 when the model's forward axis points the way the part travels)
     let along = |rot: Mat4, heading: f64| {
@@ -211,17 +223,39 @@ pub fn joint_angles(
             1.0
         }
     };
-    let front = lead_rot.transform_vector3(Vec3::Y).as_dvec3() * along(lead_rot, lead_heading);
-    let s = along(own_rot, own_heading);
-    let right = own_rot.transform_vector3(Vec3::X).as_dvec3() * s;
-    let forward = own_rot.transform_vector3(Vec3::Y).as_dvec3() * s;
-    let up = own_rot.transform_vector3(Vec3::Z).as_dvec3();
-    let (x, y, z) = (front.dot(right), front.dot(forward), front.dot(up));
-    let flat = x.hypot(y).max(1e-9);
-    (
-        x.atan2(y).to_degrees(),
-        (z / flat).clamp(-1.0, 1.0).asin().to_degrees(),
-    )
+    // forward, right and up of a part, the way it travels
+    let axes = |rot: Mat4, heading: f64| {
+        let s = along(rot, heading);
+        (
+            rot.transform_vector3(Vec3::Y).as_dvec3() * s,
+            rot.transform_vector3(Vec3::X).as_dvec3() * s,
+            rot.transform_vector3(Vec3::Z).as_dvec3(),
+        )
+    };
+    let (lead_fwd, lead_right, lead_up) = axes(lead_rot, lead_heading);
+    let (own_fwd, own_right, own_up) = axes(own_rot, own_heading);
+    if pusher {
+        let (x, y, z) = (
+            lead_fwd.dot(own_right),
+            lead_fwd.dot(own_fwd),
+            lead_fwd.dot(own_up),
+        );
+        let flat = x.hypot(y).max(1e-9);
+        (
+            x.atan2(y).to_degrees(),
+            (z / flat).clamp(-1.0, 1.0).asin().to_degrees(),
+        )
+    } else {
+        let (x, y, z) = (
+            own_fwd.dot(lead_right),
+            own_fwd.dot(lead_fwd),
+            own_fwd.dot(lead_up),
+        );
+        (
+            -x.atan2(y).to_degrees(),
+            -z.clamp(-1.0, 1.0).asin().to_degrees(),
+        )
+    }
 }
 
 fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
