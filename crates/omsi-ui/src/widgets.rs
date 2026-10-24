@@ -235,6 +235,8 @@ pub struct Ui {
     /// Rects the mouse is over UI in (the rest of the window is the 3D showroom).
     pub over_ui: bool,
     tooltip: Option<(String, Vec2)>,
+    /// The tooltip is a name shown as it is (not translated), broken anywhere it must be.
+    tooltip_raw: bool,
     /// (tests, here and with the `testing` feature) Where each clickable widget was this
     /// frame, by id.
     #[cfg(any(test, feature = "testing"))]
@@ -270,6 +272,7 @@ impl Ui {
             clipboard_in: None,
             over_ui: false,
             tooltip: None,
+            tooltip_raw: false,
             #[cfg(any(test, feature = "testing"))]
             drawn: HashMap::new(),
         }
@@ -289,6 +292,7 @@ impl Ui {
         self.cursor = winit::window::CursorIcon::Default;
         self.over_ui = false;
         self.tooltip = None;
+        self.tooltip_raw = false;
         #[cfg(any(test, feature = "testing"))]
         self.drawn.clear();
         self.push_layer(Rect::new(0.0, 0.0, size.x, size.y), 0.0);
@@ -653,6 +657,46 @@ impl Ui {
     /// translated (it is a name), and as wide as the screen has room for.
     pub fn tooltip_whole(&mut self, r: Rect, text: &str) {
         self.tooltip(r, text);
+        if self.tooltip.as_ref().is_some_and(|t| t.0 == text) {
+            self.tooltip_raw = true;
+        }
+    }
+
+    /// `text` as lines no wider than `width`, as it is: broken at spaces, and inside a word
+    /// that is wider than a line by itself (a path, a file name).
+    fn wrap_as_is(&self, text: &str, width: f32, px: f32, weight: Weight) -> Vec<String> {
+        let fits = |t: &str| self.fonts.width_as_is(t, px, weight) <= width;
+        let mut lines = Vec::new();
+        for para in text.split('\n') {
+            let mut line = String::new();
+            for word in para.split(' ') {
+                let joined = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if fits(&joined) {
+                    line = joined;
+                    continue;
+                }
+                if !line.is_empty() {
+                    lines.push(std::mem::take(&mut line));
+                }
+                // (a word too wide for a line of its own goes on by characters)
+                for ch in word.chars() {
+                    let mut next = line.clone();
+                    next.push(ch);
+                    if !fits(&next) && !line.is_empty() {
+                        lines.push(std::mem::take(&mut line));
+                        line.push(ch);
+                    } else {
+                        line = next;
+                    }
+                }
+            }
+            lines.push(line);
+        }
+        lines
     }
 
     /// Text on its baseline with `tracking` pixels more between its letters (the small
@@ -1731,8 +1775,20 @@ impl Ui {
         self.draw_popup();
         self.draw_date_popup();
         if let Some((t, at)) = self.tooltip.take() {
-            let w = (self.width(&t, 12.5, Weight::Medium) + 20.0).min(360.0);
-            let h = self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium) + 12.0;
+            let raw = std::mem::take(&mut self.tooltip_raw);
+            let shown = |ui: &Ui, t: &str| {
+                if raw {
+                    ui.fonts.width_as_is(t, 12.5, Weight::Medium)
+                } else {
+                    ui.width(t, 12.5, Weight::Medium)
+                }
+            };
+            let w = (shown(self, &t) + 20.0).min(360.0);
+            let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
+            let h = match &lines {
+                Some(l) => l.len() as f32 * 12.5 * 1.38,
+                None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
+            } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
             if r.right() > self.size.x - 8.0 {
                 r.x = self.size.x - 8.0 - r.w;
@@ -1743,14 +1799,30 @@ impl Ui {
             self.p().rounded(r, 6.0, Color::rgba(34, 34, 34, 1.0));
             self.p()
                 .rounded_border(r, 7.0, 1.0, Color::WHITE.alpha(0.1));
-            self.paragraph(
-                &t,
-                Vec2::new(r.x + 10.0, r.y + 4.0),
-                w - 20.0,
-                12.5,
-                Weight::Medium,
-                TEXT_SOFT,
-            );
+            match lines {
+                Some(lines) => {
+                    for (k, l) in lines.iter().enumerate() {
+                        self.text_as_is(
+                            l,
+                            Vec2::new(r.x + 10.0, r.y + 4.0 + 12.5 + k as f32 * 12.5 * 1.38),
+                            12.5,
+                            Weight::Medium,
+                            TEXT_SOFT,
+                            Align::Left,
+                        );
+                    }
+                }
+                None => {
+                    self.paragraph(
+                        &t,
+                        Vec2::new(r.x + 10.0, r.y + 4.0),
+                        w - 20.0,
+                        12.5,
+                        Weight::Medium,
+                        TEXT_SOFT,
+                    );
+                }
+            }
         }
         if let Some(r) = self.nav.ring() {
             self.p().rounded_border(r, 8.0, 2.0, accent());
@@ -2238,6 +2310,19 @@ mod tests {
         };
         assert_eq!(frames(long).as_deref(), Some(long));
         assert_eq!(frames("Short"), None);
+    }
+
+    #[test]
+    fn a_whole_name_tooltip_breaks_a_word_wider_than_a_line() {
+        let ui = Ui::new();
+        let path =
+            "C:/Games/OMSI-2/Vehicles/Some_Very_Long_Vehicle_Folder_Name/model/body_lod0.o3d";
+        let lines = ui.wrap_as_is(path, 120.0, 12.5, Weight::Medium);
+        assert!(lines.len() > 1);
+        assert_eq!(lines.concat(), path);
+        assert!(lines
+            .iter()
+            .all(|l| ui.fonts.width_as_is(l, 12.5, Weight::Medium) <= 120.0));
     }
 
     #[test]
