@@ -557,6 +557,7 @@ impl Ui {
             let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
             if t > 0.9 {
                 self.tooltip = Some((text.to_string(), self.input.mouse));
+                self.tooltip_raw = false;
             }
         }
     }
@@ -648,7 +649,9 @@ impl Ui {
         let cut = self.fonts.width_as_is(&crate::tr(text), px, weight) > r.w + 0.5;
         let drawn = self.text_in(text, r, px, weight, c, align);
         if cut {
-            self.tooltip_whole(r, text);
+            // (an interface label shows in the tooltip as it is cut in its box: translated)
+            let whole = crate::tr(text).into_owned();
+            self.tooltip_whole(r, &whole);
         }
         drawn
     }
@@ -2310,6 +2313,37 @@ mod tests {
         };
         assert_eq!(frames(long).as_deref(), Some(long));
         assert_eq!(frames("Short"), None);
+    }
+
+    #[test]
+    fn a_cut_label_shows_its_translation_in_the_tooltip() {
+        fn lookup(lang: &str, text: &str) -> Option<String> {
+            (lang == "xx" && text == "An English label too long for its little box")
+                .then(|| "Eine übersetzte Beschriftung, viel zu lang für ihr Kästchen".to_string())
+        }
+        crate::i18n::set_lookup(lookup);
+        crate::i18n::set_language("xx");
+        let r = Rect::new(10.0, 10.0, 80.0, 20.0);
+        let mut ui = Ui::new();
+        let mut tip = None;
+        for _ in 0..20 {
+            ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.1);
+            ui.input.mouse = Vec2::new(40.0, 20.0);
+            ui.text_in_tip(
+                "An English label too long for its little box",
+                r,
+                13.0,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            tip = ui.tooltip.clone().map(|t| t.0);
+        }
+        crate::i18n::set_language("");
+        assert_eq!(
+            tip.as_deref(),
+            Some("Eine übersetzte Beschriftung, viel zu lang für ihr Kästchen")
+        );
     }
 
     #[test]
