@@ -997,6 +997,8 @@ impl ApplicationHandler for App {
                 // goes. For a second after mouse steering is switched on the wheel eases
                 // towards the cursor (a half-life of the time that is left), then follows it.
                 let mut analog = analog;
+                // (taken before the mouse writes its own steering into it)
+                let controller_steers = analog.steering.is_some();
                 // the head turned by a stick or an axis set up for it (#454), at up to
                 // 120 degrees a second, in the views of the bus, on foot and flying
                 if analog.look != [0.0, 0.0]
@@ -1216,6 +1218,9 @@ impl ApplicationHandler for App {
                     p.axes.red_steer_spd = self.settings.red_steer_spd;
                     p.axes.pedal_hold = self.settings.brake_hold;
                     p.analog = analog;
+                    if controller_steers {
+                        p.axes.controller_steers();
+                    }
                     for (name, down) in actions {
                         if !down || (self.game_menu.is_none() && self.chooser.is_none()) {
                             p.action(&name, down);

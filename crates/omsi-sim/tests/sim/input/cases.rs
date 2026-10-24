@@ -483,3 +483,48 @@ fn steering_returns_like_a_spring() {
         s.steering
     );
 }
+
+/// Mouse steering switched off: the wheel keeps its angle (no self-centring, whatever the
+/// speed) until a steering key is pressed; then the keyboard steering takes over.
+#[test]
+fn a_wheel_left_by_the_mouse_stays_until_a_steering_key() {
+    let mut a = KeyboardAxes {
+        speed_kmh: 30.0,
+        steering: 0.6,
+        mouse_hold: true,
+        ..Default::default()
+    };
+    for _ in 0..500 {
+        a.update(0.01);
+    }
+    assert!((a.steering - 0.6).abs() < 1e-6, "it stays: {}", a.steering);
+    a.left_key = true;
+    a.update(0.01);
+    assert!(a.steering < 0.6 && !a.mouse_hold, "a key takes over");
+    a.left_key = false;
+    let before = a.steering;
+    for _ in 0..100 {
+        a.update(0.01);
+    }
+    assert!(
+        a.steering < before,
+        "keyboard behaviour: it comes back by itself"
+    );
+}
+
+/// A wheel or gamepad supplying steering ends the hold: the wheel the mouse left must not
+/// win over a controller at its centre for good.
+#[test]
+fn a_controller_ends_the_hold_of_a_wheel_the_mouse_left() {
+    let mut a = KeyboardAxes {
+        speed_kmh: 30.0,
+        steering: 0.6,
+        mouse_hold: true,
+        ..Default::default()
+    };
+    a.controller_steers();
+    for _ in 0..1000 {
+        a.update(0.01);
+    }
+    assert_eq!(a.steering, 0.0, "it comes back by itself as before");
+}
