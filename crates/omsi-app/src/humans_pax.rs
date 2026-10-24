@@ -2674,10 +2674,11 @@ impl Humans {
         let air = bn.air;
         let mut complaint_seen = false;
         let mut code = 0u8;
-        // too dark: the saloon light under half and dusk outside
-        if bn.interior < 0.5 {
+        // too dark: the saloon light off and dusk outside (the sky's light: the street
+        // lamps at the stop do not light the saloon)
+        if air.saloon_lit < 0.5 {
             let r = self.rand_f() as f32;
-            if air.brightness < 0.2 + 0.3 * r {
+            if self.daylight < 0.2 + 0.3 * r {
                 complaint_seen = true;
                 if (self.rand_f() as f32) < whinge {
                     code = 1;
@@ -3739,5 +3740,92 @@ mod tests {
         );
         assert_eq!(next(1, 0), Some(0));
         assert_eq!(next(1, 2), Some(2));
+    }
+
+    /// The player's bus at a stop, its saloon light as `saloon_lit` (`AI_Interiorlight`)
+    /// and its model's interior lights as `interior`.
+    fn boarding_bus(saloon_lit: f32, interior: f32) -> BusNow {
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let k = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("omsi-too-dark-{}-{k}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("test.bus"),
+            "[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("paths.cfg"),
+            "[pathpnt]\n1\n0\n0\n[pathpnt]\n0\n0\n0\n[pathlink]\n0\n1\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("cabin.cfg"),
+            "[entry]\n0\n[exit]\n0\n[passpos]\n0\n0\n0.9\n0.45\n0\n",
+        )
+        .unwrap();
+        let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
+        let cabin =
+            Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+        let _ = std::fs::remove_dir_all(&dir);
+        BusNow {
+            id: BusId::Player,
+            next_stop: None,
+            cabin,
+            pos: DVec3::ZERO,
+            rot: Mat4::IDENTITY,
+            heading: 0.0,
+            speed: 0.0,
+            entry_open: vec![true],
+            exit_open: vec![true],
+            walk_open: None,
+            interior,
+            air: CabinAir {
+                saloon_lit,
+                ..CabinAir::default()
+            },
+            half: DVec2::new(1.25, 6.0),
+            centre: DVec2::ZERO,
+            accel: DVec2::ZERO,
+            trailers: Vec::new(),
+            terminus: None,
+            takes: Takes::Terminus,
+            places_off: Vec::new(),
+            served: None,
+        }
+    }
+
+    /// Of `n` people stepping into `bus` in `daylight`, how many found nothing to
+    /// complain about (nobody says anything: the pack never whinges nor chats).
+    fn content_of(bus: &BusNow, daylight: f32, n: u32) -> u32 {
+        let mut humans = Humans::new(Path::new("/nonexistent"));
+        humans.tickets = Some(Arc::new(omsi_content::tickets::TicketPack::default()));
+        humans.daylight = daylight;
+        for _ in 0..n {
+            humans.greet_or_complain(0, bus);
+        }
+        assert_eq!(humans.stepped_in, n);
+        humans.content
+    }
+
+    #[test]
+    fn a_dark_saloon_at_night_is_too_dark_whatever_the_cab_light() {
+        // night: everybody finds the dark saloon too dark, the driver's light on or not
+        assert_eq!(content_of(&boarding_bus(0.0, 0.0), 0.0, 50), 0);
+        assert_eq!(content_of(&boarding_bus(0.0, 0.6), 0.0, 50), 0);
+        // the saloon lit: nobody
+        assert_eq!(content_of(&boarding_bus(1.0, 1.0), 0.0, 50), 50);
+    }
+
+    #[test]
+    fn only_the_dusk_makes_a_dark_saloon_too_dark() {
+        // broad daylight: a dark saloon is no matter
+        assert_eq!(content_of(&boarding_bus(0.0, 0.0), 0.6, 50), 50);
+        // at dusk (0.2 .. 0.5) some find it too dark and some do not
+        let content = content_of(&boarding_bus(0.0, 0.0), 0.35, 200);
+        assert!(
+            content > 0 && content < 200,
+            "{content} of 200 content at dusk"
+        );
     }
 }

@@ -1233,6 +1233,7 @@ pub(crate) fn run_offscreen(
                 .passenger_density((run_clock.time / 3600.0) as f32)
                 * settings.pax_density;
             h.time_of_day = run_clock.time;
+            h.daylight = omsi_sim::Daylight::compute(&run_clock, envir.as_ref()).light_a;
             // populate stops near every LAN player every 2 seconds, as app_events.rs
             // does every 2 s near the local player.  At startup `center` is ZERO (no
             // player bus on a headless server), so stops on the actual map – which can
