@@ -511,3 +511,20 @@ fn a_wheel_left_by_the_mouse_stays_until_a_steering_key() {
         "keyboard behaviour: it comes back by itself"
     );
 }
+
+/// A wheel or gamepad supplying steering ends the hold: the wheel the mouse left must not
+/// win over a controller at its centre for good.
+#[test]
+fn a_controller_ends_the_hold_of_a_wheel_the_mouse_left() {
+    let mut a = KeyboardAxes {
+        speed_kmh: 30.0,
+        steering: 0.6,
+        mouse_hold: true,
+        ..Default::default()
+    };
+    a.controller_steers();
+    for _ in 0..1000 {
+        a.update(0.01);
+    }
+    assert_eq!(a.steering, 0.0, "it comes back by itself as before");
+}

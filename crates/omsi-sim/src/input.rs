@@ -70,7 +70,8 @@ pub struct KeyboardAxes {
     /// `steering_neutral` key, cleared by a steering key.
     pub centering: bool,
     /// The wheel was left where mouse steering put it: it stays there (no self-centring)
-    /// until the player presses a steering key, from where the keyboard steering takes over.
+    /// until the player presses a steering key or a wheel or gamepad supplies steering
+    /// (`controller_steers`), from where the keyboard steering takes over.
     pub mouse_hold: bool,
 }
 
@@ -107,6 +108,12 @@ impl KeyboardAxes {
             mouse_hold: self.mouse_hold,
             ..Default::default()
         };
+    }
+
+    /// A wheel or gamepad supplies steering: the hold of a wheel the mouse left ends, or the
+    /// held angle would win over a controller at its centre for good.
+    pub fn controller_steers(&mut self) {
+        self.mouse_hold = false;
     }
 
     /// Road speed (km/h), as a number: a speed that is none made the return's step NaN, and
