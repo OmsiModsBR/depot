@@ -3676,8 +3676,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.25, 4.0))
                     .unwrap_or(1.0))
             }
-            "ff_road_vib" | "ff_engine_vib" if k != "ff_engine_vib" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0))
+            // (what is no finite number is the default, as the game reads it)
+            "ff_road_vib" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 4.0))
+                    .unwrap_or(1.0))
             }
             // (what is no finite number is the default, as the game reads it)
             "ff_engine_vib" => {

@@ -198,7 +198,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
         "kept as written; the game lowercases it",
     ),
     // `NaN` is a number to the launcher here; the game falls back to the default
-    ("ff_road_vib", "launcher>game", "NaN leaves the key empty"),
     ("ff_fade", "launcher>game", "NaN leaves the key empty"),
     (
         "pedal_throttle",
