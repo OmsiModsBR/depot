@@ -134,5 +134,6 @@ that writes the file then sets the notice). Check on each renderer (Vulkan/DX12,
 
 1. Start a drive and press the screenshot key (or the Esc menu's Screenshot).
 2. Open the new file in `Screenshots/`: the top-left corner must show the scene only.
-3. The notice appears on screen in the frames after the capture, and also when the file
+3. Take two screenshots within 4 seconds: the second file must not show the first notice.
+4. The notice appears on screen in the frames after the capture, and also when the file
    could not be written ("Screenshot could not be saved: ...").
