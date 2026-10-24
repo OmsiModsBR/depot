@@ -349,26 +349,28 @@ pub fn card(l: &mut Launcher, r: Rect) {
     let go = Rect::new(x, r.bottom() - 17.0 - 44.0, w, 44.0);
     let mut foot = go.y - 12.0;
     if session != "saved" {
-        let hint = if session == "new" {
-            "Without one, add or change vehicles in the game with the ALT menu."
-        } else {
-            "You start on foot at the start point; place a vehicle in the game with the ALT menu."
-        };
-        let hh = l.ui.paragraph_height(hint, w, 12.0, Weight::Regular);
-        foot -= hh;
-        l.ui.paragraph(
-            hint,
-            Vec2::new(x, foot + 12.0),
-            w,
-            12.0,
-            Weight::Regular,
-            TEXT_DIM,
-        );
         let bus = l
             .state
             .bus()
             .map(|b| omsi_launcher_lib::display_bus_name(&b.name))
             .filter(|_| !l.state.choice.bus.is_empty());
+        if bus.is_none() || session != "new" {
+            let hint = if session == "new" {
+                "No vehicle selected. Add or change vehicles in the game with the ALT menu."
+            } else {
+                "You start on foot at the start point; place a vehicle in the game with the ALT menu."
+            };
+            let hh = l.ui.paragraph_height(hint, w, 12.0, Weight::Regular);
+            foot -= hh;
+            l.ui.paragraph(
+                hint,
+                Vec2::new(x, foot + 12.0),
+                w,
+                12.0,
+                Weight::Regular,
+                TEXT_DIM,
+            );
+        }
         if let (Some(name), "new") = (bus, session) {
             foot -= 26.0;
             l.ui.icon("o-bus", Vec2::new(x + 8.0, foot + 9.0), 15.0, TEXT_DIM);
