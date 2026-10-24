@@ -225,9 +225,8 @@ fn main() {
     });
     o.shot(&format!("{dir}/add-vehicle.png"), |ui| {
         scene(ui);
-        let vehicles: Vec<String> = (1..=30)
-            .map(|i| format!("Example maker  \u{b7}  Example bus {i}"))
-            .collect();
+        let makers = s(&["Example maker", "Another maker", "Third maker"]);
+        let vehicles: Vec<String> = (1..=12).map(|i| format!("Example bus {i}")).collect();
         let liveries = s(&["Random livery", "Default", "Paint 2", "Paint 3"]);
         let depots = s(&[
             "The map's depot file",
@@ -239,12 +238,19 @@ fn main() {
             ui,
             size,
             &omsi_ui::ingame::AddVehicle {
+                makers: &makers,
+                maker: Some(0),
                 vehicles: &vehicles,
                 vehicle: Some(2),
                 liveries: &liveries,
                 livery: 2,
                 depots: &depots,
                 depot: 0,
+                numbers: &["4711".to_string(), "4712".to_string()],
+                number: 1,
+                plate: "",
+                plate_focused: false,
+                plate_hint: "Automatic",
             },
         );
     });
@@ -373,6 +379,8 @@ fn main() {
                     "Winter morning",
                 ]),
                 selected: Some(4),
+                stations: s(&["Automatic (nearest the map)", "EDDB", "EDDF", "EDDM"]),
+                station: Some(1),
             }),
         ),
         (

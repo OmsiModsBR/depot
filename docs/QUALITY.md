@@ -124,3 +124,16 @@ that are no number (`EDGES`). Inside the ranges and on the defaults both sides a
 differences at the edges are listed per key and direction, with what goes wrong, in `KNOWN`;
 they are not fixed there. A change that fixes one takes its line out of `KNOWN` (the test
 fails while a listed difference no longer happens), and a new difference fails the test.
+
+## Screenshot notice (manual check)
+
+The notice "Screenshot: <path>" must never be part of the saved picture: the capture happens
+first and the notice is raised after it (`take_screenshot` only queues the capture; the frame
+that writes the file then sets the notice). Check on each renderer (Vulkan/DX12, DirectX9
+(D3D9Ex)):
+
+1. Start a drive and press the screenshot key (or the Esc menu's Screenshot).
+2. Open the new file in `Screenshots/`: the top-left corner must show the scene only.
+3. Take two screenshots within 4 seconds: the second file must not show the first notice.
+4. The notice appears on screen in the frames after the capture, and also when the file
+   could not be written ("Screenshot could not be saved: ...").

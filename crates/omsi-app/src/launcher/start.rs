@@ -178,9 +178,8 @@ fn opener(l: &mut Launcher, id: &str, r: Rect, icon: &str, text: &str) -> bool {
     l.ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
     l.ui.icon(icon, Vec2::new(r.x + 18.0, r.center().y), 16.0, TEXT_SOFT);
     let room = r.w - 36.0 - 30.0;
-    let shown = omsi_launcher_ui::kit::fit_text(&mut l.ui, text, 13.5, room);
-    l.ui.text_in(
-        &shown,
+    l.ui.text_in_tip(
+        text,
         Rect::new(r.x + 36.0, r.y, room, r.h),
         13.5,
         Weight::Regular,
@@ -678,7 +677,7 @@ fn start_point(l: &mut Launcher) {
         close(l, true);
         return;
     }
-    l.map_interact(map, map);
+    l.map_interact_in_window(map, map);
 }
 
 fn weather(l: &mut Launcher) {
@@ -821,7 +820,7 @@ fn explore(l: &mut Launcher) {
     }
     // (looking only: a pin clicked here does not change the start)
     let entry = l.state.choice.entry;
-    l.map_interact(map, map);
+    l.map_interact_in_window(map, map);
     if l.state.choice.entry != entry {
         l.state.choice.entry = entry;
     }

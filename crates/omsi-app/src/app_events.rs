@@ -196,7 +196,7 @@ impl ApplicationHandler for App {
                         _ => None,
                     };
                     if let Some(text) = event.text.as_deref() {
-                        if self.tool_text(text, code) {
+                        if self.add_text(text, code) || self.tool_text(text, code) {
                             return;
                         }
                     }
@@ -997,6 +997,8 @@ impl ApplicationHandler for App {
                 // goes. For a second after mouse steering is switched on the wheel eases
                 // towards the cursor (a half-life of the time that is left), then follows it.
                 let mut analog = analog;
+                // (taken before the mouse writes its own steering into it)
+                let controller_steers = analog.steering.is_some();
                 // the head turned by a stick or an axis set up for it (#454), at up to
                 // 120 degrees a second, in the views of the bus, on foot and flying
                 if analog.look != [0.0, 0.0]
@@ -1216,6 +1218,9 @@ impl ApplicationHandler for App {
                     p.axes.red_steer_spd = self.settings.red_steer_spd;
                     p.axes.pedal_hold = self.settings.brake_hold;
                     p.analog = analog;
+                    if controller_steers {
+                        p.axes.controller_steers();
+                    }
                     for (name, down) in actions {
                         if !down || (self.game_menu.is_none() && self.chooser.is_none()) {
                             p.action(&name, down);
@@ -3543,18 +3548,42 @@ impl ApplicationHandler for App {
                                     image::ColorType::Rgba8,
                                 )
                             } {
-                                Ok(()) => log::info!(
-                                    "input script: window picture written to {}",
-                                    path.display()
-                                ),
-                                Err(e) => log::warn!(
-                                    "input script: {} could not be written: {e}",
-                                    path.display()
-                                ),
+                                Ok(()) => {
+                                    log::info!(
+                                        "input script: window picture written to {}",
+                                        path.display()
+                                    );
+                                    // (a player's screenshot: the notice comes only now, after
+                                    // the capture, so it is never part of the saved picture)
+                                    if !include_touch {
+                                        self.service_msg =
+                                            Some(crate::screenshot_name::notice(&path));
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!(
+                                        "input script: {} could not be written: {e}",
+                                        path.display()
+                                    );
+                                    if !include_touch {
+                                        self.service_msg = Some((
+                                            format!("Screenshot could not be saved: {e}"),
+                                            4.0,
+                                        ));
+                                    }
+                                }
                             },
-                            Err(e) => log::warn!(
-                                "input script: the window picture could not be rendered: {e}"
-                            ),
+                            Err(e) => {
+                                log::warn!(
+                                    "input script: the window picture could not be rendered: {e}"
+                                );
+                                if !include_touch {
+                                    self.service_msg = Some((
+                                        format!("Screenshot could not be saved: {e}"),
+                                        4.0,
+                                    ));
+                                }
+                            }
                         }
                     }
                     // A window that is hidden (another app covers it, another Space) gets

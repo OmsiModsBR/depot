@@ -84,9 +84,35 @@ pub(crate) fn folder_of(path: &str) -> Option<String> {
     Some(it.next().unwrap_or(file).to_string())
 }
 
+/// The on-screen notice for a saved screenshot. It is raised only after the capture, so the
+/// path never ends up inside the picture itself.
+pub(crate) fn notice(path: &std::path::Path) -> (String, f32) {
+    (format!("Screenshot: {}", path.display()), 4.0)
+}
+
+/// Whether an on-screen message is a screenshot notice (saved, or failed to save).
+pub(crate) fn is_notice(msg: &str) -> bool {
+    msg.starts_with("Screenshot: ") || msg.starts_with("Screenshot could not be saved")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_screenshot_notices_are_recognised() {
+        let (text, _) = notice(std::path::Path::new("a.png"));
+        assert!(is_notice(&text));
+        assert!(is_notice("Screenshot could not be saved: disk full"));
+        assert!(!is_notice("Mouse steering off"));
+    }
+
+    #[test]
+    fn the_notice_names_the_file_and_lasts_a_few_seconds() {
+        let (text, secs) = notice(std::path::Path::new("Screenshots/a.png"));
+        assert_eq!(text, "Screenshot: Screenshots/a.png");
+        assert!(secs > 0.0);
+    }
 
     #[test]
     fn map_and_vehicle_follow_the_time() {

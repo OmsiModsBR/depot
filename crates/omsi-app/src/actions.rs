@@ -274,6 +274,7 @@ impl App {
         // (the "Add vehicle" window closes: a press it took has no release coming, and
         // the overlay would go on dragging what was under it)
         self.new_ui.close_add();
+        self.new_ui.add_taken.clear();
         // (the Alt bar's other windows stay, but forget a press and the keys whose releases
         // will not come)
         if self.new_ui.tool.window.is_some() {
@@ -396,6 +397,21 @@ impl App {
     }
 
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {
+        // (the vehicle takes the startup number and plate, as before)
+        let (number, plate) = (self.args.number.clone(), self.args.plate.clone());
+        self.place_vehicle_with(bus, paint, hof, number, plate);
+    }
+
+    /// `place_vehicle` with the fleet number and the registration the player picked (`None`:
+    /// the vehicle's own rules, not the startup arguments').
+    pub(crate) fn place_vehicle_with(
+        &mut self,
+        bus: &str,
+        paint: Option<String>,
+        hof: Option<String>,
+        number: Option<String>,
+        plate: Option<String>,
+    ) {
         // (in the driven vehicle's place, see `swap_pending`)
         let swap = std::mem::take(&mut self.swap_pending) && self.player.is_some();
         let name = self
@@ -452,6 +468,8 @@ impl App {
             autostart: false,
             paint,
             hof: hof.or(self.args.hof.clone()),
+            number,
+            plate,
             ..self.args.clone()
         };
         match spawn_player(&one, &w, r, scene) {
@@ -1840,7 +1858,15 @@ impl App {
             &map,
             vehicle.as_deref(),
         ));
-        self.service_msg = Some((format!("Screenshot: {}", path.display()), 4.0));
+        // (the notice with the path is shown once the picture is taken, never inside it; one
+        // still showing from a shot a moment ago would be inside this one)
+        if self
+            .service_msg
+            .as_ref()
+            .is_some_and(|(m, _)| crate::screenshot_name::is_notice(m))
+        {
+            self.service_msg = None;
+        }
         self.shot = Some((path, false));
     }
 

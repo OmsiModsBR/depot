@@ -834,9 +834,8 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
             );
             // (the switches show or hide the lines on the map: the Map tab's)
             let tw = r.w - 70.0 - if tab == 0 { 56.0 } else { 0.0 };
-            let t = omsi_launcher_ui::kit::fit_text(ui, title, 13.5, tw);
-            ui.text_in(
-                &t,
+            ui.text_in_tip(
+                title,
                 Rect::new(r.x + 56.0, r.y + 6.0, tw, 20.0),
                 13.5,
                 Weight::Medium,
@@ -1118,7 +1117,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
     let over = placed
         .iter()
         .position(|p| map.contains(p.at) && p.at.distance(mouse) < 9.0)
-        .filter(|_| !in_list && !l.ui.over_ui);
+        .filter(|_| !in_list);
     let chosen = l.pages.tt.stop.clone();
     let few = placed.len() <= 30;
     // (the chosen and the hovered stop's names first, then the rest where they fit)
@@ -1224,7 +1223,9 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         released: l.ui.input.released,
         down: l.ui.input.down,
         wheel: l.ui.input.wheel.y,
-        blocked: l.ui.over_ui || in_list || !map.contains(mouse),
+        // (the card around the map is a panel, which claims the mouse over it: the map's own
+        // rectangle and the search results over it are what count here)
+        blocked: in_list || !map.contains(mouse),
     };
     l.mapview.think(map, map, l.ui.scale, p);
     let _ = l.mapview.take_clicked();
@@ -1383,10 +1384,9 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             omsi_ui::tr("next %{times}").replace("%{times}", &next.join(", "))
         };
         let title = omsi_ui::tr("to %{stops}").replace("%{stops}", &to.join(" / "));
-        let title = omsi_launcher_ui::kit::fit_text(&mut l.ui, &title, 13.5, row.w - 70.0);
-        l.ui.text_in(
+        l.ui.text_in_tip(
             &title,
-            Rect::new(row.x + 56.0, row.y + 5.0, row.w - 66.0, 20.0),
+            Rect::new(row.x + 56.0, row.y + 5.0, row.w - 70.0, 20.0),
             13.5,
             Weight::Medium,
             if off { TEXT_DIM } else { TEXT },
@@ -1445,9 +1445,8 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             color_of(&palette, line),
             Align::Left,
         );
-        let to = omsi_launcher_ui::kit::fit_text(&mut l.ui, to, 13.0, inner.w * 0.54);
-        l.ui.text_in(
-            &to,
+        l.ui.text_in_tip(
+            to,
             Rect::new(inner.x + inner.w * 0.46, y + 4.0, inner.w * 0.54, 22.0),
             13.0,
             Weight::Regular,
@@ -1722,9 +1721,8 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
             for (i, (stop, others)) in rows_of.iter().enumerate() {
                 let y = v.y + i as f32 * 33.0;
                 ui.p().rect(Rect::new(v.x, y, v.w, 1.0), EDGE);
-                let sname = omsi_launcher_ui::kit::fit_text(ui, stop, 13.0, v.w * 0.38);
-                ui.text_in(
-                    &sname,
+                ui.text_in_tip(
+                    stop,
                     Rect::new(v.x + 12.0, y + 5.0, v.w * 0.38, 22.0),
                     13.0,
                     Weight::Regular,

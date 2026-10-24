@@ -235,6 +235,8 @@ pub struct Ui {
     /// Rects the mouse is over UI in (the rest of the window is the 3D showroom).
     pub over_ui: bool,
     tooltip: Option<(String, Vec2)>,
+    /// The tooltip is a name shown as it is (not translated), broken anywhere it must be.
+    tooltip_raw: bool,
     /// (tests, here and with the `testing` feature) Where each clickable widget was this
     /// frame, by id.
     #[cfg(any(test, feature = "testing"))]
@@ -270,6 +272,7 @@ impl Ui {
             clipboard_in: None,
             over_ui: false,
             tooltip: None,
+            tooltip_raw: false,
             #[cfg(any(test, feature = "testing"))]
             drawn: HashMap::new(),
         }
@@ -289,6 +292,7 @@ impl Ui {
         self.cursor = winit::window::CursorIcon::Default;
         self.over_ui = false;
         self.tooltip = None;
+        self.tooltip_raw = false;
         #[cfg(any(test, feature = "testing"))]
         self.drawn.clear();
         self.push_layer(Rect::new(0.0, 0.0, size.x, size.y), 0.0);
@@ -553,6 +557,7 @@ impl Ui {
             let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
             if t > 0.9 {
                 self.tooltip = Some((text.to_string(), self.input.mouse));
+                self.tooltip_raw = false;
             }
         }
     }
@@ -627,6 +632,74 @@ impl Ui {
             .unwrap()
             .1
             .text_in(atlas, fonts, text, px, weight, r, align, c)
+    }
+
+    /// [`Ui::text_in`], and when the text does not fit `r` (it is cut), resting the mouse on
+    /// `r` shows the whole of it in a tooltip. Use it for any name or text that may be longer
+    /// than its box.
+    pub fn text_in_tip(
+        &mut self,
+        text: &str,
+        r: Rect,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        align: Align,
+    ) -> f32 {
+        let cut = self.fonts.width_as_is(&crate::tr(text), px, weight) > r.w + 0.5;
+        let drawn = self.text_in(text, r, px, weight, c, align);
+        if cut {
+            // (an interface label shows in the tooltip as it is cut in its box: translated)
+            let whole = crate::tr(text).into_owned();
+            self.tooltip_whole(r, &whole);
+        }
+        drawn
+    }
+
+    /// A tooltip with the whole of `text` (a cut name's), after the mouse rests on `r`: not
+    /// translated (it is a name), and as wide as the screen has room for.
+    pub fn tooltip_whole(&mut self, r: Rect, text: &str) {
+        self.tooltip(r, text);
+        if self.tooltip.as_ref().is_some_and(|t| t.0 == text) {
+            self.tooltip_raw = true;
+        }
+    }
+
+    /// `text` as lines no wider than `width`, as it is: broken at spaces, and inside a word
+    /// that is wider than a line by itself (a path, a file name).
+    fn wrap_as_is(&self, text: &str, width: f32, px: f32, weight: Weight) -> Vec<String> {
+        let fits = |t: &str| self.fonts.width_as_is(t, px, weight) <= width;
+        let mut lines = Vec::new();
+        for para in text.split('\n') {
+            let mut line = String::new();
+            for word in para.split(' ') {
+                let joined = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if fits(&joined) {
+                    line = joined;
+                    continue;
+                }
+                if !line.is_empty() {
+                    lines.push(std::mem::take(&mut line));
+                }
+                // (a word too wide for a line of its own goes on by characters)
+                for ch in word.chars() {
+                    let mut next = line.clone();
+                    next.push(ch);
+                    if !fits(&next) && !line.is_empty() {
+                        lines.push(std::mem::take(&mut line));
+                        line.push(ch);
+                    } else {
+                        line = next;
+                    }
+                }
+            }
+            lines.push(line);
+        }
+        lines
     }
 
     /// Text on its baseline with `tracking` pixels more between its letters (the small
@@ -1103,7 +1176,7 @@ impl Ui {
         self.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
         field_line(self, r, open);
         let txt = options.get(*selected).cloned().unwrap_or_default();
-        self.text_in(
+        self.text_in_tip(
             &txt,
             Rect::new(r.x + 12.0, r.y, r.w - 40.0, r.h),
             13.0,
@@ -1416,6 +1489,13 @@ impl Ui {
             );
         }
         self.pop_clip();
+        // (a value wider than the box, with no caret to follow: the whole of it on hover)
+        if !focused
+            && !value.is_empty()
+            && self.fonts.width_as_is(value, px, Weight::Regular) > inner.w
+        {
+            self.tooltip_whole(r, value);
+        }
         *value != before
     }
 
@@ -1698,8 +1778,20 @@ impl Ui {
         self.draw_popup();
         self.draw_date_popup();
         if let Some((t, at)) = self.tooltip.take() {
-            let w = (self.width(&t, 12.5, Weight::Medium) + 20.0).min(360.0);
-            let h = self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium) + 12.0;
+            let raw = std::mem::take(&mut self.tooltip_raw);
+            let shown = |ui: &Ui, t: &str| {
+                if raw {
+                    ui.fonts.width_as_is(t, 12.5, Weight::Medium)
+                } else {
+                    ui.width(t, 12.5, Weight::Medium)
+                }
+            };
+            let w = (shown(self, &t) + 20.0).min(360.0);
+            let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
+            let h = match &lines {
+                Some(l) => l.len() as f32 * 12.5 * 1.38,
+                None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
+            } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
             if r.right() > self.size.x - 8.0 {
                 r.x = self.size.x - 8.0 - r.w;
@@ -1710,14 +1802,30 @@ impl Ui {
             self.p().rounded(r, 6.0, Color::rgba(34, 34, 34, 1.0));
             self.p()
                 .rounded_border(r, 7.0, 1.0, Color::WHITE.alpha(0.1));
-            self.paragraph(
-                &t,
-                Vec2::new(r.x + 10.0, r.y + 4.0),
-                w - 20.0,
-                12.5,
-                Weight::Medium,
-                TEXT_SOFT,
-            );
+            match lines {
+                Some(lines) => {
+                    for (k, l) in lines.iter().enumerate() {
+                        self.text_as_is(
+                            l,
+                            Vec2::new(r.x + 10.0, r.y + 4.0 + 12.5 + k as f32 * 12.5 * 1.38),
+                            12.5,
+                            Weight::Medium,
+                            TEXT_SOFT,
+                            Align::Left,
+                        );
+                    }
+                }
+                None => {
+                    self.paragraph(
+                        &t,
+                        Vec2::new(r.x + 10.0, r.y + 4.0),
+                        w - 20.0,
+                        12.5,
+                        Weight::Medium,
+                        TEXT_SOFT,
+                    );
+                }
+            }
         }
         if let Some(r) = self.nav.ring() {
             self.p().rounded_border(r, 8.0, 2.0, accent());
@@ -1873,15 +1981,16 @@ impl Ui {
             } else if h {
                 self.p().rounded(cell, 5.0, HOVER);
             }
-            self.text_in(
-                o,
-                Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h),
-                13.0,
-                Weight::Regular,
-                TEXT,
-                Align::Left,
-            );
+            let text_r = Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h);
+            self.text_in(o, text_r, 13.0, Weight::Regular, TEXT, Align::Left);
             if h {
+                // (an option cut to the list's width: the whole of it, once the mouse rests)
+                if self.fonts.width_as_is(&crate::tr(o), 13.0, Weight::Regular) > text_r.w + 0.5 {
+                    let t = self.anim(id_of(&format!("poptip{k}")) ^ 0x55, 1.0, 0.4);
+                    if t > 0.9 {
+                        self.tooltip = Some((o.clone(), self.input.mouse));
+                    }
+                }
                 self.cursor = winit::window::CursorIcon::Pointer;
                 if self.input.released && !fresh {
                     p.picked = Some(k);
@@ -2184,6 +2293,70 @@ mod tests {
         assert!(ui.rect_visible(Rect::new(10.0, 90.0, 200.0, 54.0)));
         ui.pop_clip();
         assert!(ui.rect_visible(Rect::new(10.0, 50.0, 200.0, 20.0)));
+    }
+
+    /// A text cut to its box shows its whole once the mouse rests on it; one that fits does not.
+    #[test]
+    fn a_cut_text_shows_its_whole_in_a_tooltip() {
+        let long = "A name that is far too long for the little box it is drawn in";
+        let r = Rect::new(10.0, 10.0, 80.0, 20.0);
+        let frames = |text: &str| {
+            let mut ui = Ui::new();
+            let mut tip = None;
+            for _ in 0..20 {
+                ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.1);
+                ui.input.mouse = Vec2::new(40.0, 20.0);
+                ui.text_in_tip(text, r, 13.0, Weight::Regular, TEXT, Align::Left);
+                tip = ui.tooltip.clone().map(|t| t.0);
+            }
+            tip
+        };
+        assert_eq!(frames(long).as_deref(), Some(long));
+        assert_eq!(frames("Short"), None);
+    }
+
+    #[test]
+    fn a_cut_label_shows_its_translation_in_the_tooltip() {
+        fn lookup(lang: &str, text: &str) -> Option<String> {
+            (lang == "xx" && text == "An English label too long for its little box")
+                .then(|| "Eine übersetzte Beschriftung, viel zu lang für ihr Kästchen".to_string())
+        }
+        crate::i18n::set_lookup(lookup);
+        crate::i18n::set_language("xx");
+        let r = Rect::new(10.0, 10.0, 80.0, 20.0);
+        let mut ui = Ui::new();
+        let mut tip = None;
+        for _ in 0..20 {
+            ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.1);
+            ui.input.mouse = Vec2::new(40.0, 20.0);
+            ui.text_in_tip(
+                "An English label too long for its little box",
+                r,
+                13.0,
+                Weight::Regular,
+                TEXT,
+                Align::Left,
+            );
+            tip = ui.tooltip.clone().map(|t| t.0);
+        }
+        crate::i18n::set_language("");
+        assert_eq!(
+            tip.as_deref(),
+            Some("Eine übersetzte Beschriftung, viel zu lang für ihr Kästchen")
+        );
+    }
+
+    #[test]
+    fn a_whole_name_tooltip_breaks_a_word_wider_than_a_line() {
+        let ui = Ui::new();
+        let path =
+            "C:/Games/OMSI-2/Vehicles/Some_Very_Long_Vehicle_Folder_Name/model/body_lod0.o3d";
+        let lines = ui.wrap_as_is(path, 120.0, 12.5, Weight::Medium);
+        assert!(lines.len() > 1);
+        assert_eq!(lines.concat(), path);
+        assert!(lines
+            .iter()
+            .all(|l| ui.fonts.width_as_is(l, 12.5, Weight::Medium) <= 120.0));
     }
 
     #[test]

@@ -60,13 +60,9 @@ const THUMB_W: f32 = 96.0;
 const THUMB_H: f32 = 60.0;
 /// Between the thumbnail and the text.
 const THUMB_GAP: f32 = 14.0;
-/// The lines of a card's text: the title, the line under it, the author's text.
+/// The lines of a card's text: the title, the line under it, the last line.
 const TITLE_LH: f32 = 23.0;
 const SUB_LH: f32 = 14.5;
-const DESC_PX: f32 = 12.5;
-const DESC_LH: f32 = 19.4;
-/// The author's text keeps to this many lines.
-const DESC_LINES: usize = 2;
 
 /// Which pictures show now: `current`, and `next` fading in over it by `mix` (0 to 1).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,12 +151,15 @@ pub struct Slide {
 /// The bus or map block of the loading card.
 pub struct Card<'a> {
     pub title: &'a str,
-    /// The line under the title, in the accent ("Example Maker · Default paint").
+    /// The line under the title, in the accent (the bus's make, the map's folder).
     pub sub: &'a str,
-    /// The author's text, plain, cut to what fits.
-    pub description: &'a str,
-    /// The icon in the thumbnail (a Material Symbol: `directions_bus`, `map`).
+    /// A last, quieter line ("Skin: Default paint"); empty for none.
+    pub detail: &'a str,
+    /// The icon in the thumbnail (a Material Symbol: `directions_bus`, `map`), drawn until
+    /// there is a picture.
     pub icon: &'a str,
+    /// The thumbnail's picture, its texture and width over height (the map's own picture).
+    pub thumb: Option<(usize, f32)>,
 }
 
 /// What the screen says. All text is the caller's: the activity is translated here; the
@@ -191,9 +190,6 @@ pub struct Block {
     pub thumb: Rect,
     /// The text column: left edge, top and width.
     pub text: Rect,
-    /// The author's text broken into its lines (at most `DESC_LINES`, the last cut with an
-    /// ellipsis when it goes on).
-    pub lines: Vec<String>,
 }
 
 /// Where everything goes on a screen of `ui.size` design units.
@@ -226,20 +222,18 @@ pub fn layout(ui: &Ui, view: &View) -> Layout {
     let mut blocks = Vec::new();
     let mut y = 0.0;
     for c in &cards {
-        let lines = wrap(ui, c.description, text_w, DESC_PX * TS, DESC_LINES);
         let mut text_h = TITLE_LH;
         if !c.sub.trim().is_empty() {
             text_h += 4.0 + SUB_LH;
         }
-        if !lines.is_empty() {
-            text_h += 6.0 + DESC_LH * lines.len() as f32;
+        if !c.detail.trim().is_empty() {
+            text_h += 4.0 + SUB_LH;
         }
         let bh = (PAD_Y * 2.0 + text_h.max(THUMB_H)).round();
         blocks.push(Block {
             rect: Rect::new(0.0, y, CARD_W, bh),
             thumb: Rect::new(1.0 + PAD_X, y + PAD_Y, THUMB_W, THUMB_H),
             text: Rect::new(1.0 + PAD_X + THUMB_W + THUMB_GAP, y + PAD_Y, text_w, text_h),
-            lines,
         });
         // (the rule between two blocks)
         y += bh + 1.0;
@@ -295,6 +289,9 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
         }
         _ => default_background(ui, w, h),
     }
+    // the vignette: the edges darkened all round, so a screenshot of the game does not read
+    // as the game itself
+    vignette(ui, full);
     // the veil: the top darkened under the logo, the foot under the text
     veil(ui, Rect::new(0.0, 0.0, w, h * 0.22), 0.55, 0.0);
     veil(ui, Rect::new(0.0, h * 0.55, w, h * 0.45), 0.0, 0.78);
@@ -387,7 +384,14 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
                 .rect(Rect::new(c.x + 1.0, b.rect.y - 1.0, c.w - 2.0, 1.0), LINE);
         }
         ui.p().rect(b.thumb, THUMB);
-        ui.icon(card.icon, b.thumb.center(), 26.0, MUTED.alpha(0.8));
+        match card.thumb {
+            Some((tex, aspect)) => {
+                ui.push_clip(b.thumb, 0.0);
+                ui.image_cover(b.thumb, tex, aspect, 1.0);
+                ui.pop_clip();
+            }
+            None => ui.icon(card.icon, b.thumb.center(), 26.0, MUTED.alpha(0.8)),
+        }
         let t = Line {
             x: b.text.x,
             max: b.text.w,
@@ -417,12 +421,17 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
             );
             y += SUB_LH;
         }
-        if !b.lines.is_empty() {
-            y += 6.0;
-        }
-        for (k, s) in b.lines.iter().enumerate() {
-            let cy = y + DESC_LH * (k as f32 + 0.5);
-            t.draw(ui, s, cy, DESC_PX, Weight::Regular, BODY, false);
+        if !card.detail.trim().is_empty() {
+            y += 4.0;
+            t.draw(
+                ui,
+                card.detail,
+                y + SUB_LH * 0.5,
+                12.0,
+                Weight::Regular,
+                BODY,
+                false,
+            );
         }
     }
 }
@@ -432,6 +441,28 @@ pub fn draw(ui: &mut Ui, view: &View, show: &Slideshow) {
 /// linear light.
 pub fn over_black(a: f32) -> f32 {
     1.0 - (1.0 - a.clamp(0.0, 1.0)).powf(2.2)
+}
+
+/// The strength of the vignette at the very edge (the concept's black opacity), and how far
+/// in it reaches as a share of the screen's width.
+const VIGNETTE: f32 = 0.62;
+const VIGNETTE_REACH: f32 = 0.24;
+
+/// The edges of `r` darkened towards black, the corners most (the sides overlap there).
+fn vignette(ui: &mut Ui, r: Rect) {
+    const BANDS: usize = 4;
+    let reach = r.w * VIGNETTE_REACH;
+    // (the same reach on every side, so the sides of a wide screen are not darker)
+    for k in 0..BANDS {
+        let (t0, t1) = (k as f32 / BANDS as f32, (k + 1) as f32 / BANDS as f32);
+        let a = |t: f32| Color::BLACK.alpha(over_black(VIGNETTE * (1.0 - t) * (1.0 - t)));
+        let (x0, x1) = (reach * t0, reach * t1);
+        let p = ui.p();
+        p.gradient_h(Rect::new(r.x + x0, r.y, x1 - x0, r.h), a(t0), a(t1));
+        p.gradient_h(Rect::new(r.right() - x1, r.y, x1 - x0, r.h), a(t1), a(t0));
+        p.gradient(Rect::new(r.x, r.y + x0, r.w, x1 - x0), a(t0), a(t1));
+        p.gradient(Rect::new(r.x, r.bottom() - x1, r.w, x1 - x0), a(t1), a(t0));
+    }
 }
 
 /// A black veil over `r`, from the concept's opacity `top` to `bottom` (a few bands, so the
@@ -606,52 +637,6 @@ fn fit(ui: &Ui, s: &str, px: f32, weight: Weight, max: f32) -> String {
     }
 }
 
-/// `text` broken at spaces into lines of at most `width`, at most `lines` of them; when it
-/// goes on, the last line is cut at a word with an ellipsis.
-fn wrap(ui: &Ui, text: &str, width: f32, px: f32, lines: usize) -> Vec<String> {
-    let w = |t: &str| ui.fonts.width_as_is(t, px, Weight::Regular);
-    let words: Vec<&str> = text.split_whitespace().collect();
-    let mut out: Vec<String> = Vec::new();
-    let mut line = String::new();
-    let mut i = 0;
-    while i < words.len() && out.len() < lines {
-        let t = if line.is_empty() {
-            words[i].to_string()
-        } else {
-            format!("{line} {}", words[i])
-        };
-        if line.is_empty() || w(&t) <= width {
-            line = t;
-            i += 1;
-        } else {
-            out.push(std::mem::take(&mut line));
-        }
-    }
-    if out.len() < lines && !line.is_empty() {
-        out.push(line);
-    } else if i < words.len() || !line.is_empty() {
-        // more than fits: the last line ends with an ellipsis, at a word when one fits
-        if let Some(last) = out.last_mut() {
-            let mut ws: Vec<&str> = last.split(' ').collect();
-            loop {
-                let cut = format!("{}\u{2026}", ws.join(" "));
-                if w(&cut) <= width || ws.len() <= 1 {
-                    *last = cut;
-                    break;
-                }
-                ws.pop();
-            }
-        }
-    }
-    // (a single word wider than the column is cut inside)
-    for l in &mut out {
-        if w(l) > width {
-            *l = fit(ui, l, px, Weight::Regular, width);
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -710,10 +695,6 @@ mod tests {
         assert_eq!(wrapped.current, 0);
     }
 
-    const LONG: &str = "A very long description that an author wrote over many lines, with \
-                        the history of the bus, its engine, its gearbox and the people who \
-                        made it, far more than the card has room for.";
-
     fn view<'a>(long: bool) -> View<'a> {
         View {
             version: "example version",
@@ -733,15 +714,17 @@ mod tests {
                 } else {
                     "Example bus A"
                 },
-                sub: "Example Maker \u{b7} v1.2 \u{b7} Default paint",
-                description: if long { LONG } else { "Author's description." },
+                sub: "Example Maker",
+                detail: "Skin: Default paint",
                 icon: "directions_bus",
+                thumb: None,
             }),
             map: Some(Card {
                 title: "Example map",
                 sub: "Example City",
-                description: LONG,
+                detail: "",
                 icon: "map",
+                thumb: Some((5, 1.5)),
             }),
             slides: &[],
         }
@@ -802,11 +785,6 @@ mod tests {
                     y = b.rect.bottom();
                     assert!(inside(b.thumb, b.rect) && inside(b.text, b.rect), "{b:?}");
                     assert!(!overlap(b.thumb, b.text));
-                    assert!(b.lines.len() <= DESC_LINES);
-                    for s in &b.lines {
-                        let w = ui.fonts.width_as_is(s, DESC_PX * TS, Weight::Regular);
-                        assert!(w <= b.text.w + 0.01, "{s:?} is {w} wide in {}", b.text.w);
-                    }
                 }
                 assert!(y <= card.bottom() + 0.01);
             }
@@ -835,19 +813,6 @@ mod tests {
     }
 
     #[test]
-    fn a_long_description_keeps_to_two_lines_and_ends_with_an_ellipsis() {
-        let ui = Ui::new();
-        let lines = wrap(&ui, LONG, 252.0, DESC_PX * TS, 2);
-        assert_eq!(lines.len(), 2);
-        assert!(lines[1].ends_with('\u{2026}'), "{lines:?}");
-        assert_eq!(wrap(&ui, "short text", 252.0, 14.0, 2), vec!["short text"]);
-        assert!(wrap(&ui, "   ", 252.0, 14.0, 2).is_empty());
-        let one = wrap(&ui, &"x".repeat(200), 100.0, 14.0, 2);
-        assert_eq!(one.len(), 1);
-        assert!(ui.fonts.width_as_is(&one[0], 14.0, Weight::Regular) <= 100.0);
-    }
-
-    #[test]
     fn a_card_with_only_a_title_is_shorter_than_one_with_text() {
         let mut ui = Ui::new();
         ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.0);
@@ -855,13 +820,21 @@ mod tests {
         v.bus = Some(Card {
             title: "MAN_SD200",
             sub: "",
-            description: "",
+            detail: "",
             icon: "directions_bus",
+            thumb: None,
         });
         let l = layout(&ui, &v);
         assert_eq!(l.blocks[0].rect.h, PAD_Y * 2.0 + THUMB_H);
-        // the concept's block with its sub and two lines of text: 114 high
-        assert_eq!(l.blocks[1].rect.h, 114.0);
+        // a block with its make and no last line is as tall as the thumbnail asks for
+        assert_eq!(
+            l.blocks[1].rect.h,
+            PAD_Y * 2.0 + THUMB_H.max(TITLE_LH + 4.0 + SUB_LH)
+        );
+        // the bus's, with the skin line too, has one line more
+        let mut v = view(false);
+        v.bus.as_mut().unwrap().sub = "Example Maker";
+        assert!(layout(&ui, &v).blocks[0].rect.h >= l.blocks[1].rect.h);
     }
 
     #[test]
@@ -913,6 +886,8 @@ mod tests {
             assert_eq!(textures.contains(&3), !slides.is_empty());
             assert_eq!(textures.contains(&4), !slides.is_empty());
             assert!(textures.contains(&1), "the logo");
+            // the map card's own picture, in its thumbnail
+            assert!(textures.contains(&5));
         }
     }
 }
