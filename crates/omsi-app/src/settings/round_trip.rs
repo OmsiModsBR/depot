@@ -185,7 +185,6 @@ const EDGES: &[&str] = &[
 /// written by it, then read by the launcher), with what goes wrong.
 const KNOWN: &[(&str, &str, &str)] = &[
     // and the other way: the game takes NaN, the launcher saves the default over it
-    ("volume", "launcher>game", "NaN leaves the key empty"),
     // the launcher keeps whole numbers where the game keeps fractions
     (
         "max_obj_dist",

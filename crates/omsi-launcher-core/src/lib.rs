@@ -3237,9 +3237,18 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 if k != "vol_ai"
                     && k != "min_obj_size"
                     && k != "vol_scenery"
-                    && k != "ui_opacity" =>
+                    && k != "ui_opacity"
+                    && k != "volume" =>
             {
                 v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
+            }
+            // (what is no finite number is the default, as the game reads it)
+            "volume" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .unwrap_or(0.6))
             }
             // (0.2 to 1, and 0.85 for what is no finite number, as the game reads it)
             "ui_opacity" => {
