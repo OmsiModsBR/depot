@@ -46,6 +46,19 @@ impl VehicleInstance {
         }
     }
 
+    /// What each section carries (kg, the front one first, then each coupled part: the
+    /// people aboard it), on the rigid bodies of the sections that have one (see
+    /// [`crate::physics::RigidBody::set_payload`]). A section left out carries nothing.
+    pub fn set_payload(&mut self, kg: &[f32]) {
+        let at = |i: usize| kg.get(i).copied().unwrap_or(0.0);
+        if let Some(rb) = self.rigid_mut() {
+            rb.set_payload(at(0));
+        }
+        for (i, t) in self.trailers.iter_mut().enumerate() {
+            t.set_payload(at(i + 1));
+        }
+    }
+
     /// The vehicle put at `at` facing `heading` (degrees), standing still: its rigid body set
     /// down there and every rear section lined up straight behind it.
     pub fn teleport(&mut self, at: glam::DVec3, heading: f64) {

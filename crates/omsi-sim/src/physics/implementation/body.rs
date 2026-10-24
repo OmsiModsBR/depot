@@ -70,6 +70,8 @@ impl RigidBody {
         }
         RigidBody {
             mass,
+            empty_mass: mass,
+            payload: 0.0,
             inertia: spec.inertia,
             cog: spec.cog,
             position: DVec3::ZERO,
@@ -84,7 +86,9 @@ impl RigidBody {
             rot_pnt_long: spec.rot_pnt_long,
             inv_min_turn_radius: spec.inv_min_turn_radius,
             body_freq: spec.body_freq,
+            empty_body_freq: spec.body_freq,
             holding: true,
+            joint_across: 0.0,
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
             friction: DRY_GRIP,
@@ -120,6 +124,22 @@ impl RigidBody {
             w.ground_seen = false;
             w.walls.clear();
         }
+    }
+
+    /// What the body carries (kg: the people aboard): it weighs on the body as the body's own
+    /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes
+    /// to speed it up, brake it and turn it - only its inertia about the centre of gravity
+    /// stays the file's, as the payload's place in the body is not known. The body's pitch and
+    /// roll damping follows the heavier body on the same springs (`body_freq`).
+    pub fn set_payload(&mut self, kg: f32) {
+        let kg = if kg.is_finite() { kg.max(0.0) } else { 0.0 };
+        self.payload = kg;
+        self.mass = self.empty_mass + kg;
+        self.body_freq = if self.mass > 0.0 {
+            self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
+        } else {
+            self.empty_body_freq
+        };
     }
 
     /// Model origin (the point the renderer places) in the world.
