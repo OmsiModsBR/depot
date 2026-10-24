@@ -399,14 +399,14 @@ impl Shared {
                 }
                 let step = buf.rate as f64 / dev_rate;
                 for f in 0..frames {
-                    v.cur_gain += (target_gain - v.cur_gain) * 0.005;
+                    v.cur_gain = flush_tiny(v.cur_gain + (target_gain - v.cur_gain) * 0.005);
                     // silence while the buffer fills (at the start, after a stall)
                     let Some((a, b)) = buf.pair() else { break };
                     let t = v.pos as f32;
                     let (mut l, mut r) = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
                     if v.params.lowpass_hz > 0.0 {
-                        v.lp[0] += (l - v.lp[0]) * lp_alpha;
-                        v.lp[1] += (r - v.lp[1]) * lp_alpha;
+                        v.lp[0] = flush_tiny(v.lp[0] + (l - v.lp[0]) * lp_alpha);
+                        v.lp[1] = flush_tiny(v.lp[1] + (r - v.lp[1]) * lp_alpha);
                         (l, r) = (v.lp[0], v.lp[1]);
                     }
                     let g = v.cur_gain;
@@ -420,6 +420,12 @@ impl Shared {
                         buf.advance();
                     }
                 }
+                continue;
+            }
+            // silent and staying so (the game paused, a sound turned all the way down): it
+            // only moves on in time, as a voice left out above
+            if target_gain == 0.0 && v.cur_gain == 0.0 {
+                skip_clip(v, frames, dev_rate);
                 continue;
             }
             let clip = &v.clip;
@@ -439,7 +445,7 @@ impl Shared {
             };
             for f in 0..frames {
                 // smooth gain over ~5 ms
-                v.cur_gain += (target_gain - v.cur_gain) * 0.005;
+                v.cur_gain = flush_tiny(v.cur_gain + (target_gain - v.cur_gain) * 0.005);
                 let mut i0 = v.pos as usize;
                 if i0 >= nframes {
                     if !v.params.looping {
@@ -471,8 +477,8 @@ impl Shared {
                     (m, m)
                 };
                 let (l, r) = if v.params.lowpass_hz > 0.0 {
-                    v.lp[0] += (l - v.lp[0]) * lp_alpha;
-                    v.lp[1] += (r - v.lp[1]) * lp_alpha;
+                    v.lp[0] = flush_tiny(v.lp[0] + (l - v.lp[0]) * lp_alpha);
+                    v.lp[1] = flush_tiny(v.lp[1] + (r - v.lp[1]) * lp_alpha);
                     (v.lp[0], v.lp[1])
                 } else {
                     (l, r)
@@ -549,6 +555,19 @@ fn apply_params(v: &mut Voice, params: VoiceParams, now: std::time::Instant, lis
         v.doppler = (0.0, None, 1.0);
     }
     v.params = params;
+}
+
+/// `x`, or 0 once it is far below anything audible. A gain or filter state that only ever
+/// decays towards 0 (every voice while the game is paused, its master at 0; the reverb's
+/// lines with nothing fed in) ends in subnormal floats, which the processor works through
+/// dozens of times slower: mixing a block took longer than the block lasted and the game's
+/// frame waited on the voice list (8 fps while paused, #43).
+fn flush_tiny(x: f32) -> f32 {
+    if x.abs() < 1e-20 {
+        0.0
+    } else {
+        x
+    }
 }
 
 /// At most this many clip voices are mixed at once (OMSI's `[sound_maxcount]` default).
@@ -1121,6 +1140,59 @@ mod tests {
         assert!(loudest(450.0) < 0.05, "450 Hz: the tone is gone");
     }
 
+    /// Paused, the master is 0 and every voice fades towards it: the gains and the low-pass
+    /// end at 0, not in subnormal floats, which made mixing a block slower than the block
+    /// (#43). The silent voice still moves on in time.
+    #[test]
+    fn a_voice_faded_out_ends_at_zero_not_in_subnormals() {
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: (0..4800).map(|i| ((i % 97) as i16 - 48) * 300).collect(),
+        });
+        let s = shared();
+        let mut v = voice(clip, 1.0);
+        v.params.lowpass_hz = 450.0;
+        s.voices.lock().push(v);
+        s.listener.lock().master = 0.0;
+        let mut out = vec![0.0f32; 480];
+        for _ in 0..401 {
+            s.render(&mut out);
+        }
+        let voices = s.voices.lock();
+        let v = &voices[0];
+        let tidy = |x: f32| x == 0.0 || x.is_normal();
+        assert!(
+            tidy(v.cur_gain) && v.lp.iter().all(|x| tidy(*x)),
+            "{} {:?}",
+            v.cur_gain,
+            v.lp
+        );
+        assert_eq!(v.cur_gain, 0.0);
+        assert!(out.iter().all(|x| tidy(*x)), "the output");
+        assert!(v.pos > 0.0 && !v.finished, "the loop goes on in time");
+    }
+
+    /// The reverb's lines run down to 0 when nothing more is fed in, without subnormals.
+    #[test]
+    fn the_reverb_dies_out_to_zero() {
+        let mut r = Reverb::default();
+        let mut out = vec![0.0f32; 480];
+        out[0] = 1.0;
+        r.process(&mut out, 1, 48_000, 2.0, 0.5);
+        for _ in 0..2000 {
+            out.iter_mut().for_each(|x| *x = 0.0);
+            r.process(&mut out, 1, 48_000, 2.0, 0.5);
+        }
+        let tidy = |x: &f32| *x == 0.0 || x.is_normal();
+        assert!(r
+            .lines
+            .iter()
+            .flatten()
+            .all(|(b, _, lp)| b.iter().all(tidy) && tidy(lp)));
+        assert!(r.allpass.iter().flatten().all(|(b, _)| b.iter().all(tidy)));
+    }
+
     #[test]
     fn parameters_arrive_with_the_next_block() {
         let clip = Arc::new(Clip {
@@ -1448,15 +1520,15 @@ impl Reverb {
                 let mut y = 0.0;
                 for (k, (buf, i, lp)) in combs.iter_mut().enumerate() {
                     let d = buf[*i];
-                    *lp = d * 0.8 + *lp * 0.2;
-                    buf[*i] = x + *lp * gains[k];
+                    *lp = flush_tiny(d * 0.8 + *lp * 0.2);
+                    buf[*i] = flush_tiny(x + *lp * gains[k]);
                     *i = (*i + 1) % buf.len();
                     y += d;
                 }
                 y *= 0.25;
                 for (buf, i) in aps.iter_mut() {
                     let d = buf[*i];
-                    let v = y + d * 0.5;
+                    let v = flush_tiny(y + d * 0.5);
                     buf[*i] = v;
                     *i = (*i + 1) % buf.len();
                     y = d - v * 0.5;
