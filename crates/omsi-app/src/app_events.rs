@@ -1942,6 +1942,10 @@ impl ApplicationHandler for App {
                         r,
                         scene,
                     );
+                    // the people aboard weigh on the section of the bus they are in
+                    if let Some(p) = self.player.as_mut() {
+                        p.vehicle.set_payload(&h.player_payload());
+                    }
                     // validators used: the bus's `ev_Stamper` sound
                     for bus in h.take_stamped() {
                         match bus {

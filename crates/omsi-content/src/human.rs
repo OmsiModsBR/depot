@@ -13,6 +13,8 @@ pub struct Human {
     pub links: Vec<f32>,
     pub voice: String,
     pub walk_param: [f32; 5],
+    /// `[mass]` in tonnes, as OMSI reads it; 1 t for a file without one, as OMSI weighs it.
+    /// A person aboard a vehicle weighs on it with this.
     pub mass: f32,
     pub age: Option<i32>,
 }
@@ -23,6 +25,7 @@ impl Human {
         let mut h = Human {
             path: f.path.clone(),
             walk_param: [1.4, 66.0, 1.0, 1.0, 0.0],
+            mass: 1.0,
             ..Default::default()
         };
         let mut r = f.reader().disabled_blocks();
