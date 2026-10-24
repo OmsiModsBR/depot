@@ -3473,7 +3473,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
-                if k != "navigator_corner" && k != "boarding" && k != "drive_keys" && k != "pax_voices" && k != "render_scale" =>
+                if k != "navigator_corner" 
+                    && k != "boarding" 
+                    && k != "drive_keys" 
+                    && k != "pax_voices" 
+                    && k != "render_scale" =>
             {
                 v[&k] = json!(val)
             }
@@ -3723,7 +3727,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 1.5))
                     .unwrap_or(0.28))
             }
-            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" && k != "seat_y" => {
+            "seat_x" | "seat_y" | "seat_z" if k != "seat_x" && k != "seat_y" && k != "seat_z" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .map(|x| x.clamp(-1.5, 1.5))
@@ -3731,6 +3735,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             // (what is no finite number is the default, as the game reads it)
             "seat_x" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(-1.5, 1.5))
+                    .unwrap_or(0.0))
+            }
+            // (what is no finite number is the default, as the game reads it)
+            "seat_z" => {
                 v[&k] = json!(val
                     .parse::<f64>()
                     .ok()

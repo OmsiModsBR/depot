@@ -184,7 +184,6 @@ const EDGES: &[&str] = &[
 /// then read by the game; `launcher>game`: the launcher's file, read by the game and
 /// written by it, then read by the launcher), with what goes wrong.
 const KNOWN: &[(&str, &str, &str)] = &[
-    ("seat_z", "launcher>game", "NaN leaves the key empty"),
     // and the other way: the game takes NaN, the launcher saves the default over it
     ("volume", "launcher>game", "NaN leaves the key empty"),
     // the launcher keeps whole numbers where the game keeps fractions
