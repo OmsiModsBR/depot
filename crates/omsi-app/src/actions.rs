@@ -1840,7 +1840,15 @@ impl App {
             &map,
             vehicle.as_deref(),
         ));
-        // (the notice with the path is shown once the picture is taken, never inside it)
+        // (the notice with the path is shown once the picture is taken, never inside it; one
+        // still showing from a shot a moment ago would be inside this one)
+        if self
+            .service_msg
+            .as_ref()
+            .is_some_and(|(m, _)| crate::screenshot_name::is_notice(m))
+        {
+            self.service_msg = None;
+        }
         self.shot = Some((path, false));
     }
 

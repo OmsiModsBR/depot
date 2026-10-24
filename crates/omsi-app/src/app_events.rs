@@ -3568,9 +3568,17 @@ impl ApplicationHandler for App {
                                     }
                                 }
                             },
-                            Err(e) => log::warn!(
-                                "input script: the window picture could not be rendered: {e}"
-                            ),
+                            Err(e) => {
+                                log::warn!(
+                                    "input script: the window picture could not be rendered: {e}"
+                                );
+                                if !include_touch {
+                                    self.service_msg = Some((
+                                        format!("Screenshot could not be saved: {e}"),
+                                        4.0,
+                                    ));
+                                }
+                            }
                         }
                     }
                     // A window that is hidden (another app covers it, another Space) gets
