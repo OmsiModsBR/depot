@@ -379,6 +379,8 @@ fn main() {
                     "Winter morning",
                 ]),
                 selected: Some(4),
+                stations: s(&["Automatic (nearest the map)", "EDDB", "EDDF", "EDDM"]),
+                station: Some(1),
             }),
         ),
         (
