@@ -186,11 +186,6 @@ const EDGES: &[&str] = &[
 const KNOWN: &[(&str, &str, &str)] = &[
     // and the other way: the game takes NaN, the launcher saves the default over it
     // the launcher keeps whole numbers where the game keeps fractions
-    (
-        "max_obj_dist",
-        "game>launcher",
-        "the launcher rounds to whole metres (0.001 m becomes 0, no limit)",
-    ),
     // the two sides read the same text differently
 ];
 
