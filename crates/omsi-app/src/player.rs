@@ -3706,11 +3706,12 @@ pub(crate) fn pick_trailer_in(
 /// Mouse steering switched off: the wheel stays where the mouse left it and the keys go on
 /// from there, as in OMSI, where the mouse and the keys turn the one wheel (#184). The
 /// keys' own position was held at the middle while the mouse steered, and the wheel sprang
-/// back to it.
+/// back to it. It stays until a steering key is pressed (`KeyboardAxes::mouse_hold`).
 pub(crate) fn keep_wheel(p: Option<&mut Player>) {
     if let Some(p) = p {
         p.axes.steering = p.vehicle.controls().steering;
         p.axes.centering = false;
+        p.axes.mouse_hold = true;
     }
 }
 

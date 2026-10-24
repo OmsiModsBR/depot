@@ -69,6 +69,9 @@ pub struct KeyboardAxes {
     /// The steering is on its way back to the middle: set by the
     /// `steering_neutral` key, cleared by a steering key.
     pub centering: bool,
+    /// The wheel was left where mouse steering put it: it stays there (no self-centring)
+    /// until the player presses a steering key, from where the keyboard steering takes over.
+    pub mouse_hold: bool,
 }
 
 impl KeyboardAxes {
@@ -101,6 +104,7 @@ impl KeyboardAxes {
             lock_curvature: self.lock_curvature,
             pedal_hold: self.pedal_hold,
             centering: self.centering,
+            mouse_hold: self.mouse_hold,
             ..Default::default()
         };
     }
@@ -200,6 +204,9 @@ impl KeyboardAxes {
         } else {
             self.clutch = (self.clutch - 0.7 * dt).max(0.0);
         }
+        if self.left_key || self.right_key || self.neutral_key {
+            self.mouse_hold = false;
+        }
         // Steering (the paces: `paces`)
         let (rate, back) = self.paces();
         let red = self.red();
@@ -249,6 +256,9 @@ impl KeyboardAxes {
             let own = if self.old_steering { 0.0 } else { back };
             let step = omsi.max(rate).max(own) * dt;
             self.steering -= self.steering.clamp(-step, step);
+            self.steer_vel = 0.0;
+        } else if self.mouse_hold {
+            // mouse steering switched off: the wheel keeps its angle until a steering key
             self.steer_vel = 0.0;
         } else {
             // released: back by itself (Old Steering: it stays where the hands left it)
