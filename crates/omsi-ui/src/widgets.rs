@@ -2300,7 +2300,7 @@ mod tests {
     fn a_cut_text_shows_its_whole_in_a_tooltip() {
         let long = "A name that is far too long for the little box it is drawn in";
         let r = Rect::new(10.0, 10.0, 80.0, 20.0);
-        let mut frames = |text: &str| {
+        let frames = |text: &str| {
             let mut ui = Ui::new();
             let mut tip = None;
             for _ in 0..20 {
