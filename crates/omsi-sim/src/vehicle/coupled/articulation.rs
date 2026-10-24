@@ -57,6 +57,18 @@ impl TrailerPart {
         self.body.as_ref().map(|b| &b.rb)
     }
 
+    fn rigid_mut(&mut self) -> Option<&mut RigidBody> {
+        self.body.as_mut().map(|b| &mut b.rb)
+    }
+
+    /// Sets what the part's own body carries (kg, see [`RigidBody::set_payload`]); a part
+    /// without a body of its own carries nothing.
+    pub fn set_payload(&mut self, kg: f32) {
+        if let Some(rb) = self.rigid_mut() {
+            rb.set_payload(kg);
+        }
+    }
+
     /// The part's body is to be hung on its joint again at the next step.
     pub(in crate::vehicle) fn unplace(&mut self) {
         if let Some(b) = self.body.as_mut() {
@@ -293,8 +305,13 @@ impl TrailerPart {
         // at |alpha| > 47° - and beta about the transverse axis. (The horizontal angle went
         // to beta: the protection never engaged, the bellows turned in the wrong plane.)
         // Both are read off this part, not off the world: see `joint_angles`.
-        let (alpha, beta) =
-            joint_angles(lead_rot, lead_heading, self.body_rotation(), self.heading);
+        let (alpha, beta) = joint_angles(
+            lead_rot,
+            lead_heading,
+            self.body_rotation(),
+            self.heading,
+            self.ty.def.pitch_offset() > 0.0,
+        );
         if let Some(id) = self.v_alpha {
             main.state.vars[id as usize] = (alpha * ARTICULATION_SIGN) as f32;
         }
