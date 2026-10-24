@@ -976,7 +976,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
             let rh = 35.0;
             for (n, row) in rows.iter().enumerate() {
                 let rr = Rect::new(v.x + 6.0, v.y + n as f32 * rh, v.w - 16.0, rh - 3.0);
-                if rr.bottom() < v.y - 40.0 || rr.y > v.bottom() + 40.0 {
+                if !near_view(rr, area) {
                     continue;
                 }
                 let on = chosen
@@ -1091,6 +1091,12 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
     if let Some(n) = reset {
         back_to_original(l, &rows[n].clone());
     }
+}
+
+/// Whether a row at `rr` is in or close to the list's view `area` (both in window coordinates:
+/// the rows are already moved by the scrolling, the view is not).
+fn near_view(rr: Rect, area: Rect) -> bool {
+    rr.bottom() >= area.y - 40.0 && rr.y <= area.bottom() + 40.0
 }
 
 /// The `k`-th key of `row` waits to be pressed (a second key's entry is added for it when the
@@ -1959,6 +1965,22 @@ mod tests {
 
     fn kb(vehicles: Value, game: Value) -> Value {
         json!({ "vehicles": vehicles, "game": game })
+    }
+
+    #[test]
+    fn a_scrolled_list_still_draws_down_to_its_foot() {
+        let area = Rect::new(0.0, 100.0, 400.0, 300.0);
+        // the content scrolled 1000 px up: the row that stands at the view's foot is drawn
+        let rr = Rect::new(0.0, area.bottom() - 30.0, 400.0, 32.0);
+        assert!(near_view(rr, area));
+        assert!(!near_view(
+            Rect::new(0.0, area.bottom() + 80.0, 400.0, 32.0),
+            area
+        ));
+        assert!(!near_view(
+            Rect::new(0.0, area.y - 120.0, 400.0, 32.0),
+            area
+        ));
     }
 
     #[test]

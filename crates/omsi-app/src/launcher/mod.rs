@@ -1895,13 +1895,24 @@ impl Launcher {
     /// The mouse over the map: what it drags, where it zooms, and the entry point a click
     /// takes. Called once the page's panels are drawn - they have the first claim on it.
     pub fn map_interact(&mut self, r: Rect, window: Rect) {
+        self.map_interact_with(r, window, true);
+    }
+
+    /// `map_interact` for a map inside a window of its own: the window's darkened frame claims
+    /// the whole screen (`over_ui`), so only the map's own rectangle decides what the mouse
+    /// does to it.
+    pub fn map_interact_in_window(&mut self, r: Rect, window: Rect) {
+        self.map_interact_with(r, window, false);
+    }
+
+    fn map_interact_with(&mut self, r: Rect, window: Rect, panels_first: bool) {
         let p = mapview::Pointer {
             at: self.ui.input.mouse,
             pressed: self.ui.input.pressed,
             released: self.ui.input.released,
             down: self.ui.input.down,
             wheel: self.ui.input.wheel.y,
-            blocked: self.ui.over_ui || !r.contains(self.ui.input.mouse),
+            blocked: (panels_first && self.ui.over_ui) || !r.contains(self.ui.input.mouse),
         };
         self.mapview.think(r, window, self.ui.scale, p);
         if let Some(i) = self.mapview.take_clicked() {
