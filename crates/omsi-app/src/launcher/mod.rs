@@ -1874,7 +1874,20 @@ impl Launcher {
         self.map_rect = Some(r);
         let status = self.mapview.status();
         match (self.map_tex, status.is_empty()) {
-            (Some(tex), true) => self.ui.image(r, tex, RADIUS),
+            (Some(tex), true) => {
+                self.ui.image(r, tex, RADIUS);
+                // (the data's licence asks for it where its surface is shown)
+                if let Some(credit) = self.mapview.credit().map(str::to_string) {
+                    self.ui.text_in(
+                        &credit,
+                        Rect::new(r.x + 12.0, r.bottom() - 24.0, (r.w - 24.0).max(0.0), 18.0),
+                        10.5,
+                        Weight::Medium,
+                        TEXT_FAINT,
+                        Align::Left,
+                    );
+                }
+            }
             _ => {
                 self.ui.solid(r);
                 self.ui
