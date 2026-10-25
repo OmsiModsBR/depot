@@ -148,7 +148,7 @@ pub(super) struct SceneStore {
     pub(super) copies: SceneCopies,
     lamps: Lamps,
     tile_map: Option<TileMap>,
-    /// The depth surface scene targets are drawn with, and its size.
+    /// The depth surface scene targets are drawn with, and its size (the largest asked).
     target_depth: Option<(u32, u32, IDirect3DSurface9)>,
 }
 
@@ -910,7 +910,9 @@ impl D3d9Device {
             }
         };
         let depth = match &self.scene.target_depth {
-            Some((dw, dh, d)) if (*dw, *dh) == (w, h) => d.clone(),
+            // (a depth surface at least as large as the target serves, so mirrors of
+            // several sizes share one)
+            Some((dw, dh, d)) if *dw >= w && *dh >= h => d.clone(),
             _ => {
                 let mut depth = None;
                 // SAFETY: the out-parameter is a live local.
