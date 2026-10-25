@@ -202,7 +202,7 @@ pub struct Settings {
     pub info_bar_pos: String,
     /// The frame rate (and its 1 % low) as the bar's last part, not only in the corner.
     pub info_bar_fps: bool,
-    /// Which items the `custom` layout shows, in the order of [`INFO_ITEMS`].
+    /// Which items the `custom` layout shows, in the order of [`INFO_ITEM_KEYS`].
     pub info_items: [bool; 9],
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
     pub autosave_minutes: u32,

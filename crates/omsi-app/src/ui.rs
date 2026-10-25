@@ -1135,7 +1135,9 @@ impl Ui {
         // --- the information bar, along the top (or the bottom) in the middle: in as many
         // rows as the room it has needs
         self.info_rect = None;
-        if let Some(info) = f.info.as_ref() {
+        // (nothing to say - every item switched off, a layout that has only the vehicle's items
+        // and no vehicle - is no empty plate)
+        if let Some(info) = f.info.as_ref().filter(|i| !i.groups.is_empty()) {
             let px = (15.0 * s) as u32;
             let pad = 10.0 * s;
             let gap = 6.0 * s;

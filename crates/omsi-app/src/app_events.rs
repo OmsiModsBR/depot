@@ -4890,7 +4890,7 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
                     let mut next = Vec::new();
                     if let Some(s) = trip.stops.get(duty.next_stop) {
                         next.push(InfoItem::raw(
-                            format!("next: {}", s.name.trim()),
+                            format!("{} {}", omsi_ui::tr("next:"), s.name.trim()),
                             InfoTone::Plain,
                         ));
                     }
