@@ -272,6 +272,12 @@ impl MapView {
         }
     }
 
+    /// The attribution the map's package asks to be shown with its surface (its licence).
+    pub fn credit(&self) -> Option<&str> {
+        let sf = self.roads.as_deref()?.surface.as_ref()?;
+        Some(sf.credit.as_str()).filter(|c| !c.is_empty())
+    }
+
     /// A worker is reading (the page shows its little spinner).
     pub fn busy(&self) -> bool {
         self.loading.is_some()
