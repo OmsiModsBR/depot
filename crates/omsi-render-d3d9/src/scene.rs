@@ -149,8 +149,8 @@ impl SceneTexture<'_> {
 }
 
 /// The levels below a `w` x `h` RGBA image, each the 2 x 2 box average of the one above
-/// (colour weighted by alpha, as the default renderer's mip generator does it)
-/// (an odd edge repeats its last texel), down to 1 x 1.
+/// (an odd edge repeats its last texel), down to 1 x 1. The colour is weighted by alpha, as
+/// the default renderer's mip generator does it.
 pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
     let mut out: Vec<Vec<u8>> = Vec::new();
     let (mut pw, mut ph) = (w as usize, h as usize);
@@ -167,18 +167,19 @@ pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
                 let alpha: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, 3)).sum();
                 let o = (y * nw + x) * 4;
                 for c in 0..3 {
-                    next[o + c] = if alpha > 0 {
-                        // weighted by alpha: the colour stored in transparent texels must not
-                        // bleed into the silhouette (the default renderer's mip.wgsl does this)
-                        let sum: u32 = texels
-                            .iter()
-                            .map(|&(xx, yy)| at(xx, yy, c) * at(xx, yy, 3))
-                            .sum();
-                        ((sum + alpha / 2) / alpha) as u8
-                    } else {
+                    // weighted by alpha: the colour stored in transparent texels must not
+                    // bleed into the silhouette (the default renderer's mip.wgsl does this)
+                    let weighted: u32 = texels
+                        .iter()
+                        .map(|&(xx, yy)| at(xx, yy, c) * at(xx, yy, 3))
+                        .sum();
+                    next[o + c] = match (weighted + alpha / 2).checked_div(alpha) {
+                        Some(v) => v as u8,
                         // all four transparent: the plain average (alpha is often only a mask)
-                        let sum: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, c)).sum();
-                        ((sum + 2) / 4) as u8
+                        None => {
+                            let sum: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, c)).sum();
+                            ((sum + 2) / 4) as u8
+                        }
                     };
                 }
                 next[o + 3] = ((alpha + 2) / 4) as u8;
