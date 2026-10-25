@@ -10,6 +10,8 @@ pub(crate) enum Limit {
     Hidden,
     /// Offered as a fixed line: this value, and why.
     Locked(&'static str),
+    /// Offered as it is, with only these values to choose from.
+    Choices(&'static [&'static str]),
 }
 
 pub(crate) struct ApiLimit {
@@ -24,15 +26,29 @@ impl ApiLimit {
     /// The fixed value of a locked option (`None` when hidden).
     pub fn shown(&self) -> Option<&'static str> {
         match self.limit {
-            Limit::Hidden => None,
+            Limit::Hidden | Limit::Choices(_) => None,
             Limit::Locked(v) => Some(v),
+        }
+    }
+
+    /// Whether the option is a row of its own, with or without fewer choices (not hidden,
+    /// not a fixed line).
+    pub fn is_row(&self) -> bool {
+        matches!(self.limit, Limit::Choices(_))
+    }
+
+    /// Whether `value` may be chosen (only a `Choices` limit leaves values out).
+    pub fn allows(&self, value: &str) -> bool {
+        match self.limit {
+            Limit::Choices(list) => list.contains(&value),
+            _ => true,
         }
     }
 
     /// The line of a locked option: its fixed value and the reason (`None` when hidden).
     pub fn text(&self) -> Option<String> {
         match self.limit {
-            Limit::Hidden => None,
+            Limit::Hidden | Limit::Choices(_) => None,
             Limit::Locked(shown) => Some(format!("{shown} - {}", omsi_ui::tr(self.reason))),
         }
     }
@@ -109,15 +125,17 @@ pub(crate) const D3D9: &[ApiLimit] = &[
         limit: Limit::Locked("Off"),
         reason: NOT_DRAWN,
     },
+    // Mirrors are drawn (flat ones, as OMSI 2 has them): its picture sizes, and the real-time
+    // reflections on or off. Economical and the biggest picture are ours.
     ApiLimit {
         key: "mirror_size",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
+        limit: Limit::Choices(&["0", "128", "256", "512"]),
+        reason: "the sizes OMSI 2 offers",
     },
     ApiLimit {
         key: "mirror_refresh",
-        limit: Limit::Locked("None (frozen picture)"),
-        reason: NOT_DRAWN,
+        limit: Limit::Choices(&["off", "full"]),
+        reason: "OMSI 2 has real-time reflections on or off",
     },
     ApiLimit {
         key: "clouds",
@@ -151,11 +169,16 @@ mod tests {
                 l.key
             );
             assert_eq!(l.text().is_some(), l.shown().is_some());
+            assert!(!l.is_row() || l.text().is_none());
         }
         assert!(d3d9("msaa")
             .and_then(|l| l.text())
             .is_some_and(|t| t.starts_with("Off - ")));
         assert!(d3d9("ssao").is_some_and(|l| l.text().is_none()));
         assert!(d3d9("view_distance").is_none());
+        let sizes = d3d9("mirror_size").unwrap();
+        assert!(sizes.is_row() && sizes.allows("256") && !sizes.allows("1024"));
+        let refresh = d3d9("mirror_refresh").unwrap();
+        assert!(refresh.allows("full") && !refresh.allows("eco"));
     }
 }

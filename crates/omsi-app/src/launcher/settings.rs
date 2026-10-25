@@ -1932,7 +1932,7 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
 
 /// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
 /// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-fn d3d9_fixes_vanilla(s: &Value) -> bool {
+pub(crate) fn d3d9_fixes_vanilla(s: &Value) -> bool {
     // (the environment read last: the page asks this for every option, every frame)
     cfg!(windows)
         && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
@@ -1959,7 +1959,7 @@ pub enum Shown {
 }
 
 pub fn shown(o: &Opt, st: &Store) -> Shown {
-    if let Some(l) = api_limit(st.s, o.key) {
+    if let Some(l) = api_limit(st.s, o.key).filter(|l| !l.is_row()) {
         return match l.text() {
             Some(t) => Shown::Locked(t),
             None => Shown::Hidden,
@@ -2055,7 +2055,14 @@ fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
             .collect()
     };
     match &o.kind {
-        Kind::Pick(list) => own(list),
+        Kind::Pick(list) => {
+            // (under DirectX9 an option may leave some choices out, see `api_limits`)
+            let limit = api_limit(st.s, o.key);
+            list.iter()
+                .filter(|(v, _)| limit.is_none_or(|l| l.allows(v)))
+                .map(|(v, t)| (v.to_string(), t.to_string()))
+                .collect()
+        }
         Kind::Api => own(api_options()),
         Kind::Language => own(&core::LANGUAGES
             .iter()

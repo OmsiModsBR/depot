@@ -1475,8 +1475,13 @@ impl Settings {
         self.render_scale = 0.0;
         self.anisotropy = 1;
         self.post_aa = "off".into();
-        self.mirror_size = 0;
-        self.mirror_refresh = "off".into();
+        // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
+        // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
+        self.mirror_size = self.mirror_size.min(512);
+        if self.mirror_refresh == "eco" {
+            self.mirror_refresh = "full".into();
+        }
+        self.mirror_hud = 0;
         self.windy_trees = false;
         // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
         // `fair_weather_clouds`)
@@ -1632,8 +1637,9 @@ mod tests {
         s.msaa = 8;
         s.anisotropy = 16;
         s.render_scale = 0.5;
-        s.mirror_size = 512;
-        s.mirror_refresh = "full".into();
+        s.mirror_size = 1024;
+        s.mirror_refresh = "eco".into();
+        s.mirror_hud = 3;
         s.windy_trees = true;
         s.night_brightness = 1.0;
         s.clouds = false;
@@ -1644,8 +1650,10 @@ mod tests {
                 "msaa" => s.msaa == 1,
                 "render_scale" => s.render_scale == 0.0,
                 "anisotropy" => s.anisotropy == 1,
-                "mirror_size" => s.mirror_size == 0,
-                "mirror_refresh" => s.mirror_refresh == "off",
+                "mirror_size" => {
+                    s.mirror_size == 512 && l.allows(&s.mirror_size.to_string()) && s.mirror_hud == 0
+                }
+                "mirror_refresh" => s.mirror_refresh == "full" && l.allows(&s.mirror_refresh),
                 "windy_trees" => !s.windy_trees,
                 "clouds" => s.clouds,
                 "shadows" => !s.shadows,
