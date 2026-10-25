@@ -1943,7 +1943,7 @@ fn map_human_types(root: &Path, list: &[String]) -> Vec<Arc<HumanType>> {
 const MAX_LOCAL_PEOPLE: usize = 4096;
 
 fn bounded_people_limit(configured: usize) -> usize {
-    configured.clamp(1, MAX_LOCAL_PEOPLE)
+    configured.clamp(0, MAX_LOCAL_PEOPLE)
 }
 
 impl Humans {
@@ -8339,7 +8339,7 @@ mod population_limit_tests {
     fn imported_millions_cannot_become_a_local_population_budget() {
         assert_eq!(bounded_people_limit(200), 200);
         assert_eq!(bounded_people_limit(1), 1);
-        assert_eq!(bounded_people_limit(0), 1);
+        assert_eq!(bounded_people_limit(0), 0);
         assert_eq!(bounded_people_limit(MAX_LOCAL_PEOPLE), MAX_LOCAL_PEOPLE);
         assert_eq!(bounded_people_limit(2_000_000), MAX_LOCAL_PEOPLE);
         assert_eq!(bounded_people_limit(usize::MAX), MAX_LOCAL_PEOPLE);
