@@ -415,7 +415,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn texture(&mut self, path: &Path, by: &str) {
+    pub(crate) fn texture(&mut self, path: &Path, by: &str) {
         if !self.seen_texture.insert(path.to_path_buf()) {
             return;
         }
@@ -496,7 +496,7 @@ pub(crate) fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 
 /// A texture name that stands for "no texture": exporters write `null.bmp` into slots that
 /// have none.
-fn is_null_texture(name: &str) -> bool {
+pub(crate) fn is_null_texture(name: &str) -> bool {
     let n = name.trim();
     n.is_empty()
         || Path::new(&n.replace('\\', "/"))

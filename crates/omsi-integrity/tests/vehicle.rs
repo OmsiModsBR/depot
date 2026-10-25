@@ -95,3 +95,33 @@ fn a_missing_model_is_an_error_and_a_wasteful_texture_is_not() {
     assert!(!r.is_complete());
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
+    let root = temp_root("paint");
+    complete(&root);
+    write(
+        &root,
+        "Vehicles/Test/model/model.cfg",
+        "[mesh]\nbody.x\n[CTC]\nPaint\n..\\Texture\\paints\n0\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/Texture/paints/red.cti",
+        "[item]\nRed\nbody_ctc\nred.bmp\n[item]\nBlue\nbody_ctc\nblue.bmp\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/Texture/paints/red.bmp",
+        bmp(1024, 1024),
+    );
+    let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
+    assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
+    assert_eq!(r.findings[0].code, "texture-missing");
+    assert_eq!(r.findings[0].file, "blue.bmp");
+    assert_eq!(
+        r.findings[0].referenced_by.as_ref().unwrap().0,
+        "Vehicles/Test/Texture/paints/red.cti"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
