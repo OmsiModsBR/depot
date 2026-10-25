@@ -22,7 +22,6 @@ pub mod mobile;
 mod multiplayer;
 pub(crate) mod pages;
 pub mod phone;
-mod prerender;
 pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
@@ -190,10 +189,6 @@ pub struct Launcher {
     map_pic: MapPicture,
     /// The small pictures of the Maps library's rows.
     thumbs: thumbs::Thumbs,
-    /// The pictures of the library's vehicles drawn ahead of time, and how many were made
-    /// when the small pictures were last asked for again (`paint_thumbs`).
-    prerender: prerender::Prerender,
-    prerender_seen: usize,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
     /// The Maps page's start: its typed date and time, and the window open over the page.
@@ -306,8 +301,6 @@ impl Launcher {
             preview_tex: None,
             map_pic: MapPicture::default(),
             thumbs: thumbs::Thumbs::default(),
-            prerender: prerender::Prerender::default(),
-            prerender_seen: 0,
             backdrop: backdrop::Backdrop::default(),
             start: start::StartView::default(),
             mapview: mapview::MapView::new(),
@@ -460,8 +453,6 @@ impl Launcher {
         self.gpu = None;
         self.preview_tex = None;
         self.preview = preview::Preview::new();
-        // (the helper drawing pictures ahead of time is not left up for the game)
-        self.prerender.suspend();
         self.map_tex = None;
         self.map_pic = MapPicture::default();
         self.thumbs.forget_textures();
@@ -849,7 +840,6 @@ impl ApplicationHandler for Launcher {
             self.state.update(dt);
             // (no page shows the preview while the window is hidden: its helper ends at once)
             self.preview.stop();
-            self.prerender.suspend();
             self.check_exit(event_loop);
             // A game may have ended on this tick: wake so `frame` opens the device again.
             if !mobile::mobile() && self.gfx.is_none() && !self.state.in_game() {
@@ -1314,7 +1304,6 @@ impl Launcher {
                 )
             });
         self.preview.update(dt, shown);
-        self.prerender_step(dt);
 
         // --- to the GPU: the preview when it changed, then the interface onto the window
         let Some(renderer) = self.gfx.as_mut() else {
@@ -1906,24 +1895,13 @@ impl Launcher {
     /// The mouse over the map: what it drags, where it zooms, and the entry point a click
     /// takes. Called once the page's panels are drawn - they have the first claim on it.
     pub fn map_interact(&mut self, r: Rect, window: Rect) {
-        self.map_interact_with(r, window, true);
-    }
-
-    /// `map_interact` for a map inside a window of its own: the window's darkened frame claims
-    /// the whole screen (`over_ui`), so only the map's own rectangle decides what the mouse
-    /// does to it.
-    pub fn map_interact_in_window(&mut self, r: Rect, window: Rect) {
-        self.map_interact_with(r, window, false);
-    }
-
-    fn map_interact_with(&mut self, r: Rect, window: Rect, panels_first: bool) {
         let p = mapview::Pointer {
             at: self.ui.input.mouse,
             pressed: self.ui.input.pressed,
             released: self.ui.input.released,
             down: self.ui.input.down,
             wheel: self.ui.input.wheel.y,
-            blocked: (panels_first && self.ui.over_ui) || !r.contains(self.ui.input.mouse),
+            blocked: self.ui.over_ui || !r.contains(self.ui.input.mouse),
         };
         self.mapview.think(r, window, self.ui.scale, p);
         if let Some(i) = self.mapview.take_clicked() {
@@ -2033,10 +2011,7 @@ impl Launcher {
                 Page::Mods => self.state.load_mods(),
                 Page::Sessions => self.state.poll_now(),
                 // (counted again each time the page opens: a mod installed meanwhile counts)
-                Page::Setup => {
-                    self.state.usage_asked = false;
-                    self.state.squeeze.asked = false;
-                }
+                Page::Setup => self.state.usage_asked = false,
                 Page::Vehicles => {
                     self.vehicles.retry_if_failed();
                     self.refresh_catalogs();
@@ -2276,99 +2251,10 @@ impl Launcher {
                 }
             }
         }
-        self.paint_thumbs();
-        self.vehicles.set_prerender(self.prerender.status());
-        match self.vehicles.take_prerender() {
-            Some(omsi_launcher_ui::vehicles::PrerenderRequest::Start) => {
-                // (the content is read again first: new vehicles are found, the others come
-                // from the index)
-                self.prerender.looking();
-                self.state.load_content();
-            }
-            Some(omsi_launcher_ui::vehicles::PrerenderRequest::Cancel) => self.prerender.cancel(),
-            None => {}
-        }
         if let Some(u) = self.vehicles.take_use() {
             self.state.use_bus(u);
             self.go(Page::Maps);
         }
-    }
-
-    /// The small pictures of the paint tiles in view: each is the picture drawn ahead of time
-    /// for that paint (`prerender`), made smaller on the thumbnails' thread. A paint with no
-    /// picture yet shows its initial, and its picture comes in once it has been drawn.
-    fn paint_thumbs(&mut self) {
-        let shape = prerender::shape();
-        let root = std::path::PathBuf::from(&self.state.config.root);
-        let looks: Vec<showroom::Look> = self
-            .vehicles
-            .visible_paints()
-            .iter()
-            .map(|(bus, paint)| showroom::Look {
-                root: root.clone(),
-                bus: bus.clone(),
-                paint: paint.clone(),
-                ..Default::default()
-            })
-            .collect();
-        // (a picture just drawn: the small ones of the paints in view, empty so far, are made
-        // again)
-        let progress = self.prerender.progress();
-        let again = progress != self.prerender_seen;
-        self.prerender_seen = progress;
-        for look in looks {
-            let key = preview::kept_key(&look, shape);
-            if again {
-                self.thumbs.retry(&key);
-            }
-            let (bus, paint) = (look.bus.clone(), look.paint.clone());
-            self.thumbs
-                .want(&key, move || preview::kept_picture(&look, shape));
-            self.vehicles
-                .set_paint_thumb(&bus, &paint, self.thumbs.get(&key));
-        }
-    }
-
-    /// Drawing the vehicles' pictures ahead of time: starts a run once the content is read
-    /// (after another OMSI 2 folder was saved, or the page's button), follows what the page's
-    /// buttons ask for, and gives the page how it stands.
-    fn prerender_step(&mut self, dt: f32) {
-        if mobile::mobile() {
-            // (a phone's helper is a thread of the launcher, not a process of its own)
-            self.prerender.cancel();
-            return;
-        }
-        if self
-            .prerender
-            .content_ready(self.state.loading_content, self.state.vehicles.is_empty())
-        {
-            let c = &self.state.choice;
-            // (the light the pictures are drawn in: the chosen map, else the first there is)
-            let map = if c.map.is_empty() {
-                self.state.maps.first().map(|m| m.file.clone())
-            } else {
-                Some(c.map.clone())
-            };
-            match map {
-                Some(map) => {
-                    let scene = showroom::Look {
-                        root: std::path::PathBuf::from(&self.state.config.root),
-                        map,
-                        weather: c.weather.clone(),
-                        time: c.time,
-                        date: c.date.clone(),
-                        ..Default::default()
-                    };
-                    let vehicles = self.state.vehicles.clone();
-                    self.prerender.start(&vehicles, scene);
-                }
-                None => {
-                    log::warn!("launcher: no map to draw the vehicles' pictures on");
-                    self.prerender.cancel();
-                }
-            }
-        }
-        self.prerender.update(dt, self.state.in_game());
     }
 
     /// The Maps page: the library, the chosen map's picture and description, and the start
@@ -2650,7 +2536,7 @@ mod page_tests {
 /// The picture in a map's folder (`picture.jpg` and the like, as a map ships it), for the
 /// Maps page: read and made smaller on a thread, then put on the GPU.
 #[derive(Default)]
-pub(crate) struct MapPicture {
+struct MapPicture {
     /// The map file it is of.
     file: String,
     reading: Option<std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
@@ -2691,7 +2577,7 @@ impl MapPicture {
     }
 
     /// The folder of the map `file`, found through the content roots as the map list found it.
-    pub(crate) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
+    pub(super) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
         let global = omsi_cfg::find_in_roots(file)
             .map(|(_, p)| p)
             .unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
@@ -2699,7 +2585,7 @@ impl MapPicture {
     }
 
     /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
-    pub(crate) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    pub(super) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
             .into_iter()
             .filter(|(_, is_dir)| !is_dir)
@@ -2720,7 +2606,7 @@ impl MapPicture {
     /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
     /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
     /// on any card).
-    pub(crate) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
+    pub(super) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
         if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
             return None;
         }

@@ -176,47 +176,18 @@ pub fn tag(look: &Look) -> u64 {
 /// the bus elsewhere: a picture kept for one page was shown stretched on the other).
 fn cache_file(look: &Look, shape: Shape) -> PathBuf {
     let bus = look.root.join(&look.bus);
-    cache_file_with(
-        look,
-        shape,
-        &bus.parent().map(fingerprint).unwrap_or_default(),
-    )
-}
-
-/// `cache_file` with the fingerprint of the bus's folder already read.
-fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf {
-    let small = shape == thumb_shape();
-    // (the small pictures drawn ahead of time are not drawn again with every build: they
-    // change with the bus and with `THUMB_REVISION`, bumped when the showroom's drawing does)
-    let build = if small { THUMB_REVISION } else { crate::BUILD };
     let h = fnv(&[
         &look.root.to_string_lossy(),
         &look.bus,
         &look.paint,
-        fingerprint,
-        build,
+        &bus.parent().map(fingerprint).unwrap_or_default(),
+        crate::BUILD,
         &format!("{}:{}", shape.0, shape.1),
     ]);
-    let dir = omsi_launcher_lib::data_dir().join("previews");
-    let dir = if small { dir.join("small") } else { dir };
-    dir.join(format!("{h:016x}.png"))
+    omsi_launcher_lib::data_dir()
+        .join("previews")
+        .join(format!("{h:016x}.png"))
 }
-
-/// The shape of the small pictures drawn ahead of time for the Vehicles page's paint tiles.
-pub fn thumb_shape() -> Shape {
-    Shape::of(THUMB_SIZE.0, THUMB_SIZE.1, 0.5)
-}
-
-/// The size they are drawn at.
-pub const THUMB_SIZE: (u32, u32) = (336, 208);
-
-/// Changes when the showroom draws a bus differently (the small pictures are drawn again).
-const THUMB_REVISION: &str = "thumb-1";
-
-/// How many small pictures are kept at most, in a folder of their own (the oldest go), and
-/// how many one run draws, so that it never prunes its own pictures.
-pub const KEEP_SMALL: usize = 6000;
-pub const RUN_MAX: usize = 4000;
 
 /// The files under a bus's folder (its .bus, model, textures, paints, scripts), as their count,
 /// their total size and the newest change: any of them edited, added or taken away changes it.
@@ -248,43 +219,6 @@ fn fingerprint(dir: &std::path::Path) -> String {
     let mut acc = (0, 0, 0);
     walk(dir, 0, &mut acc);
     format!("{}:{}:{}", acc.0, acc.1, acc.2)
-}
-
-/// Which of `looks` (paints of one bus) have no kept picture at `shape` yet. Reads the bus's
-/// folder once, off the launcher's thread.
-pub fn missing_kept(looks: Vec<Look>, shape: Shape) -> Vec<Look> {
-    let Some(first) = looks.first() else {
-        return looks;
-    };
-    let fp = first
-        .root
-        .join(&first.bus)
-        .parent()
-        .map(fingerprint)
-        .unwrap_or_default();
-    looks
-        .into_iter()
-        .filter(|l| !cache_file_with(l, shape, &fp).exists())
-        .collect()
-}
-
-/// The picture kept for `look`'s bus and paint at `shape`, if there is one (read off the
-/// launcher's thread: it reads a file and walks the bus's folder).
-pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
-    image::open(cache_file(look, shape))
-        .ok()
-        .map(|i| i.to_rgba8())
-}
-
-/// What names the kept picture of `look`'s bus and paint at `shape` for the launcher's own
-/// small copies of it (the same on every run; not the file's name, which needs the disk).
-pub fn kept_key(look: &Look, shape: Shape) -> String {
-    kept_key_of(tag(look), shape)
-}
-
-/// `kept_key` from the tag the helper reports when it has kept a picture.
-pub fn kept_key_of(tag: u64, shape: Shape) -> String {
-    format!("paint:{tag:016x}:{}:{}", shape.0, shape.1)
 }
 
 /// The widest picture kept (a bigger preview is kept smaller: the live one replaces it).
@@ -434,14 +368,7 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
                         }
                     }
                     if let Some(dir) = file.parent() {
-                        prune(
-                            dir,
-                            if key.1 == thumb_shape() {
-                                KEEP_SMALL
-                            } else {
-                                KEEP
-                            },
-                        );
+                        prune(dir, KEEP);
                     }
                 });
             }
@@ -567,25 +494,11 @@ struct Link {
     cmds: Sender<Cmd>,
     msgs: Receiver<Msg>,
     child: Option<std::process::Child>,
-    /// The file name of the helper's own mark of the bus it reads (None: the common one).
-    mark: Option<&'static str>,
-}
-
-/// The mark of a bus a helper was reading taken away: `mark`'s, or the common one.
-fn clear_mark(mark: Option<&str>) {
-    match mark {
-        Some(n) => super::showroom::clear_mark(n),
-        None => super::showroom::clear_placing_mark(),
-    }
 }
 
 impl Link {
     /// The helper started: the game binary again on a computer, a thread on a phone.
-    fn start(
-        root: &std::path::Path,
-        backend: Option<&str>,
-        mark: Option<&'static str>,
-    ) -> Result<Link, String> {
+    fn start(root: &std::path::Path, backend: Option<&str>) -> Result<Link, String> {
         let root = root.to_path_buf();
         let (cmds, cmd_rx) = channel::<Cmd>();
         let (msg_tx, msgs) = channel::<Msg>();
@@ -603,7 +516,6 @@ impl Link {
                 cmds,
                 msgs,
                 child: None,
-                mark: None,
             });
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -624,9 +536,6 @@ impl Link {
             .stderr(stderr);
         if let Some(b) = backend {
             cmd.env(omsi_cfg::flags::BACKEND.name, b);
-        }
-        if let Some(m) = mark {
-            cmd.env("DEPOT_PLACING_MARK", m);
         }
         #[cfg(windows)]
         {
@@ -681,7 +590,6 @@ impl Link {
             cmds,
             msgs,
             child: Some(child),
-            mark,
         })
     }
 }
@@ -740,7 +648,6 @@ impl Drop for Link {
     fn drop(&mut self) {
         // its input closes (with the last sender of `cmds`) and it ends by itself, in order
         drop(std::mem::replace(&mut self.cmds, channel().0));
-        let mark = self.mark;
         if let Some(mut c) = self.child.take() {
             // (waited for off the launcher's thread)
             std::thread::spawn(move || {
@@ -757,7 +664,7 @@ impl Drop for Link {
                 // A helper stopped here was ended by the launcher, not by the bus it was reading:
                 // the showroom's mark of a bus that hung is not left for the next helper to take
                 // as one (the bus would have been left out of the preview for good).
-                clear_mark(mark);
+                super::showroom::clear_placing_mark();
             });
         }
     }
@@ -808,9 +715,6 @@ pub struct Preview {
     pinned: bool,
     /// When the helper running started, or last sent something (`FIRST_PICTURE_LIMIT`).
     heard: Instant,
-    /// The file name of the mark this preview's helper keeps of the bus it reads (None: the
-    /// common one the page's live helper uses).
-    mark: Option<&'static str>,
 }
 
 impl Default for Preview {
@@ -821,26 +725,12 @@ impl Default for Preview {
 
 impl Preview {
     pub fn new() -> Preview {
-        Preview::with_mark(None)
-    }
-
-    /// A preview for the pictures drawn ahead of time: its helper keeps a mark of its own, so
-    /// that it and the page's live helper never take each other's for a bus that hung.
-    pub fn for_prerender() -> Preview {
-        Preview::with_mark(Some("showroom-placing-prerender.txt"))
-    }
-
-    fn with_mark(mark: Option<&'static str>) -> Preview {
         // A mark of the bus a helper was reading, left by the last launcher, says nothing of
         // the bus: its helpers are ended with it (`end_with_launcher`), in the middle of
         // reading one as well. (Within a launcher's session a bus that stops a helper is still
         // found: the next helper reads the mark.)
         static CLEARED: std::sync::Once = std::sync::Once::new();
-        static CLEARED_OWN: std::sync::Once = std::sync::Once::new();
-        match mark {
-            None => CLEARED.call_once(super::showroom::clear_placing_mark),
-            Some(n) => CLEARED_OWN.call_once(|| super::showroom::clear_mark(n)),
-        }
+        CLEARED.call_once(super::showroom::clear_placing_mark);
         Preview {
             wanted: None,
             link: None,
@@ -866,7 +756,6 @@ impl Preview {
             drew: false,
             pinned: false,
             heard: Instant::now(),
-            mark,
         }
     }
 
@@ -914,17 +803,6 @@ impl Preview {
         if let Some(l) = self.link.as_ref() {
             let _ = l.cmds.send(Cmd::Zoom(k));
         }
-    }
-
-    /// The helper could not draw the bus wanted (it could not be started, or stopped on its own
-    /// on every interface).
-    pub fn gave_up(&self) -> bool {
-        self.broken.is_some() && self.broken == self.wanted
-    }
-
-    /// The bus and shape of the picture the helper kept last.
-    pub fn kept(&self) -> Option<(u64, Shape)> {
-        self.kept
     }
 
     /// The page shows a picture, not the live view (see `want_picture`).
@@ -978,15 +856,12 @@ impl Preview {
     pub fn stop(&mut self) {
         // (stopped at once: the picture it may be writing goes to its place whole or not at
         // all, and the mark of the bus it was reading is the launcher's to clear)
-        let mark = self.mark;
         if let Some(mut c) = self.link.as_mut().and_then(|l| l.child.take()) {
-            log::info!(
-                "launcher: the preview helper is stopped (the window is hidden, or a game runs)"
-            );
+            log::info!("launcher: the window is hidden, the preview helper is stopped");
             let _ = c.kill();
             std::thread::spawn(move || {
                 let _ = c.wait();
-                clear_mark(mark);
+                super::showroom::clear_placing_mark();
             });
         }
         self.unused = self.unused.max(LINGER + 1.0);
@@ -1050,7 +925,6 @@ impl Preview {
             match Link::start(
                 &look.root,
                 self.backends.get(self.backend).copied().flatten(),
-                self.mark,
             ) {
                 Ok(l) => {
                     self.link = Some(l);
@@ -1128,7 +1002,7 @@ impl Preview {
                 let _ = c.kill();
                 let _ = c.wait();
             }
-            clear_mark(self.mark);
+            super::showroom::clear_placing_mark();
             ended = true;
         }
         if ended {
@@ -1162,7 +1036,7 @@ impl Preview {
                 // (its end is the interface's, not the bus's: the mark of the bus it was
                 // reading, if any, is not left for the next helper to take as a bus that hung,
                 // as when the launcher stops a helper)
-                clear_mark(self.mark);
+                super::showroom::clear_placing_mark();
                 self.backend += 1;
                 log::warn!(
                     "launcher: the preview helper is started again on {}",
@@ -1300,7 +1174,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         p.want(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
@@ -1343,7 +1216,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         p.want(a.clone());
         p.update(0.016, Some((2, 1)));
@@ -1375,7 +1247,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         p.want(a.clone());
         drop(msg_tx);
@@ -1393,7 +1264,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
         p.update(0.016, Some((2, 1)));
@@ -1405,7 +1275,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         p.drew = false;
         drop(msg_tx);
@@ -1465,7 +1334,6 @@ mod tests {
             cmds,
             msgs,
             child: None,
-            mark: None,
         });
         p.want_picture(a.clone());
         msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
@@ -1545,64 +1413,5 @@ mod tests {
             Shape::of(1284, 722, 0.51),
             "a few pixels more is the same shape"
         );
-    }
-
-    #[test]
-    fn only_the_paints_with_no_kept_picture_are_missing() {
-        let root = std::env::temp_dir().join(format!("depot-missing-kept-{}", std::process::id()));
-        let look = |paint: &str| Look {
-            root: root.clone(),
-            bus: "Vehicles/A/a.bus".into(),
-            paint: paint.into(),
-            ..Default::default()
-        };
-        let shape = Shape::of(336, 208, 0.5);
-        let all = vec![look(""), look("Red"), look("Blue")];
-        // nothing kept: all three; with the Red one kept: the other two
-        assert_eq!(missing_kept(all.clone(), shape).len(), 3);
-        let file = cache_file(&look("Red"), shape);
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, b"png").unwrap();
-        let left = missing_kept(all.clone(), shape);
-        let _ = std::fs::remove_file(&file);
-        assert_eq!(
-            left.iter().map(|l| l.paint.as_str()).collect::<Vec<_>>(),
-            vec!["", "Blue"]
-        );
-        assert!(missing_kept(Vec::new(), shape).is_empty());
-        // (the small pictures of the page are named by bus, paint and shape)
-        assert_ne!(
-            kept_key(&look("Red"), shape),
-            kept_key(&look("Blue"), shape)
-        );
-        assert_ne!(
-            kept_key(&look("Red"), shape),
-            kept_key(&look("Red"), Shape::of(1600, 720, 0.5))
-        );
-    }
-
-    #[test]
-    fn the_small_pictures_have_a_folder_of_their_own_and_do_not_change_with_the_build() {
-        let look = Look {
-            root: "/omsi".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let small = cache_file_with(&look, thumb_shape(), "1:2:3");
-        let page = cache_file_with(&look, Shape::of(1280, 720, 0.5), "1:2:3");
-        assert_eq!(small.parent().unwrap().file_name().unwrap(), "small");
-        assert_ne!(page.parent().unwrap().file_name().unwrap(), "small");
-        assert_ne!(small, page);
-        // (a bus that changed is drawn anew)
-        assert_ne!(small, cache_file_with(&look, thumb_shape(), "1:2:4"));
-        // the run is smaller than what is kept, so it never prunes its own pictures
-        assert!(RUN_MAX < KEEP_SMALL);
-    }
-
-    #[test]
-    fn a_prerender_preview_has_a_mark_of_its_own() {
-        assert_eq!(Preview::new().mark, None);
-        let own = Preview::for_prerender().mark.unwrap();
-        assert!(own.starts_with("showroom-placing") && own != "showroom-placing.txt");
     }
 }
