@@ -3167,6 +3167,7 @@ dependencies = [
  "log",
  "omsi-cfg",
  "omsi-content",
+ "omsi-integrity",
  "omsi-map",
  "omsi-model",
  "omsi-o3d",
@@ -3212,6 +3213,18 @@ dependencies = [
  "ab_glyph",
  "log",
  "omsi-cfg",
+ "omsi-texture",
+]
+
+[[package]]
+name = "omsi-integrity"
+version = "0.1.0"
+dependencies = [
+ "omsi-cfg",
+ "omsi-map",
+ "omsi-model",
+ "omsi-o3d",
+ "omsi-scenery",
  "omsi-texture",
 ]
 
