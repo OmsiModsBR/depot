@@ -454,3 +454,39 @@ fn a_wasteful_texture_counts_every_file_that_names_it() {
     assert_eq!(f.referenced_by.as_ref().unwrap().1, 2, "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_texture_change_master_stands_for_the_texture_the_mesh_names() {
+    let root = temp_root("texchange");
+    complete(&root);
+    fs::remove_file(root.join("Sceneryobjects/house/texture/wall.bmp")).unwrap();
+    write(
+        &root,
+        "Sceneryobjects/house/house.sco",
+        "[model]\nmodel.cfg\n",
+    );
+    write(
+        &root,
+        "Sceneryobjects/house/model.cfg",
+        "[mesh]\nhouse.x\n\n[texchanges]\ntexture\\chtex.cfg\n",
+    );
+    write(
+        &root,
+        "Sceneryobjects/house/texture/chtex.cfg",
+        "[newtexchangemaster]\nwall.bmp\nvar\n[entries]\n1\nw1.bmp\n",
+    );
+    map(&root, TILE);
+    // the entry is missing: reported, and not the placeholder the mesh names
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let missing: Vec<&str> = r
+        .findings
+        .iter()
+        .filter(|f| f.code == "texture-missing")
+        .map(|f| f.file.as_str())
+        .collect();
+    assert_eq!(missing, ["w1.bmp"], "{:#?}", r.findings);
+    write(&root, "Sceneryobjects/house/texture/w1.bmp", bmp(512, 512));
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
