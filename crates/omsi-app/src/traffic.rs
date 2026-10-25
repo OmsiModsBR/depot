@@ -2218,6 +2218,13 @@ impl Traffic {
         !v.frames(p, r) || self.occluded(world, &v, p, r)
     }
 
+    /// How many more vehicles without a timetable the options' `[AIMaxCountRandom]` lets on
+    /// the streets (those asleep out of range are not counted: they are not on them).
+    fn random_room(&self) -> usize {
+        let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
+        (self.max_random as usize).saturating_sub(active)
+    }
+
     /// Spawn cars until `target` are within `spawn_radius` of `center`; despawn far ones.
     pub fn populate(
         &mut self,
@@ -2599,6 +2606,9 @@ impl Traffic {
         if self.rand_f() >= forced.unwrap_or(0.035) {
             return;
         }
+        if self.random_room() == 0 {
+            return;
+        }
         let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set() || forced.is_some();
         let mut candidates: Vec<(i64, crate::scene::ParkedObject)> = world
             .parked_objects
@@ -2805,6 +2815,12 @@ impl Traffic {
                         .unwrap_or(false)
             })
             .count();
+        // (the options' cap on the vehicles without a timetable holds for every centre together)
+        let target = if kind == LaneKind::Street {
+            target.min(unscheduled + self.random_room())
+        } else {
+            target
+        };
         let mut count = unscheduled;
         while count < target && attempts < target * 12 {
             attempts += 1;
@@ -2974,7 +2990,9 @@ impl Traffic {
         }
         let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
         let mut budget = (target as f32 * 1.25).ceil() as usize;
-        budget = budget.saturating_sub(active);
+        budget = budget
+            .min(self.max_random as usize)
+            .saturating_sub(active);
         let centers: Vec<DVec3> = std::iter::once(center)
             .chain(self.lan_centers.iter().copied())
             .collect();
@@ -3060,6 +3078,7 @@ impl Traffic {
         let map_target = ((street_target as f64 * self.street_weight / near)
             .min(street_target as f64 * MAP_POPULATION_FACTOR as f64))
             as usize;
+        let map_target = map_target.min(self.max_random as usize);
         let present =
             self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count() + self.dormant.len();
         if present >= map_target {
