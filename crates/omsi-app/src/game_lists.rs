@@ -3323,6 +3323,8 @@ fn options_pages(app: &App) -> Vec<Page> {
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     let cm = |v: f32| format!("{:+.0} cm", v * 100.0);
     let later = "Takes effect when the game starts the next time";
+    // (the switches of the custom layout only where that layout is chosen)
+    let custom_bar = s.info_bar_mode == "custom";
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
@@ -3341,15 +3343,15 @@ fn options_pages(app: &App) -> Vec<Page> {
         pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay; Custom bar the items chosen below"),
         pick("info_bar_pos", "Information bar position", "Along the top or the bottom of the screen"),
         switch_row(app, "info_bar_fps", "Frame rate in the information bar", "Adds the frame rate and its 1 % low as the bar's last item"),
-        switch_row(app, "info_item_time", "Time", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_speed", "Speed and limit", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_trip", "Trip distance", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_odometer", "Odometer", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_temps", "Temperatures", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_tank", "Tank", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_pax", "Passengers", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_line", "Line and destination", "Shown in the Custom bar layout"),
-        switch_row(app, "info_item_next", "Next stop and delay", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_time", "Time", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_speed", "Speed and limit", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_trip", "Trip distance", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_odometer", "Odometer", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_temps", "Temperatures", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_tank", "Tank", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_pax", "Passengers", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_line", "Line and destination", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_next", "Next stop and delay", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "exact_fare", "Passengers pay the exact fare", "No change is given at the cash desk"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("maintenance", "Maintenance", later),

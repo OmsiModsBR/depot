@@ -1984,6 +1984,7 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
         k if k.starts_with("head_tracking_") => st.on("head_tracking"),
+        k if k.starts_with("info_item_") => st.get("info_bar_mode").as_str() == Some("custom"),
         "ui_dimming" => st.get("ui_background").as_str() == Some("scene"),
         _ => true,
     };
@@ -3625,6 +3626,7 @@ mod tests {
         let mut s = core::settings_from_text(None);
         s["triple_screen"] = json!(true);
         s["head_tracking"] = json!(true);
+        s["info_bar_mode"] = json!("custom");
         s["graphics"] = json!("enhanced");
         s
     }
