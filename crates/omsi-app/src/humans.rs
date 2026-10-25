@@ -1623,6 +1623,40 @@ impl Want {
     }
 }
 
+/// How far ahead of a walker (m) a standing vehicle in the way is looked for.
+const VEHICLE_LOOK_AHEAD: f64 = 0.9;
+
+/// Whether a standing vehicle (`blocks`) is in the way of somebody at `pos` who wants to walk
+/// at `want`: the point a step ahead comes within a body of it. Never for a walker who only
+/// goes along its side: the crowd keeps them off it. Counted that way too, the people who got
+/// off a bus and walked along it to the stop's point of the pavement stood still beside the
+/// door, eight seconds at a time, until the bus drove off (#57).
+fn standing_vehicle_ahead(pos: DVec2, want: DVec2, blocks: &[Block]) -> bool {
+    let speed = want.length();
+    if speed < 1e-6 {
+        return false;
+    }
+    let ahead = pos + want / speed * VEHICLE_LOOK_AHEAD;
+    let reach = BODY_OUTSIDE + 0.15;
+    // distance to the outline, below zero inside the box
+    let gap = |b: &Block, p: DVec2| {
+        let (q, inside) = b.closest(p);
+        let d = (p - q).length();
+        if inside {
+            -d
+        } else {
+            d
+        }
+    };
+    blocks.iter().any(|b| {
+        b.vel.length() < 0.5 && b.near(ahead, reach) && {
+            let there = gap(b, ahead);
+            // heading into it (more than 30 degrees off its side), not along it
+            there < reach && gap(b, pos) - there > VEHICLE_LOOK_AHEAD * 0.5
+        }
+    })
+}
+
 /// Velocity towards `to`, easing into the stop over the last metre.
 /// Somebody off the pavement's path by more than this beyond its corridor (just off a bus,
 /// at its door) walks onto it at their own pace before the corridor holds them; within it
@@ -4757,14 +4791,7 @@ impl Humans {
                 self.people[i].car_wait = 0.0;
                 continue;
             }
-            let ahead = p.position.truncate() + want / speed * 0.9;
-            let in_way = blocks.iter().any(|b| {
-                b.vel.length() < 0.5 && b.near(ahead, BODY_OUTSIDE + 0.15) && {
-                    let (q, inside) = b.closest(ahead);
-                    inside || (ahead - q).length() < BODY_OUTSIDE + 0.15
-                }
-            });
-            if !in_way {
+            if !standing_vehicle_ahead(p.position.truncate(), want, &blocks) {
                 self.people[i].car_wait = 0.0;
                 continue;
             }
@@ -6755,6 +6782,69 @@ impl Humans {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A standing articulated bus's front section (2.55 x 10.09 m, heading north), the right
+    /// door's exit point 1.16 m right of its middle line.
+    fn standing_bus() -> Block {
+        Block {
+            center: DVec2::new(0.0, 0.618),
+            half: DVec2::new(1.275, 5.043),
+            heading: 0.0,
+            vel: DVec2::ZERO,
+        }
+    }
+
+    #[test]
+    fn a_standing_vehicle_is_in_the_way_only_of_who_walks_into_it() {
+        let bus = [standing_bus()];
+        // beside it, along its side towards the stop's point 1 m off it, near its front
+        let beside = DVec2::new(1.275 + BODY_OUTSIDE, 1.0);
+        let want = (DVec2::new(2.3, 7.0) - beside).normalize() * 1.1;
+        assert!(!standing_vehicle_ahead(beside, want, &bus));
+        // just off it, still within its box at the door
+        let door = DVec2::new(1.159, 1.024);
+        assert!(!standing_vehicle_ahead(door, want, &bus));
+        // away from it, onto the pavement
+        assert!(!standing_vehicle_ahead(door, DVec2::X * 1.1, &bus));
+        // straight at its rear, half a metre short of it: in the way
+        let behind = DVec2::new(0.0, 0.618 - 5.043 - 0.5);
+        assert!(standing_vehicle_ahead(behind, DVec2::Y * 1.1, &bus));
+        // at its side from across the pavement
+        assert!(standing_vehicle_ahead(
+            DVec2::new(2.0, 0.0),
+            DVec2::NEG_X * 1.1,
+            &bus
+        ));
+        // a moving one is the crowd's business
+        let mut moving = bus;
+        moving[0].vel = DVec2::Y * 3.0;
+        assert!(!standing_vehicle_ahead(behind, DVec2::Y * 1.1, &moving));
+    }
+
+    /// Off the door of a standing bus towards the stop's point of the pavement, 1 m off its
+    /// side and 6 m on: walking along the bus, they are there in a few seconds - not stood
+    /// beside the door until the bus leaves (#57).
+    #[test]
+    fn off_a_standing_bus_people_walk_along_it_to_the_pavement() {
+        let bus = [standing_bus()];
+        let target = DVec2::new(2.3, 7.0);
+        let mut w = Walker::new(DVec2::new(1.159, 1.024), BODY_OUTSIDE, 0);
+        let params = CrowdParams::default();
+        let dt = 1.0 / 60.0;
+        let mut held = 0.0;
+        for _ in 0..(8.0 / dt) as usize {
+            let want = arrive(w.pos, target, 1.1);
+            w.want = if standing_vehicle_ahead(w.pos, want, &bus) {
+                held += dt;
+                DVec2::ZERO
+            } else {
+                want
+            };
+            crowd::step(std::slice::from_mut(&mut w), &bus, &params, dt);
+        }
+        assert!(held < 0.1, "held {held:.1} s beside the bus");
+        assert!((w.pos - target).length() < 0.5, "{:?}", w.pos);
+    }
 
     /// Off a bus 3 m from the pavement's path (along y), walking onto it at 1.1 m/s: hardly
     /// faster over any quarter of a second (pulled by the corridor all the way, over 1.5
