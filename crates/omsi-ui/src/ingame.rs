@@ -652,21 +652,20 @@ fn fit_as_is(ui: &Ui, s: &str, px: f32, max: f32) -> String {
     String::new()
 }
 
-/// The "Add vehicle" window: the manufacturers, the chosen one's models, the chosen model's
-/// liveries and depot files, and the buttons. Every list is the game's own; this only shows
-/// them.
+/// The "Add vehicle" window: a picture of the vehicle chosen, its manufacturer, model, paint
+/// and depot file in dropdowns, the author's description, and the fleet number and plate.
+/// Every list is the game's own; this only shows them.
 pub struct AddVehicle<'a> {
     pub makers: &'a [String],
-    pub maker: Option<usize>,
+    pub maker: usize,
     /// The models of the manufacturer chosen.
     pub vehicles: &'a [String],
-    pub vehicle: Option<usize>,
+    pub vehicle: usize,
     pub liveries: &'a [String],
     pub livery: usize,
     pub depots: &'a [String],
     pub depot: usize,
-    /// The chosen vehicle's fleet numbers (its prefixes), as the window shows them; with fewer
-    /// than two there is nothing to step through.
+    /// The chosen vehicle's fleet numbers (its prefixes); empty when it has none.
     pub numbers: &'a [String],
     pub number: usize,
     /// The registration typed (empty: the vehicle's own), whether its field has the keyboard,
@@ -674,6 +673,26 @@ pub struct AddVehicle<'a> {
     pub plate: &'a str,
     pub plate_focused: bool,
     pub plate_hint: &'a str,
+    /// The author's description of the vehicle chosen (drawn as it is).
+    pub description: &'a str,
+    pub preview: Preview,
+}
+
+/// What the picture box of the "Add vehicle" window shows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Preview {
+    /// A picture: its texture, its width over its height, and the part of it the vehicle
+    /// stands in (left, top, right, bottom, 0 to 1): only that part is shown, as large as
+    /// the box allows.
+    Picture {
+        tex: usize,
+        aspect: f32,
+        part: [f32; 4],
+    },
+    /// The picture is being read.
+    Loading,
+    /// No picture was drawn of this vehicle and paint yet.
+    Missing,
 }
 
 /// What a click in the "Add vehicle" window asked for.
@@ -683,8 +702,8 @@ pub enum AddVehicleEvent {
     Vehicle(usize),
     Livery(usize),
     Depot(usize),
-    /// The fleet number one step down (-1) or up (1).
-    Number(i32),
+    /// The fleet number at this line of the list.
+    Number(usize),
     /// The registration's field was clicked.
     Plate,
     Place,
@@ -693,8 +712,8 @@ pub enum AddVehicleEvent {
 
 /// Where the "Add vehicle" window is in a picture of `size` points: in the middle.
 pub fn add_vehicle_rect(size: glam::Vec2) -> Rect {
-    let w = 860.0f32.min(size.x - 32.0);
-    let h = 560.0f32.min(size.y - 32.0);
+    let w = 880.0f32.min(size.x - 32.0);
+    let h = 600.0f32.min(size.y - 32.0);
     Rect::new(
         ((size.x - w) * 0.5).floor(),
         ((size.y - h) * 0.5).floor(),
@@ -703,94 +722,292 @@ pub fn add_vehicle_rect(size: glam::Vec2) -> Rect {
     )
 }
 
+/// The part of a picture (`aspect` wide over high) to show in a box of `box_aspect`: the
+/// vehicle standing in `part` in the middle, as large as it fits with a margin round it, the
+/// picture's own backdrop round it filling the box. Kept inside the picture (moved, or a
+/// little larger, where the vehicle stands near an edge). Left, top, right, bottom, 0 to 1.
+pub fn preview_part(box_aspect: f32, aspect: f32, part: [f32; 4]) -> [f32; 4] {
+    const MARGIN: f32 = PREVIEW_MARGIN;
+    let a = box_aspect.max(1e-3);
+    // (in the picture's height as the unit, so that both sides measure alike)
+    let (x0, x1) = (part[0] * aspect, part[2] * aspect);
+    let (y0, y1) = (part[1], part[3]);
+    let mut w = ((x1 - x0) * MARGIN).max((y1 - y0) * MARGIN * a);
+    let mut h = w / a;
+    if w > aspect {
+        w = aspect;
+        h = w / a;
+    }
+    if h > 1.0 {
+        h = 1.0;
+        w = h * a;
+    }
+    let cx = ((x0 + x1) * 0.5).clamp(w * 0.5, aspect - w * 0.5);
+    let cy = ((y0 + y1) * 0.5).clamp(h * 0.5, 1.0 - h * 0.5);
+    [
+        (cx - w * 0.5) / aspect,
+        cy - h * 0.5,
+        (cx + w * 0.5) / aspect,
+        cy + h * 0.5,
+    ]
+}
+
+/// How much room is left round the vehicle in the picture box (1.12: 12 % of its size).
+const PREVIEW_MARGIN: f32 = 1.12;
+
+/// Where in the box `b` to draw a picture (`aspect` wide over high) whose vehicle stands in
+/// `part`, and which part of the picture: the whole box with `preview_part` when a part of
+/// the box's shape holds the vehicle; else (a box much wider or taller than the picture) the
+/// vehicle with its margin, whole, as large as it fits in the middle of the box.
+pub fn preview_fit(b: Rect, aspect: f32, part: [f32; 4]) -> (Rect, [f32; 4]) {
+    let uv = preview_part(b.w / b.h.max(1.0), aspect, part);
+    const E: f32 = 1e-4;
+    if uv[0] <= part[0] + E && uv[1] <= part[1] + E && uv[2] >= part[2] - E && uv[3] >= part[3] - E
+    {
+        return (b, uv);
+    }
+    // (in the picture's height as the unit, so that both sides measure alike)
+    let around = |a: f32, z: f32, end: f32| {
+        let (c, half) = ((a + z) * 0.5, (z - a) * PREVIEW_MARGIN * 0.5);
+        ((c - half).max(0.0), (c + half).min(end))
+    };
+    let (x0, x1) = around(part[0] * aspect, part[2] * aspect, aspect);
+    let (y0, y1) = around(part[1], part[3], 1.0);
+    let ra = (x1 - x0).max(E) / (y1 - y0).max(E);
+    let (w, h) = if ra > b.w / b.h.max(1.0) {
+        (b.w, b.w / ra)
+    } else {
+        (b.h * ra, b.h)
+    };
+    (
+        Rect::new(b.x + (b.w - w) * 0.5, b.y + (b.h - h) * 0.5, w, h),
+        [x0 / aspect, y0, x1 / aspect, y1],
+    )
+}
+
+/// The part of a picture drawn ahead of time (`w` x `h`, RGBA) the vehicle stands in, as
+/// (left, top, right, bottom) from 0 to 1, without the empty floor and sky round it. The
+/// pictures have a backdrop that changes from top to bottom but not across (a sky, the
+/// horizon, a plain floor) and the vehicle clear of the left and right edges: a pixel unlike
+/// its row's edges (or those of the rows next to it, for the curved horizon) is the vehicle's,
+/// when the pixel over or under it is too (a line one pixel thin is the horizon's blend).
+/// None when nothing stands out.
+pub fn subject_part(w: usize, h: usize, rgba: &[u8]) -> Option<[f32; 4]> {
+    const EDGE: usize = 3;
+    const NEAR: usize = 2;
+    const DIFF: i32 = 48;
+    if w <= EDGE * 4 || h < 3 || rgba.len() < w * h * 4 {
+        return None;
+    }
+    let px = |x: usize, y: usize| {
+        let i = (y * w + x) * 4;
+        [rgba[i] as i32, rgba[i + 1] as i32, rgba[i + 2] as i32]
+    };
+    let mean = |y: usize, xs: std::ops::Range<usize>| {
+        let n = xs.len() as i32;
+        let mut a = [0; 3];
+        for x in xs {
+            let p = px(x, y);
+            for c in 0..3 {
+                a[c] += p[c];
+            }
+        }
+        a.map(|v| v / n)
+    };
+    let refs: Vec<[[i32; 3]; 2]> = (0..h)
+        .map(|y| [mean(y, 0..EDGE), mean(y, w - EDGE..w)])
+        .collect();
+    let mut odd = vec![false; w * h];
+    for y in 0..h {
+        let near = &refs[y.saturating_sub(NEAR)..(y + NEAR + 1).min(h)];
+        for x in 0..w {
+            let p = px(x, y);
+            odd[y * w + x] = near
+                .iter()
+                .flatten()
+                .all(|r| (p[0] - r[0]).abs() + (p[1] - r[1]).abs() + (p[2] - r[2]).abs() > DIFF);
+        }
+    }
+    let (mut cols, mut rows) = (vec![0u32; w], vec![0u32; h]);
+    for y in 1..h - 1 {
+        for x in 0..w {
+            if odd[y * w + x] && (odd[(y - 1) * w + x] || odd[(y + 1) * w + x]) {
+                cols[x] += 1;
+                rows[y] += 1;
+            }
+        }
+    }
+    let first = |v: &[u32]| v.iter().position(|&n| n >= 2);
+    let last = |v: &[u32]| v.iter().rposition(|&n| n >= 2);
+    let (x0, x1, y0, y1) = (first(&cols)?, last(&cols)?, first(&rows)?, last(&rows)?);
+    let (fw, fh) = (w as f32, h as f32);
+    Some([
+        x0.saturating_sub(2) as f32 / fw,
+        y0.saturating_sub(2) as f32 / fh,
+        (x1 + 3).min(w) as f32 / fw,
+        (y1 + 3).min(h) as f32 / fh,
+    ])
+}
+
 /// The "Add vehicle" window in a picture of `size` points. It never pauses anything: the
 /// game goes on behind it.
 pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddVehicleEvent> {
     let r = add_vehicle_rect(size);
     let body = window(ui, r, "Add vehicle", "the game keeps running");
     let mut event = None;
-    let foot_h = FOOT_H;
-    let lists_h = (body.h - foot_h - 36.0).max(ROW_H);
-    let left_w = (body.w * 0.5).floor();
-    let right_x = body.x + left_w + 1.0;
-    let right_w = body.right() - right_x;
-    let head = |ui: &mut Ui, s: &str, x: f32, y: f32| {
-        text(ui, s, x + 16.0, y + 17.0, 12.0, Weight::Regular, MUTED)
+    let x0 = body.x + 20.0;
+    let lw = ((body.w - 64.0) * 0.43).floor();
+    let x1 = x0 + lw + 24.0;
+    let rw = body.right() - 20.0 - x1;
+    // the picture of the vehicle, the bus alone filling the box
+    let box_ = Rect::new(
+        x0,
+        body.y + 14.0,
+        lw,
+        (body.h - FOOT_H - 14.0 - 4.0 * 62.0 - 18.0).clamp(80.0, 210.0),
+    );
+    ui.p().rounded(box_, 6.0, FIELD);
+    ui.p().rounded_border(box_, 6.0, 1.0, LINE);
+    match v.preview {
+        Preview::Picture { tex, aspect, part } => {
+            let (at, uv) = preview_fit(box_.inset(1.0), aspect, part);
+            ui.image_part(at, tex, uv, 5.0);
+        }
+        Preview::Loading => {
+            ui.text_in(
+                "Loading…",
+                box_,
+                13.0 * TS,
+                Weight::Regular,
+                MUTED,
+                Align::Center,
+            );
+        }
+        Preview::Missing => {
+            ui.icon(
+                "directions_bus",
+                Vec2::new(box_.center().x, box_.center().y - 22.0),
+                40.0,
+                MUTED.alpha(0.5),
+            );
+            ui.text_in(
+                "No picture of this vehicle yet",
+                Rect::new(box_.x + 12.0, box_.center().y + 6.0, box_.w - 24.0, 20.0),
+                13.0 * TS,
+                Weight::Regular,
+                MUTED,
+                Align::Center,
+            );
+            ui.text_in(
+                "The launcher draws them on its Vehicles page",
+                Rect::new(box_.x + 12.0, box_.center().y + 28.0, box_.w - 24.0, 18.0),
+                11.5 * TS,
+                Weight::Regular,
+                MUTED.alpha(0.75),
+                Align::Center,
+            );
+        }
+    }
+    // the four dropdowns under it, as the original's lists by manufacturer, then model, then
+    // paint and depot file
+    let field = |k: usize| box_.bottom() + 14.0 + k as f32 * 62.0;
+    let drop = |ui: &mut Ui, k: usize, label: &str, name: &str, opts: &[String], at: usize| {
+        let y = field(k);
+        head(ui, label, x0, y + 8.0);
+        let mut i = at;
+        let changed = ui.select_as_is(name, Rect::new(x0, y + 20.0, lw, 34.0), &mut i, opts);
+        changed.then_some(i)
     };
-    // the manufacturers and their models at the left (as the original's lists by manufacturer
-    // and then model), the livery and the depot file at the right
-    let half = ((lists_h - 34.0) * 0.5).floor();
-    // (the right column gives its foot to the fleet number and the registration)
-    let strip_h = 62.0;
-    let half_r = ((lists_h - 34.0 - strip_h) * 0.5).floor();
-    head(ui, "Manufacturer", body.x, body.y);
-    let makers = Rect::new(body.x + 4.0, body.y + 34.0, left_w - 8.0, half);
-    if let Some(i) = list(ui, "add:makers", makers, v.makers, v.maker) {
+    if let Some(i) = drop(ui, 0, "Manufacturer", "add:makers", v.makers, v.maker) {
         event = Some(AddVehicleEvent::Maker(i));
     }
-    let ym = makers.bottom() + 4.0;
-    head(ui, "Model", body.x, ym);
-    let vehicles = Rect::new(body.x + 4.0, ym + 34.0, left_w - 8.0, half);
-    if let Some(i) = list(ui, "add:vehicles", vehicles, v.vehicles, v.vehicle) {
+    if let Some(i) = drop(ui, 1, "Model", "add:vehicles", v.vehicles, v.vehicle) {
         event = Some(AddVehicleEvent::Vehicle(i));
     }
-    ui.p().rect(
-        Rect::new(body.x + left_w, body.y + 8.0, 1.0, body.h - foot_h - 8.0),
-        LINE,
-    );
-    head(ui, "Livery", right_x, body.y);
-    let liveries = Rect::new(right_x + 4.0, body.y + 34.0, right_w - 8.0, half_r);
-    if let Some(i) = list(ui, "add:liveries", liveries, v.liveries, Some(v.livery)) {
+    if let Some(i) = drop(ui, 2, "Paint", "add:liveries", v.liveries, v.livery) {
         event = Some(AddVehicleEvent::Livery(i));
     }
-    let y2 = liveries.bottom() + 4.0;
-    head(ui, "Depot file", right_x, y2);
-    let depots = Rect::new(right_x + 4.0, y2 + 34.0, right_w - 8.0, half_r);
-    if let Some(i) = list(ui, "add:depots", depots, v.depots, Some(v.depot)) {
+    if let Some(i) = drop(ui, 3, "Garage", "add:depots", v.depots, v.depot) {
         event = Some(AddVehicleEvent::Depot(i));
     }
-    // the fleet number (the prefix) and the registration (the plate)
-    let sy = depots.bottom() + 6.0;
-    let half_w = ((right_w - 8.0 - 12.0) * 0.5).floor();
-    head(ui, "Prefix", right_x, sy - 4.0);
-    head(ui, "Plate", right_x + half_w + 12.0, sy - 4.0);
-    let has_numbers = v.vehicle.is_some() && v.numbers.len() > 1;
-    let label = v.numbers.get(v.number).map(String::as_str).unwrap_or("-");
-    let by = stepper(
-        ui,
-        "add:number",
-        Rect::new(right_x + 16.0, sy + 18.0, half_w - 12.0, 30.0),
-        label,
-        has_numbers,
+    // the author's description at the right, scrolling, as the author wrote it
+    head(ui, "Description", x1, body.y + 22.0);
+    let last = field(3);
+    let desc = Rect::new(
+        x1,
+        body.y + 34.0,
+        rw,
+        (last - 14.0 - body.y - 34.0).max(40.0),
     );
-    if has_numbers && by != 0 {
-        event = Some(AddVehicleEvent::Number(by));
+    ui.p().rounded(desc, 6.0, FIELD);
+    ui.p().rounded_border(desc, 6.0, 1.0, LINE);
+    let text = v.description.trim();
+    let inner = desc.pad(14.0, 10.0);
+    let px = 13.5 * TS;
+    if text.is_empty() {
+        ui.text_in(
+            "The author wrote no description.",
+            Rect::new(inner.x, inner.y, inner.w, 24.0),
+            px,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+    } else {
+        // (the box starts at the top for every vehicle: its scroll is named after the text)
+        let name = format!("add:about:{:016x}", id_of(text));
+        ui.scroll_area(&name, inner, &mut |ui, view| {
+            ui.paragraph_as_is(
+                text,
+                Vec2::new(view.x, view.y),
+                view.w - 10.0,
+                px,
+                Weight::Regular,
+                FG,
+            ) + 8.0
+        });
     }
-    if v.vehicle.is_some()
-        && text_field(
-            ui,
-            "add:plate",
-            Rect::new(
-                right_x + half_w + 12.0 + 16.0,
-                sy + 18.0,
-                half_w - 12.0,
-                30.0,
-            ),
-            v.plate,
-            v.plate_focused,
-            v.plate_hint,
-        )
-    {
+    // the fleet number (the prefix) and the registration (the plate) under it
+    let half = ((rw - 12.0) * 0.5).floor();
+    head(ui, "Prefix", x1, last + 8.0);
+    head(ui, "Plate", x1 + half + 12.0, last + 8.0);
+    let nr = Rect::new(x1, last + 20.0, half, 34.0);
+    if v.numbers.is_empty() {
+        ui.p().rounded(nr, 4.0, FIELD);
+        ui.p().rounded_border(nr, 4.0, 1.0, LINE);
+        ui.text_in(
+            "-",
+            nr.pad(12.0, 0.0),
+            13.0,
+            Weight::Regular,
+            MUTED,
+            Align::Left,
+        );
+    } else {
+        let mut i = v.number;
+        if ui.select_as_is("add:number", nr, &mut i, v.numbers) {
+            event = Some(AddVehicleEvent::Number(i));
+        }
+    }
+    if text_field(
+        ui,
+        "add:plate",
+        Rect::new(x1 + half + 12.0, last + 20.0, rw - half - 12.0, 34.0),
+        v.plate,
+        v.plate_focused,
+        v.plate_hint,
+    ) {
         event = Some(AddVehicleEvent::Plate);
     }
-    let labels: &[(&str, bool)] = if v.vehicle.is_some() {
-        &[("Place", true), ("Cancel", true)]
-    } else {
-        &[("Cancel", true)]
-    };
     let hint = "The vehicle follows the mouse until a click puts it down";
-    match foot(ui, "add", r, labels, hint) {
-        Some(0) if v.vehicle.is_some() => event = Some(AddVehicleEvent::Place),
+    match foot(
+        ui,
+        "add",
+        r,
+        &[("Place", !v.vehicles.is_empty()), ("Cancel", true)],
+        hint,
+    ) {
+        Some(0) => event = Some(AddVehicleEvent::Place),
         Some(_) => event = Some(AddVehicleEvent::Cancel),
         None => {}
     }
@@ -1014,77 +1231,159 @@ mod tests {
         let numbers = vec!["4711".to_string(), "4712".to_string()];
         let size = Vec2::new(1672.0, 941.0);
         let mut ui = Ui::new();
-        let run = |ui: &mut Ui, chosen: Option<usize>, click: Option<Vec2>| {
-            let view = AddVehicle {
-                makers: &makers,
-                maker: Some(0),
-                vehicles: &vehicles,
-                vehicle: chosen,
-                liveries: &liveries,
-                livery: 0,
-                depots: &depots,
-                depot: 0,
-                numbers: &numbers,
-                number: 0,
-                plate: "",
-                plate_focused: false,
-                plate_hint: "Automatic",
-            };
-            let frame = |ui: &mut Ui| {
-                ui.begin(size, 1.0, 0.016);
-                let e = add_vehicle(ui, size, &view);
-                ui.finish();
-                e
-            };
-            if let Some(p) = click {
-                ui.input.mouse = p;
-                ui.input.pressed = true;
-                ui.input.down = true;
-                frame(ui);
-                ui.input.released = true;
-                ui.input.down = false;
-            }
-            frame(ui)
+        let view = AddVehicle {
+            makers: &makers,
+            maker: 0,
+            vehicles: &vehicles,
+            vehicle: 2,
+            liveries: &liveries,
+            livery: 0,
+            depots: &depots,
+            depot: 0,
+            numbers: &numbers,
+            number: 0,
+            plate: "",
+            plate_focused: false,
+            plate_hint: "Automatic",
+            description: "Example bus\nBuilt from 1990 to 1999.",
+            preview: Preview::Missing,
         };
-        run(&mut ui, None, None);
-        let maker = ui.drawn[&id_of("add:makers:row:1")].center();
+        let frame = |ui: &mut Ui| {
+            ui.begin(size, 1.0, 0.016);
+            let e = add_vehicle(ui, size, &view);
+            ui.finish();
+            e
+        };
+        // a click is a press and its release; what it chose comes back on one of the frames
+        let click = |ui: &mut Ui, p: Vec2| {
+            ui.input.mouse = p;
+            ui.input.pressed = true;
+            ui.input.down = true;
+            let a = frame(ui);
+            ui.input.released = true;
+            ui.input.down = false;
+            let b = frame(ui);
+            // (a list opened needs a moment before it takes a click)
+            let mut c = None;
+            for _ in 0..30 {
+                c = c.or(frame(ui));
+            }
+            a.or(b).or(c)
+        };
+        frame(&mut ui);
+        // a dropdown opens its list; a line of it chosen is reported
+        let pick = |ui: &mut Ui, name: &str, line: usize| {
+            let anchor = ui.drawn[&id_of(name)];
+            assert_eq!(click(ui, anchor.center()), None, "{name} only opens");
+            assert!(ui.popup_open());
+            let row = Vec2::new(
+                anchor.x + 20.0,
+                anchor.bottom() + 6.0 + 4.0 + line as f32 * 34.0 + 17.0,
+            );
+            click(ui, row)
+        };
         assert_eq!(
-            run(&mut ui, None, Some(maker)),
+            pick(&mut ui, "add:makers", 1),
             Some(AddVehicleEvent::Maker(1))
         );
-        let row = ui.drawn[&id_of("add:vehicles:row:2")].center();
+        assert!(!ui.popup_open());
         assert_eq!(
-            run(&mut ui, None, Some(row)),
-            Some(AddVehicleEvent::Vehicle(2))
+            pick(&mut ui, "add:vehicles", 3),
+            Some(AddVehicleEvent::Vehicle(3))
         );
-        // without a vehicle chosen the only button is Cancel
-        let first = ui.drawn[&id_of("add:btn:0")].center();
         assert_eq!(
-            run(&mut ui, None, Some(first)),
-            Some(AddVehicleEvent::Cancel)
-        );
-        run(&mut ui, Some(2), None);
-        let place = ui.drawn[&id_of("add:btn:0")].center();
-        assert_eq!(
-            run(&mut ui, Some(2), Some(place)),
-            Some(AddVehicleEvent::Place)
-        );
-        let red = ui.drawn[&id_of("add:liveries:row:1")].center();
-        assert_eq!(
-            run(&mut ui, Some(2), Some(red)),
+            pick(&mut ui, "add:liveries", 1),
             Some(AddVehicleEvent::Livery(1))
         );
-        // the fleet number steps and the plate's field is clicked, once a vehicle is chosen
-        let next = ui.drawn[&(id_of("add:number") ^ 2)].center();
         assert_eq!(
-            run(&mut ui, Some(2), Some(next)),
+            pick(&mut ui, "add:number", 1),
             Some(AddVehicleEvent::Number(1))
         );
         let plate = ui.drawn[&id_of("add:plate")].center();
-        assert_eq!(
-            run(&mut ui, Some(2), Some(plate)),
-            Some(AddVehicleEvent::Plate)
+        assert_eq!(click(&mut ui, plate), Some(AddVehicleEvent::Plate));
+        let place = ui.drawn[&id_of("add:btn:0")].center();
+        assert_eq!(click(&mut ui, place), Some(AddVehicleEvent::Place));
+        let cancel = ui.drawn[&id_of("add:btn:1")].center();
+        assert_eq!(click(&mut ui, cancel), Some(AddVehicleEvent::Cancel));
+    }
+
+    #[test]
+    fn the_vehicle_is_found_on_a_sky_and_a_floor_without_the_horizon() {
+        let (w, h) = (120usize, 80usize);
+        let mut img = vec![0u8; w * h * 4];
+        for y in 0..h {
+            for x in 0..w {
+                // a sky lighter at the top, the horizon at row 30 (a row lower in the middle,
+                // with a one-pixel blend), a plain grey floor
+                let horizon = if (40..80).contains(&x) { 31 } else { 30 };
+                let mut c = if y < horizon {
+                    [200 - y as u8, 210 - y as u8, 230 - y as u8]
+                } else {
+                    [70, 73, 75]
+                };
+                if y == horizon {
+                    c = [135, 150, 165];
+                }
+                // a vehicle from (30, 40) to (90, 62), dark with light windows
+                if (30..90).contains(&x) && (40..62).contains(&y) {
+                    c = if y < 48 {
+                        [220, 220, 210]
+                    } else {
+                        [20, 20, 24]
+                    };
+                }
+                img[(y * w + x) * 4..(y * w + x) * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
+            }
+        }
+        let p = subject_part(w, h, &img).unwrap();
+        let px = |v: f32, n: usize| (v * n as f32).round() as i32;
+        assert_eq!((px(p[0], w), px(p[2], w)), (28, 92), "{p:?}");
+        assert_eq!((px(p[1], h), px(p[3], h)), (38, 64), "{p:?}");
+        // a plain backdrop has nothing in it
+        let plain: Vec<u8> = (0..w * h).flat_map(|_| [70u8, 73, 75, 255]).collect();
+        assert_eq!(subject_part(w, h, &plain), None);
+    }
+
+    #[test]
+    fn the_vehicle_stands_in_the_middle_of_the_box_as_large_as_it_fits() {
+        let aspect = 336.0 / 208.0;
+        // a bus in the middle half of the picture: the part shown has the box's shape, holds
+        // the bus with a margin, and the bus is in its middle
+        let bus = [0.3, 0.35, 0.8, 0.75];
+        let uv = preview_part(2.0, aspect, bus);
+        let (w, h) = ((uv[2] - uv[0]) * aspect, uv[3] - uv[1]);
+        assert!((w / h - 2.0).abs() < 1e-4, "{uv:?}");
+        assert!(uv[0] < bus[0] && uv[2] > bus[2] && uv[1] < bus[1] && uv[3] > bus[3]);
+        assert!(((uv[0] + uv[2]) - (bus[0] + bus[2])).abs() < 1e-4);
+        // as large as it fits: the bus's width and the margin, no more
+        assert!((w - (bus[2] - bus[0]) * aspect * 1.12).abs() < 1e-4);
+        // near an edge it moves inside the picture
+        let edge = preview_part(2.0, aspect, [0.0, 0.4, 0.4, 0.7]);
+        assert!(edge[0] >= 0.0 && edge[2] <= 1.0);
+        // a box wider than the picture can fill: the whole width, the bus inside
+        let wide = preview_part(4.0, aspect, [0.05, 0.1, 0.95, 0.9]);
+        assert!(
+            wide[0] >= -1e-6 && wide[2] <= 1.0 + 1e-6 && wide[1] >= -1e-6 && wide[3] <= 1.0 + 1e-6
         );
+        // ... where no part of the box's shape holds the bus, the bus is drawn whole, as large
+        // as it fits in the middle of the box
+        let b = Rect::new(10.0, 20.0, 400.0, 100.0);
+        let bus = [0.05, 0.1, 0.95, 0.9];
+        let (at, uv) = preview_fit(b, aspect, bus);
+        assert!(uv[0] <= bus[0] && uv[1] <= bus[1] && uv[2] >= bus[2] && uv[3] >= bus[3]);
+        assert!(uv[0] >= 0.0 && uv[1] >= 0.0 && uv[2] <= 1.0 && uv[3] <= 1.0);
+        assert!((at.h - b.h).abs() < 1e-3 && at.w < b.w);
+        assert!((at.center().x - b.center().x).abs() < 1e-3);
+        let shown = (uv[2] - uv[0]) * aspect / (uv[3] - uv[1]);
+        assert!((at.w / at.h - shown).abs() < 1e-3, "not stretched");
+        // and where one does, the whole box
+        let (at, uv) = preview_fit(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            aspect,
+            [0.3, 0.35, 0.8, 0.75],
+        );
+        assert_eq!(at, Rect::new(0.0, 0.0, 200.0, 100.0));
+        assert_eq!(uv, preview_part(2.0, aspect, [0.3, 0.35, 0.8, 0.75]));
     }
 
     #[test]

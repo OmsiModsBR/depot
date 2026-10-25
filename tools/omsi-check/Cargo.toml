@@ -15,6 +15,7 @@ omsi-map = { path = "../../crates/omsi-map" }
 omsi-vehicle = { path = "../../crates/omsi-vehicle" }
 omsi-timetable = { path = "../../crates/omsi-timetable" }
 omsi-content = { path = "../../crates/omsi-content" }
+omsi-integrity = { path = "../../crates/omsi-integrity" }
 omsi-texture = { path = "../../crates/omsi-texture" }
 omsi-sim = { path = "../../crates/omsi-sim" }
 parking_lot.workspace = true

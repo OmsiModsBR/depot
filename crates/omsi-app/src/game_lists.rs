@@ -345,6 +345,24 @@ pub(crate) fn place_numbers(app: &App, bus: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A vehicle's description as its author wrote it: its description file in the game's
+/// language (`<bus>_ENG.dsc`), else the `[description]` of the vehicle file.
+pub(crate) fn place_description(app: &App, bus: &str) -> String {
+    let Ok(path) = crate::spawn::player_bus_path(&app.args.root, bus) else {
+        return String::new();
+    };
+    let lang = crate::describe::language_code(&app.settings.language);
+    omsi_content::Dsc::find(&path, &lang)
+        .map(|d| d.description)
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            omsi_vehicle::Vehicle::load(&path)
+                .ok()
+                .map(|v| v.description.trim().to_string())
+        })
+        .unwrap_or_default()
+}
+
 /// A vehicle's depot files as (label, file name), alphabetical (the place list puts the
 /// map's depot file first).
 pub(crate) fn place_depots(app: &App, bus: &str) -> Vec<(String, String)> {

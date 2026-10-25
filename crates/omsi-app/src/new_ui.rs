@@ -398,6 +398,16 @@ pub(crate) struct State {
     win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
+    /// A dropdown of that window has its list open: every click goes to the window then.
+    add_modal: bool,
+    /// The picture of the vehicle and paint chosen there, read on its thread and not yet in
+    /// the GPU (none inside: no picture was drawn of them).
+    add_picture: Option<(u64, Option<crate::new_ui_add::Picture>)>,
+    /// The picture the window wants now: a picture read for one chosen before is dropped.
+    add_picture_want: Option<u64>,
+    /// The window is open (also while the Esc menu or the report hides it: its picture stays
+    /// in the GPU then).
+    add_open: bool,
     /// The Alt bar's window open (reposition, date and time, weather...).
     tool: Option<crate::new_ui_windows::ToolFrame>,
     /// What clicks in it asked for, for the game to apply.
@@ -439,6 +449,12 @@ struct Overlay {
     show: omsi_ui::loading::Slideshow,
     /// The loading those pictures belong to (`State::loading_gen`).
     gen: u64,
+    /// The "Add vehicle" window's picture: which vehicle and paint it is, and in the GPU its
+    /// texture, its width over its height and where the vehicle stands in it (none: there is
+    /// no picture of them).
+    add_picture: Option<(u64, Option<(usize, f32, [f32; 4])>)>,
+    /// The window was drawn last time (a list of it left open is closed when it goes).
+    add_drawn: bool,
 }
 
 impl Overlay {
@@ -459,6 +475,8 @@ impl Overlay {
             map_tex: None,
             show: omsi_ui::loading::Slideshow::new(0),
             gen: 0,
+            add_picture: None,
+            add_drawn: false,
         }
     }
 
@@ -483,9 +501,11 @@ impl Overlay {
             (arrived, map_picture),
             gen,
             area,
+            (add_picture, add_open),
         ) = match self.shared.lock() {
             Ok(mut s) => {
                 let arrived = std::mem::take(&mut s.slides);
+                let add_picture = s.add_picture.take();
                 let map_picture = s.map_picture.take();
                 let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
                     s.win_input.pop_front()
@@ -506,6 +526,7 @@ impl Overlay {
                     (arrived, map_picture),
                     s.loading_gen,
                     s.area,
+                    (add_picture, s.add_open),
                 )
             }
             Err(_) => return,
@@ -552,6 +573,27 @@ impl Overlay {
                 self.logo = Some((tex, img.height() as f32 / img.width() as f32));
             }
         }
+        // the "Add vehicle" window's picture: a new one in the GPU, the one before out of it
+        // (and out of it too once the window is closed; not while it is only hidden)
+        let stale = add_picture.is_some() || !add_open;
+        if stale {
+            if let Some((_, Some((tex, _, _)))) = self.add_picture.take() {
+                gpu.free(tex);
+            }
+        }
+        if let Some((key, pic)) = add_picture {
+            let up = pic.map(|p| {
+                let tex = gpu.add_image(device, queue, p.w, p.h, &p.rgba);
+                (tex, p.w as f32 / p.h.max(1) as f32, p.part)
+            });
+            self.add_picture = Some((key, up));
+        }
+        // (a list of the window left open when it closed or was hidden is closed: it would stay
+        // drawn over what comes next and take its first click)
+        if add.is_none() && std::mem::replace(&mut self.add_drawn, false) {
+            self.ui.close_popup();
+        }
+        self.add_drawn = add.is_some();
         // (laid out in the area: the centre screen of a triple screen, else the picture)
         let area = area.map_or(Area::whole((w, h)), |a| a.within((w, h)));
         let (aw, ah) = area.size;
@@ -657,10 +699,12 @@ impl Overlay {
                 alt.draw(&mut self.ui);
             }
             if let Some(add) = add {
-                if let Some(e) = add.draw(&mut self.ui, size) {
-                    if let Ok(mut s) = self.shared.lock() {
-                        s.add_events.push(e);
-                    }
+                let preview = add.preview(self.add_picture);
+                let e = add.draw(&mut self.ui, size, preview);
+                let modal = self.ui.popup_open();
+                if let Ok(mut s) = self.shared.lock() {
+                    s.add_events.extend(e);
+                    s.add_modal = modal;
                 }
             }
             if let Some(tool) = tool {
@@ -703,6 +747,10 @@ pub(crate) struct NewUi {
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
     /// Keys the "Add vehicle" window's registration field took: their release is its too.
     pub(crate) add_taken: std::collections::HashSet<winit::keyboard::KeyCode>,
+    /// The vehicle and paint whose picture the "Add vehicle" window asked for last.
+    add_picture: Option<u64>,
+    /// The manufacturer and the vehicle file chosen last in that window: it opens on them.
+    pub(crate) add_last: Option<(String, String)>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
     /// The headset's picture of the menu and the page (a render texture of the window's size,
@@ -972,11 +1020,63 @@ impl NewUi {
     /// Close the "Add vehicle" window, forgetting what was still on its way to it.
     pub(crate) fn close_add(&mut self) {
         self.add = None;
+        self.add_picture = None;
         if let Ok(mut s) = self.shared.lock() {
             s.add = None;
             s.win_input.clear();
             s.add_events.clear();
+            s.add_modal = false;
+            s.add_picture = None;
+            s.add_picture_want = None;
+            s.add_open = false;
         }
+    }
+
+    /// Tell the overlay whether the "Add vehicle" window is open (each frame).
+    pub(crate) fn set_add_open(&self, open: bool) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.add_open = open;
+        }
+    }
+
+    /// Whether a dropdown of the "Add vehicle" window has its list open (it takes every
+    /// click, wherever it is, until it closes).
+    pub(crate) fn add_modal(&self) -> bool {
+        self.shared.lock().is_ok_and(|s| s.add_modal)
+    }
+
+    /// Read the picture drawn ahead of time of `bus` in `paint` (the launcher's, under the
+    /// installation `root`) on a thread of its own for the "Add vehicle" window, once per
+    /// vehicle and paint chosen. Returns the key the window asks the overlay for it by.
+    pub(crate) fn want_add_picture(
+        &mut self,
+        root: &std::path::Path,
+        bus: &str,
+        paint: &str,
+    ) -> u64 {
+        let key = crate::new_ui_add::picture_key(root, bus, paint);
+        if self.add_picture == Some(key) {
+            return key;
+        }
+        self.add_picture = Some(key);
+        if let Ok(mut s) = self.shared.lock() {
+            s.add_picture_want = Some(key);
+        }
+        let shared = self.shared.clone();
+        let (root, bus, paint) = (root.to_path_buf(), bus.to_string(), paint.to_string());
+        let _ = std::thread::Builder::new()
+            .name("add-vehicle-picture".into())
+            .spawn(move || {
+                let pic = crate::new_ui_add::read_picture(&root, &bus, &paint);
+                // (a picture read for a vehicle or paint chosen before this one is dropped: it
+                // came after the one wanted, or would take its place)
+                if let Ok(mut s) = shared.lock() {
+                    if s.add_picture_want == Some(key) {
+                        s.add_picture = Some((key, pic));
+                    }
+                }
+            });
+        key
     }
 }
 
@@ -1054,6 +1154,7 @@ impl App {
             (alt, self.add_frame(), self.tool_frame())
         };
         let area = self.new_ui_area();
+        self.new_ui.set_add_open(self.new_ui.add.is_some());
         self.new_ui.set(
             menu,
             alt,
