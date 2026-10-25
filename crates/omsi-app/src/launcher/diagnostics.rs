@@ -37,12 +37,18 @@ fn line(l: &mut Launcher, r: Rect, y: f32, label: &str, value: &str) {
         Weight::Regular,
         MUTED,
     );
+    // (the value starts after the label when a translation is longer than the usual column)
+    let label_w = l
+        .ui
+        .fonts
+        .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
+    let x = (r.x + 170.0).max(r.x + 19.0 + label_w + 14.0);
     clipped(
         &mut l.ui,
         value,
-        r.x + 170.0,
+        x,
         y,
-        r.w - 190.0,
+        (r.right() - 20.0 - x).max(40.0),
         13.0,
         Weight::Regular,
         FG,
@@ -144,13 +150,26 @@ fn log_card(l: &mut Launcher, r: Rect) {
         "Preview helper",
         &super::preview::helper_log().to_string_lossy(),
     );
-    l.ui.paragraph(
-        "Each is written again when it starts (the game's with each game). A game started with RUST_LOG=debug writes more.",
-        Vec2::new(r.x + 19.0, r.y + 172.0),
-        r.w - 38.0,
-        12.5,
-        Weight::Regular,
-        MUTED,
+    // (the next games started from here write what they load and every failure)
+    let mut detailed = l
+        .state
+        .settings
+        .get("detailed_log")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let row = Rect::new(r.x + 19.0, r.y + 166.0, r.w - 38.0, 32.0);
+    if l.ui.toggle(
+        "diagnostics:detailed-log",
+        row,
+        &mut detailed,
+        "Detailed log",
+    ) {
+        l.state.settings["detailed_log"] = serde_json::json!(detailed);
+        l.state.settings_dirty = 0.3;
+    }
+    l.ui.tooltip(
+        row,
+        "Each is written again when it starts (the game's with each game). With the detailed log on, the next games also write everything they load and every failure, so the file is larger.",
     );
     let b = Rect::new(
         r.x + 19.0,

@@ -107,7 +107,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<UiPipeline> {
 
 /// An sRGB-encoded value of linear `c` (a clear colour, which wgpu takes linear).
 /// Whether `t` is a render target of `w` by `h`.
-fn is_target_of(t: &IDirect3DTexture9, w: u32, h: u32) -> bool {
+pub(super) fn is_target_of(t: &IDirect3DTexture9, w: u32, h: u32) -> bool {
     let mut desc = D3DSURFACE_DESC::default();
     // SAFETY: the out-parameter is a live local.
     unsafe { t.GetLevelDesc(0, &mut desc) }.is_ok()

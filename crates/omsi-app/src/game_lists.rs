@@ -2238,7 +2238,6 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "momentary_gears" => s.momentary_gears,
         "auto_shift" => s.auto_shift,
         "ff_invert" => s.ff_invert,
-        "machine_translation" => s.machine_translation,
         "ui_scale_window" => s.ui_scale_window,
         "tooltips" => s.tooltips,
         "notes" => s.notes,
@@ -2589,11 +2588,6 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         "ff_invert" => {
             app.settings.ff_invert = on;
             Some(("ff_invert", bit))
-        }
-        "machine_translation" => {
-            app.settings.machine_translation = on;
-            crate::mt::enable(on);
-            Some(("machine_translation", bit))
         }
         "ui_scale_window" => {
             app.settings.ui_scale_window = on;
@@ -3626,7 +3620,6 @@ fn options_pages(app: &App) -> Vec<Page> {
         .collect();
     let interface: Vec<(String, String)> = vec![
         pick("language", "Language", "The language of the game's interface"),
-        switch_row(app, "machine_translation", "Translate the remaining texts automatically (offline, downloads 620 MB once)", "Translates texts nobody has translated, on this machine"),
         slider_row(app, "ui_scale", "Game interface size", "The size of the texts, the menu, the timetable and the navigator", &pct),
         switch_row(app, "ui_scale_window", "Interface grows with the window", "On a window taller than 1080p the interface grows with it"),
         slider_row(app, "ui_opacity", "Interface opacity", "How much of the interface's backgrounds shows", &pct),

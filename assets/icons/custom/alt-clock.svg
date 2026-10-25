@@ -1,3 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2"/>
+  <defs>
+  <mask id="alt-clock-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+  <rect width="24" height="24" fill="white" stroke="none"/>
+  <circle cx="17.5" cy="17.5" r="6.4" fill="black" stroke="none"/>
+  </mask>
+  </defs>
+  <g mask="url(#alt-clock-cut)">
+  <path d="M5 4.5h14A1.5 1.5 0 0 1 20.5 6v13a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5zM3.5 9.5h17M8 2.5v4M16 2.5v4"/>
+  <path d="M7 13h.01M10.5 13h.01M7 16.5h.01M10.5 16.5h.01" stroke-width="2"/>
+  </g>
+  <circle cx="17.5" cy="17.5" r="4.6"/>
+  <path d="M17.5 15.2v2.4l1.6 1"/>
 </svg>

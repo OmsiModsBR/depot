@@ -49,6 +49,18 @@ mod tests {
     }
 
     #[test]
+    fn the_alt_bars_icons_draw_at_the_bars_size() {
+        let alt: Vec<_> = super::names().filter(|n| n.starts_with("alt-")).collect();
+        assert!(alt.len() >= 16, "{alt:?}");
+        for name in alt {
+            let a = super::rasterize(name, 32).unwrap();
+            let covered = a.iter().filter(|&&v| v > 128).count();
+            // (a drawing of lines: neither a speck nor a blot)
+            assert!((60..420).contains(&covered), "{name}: {covered}");
+        }
+    }
+
+    #[test]
     fn icons_are_built_in_and_draw() {
         assert!(super::names().count() > 50);
         let a = super::rasterize("directions_bus", 32).unwrap();

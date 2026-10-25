@@ -764,7 +764,6 @@ impl App {
             self.vehicle_list = menu.vehicles;
             // (alphabetical)
             self.vehicle_list.sort_by_key(|v| v.0.to_lowercase());
-            crate::mt::protect(self.vehicle_list.iter().map(|v| v.0.as_str()));
         }
     }
 
