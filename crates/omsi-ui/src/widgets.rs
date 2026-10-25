@@ -519,6 +519,27 @@ impl Ui {
         *v
     }
 
+    /// For how many seconds `id` has been under the mouse without a break: 0 while it is not,
+    /// and counted again from 0 after a frame it was not drawn (a closed bar opened again).
+    pub fn hovered_for(&mut self, id: Id, hovered: bool) -> f32 {
+        let (start, seen) = (id ^ 0x5eed_7135_0000_0001, id ^ 0x5eed_7135_0000_0002);
+        let now = self.time;
+        let fresh = self
+            .anims
+            .get(&seen)
+            .is_none_or(|&t| now - t > self.dt * 2.0 + 1e-3);
+        if !hovered {
+            self.anims.remove(&start);
+            self.anims.remove(&seen);
+            return 0.0;
+        }
+        if fresh {
+            self.anims.insert(start, now);
+        }
+        self.anims.insert(seen, now);
+        now - self.anims[&start]
+    }
+
     /// Hover/press behaviour of a clickable area: (hovered, pressed now, clicked).
     pub fn interact(&mut self, id: Id, r: Rect) -> (bool, bool, bool) {
         #[cfg(any(test, feature = "testing"))]

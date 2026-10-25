@@ -15,6 +15,8 @@ pub const CELL_W: f32 = 76.0;
 pub const CELL_H: f32 = 76.0;
 /// The size of a tile's icon.
 const ICON: f32 = 32.0;
+/// How long the mouse rests on a tile (or the arrow) before its name shows, in seconds.
+pub const TIP_DELAY: f32 = 1.0;
 pub const GAP: f32 = 8.0;
 /// The panel's padding round the tiles.
 pub const PAD: f32 = 12.0;
@@ -150,6 +152,8 @@ fn tip(ui: &mut Ui, s: &str, over: Rect, panel: Rect) {
     let lo = panel.x.min(ui.size.x - w - 8.0).max(8.0);
     let x = (over.center().x - w * 0.5).clamp(lo, (ui.size.x - w - 8.0).max(lo));
     let r = Rect::new(x, panel.y - 30.0, w, 24.0);
+    #[cfg(test)]
+    ui.drawn.insert(id_of(&format!("alt:tip:{s}")), r);
     ui.p().rounded(r, 4.0, Color::rgba(14, 15, 17, 0.95));
     ui.p().rounded_border(r, 4.0, 1.0, EDGE);
     ui.text_in(s, r, px, Weight::Regular, FG, Align::Center);
@@ -172,7 +176,10 @@ pub fn draw<'a>(
     let mut shown: Option<(&Button, Rect)> = None;
     for (i, b) in buttons.iter().enumerate() {
         let r = cell_rect(at, i);
-        let (hover, _, click) = ui.interact(id_of(&format!("alt:{}", b.id)), r);
+        let id = id_of(&format!("alt:{}", b.id));
+        let (hover, _, click) = ui.interact(id, r);
+        // (the name shows once the mouse has rested on the tile a moment, not while passing)
+        let rested = ui.hovered_for(id, hover && !ui.input.down) >= TIP_DELAY;
         let enabled = b.disabled.is_none();
         let a = accent();
         let focus = state.focus.as_deref() == Some(b.id);
@@ -205,7 +212,7 @@ pub fn draw<'a>(
                 ui.text_in(t, sign, 12.0 * TS, Weight::Bold, ink, Align::Center);
             }
         }
-        if hover || focus {
+        if rested || focus {
             shown = Some((b, r));
         }
         if click && enabled {
@@ -216,6 +223,7 @@ pub fn draw<'a>(
     // the arrow that folds the bar
     let ar = arrow_rect(at, buttons.len());
     let (hover, _, _) = ui.interact(id_of("alt:fold"), ar);
+    let arrow_rested = ui.hovered_for(id_of("alt:fold"), hover && !ui.input.down) >= TIP_DELAY;
     ui.icon(
         "chevron_right",
         ar.center(),
@@ -242,7 +250,7 @@ pub fn draw<'a>(
             r,
             p,
         );
-    } else if hover {
+    } else if arrow_rested {
         tip(ui, "Fold the bar", ar, p);
     }
     clicked
@@ -428,6 +436,35 @@ mod tests {
         );
         let r = panel_rect(at, bs.len());
         assert!(r.w > 0.0 && r.h > 0.0);
+    }
+
+    #[test]
+    fn a_tiles_name_shows_once_the_mouse_has_rested_on_it_a_second() {
+        let bs = buttons();
+        let mut ui = Ui::new();
+        let mut st = State::default();
+        frame(&mut ui, &bs, &mut st, None);
+        ui.input.mouse = ui.drawn[&id_of("alt:swap")].center();
+        let tipped = |ui: &mut Ui, st: &mut State, dt: f32| {
+            ui.begin(Vec2::new(1672.0, 941.0), 1.0, dt);
+            draw(ui, Vec2::new(1366.0, 723.0), &bs, st);
+            ui.finish();
+            ui.drawn.contains_key(&id_of("alt:tip:swap"))
+        };
+        assert!(!tipped(&mut ui, &mut st, 0.05), "not at once");
+        for _ in 0..15 {
+            tipped(&mut ui, &mut st, 0.05);
+        }
+        assert!(!tipped(&mut ui, &mut st, 0.05), "not before a second");
+        for _ in 0..6 {
+            tipped(&mut ui, &mut st, 0.05);
+        }
+        assert!(tipped(&mut ui, &mut st, 0.05), "after a second");
+        // off the tile and back: the second starts again
+        ui.input.mouse = Vec2::ZERO;
+        tipped(&mut ui, &mut st, 0.05);
+        ui.input.mouse = ui.drawn[&id_of("alt:swap")].center();
+        assert!(!tipped(&mut ui, &mut st, 0.05));
     }
 
     #[test]
