@@ -2,9 +2,9 @@ use crate::image_size::{image_size, next_pow2};
 use crate::report::{Finding, Report, Severity};
 use omsi_cfg::{resolve_path, vfs};
 use omsi_map::{GlobalCfg, Tile};
-use omsi_model::Model;
+use omsi_model::{MaterialDef, Model};
 use omsi_scenery::{SceneryObject, Spline};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Longest path Windows takes without the `\\?\` prefix, the terminating NUL not counted.
@@ -38,7 +38,8 @@ struct Checker<'a> {
     pending: BTreeMap<(&'static str, String), Pending>,
     seen_sco: HashSet<PathBuf>,
     seen_sli: HashSet<PathBuf>,
-    seen_mesh: HashSet<PathBuf>,
+    seen_mesh: HashSet<(PathBuf, String)>,
+    mesh_cache: HashMap<PathBuf, Option<Vec<omsi_o3d::Material>>>,
     seen_texture: HashSet<PathBuf>,
     seen_long: HashSet<PathBuf>,
 }
@@ -52,6 +53,7 @@ impl<'a> Checker<'a> {
             seen_sco: HashSet::new(),
             seen_sli: HashSet::new(),
             seen_mesh: HashSet::new(),
+            mesh_cache: HashMap::new(),
             seen_texture: HashSet::new(),
             seen_long: HashSet::new(),
         }
@@ -267,46 +269,78 @@ impl<'a> Checker<'a> {
                 );
                 continue;
             }
-            self.mesh(&mesh_path, &dirs, &file);
+            self.mesh(&mesh_path, &dirs, &md.materials, &file);
         }
     }
 
-    fn mesh(&mut self, path: &Path, dirs: &[PathBuf], by: &str) {
-        if !self.seen_mesh.insert(path.to_path_buf()) {
+    fn mesh(&mut self, path: &Path, dirs: &[PathBuf], overrides: &[MaterialDef], by: &str) {
+        // (a mesh shared by two objects is looked at once per texture lookup context: the
+        // folders its textures are searched in, and the material commands that name more)
+        let context = format!("{dirs:?}{overrides:?}");
+        if !self.seen_mesh.insert((path.to_path_buf(), context)) {
             return;
         }
         self.long_path(path, by);
-        let mesh = match omsi_o3d::load_mesh(path) {
-            Ok(m) => m,
-            Err(e) => {
-                self.add(
-                    Severity::Error,
-                    "mesh-unreadable",
-                    self.rel(path),
-                    by,
-                    format!("The mesh cannot be read: {e}"),
-                    None,
-                );
-                return;
-            }
+        if !self.mesh_cache.contains_key(path) {
+            let loaded = match omsi_o3d::load_mesh(path) {
+                Ok(m) => Some(m.materials),
+                Err(e) => {
+                    self.add(
+                        Severity::Error,
+                        "mesh-unreadable",
+                        self.rel(path),
+                        by,
+                        format!("The mesh cannot be read: {e}"),
+                        None,
+                    );
+                    None
+                }
+            };
+            self.mesh_cache.insert(path.to_path_buf(), loaded);
+        }
+        let Some(materials) = self.mesh_cache.get(path).cloned().flatten() else {
+            return;
         };
         let mesh_name = self.rel(path);
         let dir_refs: Vec<&Path> = dirs.iter().map(|d| d.as_path()).collect();
-        for m in &mesh.materials {
-            let name = m.texture.trim();
-            if name.is_empty() {
-                continue;
+        for (slot, m) in materials.iter().enumerate() {
+            let slot_overrides: Vec<&MaterialDef> = overrides
+                .iter()
+                .filter(|o| !o.item && override_slot(&materials, o) == Some(slot))
+                .collect();
+            // a slot fed by [useTextTexture] / [useScriptTexture] gets a generated picture:
+            // the name in the mesh is a placeholder
+            let generated = slot_overrides
+                .iter()
+                .any(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some());
+            let mut names: Vec<&str> = Vec::new();
+            if !generated {
+                names.push(&m.texture);
             }
-            match omsi_texture::find_texture(name, &dir_refs) {
-                Some(p) => self.texture(&p, &mesh_name),
-                None => self.add(
-                    Severity::Warning,
-                    "texture-missing",
-                    name.to_string(),
-                    &mesh_name,
-                    "A texture a mesh names is missing; the surface shows white.".into(),
-                    None,
-                ),
+            for o in &slot_overrides {
+                names.extend(o.nightmap.as_deref());
+                names.extend(o.transmap.as_deref());
+                names.extend(o.envmap.as_ref().map(|e| e.0.as_str()));
+                names.extend(o.envmap_mask.as_deref());
+                names.extend(o.bumpmap.as_ref().map(|b| b.0.as_str()));
+            }
+            for name in names {
+                let name = name.trim();
+                // `null.bmp` stands for no texture, `\S:n` for a picture a script draws
+                if is_null_texture(name) || name.starts_with("\\S:") {
+                    continue;
+                }
+                match omsi_texture::find_texture(name, &dir_refs) {
+                    Some(p) => self.texture(&p, &mesh_name),
+                    None => self.add(
+                        Severity::Warning,
+                        "texture-missing",
+                        name.to_string(),
+                        &mesh_name,
+                        "A texture a mesh names is missing; the surface shows white.".into(),
+                        None,
+                    ),
+                }
             }
         }
     }
@@ -445,4 +479,29 @@ fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
     }
     dirs.push(resolve_path(root, "Texture"));
     dirs
+}
+
+/// A texture name that stands for "no texture": exporters write `null.bmp` into slots that
+/// have none.
+fn is_null_texture(name: &str) -> bool {
+    let n = name.trim();
+    n.is_empty()
+        || Path::new(&n.replace('\\', "/"))
+            .file_stem()
+            .is_some_and(|s| s.eq_ignore_ascii_case("null"))
+}
+
+/// The material slot a `[matl]` block refers to: its texture name, and which occurrence of
+/// that name when the mesh uses it more than once.
+fn override_slot(materials: &[omsi_o3d::Material], o: &MaterialDef) -> Option<usize> {
+    let mut nth = 0;
+    for (slot, m) in materials.iter().enumerate() {
+        if m.texture.eq_ignore_ascii_case(&o.texture) {
+            if nth == o.index.max(0) as usize {
+                return Some(slot);
+            }
+            nth += 1;
+        }
+    }
+    None
 }

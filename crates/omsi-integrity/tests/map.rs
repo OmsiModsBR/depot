@@ -134,3 +134,63 @@ fn a_texture_is_read_by_its_content_and_not_by_its_extension() {
     assert_eq!(next_pow2(1024), 1024);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_night_map_a_material_declares_must_exist() {
+    let root = temp_root("night");
+    complete(&root);
+    write(
+        &root,
+        "Sceneryobjects/house/house.sco",
+        "[mesh]\nhouse.x\n[matl]\nwall.bmp\n0\n[matl_nightmap]\nwall_night.bmp\n",
+    );
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
+    assert_eq!(r.findings[0].code, "texture-missing");
+    assert_eq!(r.findings[0].file, "wall_night.bmp");
+    write(
+        &root,
+        "Sceneryobjects/house/texture/wall_night.bmp",
+        bmp(512, 512),
+    );
+    // (a texture lookup that missed is remembered until the content changes)
+    omsi_cfg::content_changed();
+    let again = check_map(&root, &root.join("Maps/Test"));
+    assert!(again.findings.is_empty(), "{:#?}", again.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn generated_and_null_textures_are_not_looked_for() {
+    let root = temp_root("generated");
+    complete(&root);
+    fs::remove_file(root.join("Sceneryobjects/house/texture/wall.bmp")).unwrap();
+    // the mesh's texture is a placeholder for a picture the game draws
+    write(
+        &root,
+        "Sceneryobjects/house/house.sco",
+        "[mesh]\nhouse.x\n[matl]\nwall.bmp\n0\n[useTextTexture]\n1\n",
+    );
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_object_that_borrows_a_model_finds_its_textures_beside_the_model() {
+    let root = temp_root("shared");
+    complete(&root);
+    // a second object of another folder uses the same mesh, with no texture of its own
+    write(
+        &root,
+        "Sceneryobjects/other/other.sco",
+        "[model]\n..\\house\\house.sco\n",
+    );
+    let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\other\\other.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\n");
+    map(&root, &tile);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.is_complete(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
