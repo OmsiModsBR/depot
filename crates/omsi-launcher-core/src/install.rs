@@ -364,7 +364,9 @@ pub fn free_space(path: &Path) -> Option<u64> {
 fn free_space_impl(p: &Path) -> Option<u64> {
     use std::os::unix::ffi::OsStrExt;
     let c = std::ffi::CString::new(p.as_os_str().as_bytes()).ok()?;
+    // SAFETY: an all-zero statvfs is a valid value for the struct the call fills in
     let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a NUL-terminated path that lives through the call; `s` is the zeroed statvfs written there
     if unsafe { libc::statvfs(c.as_ptr(), &mut s) } != 0 {
         return None;
     }
@@ -385,6 +387,7 @@ fn free_space_impl(p: &Path) -> Option<u64> {
     }
     let wide: Vec<u16> = p.as_os_str().encode_wide().chain(Some(0)).collect();
     let (mut a, mut t, mut f) = (0u64, 0u64, 0u64);
+    // SAFETY: `wide` is a NUL-terminated path that lives through the call; `a`, `t` and `f` are live u64 locals
     (unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut a, &mut t, &mut f) } != 0).then_some(a)
 }
 
@@ -396,6 +399,7 @@ fn free_space_impl(_p: &Path) -> Option<u64> {
 /// Is the process `pid` still running?
 #[cfg(unix)]
 pub fn pid_alive(pid: u32) -> bool {
+    // SAFETY: signal 0 sends nothing; the call only asks whether the process exists
     let r = unsafe { libc::kill(pid as libc::pid_t, 0) };
     r == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
@@ -410,6 +414,7 @@ pub fn pid_alive(pid: u32) -> bool {
     }
     const QUERY_LIMITED: u32 = 0x1000;
     const STILL_ACTIVE: u32 = 259;
+    // SAFETY: the process handle is closed below, on every path that gets one
     unsafe {
         let h = OpenProcess(QUERY_LIMITED, 0, pid);
         if h == 0 {

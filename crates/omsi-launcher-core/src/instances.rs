@@ -133,8 +133,10 @@ fn is_our_child(id: &str) -> bool {
 /// collected by its parent yet (a zombie: it is not running, whatever its id says).
 #[cfg(target_os = "macos")]
 pub fn process_start(pid: u32) -> Option<u64> {
+    // SAFETY: an all-zero proc_bsdinfo is valid (plain integers and arrays), and the call fills it in
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+    // SAFETY: `info` is passed with its size, as PROC_PIDTBSDINFO expects
     let n = unsafe {
         libc::proc_pidinfo(
             pid as libc::c_int,
@@ -176,6 +178,7 @@ pub fn process_start(pid: u32) -> Option<u64> {
         fn CloseHandle(h: isize) -> i32;
     }
     const QUERY_LIMITED: u32 = 0x1000;
+    // SAFETY: plain kernel32 calls; the process handle opened here is closed below on every path that gets one
     unsafe {
         let h = OpenProcess(QUERY_LIMITED, 0, pid);
         if h == 0 {
@@ -499,6 +502,7 @@ fn force_kill(pid: u32) -> Result<()> {
 
 #[cfg(unix)]
 fn signal(pid: u32, sig: libc::c_int) -> Result<()> {
+    // SAFETY: kill takes a pid and a signal number; no memory is shared with the call
     if unsafe { libc::kill(pid as libc::pid_t, sig) } != 0 {
         return Err(anyhow!(
             "could not stop process {pid}: {}",

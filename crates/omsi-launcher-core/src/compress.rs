@@ -412,6 +412,7 @@ mod sys {
     fn root_of(dir: &Path) -> Option<Vec<u16>> {
         let w = wide(dir);
         let mut root = vec![0u16; 261];
+        // SAFETY: `w` is a NUL-terminated path that lives through the call; `root` is the 261-u16 buffer the volume root is written into
         unsafe { GetVolumePathNameW(PCWSTR(w.as_ptr()), &mut root) }.ok()?;
         Some(root)
     }
@@ -423,10 +424,12 @@ mod sys {
         }
         let root = root_of(dir).ok_or(Unsupported::Unreadable)?;
         // fixed disks only (not network, optical or removable)
+        // SAFETY: `root` is the NUL-terminated volume root from GetVolumePathNameW; the call only reads it
         if unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) } != 3 {
             return Err(Unsupported::NotFixed);
         }
         let mut fs = [0u16; 64];
+        // SAFETY: `root` is a NUL-terminated volume root; `fs` is the 64-u16 buffer the file system name is written into, the other outputs are None
         unsafe {
             GetVolumeInformationW(PCWSTR(root.as_ptr()), None, None, None, None, Some(&mut fs))
         }
@@ -456,6 +459,7 @@ mod sys {
             .encode_utf16()
             .chain(Some(0))
             .collect();
+        // SAFETY: `path` is a NUL-terminated device name that lives through the call; the handle, when opened, is closed further down on every path
         unsafe {
             let Ok(h) = CreateFileW(
                 PCWSTR(path.as_ptr()),
@@ -501,10 +505,12 @@ mod sys {
     pub fn on_disk(p: &Path, len: u64) -> u64 {
         let w = wide_long(p);
         let mut high = 0u32;
+        // SAFETY: `w` is a NUL-terminated long path that lives through the call; `high` is a live u32; the error state is read right after, so it is cleared first
         let low = unsafe {
             SetLastError(WIN32_ERROR(0));
             GetCompressedFileSizeW(PCWSTR(w.as_ptr()), Some(&mut high))
         };
+        // SAFETY: reads the thread's last error code; takes no pointers
         if low == u32::MAX && unsafe { GetLastError() }.0 != 0 {
             return len;
         }
@@ -514,6 +520,7 @@ mod sys {
     pub fn free(dir: &Path) -> Option<u64> {
         let w = wide(dir);
         let mut avail = 0u64;
+        // SAFETY: `w` is a NUL-terminated path that lives through the call; `avail` is a live u64 local
         unsafe { GetDiskFreeSpaceExW(PCWSTR(w.as_ptr()), Some(&mut avail), None, None) }.ok()?;
         Some(avail)
     }
