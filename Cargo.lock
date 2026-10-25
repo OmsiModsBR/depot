@@ -2939,6 +2939,7 @@ dependencies = [
  "omsi-o3d",
  "omsi-scenery",
  "omsi-texture",
+ "omsi-vehicle",
 ]
 
 [[package]]
