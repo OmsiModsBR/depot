@@ -3109,6 +3109,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["voice_chat"] = json!(true);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
+    // the game's log with everything it loads and every failure (off: the usual log)
+    v["detailed_log"] = json!(false);
     // the window's size in pixels, "auto" to fit the screen (#904)
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
@@ -3645,7 +3647,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "head_tracking_invert_y"
             | "head_tracking_invert_z"
             | "voice_chat"
-            | "launcher_rest" => v[&k] = json!(b(val)),
+            | "launcher_rest"
+            | "detailed_log" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => {
@@ -4384,7 +4387,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .filter(|x| x.is_finite())
         .unwrap_or(16.0)
         .clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\ndetailed_log={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), b("detailed_log", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -4996,6 +4999,15 @@ pub struct Launched {
     pub others: usize,
 }
 
+/// Whether the "detailed log" setting is on (the games started from here then write debug
+/// lines of the game's own crates to their log).
+pub fn detailed_log_on() -> bool {
+    get_settings()
+        .ok()
+        .and_then(|v| v.get("detailed_log").and_then(|x| x.as_bool()))
+        .unwrap_or(false)
+}
+
 /// Start a game for the duty. Any number may run at once; each writes its own log.
 pub fn launch(d: &Duty) -> Result<Launched> {
     if IN_PROCESS_GAMES {
@@ -5360,6 +5372,7 @@ mod tests {
             ("steer_look", json!(true)),
             ("voice_chat", json!(false)),
             ("launcher_rest", json!(false)),
+            ("detailed_log", json!(true)),
             ("camera_collision", json!(false)),
             ("brake_hold", json!(false)),
             ("auto_clutch", json!(false)),
@@ -5402,6 +5415,7 @@ mod tests {
             "steer_look",
             "voice_chat",
             "launcher_rest",
+            "detailed_log",
             "camera_collision",
             "brake_hold",
             "auto_clutch",

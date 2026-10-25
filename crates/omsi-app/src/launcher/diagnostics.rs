@@ -19,7 +19,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     build_card(l, left);
     folder_card(l, right);
     let y2 = y + 316.0;
-    let rest = (area.bottom() - y2 - 24.0).max(200.0);
+    let rest = (area.bottom() - y2 - 24.0).max(300.0);
     log_card(l, Rect::new(area.x, y2, col, rest));
     games_card(l, Rect::new(area.x + col + 16.0, y2, col, rest));
 }
@@ -144,9 +144,25 @@ fn log_card(l: &mut Launcher, r: Rect) {
         "Preview helper",
         &super::preview::helper_log().to_string_lossy(),
     );
+    // (the next games started from here write what they load and every failure)
+    let mut detailed = l
+        .state
+        .settings
+        .get("detailed_log")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if l.ui.toggle(
+        "diagnostics:detailed-log",
+        Rect::new(r.x + 19.0, r.y + 164.0, r.w - 38.0, 32.0),
+        &mut detailed,
+        "Detailed log",
+    ) {
+        l.state.settings["detailed_log"] = serde_json::json!(detailed);
+        l.state.settings_dirty = 0.3;
+    }
     l.ui.paragraph(
-        "Each is written again when it starts (the game's with each game). A game started with RUST_LOG=debug writes more.",
-        Vec2::new(r.x + 19.0, r.y + 172.0),
+        "Each is written again when it starts (the game's with each game). With the detailed log on, the next games also write everything they load and every failure, so the file is larger.",
+        Vec2::new(r.x + 19.0, r.y + 204.0),
         r.w - 38.0,
         12.5,
         Weight::Regular,
@@ -154,7 +170,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
     );
     let b = Rect::new(
         r.x + 19.0,
-        (r.y + 206.0).max(r.bottom() - 84.0),
+        (r.y + 262.0).max(r.bottom() - 84.0),
         r.w - 38.0,
         44.0,
     );

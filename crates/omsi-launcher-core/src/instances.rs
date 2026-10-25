@@ -328,6 +328,10 @@ pub struct Started {
     pub others: usize,
 }
 
+/// `RUST_LOG` for a game started with the detailed log on: what the game's own crates load
+/// and what fails, not the graphics libraries' chatter.
+pub const DETAILED_LOG_FILTER: &str = "info,omsi_app=debug,omsi_audio=debug,omsi_cfg=debug,omsi_content=debug,omsi_geometry=debug,omsi_html=debug,omsi_map=debug,omsi_model=debug,omsi_net=debug,omsi_o3d=debug,omsi_plugin=debug,omsi_render=debug,omsi_render_d3d9=debug,omsi_scenery=debug,omsi_script=debug,omsi_sim=debug,omsi_texture=debug,omsi_timetable=debug,omsi_ui=debug,omsi_vehicle=debug";
+
 /// Start the game with `args`; games already running keep running.
 pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Result<Started> {
     let running: Vec<Instance> = list().into_iter().filter(|i| i.running).collect();
@@ -341,9 +345,14 @@ pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Re
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let child = std::process::Command::new(game)
-        .args(args)
-        .env(omsi_cfg::flags::INSTANCE.name, &id)
+    let mut cmd = std::process::Command::new(game);
+    cmd.args(args).env(omsi_cfg::flags::INSTANCE.name, &id);
+    // the "detailed log" setting: debug lines from the game's own crates, unless the player
+    // set RUST_LOG for this launch themselves
+    if std::env::var_os("RUST_LOG").is_none() && crate::detailed_log_on() {
+        cmd.env("RUST_LOG", DETAILED_LOG_FILTER);
+    }
+    let child = cmd
         .stdout(file)
         .stderr(err)
         .spawn()
