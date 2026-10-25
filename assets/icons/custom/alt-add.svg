@@ -1,3 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M3 7h12v9H3zM3 12h12M6 18v1.5M12 18v1.5M19 3v7M15.5 6.5h7"/>
+  <defs>
+  <mask id="alt-add-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+  <rect width="24" height="24" fill="white" stroke="none"/>
+  <circle cx="19.2" cy="4.8" r="5.8" fill="black" stroke="none"/>
+  </mask>
+  </defs>
+  <g mask="url(#alt-add-cut)">
+  <g transform="translate(-0.4 9.0) scale(0.9)">
+  <path d="M3.3 10H2.5A1.5 1.5 0 0 1 1 8.5v-7A1.5 1.5 0 0 1 2.5 0h17.3a1.5 1.5 0 0 1 1.47 1.2L22 8.5A1.5 1.5 0 0 1 20.5 10h-.8M15.3 10H7.7"/>
+  <path d="M1 5.5h20.9M7 0v5.5M13 0v5.5"/>
+  <circle cx="5.5" cy="10.2" r="1.9"/>
+  <circle cx="17.5" cy="10.2" r="1.9"/>
+  </g>
+  </g>
+  <path d="M19.2 1.8v6M16.2 4.8h6"/>
 </svg>

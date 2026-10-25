@@ -13,6 +13,8 @@ use glam::Vec2;
 pub const COLUMNS: usize = 5;
 pub const CELL_W: f32 = 76.0;
 pub const CELL_H: f32 = 76.0;
+/// The size of a tile's icon.
+const ICON: f32 = 32.0;
 pub const GAP: f32 = 8.0;
 /// The panel's padding round the tiles.
 pub const PAD: f32 = 12.0;
@@ -196,7 +198,7 @@ pub fn draw<'a>(
             );
         }
         match b.glyph {
-            Glyph::Icon(name) => ui.icon(name, r.center(), 28.0, ink),
+            Glyph::Icon(name) => ui.icon(name, r.center(), ICON, ink),
             Glyph::Sign(t) => {
                 let sign = Rect::new(r.center().x - 17.0, r.center().y - 11.0, 34.0, 22.0);
                 ui.p().rounded_border(sign, 3.0, 1.5, ink);
