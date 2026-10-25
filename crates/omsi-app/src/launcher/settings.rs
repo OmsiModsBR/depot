@@ -382,6 +382,38 @@ pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[
     ("3840x2160", "3840 x 2160"),
 ];
 
+/// The Online options (chat, chat size, other players' names, voice chat), kept apart and
+/// off the page while multiplayer is disabled: the server will be a Depot feature of its
+/// own. Move them back into `OPTS` (and their keys into the test's `BEFORE`) to show them.
+#[allow(dead_code)]
+pub static ONLINE_OPTS: &[Opt] = &[
+    toggle(GENERAL, "Online", "chat", "Chat in online games", ""),
+    slide(
+        GENERAL,
+        "Online",
+        "chat_size",
+        "Chat size",
+        "Ctrl and the wheel over it in the game",
+        (0.5, 3.0, 0.1),
+        pct,
+        tenths,
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "name_tags",
+        "Other players' names",
+        "Above their buses",
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "voice_chat",
+        "Voice chat",
+        "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server",
+    ),
+];
+
 /// Every option of the page, section by section, card by card.
 pub static OPTS: &[Opt] = &[
     // General
@@ -619,31 +651,6 @@ pub static OPTS: &[Opt] = &[
         "Corner",
         "Where the navigator sits",
         CORNERS,
-    ),
-    toggle(GENERAL, "Online", "chat", "Chat in online games", ""),
-    slide(
-        GENERAL,
-        "Online",
-        "chat_size",
-        "Chat size",
-        "Ctrl and the wheel over it in the game",
-        (0.5, 3.0, 0.1),
-        pct,
-        tenths,
-    ),
-    toggle(
-        GENERAL,
-        "Online",
-        "name_tags",
-        "Other players' names",
-        "Above their buses",
-    ),
-    toggle(
-        GENERAL,
-        "Online",
-        "voice_chat",
-        "Voice chat",
-        "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server",
     ),
     now(toggle(
         GENERAL,
@@ -3579,7 +3586,6 @@ mod tests {
         "language",
         "machine_translation",
         "launcher_rest",
-        "voice_chat",
         "ui_scale",
         "ui_scale_window",
         "ui_opacity",
@@ -3599,9 +3605,6 @@ mod tests {
         "info_item_line",
         "info_item_next",
         "notes",
-        "chat",
-        "chat_size",
-        "name_tags",
         "navigator",
         "nav_arrows",
         "nav_ai",
