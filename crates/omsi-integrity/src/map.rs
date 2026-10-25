@@ -68,7 +68,12 @@ impl<'a> Checker<'a> {
     }
 
     fn rel(&self, p: &Path) -> String {
-        p.strip_prefix(self.root).unwrap_or(p).display().to_string()
+        // (always written with `/`, whatever the system)
+        p.strip_prefix(self.root)
+            .unwrap_or(p)
+            .display()
+            .to_string()
+            .replace('\\', "/")
     }
 
     fn add(
