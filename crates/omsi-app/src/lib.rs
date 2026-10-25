@@ -104,6 +104,7 @@ mod evdev_buttons;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod evdev_ff;
 mod ffb_calibration;
+mod frame_stats;
 mod ground_gap;
 mod hpattern;
 mod input;
@@ -609,6 +610,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         spanned: false,
         ui: ui::Ui::new(),
         fps: 0.0,
+        frame_stats: Default::default(),
+        fps_low: None,
         rain: rain::Rain::new(),
         cabin_air: crate::condensation::CabinAir::new(),
         spray: puddles::Spray::new(),

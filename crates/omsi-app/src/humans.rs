@@ -2354,6 +2354,21 @@ impl Humans {
         (walking, waiting, aboard)
     }
 
+    /// How many places (seats and standing places the bus's files give, less those its scripts
+    /// have switched off) the player's bus has for passengers; none without a cabin.
+    pub fn capacity(&self, bus: &VehicleInstance) -> Option<usize> {
+        let cabin = self.player_cabin.as_ref()?;
+        let off = places_off(bus, cabin);
+        Some(
+            cabin
+                .seats
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !off.get(*i).copied().unwrap_or(false))
+                .count(),
+        )
+    }
+
     /// People currently in the player's bus.
     pub fn riding(&self) -> usize {
         self.people

@@ -78,7 +78,10 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `head_tracking_y_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `head_tracking_yaw_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `head_tracking_z_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
-| `info_bar` | - | yes | yes | yes |
+| `info_bar` | yes | yes | yes | yes |
+| `info_bar_fps` | yes | yes | yes | yes |
+| `info_bar_mode` | yes | yes | yes | yes |
+| `info_bar_pos` | yes | yes | yes | yes |
 | `language` | yes | yes | yes | yes |
 | `led_glow` | yes | yes | yes | yes |
 | `led_mips` | yes | yes | yes | yes |

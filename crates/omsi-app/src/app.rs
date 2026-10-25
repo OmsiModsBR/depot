@@ -87,6 +87,10 @@ pub(crate) struct App {
     /// Chat, mouse-over names and name tags (Roboto).
     pub(crate) ui: Option<ui::Ui>,
     pub(crate) fps: f32,
+    /// The frames of the last seconds, for the "1 % low" beside the frame rate.
+    pub(crate) frame_stats: crate::frame_stats::FrameStats,
+    /// The 1 % low as of the last full second (none before enough frames).
+    pub(crate) fps_low: Option<f32>,
     pub(crate) rain: rain::Rain,
     /// The player's bus's cabin air and the condensation on its glass.
     pub(crate) cabin_air: crate::condensation::CabinAir,

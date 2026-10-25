@@ -3146,6 +3146,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("nav_light", json!(false)),
         ("nav_contours", json!(false)),
         ("nav_orientation", json!("map")),
+        ("info_bar_mode", json!("full")),
+        ("info_bar_pos", json!("top")),
+        ("info_bar_fps", json!(false)),
         ("get_up", json!(false)),
         ("time_speed", json!("1")),
         ("time_sync", json!(false)),
@@ -3874,7 +3877,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "map"
                 })
             }
-            "info_bar" => v[&k] = json!(b(val)),
+            "info_bar" | "info_bar_fps" => v[&k] = json!(b(val)),
+            "info_bar_mode" => {
+                v[&k] = json!(if matches!(val, "compact" | "essential") {
+                    val
+                } else {
+                    "full"
+                })
+            }
+            "info_bar_pos" => v[&k] = json!(if val == "bottom" { "bottom" } else { "top" }),
             "autosave_minutes" => {
                 v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 60)).unwrap_or(5))
             }
@@ -4436,6 +4447,24 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         }
     ));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
+    let mode = v
+        .get("info_bar_mode")
+        .and_then(|x| x.as_str())
+        .unwrap_or("full");
+    let pos = v
+        .get("info_bar_pos")
+        .and_then(|x| x.as_str())
+        .unwrap_or("top");
+    text.push_str(&format!(
+        "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
+        if matches!(mode, "compact" | "essential") {
+            mode
+        } else {
+            "full"
+        },
+        if pos == "bottom" { "bottom" } else { "top" },
+        b("info_bar_fps", false)
+    ));
     text.push_str(&format!(
         "autosave_minutes={}\n",
         n("autosave_minutes", 5).clamp(0, 60)
@@ -6113,6 +6142,32 @@ mod right_stick_look_tests {
                 serde_json::json!(enabled)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod info_bar_tests {
+    use super::*;
+
+    #[test]
+    fn the_information_bar_keys_round_trip_and_fall_back() {
+        let v = settings_from_text(None);
+        assert_eq!(v["info_bar_mode"], json!("full"));
+        assert_eq!(v["info_bar_pos"], json!("top"));
+        assert_eq!(v["info_bar_fps"], json!(false));
+        let v = settings_from_text(Some(
+            "info_bar_mode=compact\ninfo_bar_pos=bottom\ninfo_bar_fps=1\n",
+        ));
+        assert_eq!(v["info_bar_mode"], json!("compact"));
+        assert_eq!(v["info_bar_pos"], json!("bottom"));
+        assert_eq!(v["info_bar_fps"], json!(true));
+        let text = settings_to_text(&v, None);
+        assert!(text.lines().any(|l| l == "info_bar_mode=compact"));
+        assert!(text.lines().any(|l| l == "info_bar_pos=bottom"));
+        assert!(text.lines().any(|l| l == "info_bar_fps=1"));
+        let v = settings_from_text(Some("info_bar_mode=sideways\ninfo_bar_pos=left\n"));
+        assert_eq!(v["info_bar_mode"], json!("full"));
+        assert_eq!(v["info_bar_pos"], json!("top"));
     }
 }
 

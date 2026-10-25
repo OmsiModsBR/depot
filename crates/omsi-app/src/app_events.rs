@@ -2936,6 +2936,11 @@ impl ApplicationHandler for App {
                 };
                 let vr_nav_display = self.vr_nav_display();
                 let vr_active = self.vr_active();
+                let speed_limit = if self.info_bar {
+                    self.speed_limit_here()
+                } else {
+                    None
+                };
                 // the interface over the picture
                 // (the pages of an open settings window)
                 let menu_tabs = match self.list_kind.as_ref() {
@@ -3367,7 +3372,7 @@ impl ApplicationHandler for App {
                             } else {
                                 &[]
                             },
-                            fps: self.settings.show_fps.then_some(self.fps),
+                            fps: self.settings.show_fps.then_some((self.fps, self.fps_low)),
                             paused: self.paused,
                             // (an open list; the new menu draws the top level itself)
                             menu: chooser_sel.map(|k| (k, &chooser_items[..])),
@@ -3395,12 +3400,27 @@ impl ApplicationHandler for App {
                                 })
                                 .flatten(),
                             info: self.info_bar.then(|| {
-                                info_line(
-                                    &self.clock,
-                                    self.player.as_ref(),
-                                    self.duty.as_ref(),
-                                    self.humans.as_ref().map(|h| h.riding()),
-                                    self.career.metres,
+                                let player = self.player.as_ref();
+                                info_bar(
+                                    &InfoData {
+                                        clock: &self.clock,
+                                        player,
+                                        duty: self.duty.as_ref(),
+                                        passengers: self.humans.as_ref().map(|h| h.riding()),
+                                        capacity: self
+                                            .humans
+                                            .as_ref()
+                                            .zip(player)
+                                            .and_then(|(h, p)| h.capacity(&p.vehicle)),
+                                        metres: self.career.metres,
+                                        limit: speed_limit,
+                                        fps: self
+                                            .settings
+                                            .info_bar_fps
+                                            .then_some((self.fps, self.fps_low)),
+                                    },
+                                    InfoMode::from_setting(&self.settings.info_bar_mode),
+                                    self.settings.info_bar_pos == "bottom",
                                 )
                             }),
                             info_room: self.touch.info_room.filter(|_| self.touch.enabled),
@@ -4009,6 +4029,7 @@ impl ApplicationHandler for App {
                         *self.profile.entry("limiter").or_default() += __t.elapsed().as_secs_f64();
                     }
                     self.frames += 1;
+                    self.frame_stats.push(raw_dt);
                     let profiling = omsi_cfg::flags::PROFILE.is_set();
                     if profiling
                         && self.cpu_mark.is_none()
@@ -4084,6 +4105,7 @@ impl ApplicationHandler for App {
                             .map(|p| format!(" - {:.0} km/h", p.vehicle.motion().velocity_kmh()))
                             .unwrap_or_default();
                         self.fps = self.frames as f32;
+                        self.fps_low = self.frame_stats.low();
                         win.set_title(&format!(
                             "Project Depot - {} fps{speed} - {:.0},{:.0},{:.0} yaw {:.0}",
                             self.frames,
@@ -4213,6 +4235,26 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    /// The speed limit of the street the player's vehicle is on, to five km/h, for the
+    /// information bar: from the map's own lanes (or the traffic's) within eight metres of the
+    /// vehicle; none off the streets, on foot or on a map without lanes.
+    pub(crate) fn speed_limit_here(&self) -> Option<f32> {
+        if self.on_foot.is_some() {
+            return None;
+        }
+        let p = self.player.as_ref()?;
+        let net = self
+            .navigator
+            .as_ref()
+            .and_then(|n| n.map_net())
+            .or(self.traffic.as_ref().map(|t| &t.net))?;
+        let (lane, _, _) = net
+            .nearest_lane_near(p.vehicle.position, omsi_sim::traffic::LaneKind::Street)
+            .filter(|l| l.2 < 8.0)?;
+        let v = net.lanes.get(lane)?.speed_limit_kmh;
+        (v > 1.0 && v < 200.0).then(|| (v / 5.0).round() * 5.0)
+    }
+
     /// The window's size in pixels, while the mirror panels can be worked (in the cab, no menu).
     pub(crate) fn mirror_hud_size(&self) -> Option<(f32, f32)> {
         if !self.in_cab || self.game_menu.is_some() || !self.mirror_hud.editing() {
@@ -4673,68 +4715,160 @@ pub(crate) fn vehicle_temperatures(p: &Player) -> (f32, f32) {
     (outside, inside)
 }
 
-/// OMSI's information bar: the time, the speed, the kilometres driven this session and the
-/// bus's odometer, temperatures, the passengers aboard, and the trip with its next stop and delay.
-fn info_line(
-    clock: &omsi_sim::SimClock,
-    player: Option<&Player>,
-    duty: Option<&crate::schedule::PlayerDuty>,
-    passengers: Option<usize>,
-    metres: f64,
-) -> String {
-    let t = clock.time;
-    let mut parts = vec![format!(
-        "{:02}:{:02}:{:02}",
-        ((t / 3600.0) as i64).rem_euclid(24),
-        ((t % 3600.0) / 60.0) as i64,
-        (t % 60.0) as i64
-    )];
-    if let Some(p) = player {
-        parts.push(format!(
-            "{:.0} km/h",
-            p.vehicle.motion().velocity_kmh().abs()
-        ));
-        parts.push(distance_driven(metres));
-        // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
-        // `kmcounter_*` the cockpit shows, whole kilometres and the metres of the fraction)
-        if let Some(km) = p.vehicle.var("kmcounter_km").filter(|v| v.is_finite()) {
-            parts.push(odometer_reading(
-                km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0,
-            ));
+/// What the information bar says, in the layout the player chose (`info_bar_mode`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InfoMode {
+    /// Every item.
+    Full,
+    /// The time, the speed and its limit, the line, the next stop and the delay.
+    Compact,
+    /// The speed, its limit and the delay.
+    Essential,
+}
+
+impl InfoMode {
+    pub(crate) fn from_setting(s: &str) -> InfoMode {
+        match s {
+            "compact" => InfoMode::Compact,
+            "essential" => InfoMode::Essential,
+            _ => InfoMode::Full,
         }
-        let (outside, inside) = vehicle_temperatures(p);
-        parts.push(format!("EXT {:.0} °C / INT {:.0} °C", outside, inside));
-        // the tank as the bus's script says it (OMSI's RL_TankContent: tank_percent)
-        if let Some(tank) = p.vehicle.var("tank_percent").filter(|v| v.is_finite()) {
-            parts.push(format!("tank {:.0} %", (tank * 100.0).round()));
+    }
+}
+
+/// What `info_bar` reads from the game.
+pub(crate) struct InfoData<'a> {
+    pub clock: &'a omsi_sim::SimClock,
+    pub player: Option<&'a Player>,
+    pub duty: Option<&'a crate::schedule::PlayerDuty>,
+    /// How many are aboard (none: the passengers are switched off for this drive).
+    pub passengers: Option<usize>,
+    /// How many the bus has places for.
+    pub capacity: Option<usize>,
+    /// The kilometres driven this session (`Career::metres`).
+    pub metres: f64,
+    /// The speed limit of the road the bus is on, in km/h.
+    pub limit: Option<f32>,
+    /// The frame rate and its 1 % low.
+    pub fps: Option<(f32, Option<f32>)>,
+}
+
+/// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
+/// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
+/// and the trip with its next stop and delay. A group of it is one thing the player reads at
+/// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
+pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
+    use ui::{InfoItem, InfoTone};
+    let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
+    let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
+    let full = mode == InfoMode::Full;
+    let t = d.clock.time;
+    let mut groups: Vec<Vec<InfoItem>> = Vec::new();
+    if mode != InfoMode::Essential {
+        let time = if full {
+            format!(
+                "{:02}:{:02}:{:02}",
+                ((t / 3600.0) as i64).rem_euclid(24),
+                ((t % 3600.0) / 60.0) as i64,
+                (t % 60.0) as i64
+            )
+        } else {
+            format!(
+                "{:02}:{:02}",
+                ((t / 3600.0) as i64).rem_euclid(24),
+                ((t % 3600.0) / 60.0) as i64
+            )
+        };
+        groups.push(vec![plain(time)]);
+    }
+    if let Some(p) = d.player {
+        let mut speed = vec![
+            plain(format!("{:.0}", p.vehicle.motion().velocity_kmh().abs())),
+            dim("km/h".into()),
+        ];
+        if let Some(limit) = d.limit {
+            speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit));
         }
-        // how many are aboard right now (None: the passengers are switched off for this
-        // drive, so there is nothing to count)
-        if let Some(n) = passengers {
-            parts.push(passengers_aboard(n));
+        groups.push(speed);
+        if full {
+            groups.push(vec![plain(distance_driven(d.metres))]);
+            // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
+            // `kmcounter_*` the cockpit shows, whole kilometres and the metres of the fraction)
+            if let Some(km) = p.vehicle.var("kmcounter_km").filter(|v| v.is_finite()) {
+                groups.push(vec![plain(odometer_reading(
+                    km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0,
+                ))]);
+            }
+            let (outside, inside) = vehicle_temperatures(p);
+            groups.push(vec![plain(format!(
+                "EXT {:.0} °C / INT {:.0} °C",
+                outside, inside
+            ))]);
+            // the tank as the bus's script says it (OMSI's RL_TankContent: tank_percent)
+            if let Some(tank) = p.vehicle.var("tank_percent").filter(|v| v.is_finite()) {
+                groups.push(vec![plain(format!("tank {:.0} %", (tank * 100.0).round()))]);
+            }
+            // how many are aboard right now (None: the passengers are switched off for this
+            // drive, so there is nothing to count)
+            if let Some(n) = d.passengers {
+                groups.push(vec![plain(passengers_aboard(n, d.capacity))]);
+            }
         }
-        if let Some(d) = duty {
-            if let Some(trip) = d.trips.get(d.trip_index) {
-                let line = if trip.line.trim().is_empty() {
-                    d.line.trim()
-                } else {
-                    trip.line.trim()
-                };
-                parts.push(format!("{line} › {}", trip.terminus.trim()));
-                if let Some(s) = trip.stops.get(d.next_stop) {
-                    parts.push(format!("next: {}", s.name.trim()));
-                }
+        if let Some(duty) = d.duty {
+            if let Some(trip) = duty.trips.get(duty.trip_index) {
                 let delay = p.vehicle.host.tt_delay;
-                parts.push(format!(
-                    "{}{}:{:02}",
-                    if delay < 0.0 { "−" } else { "+" },
-                    (delay.abs() / 60.0) as i64,
-                    (delay.abs() % 60.0) as i64
-                ));
+                let delay_item = InfoItem::new(
+                    format!(
+                        "{}{}:{:02}",
+                        if delay < 0.0 { "−" } else { "+" },
+                        (delay.abs() / 60.0) as i64,
+                        (delay.abs() % 60.0) as i64
+                    ),
+                    if delay > 60.0 {
+                        InfoTone::Late
+                    } else if delay < -60.0 {
+                        InfoTone::Early
+                    } else {
+                        InfoTone::Plain
+                    },
+                );
+                if mode == InfoMode::Essential {
+                    groups.push(vec![delay_item]);
+                } else {
+                    let line = if trip.line.trim().is_empty() {
+                        duty.line.trim()
+                    } else {
+                        trip.line.trim()
+                    };
+                    let mut line_group = vec![InfoItem::new(line, InfoTone::Badge)];
+                    if full || trip.terminus.trim().is_empty() {
+                        line_group.push(plain(trip.terminus.trim().to_string()));
+                    }
+                    groups.push(line_group);
+                    let mut next = Vec::new();
+                    if let Some(s) = trip.stops.get(duty.next_stop) {
+                        next.push(plain(format!("next: {}", s.name.trim())));
+                    }
+                    next.push(delay_item);
+                    groups.push(next);
+                }
             }
         }
     }
-    parts.join(ui::INFO_SEP)
+    if let Some((fps, low)) = d.fps {
+        let level = ui::fps_level(fps);
+        let text = match (full, low) {
+            (true, Some(low)) => {
+                format!("{fps:.0} fps   {} {low:.0}", omsi_ui::tr("1 % low"))
+            }
+            (false, Some(low)) => format!("{fps:.0} / {low:.0} fps"),
+            (_, None) => format!("{fps:.0} fps"),
+        };
+        if mode != InfoMode::Essential {
+            groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
+        }
+    }
+    ui::InfoBar { groups, bottom }
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.
@@ -4747,13 +4881,19 @@ fn odometer_reading(km: f64) -> String {
     format!("{} {:.1} km", omsi_ui::tr("Odometer"), km.max(0.0))
 }
 
-/// `n` with the word for a passenger in the interface's language (singular for one; both
-/// words are keys of the tables - the whole line is too much of a sentence to translate).
-fn passengers_aboard(n: usize) -> String {
-    format!(
-        "{n} {}",
-        omsi_ui::tr(if n == 1 { "Passenger" } else { "Passengers" })
-    )
+/// `n` (of `capacity`, when the bus has places to count) with the word for a passenger in the
+/// interface's language (singular for one; both words are keys of the tables - the whole line
+/// is too much of a sentence to translate).
+fn passengers_aboard(n: usize, capacity: Option<usize>) -> String {
+    let word = omsi_ui::tr(if n == 1 && capacity.is_none() {
+        "Passenger"
+    } else {
+        "Passengers"
+    });
+    match capacity {
+        Some(c) => format!("{n} / {c} {word}"),
+        None => format!("{n} {word}"),
+    }
 }
 
 #[cfg(test)]
@@ -4809,9 +4949,50 @@ mod info_tests {
     /// tables' language; without a lookup the English key is drawn as it is).
     #[test]
     fn one_passenger_is_written_in_the_singular() {
-        assert_eq!(passengers_aboard(0), "0 Passengers");
-        assert_eq!(passengers_aboard(1), "1 Passenger");
-        assert_eq!(passengers_aboard(23), "23 Passengers");
+        assert_eq!(passengers_aboard(0, None), "0 Passengers");
+        assert_eq!(passengers_aboard(1, None), "1 Passenger");
+        assert_eq!(passengers_aboard(23, None), "23 Passengers");
+    }
+
+    /// With the places the bus has, the count is "aboard / places" and the word is the plural.
+    #[test]
+    fn the_passengers_come_with_the_places_of_the_bus() {
+        assert_eq!(passengers_aboard(36, Some(111)), "36 / 111 Passengers");
+        assert_eq!(passengers_aboard(1, Some(40)), "1 / 40 Passengers");
+    }
+
+    #[test]
+    fn the_layout_is_read_from_the_setting() {
+        use super::InfoMode;
+        assert_eq!(InfoMode::from_setting("full"), InfoMode::Full);
+        assert_eq!(InfoMode::from_setting("compact"), InfoMode::Compact);
+        assert_eq!(InfoMode::from_setting("essential"), InfoMode::Essential);
+        assert_eq!(InfoMode::from_setting("sideways"), InfoMode::Full);
+    }
+
+    /// Without a vehicle the bar has the time, and the frame rate when it is asked for.
+    #[test]
+    fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
+        use super::{info_bar, InfoData, InfoMode};
+        let clock = omsi_sim::SimClock::default();
+        let data = InfoData {
+            clock: &clock,
+            player: None,
+            duty: None,
+            passengers: None,
+            capacity: None,
+            metres: 0.0,
+            limit: None,
+            fps: Some((74.0, Some(52.0))),
+        };
+        let bar = info_bar(&data, InfoMode::Full, true);
+        assert!(bar.bottom);
+        assert_eq!(bar.groups.len(), 2);
+        assert!(bar.groups[1][0].text.starts_with("74 fps"));
+        let compact = info_bar(&data, InfoMode::Compact, false);
+        assert_eq!(compact.groups[1][0].text, "74 / 52 fps");
+        // the essentials have no frame rate: the corner chip is for that
+        assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 0);
     }
 }
 

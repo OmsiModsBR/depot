@@ -492,8 +492,8 @@ pub struct Frame<'a> {
     /// What the driver has to act on (why the bus does not move, a passenger's wish, the
     /// change due, a service done), top left.
     pub notes: &'a [String],
-    /// The frame rate, top right (the `show_fps` setting).
-    pub fps: Option<f32>,
+    /// The frame rate and its 1 % low, top right (the `show_fps` setting).
+    pub fps: Option<(f32, Option<f32>)>,
     /// The game stands paused.
     pub paused: bool,
     /// The game menu is open, with this line chosen (labels from `GAME_MENU`).
@@ -502,8 +502,8 @@ pub struct Frame<'a> {
     pub menu_top: Option<f32>,
     /// The timetable window: its title and per stop (name, time, 0 served / 1 next / 2 ahead).
     pub timetable: Option<(String, Vec<(String, String, u8)>)>,
-    /// The information bar along the top: its parts between [`INFO_SEP`]s.
-    pub info: Option<String>,
+    /// The information bar: its items in groups (a hairline between the groups).
+    pub info: Option<InfoBar>,
     /// The room the information bar has along the top: from x to x, from y down (on a
     /// touch screen the gap between its buttons); none: the window's width.
     pub info_room: Option<[f32; 3]>,
@@ -594,24 +594,87 @@ pub struct Ui {
     pub info_rect: Option<[f32; 4]>,
 }
 
-/// Between the information bar's parts.
-pub(crate) const INFO_SEP: &str = "   ·   ";
+/// How an item of the information bar looks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InfoTone {
+    /// White text.
+    Plain,
+    /// Grey text: a unit, a label.
+    Dim,
+    /// The line number: dark text on the accent.
+    Badge,
+    /// The speed limit: dark text on a white sign with a red frame.
+    Limit,
+    /// A delay: red text.
+    Late,
+    /// Ahead of the timetable: green text.
+    Early,
+    /// A frame rate that keeps up (green dot), is going slow (amber) or struggles (red).
+    Fps(u8),
+}
 
-/// The information bar's parts in rows no wider than `room` (as `width` measures a text),
-/// each as many parts as fit: in one line it ran off both sides of a narrow window, and on a
-/// phone it lay under the buttons along the top (#1164).
-pub(crate) fn info_rows(line: &str, room: f32, width: impl Fn(&str) -> f32) -> Vec<String> {
-    let mut rows: Vec<String> = Vec::new();
-    for part in line.split(INFO_SEP) {
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct InfoItem {
+    pub text: String,
+    pub tone: InfoTone,
+}
+
+impl InfoItem {
+    pub(crate) fn new(text: impl Into<String>, tone: InfoTone) -> InfoItem {
+        InfoItem {
+            text: text.into(),
+            tone,
+        }
+    }
+}
+
+/// The information bar: items in groups, along the top or the bottom of the screen.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct InfoBar {
+    pub groups: Vec<Vec<InfoItem>>,
+    pub bottom: bool,
+}
+
+/// The information bar's groups in rows no wider than `room` (`widths`: each group's), each
+/// as many groups as fit with `gap` between them; a group wider than the room alone is a row
+/// of its own (it ran off both sides of a narrow window, and on a phone it lay under the
+/// buttons along the top, #1164).
+pub(crate) fn info_rows(widths: &[f32], gap: f32, room: f32) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut used = 0.0f32;
+    for (k, w) in widths.iter().enumerate() {
         match rows.last_mut() {
-            Some(row) if width(&format!("{row}{INFO_SEP}{part}")) <= room => {
-                row.push_str(INFO_SEP);
-                row.push_str(part);
+            Some(row) if used + gap + w <= room => {
+                row.push(k);
+                used += gap + w;
             }
-            _ => rows.push(part.to_string()),
+            _ => {
+                rows.push(vec![k]);
+                used = *w;
+            }
         }
     }
     rows
+}
+
+/// The plate (13 green, 14 amber, 15 red) of the dot beside a frame rate.
+fn fps_dot(fps: f32) -> u8 {
+    fps_dot_level(fps_level(fps))
+}
+
+/// 0 keeps up (50 and over), 1 slow (30 to 49), 2 struggles.
+pub(crate) fn fps_level(fps: f32) -> u8 {
+    if fps >= 50.0 {
+        0
+    } else if fps >= 30.0 {
+        1
+    } else {
+        2
+    }
+}
+
+fn fps_dot_level(level: u8) -> u8 {
+    13 + level.min(2)
 }
 
 pub(crate) fn shift_overlays(scene: &mut Scene, start: usize, x: f32) {
@@ -1003,15 +1066,16 @@ impl Ui {
                 y = if up { top - gap } else { top + h + gap };
             }
         }
-        if let Some(fps) = f.fps {
-            let l = self.text.label(
-                r,
-                scene,
-                &format!("{fps:.0} fps"),
-                (13.0 * s) as u32,
-                [255, 255, 255, 200],
-            );
-            let x = f.width - l.w as f32 - 12.0 * s;
+        if let Some((fps, low)) = f.fps {
+            let text = match low {
+                Some(low) => format!("{fps:.0} fps   ·   {} {low:.0}", omsi_ui::tr("1 % low")),
+                None => format!("{fps:.0} fps"),
+            };
+            let l = self
+                .text
+                .label(r, scene, &text, (13.0 * s) as u32, [255, 255, 255, 200]);
+            let dot = 7.0 * s;
+            let x = f.width - l.w as f32 - 12.0 * s - dot - 6.0 * s;
             // (on a plate, as the notes are: over a bright sky the outline alone was not enough)
             let plate = self.text.plate(r, scene, 7);
             scene.overlays.push((
@@ -1019,43 +1083,138 @@ impl Ui {
                 [
                     x - 5.0 * s,
                     10.0 * s,
-                    x + l.w as f32 + 5.0 * s,
+                    x + l.w as f32 + dot + 11.0 * s,
                     10.0 * s + l.h as f32,
                 ],
             ));
+            let tone = self.text.plate(r, scene, fps_dot(fps));
+            let cy = 10.0 * s + l.h as f32 * 0.5;
             scene
                 .overlays
-                .push((l.tex, [x, 10.0 * s, x + l.w as f32, 10.0 * s + l.h as f32]));
+                .push((tone, [x, cy - dot * 0.5, x + dot, cy + dot * 0.5]));
+            let tx = x + dot + 6.0 * s;
+            scene.overlays.push((
+                l.tex,
+                [tx, 10.0 * s, tx + l.w as f32, 10.0 * s + l.h as f32],
+            ));
         }
-        // --- the information bar, along the top in the middle: in as many rows as the room
-        // it has needs
+        // --- the information bar, along the top (or the bottom) in the middle: in as many
+        // rows as the room it has needs
         self.info_rect = None;
         if let Some(info) = f.info.as_ref() {
             let px = (15.0 * s) as u32;
             let pad = 10.0 * s;
-            let [x0, x1, y] = f
+            let gap = 6.0 * s;
+            let group_gap = 24.0 * s;
+            let [x0, x1, top_y] = f
                 .info_room
                 .unwrap_or([12.0 * s, f.width - 12.0 * s, 8.0 * s]);
-            let rows = info_rows(info, (x1 - x0 - pad * 2.0).max(1.0), |t| {
-                self.text.width(t, px as f32)
-            });
-            let labels: Vec<Label> = rows
+            // (a touch screen's buttons own the corners: the bar stays in the gap between them)
+            let bottom = info.bottom && f.info_room.is_none();
+            let colour = |tone: InfoTone| match tone {
+                InfoTone::Dim => [163, 168, 178, 0],
+                InfoTone::Badge | InfoTone::Limit => [26, 17, 0, 0],
+                InfoTone::Late => [238, 106, 95, 0],
+                InfoTone::Early => [95, 207, 138, 0],
+                InfoTone::Plain | InfoTone::Fps(_) => [255, 255, 255, 0],
+            };
+            // each item as a label and the room it takes
+            let groups: Vec<Vec<(Label, InfoTone, f32)>> = info
+                .groups
                 .iter()
-                .map(|t| self.text.label(r, scene, t, px, [255, 255, 255, 0]))
+                .map(|g| {
+                    g.iter()
+                        .map(|it| {
+                            let l = self.text.label(r, scene, &it.text, px, colour(it.tone));
+                            let w = match it.tone {
+                                InfoTone::Badge => l.w as f32 + 12.0 * s,
+                                InfoTone::Limit => {
+                                    (l.w as f32 + 10.0 * s).max(l.h as f32 + 4.0 * s)
+                                }
+                                InfoTone::Fps(_) => l.w as f32 + 7.0 * s + 5.0 * s,
+                                _ => l.w as f32,
+                            };
+                            (l, it.tone, w)
+                        })
+                        .collect()
+                })
                 .collect();
-            let lw = labels.iter().map(|l| l.w).max().unwrap_or(0) as f32;
-            let lh = labels.iter().map(|l| l.h).max().unwrap_or(0) as f32;
-            let (w, h) = (lw + pad * 2.0, lh * labels.len() as f32 + pad * 0.8);
+            let widths: Vec<f32> = groups
+                .iter()
+                .map(|g| {
+                    g.iter().map(|i| i.2).sum::<f32>() + gap * g.len().saturating_sub(1) as f32
+                })
+                .collect();
+            let rows = info_rows(&widths, group_gap, (x1 - x0 - pad * 2.0).max(1.0));
+            let lh = groups.iter().flatten().map(|i| i.0.h).max().unwrap_or(0) as f32;
+            let row_h = lh + 6.0 * s;
+            let row_w = |row: &Vec<usize>| {
+                row.iter().map(|k| widths[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
+            };
+            let lw = rows.iter().map(row_w).fold(0.0f32, f32::max);
+            let (w, h) = (lw + pad * 2.0, row_h * rows.len() as f32 + pad * 0.5);
             let x = (x0 + x1 - w) * 0.5;
+            let y = if bottom {
+                f.height - h - 10.0 * s
+            } else {
+                top_y
+            };
             let plate = self.text.plate(r, scene, 3);
             scene.overlays.push((plate, [x, y, x + w, y + h]));
-            for (k, l) in labels.iter().enumerate() {
-                let (lx, ly) = (x + (w - l.w as f32) * 0.5, y + pad * 0.4 + k as f32 * lh);
-                scene
-                    .overlays
-                    .push((l.tex, [lx, ly, lx + l.w as f32, ly + l.h as f32]));
+            let line = self.text.plate(r, scene, 10);
+            for (n, row) in rows.iter().enumerate() {
+                let ry = y + pad * 0.25 + n as f32 * row_h;
+                let mut cx = x + (w - row_w(row)) * 0.5;
+                for (i, k) in row.iter().enumerate() {
+                    if i > 0 {
+                        let hx = cx - group_gap * 0.5;
+                        scene.overlays.push((
+                            line,
+                            [hx, ry + 3.0 * s, hx + s.max(1.0), ry + row_h - 3.0 * s],
+                        ));
+                    }
+                    for (l, tone, iw) in &groups[*k] {
+                        let ty = ry + (row_h - l.h as f32) * 0.5;
+                        let mut tx = cx + (iw - l.w as f32) * 0.5;
+                        match tone {
+                            InfoTone::Badge => {
+                                let b = self.text.plate(r, scene, 4);
+                                scene.overlays.push((
+                                    b,
+                                    [cx, ty - 1.0 * s, cx + iw, ty + l.h as f32 + 1.0 * s],
+                                ));
+                            }
+                            InfoTone::Limit => {
+                                let red = self.text.plate(r, scene, 11);
+                                let white = self.text.plate(r, scene, 12);
+                                let (t0, t1) = (ty - 2.0 * s, ty + l.h as f32 + 2.0 * s);
+                                scene.overlays.push((red, [cx, t0, cx + iw, t1]));
+                                scene.overlays.push((
+                                    white,
+                                    [cx + 2.5 * s, t0 + 2.5 * s, cx + iw - 2.5 * s, t1 - 2.5 * s],
+                                ));
+                            }
+                            InfoTone::Fps(level) => {
+                                let d = self.text.plate(r, scene, fps_dot_level(*level));
+                                let c = ry + row_h * 0.5;
+                                scene
+                                    .overlays
+                                    .push((d, [cx, c - 3.5 * s, cx + 7.0 * s, c + 3.5 * s]));
+                                tx = cx + 12.0 * s;
+                            }
+                            _ => {}
+                        }
+                        scene
+                            .overlays
+                            .push((l.tex, [tx, ty, tx + l.w as f32, ty + l.h as f32]));
+                        cx += iw + gap;
+                    }
+                    cx += group_gap - gap;
+                }
             }
-            self.info_rect = Some([x, y, x + w, y + h]);
+            if !bottom {
+                self.info_rect = Some([x, y, x + w, y + h]);
+            }
         }
         let tutorial_w = (420.0 * s).min(f.width * 0.42);
         // --- the timetable window, on the right
@@ -1310,6 +1469,15 @@ impl TextCache {
             9 => vec![255, 255, 255, 15],
             // the picture dimmed behind the menu
             6 => vec![0, 0, 0, 120],
+            // a hairline between the information bar's groups
+            10 => vec![255, 255, 255, 46],
+            // the speed limit's red frame and white sign
+            11 => vec![208, 48, 48, 255],
+            12 => vec![235, 235, 235, 255],
+            // the frame rate's dot: keeps up, slow, struggling
+            13 => vec![95, 207, 138, 255],
+            14 => vec![232, 171, 58, 255],
+            15 => vec![238, 106, 95, 255],
             // behind a note or the tooltip (the old HUD's 40 %)
             7 => vec![0, 0, 0, 102],
             _ => vec![10, 12, 16, 150],
@@ -3287,36 +3455,35 @@ fn vr_settings_sidebar_step(available: f32, pages: usize, scale: f32) -> f32 {
 mod tests {
     use super::*;
 
-    /// The information bar is broken between its parts into rows that fit the room it has,
-    /// as many parts to a row as go in; a part wider than the room alone is a row of its own
-    /// (#1164).
+    /// The information bar is broken between its groups into rows that fit the room it has,
+    /// as many groups to a row as go in; a group wider than the room alone is a row of its
+    /// own (#1164).
     #[test]
     fn the_information_bar_breaks_into_rows_that_fit() {
-        let line = [
-            "09:00:07",
-            "0 km/h",
-            "EXT 15 °C / INT 15 °C",
-            "tank 80 %",
-            "0 Passengers",
-            "76 › Krankenhaus",
-            "next: Bauernhof",
-            "−6:52",
-        ]
-        .join(INFO_SEP);
-        let w = |t: &str| t.chars().count() as f32 * 10.0;
-        assert_eq!(info_rows(&line, 5000.0, w), vec![line.clone()]);
-        let rows = info_rows(&line, 500.0, w);
+        let widths = [80.0, 60.0, 210.0, 90.0, 120.0, 150.0, 40.0];
         assert_eq!(
-            rows,
-            vec![
-                format!("09:00:07{INFO_SEP}0 km/h{INFO_SEP}EXT 15 °C / INT 15 °C"),
-                format!("tank 80 %{INFO_SEP}0 Passengers"),
-                format!("76 › Krankenhaus{INFO_SEP}next: Bauernhof{INFO_SEP}−6:52"),
-            ]
+            info_rows(&widths, 20.0, 5000.0),
+            vec![(0..7).collect::<Vec<_>>()]
         );
-        assert!(rows.iter().all(|r| w(r) <= 500.0));
-        assert_eq!(rows.join(INFO_SEP), line);
-        assert_eq!(info_rows(&line, 50.0, w).len(), 8);
+        let rows = info_rows(&widths, 20.0, 400.0);
+        assert_eq!(rows, vec![vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
+        for r in &rows {
+            let used: f32 = r.iter().map(|k| widths[*k]).sum::<f32>() + 20.0 * (r.len() - 1) as f32;
+            assert!(used <= 400.0);
+        }
+        assert_eq!(info_rows(&widths, 20.0, 50.0).len(), 7);
+        assert!(info_rows(&[], 20.0, 50.0).is_empty());
+    }
+
+    #[test]
+    fn the_frame_rate_dot_follows_the_rate() {
+        assert_eq!(fps_level(144.0), 0);
+        assert_eq!(fps_level(50.0), 0);
+        assert_eq!(fps_level(49.0), 1);
+        assert_eq!(fps_level(30.0), 1);
+        assert_eq!(fps_level(12.0), 2);
+        assert_eq!(fps_dot(60.0), 13);
+        assert_eq!(fps_dot(12.0), 15);
     }
 
     #[test]
