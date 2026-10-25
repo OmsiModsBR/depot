@@ -189,20 +189,8 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let kind = l.pages.diag.kind;
     let list = items(l, kind);
     let root = PathBuf::from(l.state.config.root.trim());
-    if list.is_empty() || root.as_os_str().is_empty() {
-        clipped(
-            &mut l.ui,
-            "Nothing to verify here.",
-            area.x + 4.0,
-            area.y + 14.0,
-            area.w - 8.0,
-            13.0,
-            Weight::Regular,
-            MUTED,
-        );
-        return;
-    }
-    l.pages.diag.item = l.pages.diag.item.min(list.len() - 1);
+    let empty = list.is_empty() || root.as_os_str().is_empty();
+    l.pages.diag.item = l.pages.diag.item.min(list.len().saturating_sub(1));
     l.pages.diag.compare = l.pages.diag.compare.min(list.len());
     let busy = l.pages.diag.run.is_some();
 
@@ -221,6 +209,19 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         d.item = 0;
         d.compare = 0;
         d.done = None;
+    }
+    if empty {
+        clipped(
+            &mut l.ui,
+            "Nothing to verify here.",
+            area.x + 4.0,
+            area.y + h + 26.0,
+            area.w - 8.0,
+            13.0,
+            Weight::Regular,
+            MUTED,
+        );
+        return;
     }
     let names: Vec<String> = list.iter().map(|x| x.0.clone()).collect();
     let sel_w = ((area.w - 240.0 - 12.0) * 0.5).clamp(160.0, 340.0);
@@ -273,6 +274,8 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             if let Some(run) = l.pages.diag.run.take() {
                 run.cancel.store(true, Ordering::Relaxed);
             }
+            // (the placeholder of the check that was running is not a result)
+            l.pages.diag.done = None;
         }
     } else if action(
         &mut l.ui,
