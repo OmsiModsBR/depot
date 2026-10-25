@@ -204,7 +204,7 @@ impl<'a> Checker<'a> {
             None => self.add(
                 Severity::Warning,
                 "texture-missing",
-                self.missing_target(&[self.root, &texture_dir], name),
+                self.missing_target(&[self.root], name),
                 by,
                 "A ground texture is missing; that ground shows white.".into(),
                 None,
