@@ -3,10 +3,13 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-/// The smallest power of two that is at least `n` (1 for 0).
+/// The smallest power of two that is at least `n` (1 for 0); `u32::MAX` where none fits.
 pub fn next_pow2(n: u32) -> u32 {
-    n.max(1).next_power_of_two()
+    n.max(1).checked_next_power_of_two().unwrap_or(u32::MAX)
 }
+
+/// No texture the game can hold is wider than this: a header that says more is damaged.
+const MAX_SIDE: u32 = 32768;
 
 /// Width and height of a bmp, tga, dds, png or jpg, told by the content and not by the
 /// extension (mods keep a dds under a `.jpg` name). `None` when it is none of them.
@@ -56,7 +59,7 @@ fn size_of<R: Read + Seek>(r: &mut R, path: &Path) -> Option<(u32, u32)> {
 }
 
 fn nonzero(w: u32, h: u32) -> Option<(u32, u32)> {
-    (w > 0 && h > 0).then_some((w, h))
+    (w > 0 && h > 0 && w <= MAX_SIDE && h <= MAX_SIDE).then_some((w, h))
 }
 
 fn read_up_to<R: Read>(r: &mut R, buf: &mut [u8]) -> usize {
