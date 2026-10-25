@@ -60,6 +60,8 @@ pub enum Kind {
         step: f32,
         show: fn(f32) -> String,
         keep: fn(f32) -> Value,
+        /// The value can also be typed in a field beside the slider.
+        typed: bool,
     },
     /// The quality preset: sets several graphics options at once (not a key of the file).
     Preset,
@@ -144,9 +146,39 @@ const fn slide(
     key: &'static str,
     label: &'static str,
     hint: &'static str,
+    range: (f32, f32, f32),
+    show: fn(f32) -> String,
+    keep: fn(f32) -> Value,
+) -> Opt {
+    slide_with(sec, group, key, label, hint, range, show, keep, false)
+}
+
+/// A slider whose value can also be typed (the original's traffic and people counts).
+#[allow(clippy::too_many_arguments)]
+const fn slide_typed(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
+    range: (f32, f32, f32),
+    show: fn(f32) -> String,
+    keep: fn(f32) -> Value,
+) -> Opt {
+    slide_with(sec, group, key, label, hint, range, show, keep, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+const fn slide_with(
+    sec: usize,
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    hint: &'static str,
     (min, max, step): (f32, f32, f32),
     show: fn(f32) -> String,
     keep: fn(f32) -> Value,
+    typed: bool,
 ) -> Opt {
     Opt {
         sec,
@@ -160,6 +192,7 @@ const fn slide(
             step,
             show,
             keep,
+            typed,
         },
         when: When::Next,
     }
@@ -310,6 +343,12 @@ fn fade(v: f32) -> String {
 }
 fn count(v: f32) -> String {
     format!("{v:.0}")
+}
+fn integer(v: f32) -> Value {
+    json!(v.round() as i64)
+}
+fn percent_whole(v: f32) -> String {
+    format!("{v:.0}%")
 }
 fn hundredths(v: f32) -> Value {
     json!((v * 100.0).round() / 100.0)
@@ -1500,47 +1539,55 @@ pub static OPTS: &[Opt] = &[
         "Timetable buses",
         "Drive their tours on the map",
     ),
-    pick(
+    slide_typed(
         TRAFFIC,
         "AI traffic",
-        "ai_unsched_factor",
-        "Random traffic",
-        "Cars and trucks",
-        &[
-            ("25", "25%"),
-            ("50", "50%"),
-            ("75", "75%"),
-            ("100", "100%"),
-            ("150", "150%"),
-            ("200", "200%"),
-        ],
+        "ai_max_random",
+        "Vehicles without a timetable",
+        "Cars and trucks at once, at most",
+        (0.0, 1000.0, 1.0),
+        count,
+        integer,
     ),
-    pick(
+    slide_typed(
         TRAFFIC,
         "AI traffic",
         "ai_max_scheduled",
-        "Timetable vehicles",
-        "",
-        &[
-            ("0", "All"),
-            ("10", "At most 10"),
-            ("25", "At most 25"),
-            ("50", "At most 50"),
-        ],
+        "Vehicles with a timetable",
+        "Buses at once, at most",
+        (0.0, 1000.0, 1.0),
+        count,
+        integer,
     ),
-    pick(
+    slide_typed(
+        TRAFFIC,
+        "AI traffic",
+        "ai_unsched_factor",
+        "Road traffic factor",
+        "Cars and trucks, as a share of the map's traffic",
+        (1.0, 300.0, 1.0),
+        percent_whole,
+        integer,
+    ),
+    slide(
+        TRAFFIC,
+        "AI traffic",
+        "ai_priority_scheduled",
+        "Highest line priority",
+        "1 only the most important lines, 4 all of them",
+        (1.0, 4.0, 1.0),
+        count,
+        integer,
+    ),
+    slide_typed(
         TRAFFIC,
         "AI traffic",
         "ai_max_parked",
         "Parked cars",
-        "",
-        &[
-            ("-1", "None"),
-            ("0", "Every space"),
-            ("35", "At most 35"),
-            ("100", "At most 100"),
-            ("250", "At most 250"),
-        ],
+        "The share of the parking spaces with a car",
+        (0.0, 100.0, 1.0),
+        percent_whole,
+        integer,
     ),
     toggle(
         TRAFFIC,
@@ -1549,27 +1596,23 @@ pub static OPTS: &[Opt] = &[
         "Passengers",
         "At the stops",
     ),
-    pick(
+    slide_typed(
         TRAFFIC,
         "People",
         "ai_max_humans",
-        "People",
-        "Waiting, walking or riding at once",
-        &[
-            ("50", "At most 50"),
-            ("100", "At most 100"),
-            ("200", "At most 200"),
-            ("400", "At most 400"),
-            ("800", "At most 800"),
-        ],
+        "Most people",
+        "The most people visible at once, waiting, walking or riding",
+        (0.0, 1000.0, 1.0),
+        count,
+        integer,
     ),
-    slide(
+    slide_typed(
         TRAFFIC,
         "People",
         "pax_density",
-        "How many passengers",
-        "",
-        (0.0, 2.0, 0.1),
+        "Passengers at the stops",
+        "How many people wait at the stops, as a share",
+        (0.0, 2.0, 0.01),
         pct,
         hundredths,
     ),
@@ -1932,7 +1975,7 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
 
 /// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
 /// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-fn d3d9_fixes_vanilla(s: &Value) -> bool {
+pub(crate) fn d3d9_fixes_vanilla(s: &Value) -> bool {
     // (the environment read last: the page asks this for every option, every frame)
     cfg!(windows)
         && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
@@ -1959,7 +2002,7 @@ pub enum Shown {
 }
 
 pub fn shown(o: &Opt, st: &Store) -> Shown {
-    if let Some(l) = api_limit(st.s, o.key) {
+    if let Some(l) = api_limit(st.s, o.key).filter(|l| !l.is_row()) {
         return match l.text() {
             Some(t) => Shown::Locked(t),
             None => Shown::Hidden,
@@ -2055,7 +2098,14 @@ fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
             .collect()
     };
     match &o.kind {
-        Kind::Pick(list) => own(list),
+        Kind::Pick(list) => {
+            // (under DirectX9 an option may leave some choices out, see `api_limits`)
+            let limit = api_limit(st.s, o.key);
+            list.iter()
+                .filter(|(v, _)| limit.is_none_or(|l| l.allows(v)))
+                .map(|(v, t)| (v.to_string(), t.to_string()))
+                .collect()
+        }
         Kind::Api => own(api_options()),
         Kind::Language => own(&core::LANGUAGES
             .iter()
@@ -2103,6 +2153,10 @@ fn chosen(o: &Opt, st: &Store, options: &mut Vec<(String, String)>) -> usize {
         return preset_now(st).unwrap_or(options.len() - 1);
     }
     let mut cur = value_text(st.get(o.key));
+    // (a saved value DirectX9 does not offer shows as the choice it takes, see `api_limits`)
+    if let Some(l) = api_limit(st.s, o.key) {
+        cur = l.fit(&cur);
+    }
     // (anisotropy 0 is off, the same entry as 1)
     if o.key == "anisotropy" && cur == "0" {
         cur = "1".to_string();
@@ -2694,12 +2748,45 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             step,
             show,
             keep,
+            typed,
         } => {
             let or = default_of(o.key)
                 .and_then(|d| d.as_f64())
                 .unwrap_or(*min as f64);
             let mut v = st.get(o.key).as_f64().unwrap_or(or) as f32;
-            if ui.slider(&id, ctrl, &mut v, *min, *max, *step, "", &|x| show(x)) {
+            let mut moved = false;
+            if *typed {
+                // (the slider's own value text gives way to a field over it)
+                moved |= ui.slider(&id, ctrl, &mut v, *min, *max, *step, "", &|_| String::new());
+                // (right of the slider's own click area, which ends 50 px before the control)
+                let fr = Rect::new(ctrl.right() - 48.0, ctrl.y + 2.0, 48.0, ctrl.h - 4.0);
+                let name = format!("{id}-typed");
+                let fid = omsi_ui::widgets::id_of(&name);
+                let mut text = TYPED.with(|t| {
+                    let t = t.borrow();
+                    if ui.focus == Some(fid) && t.0 == fid {
+                        t.1.clone()
+                    } else {
+                        show(v)
+                    }
+                });
+                if ui.text_input(&name, fr, &mut text, "", None) {
+                    TYPED.with(|t| *t.borrow_mut() = (fid, text.clone()));
+                    let digits = text.trim().trim_end_matches('%').trim();
+                    if let Ok(x) = digits.parse::<f32>() {
+                        let x = if show(0.0).ends_with('%') && *max <= 5.0 {
+                            x / 100.0
+                        } else {
+                            x
+                        };
+                        v = ((x / step.max(1e-6)).round() * step).clamp(*min, *max);
+                        moved = true;
+                    }
+                }
+            } else {
+                moved |= ui.slider(&id, ctrl, &mut v, *min, *max, *step, "", &|x| show(x));
+            }
+            if moved {
                 st.set(o.key, keep(v));
                 after(o.key, st);
             }
@@ -2730,6 +2817,12 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
 
 /// The graphics API first, as a card of its own across the page: it decides what the other
 /// graphics options can do.
+thread_local! {
+    /// The text being typed in a slider's field: which field, and what it holds.
+    static TYPED: std::cell::RefCell<(omsi_ui::widgets::Id, String)> =
+        const { std::cell::RefCell::new((0, String::new())) };
+}
+
 fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     ui.panel(r);
     ui.p().rounded(r, RADIUS, accent().alpha(0.08));
@@ -3556,6 +3649,8 @@ mod tests {
         "get_up",
         "ai_unsched_factor",
         "ai_max_scheduled",
+        "ai_max_random",
+        "ai_priority_scheduled",
         "ai_max_parked",
         "autosave_minutes",
         "ai_max_humans",
@@ -3774,7 +3869,7 @@ mod tests {
         for l in crate::api_limits::D3D9 {
             assert_eq!(
                 drawn(&mut s, l.key),
-                !cfg!(windows),
+                !cfg!(windows) || l.is_row(),
                 "{} under DirectX9",
                 l.key
             );
@@ -3783,6 +3878,35 @@ mod tests {
         // (VR takes DirectX 12 instead: the choice is offered)
         s["vr"] = json!(true);
         assert!(drawn(&mut s, "graphics"));
+    }
+
+    /// An option DirectX9 leaves some choices out of offers only the rest, and a saved value
+    /// outside them shows as the choice it takes.
+    #[test]
+    fn directx9_offers_only_the_choices_it_allows() {
+        let (mut s, mut start) = (all_rows(), start());
+        s["graphics_api"] = json!("d3d9");
+        s["mirror_size"] = json!(64);
+        s["mirror_refresh"] = json!("eco");
+        let st = Store {
+            s: &mut s,
+            start: &mut start,
+            changed: false,
+            start_changed: false,
+        };
+        for (key, want, now) in [
+            ("mirror_size", vec!["0", "128", "256", "512"], "128"),
+            ("mirror_refresh", vec!["off", "full"], "full"),
+        ] {
+            let o = OPTS.iter().find(|o| o.key == key).unwrap();
+            let mut options = options_of(o, &st);
+            let at = chosen(o, &st, &mut options);
+            let values: Vec<_> = options.iter().map(|x| x.0.as_str()).collect();
+            if cfg!(windows) {
+                assert_eq!(values, want, "{key}");
+                assert_eq!(options[at].0, now, "{key}");
+            }
+        }
     }
 
     /// A changed option is marked and goes back to its default with its own button.

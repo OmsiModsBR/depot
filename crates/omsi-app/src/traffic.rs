@@ -622,8 +622,11 @@ pub struct Traffic {
     pub density_curve: Vec<(f32, f32)>,
     /// The options' `[AIUnschedFactor]`: the share of the random traffic.
     pub unsched_factor: f32,
-    /// The options' `[AIMaxCountScheduled]` (0 = no limit).
+    /// The options' `[AIMaxCountScheduled]`: no more timetable vehicles than that at once.
     pub max_scheduled: u32,
+    /// The options' `[AIMaxCountRandom]` (first line): no more vehicles without a timetable
+    /// than that on the streets at once.
+    pub max_random: u32,
     /// `--no-timetable-buses`: the timetable runs for the player's duty, but puts no AI
     /// bus on the road (#1762).
     pub no_timetable_buses: bool,
@@ -1600,6 +1603,7 @@ impl Traffic {
             density_curve: world.global.traffic_density_road.clone(),
             unsched_factor: crate::settings::Settings::load().ai_unsched_factor,
             max_scheduled: crate::settings::Settings::load().ai_max_scheduled,
+            max_random: crate::settings::Settings::load().ai_max_random,
             no_timetable_buses: false,
             viewer: None,
             occluders: None,
@@ -2214,6 +2218,17 @@ impl Traffic {
         !v.frames(p, r) || self.occluded(world, &v, p, r)
     }
 
+    /// How many more vehicles without a timetable the options' `[AIMaxCountRandom]` lets on
+    /// the streets (those asleep out of range are not counted: they are not on them).
+    fn random_room(&self) -> usize {
+        let active = self
+            .cars
+            .iter()
+            .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
+            .count();
+        (self.max_random as usize).saturating_sub(active)
+    }
+
     /// Spawn cars until `target` are within `spawn_radius` of `center`; despawn far ones.
     pub fn populate(
         &mut self,
@@ -2443,8 +2458,9 @@ impl Traffic {
                 }
             })
             .collect();
-        let street_target =
-            (self.target as f32 * density * road_scale(&near_density)).round() as usize;
+        let street_target = ((self.target as f32 * density * road_scale(&near_density)).round()
+            as usize)
+            .min(self.max_random as usize);
         // the cars that come into range again, where they have got to
         self.wake_dormant(world, renderer, scene, center, street_target);
         // the whole map's population: as dense as around the player, on every street the
@@ -2592,6 +2608,9 @@ impl Traffic {
         let forced = omsi_cfg::flags::PARKED_PULL_OUT.number::<f64>();
         // about one car a minute
         if self.rand_f() >= forced.unwrap_or(0.035) {
+            return;
+        }
+        if self.random_room() == 0 {
             return;
         }
         let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set() || forced.is_some();
@@ -2800,6 +2819,12 @@ impl Traffic {
                         .unwrap_or(false)
             })
             .count();
+        // (the options' cap on the vehicles without a timetable holds for every centre together)
+        let target = if kind == LaneKind::Street {
+            target.min(unscheduled + self.random_room())
+        } else {
+            target
+        };
         let mut count = unscheduled;
         while count < target && attempts < target * 12 {
             attempts += 1;
@@ -2969,7 +2994,7 @@ impl Traffic {
         }
         let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
         let mut budget = (target as f32 * 1.25).ceil() as usize;
-        budget = budget.saturating_sub(active);
+        budget = budget.min(self.max_random as usize).saturating_sub(active);
         let centers: Vec<DVec3> = std::iter::once(center)
             .chain(self.lan_centers.iter().copied())
             .collect();
@@ -3055,6 +3080,8 @@ impl Traffic {
         let map_target = ((street_target as f64 * self.street_weight / near)
             .min(street_target as f64 * MAP_POPULATION_FACTOR as f64))
             as usize;
+        // (the cap holds for the whole map: the cars asleep out of range count here)
+        let map_target = map_target.min(self.max_random as usize);
         let present =
             self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count() + self.dormant.len();
         if present >= map_target {
@@ -3491,13 +3518,12 @@ impl Traffic {
         if self.no_timetable_buses {
             return None;
         }
-        if self.max_scheduled > 0
-            && self
-                .cars
-                .iter()
-                .filter(|c| c.is_bus() || !c.state.route.is_empty())
-                .count()
-                >= self.max_scheduled as usize
+        if self
+            .cars
+            .iter()
+            .filter(|c| c.is_bus() || !c.state.route.is_empty())
+            .count()
+            >= self.max_scheduled as usize
         {
             return None;
         }
