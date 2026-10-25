@@ -2206,6 +2206,9 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "timetable_win" => app.timetable,
         "info_bar" => app.info_bar,
         "info_bar_fps" => s.info_bar_fps,
+        k if crate::settings::info_item_index(k).is_some() => {
+            s.info_items[crate::settings::info_item_index(k)?]
+        }
         "nav_arrows" => app.navigator.as_ref().map_or(s.nav_arrows, |n| n.arrows),
         "exact_fare" => s.exact_fare,
         "collision_pedestrians" => s.collision_pedestrians,
@@ -2451,6 +2454,11 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         "info_bar_fps" => {
             app.settings.info_bar_fps = on;
             Some(("info_bar_fps", bit))
+        }
+        k if crate::settings::info_item_index(k).is_some() => {
+            let i = crate::settings::info_item_index(k)?;
+            app.settings.info_items[i] = on;
+            Some((crate::settings::INFO_ITEM_KEYS[i], bit))
         }
         "nav_arrows" => {
             app.settings.nav_arrows = on;
@@ -3094,6 +3102,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("full", "Full bar"),
             ("compact", "Compact bar"),
             ("essential", "Essentials only"),
+            ("custom", "Custom bar"),
         ],
         "info_bar_pos" => vec![
             ("top", "Top of the screen"),
@@ -3328,10 +3337,19 @@ fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "coll_vehicles", "Collisions with vehicles", "Enables/Disables Collisions with Other Vehicles"),
         switch_row(app, "collision_pedestrians", "Collisions with people", "Enables/disables knocking down people"),
         switch_row(app, "timetable_win", "Timetable window (Insert)", "Displays a list of all stops (only when a tour is active)"),
-        switch_row(app, "info_bar", "Information bar (Shift+Y)", "Displays information such as the time, speed, and other details at the top of the screen"),
-        pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay"),
+        switch_row(app, "info_bar", "Information bar (Shift+Y)", "Displays information such as the time, speed, and other details along the screen"),
+        pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay; Custom bar the items chosen below"),
         pick("info_bar_pos", "Information bar position", "Along the top or the bottom of the screen"),
         switch_row(app, "info_bar_fps", "Frame rate in the information bar", "Adds the frame rate and its 1 % low as the bar's last item"),
+        switch_row(app, "info_item_time", "Time", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_speed", "Speed and limit", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_trip", "Trip distance", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_odometer", "Odometer", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_temps", "Temperatures", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_tank", "Tank", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_pax", "Passengers", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_line", "Line and destination", "Shown in the Custom bar layout"),
+        switch_row(app, "info_item_next", "Next stop and delay", "Shown in the Custom bar layout"),
         switch_row(app, "exact_fare", "Passengers pay the exact fare", "No change is given at the cash desk"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("maintenance", "Maintenance", later),

@@ -66,6 +66,30 @@ impl TextCache {
         px: u32,
         color: [u8; 4],
     ) -> Label {
+        self.label_with(r, scene, &omsi_ui::tr(text), px, color)
+    }
+
+    /// Like [`label`](Self::label) for a text that is not an interface text (a name from the
+    /// map): drawn as it is.
+    fn label_raw(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        text: &str,
+        px: u32,
+        color: [u8; 4],
+    ) -> Label {
+        self.label_with(r, scene, text, px, color)
+    }
+
+    fn label_with(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        text: &str,
+        px: u32,
+        color: [u8; 4],
+    ) -> Label {
         let color = [
             color[0],
             color[1],
@@ -75,8 +99,7 @@ impl TextCache {
         // (in the interface's language: the menu, the notes, the windows; a letter and its
         // combining mark as one, as macOS gives file names - the weather "Eiseska\u{308}lte"
         // showed a box after its "a" in the menu's list)
-        let text = omsi_ui::tr(text);
-        let text = &*omsi_ui::text::composed(&text);
+        let text = &*omsi_ui::text::composed(text);
         let key = (text.to_string(), px, color);
         if let Some(l) = self.labels.get_mut(&key) {
             l.used = self.frame;
@@ -617,6 +640,9 @@ pub(crate) enum InfoTone {
 pub(crate) struct InfoItem {
     pub text: String,
     pub tone: InfoTone,
+    /// A name from the map or the timetable, drawn as it is (not looked up as an interface
+    /// text, in which "Depot" or "Station" would come out in another language).
+    pub raw: bool,
 }
 
 impl InfoItem {
@@ -624,6 +650,14 @@ impl InfoItem {
         InfoItem {
             text: text.into(),
             tone,
+            raw: false,
+        }
+    }
+
+    pub(crate) fn raw(text: impl Into<String>, tone: InfoTone) -> InfoItem {
+        InfoItem {
+            raw: true,
+            ..InfoItem::new(text, tone)
         }
     }
 }
@@ -1125,7 +1159,11 @@ impl Ui {
                 .map(|g| {
                     g.iter()
                         .map(|it| {
-                            let l = self.text.label(r, scene, &it.text, px, colour(it.tone));
+                            let l = if it.raw {
+                                self.text.label_raw(r, scene, &it.text, px, colour(it.tone))
+                            } else {
+                                self.text.label(r, scene, &it.text, px, colour(it.tone))
+                            };
                             let w = match it.tone {
                                 InfoTone::Badge => l.w as f32 + 12.0 * s,
                                 InfoTone::Limit => {

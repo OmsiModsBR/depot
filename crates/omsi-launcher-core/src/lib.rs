@@ -3073,6 +3073,19 @@ pub fn dimming_of(v: &Value) -> i64 {
         .clamp(30, 90)
 }
 
+/// The information bar's items the custom layout switches one by one.
+const INFO_ITEM_KEYS: [&str; 9] = [
+    "info_item_time",
+    "info_item_speed",
+    "info_item_trip",
+    "info_item_odometer",
+    "info_item_temps",
+    "info_item_tank",
+    "info_item_pax",
+    "info_item_line",
+    "info_item_next",
+];
+
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
@@ -3149,6 +3162,15 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_bar_mode", json!("full")),
         ("info_bar_pos", json!("top")),
         ("info_bar_fps", json!(false)),
+        ("info_item_time", json!(true)),
+        ("info_item_speed", json!(true)),
+        ("info_item_trip", json!(true)),
+        ("info_item_odometer", json!(true)),
+        ("info_item_temps", json!(true)),
+        ("info_item_tank", json!(true)),
+        ("info_item_pax", json!(true)),
+        ("info_item_line", json!(true)),
+        ("info_item_next", json!(true)),
         ("get_up", json!(false)),
         ("time_speed", json!("1")),
         ("time_sync", json!(false)),
@@ -3878,8 +3900,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 })
             }
             "info_bar" | "info_bar_fps" => v[&k] = json!(b(val)),
+            k if INFO_ITEM_KEYS.iter().any(|x| *x == k) => v[&k] = json!(b(val)),
             "info_bar_mode" => {
-                v[&k] = json!(if matches!(val, "compact" | "essential") {
+                v[&k] = json!(if matches!(val, "compact" | "essential" | "custom") {
                     val
                 } else {
                     "full"
@@ -4457,7 +4480,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .unwrap_or("top");
     text.push_str(&format!(
         "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-        if matches!(mode, "compact" | "essential") {
+        if matches!(mode, "compact" | "essential" | "custom") {
             mode
         } else {
             "full"
@@ -4465,6 +4488,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         if pos == "bottom" { "bottom" } else { "top" },
         b("info_bar_fps", false)
     ));
+    for key in INFO_ITEM_KEYS {
+        text.push_str(&format!("{key}={}\n", b(key, true)));
+    }
     text.push_str(&format!(
         "autosave_minutes={}\n",
         n("autosave_minutes", 5).clamp(0, 60)
@@ -6155,6 +6181,7 @@ mod info_bar_tests {
         assert_eq!(v["info_bar_mode"], json!("full"));
         assert_eq!(v["info_bar_pos"], json!("top"));
         assert_eq!(v["info_bar_fps"], json!(false));
+        assert_eq!(v["info_item_pax"], json!(true));
         let v = settings_from_text(Some(
             "info_bar_mode=compact\ninfo_bar_pos=bottom\ninfo_bar_fps=1\n",
         ));

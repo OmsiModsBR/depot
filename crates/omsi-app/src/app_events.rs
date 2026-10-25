@@ -3414,6 +3414,7 @@ impl ApplicationHandler for App {
                                             .and_then(|(h, p)| h.capacity(&p.vehicle)),
                                         metres: self.career.metres,
                                         limit: speed_limit,
+                                        items: self.settings.info_items,
                                         fps: self
                                             .settings
                                             .info_bar_fps
@@ -4738,6 +4739,8 @@ pub(crate) enum InfoMode {
     Compact,
     /// The speed, its limit and the delay.
     Essential,
+    /// The full bar with the items the player switched off left out.
+    Custom,
 }
 
 impl InfoMode {
@@ -4745,6 +4748,7 @@ impl InfoMode {
         match s {
             "compact" => InfoMode::Compact,
             "essential" => InfoMode::Essential,
+            "custom" => InfoMode::Custom,
             _ => InfoMode::Full,
         }
     }
@@ -4765,6 +4769,8 @@ pub(crate) struct InfoData<'a> {
     pub limit: Option<f32>,
     /// The frame rate and its 1 % low.
     pub fps: Option<(f32, Option<f32>)>,
+    /// Which items the custom layout shows (`Settings::info_items`).
+    pub items: [bool; 9],
 }
 
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
@@ -4775,10 +4781,14 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
     use ui::{InfoItem, InfoTone};
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
-    let full = mode == InfoMode::Full;
+    // (the custom layout is the full one less what is switched off, item by item: the time,
+    // the speed, the trip distance, the odometer, the temperatures, the tank, the passengers,
+    // the line and the next stop)
+    let full = matches!(mode, InfoMode::Full | InfoMode::Custom);
+    let on = |i: usize| mode != InfoMode::Custom || d.items[i];
     let t = d.clock.time;
     let mut groups: Vec<Vec<InfoItem>> = Vec::new();
-    if mode != InfoMode::Essential {
+    if mode != InfoMode::Essential && on(0) {
         let time = if full {
             format!(
                 "{:02}:{:02}:{:02}",
@@ -4803,28 +4813,42 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
         if let Some(limit) = d.limit {
             speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit));
         }
-        groups.push(speed);
-        if full {
+        if on(1) {
+            groups.push(speed);
+        }
+        if full && on(2) {
             groups.push(vec![plain(distance_driven(d.metres))]);
+        }
+        if full {
             // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
             // `kmcounter_*` the cockpit shows, whole kilometres and the metres of the fraction)
-            if let Some(km) = p.vehicle.var("kmcounter_km").filter(|v| v.is_finite()) {
+            if let Some(km) = p
+                .vehicle
+                .var("kmcounter_km")
+                .filter(|v| v.is_finite() && on(3))
+            {
                 groups.push(vec![plain(odometer_reading(
                     km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0,
                 ))]);
             }
-            let (outside, inside) = vehicle_temperatures(p);
-            groups.push(vec![plain(format!(
-                "EXT {:.0} °C / INT {:.0} °C",
-                outside, inside
-            ))]);
+            if on(4) {
+                let (outside, inside) = vehicle_temperatures(p);
+                groups.push(vec![plain(format!(
+                    "EXT {:.0} °C / INT {:.0} °C",
+                    outside, inside
+                ))]);
+            }
             // the tank as the bus's script says it (OMSI's RL_TankContent: tank_percent)
-            if let Some(tank) = p.vehicle.var("tank_percent").filter(|v| v.is_finite()) {
+            if let Some(tank) = p
+                .vehicle
+                .var("tank_percent")
+                .filter(|v| v.is_finite() && on(5))
+            {
                 groups.push(vec![plain(format!("tank {:.0} %", (tank * 100.0).round()))]);
             }
             // how many are aboard right now (None: the passengers are switched off for this
             // drive, so there is nothing to count)
-            if let Some(n) = d.passengers {
+            if let Some(n) = d.passengers.filter(|_| on(6)) {
                 groups.push(vec![plain(passengers_aboard(n, d.capacity))]);
             }
         }
@@ -4854,17 +4878,26 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
                     } else {
                         trip.line.trim()
                     };
-                    let mut line_group = vec![InfoItem::new(line, InfoTone::Badge)];
+                    // (names from the map are drawn as they are, not looked up as interface
+                    // texts: a destination "Depot" is the map's word)
+                    let mut line_group = vec![InfoItem::raw(line, InfoTone::Badge)];
                     if full && !trip.terminus.trim().is_empty() {
-                        line_group.push(plain(trip.terminus.trim().to_string()));
+                        line_group.push(InfoItem::raw(trip.terminus.trim(), InfoTone::Plain));
                     }
-                    groups.push(line_group);
+                    if on(7) {
+                        groups.push(line_group);
+                    }
                     let mut next = Vec::new();
                     if let Some(s) = trip.stops.get(duty.next_stop) {
-                        next.push(plain(format!("next: {}", s.name.trim())));
+                        next.push(InfoItem::raw(
+                            format!("next: {}", s.name.trim()),
+                            InfoTone::Plain,
+                        ));
                     }
                     next.push(delay_item);
-                    groups.push(next);
+                    if on(8) {
+                        groups.push(next);
+                    }
                 }
             }
         }
@@ -4979,7 +5012,31 @@ mod info_tests {
         assert_eq!(InfoMode::from_setting("full"), InfoMode::Full);
         assert_eq!(InfoMode::from_setting("compact"), InfoMode::Compact);
         assert_eq!(InfoMode::from_setting("essential"), InfoMode::Essential);
+        assert_eq!(InfoMode::from_setting("custom"), InfoMode::Custom);
         assert_eq!(InfoMode::from_setting("sideways"), InfoMode::Full);
+    }
+
+    /// The custom layout leaves out the items switched off; the others keep their layout.
+    #[test]
+    fn the_custom_layout_leaves_out_what_is_switched_off() {
+        use super::{info_bar, InfoData, InfoMode};
+        let clock = omsi_sim::SimClock::default();
+        let mut data = InfoData {
+            clock: &clock,
+            player: None,
+            duty: None,
+            passengers: None,
+            capacity: None,
+            metres: 0.0,
+            limit: None,
+            fps: None,
+            items: [true; 9],
+        };
+        assert_eq!(info_bar(&data, InfoMode::Custom, false).groups.len(), 1);
+        data.items[0] = false;
+        assert!(info_bar(&data, InfoMode::Custom, false).groups.is_empty());
+        // the other layouts do not read the switches
+        assert_eq!(info_bar(&data, InfoMode::Full, false).groups.len(), 1);
     }
 
     /// Without a vehicle the bar has the time, and the frame rate when it is asked for.
@@ -4996,6 +5053,7 @@ mod info_tests {
             metres: 0.0,
             limit: None,
             fps: Some((74.0, Some(52.0))),
+            items: [true; 9],
         };
         let bar = info_bar(&data, InfoMode::Full, true);
         assert!(bar.bottom);
