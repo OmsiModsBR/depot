@@ -1,10 +1,10 @@
-use crate::map::{texture_dirs, Checker};
+use crate::map::Checker;
 use crate::report::{Report, Severity};
 use omsi_cfg::{resolve_path, vfs};
 use omsi_model::Model;
 use omsi_vehicle::sound::SoundCfg;
 use omsi_vehicle::vehicle::Vehicle;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Check one vehicle file (`.bus`, `.ovh`, ...): its model with meshes and textures, scripts
 /// and variable lists, sound set and the other files it names. `root` is the OMSI 2 folder.
@@ -44,8 +44,26 @@ impl Checker<'_> {
                 match Model::load(&mp) {
                     Ok(model) => {
                         let model_dir = mp.parent().unwrap_or(&dir).to_path_buf();
-                        let dirs = texture_dirs(self.root, &model_dir);
-                        self.model_meshes(&model, &model_dir, &dirs, &file);
+                        // (the folders the vehicle loader searches, in its order)
+                        let dirs = vec![
+                            resolve_path(&dir, "Texture"),
+                            resolve_path(&model_dir, "Texture"),
+                            model_dir.clone(),
+                            resolve_path(self.root, "Texture"),
+                        ];
+                        // a mesh the model.cfg's folder lacks may lie beside the vehicle,
+                        // in its `model` folder, one folder above the model.cfg, or in the
+                        // installation
+                        let bases: Vec<PathBuf> = [
+                            Some(dir.clone()),
+                            Some(resolve_path(&dir, "model")),
+                            model_dir.parent().map(Path::to_path_buf),
+                            Some(self.root.to_path_buf()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                        self.model_meshes(&model, &model_dir, &dirs, &bases, &file);
                     }
                     Err(_) => self.add(
                         Severity::Error,
