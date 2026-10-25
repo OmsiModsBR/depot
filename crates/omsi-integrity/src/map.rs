@@ -117,10 +117,9 @@ impl<'a> Checker<'a> {
             }
         };
         let by = self.rel(&global_path);
-        for g in &global.ground_textures {
-            for name in [&g.texture, &g.detail_texture] {
-                self.ground_texture(name, &by);
-            }
+        for (i, g) in global.ground_textures.iter().enumerate() {
+            self.ground_texture(&g.texture, &by, i == 0);
+            self.ground_texture(&g.detail_texture, &by, false);
         }
         for t in &global.tiles {
             let path = resolve_path(map_dir, &t.file);
@@ -165,16 +164,29 @@ impl<'a> Checker<'a> {
                 self.report.splines += 1;
                 self.spline(&s.file, &tile_name);
             }
+            // objects a chrono patch changes to
+            for c in &tile.chrono_changes {
+                if let Some(f) = &c.new_type {
+                    if c.is_spline {
+                        self.spline(f, &tile_name);
+                    } else {
+                        self.object(f, &tile_name);
+                    }
+                }
+            }
         }
     }
 
-    /// A ground texture is named from the installation folder (`Texture\...`).
-    fn ground_texture(&mut self, name: &str, by: &str) {
-        if name.trim().is_empty() {
-            return;
-        }
-        let texture_dir = resolve_path(self.root, "Texture");
-        match omsi_texture::find_texture(name, &[self.root, &texture_dir]) {
+    /// A ground texture is named from the installation folder (`Texture\...`) and looked
+    /// for there only; the first ground, when it names none, is the installation's
+    /// `Texture\gras.bmp`.
+    fn ground_texture(&mut self, name: &str, by: &str, first: bool) {
+        let name = match (name.trim(), first) {
+            ("", true) => "Texture\\gras.bmp",
+            ("", false) => return,
+            (n, _) => n,
+        };
+        match omsi_texture::find_texture(name, &[self.root]) {
             Some(p) => self.texture(&p, by),
             None => self.add(
                 Severity::Warning,
