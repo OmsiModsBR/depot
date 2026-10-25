@@ -12,7 +12,8 @@ impl Renderer {
         self.asset_mirror.set(mirror);
     }
 
-    /// Hands the plan of each window picture to `sink`, after culling and before this
+    /// Hands the plan of each window picture, and of each render texture's (a mirror's, see
+    /// [`crate::FramePlan::target`]), to `sink`, after culling and before this
     /// renderer records its passes (None stops).
     pub fn set_plan_sink(&mut self, sink: Option<PlanSink>) {
         self.plan_sink = sink;

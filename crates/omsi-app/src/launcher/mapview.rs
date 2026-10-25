@@ -132,6 +132,9 @@ struct Roads {
     /// The streets the map's name signs name, each once (any case), with where its first
     /// sign stands: the Timetable page's search finds them.
     streets: Vec<(String, DVec2)>,
+    /// The map's own surface (`openomsi-realmap`: water, green, built-up land, rivers, rail,
+    /// borders), drawn under the roads when the map's author ships it.
+    surface: Option<Arc<crate::map_surface::MapSurface>>,
 }
 
 /// What a worker read.
@@ -267,6 +270,12 @@ impl MapView {
         } else {
             ""
         }
+    }
+
+    /// The attribution the map's package asks to be shown with its surface (its licence).
+    pub fn credit(&self) -> Option<&str> {
+        let sf = self.roads.as_deref()?.surface.as_ref()?;
+        Some(sf.credit.as_str()).filter(|c| !c.is_empty())
     }
 
     /// A worker is reading (the page shows its little spinner).
@@ -874,6 +883,12 @@ impl MapView {
         };
         let mut p = Painter::new();
         let mut points = 0usize;
+        // the map's own surface first, under every road (as the game's city map has it); the
+        // launcher's map is dark. It draws only what the package holds - never a link between
+        // stops
+        if let Some(sf) = &roads.surface {
+            sf.build(&mut p, roads.origin, None, false, 0.0);
+        }
         // what a road is drawn from: its own metres, at least a hair of a pixel
         let mut band = |p: &mut Painter, pts: &[DVec3], w_m: f32, w_px: f32, c: Color| {
             let v: Vec<Vec3> = pts.iter().map(|q| rel(*q)).collect();
@@ -1187,6 +1202,8 @@ fn read_map(look: &Look) -> Roads {
         entries,
         objects,
         streets,
+        // (after `configure_grid`: the package is put onto this game's grid)
+        surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
     }
 }
 

@@ -382,6 +382,38 @@ pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[
     ("3840x2160", "3840 x 2160"),
 ];
 
+/// The Online options (chat, chat size, other players' names, voice chat), kept apart and
+/// off the page while multiplayer is disabled: the server will be a Depot feature of its
+/// own. Move them back into `OPTS` (and their keys into the test's `BEFORE`) to show them.
+#[allow(dead_code)]
+pub static ONLINE_OPTS: &[Opt] = &[
+    toggle(GENERAL, "Online", "chat", "Chat in online games", ""),
+    slide(
+        GENERAL,
+        "Online",
+        "chat_size",
+        "Chat size",
+        "Ctrl and the wheel over it in the game",
+        (0.5, 3.0, 0.1),
+        pct,
+        tenths,
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "name_tags",
+        "Other players' names",
+        "Above their buses",
+    ),
+    toggle(
+        GENERAL,
+        "Online",
+        "voice_chat",
+        "Voice chat",
+        "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server",
+    ),
+];
+
 /// Every option of the page, section by section, card by card.
 pub static OPTS: &[Opt] = &[
     // General
@@ -392,13 +424,6 @@ pub static OPTS: &[Opt] = &[
         "Language",
         "The launcher's texts at once, the game's at its next start",
         Kind::Language,
-    )),
-    now(toggle(
-        GENERAL,
-        "Language",
-        "machine_translation",
-        "Translate the remaining texts automatically",
-        "Offline; the 620 MB download starts at once",
     )),
     toggle(
         GENERAL,
@@ -619,31 +644,6 @@ pub static OPTS: &[Opt] = &[
         "Corner",
         "Where the navigator sits",
         CORNERS,
-    ),
-    toggle(GENERAL, "Online", "chat", "Chat in online games", ""),
-    slide(
-        GENERAL,
-        "Online",
-        "chat_size",
-        "Chat size",
-        "Ctrl and the wheel over it in the game",
-        (0.5, 3.0, 0.1),
-        pct,
-        tenths,
-    ),
-    toggle(
-        GENERAL,
-        "Online",
-        "name_tags",
-        "Other players' names",
-        "Above their buses",
-    ),
-    toggle(
-        GENERAL,
-        "Online",
-        "voice_chat",
-        "Voice chat",
-        "GreenTeaSpeak with the Project Depot plugin, when the server names a voice server",
     ),
     now(toggle(
         GENERAL,
@@ -2162,7 +2162,6 @@ fn after(key: &str, st: &mut Store) {
     match key {
         // (the field of view of the three screens follows from their distance)
         "triple_distance_mm" => st.s["triple_fov_deg"] = json!(0.0),
-        "machine_translation" => crate::mt::enable(st.on("machine_translation")),
         "ui_accent" => omsi_ui::theme::set_accent(
             omsi_ui::theme::Accent::named(st.get("ui_accent").as_str().unwrap_or(""))
                 .unwrap_or_default(),
@@ -2636,13 +2635,6 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             .split_once(" - ")
             .map(|x| x.1.to_string())
             .unwrap_or_default(),
-        // (the translation's download and setting up, while it is under way)
-        None if o.key == "machine_translation"
-            && st.on(o.key)
-            && !matches!(crate::mt::status().as_str(), "" | "Ready") =>
-        {
-            crate::mt::status()
-        }
         None => omsi_ui::tr(o.hint).into_owned(),
     };
     let mut wx = x;
@@ -3577,9 +3569,7 @@ mod tests {
         "metar_sync",
         "time_speed",
         "language",
-        "machine_translation",
         "launcher_rest",
-        "voice_chat",
         "ui_scale",
         "ui_scale_window",
         "ui_opacity",
@@ -3599,9 +3589,6 @@ mod tests {
         "info_item_line",
         "info_item_next",
         "notes",
-        "chat",
-        "chat_size",
-        "name_tags",
         "navigator",
         "nav_arrows",
         "nav_ai",
