@@ -1477,9 +1477,11 @@ impl Settings {
         self.post_aa = "off".into();
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
-        self.mirror_size = self.mirror_size.min(512);
-        if self.mirror_refresh == "eco" {
-            self.mirror_refresh = "full".into();
+        if let Some(l) = crate::api_limits::d3d9("mirror_size") {
+            self.mirror_size = l.fit(&self.mirror_size.to_string()).parse().unwrap_or(0);
+        }
+        if let Some(l) = crate::api_limits::d3d9("mirror_refresh") {
+            self.mirror_refresh = l.fit(&self.mirror_refresh);
         }
         self.mirror_hud = 0;
         self.windy_trees = false;
@@ -1637,7 +1639,7 @@ mod tests {
         s.msaa = 8;
         s.anisotropy = 16;
         s.render_scale = 0.5;
-        s.mirror_size = 1024;
+        s.mirror_size = 64;
         s.mirror_refresh = "eco".into();
         s.mirror_hud = 3;
         s.windy_trees = true;
@@ -1651,7 +1653,9 @@ mod tests {
                 "render_scale" => s.render_scale == 0.0,
                 "anisotropy" => s.anisotropy == 1,
                 "mirror_size" => {
-                    s.mirror_size == 512 && l.allows(&s.mirror_size.to_string()) && s.mirror_hud == 0
+                    s.mirror_size == 128
+                        && l.allows(&s.mirror_size.to_string())
+                        && s.mirror_hud == 0
                 }
                 "mirror_refresh" => s.mirror_refresh == "full" && l.allows(&s.mirror_refresh),
                 "windy_trees" => !s.windy_trees,

@@ -37,6 +37,27 @@ impl ApiLimit {
         matches!(self.limit, Limit::Choices(_))
     }
 
+    /// `value` as this limit takes it: itself when allowed, else (for a `Choices` limit) the
+    /// nearest allowed number (never 0 for a positive one), or the last choice when it is not a number.
+    pub fn fit(&self, value: &str) -> String {
+        let Limit::Choices(list) = self.limit else {
+            return value.to_string();
+        };
+        if list.contains(&value) {
+            return value.to_string();
+        }
+        let nearest = value.parse::<f64>().ok().and_then(|v| {
+            list.iter()
+                .filter_map(|c| c.parse::<f64>().ok().map(|n| (c, n)))
+                // (zero is "off": a value above it never rounds down to it)
+                .filter(|&(_, n)| v <= 0.0 || n > 0.0)
+                .map(|(c, n)| (c, (n - v).abs()))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(c, _)| c.to_string())
+        });
+        nearest.unwrap_or_else(|| list.last().map(|c| c.to_string()).unwrap_or_default())
+    }
+
     /// Whether `value` may be chosen (only a `Choices` limit leaves values out).
     pub fn allows(&self, value: &str) -> bool {
         match self.limit {
@@ -180,5 +201,10 @@ mod tests {
         assert!(sizes.is_row() && sizes.allows("256") && !sizes.allows("1024"));
         let refresh = d3d9("mirror_refresh").unwrap();
         assert!(refresh.allows("full") && !refresh.allows("eco"));
+        assert_eq!(sizes.fit("64"), "128");
+        assert_eq!(sizes.fit("1024"), "512");
+        assert_eq!(sizes.fit("0"), "0");
+        assert_eq!(refresh.fit("eco"), "full");
+        assert_eq!(d3d9("msaa").unwrap().fit("4"), "4");
     }
 }
