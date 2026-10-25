@@ -157,7 +157,7 @@ impl Renderer {
             return;
         };
         let lists = self.draw_lists(scene, &f, &mut clock);
-        if f.window_picture && self.plan_sink.is_some() {
+        if (f.window_picture || f.exclude_texture.is_some()) && self.plan_sink.is_some() {
             let light_map = self.light_map_place(f.ro);
             if let Some(sink) = self.plan_sink.as_mut() {
                 sink(&super::mirror::plan_of(&f, &lists, light_map), scene);

@@ -148,7 +148,7 @@ impl PlanBatch {
     }
 }
 
-/// What the window's picture draws this frame, in the order this renderer draws it.
+/// What a picture (the window's, or a render texture's) draws this frame, in the order this renderer draws it.
 ///
 /// Per-draw data: entry `e = list[i]` of an instance `i` of a batch has its model matrix
 /// (column-major, relative to `render_origin`) at `Scene::slot_models()[e]` and two parameter
@@ -158,6 +158,9 @@ impl PlanBatch {
 pub struct FramePlan {
     pub width: u32,
     pub height: u32,
+    /// The render texture this picture is drawn into (a mirror's), `None` for the window's.
+    /// A texture's picture has no overlays and no HUD.
+    pub target: Option<TextureId>,
     pub render_origin: glam::DVec3,
     /// Column-major, from render-origin-relative world to clip space (wgpu depth 0..1).
     pub view_proj: [[f32; 4]; 4],
@@ -206,6 +209,7 @@ pub(crate) fn plan_of(
     FramePlan {
         width: f.width,
         height: f.height,
+        target: f.exclude_texture,
         render_origin: f.ro,
         view_proj: cu.view_proj,
         cam_pos: cu.cam_pos,
