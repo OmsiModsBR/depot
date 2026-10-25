@@ -61,6 +61,16 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Where a missing texture was first looked for, as the finding's identity: two objects
+    /// that lack different files of the same name are two findings, and a comparison with a
+    /// baseline tells them apart.
+    pub(crate) fn missing_target(&self, dirs: &[&Path], name: &str) -> String {
+        match dirs.first() {
+            Some(d) => self.rel(&d.join(name.replace('\\', "/"))),
+            None => name.to_string(),
+        }
+    }
+
     pub(crate) fn rel(&self, p: &Path) -> String {
         p.strip_prefix(self.root).unwrap_or(p).display().to_string()
     }
@@ -182,7 +192,7 @@ impl<'a> Checker<'a> {
             None => self.add(
                 Severity::Warning,
                 "texture-missing",
-                name.to_string(),
+                self.missing_target(&[self.root, &texture_dir], name),
                 by,
                 "A ground texture is missing; that ground shows white.".into(),
                 None,
@@ -355,7 +365,7 @@ impl<'a> Checker<'a> {
                     None => self.add(
                         Severity::Warning,
                         "texture-missing",
-                        name.to_string(),
+                        self.missing_target(&dir_refs, name),
                         &mesh_name,
                         "A texture a mesh names is missing; the surface shows white.".into(),
                         None,
@@ -413,7 +423,7 @@ impl<'a> Checker<'a> {
                 None => self.add(
                     Severity::Warning,
                     "texture-missing",
-                    name.to_string(),
+                    self.missing_target(&dir_refs, name),
                     &file,
                     "A texture a spline names is missing; the road or rail shows white.".into(),
                     None,

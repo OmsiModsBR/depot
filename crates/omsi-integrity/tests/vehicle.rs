@@ -118,7 +118,7 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
-    assert_eq!(r.findings[0].file, "blue.bmp");
+    assert_eq!(r.findings[0].file, "Vehicles/Test/texture/paints/blue.bmp");
     assert_eq!(
         r.findings[0].referenced_by.as_ref().unwrap().0,
         "Vehicles/Test/texture/paints/red.cti"

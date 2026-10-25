@@ -237,7 +237,7 @@ impl Checker<'_> {
             None => self.add(
                 Severity::Warning,
                 "texture-missing",
-                name.to_string(),
+                self.missing_target(&look, name),
                 by,
                 "A paint scheme names a texture that is missing; that paint shows white.".into(),
                 None,
