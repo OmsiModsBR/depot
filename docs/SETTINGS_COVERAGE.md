@@ -82,6 +82,15 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `info_bar_fps` | yes | yes | yes | yes |
 | `info_bar_mode` | yes | yes | yes | yes |
 | `info_bar_pos` | yes | yes | yes | yes |
+| `info_item_time` | yes | yes | yes | yes |
+| `info_item_speed` | yes | yes | yes | yes |
+| `info_item_trip` | yes | yes | yes | yes |
+| `info_item_odometer` | yes | yes | yes | yes |
+| `info_item_temps` | yes | yes | yes | yes |
+| `info_item_tank` | yes | yes | yes | yes |
+| `info_item_pax` | yes | yes | yes | yes |
+| `info_item_line` | yes | yes | yes | yes |
+| `info_item_next` | yes | yes | yes | yes |
 | `language` | yes | yes | yes | yes |
 | `led_glow` | yes | yes | yes | yes |
 | `led_mips` | yes | yes | yes | yes |

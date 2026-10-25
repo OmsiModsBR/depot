@@ -13,6 +13,25 @@ pub(crate) fn data_dir() -> Option<PathBuf> {
 /// Version of the settings file (`version=`); files without it are version 1.
 pub const SETTINGS_VERSION: u32 = 2;
 
+/// The items of the information bar the `custom` layout can switch one by one (settings
+/// keys `info_item_<name>`).
+pub const INFO_ITEM_KEYS: [&str; 9] = [
+    "info_item_time",
+    "info_item_speed",
+    "info_item_trip",
+    "info_item_odometer",
+    "info_item_temps",
+    "info_item_tank",
+    "info_item_pax",
+    "info_item_line",
+    "info_item_next",
+];
+
+/// Where `key` (`info_item_<name>`) stands among the items of the information bar.
+pub fn info_item_index(key: &str) -> Option<usize> {
+    INFO_ITEM_KEYS.iter().position(|k| *k == key)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     /// Samples per pixel: 1, 2, 4 or 8.
@@ -183,6 +202,8 @@ pub struct Settings {
     pub info_bar_pos: String,
     /// The frame rate (and its 1 % low) as the bar's last part, not only in the corner.
     pub info_bar_fps: bool,
+    /// Which items the `custom` layout shows, in the order of [`INFO_ITEMS`].
+    pub info_items: [bool; 9],
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
     pub autosave_minutes: u32,
     /// The interface's accent colour (`omsi_ui::theme::Accent`, by name), in the launcher and
@@ -581,6 +602,7 @@ impl Settings {
             info_bar_mode: "full".into(),
             info_bar_pos: "top".into(),
             info_bar_fps: false,
+            info_items: [true; 9],
             autosave_minutes: 5,
             ui_accent: "Amber".into(),
             ui_corners: "rounded".into(),
@@ -1236,7 +1258,7 @@ impl Settings {
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
                 "info_bar_mode" => {
-                    s.info_bar_mode = if matches!(v, "compact" | "essential") {
+                    s.info_bar_mode = if matches!(v, "compact" | "essential" | "custom") {
                         v.to_string()
                     } else {
                         "full".to_string()
@@ -1246,6 +1268,11 @@ impl Settings {
                     s.info_bar_pos = if v == "bottom" { "bottom" } else { "top" }.to_string()
                 }
                 "info_bar_fps" => s.info_bar_fps = b(v),
+                k if info_item_index(k).is_some() => {
+                    if let Some(i) = info_item_index(k) {
+                        s.info_items[i] = b(v);
+                    }
+                }
                 "autosave_minutes" => {
                     s.autosave_minutes = v
                         .parse::<u32>()
@@ -1380,6 +1407,9 @@ impl Settings {
             "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
             self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
         ));
+        for (key, on) in INFO_ITEM_KEYS.iter().zip(self.info_items) {
+            text.push_str(&format!("{key}={}\n", on as u8));
+        }
         text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
         text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
         text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
