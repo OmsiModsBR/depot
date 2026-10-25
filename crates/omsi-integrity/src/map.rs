@@ -93,6 +93,7 @@ impl<'a> Checker<'a> {
                 message: p.message,
                 detail: p.detail,
                 referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.count)),
+                known: false,
             });
         }
         self.report

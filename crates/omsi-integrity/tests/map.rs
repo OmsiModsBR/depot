@@ -194,3 +194,40 @@ fn an_object_that_borrows_a_model_finds_its_textures_beside_the_model() {
     assert!(r.is_complete(), "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn findings_the_baseline_has_too_are_marked_known() {
+    let before = temp_root("base-before");
+    complete(&before);
+    fs::remove_file(before.join("Splines/road.sli")).unwrap();
+    map(&before, TILE);
+    let base = check_map(&before, &before.join("Maps/Test"));
+
+    // the optimized copy: the same spline is still missing, and a new texture problem
+    let after = temp_root("base-after");
+    complete(&after);
+    fs::remove_file(after.join("Splines/road.sli")).unwrap();
+    write(
+        &after,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(1400, 1400),
+    );
+    map(&after, TILE);
+    let mut r = check_map(&after, &after.join("Maps/Test"));
+    r.mark_known(&base);
+    let spline = r
+        .findings
+        .iter()
+        .find(|f| f.code == "spline-missing")
+        .unwrap();
+    let npot = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap();
+    assert!(spline.known && !npot.known);
+    assert_eq!(r.count_new(Severity::Error), 0);
+    assert_eq!(r.count_new(Severity::NotOptimized), 1);
+    let _ = fs::remove_dir_all(&before);
+    let _ = fs::remove_dir_all(&after);
+}
