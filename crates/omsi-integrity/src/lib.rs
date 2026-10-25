@@ -1,4 +1,4 @@
-//! Integrity check of a map (later vehicles too), run on the user's request.
+//! Integrity check of a map or a vehicle, run on the user's request.
 //!
 //! It follows what the map names - `global.cfg` -> tiles -> objects and splines -> models and
 //! meshes -> textures - and reports what is missing, unreadable or wasteful. It only reads
@@ -14,7 +14,9 @@
 mod image_size;
 mod map;
 mod report;
+mod vehicle;
 
 pub use image_size::{image_size, next_pow2};
 pub use map::check_map;
 pub use report::{Finding, Report, Severity};
+pub use vehicle::check_vehicle;
