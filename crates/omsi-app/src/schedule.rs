@@ -890,7 +890,7 @@ impl Schedule {
     /// day after the clock has passed midnight (as the existing night-tour handling in
     /// `tour_available` has it).
     fn ran_yesterday(&self, i: usize, yesterday: (i32, i32)) -> bool {
-        mask_matches(self.departures[i].mask, yesterday)
+        mask_matches(self.departures[i].mask, yesterday) && self.priority_allows(i)
     }
 
     /// The departures of yesterday's timetable that are due now, on the clock of yesterday's
@@ -958,8 +958,16 @@ impl Schedule {
 
     /// Whether departure `i`'s tour runs on the current day.
     fn runs(&self, i: usize) -> bool {
-        mask_matches(self.departures[i].mask, self.day_bits)
-            && (self.departures[i].priority <= self.max_priority || self.is_player_tour(i))
+        mask_matches(self.departures[i].mask, self.day_bits) && self.priority_allows(i)
+    }
+
+    /// Whether the options' highest line priority lets departure `i`'s line run: all of them
+    /// at 4 (a line may write a priority beyond the original's 1 to 4), and the player's own
+    /// tour whatever its line's priority.
+    fn priority_allows(&self, i: usize) -> bool {
+        self.max_priority >= 4
+            || self.departures[i].priority <= self.max_priority
+            || self.is_player_tour(i)
     }
 
     /// Move the timetable on to the clock's date when it has changed (midnight): the day's

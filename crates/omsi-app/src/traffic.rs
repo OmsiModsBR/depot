@@ -2221,7 +2221,11 @@ impl Traffic {
     /// How many more vehicles without a timetable the options' `[AIMaxCountRandom]` lets on
     /// the streets (those asleep out of range are not counted: they are not on them).
     fn random_room(&self) -> usize {
-        let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
+        let active = self
+            .cars
+            .iter()
+            .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
+            .count();
         (self.max_random as usize).saturating_sub(active)
     }
 
@@ -2454,9 +2458,9 @@ impl Traffic {
                 }
             })
             .collect();
-        let street_target =
-            ((self.target as f32 * density * road_scale(&near_density)).round() as usize)
-                .min(self.max_random as usize);
+        let street_target = ((self.target as f32 * density * road_scale(&near_density)).round()
+            as usize)
+            .min(self.max_random as usize);
         // the cars that come into range again, where they have got to
         self.wake_dormant(world, renderer, scene, center, street_target);
         // the whole map's population: as dense as around the player, on every street the
@@ -2990,9 +2994,7 @@ impl Traffic {
         }
         let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
         let mut budget = (target as f32 * 1.25).ceil() as usize;
-        budget = budget
-            .min(self.max_random as usize)
-            .saturating_sub(active);
+        budget = budget.min(self.max_random as usize).saturating_sub(active);
         let centers: Vec<DVec3> = std::iter::once(center)
             .chain(self.lan_centers.iter().copied())
             .collect();
@@ -3078,6 +3080,7 @@ impl Traffic {
         let map_target = ((street_target as f64 * self.street_weight / near)
             .min(street_target as f64 * MAP_POPULATION_FACTOR as f64))
             as usize;
+        // (the cap holds for the whole map: the cars asleep out of range count here)
         let map_target = map_target.min(self.max_random as usize);
         let present =
             self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count() + self.dormant.len();

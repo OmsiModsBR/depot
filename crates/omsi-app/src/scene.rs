@@ -14852,7 +14852,8 @@ mod tests {
     /// stays kept at any higher one.
     #[test]
     fn the_share_of_parked_cars_keeps_the_same_spaces_as_it_grows() {
-        let kept = |p: i64| -> Vec<bool> { (0..500i64).map(|k| parked_space_kept(k, 7, p)).collect() };
+        let kept =
+            |p: i64| -> Vec<bool> { (0..500i64).map(|k| parked_space_kept(k, 7, p)).collect() };
         assert!(kept(100).iter().all(|k| *k));
         assert!(kept(0).iter().all(|k| !*k));
         let (low, high) = (kept(30), kept(60));

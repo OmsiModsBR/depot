@@ -3137,6 +3137,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("100", "100%"),
             ("150", "150%"),
             ("200", "200%"),
+            ("300", "300%"),
         ],
         "ai_max_scheduled" | "ai_max_random" => vec![
             ("0", "None"),
@@ -3169,6 +3170,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("15", "Every 15 minutes"),
         ],
         "ai_max_humans" => vec![
+            ("0", "None"),
             ("50", "At most 50"),
             ("100", "At most 100"),
             ("200", "At most 200"),

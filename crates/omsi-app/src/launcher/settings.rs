@@ -2755,7 +2755,8 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             if *typed {
                 // (the slider's own value text gives way to a field over it)
                 moved |= ui.slider(&id, ctrl, &mut v, *min, *max, *step, "", &|_| String::new());
-                let fr = Rect::new(ctrl.right() - 60.0, ctrl.y + 2.0, 60.0, ctrl.h - 4.0);
+                // (right of the slider's own click area, which ends 50 px before the control)
+                let fr = Rect::new(ctrl.right() - 48.0, ctrl.y + 2.0, 48.0, ctrl.h - 4.0);
                 let name = format!("{id}-typed");
                 let fid = omsi_ui::widgets::id_of(&name);
                 let mut text = TYPED.with(|t| {
