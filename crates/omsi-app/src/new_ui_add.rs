@@ -8,7 +8,9 @@
 //! dropdown's list is open, the click closes the list).
 //!
 //! The picture is the one the launcher drew ahead of time of that vehicle and paint (its
-//! Vehicles page), cut to the vehicle; none is drawn here.
+//! Vehicles page), cut to the vehicle; none is drawn here. A live 3D view of the vehicle, as
+//! the launcher's preview draws it, comes only when the player turns it on with the box's
+//! button ([`LiveView`]): its helper reads the vehicle and draws it beside the game.
 //!
 //! The overlay draws the window inside the renderer, so the clicks and the wheel over it are
 //! handed to the overlay ([`WinInput`]) and what they chose comes back as events the game
@@ -78,12 +80,33 @@ pub(crate) struct AddFrame {
     description: String,
     /// Which picture the window shows (see [`picture_key`]).
     picture: Option<u64>,
+    /// The live 3D view, while it is on: the vehicle and paint it should show
+    /// (`preview::tag`), and whether it could not be shown.
+    live: Option<(u64, bool)>,
 }
 
 impl AddFrame {
+    /// The player has the live 3D view on.
+    pub(crate) fn live_on(&self) -> bool {
+        self.live.is_some()
+    }
+
     /// What the picture box shows, given the picture the overlay has: which one it is, and
     /// its texture, width over height and the vehicle's part (none: there is none of it).
-    pub(crate) fn preview(&self, have: Option<(u64, Option<(usize, f32, [f32; 4])>)>) -> Preview {
+    /// With the live view on, its frame the overlay has (which vehicle and paint it shows,
+    /// and its texture) instead.
+    pub(crate) fn preview(
+        &self,
+        have: Option<(u64, Option<(usize, f32, [f32; 4])>)>,
+        live: Option<(u64, usize)>,
+    ) -> Preview {
+        if let Some((want, failed)) = self.live {
+            return match live {
+                _ if failed => Preview::Failed,
+                Some((tag, tex)) if tag == want => Preview::Live { tex },
+                _ => Preview::Starting,
+            };
+        }
         match (self.picture, have) {
             (Some(want), Some((key, Some((tex, aspect, part))))) if want == key => {
                 Preview::Picture { tex, aspect, part }
@@ -119,6 +142,7 @@ impl AddFrame {
                 plate_hint: &omsi_ui::tr("Automatic"),
                 description: &self.description,
                 preview,
+                live: self.live.is_some(),
             },
         )
     }
@@ -207,6 +231,7 @@ impl AddWindow {
             plate_focused: self.plate_focused,
             description: self.description.clone(),
             picture: self.picture,
+            live: None,
         }
     }
 
@@ -351,6 +376,31 @@ impl AddWindow {
     }
 }
 
+/// The window's live 3D view: the launcher's preview helper started for it, and the vehicle
+/// and paint it shows in the light of the game's time.
+pub(crate) struct LiveView {
+    preview: crate::launcher::preview::Preview,
+    look: Option<crate::launcher::preview::Look>,
+    last: std::time::Instant,
+}
+
+impl LiveView {
+    fn new() -> LiveView {
+        LiveView {
+            preview: crate::launcher::preview::Preview::for_game(),
+            look: None,
+            last: std::time::Instant::now(),
+        }
+    }
+
+    /// What the window draws of it: the vehicle and paint wanted, and whether it failed.
+    fn frame(&self) -> (u64, bool) {
+        let tag = self.look.as_ref().map_or(0, crate::launcher::preview::tag);
+        let failed = self.preview.gave_up() || (self.preview.error.is_some() && !self.preview.busy);
+        (tag, failed)
+    }
+}
+
 impl App {
     /// Whether the "Add vehicle" window is showing: it is open and neither the Esc menu nor a
     /// layout of its own (triple screen, headset) is in the way.
@@ -415,6 +465,79 @@ impl App {
         self.add_picture();
     }
 
+    /// What the live view shows: the vehicle and paint chosen in the window (the bus's own
+    /// paint for "Random livery"), on the map driven, in the light of the game's hour and day
+    /// and the weather it started with.
+    fn add_live_look(&self) -> Option<crate::launcher::preview::Look> {
+        let (bus, paint) = self.new_ui.add.as_ref()?.picture_look()?;
+        let (day, month) = self.clock.day_month();
+        Some(crate::launcher::preview::Look {
+            root: self.args.root.clone(),
+            map: self.args.map.clone(),
+            bus,
+            paint,
+            weather: self.args.weather.clone().unwrap_or_default(),
+            time: (self.clock.time / 60.0) as i32,
+            date: format!("{:04}-{month:02}-{day:02}", self.clock.year),
+        })
+    }
+
+    /// Keep the live view on the vehicle and paint chosen (a change of either starts the
+    /// helper reading the new one; the light stays as it was).
+    fn add_live_follow(&mut self) {
+        let look = self.add_live_look();
+        let Some(live) = self.new_ui.add_live.as_mut() else {
+            return;
+        };
+        let same = |a: &crate::launcher::preview::Look, b: &crate::launcher::preview::Look| {
+            (&a.bus, &a.paint) == (&b.bus, &b.paint)
+        };
+        if let Some(look) = look {
+            if !live.look.as_ref().is_some_and(|l| same(l, &look)) {
+                live.preview.want(look.clone());
+                live.look = Some(look);
+            }
+        }
+    }
+
+    /// Where the live view is drawn in the window, in pixels (the picture box's inside).
+    fn add_live_size(&self) -> Option<(u32, u32)> {
+        let s = self.surface.as_ref()?;
+        let (w, h) = (s.config.width, s.config.height);
+        let scale = scale_for(w, h);
+        let b = ingame::add_vehicle_box(Vec2::new(w as f32, h as f32) / scale).inset(1.0);
+        Some((
+            ((b.w * scale) as u32).max(16),
+            ((b.h * scale) as u32).max(16),
+        ))
+    }
+
+    /// Before each frame: the live view's helper while the window shows the view (it ends a
+    /// moment after the window is hidden behind the Esc menu or the report), and its new
+    /// frame to the overlay.
+    pub(crate) fn add_live_update(&mut self) {
+        if self.new_ui.add.is_none() {
+            self.new_ui.stop_add_live();
+            return;
+        }
+        let shown = self
+            .add_window_active()
+            .then(|| self.add_live_size())
+            .flatten();
+        let Some(live) = self.new_ui.add_live.as_mut() else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        let dt = now.duration_since(live.last).as_secs_f32().min(0.5);
+        live.last = now;
+        live.preview.update(dt, shown);
+        let frame = live.preview.take_frame();
+        let showing = live.preview.showing();
+        if let (Some((w, h, px)), Some(tag)) = (frame, showing) {
+            self.new_ui.offer_add_live((tag, w, h, px));
+        }
+    }
+
     /// Ask for the picture of the vehicle and paint chosen in the window.
     fn add_picture(&mut self) {
         let Some((bus, paint)) = self.new_ui.add.as_ref().and_then(AddWindow::picture_look) else {
@@ -429,9 +552,12 @@ impl App {
 
     /// The window as it is drawn now.
     pub(crate) fn add_frame(&self) -> Option<AddFrame> {
-        self.add_window_active()
+        let mut frame = self
+            .add_window_active()
             .then(|| self.new_ui.add.as_ref().map(AddWindow::frame))
-            .flatten()
+            .flatten()?;
+        frame.live = self.new_ui.add_live.as_ref().map(LiveView::frame);
+        Some(frame)
     }
 
     /// Whether the cursor is over the window, or a dropdown of it has its list open (the list
@@ -550,12 +676,17 @@ impl App {
                     // (a manufacturer chosen comes with its first model)
                     if win.choose_maker(i).is_some() {
                         self.add_choose(0);
+                        self.add_live_follow();
                     }
                 }
-                AddVehicleEvent::Vehicle(i) => self.add_choose(i),
+                AddVehicleEvent::Vehicle(i) => {
+                    self.add_choose(i);
+                    self.add_live_follow();
+                }
                 AddVehicleEvent::Livery(i) => {
                     win.set_livery(i);
                     self.add_picture();
+                    self.add_live_follow();
                 }
                 AddVehicleEvent::Depot(i) => win.set_depot(i),
                 AddVehicleEvent::Number(i) => win.set_number(i),
@@ -577,6 +708,24 @@ impl App {
                 AddVehicleEvent::Cancel => {
                     self.new_ui.close_add();
                     return;
+                }
+                // (the live view only when the player asks for it)
+                AddVehicleEvent::Live(true) => {
+                    if self.new_ui.add_live.is_none() {
+                        self.new_ui.add_live = Some(LiveView::new());
+                    }
+                    self.add_live_follow();
+                }
+                AddVehicleEvent::Live(false) => self.new_ui.stop_add_live(),
+                AddVehicleEvent::Orbit(dx, dy) => {
+                    if let Some(l) = self.new_ui.add_live.as_mut() {
+                        l.preview.orbit(dx, dy);
+                    }
+                }
+                AddVehicleEvent::Zoom(k) => {
+                    if let Some(l) = self.new_ui.add_live.as_mut() {
+                        l.preview.zoom_by(k);
+                    }
                 }
             }
         }
@@ -710,13 +859,17 @@ mod tests {
     #[test]
     fn the_picture_box_waits_for_its_own_picture() {
         let mut f = window().frame();
-        assert_eq!(f.preview(None), Preview::Missing, "nothing asked for");
+        assert_eq!(f.preview(None, None), Preview::Missing, "nothing asked for");
         f.picture = Some(7);
-        assert_eq!(f.preview(None), Preview::Loading);
-        assert_eq!(f.preview(Some((6, None))), Preview::Loading, "another's");
-        assert_eq!(f.preview(Some((7, None))), Preview::Missing);
+        assert_eq!(f.preview(None, None), Preview::Loading);
         assert_eq!(
-            f.preview(Some((7, Some((3, 1.5, [0.1, 0.2, 0.9, 0.8]))))),
+            f.preview(Some((6, None)), None),
+            Preview::Loading,
+            "another's"
+        );
+        assert_eq!(f.preview(Some((7, None)), None), Preview::Missing);
+        assert_eq!(
+            f.preview(Some((7, Some((3, 1.5, [0.1, 0.2, 0.9, 0.8])))), None),
             Preview::Picture {
                 tex: 3,
                 aspect: 1.5,
@@ -728,5 +881,28 @@ mod tests {
             picture_key(root, "Vehicles/A/a.bus", ""),
             picture_key(root, "Vehicles/A/a.bus", "Red")
         );
+    }
+
+    #[test]
+    fn the_live_view_shows_its_own_frame_or_says_how_it_stands() {
+        let mut f = window().frame();
+        f.picture = Some(7);
+        let pic = Some((7, Some((3, 1.5, [0.0, 0.0, 1.0, 1.0]))));
+        assert!(!f.live_on());
+        assert!(
+            matches!(f.preview(pic, Some((9, 4))), Preview::Picture { .. }),
+            "off: the picture, whatever frame is left"
+        );
+        f.live = Some((9, false));
+        assert!(f.live_on());
+        assert_eq!(f.preview(pic, None), Preview::Starting);
+        assert_eq!(
+            f.preview(pic, Some((8, 4))),
+            Preview::Starting,
+            "a frame of the vehicle shown before"
+        );
+        assert_eq!(f.preview(pic, Some((9, 4))), Preview::Live { tex: 4 });
+        f.live = Some((9, true));
+        assert_eq!(f.preview(pic, Some((9, 4))), Preview::Failed);
     }
 }
