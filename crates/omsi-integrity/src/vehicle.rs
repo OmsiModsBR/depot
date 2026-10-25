@@ -1,4 +1,4 @@
-use crate::map::{is_null_texture, texture_dirs, Checker};
+use crate::map::{is_null_texture, Checker};
 use crate::report::{Report, Severity};
 use omsi_cfg::{resolve_path, vfs, CfgFile};
 use omsi_model::Model;
@@ -44,9 +44,27 @@ impl Checker<'_> {
                 match Model::load(&mp) {
                     Ok(model) => {
                         let model_dir = mp.parent().unwrap_or(&dir).to_path_buf();
-                        let dirs = texture_dirs(self.root, &model_dir);
-                        self.model_meshes(&model, &model_dir, &dirs, &file);
-                        self.paints(&model, &model_dir, &dirs);
+                        // (the folders the vehicle loader searches, in its order)
+                        let dirs = vec![
+                            resolve_path(&dir, "Texture"),
+                            resolve_path(&model_dir, "Texture"),
+                            model_dir.clone(),
+                            resolve_path(self.root, "Texture"),
+                        ];
+                        // a mesh the model.cfg's folder lacks may lie beside the vehicle,
+                        // in its `model` folder, one folder above the model.cfg, or in the
+                        // installation
+                        let bases: Vec<PathBuf> = [
+                            Some(dir.clone()),
+                            Some(resolve_path(&dir, "model")),
+                            model_dir.parent().map(Path::to_path_buf),
+                            Some(self.root.to_path_buf()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                        self.model_meshes(&model, &model_dir, &dirs, &bases, &file);
+                        self.paints(&model, &dir, &model_dir, &dirs);
                     }
                     Err(_) => self.add(
                         Severity::Error,
@@ -158,33 +176,45 @@ impl Checker<'_> {
 }
 
 impl Checker<'_> {
-    /// The textures of the paint schemes: the `[item]` lines of the `.cti` files in the
-    /// model's `[CTC]` folders, then the model's own items. A paint's texture is searched
-    /// in the paint's folder first.
-    fn paints(&mut self, model: &Model, model_dir: &Path, dirs: &[PathBuf]) {
-        let mut item_dir = model_dir.to_path_buf();
+    /// The textures of the paint schemes, found as the vehicle loader finds them: the
+    /// `[CTC]` folders are named from the vehicle's folder, every content root's copy of a
+    /// folder is read (a `.cti` of the same name in a root of higher priority wins), then the
+    /// model's own paint items follow. A paint's texture is searched in the paint's folder
+    /// first.
+    fn paints(&mut self, model: &Model, vehicle_dir: &Path, _model_dir: &Path, dirs: &[PathBuf]) {
+        let mut item_dir = vehicle_dir.to_path_buf();
         for (i, c) in model.ctc.iter().enumerate() {
-            let folder = resolve_path(model_dir, &c.path);
+            let folder = resolve_path(vehicle_dir, &c.path);
             if i == 0 {
                 item_dir = folder.clone();
             }
-            let mut ctis: Vec<PathBuf> = vfs::read_dir_paths(&folder)
-                .into_iter()
-                .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("cti")))
-                .collect();
-            ctis.sort();
-            for cti in ctis {
-                let by = self.rel(&cti);
-                let Ok(cfg) = CfgFile::read(&cti) else {
-                    continue;
-                };
-                let mut r = cfg.reader();
-                while let Some(k) = r.next_keyword() {
-                    if k == "item" {
-                        let _name = r.str();
-                        let _ctc = r.str();
-                        let texture = r.str().to_string();
-                        self.paint_texture(&texture, &folder, dirs, &by);
+            let mut seen = std::collections::HashSet::new();
+            for d in omsi_cfg::mirrored_dirs(&folder) {
+                let mut ctis: Vec<PathBuf> = vfs::read_dir_paths(&d)
+                    .into_iter()
+                    .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("cti")))
+                    .collect();
+                ctis.sort();
+                for cti in ctis {
+                    let name = cti
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                        .unwrap_or_default();
+                    if !seen.insert(name) {
+                        continue;
+                    }
+                    let by = self.rel(&cti);
+                    let Ok(cfg) = CfgFile::read(&cti) else {
+                        continue;
+                    };
+                    let mut r = cfg.reader();
+                    while let Some(k) = r.next_keyword() {
+                        if k == "item" {
+                            let _name = r.str();
+                            let _ctc = r.str();
+                            let texture = r.str().to_string();
+                            self.paint_texture(&texture, &d, dirs, &by);
+                        }
                     }
                 }
             }
