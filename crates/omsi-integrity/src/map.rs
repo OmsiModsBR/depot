@@ -297,7 +297,6 @@ impl<'a> Checker<'a> {
             }
             None => (sco.model.clone(), sco_dir.to_path_buf()),
         };
-        self.masters = omsi_model::load_texchanges(&model_dir, &model.texchanges);
         let mut dirs = texture_dirs(self.root, &model_dir);
         if sco.model_file.is_some() {
             let own = resolve_path(sco_dir, "texture");
@@ -316,6 +315,13 @@ impl<'a> Checker<'a> {
         fallback_bases: &[PathBuf],
         file: &str,
     ) {
+        // (a vehicle names them from its own folder, which may not be the model.cfg's)
+        self.masters = omsi_model::load_texchanges(model_dir, &model.texchanges);
+        for b in fallback_bases {
+            if self.masters.is_empty() {
+                self.masters = omsi_model::load_texchanges(b, &model.texchanges);
+            }
+        }
         for md in &model.meshes {
             if md.file.trim().is_empty() {
                 continue;
