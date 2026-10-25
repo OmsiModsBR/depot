@@ -2869,19 +2869,21 @@ pub fn tutorials(l: &mut Launcher, area: Rect) {
             TEXT,
             Align::Left,
         );
-        l.ui.push_clip(
+        // (scrolled: a long lesson text ran past the card and was cut off)
+        l.ui.scroll_area(
+            &format!("tut-text-{n}"),
             Rect::new(r.x + 18.0, r.y + 46.0, r.w - 36.0, r.h - 110.0),
-            0.0,
+            &mut |ui, v| {
+                ui.paragraph(
+                    text,
+                    Vec2::new(v.x, v.y),
+                    v.w - 12.0,
+                    12.5,
+                    Weight::Regular,
+                    TEXT_DIM,
+                )
+            },
         );
-        l.ui.paragraph(
-            text,
-            Vec2::new(r.x + 18.0, r.y + 46.0),
-            r.w - 36.0,
-            12.5,
-            Weight::Regular,
-            TEXT_DIM,
-        );
-        l.ui.pop_clip();
         if l.ui.button(
             &format!("tut-{n}"),
             Rect::new(r.x + 18.0, r.bottom() - 58.0, 200.0, 40.0),

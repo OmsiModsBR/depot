@@ -4,7 +4,7 @@
 
 use windows::Win32::Graphics::Direct3D9::*;
 
-use super::{make_mesh, map_err, shader, some, write_buffer, D3d9Device, Mesh};
+use super::{make_mesh, map_err, rgba_to_argb, shader, some, write_buffer, D3d9Device, Mesh};
 use crate::scene::{
     mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneLamps,
     SceneMaterial, SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS,
@@ -148,6 +148,8 @@ pub(super) struct SceneStore {
     pub(super) copies: SceneCopies,
     lamps: Lamps,
     tile_map: Option<TileMap>,
+    /// The depth surface scene targets are drawn with, and its size (the largest asked).
+    target_depth: Option<(u32, u32, IDirect3DSurface9)>,
 }
 
 /// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
@@ -804,6 +806,17 @@ impl D3d9Device {
             ));
         };
         frame.validate()?;
+        self.ensure_scene_pipeline()?;
+        let drawn = self.draw_scene_inner(frame, &material, target.width, target.height);
+        let restored = self.restore_scene_states();
+        drawn?;
+        restored?;
+        self.set_frame_states()
+    }
+
+    /// Builds the scene pipeline if it is not there; one that cannot be made on this device
+    /// is remembered, and not tried again.
+    fn ensure_scene_pipeline(&mut self) -> Result<()> {
         if let Some(why) = &self.scene.unsupported {
             return Err(BackendError::Unsupported(why.clone()));
         }
@@ -818,10 +831,14 @@ impl D3d9Device {
                 Err(e) => return Err(e),
             }
         }
-        let drawn = self.draw_scene_inner(frame, &material, target.width, target.height);
-        // Back to the backend's own states whatever happened, with depth as it expects it.
+        Ok(())
+    }
+
+    /// Back to the backend's own states after a scene, whatever happened, with depth as the
+    /// backend expects it.
+    fn restore_scene_states(&mut self) -> Result<()> {
         // SAFETY: plain calls on a live device.
-        let restored = unsafe {
+        unsafe {
             self.device
                 .SetStreamSourceFreq(0, 1)
                 .and_then(|_| self.device.SetStreamSourceFreq(1, 1))
@@ -841,9 +858,130 @@ impl D3d9Device {
                         .Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 1.0, 0)
                 })
                 .map_err(map_err)
+        }
+    }
+
+    /// Draws `frame` into the render texture of scene texture `target`, `size` pixels (a
+    /// mirror's picture), cleared to `clear_rgba` first: the same batches and shader as the
+    /// window's picture, with a depth surface of its own. Inside a frame or outside one;
+    /// what was bound is bound again whatever happened. The texture is made here, or again
+    /// when its size changes; a device opened again has it back at the next draw.
+    pub fn draw_scene_into<'m>(
+        &mut self,
+        target: usize,
+        size: (u32, u32),
+        clear_rgba: [f32; 4],
+        frame: &SceneFrame,
+        material: impl Fn(usize) -> Option<SceneMaterial<'m>>,
+    ) -> Result<()> {
+        let (w, h) = size;
+        if w == 0 || h == 0 || w.max(h) > self.caps.max_texture_size {
+            return Err(BackendError::InvalidArgument(format!(
+                "a scene target of {w}x{h}"
+            )));
+        }
+        frame.validate()?;
+        self.ensure_scene_pipeline()?;
+        let texture = match self
+            .scene_texture(target)
+            .filter(|t| super::ui::is_target_of(t, w, h))
+        {
+            Some(t) => t.clone(),
+            None => {
+                let mut texture = None;
+                // SAFETY: the out-parameter is a live local.
+                unsafe {
+                    self.device
+                        .CreateTexture(
+                            w,
+                            h,
+                            1,
+                            D3DUSAGE_RENDERTARGET as u32,
+                            D3DFMT_A8R8G8B8,
+                            D3DPOOL_DEFAULT,
+                            &mut texture,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                }
+                let texture = some(texture, "scene target")?;
+                self.put_scene_target(target, texture.clone());
+                texture
+            }
+        };
+        let depth = match &self.scene.target_depth {
+            // (a depth surface at least as large as the target serves, so mirrors of
+            // several sizes share one)
+            Some((dw, dh, d)) if *dw >= w && *dh >= h => d.clone(),
+            _ => {
+                let mut depth = None;
+                // SAFETY: the out-parameter is a live local.
+                unsafe {
+                    self.device
+                        .CreateDepthStencilSurface(
+                            w,
+                            h,
+                            D3DFMT_D24X8,
+                            D3DMULTISAMPLE_NONE,
+                            0,
+                            true,
+                            &mut depth,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                }
+                let depth = some(depth, "scene target depth")?;
+                self.scene.target_depth = Some((w, h, depth.clone()));
+                depth
+            }
+        };
+        // SAFETY: plain calls on a live device; the surfaces belong to it. What was bound is
+        // bound again whatever happened.
+        let (drawn, restored_bindings) = unsafe {
+            let surface = texture.GetSurfaceLevel(0).map_err(map_err)?;
+            let color = self.device.GetRenderTarget(0).map_err(map_err)?;
+            let prev_depth = self.device.GetDepthStencilSurface().ok();
+            self.device.SetRenderTarget(0, &surface).map_err(map_err)?;
+            let drawn = self
+                .device
+                .SetDepthStencilSurface(&depth)
+                .map_err(map_err)
+                .and_then(|_| {
+                    let own_scene = self.frame.is_none();
+                    if own_scene {
+                        self.device.BeginScene().map_err(map_err)?;
+                    }
+                    let drawn = self
+                        .device
+                        .Clear(
+                            0,
+                            std::ptr::null(),
+                            (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) as u32,
+                            rgba_to_argb(clear_rgba),
+                            1.0,
+                            0,
+                        )
+                        .map_err(map_err)
+                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h));
+                    // (the backend's own states, with this surface's depth still bound)
+                    let states = self.restore_scene_states();
+                    let ended = if own_scene {
+                        self.device.EndScene().map_err(map_err)
+                    } else {
+                        Ok(())
+                    };
+                    drawn.and(states).and(ended)
+                });
+            // (setting the colour target again sets the whole viewport again too)
+            let rebound = self
+                .device
+                .SetRenderTarget(0, &color)
+                .and_then(|_| self.device.SetDepthStencilSurface(prev_depth.as_ref()))
+                .map_err(map_err);
+            (drawn, rebound)
         };
         drawn?;
-        restored?;
+        restored_bindings?;
         self.set_frame_states()
     }
 

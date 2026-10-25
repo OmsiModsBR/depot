@@ -108,7 +108,7 @@ the log instead of a black world; the scene is then not tried again every frame.
 (`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
 
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
-the fog's way through the player's vehicle, and mirrors and render-to-texture. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
+the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
 Known differences from the default renderer, each for a later PR:
@@ -195,6 +195,6 @@ frame plan and asset events to this crate. In order:
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface, the
    HUD's pictures, the minimap and the city map).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
-   specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky, then mirrors and maps (render to texture).
+   specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.

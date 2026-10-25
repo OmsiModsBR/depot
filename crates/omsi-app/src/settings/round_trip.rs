@@ -98,7 +98,6 @@ const VARIED: &[(&str, &str)] = &[
     ("time_sync", "1"),
     ("metar_sync", "1"),
     ("metar_station", "EDDB"),
-    ("machine_translation", "1"),
     ("ctrl_deadzone", "0.1"),
     ("right_stick_look", "0"),
     ("pad_steer_linear", "1"),
