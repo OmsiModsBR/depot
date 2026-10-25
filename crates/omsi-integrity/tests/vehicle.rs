@@ -103,16 +103,16 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     write(
         &root,
         "Vehicles/Test/model/model.cfg",
-        "[mesh]\nbody.x\n[CTC]\nPaint\n..\\Texture\\paints\n0\n",
+        "[mesh]\nbody.x\n[CTC]\nPaint\nTexture\\paints\n0\n",
     );
     write(
         &root,
-        "Vehicles/Test/Texture/paints/red.cti",
+        "Vehicles/Test/texture/paints/red.cti",
         "[item]\nRed\nbody_ctc\nred.bmp\n[item]\nBlue\nbody_ctc\nblue.bmp\n",
     );
     write(
         &root,
-        "Vehicles/Test/Texture/paints/red.bmp",
+        "Vehicles/Test/texture/paints/red.bmp",
         bmp(1024, 1024),
     );
     let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
@@ -121,7 +121,43 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     assert_eq!(r.findings[0].file, "blue.bmp");
     assert_eq!(
         r.findings[0].referenced_by.as_ref().unwrap().0,
-        "Vehicles/Test/Texture/paints/red.cti"
+        "Vehicles/Test/texture/paints/red.cti"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_model_cfg_in_a_subfolder_finds_its_mesh_and_the_vehicles_textures() {
+    let root = temp_root("subfolder");
+    complete(&root);
+    // model.cfg in a "Configuration Files" folder; the mesh lies in the vehicle's `model`
+    // folder and the texture in the vehicle's own `Texture` folder
+    write(
+        &root,
+        "Vehicles/Test/Configuration Files/model.cfg",
+        "[mesh]\nbody.x\n",
+    );
+    fs::remove_file(root.join("Vehicles/Test/model/model.cfg")).unwrap();
+    write(
+        &root,
+        "Vehicles/Test/Test.bus",
+        BUS.replace("model\\model.cfg", "Configuration Files\\model.cfg"),
+    );
+    let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_reflection_camera_texture_needs_no_file() {
+    let root = temp_root("mirror");
+    complete(&root);
+    write(
+        &root,
+        "Vehicles/Test/model/body.x",
+        MESH.replace("body.bmp", "reflexion0.bmp"),
+    );
+    let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }

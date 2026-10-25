@@ -253,7 +253,7 @@ impl<'a> Checker<'a> {
             dirs.retain(|d| *d != own);
             dirs.insert(0, own);
         }
-        self.model_meshes(&model, &model_dir, &dirs, &file);
+        self.model_meshes(&model, &model_dir, &dirs, &[], &file);
     }
 
     /// Every mesh a model names, with their textures.
@@ -262,6 +262,7 @@ impl<'a> Checker<'a> {
         model: &Model,
         model_dir: &Path,
         dirs: &[PathBuf],
+        fallback_bases: &[PathBuf],
         file: &str,
     ) {
         for md in &model.meshes {
@@ -271,6 +272,11 @@ impl<'a> Checker<'a> {
             let mut mesh_path = resolve_path(&resolve_path(model_dir, "model"), &md.file);
             if !vfs::is_file(&mesh_path) {
                 mesh_path = resolve_path(model_dir, &md.file);
+            }
+            if !vfs::is_file(&mesh_path) {
+                if let Some(p) = fallback_bases.iter().find_map(|b| find_beside(b, &md.file)) {
+                    mesh_path = p;
+                }
             }
             if !vfs::is_file(&mesh_path) {
                 self.add(
@@ -341,7 +347,7 @@ impl<'a> Checker<'a> {
             for name in names {
                 let name = name.trim();
                 // `null.bmp` stands for no texture, `\S:n` for a picture a script draws
-                if is_null_texture(name) || name.starts_with("\\S:") {
+                if is_null_texture(name) || name.starts_with("\\S:") || is_reflexion(name) {
                     continue;
                 }
                 match omsi_texture::find_texture(name, &dir_refs) {
@@ -518,4 +524,25 @@ fn override_slot(materials: &[omsi_o3d::Material], o: &MaterialDef) -> Option<us
         }
     }
     None
+}
+
+/// A mirror or camera monitor: the game draws what a reflection camera sees into a texture
+/// named `reflexion<N>`, so no file of that name is needed.
+fn is_reflexion(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    n.strip_prefix("reflexion")
+        .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// A file named from another folder, found in `base`: as written, or without its first
+/// folder (a path that names its own folder again, given from inside it).
+pub(crate) fn find_beside(base: &Path, file: &str) -> Option<PathBuf> {
+    let p = resolve_path(base, file);
+    if vfs::exists(&p) {
+        return Some(p);
+    }
+    let trimmed = file.trim_start_matches(['\\', '/']);
+    let (_, rest) = trimmed.split_once(['\\', '/'])?;
+    let p = resolve_path(base, rest);
+    vfs::exists(&p).then_some(p)
 }
