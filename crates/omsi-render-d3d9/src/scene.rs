@@ -149,6 +149,7 @@ impl SceneTexture<'_> {
 }
 
 /// The levels below a `w` x `h` RGBA image, each the 2 x 2 box average of the one above
+/// (colour weighted by alpha, as the default renderer's mip generator does it)
 /// (an odd edge repeats its last texel), down to 1 x 1.
 pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
     let mut out: Vec<Vec<u8>> = Vec::new();
@@ -161,11 +162,26 @@ pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
             let (y0, y1) = ((y * 2).min(ph - 1), (y * 2 + 1).min(ph - 1));
             for x in 0..nw {
                 let (x0, x1) = ((x * 2).min(pw - 1), (x * 2 + 1).min(pw - 1));
-                for c in 0..4 {
-                    let at = |xx: usize, yy: usize| prev[(yy * pw + xx) * 4 + c] as u32;
-                    let sum = at(x0, y0) + at(x1, y0) + at(x0, y1) + at(x1, y1);
-                    next[(y * nw + x) * 4 + c] = ((sum + 2) / 4) as u8;
+                let at = |xx: usize, yy: usize, c: usize| prev[(yy * pw + xx) * 4 + c] as u32;
+                let texels = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
+                let alpha: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, 3)).sum();
+                let o = (y * nw + x) * 4;
+                for c in 0..3 {
+                    next[o + c] = if alpha > 0 {
+                        // weighted by alpha: the colour stored in transparent texels must not
+                        // bleed into the silhouette (the default renderer's mip.wgsl does this)
+                        let sum: u32 = texels
+                            .iter()
+                            .map(|&(xx, yy)| at(xx, yy, c) * at(xx, yy, 3))
+                            .sum();
+                        ((sum + alpha / 2) / alpha) as u8
+                    } else {
+                        // all four transparent: the plain average (alpha is often only a mask)
+                        let sum: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, c)).sum();
+                        ((sum + 2) / 4) as u8
+                    };
                 }
+                next[o + 3] = ((alpha + 2) / 4) as u8;
             }
         }
         out.push(next);
@@ -602,12 +618,29 @@ mod tests {
         let row = [[0, 0, 0, 0], [100, 100, 100, 100], [200, 200, 200, 200]].concat();
         let chain = mip_chain(3, 1, &row);
         assert_eq!(chain.len(), 1);
-        assert_eq!(chain[0], vec![50, 50, 50, 50]);
+        // (the colour is weighted by alpha: the transparent texel's black does not count)
+        assert_eq!(chain[0], vec![100, 100, 100, 50]);
         // the chain of 8x2 has 8x2 -> 4x1 -> 2x1 -> 1x1 below level 0
         let chain = mip_chain(8, 2, &[7u8; 8 * 2 * 4]);
         let sizes: Vec<usize> = chain.iter().map(|l| l.len() / 4).collect();
         assert_eq!(sizes, vec![4, 2, 1]);
         assert!(chain.iter().flatten().all(|&c| c == 7));
+    }
+
+    #[test]
+    fn the_mip_chain_keeps_transparent_colour_out_of_the_silhouette() {
+        // a green leaf texel beside three blue fully transparent ones stays green
+        let rgba = [
+            [0, 200, 0, 255],
+            [0, 0, 255, 0],
+            [0, 0, 255, 0],
+            [0, 0, 255, 0],
+        ]
+        .concat();
+        assert_eq!(mip_chain(2, 2, &rgba), vec![vec![0, 200, 0, 64]]);
+        // all four transparent: the plain average, so a mask in alpha does not blacken colour
+        let rgba = [[40, 80, 120, 0]; 4].concat();
+        assert_eq!(mip_chain(2, 2, &rgba), vec![vec![40, 80, 120, 0]]);
     }
 
     #[test]
