@@ -64,7 +64,7 @@ impl Checker<'_> {
                         .flatten()
                         .collect();
                         self.model_meshes(&model, &model_dir, &dirs, &bases, &file);
-                        self.paints(&model, &dir, &model_dir, &dirs);
+                        self.paints(&model, &dir, &dirs);
                     }
                     Err(e) => self.add(
                         Severity::Error,
@@ -182,7 +182,15 @@ impl Checker<'_> {
     /// folder is read (a `.cti` of the same name in a root of higher priority wins), then the
     /// model's own paint items follow. A paint's texture is searched in the paint's folder
     /// first.
-    fn paints(&mut self, model: &Model, vehicle_dir: &Path, _model_dir: &Path, dirs: &[PathBuf]) {
+    fn paints(&mut self, model: &Model, vehicle_dir: &Path, dirs: &[PathBuf]) {
+        // (an item only counts for a model that has a [CTCTexture] of that name: the others
+        // are slots of a folder shared by several models)
+        let slots: Vec<String> = model
+            .ctc_textures
+            .iter()
+            .map(|(n, _)| n.trim().to_ascii_lowercase())
+            .collect();
+        let has = |ctc: &str| slots.contains(&ctc.trim().to_ascii_lowercase());
         let mut item_dir = vehicle_dir.to_path_buf();
         for (i, c) in model.ctc.iter().enumerate() {
             let folder = resolve_path(vehicle_dir, &c.path);
@@ -212,16 +220,18 @@ impl Checker<'_> {
                     while let Some(k) = r.next_keyword() {
                         if k == "item" {
                             let _name = r.str();
-                            let _ctc = r.str();
+                            let ctc = r.str().to_string();
                             let texture = r.str().to_string();
-                            self.paint_texture(&texture, &d, dirs, &by);
+                            if has(&ctc) {
+                                self.paint_texture(&texture, &d, dirs, &by);
+                            }
                         }
                     }
                 }
             }
         }
         let by = self.rel(&model.path);
-        for it in &model.items {
+        for it in model.items.iter().filter(|it| has(&it.ctc)) {
             self.paint_texture(&it.texture, &item_dir, dirs, &by);
         }
     }
@@ -233,7 +243,7 @@ impl Checker<'_> {
         }
         let mut look: Vec<&Path> = vec![folder];
         look.extend(dirs.iter().map(|d| d.as_path()));
-        match omsi_texture::find_texture(name, &look) {
+        match omsi_texture::find_texture_uncached(name, &look) {
             Some(p) => self.texture(&p, by),
             None => self.add(
                 Severity::Warning,
