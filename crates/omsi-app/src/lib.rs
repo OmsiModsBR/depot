@@ -314,7 +314,6 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     ui_language(&settings::Settings::load().language);
     // (the launcher and every menu of the game wear the accent chosen in Settings > Interface)
     settings::Settings::load().apply_accent();
-    // (a server has no interface to translate)
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
     if args.server.is_some() {
         eprintln!("server: the dedicated server is no longer built or supported (see docs/removed/MULTIPLAYER_DISABLED.md)");
