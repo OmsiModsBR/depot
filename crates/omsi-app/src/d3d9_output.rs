@@ -336,6 +336,8 @@ impl Inner {
     fn failed(&mut self, e: BackendError) {
         match e {
             BackendError::DeviceLost => {
+                // (the frame that was open went with the device)
+                self.open = false;
                 // a removed device (driver reset): a new one is opened, and the scene's
                 // meshes and textures go up again from the copies the device keeps
                 log::error!("d3d9: the device was lost; opening it again");
