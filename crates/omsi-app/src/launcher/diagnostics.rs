@@ -12,7 +12,27 @@ use omsi_ui::{Rect, Weight};
 /// The page in `area` (the sidebar is outside it).
 pub fn draw(l: &mut Launcher, area: Rect) {
     // (a phone keeps its compact heading, as the other pages)
-    let y = l.page_title(area, omsi_launcher_ui::Page::Diagnostics).y;
+    let body = l.page_title(area, omsi_launcher_ui::Page::Diagnostics);
+    let bar = Rect::new(body.x, body.y, body.w, 36.0);
+    let mut tab = l.pages.diag.tab;
+    if l.ui.segmented(
+        "diag-tab",
+        Rect::new(bar.x, bar.y, 300.0f32.min(bar.w), bar.h),
+        &mut tab,
+        &["Overview", "Integrity"],
+    ) {
+        l.pages.diag.tab = tab;
+    }
+    let below = Rect::new(area.x, body.y + 52.0, area.w, area.bottom() - body.y - 52.0);
+    match l.pages.diag.tab {
+        1 => super::integrity::draw(l, below),
+        _ => overview(l, below),
+    }
+}
+
+/// The first tab: this build, the folder, the log and the games running.
+fn overview(l: &mut Launcher, area: Rect) {
+    let y = area.y;
     let col = (area.w - 16.0) * 0.5;
     let left = Rect::new(area.x, y, col, 300.0);
     let right = Rect::new(area.x + col + 16.0, y, col, 300.0);

@@ -3093,6 +3093,7 @@ dependencies = [
  "omsi-cfg",
  "omsi-content",
  "omsi-geometry",
+ "omsi-integrity",
  "omsi-launcher-core",
  "omsi-launcher-ui",
  "omsi-map",

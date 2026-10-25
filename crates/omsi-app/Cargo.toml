@@ -44,6 +44,7 @@ omsi-plugin = { path = "../omsi-plugin", optional = true }
 omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-content = { path = "../omsi-content" }
 omsi-timetable = { path = "../omsi-timetable" }
+omsi-integrity = { path = "../omsi-integrity" }
 omsi-script = { path = "../omsi-script" }
 omsi-audio = { path = "../omsi-audio" }
 wgpu.workspace = true
