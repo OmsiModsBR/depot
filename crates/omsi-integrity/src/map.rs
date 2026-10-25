@@ -29,7 +29,8 @@ struct Pending {
     message: String,
     detail: Option<String>,
     first_by: String,
-    count: usize,
+    /// The distinct files that name it.
+    users: HashSet<String>,
 }
 
 pub(crate) struct Checker<'a> {
@@ -96,9 +97,9 @@ impl<'a> Checker<'a> {
             message,
             detail,
             first_by: by.to_string(),
-            count: 0,
+            users: HashSet::new(),
         });
-        e.count += 1;
+        e.users.insert(by.to_string());
     }
 
     pub(crate) fn finish(mut self) -> Report {
@@ -109,7 +110,7 @@ impl<'a> Checker<'a> {
                 file,
                 message: p.message,
                 detail: p.detail,
-                referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.count)),
+                referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.users.len())),
                 known: false,
             });
         }
@@ -527,7 +528,7 @@ impl<'a> Checker<'a> {
             // (checked already: each finding about it counts one more file that names it)
             for code in ["texture-npot", "texture-unreadable", "path-too-long"] {
                 if let Some(p) = self.pending.get_mut(&(code, file.clone())) {
-                    p.count += 1;
+                    p.users.insert(by.to_string());
                 }
             }
             return;

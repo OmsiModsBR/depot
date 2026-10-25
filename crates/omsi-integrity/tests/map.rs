@@ -272,7 +272,7 @@ fn a_mixed_size_is_enlarged_on_the_axis_that_needs_it() {
 }
 
 #[test]
-fn a_file_used_by_several_files_is_one_finding_with_the_count() {
+fn a_file_placed_twice_by_one_tile_is_one_finding_with_one_user() {
     let root = temp_root("count");
     complete(&root);
     let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\gone.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\nObject Nr. 2\n[object]\n0\nSceneryobjects\\gone.sco\n9\n5\n6\n0.25\n90\n0\n0\n0\n");
@@ -283,7 +283,7 @@ fn a_file_used_by_several_files_is_one_finding_with_the_count() {
         .iter()
         .find(|f| f.code == "object-missing")
         .unwrap();
-    assert_eq!(f.referenced_by.as_ref().unwrap().1, 2);
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 1);
     assert_eq!(
         r.findings
             .iter()
@@ -433,7 +433,7 @@ fn a_file_added_after_a_check_is_seen_by_the_next_one() {
 }
 
 #[test]
-fn a_wasteful_texture_counts_every_file_that_names_it() {
+fn a_texture_two_objects_share_through_one_mesh_has_that_mesh_as_user() {
     let root = temp_root("npotcount");
     complete(&root);
     write(
@@ -454,7 +454,7 @@ fn a_wasteful_texture_counts_every_file_that_names_it() {
         .iter()
         .find(|f| f.code == "texture-npot")
         .unwrap_or_else(|| panic!("{:#?}", r.findings));
-    assert_eq!(f.referenced_by.as_ref().unwrap().1, 2, "{:#?}", r.findings);
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -491,6 +491,34 @@ fn a_texture_change_master_stands_for_the_texture_the_mesh_names() {
     write(&root, "Sceneryobjects/house/texture/w1.bmp", bmp(512, 512));
     let r = check_map(&root, &root.join("Maps/Test"));
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_file_naming_a_texture_twice_is_one_user() {
+    let root = temp_root("twoslots");
+    complete(&root);
+    write(
+        &root,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(300, 300),
+    );
+    // two materials of one mesh with the same texture
+    let two = MESH.replace(
+        "MeshMaterialList { 1; 1; 0;;",
+        "MeshMaterialList { 2; 1; 0;;",
+    );
+    let material = "Material { 1;1;1;1;; 2; 0;0;0;; 0;0;0;; TextureFilename { \"wall.bmp\"; } }";
+    let two = two.replace(material, &format!("{material} {material}"));
+    write(&root, "Sceneryobjects/house/model/house.x", two);
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap();
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", f);
     let _ = fs::remove_dir_all(&root);
 }
 
