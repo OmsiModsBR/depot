@@ -43,6 +43,9 @@ pub(crate) struct Checker<'a> {
     seen_texture: HashMap<PathBuf, String>,
     seen_long: HashSet<PathBuf>,
     pub(crate) sound_seen: HashSet<PathBuf>,
+    /// The `[texchanges]` masters of the object being looked at: their mesh texture names are
+    /// placeholders, the pictures are the entries.
+    masters: Vec<omsi_model::TexChangeMaster>,
 }
 
 impl<'a> Checker<'a> {
@@ -61,6 +64,7 @@ impl<'a> Checker<'a> {
             seen_texture: HashMap::new(),
             seen_long: HashSet::new(),
             sound_seen: HashSet::new(),
+            masters: Vec::new(),
         }
     }
 
@@ -141,6 +145,9 @@ impl<'a> Checker<'a> {
             self.ground_texture(&g.texture, &by, i == 0);
             self.ground_texture(&g.detail_texture, &by, false);
         }
+        // (the game looks for chrono folders at any depth below `Chrono`)
+        let mut chrono_dirs = Vec::new();
+        collect_dirs(&resolve_path(map_dir, "Chrono"), 4, &mut chrono_dirs);
         for t in &global.tiles {
             let path = resolve_path(map_dir, &t.file);
             let tile_name = self.rel(&path);
@@ -174,14 +181,9 @@ impl<'a> Checker<'a> {
             self.report.tiles += 1;
             self.tile_content(&tile, &tile_name, true);
             // the patches of every chrono folder (active or not: the check is of the map)
-            for dir in vfs::list_dir(&resolve_path(map_dir, "Chrono"))
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|(_, is_dir)| *is_dir)
-            {
-                let base = resolve_path(map_dir, "Chrono").join(dir.0);
+            for base in &chrono_dirs {
                 let name = t.file.rsplit(['/', '\\']).next().unwrap_or(&t.file);
-                let patch_path = resolve_path(&base, name);
+                let patch_path = resolve_path(base, name);
                 if !vfs::is_file(&patch_path) {
                     continue;
                 }
@@ -324,6 +326,13 @@ impl<'a> Checker<'a> {
         fallback_bases: &[PathBuf],
         file: &str,
     ) {
+        // (a vehicle names them from its own folder, which may not be the model.cfg's)
+        self.masters = omsi_model::load_texchanges(model_dir, &model.texchanges);
+        for b in fallback_bases {
+            if self.masters.is_empty() {
+                self.masters = omsi_model::load_texchanges(b, &model.texchanges);
+            }
+        }
         for md in &model.meshes {
             if md.file.trim().is_empty() {
                 continue;
@@ -350,12 +359,14 @@ impl<'a> Checker<'a> {
             }
             self.mesh(&mesh_path, dirs, &md.materials, file);
         }
+        self.masters.clear();
     }
 
     fn mesh(&mut self, path: &Path, dirs: &[PathBuf], overrides: &[MaterialDef], by: &str) {
         // (a mesh shared by two objects is looked at once per texture lookup context: the
         // folders its textures are searched in, and the material commands that name more)
-        let context = format!("{dirs:?}{overrides:?}");
+        let masters: Vec<&str> = self.masters.iter().map(|m| m.texture.as_str()).collect();
+        let context = format!("{dirs:?}{overrides:?}{masters:?}");
         if !self.seen_mesh.insert((path.to_path_buf(), context)) {
             return;
         }
@@ -393,7 +404,18 @@ impl<'a> Checker<'a> {
                 .iter()
                 .any(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some());
             let mut names: Vec<&str> = Vec::new();
-            if !generated {
+            let mut entries: Vec<(String, PathBuf)> = Vec::new();
+            // a texture a [texchanges] master replaces is a placeholder name; its entries are
+            // the pictures
+            let master = self
+                .masters
+                .iter()
+                .find(|x| x.texture.trim().eq_ignore_ascii_case(m.texture.trim()));
+            if let Some(x) = master {
+                for e in &x.entries {
+                    entries.push((e.clone(), x.dir.clone()));
+                }
+            } else if !generated {
                 names.push(&m.texture);
             }
             for o in &slot_overrides {
@@ -402,6 +424,25 @@ impl<'a> Checker<'a> {
                 names.extend(o.envmap.as_ref().map(|e| e.0.as_str()));
                 names.extend(o.envmap_mask.as_deref());
                 names.extend(o.bumpmap.as_ref().map(|b| b.0.as_str()));
+            }
+            for (name, dir) in &entries {
+                let name = name.trim();
+                if is_null_texture(name) {
+                    continue;
+                }
+                let mut where_ = vec![dir.as_path()];
+                where_.extend(dir_refs.iter().copied());
+                match omsi_texture::find_texture_uncached(name, &where_) {
+                    Some(p) => self.texture(&p, &mesh_name),
+                    None => self.add(
+                        Severity::Warning,
+                        "texture-missing",
+                        name.to_string(),
+                        &mesh_name,
+                        "A texture a texture-change list names is missing.".into(),
+                        None,
+                    ),
+                }
             }
             for name in names {
                 let name = name.trim();
@@ -614,4 +655,18 @@ pub(crate) fn find_beside(base: &Path, file: &str) -> Option<PathBuf> {
     let (_, rest) = trimmed.split_once(['\\', '/'])?;
     let p = resolve_path(base, rest);
     vfs::exists(&p).then_some(p)
+}
+
+/// The folders below `dir`, to `depth` levels.
+fn collect_dirs(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    if depth == 0 {
+        return;
+    }
+    for (name, is_dir) in vfs::list_dir(dir).unwrap_or_default() {
+        if is_dir {
+            let sub = dir.join(name);
+            out.push(sub.clone());
+            collect_dirs(&sub, depth - 1, out);
+        }
+    }
 }
