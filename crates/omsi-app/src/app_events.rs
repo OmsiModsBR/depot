@@ -4236,8 +4236,7 @@ impl ApplicationHandler for App {
 
 impl App {
     /// The speed limit of the street the player's vehicle is on, to five km/h, for the
-    /// information bar: from the map's own lanes (or the traffic's) within eight metres of the
-    /// vehicle; none off the streets, on foot or on a map without lanes.
+    /// information bar (see [`street_limit`]); none on foot or on a map without lanes.
     pub(crate) fn speed_limit_here(&self) -> Option<f32> {
         if self.on_foot.is_some() {
             return None;
@@ -4248,11 +4247,7 @@ impl App {
             .as_ref()
             .and_then(|n| n.map_net())
             .or(self.traffic.as_ref().map(|t| &t.net))?;
-        let (lane, _, _) = net
-            .nearest_lane_near(p.vehicle.position, omsi_sim::traffic::LaneKind::Street)
-            .filter(|l| l.2 < 8.0)?;
-        let v = net.lanes.get(lane)?.speed_limit_kmh;
-        (v > 1.0 && v < 200.0).then(|| (v / 5.0).round() * 5.0)
+        street_limit(net, p.vehicle.position, p.vehicle.heading)
     }
 
     /// The window's size in pixels, while the mirror panels can be worked (in the cab, no menu).
@@ -4715,6 +4710,25 @@ pub(crate) fn vehicle_temperatures(p: &Player) -> (f32, f32) {
     (outside, inside)
 }
 
+/// The limit the map gives the street lane a vehicle at `pos` facing `heading` (degrees) is
+/// on, to five km/h: the lane that runs the way it faces within eight metres (so not the
+/// cross street in a junction; backing up, the way it came from), and only a limit the map
+/// itself gives - a street without one has the traffic's default, which is no sign.
+pub(crate) fn street_limit(
+    net: &omsi_sim::traffic::Network,
+    pos: glam::DVec3,
+    heading: f64,
+) -> Option<f32> {
+    use omsi_sim::traffic::LaneKind;
+    let lane = net
+        .lane_along(pos, heading, LaneKind::Street, 8.0, 45.0)
+        .or_else(|| net.lane_along(pos, heading + 180.0, LaneKind::Street, 8.0, 45.0))?
+        .0;
+    let lane = net.lanes.get(lane)?;
+    let v = lane.speed_limit_kmh;
+    (lane.limit_from_map && v > 1.0 && v < 200.0).then(|| (v / 5.0).round() * 5.0)
+}
+
 /// What the information bar says, in the layout the player chose (`info_bar_mode`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InfoMode {
@@ -4841,7 +4855,7 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
                         trip.line.trim()
                     };
                     let mut line_group = vec![InfoItem::new(line, InfoTone::Badge)];
-                    if full || trip.terminus.trim().is_empty() {
+                    if full && !trip.terminus.trim().is_empty() {
                         line_group.push(plain(trip.terminus.trim().to_string()));
                     }
                     groups.push(line_group);
@@ -4864,9 +4878,7 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
             (false, Some(low)) => format!("{fps:.0} / {low:.0} fps"),
             (_, None) => format!("{fps:.0} fps"),
         };
-        if mode != InfoMode::Essential {
-            groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
-        }
+        groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
     }
     ui::InfoBar { groups, bottom }
 }
@@ -4991,8 +5003,8 @@ mod info_tests {
         assert!(bar.groups[1][0].text.starts_with("74 fps"));
         let compact = info_bar(&data, InfoMode::Compact, false);
         assert_eq!(compact.groups[1][0].text, "74 / 52 fps");
-        // the essentials have no frame rate: the corner chip is for that
-        assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 0);
+        // (asked for, the frame rate is there in every layout)
+        assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 1);
     }
 }
 
@@ -5036,5 +5048,73 @@ mod vr_mirror_tests {
         assert_eq!(vr_mirror_updates(&mut budget, 0.1, -1.0, 0), 0);
         assert_eq!(vr_mirror_updates(&mut budget, 0.1, 360.0, 0), 0);
         assert_eq!(budget, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod street_limit_tests {
+    use super::street_limit;
+    use glam::DVec3;
+    use omsi_sim::traffic::{Lane, LaneBuilder, LaneKind, Network};
+
+    fn road(a: (f64, f64), b: (f64, f64), limit: Option<f32>) -> Lane {
+        let mut l = LaneBuilder::polyline(
+            vec![DVec3::new(a.0, a.1, 0.0), DVec3::new(b.0, b.1, 0.0)],
+            LaneKind::Street,
+            3.0,
+        );
+        if let Some(v) = limit {
+            l.speed_limit_kmh = v;
+            l.limit_from_map = true;
+        }
+        l
+    }
+
+    fn net(lanes: Vec<Lane>) -> Network {
+        let mut n = Network {
+            lanes,
+            ..Default::default()
+        };
+        n.build_grid();
+        n
+    }
+
+    #[test]
+    fn the_limit_is_the_one_of_the_street_the_vehicle_drives_along() {
+        // a 30 zone running north, crossed by a 50 road running east, the vehicle at the
+        // crossing and a little off the east road's centre line, heading north
+        let n = net(vec![
+            road((0.0, -50.0), (0.0, 50.0), Some(30.0)),
+            road((-50.0, 1.0), (50.0, 1.0), Some(50.0)),
+        ]);
+        assert_eq!(street_limit(&n, DVec3::new(0.5, 0.0, 0.0), 0.0), Some(30.0));
+        // heading east it is the other street's
+        assert_eq!(
+            street_limit(&n, DVec3::new(0.5, 0.0, 0.0), 90.0),
+            Some(50.0)
+        );
+    }
+
+    #[test]
+    fn a_street_without_a_limit_from_the_map_shows_none() {
+        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), None)]);
+        assert_eq!(street_limit(&n, DVec3::new(0.0, 0.0, 0.0), 0.0), None);
+    }
+
+    #[test]
+    fn off_the_streets_it_shows_none_and_backing_up_it_still_reads() {
+        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), Some(30.0))]);
+        assert_eq!(street_limit(&n, DVec3::new(40.0, 0.0, 0.0), 0.0), None);
+        // heading south on the northbound lane: reversing along it
+        assert_eq!(
+            street_limit(&n, DVec3::new(0.0, 0.0, 0.0), 180.0),
+            Some(30.0)
+        );
+    }
+
+    #[test]
+    fn the_limit_is_given_to_five() {
+        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), Some(48.0))]);
+        assert_eq!(street_limit(&n, DVec3::ZERO, 0.0), Some(50.0));
     }
 }

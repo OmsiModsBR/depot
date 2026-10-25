@@ -52,6 +52,8 @@ pub struct Lane {
     /// Cumulative distance at each point.
     pub dist: Vec<f32>,
     pub speed_limit_kmh: f32,
+    /// The map gave the limit (a `[rule] speedlimit`); false: the street default.
+    pub limit_from_map: bool,
     /// Lanes reachable from the end of this one.
     pub next: Vec<usize>,
     /// Traffic light controlling entry into this lane: (object instance, light index).

@@ -14584,6 +14584,7 @@ fn spline_lanes(
             }
             if let Some(v) = limit {
                 l.speed_limit_kmh = v;
+                l.limit_from_map = true;
             }
             l.density = density;
             l.group_density = group_density.clone();
@@ -14724,6 +14725,7 @@ fn object_lanes(
             }
             if let Some(v) = limit {
                 l.speed_limit_kmh = v;
+                l.limit_from_map = true;
             }
             l.density = density;
             l.group_density = group_density.clone();

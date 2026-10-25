@@ -46,12 +46,6 @@ impl FrameStats {
         let mean = t[..n].iter().sum::<f32>() / n as f32;
         (mean > 0.0).then(|| 1.0 / mean)
     }
-
-    /// Forget everything (a map change, a long pause).
-    pub(crate) fn clear(&mut self) {
-        self.times.clear();
-        self.total = 0.0;
-    }
 }
 
 #[cfg(test)]
@@ -106,15 +100,5 @@ mod tests {
             s.push(1.0 / 60.0);
         }
         assert!(s.low().unwrap() > 50.0);
-    }
-
-    #[test]
-    fn clear_forgets() {
-        let mut s = FrameStats::default();
-        for _ in 0..100 {
-            s.push(0.016);
-        }
-        s.clear();
-        assert!(s.low().is_none());
     }
 }

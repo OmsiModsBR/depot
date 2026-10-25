@@ -518,3 +518,21 @@ fn the_city_map_draws_over_the_picture() {
     let mid = at(((r[0] + r[2]) * 0.5) as u32, (r[3] - 40.0) as u32);
     assert!(mid.iter().all(|&c| c < 90), "{mid:?}");
 }
+
+/// A bar along the bottom lifts a navigator in a bottom corner above it where they would lie
+/// over each other, and leaves a navigator in a corner it does not reach, or at the top.
+#[test]
+fn a_navigator_in_a_bottom_corner_stands_above_an_information_bar_along_the_bottom() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    let (screen, size) = ((1920.0, 1080.0), (356.0, 300.0));
+    let bar = [210.0, 1020.0, 1710.0, 1070.0];
+    let (x, y) = n.panel_origin(screen, size, false, Some(bar));
+    assert_eq!(x, 19.0);
+    assert!(y + 300.0 <= 1020.0, "above the bar: {y}");
+    // not under it: a bar that starts right of the navigator does not move it
+    let (_, y) = n.panel_origin(screen, size, false, Some([400.0, 1020.0, 1710.0, 1070.0]));
+    assert_eq!(y, 1080.0 - 19.0 - 300.0);
+    // a navigator at the top is not moved by a bar at the bottom
+    n.corner = "top-left".into();
+    assert_eq!(n.panel_origin(screen, size, false, Some(bar)), (19.0, 19.0));
+}

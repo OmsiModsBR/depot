@@ -1212,9 +1212,7 @@ impl Ui {
                     cx += group_gap - gap;
                 }
             }
-            if !bottom {
-                self.info_rect = Some([x, y, x + w, y + h]);
-            }
+            self.info_rect = Some([x, y, x + w, y + h]);
         }
         let tutorial_w = (420.0 * s).min(f.width * 0.42);
         // --- the timetable window, on the right

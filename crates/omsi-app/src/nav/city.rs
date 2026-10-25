@@ -194,8 +194,22 @@ impl Navigator {
         let y0 = if top { margin } else { sh - margin - ph };
         // (below the information bar where they would lie over each other: in its rows on a
         // phone it took the navigator's place in the top middle, #1164)
+        // (a bar along the bottom, the other way round: a navigator in a bottom corner stands
+        // above it)
         let y0 = match info {
-            Some(i) if top && x0 < i[2] && x0 + pw > i[0] => y0.max((i[3] + margin * 0.5).round()),
+            Some(i) if x0 < i[2] && x0 + pw > i[0] => {
+                if i[1] < sh * 0.5 {
+                    if top {
+                        y0.max((i[3] + margin * 0.5).round())
+                    } else {
+                        y0
+                    }
+                } else if top {
+                    y0
+                } else {
+                    y0.min((i[1] - margin * 0.5 - ph).round())
+                }
+            }
             _ => y0,
         };
         // (dragged somewhere else: there - on a phone too, where it had to stay in the
