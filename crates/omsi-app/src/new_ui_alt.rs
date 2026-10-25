@@ -485,7 +485,7 @@ impl App {
             } else if self.mouse_drive {
                 "alt-mouse"
             } else {
-                "alt-wheel"
+                "alt-keyboard"
             },
             pumping: self.pumping.map(|p| p.0),
         }
