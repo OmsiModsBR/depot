@@ -1692,16 +1692,21 @@ mod tests {
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
                 // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
                 let saved = Settings::from_text(&format!(
-                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!(
                     (saved.msaa, saved.anisotropy, saved.render_scale),
                     (1, 1, 0.0)
                 );
+                // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
                 assert_eq!(
-                    (saved.mirror_size, saved.mirror_refresh.as_str()),
-                    (0, "off")
+                    (
+                        saved.mirror_size,
+                        saved.mirror_refresh.as_str(),
+                        saved.mirror_hud
+                    ),
+                    (512, "full", 0)
                 );
                 // (what it does draw stays as saved: env maps and shadow meshes)
                 assert!(saved.reflections && saved.shadow_blobs);
