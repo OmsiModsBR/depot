@@ -527,7 +527,7 @@ impl Ui {
         let fresh = self
             .anims
             .get(&seen)
-            .is_none_or(|&t| now - t > self.dt * 2.0 + 1e-3);
+            .is_none_or(|&t| now - t > self.dt * 1.5 + 1e-3);
         if !hovered {
             self.anims.remove(&start);
             self.anims.remove(&seen);
