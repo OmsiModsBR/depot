@@ -103,7 +103,7 @@ impl Page {
             Page::Diagnostics => Some((
                 "Build & log",
                 "Check what goes wrong",
-                "This build, the OMSI 2 folder, the game's log and the games running: to look at, or send along.",
+                "This build, the OMSI 2 folder and the game's log: to look at, or send along.",
             )),
             Page::Settings => Some((
                 "Graphics, sound & driving",

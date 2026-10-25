@@ -2404,7 +2404,7 @@ impl Launcher {
     /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
     /// look has them; returns where the message line can start.
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
-        let games = self.state.instances.len();
+        let games = self.state.instances.iter().filter(|i| i.running).count();
         let root_ok = self.root_ok();
         let chips = [
             (

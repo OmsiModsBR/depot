@@ -4996,7 +4996,8 @@ pub struct Launched {
     pub others: usize,
 }
 
-/// Start a game for the duty. Any number may run at once; each writes its own log.
+/// Start a game for the duty. The core does not limit how many run (the CLI and tests use
+/// that); the launcher allows one at a time and enforces it itself.
 pub fn launch(d: &Duty) -> Result<Launched> {
     if IN_PROCESS_GAMES {
         let args = duty_args(d)?;
