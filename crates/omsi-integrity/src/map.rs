@@ -32,9 +32,9 @@ struct Pending {
     count: usize,
 }
 
-struct Checker<'a> {
-    root: &'a Path,
-    report: Report,
+pub(crate) struct Checker<'a> {
+    pub(crate) root: &'a Path,
+    pub(crate) report: Report,
     pending: BTreeMap<(&'static str, String), Pending>,
     seen_sco: HashSet<PathBuf>,
     seen_sli: HashSet<PathBuf>,
@@ -42,10 +42,11 @@ struct Checker<'a> {
     mesh_cache: HashMap<PathBuf, Option<Vec<omsi_o3d::Material>>>,
     seen_texture: HashSet<PathBuf>,
     seen_long: HashSet<PathBuf>,
+    pub(crate) sound_seen: HashSet<PathBuf>,
 }
 
 impl<'a> Checker<'a> {
-    fn new(root: &'a Path) -> Self {
+    pub(crate) fn new(root: &'a Path) -> Self {
         Checker {
             root,
             report: Report::default(),
@@ -56,14 +57,15 @@ impl<'a> Checker<'a> {
             mesh_cache: HashMap::new(),
             seen_texture: HashSet::new(),
             seen_long: HashSet::new(),
+            sound_seen: HashSet::new(),
         }
     }
 
-    fn rel(&self, p: &Path) -> String {
+    pub(crate) fn rel(&self, p: &Path) -> String {
         p.strip_prefix(self.root).unwrap_or(p).display().to_string()
     }
 
-    fn add(
+    pub(crate) fn add(
         &mut self,
         severity: Severity,
         code: &'static str,
@@ -82,7 +84,7 @@ impl<'a> Checker<'a> {
         e.count += 1;
     }
 
-    fn finish(mut self) -> Report {
+    pub(crate) fn finish(mut self) -> Report {
         for ((code, file), p) in std::mem::take(&mut self.pending) {
             self.report.findings.push(Finding {
                 severity: p.severity,
@@ -250,26 +252,37 @@ impl<'a> Checker<'a> {
             dirs.retain(|d| *d != own);
             dirs.insert(0, own);
         }
+        self.model_meshes(&model, &model_dir, &dirs, &file);
+    }
+
+    /// Every mesh a model names, with their textures.
+    pub(crate) fn model_meshes(
+        &mut self,
+        model: &Model,
+        model_dir: &Path,
+        dirs: &[PathBuf],
+        file: &str,
+    ) {
         for md in &model.meshes {
             if md.file.trim().is_empty() {
                 continue;
             }
-            let mut mesh_path = resolve_path(&resolve_path(&model_dir, "model"), &md.file);
+            let mut mesh_path = resolve_path(&resolve_path(model_dir, "model"), &md.file);
             if !vfs::is_file(&mesh_path) {
-                mesh_path = resolve_path(&model_dir, &md.file);
+                mesh_path = resolve_path(model_dir, &md.file);
             }
             if !vfs::is_file(&mesh_path) {
                 self.add(
                     Severity::Error,
                     "mesh-missing",
                     self.rel(&mesh_path),
-                    &file,
+                    file,
                     "A mesh of the object is missing; that part is not drawn.".into(),
                     None,
                 );
                 continue;
             }
-            self.mesh(&mesh_path, &dirs, &md.materials, &file);
+            self.mesh(&mesh_path, dirs, &md.materials, file);
         }
     }
 
@@ -469,7 +482,7 @@ fn prev_pow2(n: u32) -> u32 {
 /// Where the game looks for a texture of content in `content_dir`: its `texture` folder,
 /// the folder itself, the `texture` next to a vehicle's `model` folder, then `Texture` of
 /// the installation.
-fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![
         resolve_path(content_dir, "texture"),
         content_dir.to_path_buf(),

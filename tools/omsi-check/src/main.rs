@@ -51,6 +51,9 @@ struct Args {
     /// for OMSI 2 / DirectX 9, then does nothing else.
     #[arg(long)]
     integrity: Option<String>,
+    /// The same for one vehicle file, relative to the installation (`Vehicles/Bus/Bus.bus`).
+    #[arg(long)]
+    integrity_vehicle: Option<String>,
 }
 
 mod dump;
@@ -265,10 +268,8 @@ fn check_scripts(root: &Path, verbose: bool) {
     }
 }
 
-fn integrity(root: &Path, map: &str, verbose: bool) -> Result<()> {
+fn integrity(r: omsi_integrity::Report, verbose: bool) -> Result<()> {
     use omsi_integrity::Severity;
-    let map_dir = resolve_path(&resolve_path(root, "Maps"), map);
-    let r = omsi_integrity::check_map(root, &map_dir);
     println!(
         "{}: {} tiles, {} objects, {} splines, {} textures",
         r.map, r.tiles, r.objects, r.splines, r.textures
@@ -359,7 +360,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if let Some(map) = &args.integrity {
-        return integrity(&root, map, args.verbose);
+        let map_dir = resolve_path(&resolve_path(&root, "Maps"), map);
+        return integrity(omsi_integrity::check_map(&root, &map_dir), args.verbose);
+    }
+    if let Some(vehicle) = &args.integrity_vehicle {
+        let file = resolve_path(&root, vehicle);
+        return integrity(omsi_integrity::check_vehicle(&root, &file), args.verbose);
     }
     if args.dump.is_some() || args.dump_detail.is_some() {
         let (rv, rvs) = roadvehicle_builtins(&root);
