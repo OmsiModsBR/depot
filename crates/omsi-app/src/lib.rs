@@ -48,7 +48,6 @@ mod map_surface;
 mod menu;
 mod mirror_hud;
 mod money;
-mod mt;
 mod nav;
 mod new_ui;
 mod new_ui_add;
@@ -316,7 +315,6 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     // (the launcher and every menu of the game wear the accent chosen in Settings > Interface)
     settings::Settings::load().apply_accent();
     // (a server has no interface to translate)
-    mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
     if args.server.is_some() {
         eprintln!("server: the dedicated server is no longer built or supported (see docs/removed/MULTIPLAYER_DISABLED.md)");
