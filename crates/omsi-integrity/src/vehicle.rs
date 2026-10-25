@@ -66,13 +66,14 @@ impl Checker<'_> {
                         self.model_meshes(&model, &model_dir, &dirs, &bases, &file);
                         self.paints(&model, &dir, &model_dir, &dirs);
                     }
-                    Err(_) => self.add(
+                    Err(e) => self.add(
                         Severity::Error,
                         "model-missing",
                         self.rel(&mp),
                         &file,
-                        "The model.cfg the vehicle names is missing or unreadable; it has no body."
-                            .into(),
+                        format!(
+                            "The model.cfg the vehicle names is missing or unreadable ({e}); it has no body."
+                        ),
                         None,
                     ),
                 }

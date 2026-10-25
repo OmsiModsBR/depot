@@ -161,3 +161,24 @@ fn a_reflection_camera_texture_needs_no_file() {
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_texture_change_list_is_named_from_the_vehicles_folder() {
+    let root = temp_root("texchange");
+    complete(&root);
+    fs::remove_file(root.join("Vehicles/Test/texture/body.bmp")).unwrap();
+    write(
+        &root,
+        "Vehicles/Test/model/model.cfg",
+        "[mesh]\nbody.x\n[texchanges]\ntexture\\chtex.cfg\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/texture/chtex.cfg",
+        "[newtexchangemaster]\nbody.bmp\nvar\n[entries]\n1\nalt.bmp\n",
+    );
+    write(&root, "Vehicles/Test/texture/alt.bmp", bmp(512, 512));
+    let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}

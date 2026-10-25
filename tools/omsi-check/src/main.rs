@@ -49,7 +49,7 @@ struct Args {
     /// Integrity check of one map (the name of its folder under `Maps`): follows the map's
     /// files down to the textures and lists what is missing, unreadable or not optimized
     /// for OMSI 2 / DirectX 9, then does nothing else.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "integrity_vehicle")]
     integrity: Option<String>,
     /// The same for one vehicle file, relative to the installation (`Vehicles/Bus/Bus.bus`).
     #[arg(long)]
