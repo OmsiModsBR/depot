@@ -356,7 +356,9 @@ pub fn find_texture(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     found
 }
 
-fn find_texture_uncached(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
+/// [`find_texture`] without the process-wide memo: a check that must see the disk as it is now
+/// (the integrity check, run again after files were fixed).
+pub fn find_texture_uncached(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     find_texture_in_season(name, dirs, season_folder().as_deref())
         .or_else(|| find_texture_elsewhere(name, dirs))
 }
