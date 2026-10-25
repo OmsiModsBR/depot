@@ -408,6 +408,9 @@ pub(crate) struct State {
     /// The window is open (also while the Esc menu or the report hides it: its picture stays
     /// in the GPU then).
     add_open: bool,
+    /// The live 3D view's latest frame, not yet in the GPU: which vehicle and paint it shows
+    /// (`preview::tag`), its size and RGBA.
+    add_live: Option<(u64, u32, u32, Vec<u8>)>,
     /// The Alt bar's window open (reposition, date and time, weather...).
     tool: Option<crate::new_ui_windows::ToolFrame>,
     /// What clicks in it asked for, for the game to apply.
@@ -455,6 +458,8 @@ struct Overlay {
     add_picture: Option<(u64, Option<(usize, f32, [f32; 4])>)>,
     /// The window was drawn last time (a list of it left open is closed when it goes).
     add_drawn: bool,
+    /// The live 3D view's frame in the GPU: which vehicle and paint it shows, and its texture.
+    add_live: Option<(u64, usize)>,
 }
 
 impl Overlay {
@@ -477,6 +482,7 @@ impl Overlay {
             gen: 0,
             add_picture: None,
             add_drawn: false,
+            add_live: None,
         }
     }
 
@@ -501,11 +507,12 @@ impl Overlay {
             (arrived, map_picture),
             gen,
             area,
-            (add_picture, add_open),
+            (add_picture, add_open, add_live),
         ) = match self.shared.lock() {
             Ok(mut s) => {
                 let arrived = std::mem::take(&mut s.slides);
                 let add_picture = s.add_picture.take();
+                let add_live = s.add_live.take();
                 let map_picture = s.map_picture.take();
                 let input = if s.add.is_some() || s.tool.is_some() || s.report.is_some() {
                     s.win_input.pop_front()
@@ -526,7 +533,7 @@ impl Overlay {
                     (arrived, map_picture),
                     s.loading_gen,
                     s.area,
-                    (add_picture, s.add_open),
+                    (add_picture, s.add_open, add_live),
                 )
             }
             Err(_) => return,
@@ -594,6 +601,23 @@ impl Overlay {
             self.ui.close_popup();
         }
         self.add_drawn = add.is_some();
+        // the live 3D view's frame, into the texture it had (out of the GPU once the view is
+        // off or the window closed; not while the window is only hidden)
+        if !add_open || add.as_ref().is_some_and(|a| !a.live_on()) {
+            if let Some((_, tex)) = self.add_live.take() {
+                gpu.free(tex);
+            }
+        }
+        if let Some((tag, fw, fh, px)) = add_live {
+            let tex = match self.add_live {
+                Some((_, tex)) => {
+                    gpu.update_image(device, queue, tex, fw, fh, &px);
+                    tex
+                }
+                None => gpu.add_image(device, queue, fw, fh, &px),
+            };
+            self.add_live = Some((tag, tex));
+        }
         // (laid out in the area: the centre screen of a triple screen, else the picture)
         let area = area.map_or(Area::whole((w, h)), |a| a.within((w, h)));
         let (aw, ah) = area.size;
@@ -699,7 +723,7 @@ impl Overlay {
                 alt.draw(&mut self.ui);
             }
             if let Some(add) = add {
-                let preview = add.preview(self.add_picture);
+                let preview = add.preview(self.add_picture, self.add_live);
                 let e = add.draw(&mut self.ui, size, preview);
                 let modal = self.ui.popup_open();
                 if let Ok(mut s) = self.shared.lock() {
@@ -751,6 +775,8 @@ pub(crate) struct NewUi {
     add_picture: Option<u64>,
     /// The manufacturer and the vehicle file chosen last in that window: it opens on them.
     pub(crate) add_last: Option<(String, String)>,
+    /// That window's live 3D view, while the player has it on.
+    pub(crate) add_live: Option<crate::new_ui_add::LiveView>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub(crate) page: Option<crate::new_ui_pages::PageFrame>,
     /// The headset's picture of the menu and the page (a render texture of the window's size,
@@ -1021,6 +1047,7 @@ impl NewUi {
     pub(crate) fn close_add(&mut self) {
         self.add = None;
         self.add_picture = None;
+        self.stop_add_live();
         if let Ok(mut s) = self.shared.lock() {
             s.add = None;
             s.win_input.clear();
@@ -1036,6 +1063,22 @@ impl NewUi {
     pub(crate) fn set_add_open(&self, open: bool) {
         if let Ok(mut s) = self.shared.lock() {
             s.add_open = open;
+        }
+    }
+
+    /// Turn the "Add vehicle" window's live 3D view off: its helper ends (by itself, its
+    /// input closed) and its last frame is not shown any more.
+    pub(crate) fn stop_add_live(&mut self) {
+        self.add_live = None;
+        if let Ok(mut s) = self.shared.lock() {
+            s.add_live = None;
+        }
+    }
+
+    /// The live 3D view's latest frame, for the overlay.
+    pub(crate) fn offer_add_live(&self, frame: (u64, u32, u32, Vec<u8>)) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.add_live = Some(frame);
         }
     }
 
@@ -1143,6 +1186,7 @@ impl App {
             self.new_ui.page = None;
         }
         self.add_events();
+        self.add_live_update();
         self.tool_events();
         self.report_events();
         let alt = self.alt_bar_active().then(|| self.alt_frame());

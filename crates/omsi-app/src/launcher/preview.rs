@@ -11,7 +11,8 @@
 //! has drawn the live one. On a phone the helper runs on a thread of the launcher instead
 //! (an app does not start processes of its own).
 
-use super::showroom::{Look, Showroom};
+pub use super::showroom::Look;
+use super::showroom::Showroom;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
@@ -369,6 +370,7 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
     let mut last_px: Option<(u32, u32, Vec<u8>)> = None;
     let mut cached: Option<(u64, Shape)> = None;
     let (kept_tx, kept_rx) = channel::<(u64, Shape)>();
+    let keep = std::env::var_os(NO_KEEP).is_none();
     // (none said yet: the first is always sent)
     let mut status = (true, Some(String::new()));
     let mut last = Instant::now();
@@ -413,8 +415,10 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
                 last_px = Some((w, h, px));
             }
         }
-        // the settled picture is kept for the next time this bus is chosen
-        if let (true, Some(l), Some((w, h, px))) = (room.settled(), look.as_ref(), last_px.as_ref())
+        // the settled picture is kept for the next time this bus is chosen (not by the game's
+        // helper: its pictures are of the game's window, and turned by the player)
+        if let (true, Some(l), Some((w, h, px))) =
+            (room.settled() && keep, look.as_ref(), last_px.as_ref())
         {
             let key = (tag(l), Shape::of(*w, *h, room.focus_x));
             if cached != Some(key) {
@@ -636,6 +640,9 @@ impl Link {
         if let Some(m) = mark {
             cmd.env("DEPOT_PLACING_MARK", m);
         }
+        if mark == Some(GAME_MARK) {
+            cmd.env(NO_KEEP, "1");
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -771,6 +778,12 @@ impl Drop for Link {
     }
 }
 
+/// The mark the in-game "Add vehicle" window's helper keeps (`Preview::for_game`).
+const GAME_MARK: &str = "showroom-placing-game.txt";
+
+/// Set for a helper that keeps no pictures (the game's).
+const NO_KEEP: &str = "DEPOT_PREVIEW_NO_KEEP";
+
 /// How long the preview stays drawn by the helper after no page shows it.
 const LINGER: f32 = 2.0;
 
@@ -838,6 +851,13 @@ impl Preview {
         Preview::with_mark(Some("showroom-placing-prerender.txt"))
     }
 
+    /// A preview for the in-game "Add vehicle" window's live view, asked for by the player:
+    /// its helper keeps a mark of its own too, and keeps no pictures (the launcher's kept
+    /// pictures, its small ones included, are left as they are).
+    pub fn for_game() -> Preview {
+        Preview::with_mark(Some(GAME_MARK))
+    }
+
     fn with_mark(mark: Option<&'static str>) -> Preview {
         // A mark of the bus a helper was reading, left by the last launcher, says nothing of
         // the bus: its helpers are ended with it (`end_with_launcher`), in the middle of
@@ -845,8 +865,10 @@ impl Preview {
         // found: the next helper reads the mark.)
         static CLEARED: std::sync::Once = std::sync::Once::new();
         static CLEARED_OWN: std::sync::Once = std::sync::Once::new();
+        static CLEARED_GAME: std::sync::Once = std::sync::Once::new();
         match mark {
             None => CLEARED.call_once(super::showroom::clear_placing_mark),
+            Some(GAME_MARK) => CLEARED_GAME.call_once(|| super::showroom::clear_mark(GAME_MARK)),
             Some(n) => CLEARED_OWN.call_once(|| super::showroom::clear_mark(n)),
         }
         Preview {
