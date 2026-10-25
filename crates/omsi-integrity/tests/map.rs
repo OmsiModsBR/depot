@@ -198,6 +198,7 @@ fn an_object_that_borrows_a_model_finds_its_textures_beside_the_model() {
     let _ = fs::remove_dir_all(&root);
 }
 
+<<<<<<< HEAD
 #[test]
 fn findings_the_baseline_has_too_are_marked_known() {
     let before = temp_root("base-before");
@@ -245,12 +246,184 @@ fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
     let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\other\\other.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\n");
     map(&root, &tile);
     let r = check_map(&root, &root.join("Maps/Test"));
+=======
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    b.extend(w.to_be_bytes());
+    b.extend(h.to_be_bytes());
+    b
+}
+
+fn dds(w: u32, h: u32) -> Vec<u8> {
+    let mut b = vec![0u8; 128];
+    b[..4].copy_from_slice(b"DDS ");
+    b[12..16].copy_from_slice(&h.to_le_bytes());
+    b[16..20].copy_from_slice(&w.to_le_bytes());
+    b
+}
+
+fn tga(w: u16, h: u16) -> Vec<u8> {
+    let mut b = vec![0u8; 18];
+    b[2] = 2;
+    b[12..14].copy_from_slice(&w.to_le_bytes());
+    b[14..16].copy_from_slice(&h.to_le_bytes());
+    b
+}
+
+fn jpeg(w: u16, h: u16) -> Vec<u8> {
+    let mut b = vec![
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08,
+    ];
+    b.extend(h.to_be_bytes());
+    b.extend(w.to_be_bytes());
+    b
+}
+
+#[test]
+fn every_picture_format_gives_its_size_and_a_damaged_header_is_refused() {
+    let root = temp_root("formats");
+    write(&root, "a.png", png(300, 200));
+    write(&root, "b.dds", dds(1024, 512));
+    write(&root, "c.tga", tga(64, 48));
+    write(&root, "d.jpg", jpeg(1920, 1080));
+    // a header that claims more than any texture can be, and a truncated jpeg
+    write(&root, "e.png", png(0xFFFF_FFFF, 5));
+    write(&root, "f.dds", dds(3_000_000_000, 3_000_000_000));
+    write(&root, "g.jpg", &jpeg(8, 8)[..12]);
+    assert_eq!(image_size(&root.join("a.png")), Some((300, 200)));
+    assert_eq!(image_size(&root.join("b.dds")), Some((1024, 512)));
+    assert_eq!(image_size(&root.join("c.tga")), Some((64, 48)));
+    assert_eq!(image_size(&root.join("d.jpg")), Some((1920, 1080)));
+    assert_eq!(image_size(&root.join("e.png")), None);
+    assert_eq!(image_size(&root.join("f.dds")), None);
+    assert_eq!(image_size(&root.join("g.jpg")), None);
+    assert_eq!(next_pow2(u32::MAX), u32::MAX);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_mixed_size_is_enlarged_on_the_axis_that_needs_it() {
+    let root = temp_root("mixed");
+    complete(&root);
+    write(
+        &root,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(1024, 1400),
+    );
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
+    assert!(r.findings[0].message.contains("1024x2048"));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_file_used_by_several_files_is_one_finding_with_the_count() {
+    let root = temp_root("count");
+    complete(&root);
+    let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\gone.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\nObject Nr. 2\n[object]\n0\nSceneryobjects\\gone.sco\n9\n5\n6\n0.25\n90\n0\n0\n0\n");
+    map(&root, &tile);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "object-missing")
+        .unwrap();
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 2);
+    assert_eq!(
+        r.findings
+            .iter()
+            .filter(|f| f.code == "object-missing")
+            .count(),
+        1
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_missing_model_and_a_missing_mesh_are_errors() {
+    let root = temp_root("model-mesh");
+    complete(&root);
+    fs::remove_file(root.join("Sceneryobjects/house/model/house.x")).unwrap();
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert_eq!(
+        r.by_code().get("mesh-missing"),
+        Some(&1),
+        "{:#?}",
+        r.findings
+    );
+    write(
+        &root,
+        "Sceneryobjects/house/house.sco",
+        "[model]\nmissing\\model.cfg\n",
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert_eq!(
+        r.by_code().get("model-missing"),
+        Some(&1),
+        "{:#?}",
+        r.findings
+    );
+    assert!(!r.is_complete());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_path_over_259_characters_is_a_warning() {
+    let root = temp_root("long");
+    complete(&root);
+    let deep = "d".repeat(120);
+    write(
+        &root,
+        &format!("Sceneryobjects/house/texture/{deep}/{deep}/wall.bmp"),
+        bmp(256, 256),
+    );
+    write(
+        &root,
+        "Sceneryobjects/house/house.sco",
+        format!(
+            "[mesh]\nhouse.x\n[matl]\nwall.bmp\n0\n[matl_nightmap]\n{deep}\\{deep}\\wall.bmp\n"
+        ),
+    );
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    if root.to_string_lossy().len() + 150 + 240 > 259 {
+        assert_eq!(
+            r.by_code().get("path-too-long"),
+            Some(&1),
+            "{:#?}",
+            r.findings
+        );
+    }
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_ground_texture_is_looked_for_from_the_installation_folder_only() {
+    let root = temp_root("ground");
+    complete(&root);
+    write(
+        &root,
+        "Maps/Test/global.cfg",
+        "[name]\nTest\n\n[groundtex]\nTexture\\gras.bmp\ndetail.bmp\n8\n4\n4\n\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    write(&root, "Maps/Test/tile_0_0.map", TILE);
+    // `detail.bmp` is bare, so the game does not find it in `Texture`
+    write(&root, "Texture/detail.bmp", bmp(256, 256));
+    write(&root, "Texture/gras.bmp", bmp(256, 256));
+    let r = check_map(&root, &root.join("Maps/Test"));
+>>>>>>> claude/project-thread-nhvp1h
     let missing: Vec<&str> = r
         .findings
         .iter()
         .filter(|f| f.code == "texture-missing")
         .map(|f| f.file.as_str())
         .collect();
+<<<<<<< HEAD
     assert_eq!(missing.len(), 2, "{missing:?}");
+=======
+    assert_eq!(missing, ["detail.bmp"], "{:#?}", r.findings);
+>>>>>>> claude/project-thread-nhvp1h
     let _ = fs::remove_dir_all(&root);
 }
