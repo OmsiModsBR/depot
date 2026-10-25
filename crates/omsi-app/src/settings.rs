@@ -1469,8 +1469,15 @@ impl Settings {
         self.render_scale = 0.0;
         self.anisotropy = 1;
         self.post_aa = "off".into();
-        self.mirror_size = 0;
-        self.mirror_refresh = "off".into();
+        // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
+        // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
+        if let Some(l) = crate::api_limits::d3d9("mirror_size") {
+            self.mirror_size = l.fit(&self.mirror_size.to_string()).parse().unwrap_or(0);
+        }
+        if let Some(l) = crate::api_limits::d3d9("mirror_refresh") {
+            self.mirror_refresh = l.fit(&self.mirror_refresh);
+        }
+        self.mirror_hud = 0;
         self.windy_trees = false;
         // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
         // `fair_weather_clouds`)
@@ -1626,8 +1633,9 @@ mod tests {
         s.msaa = 8;
         s.anisotropy = 16;
         s.render_scale = 0.5;
-        s.mirror_size = 512;
-        s.mirror_refresh = "full".into();
+        s.mirror_size = 64;
+        s.mirror_refresh = "eco".into();
+        s.mirror_hud = 3;
         s.windy_trees = true;
         s.night_brightness = 1.0;
         s.clouds = false;
@@ -1638,8 +1646,12 @@ mod tests {
                 "msaa" => s.msaa == 1,
                 "render_scale" => s.render_scale == 0.0,
                 "anisotropy" => s.anisotropy == 1,
-                "mirror_size" => s.mirror_size == 0,
-                "mirror_refresh" => s.mirror_refresh == "off",
+                "mirror_size" => {
+                    s.mirror_size == 128
+                        && l.allows(&s.mirror_size.to_string())
+                        && s.mirror_hud == 0
+                }
+                "mirror_refresh" => s.mirror_refresh == "full" && l.allows(&s.mirror_refresh),
                 "windy_trees" => !s.windy_trees,
                 "clouds" => s.clouds,
                 "shadows" => !s.shadows,
@@ -1674,16 +1686,21 @@ mod tests {
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
                 // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
                 let saved = Settings::from_text(&format!(
-                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!(
                     (saved.msaa, saved.anisotropy, saved.render_scale),
                     (1, 1, 0.0)
                 );
+                // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
                 assert_eq!(
-                    (saved.mirror_size, saved.mirror_refresh.as_str()),
-                    (0, "off")
+                    (
+                        saved.mirror_size,
+                        saved.mirror_refresh.as_str(),
+                        saved.mirror_hud
+                    ),
+                    (512, "full", 0)
                 );
                 // (what it does draw stays as saved: env maps and shadow meshes)
                 assert!(saved.reflections && saved.shadow_blobs);

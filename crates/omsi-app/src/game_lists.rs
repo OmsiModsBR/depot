@@ -1597,7 +1597,7 @@ fn limit_row(
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
     if d3d9 {
-        if let Some(l) = crate::api_limits::d3d9(key) {
+        if let Some(l) = crate::api_limits::d3d9(key).filter(|l| !l.is_row()) {
             return l.shown().map(|v| {
                 (
                     row(name, 'i', &omsi_ui::tr(v), &omsi_ui::tr(l.reason), None),
@@ -3217,7 +3217,13 @@ fn select_state(
     file: &serde_json::Value,
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
-    let options = select_options(key);
+    let mut options = select_options(key);
+    // (under DirectX9 an option may leave some choices out, see `api_limits`)
+    if crate::launcher::settings::d3d9_fixes_vanilla(file) {
+        if let Some(l) = crate::api_limits::d3d9(key) {
+            options.retain(|o| l.allows(o.0));
+        }
+    }
     let mut cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     // anisotropy 0 is off, the same entry as 1
     if key == "anisotropy" && cur == "0" {
@@ -4608,6 +4614,7 @@ mod tests {
         for l in crate::api_limits::D3D9 {
             let row = super::limit_row(true, l.key, "Name", own);
             match l.shown() {
+                None if l.is_row() => assert_eq!(row, own(), "{} is a row", l.key),
                 None => assert!(row.is_none(), "{} is hidden", l.key),
                 Some(v) => {
                     let (text, action) = row.unwrap();
