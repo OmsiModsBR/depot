@@ -119,10 +119,13 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
     assert_eq!(r.findings[0].file, "blue.bmp");
-    assert_eq!(
-        r.findings[0].referenced_by.as_ref().unwrap().0,
-        "Vehicles/Test/texture/paints/red.cti"
-    );
+    // (the folder is spelled as the model.cfg writes it: `Texture` on a system that ignores case)
+    assert!(r.findings[0]
+        .referenced_by
+        .as_ref()
+        .unwrap()
+        .0
+        .eq_ignore_ascii_case("Vehicles/Test/texture/paints/red.cti"));
     let _ = fs::remove_dir_all(&root);
 }
 
