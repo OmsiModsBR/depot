@@ -96,7 +96,6 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `led_mips` | yes | yes | yes | yes |
 | `look_sens` | yes | yes | yes | yes |
 | `look_smoothing_ms` | yes | yes | yes | yes |
-| `machine_translation` | yes | yes | yes | yes |
 | `maintenance` | yes | yes | yes | yes, known difference (launcher>game) |
 | `max_fps` | yes | yes | yes | yes, known difference (launcher>game) |
 | `max_obj_dist` | yes | yes | yes | yes, known difference (launcher>game, game>launcher) |

@@ -56,7 +56,7 @@ pub enum Sheet {
 }
 
 /// The pages More opens.
-const MORE: [(Page, &str, &str, &str); 7] = [
+const MORE: [(Page, &str, &str, &str); 6] = [
     (
         Page::Profile,
         "Profile",
@@ -74,12 +74,6 @@ const MORE: [(Page, &str, &str, &str); 7] = [
         "Controls",
         "sports_esports",
         "Touch, wheels and gamepads",
-    ),
-    (
-        Page::Sessions,
-        "Sessions",
-        "terminal",
-        "Games running and their logs",
     ),
     (
         Page::Tutorials,
@@ -2368,7 +2362,6 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         Page::Profile => super::pages::profile(l, content),
         Page::Settings => super::settings::settings(l, content),
         Page::Controls => super::pages::controls(l, content),
-        Page::Sessions => super::pages::sessions(l, content),
         Page::Mods => super::pages::mods(l, content),
         Page::Tutorials => super::pages::tutorials(l, content),
         Page::Timetable => super::timetable::draw(l, content),

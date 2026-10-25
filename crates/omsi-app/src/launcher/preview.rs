@@ -278,6 +278,19 @@ pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
     image::open(cache_file(look, shape)).ok().map(|i| i.to_rgba8())
 }
 
+/// The small picture drawn ahead of time of `bus` (`Vehicles/<folder>/<file>`) in `paint`
+/// (empty: the bus's own) under the installation `root`, if the launcher has drawn it: the
+/// in-game "Add vehicle" window shows it. Read off the game's thread.
+pub fn kept_thumb(root: &std::path::Path, bus: &str, paint: &str) -> Option<image::RgbaImage> {
+    let look = Look {
+        root: root.to_path_buf(),
+        bus: bus.to_string(),
+        paint: paint.to_string(),
+        ..Default::default()
+    };
+    kept_picture(&look, thumb_shape())
+}
+
 /// What names the kept picture of `look`'s bus and paint at `shape` for the launcher's own
 /// small copies of it (the same on every run; not the file's name, which needs the disk).
 pub fn kept_key(look: &Look, shape: Shape) -> String {

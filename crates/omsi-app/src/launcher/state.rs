@@ -417,7 +417,6 @@ pub struct State {
     stamp: Option<String>,
     poll_t: f32,
     polling: bool,
-    pub second_armed: Option<Instant>,
     /// Multiplayer: the saved servers, what each said last (and when it was asked), and the
     /// one the Drive page is joined to now (its address).
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -442,12 +441,6 @@ impl State {
                 .get("language")
                 .and_then(|x| x.as_str())
                 .unwrap_or("ENG"),
-        );
-        crate::mt::enable(
-            settings
-                .get("machine_translation")
-                .and_then(|x| x.as_bool())
-                .unwrap_or(false),
         );
         let keybindings = core::get_keybindings().unwrap_or(serde_json::Value::Null);
         let mut choice = Choice::load();
@@ -510,7 +503,6 @@ impl State {
             stamp: None,
             poll_t: 0.0,
             polling: false,
-            second_armed: None,
             servers: with_official(
                 std::fs::read(servers_path())
                     .ok()
@@ -1033,10 +1025,23 @@ impl State {
         self.launch_with(|_| {});
     }
 
+    /// Only one game runs at a time: with one starting or running, a start says so and does
+    /// nothing (its window may be in the tray).
+    fn one_game_only(&mut self) -> bool {
+        if !self.in_game() {
+            return false;
+        }
+        self.set_status(
+            "A game is running already. Close it before starting another one (its window may be in the tray).",
+            true,
+        );
+        true
+    }
+
     /// Start a session with the duty the choice makes, as `adjust` changes it (Maps: a start
     /// without a bus leaves the bus out of the duty, not out of the choice kept for the next).
     pub fn launch_with(&mut self, adjust: impl FnOnce(&mut core::Duty)) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         if !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root))
@@ -1151,7 +1156,7 @@ impl State {
 
     /// Continue the situation chosen of the map's (`laststn.osn`, or a save slot, #341).
     pub fn launch_last_situation(&mut self) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         let pick = self.save_pick;
@@ -1173,7 +1178,7 @@ impl State {
 
     /// Start one of OMSI's tutorials (1..4).
     pub fn launch_tutorial(&mut self, n: usize) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         let mut d = self.duty();
@@ -1352,11 +1357,6 @@ impl State {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(
-                    maps.iter()
-                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
-                );
-                crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
                 self.maps = maps;
                 self.weathers = weathers;
                 self.pick_map();
@@ -1371,48 +1371,10 @@ impl State {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(
-                    batch
-                        .iter()
-                        .flat_map(|v| {
-                            [
-                                v.name.as_str(),
-                                v.manufacturer.as_str(),
-                                v.type_name.as_str(),
-                            ]
-                        })
-                        .chain(
-                            batch
-                                .iter()
-                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
-                        ),
-                );
                 self.vehicles.extend(batch);
                 self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
-                // (names of things, not the interface: never machine-translated)
-                crate::mt::protect(
-                    maps.iter()
-                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
-                );
-                crate::mt::protect(
-                    vehicles
-                        .iter()
-                        .flat_map(|v| {
-                            [
-                                v.name.as_str(),
-                                v.manufacturer.as_str(),
-                                v.type_name.as_str(),
-                            ]
-                        })
-                        .chain(
-                            vehicles
-                                .iter()
-                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
-                        ),
-                );
-                crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
                 let known: std::collections::HashSet<String> = self
                     .maps
                     .iter()
@@ -1504,21 +1466,6 @@ impl State {
                 }
             }
             Msg::Lines { map, date, lines } => {
-                if let Ok(ls) = lines.as_ref() {
-                    crate::mt::protect(
-                        ls.iter()
-                            .flat_map(|l| {
-                                l.termini
-                                    .iter()
-                                    .map(|t| t.as_str())
-                                    .chain([l.name.as_str()])
-                            })
-                            .chain(
-                                ls.iter()
-                                    .flat_map(|l| l.tours.iter().map(|t| t.number.as_str())),
-                            ),
-                    );
-                }
                 if (map, date) != self.lines_for {
                     return;
                 }

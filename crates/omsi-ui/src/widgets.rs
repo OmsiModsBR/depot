@@ -172,6 +172,8 @@ struct Popup {
     /// Typed while the list is open: only the options with it in their name are shown (a
     /// map's many entry points, #747).
     query: String,
+    /// The options are the game's names: drawn as they are, not translated.
+    as_is: bool,
 }
 
 impl Popup {
@@ -461,6 +463,32 @@ impl Ui {
         self.push_layer(c, rad);
     }
 
+    /// The part `uv` (left, top, right, bottom, 0 to 1) of texture `tex` filling `r`, its
+    /// corners rounded.
+    pub fn image_part(&mut self, r: Rect, tex: usize, uv: [f32; 4], radius: f32) {
+        let clip = intersect(self.clip_now(), r);
+        self.push_layer(clip, radius);
+        self.layers.last_mut().unwrap().2 = tex;
+        let sprite = crate::Sprite {
+            uv,
+            w: r.w,
+            h: r.h,
+            ascent: 0.0,
+        };
+        self.p().sprite(
+            sprite,
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.w, r.h),
+            Color::WHITE,
+        );
+        let (c, rad) = self
+            .clip_stack
+            .last()
+            .copied()
+            .unwrap_or((Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0));
+        self.push_layer(c, rad);
+    }
+
     /// A picture of texture `tex` (`aspect`: its width over its height) covering `r` with its
     /// centre, the overhang cut, drawn with opacity `alpha`.
     pub fn image_cover(&mut self, r: Rect, tex: usize, aspect: f32, alpha: f32) {
@@ -517,6 +545,27 @@ impl Ui {
         let v = self.anims.entry(id).or_insert(to);
         *v += (to - *v) * k;
         *v
+    }
+
+    /// For how many seconds `id` has been under the mouse without a break: 0 while it is not,
+    /// and counted again from 0 after a frame it was not drawn (a closed bar opened again).
+    pub fn hovered_for(&mut self, id: Id, hovered: bool) -> f32 {
+        let (start, seen) = (id ^ 0x5eed_7135_0000_0001, id ^ 0x5eed_7135_0000_0002);
+        let now = self.time;
+        let fresh = self
+            .anims
+            .get(&seen)
+            .is_none_or(|&t| now - t > self.dt * 1.5 + 1e-3);
+        if !hovered {
+            self.anims.remove(&start);
+            self.anims.remove(&seen);
+            return 0.0;
+        }
+        if fresh {
+            self.anims.insert(start, now);
+        }
+        self.anims.insert(seen, now);
+        now - self.anims[&start]
     }
 
     /// Hover/press behaviour of a clickable area: (hovered, pressed now, clicked).
@@ -656,6 +705,27 @@ impl Ui {
         drawn
     }
 
+    /// A text that is not the interface's own, as it is, left in `r` and vertically centred,
+    /// cut with an ellipsis to fit; resting the mouse on a cut one shows the whole of it.
+    pub fn text_in_as_is(&mut self, text: &str, r: Rect, px: f32, weight: Weight, c: Color) {
+        let mut shown = text.to_string();
+        if self.fonts.width_as_is(text, px, weight) > r.w {
+            let mut cut: Vec<char> = text.chars().collect();
+            shown.clear();
+            while !cut.is_empty() {
+                cut.pop();
+                let t = cut.iter().collect::<String>().trim_end().to_string() + "…";
+                if self.fonts.width_as_is(&t, px, weight) <= r.w {
+                    shown = t;
+                    break;
+                }
+            }
+            self.tooltip_whole(r, text);
+        }
+        let base = r.center().y + self.fonts.cap_height(px, weight) * 0.5;
+        self.text_as_is(&shown, Vec2::new(r.x, base), px, weight, c, Align::Left);
+    }
+
     /// A tooltip with the whole of `text` (a cut name's), after the mouse rests on `r`: not
     /// translated (it is a name), and as wide as the screen has room for.
     pub fn tooltip_whole(&mut self, r: Rect, text: &str) {
@@ -787,6 +857,27 @@ impl Ui {
             n += 1;
         }
         n as f32 * lh
+    }
+
+    /// [`Ui::paragraph`] of a text that is not the interface's own (an author's description):
+    /// drawn as it is, broken at spaces (and inside a word wider than a line). Returns the
+    /// height used.
+    pub fn paragraph_as_is(
+        &mut self,
+        text: &str,
+        at: Vec2,
+        width: f32,
+        px: f32,
+        weight: Weight,
+        c: Color,
+    ) -> f32 {
+        let lh = px * 1.38;
+        let lines = self.wrap_as_is(text, width, px, weight);
+        for (n, line) in lines.iter().enumerate() {
+            let y = at.y + px + n as f32 * lh;
+            self.text_as_is(line, Vec2::new(at.x, y), px, weight, c, Align::Left);
+        }
+        lines.len() as f32 * lh
     }
 
     /// Height `paragraph` would take.
@@ -1158,6 +1249,39 @@ impl Ui {
         selected: &mut usize,
         options: &[String],
     ) -> bool {
+        self.select_with(name, r, selected, options, false)
+    }
+
+    /// [`Ui::select`] of options that are not the interface's own words (the game's
+    /// manufacturers, vehicles, paints): drawn as they are, not translated.
+    pub fn select_as_is(
+        &mut self,
+        name: &str,
+        r: Rect,
+        selected: &mut usize,
+        options: &[String],
+    ) -> bool {
+        self.select_with(name, r, selected, options, true)
+    }
+
+    /// Whether a dropdown's list is open (it takes every click until it closes).
+    pub fn popup_open(&self) -> bool {
+        self.popup.is_some()
+    }
+
+    /// Close the open dropdown's list without choosing (its window went away).
+    pub fn close_popup(&mut self) {
+        self.popup = None;
+    }
+
+    fn select_with(
+        &mut self,
+        name: &str,
+        r: Rect,
+        selected: &mut usize,
+        options: &[String],
+        as_is: bool,
+    ) -> bool {
         let id = id_of(name);
         let mut changed = false;
         if let Some(p) = self.popup.as_mut().filter(|p| p.id == id) {
@@ -1176,14 +1300,12 @@ impl Ui {
         self.p().rounded_border(r, CONTROL_RADIUS, 1.0, EDGE);
         field_line(self, r, open);
         let txt = options.get(*selected).cloned().unwrap_or_default();
-        self.text_in_tip(
-            &txt,
-            Rect::new(r.x + 12.0, r.y, r.w - 40.0, r.h),
-            13.0,
-            Weight::Regular,
-            TEXT,
-            Align::Left,
-        );
+        let tr = Rect::new(r.x + 12.0, r.y, r.w - 40.0, r.h);
+        if as_is {
+            self.text_in_as_is(&txt, tr, 13.0, Weight::Regular, TEXT);
+        } else {
+            self.text_in_tip(&txt, tr, 13.0, Weight::Regular, TEXT, Align::Left);
+        }
         let rot = self.anim(id ^ 9, if open { 1.0 } else { 0.0 }, 0.08);
         self.icon(
             if rot > 0.5 {
@@ -1213,6 +1335,7 @@ impl Ui {
                     picked: None,
                     drag: None,
                     query: String::new(),
+                    as_is,
                 };
                 // the chosen option in view
                 let row = 34.0;
@@ -1982,10 +2105,19 @@ impl Ui {
                 self.p().rounded(cell, 5.0, HOVER);
             }
             let text_r = Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h);
-            self.text_in(o, text_r, 13.0, Weight::Regular, TEXT, Align::Left);
+            if p.as_is {
+                self.text_in_as_is(o, text_r, 13.0, Weight::Regular, TEXT);
+            } else {
+                self.text_in(o, text_r, 13.0, Weight::Regular, TEXT, Align::Left);
+            }
             if h {
                 // (an option cut to the list's width: the whole of it, once the mouse rests)
-                if self.fonts.width_as_is(&crate::tr(o), 13.0, Weight::Regular) > text_r.w + 0.5 {
+                let whole = if p.as_is {
+                    std::borrow::Cow::Borrowed(o.as_str())
+                } else {
+                    crate::tr(o)
+                };
+                if self.fonts.width_as_is(&whole, 13.0, Weight::Regular) > text_r.w + 0.5 {
                     let t = self.anim(id_of(&format!("poptip{k}")) ^ 0x55, 1.0, 0.4);
                     if t > 0.9 {
                         self.tooltip = Some((o.clone(), self.input.mouse));

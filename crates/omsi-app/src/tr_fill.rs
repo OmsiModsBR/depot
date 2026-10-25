@@ -44,6 +44,7 @@ pub(crate) fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>
 }
 
 /// Enough words around the values to tell the template apart ("%{a}: %{b}" is not).
+#[cfg(test)]
 pub(crate) fn telling(parts: &[String]) -> bool {
     parts.len() >= 2
         && parts
