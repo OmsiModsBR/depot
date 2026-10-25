@@ -351,6 +351,15 @@ const CORNERS: &[(&str, &str)] = &[
     ("bottom-left", "Bottom left"),
     ("bottom-right", "Bottom right"),
 ];
+const INFO_BAR_MODES: &[(&str, &str)] = &[
+    ("full", "Full bar"),
+    ("compact", "Compact bar"),
+    ("essential", "Essentials only"),
+];
+const INFO_BAR_POSITIONS: &[(&str, &str)] = &[
+    ("top", "Top of the screen"),
+    ("bottom", "Bottom of the screen"),
+];
 const SEASONS: &[(&str, &str)] = &[
     ("auto", "By date"),
     ("spring", "Spring"),
@@ -486,6 +495,36 @@ pub static OPTS: &[Opt] = &[
         "show_fps",
         "Frame rate in the corner",
         "",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar",
+        "Information bar (Shift+Y)",
+        "Displays information such as the time, speed, and other details at the top of the screen",
+    ),
+    pick(
+        GENERAL,
+        "On screen",
+        "info_bar_mode",
+        "Information bar layout",
+        "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay",
+        INFO_BAR_MODES,
+    ),
+    pick(
+        GENERAL,
+        "On screen",
+        "info_bar_pos",
+        "Information bar position",
+        "Along the top or the bottom of the screen",
+        INFO_BAR_POSITIONS,
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_fps",
+        "Frame rate in the information bar",
+        "Adds the frame rate and its 1 % low as the bar's last item",
     ),
     toggle(
         GENERAL,
@@ -3481,6 +3520,10 @@ mod tests {
         "ui_opacity",
         "tooltips",
         "show_fps",
+        "info_bar",
+        "info_bar_mode",
+        "info_bar_pos",
+        "info_bar_fps",
         "notes",
         "chat",
         "chat_size",

@@ -176,6 +176,13 @@ pub struct Settings {
     /// The information bar along the top (Shift+Y, the menu, the touch panel's button): as
     /// it was left, not switched on again every session (#1164).
     pub info_bar: bool,
+    /// What the information bar shows: `full` (all of it), `compact` (time, speed, line, next
+    /// stop) or `essential` (speed, limit, delay).
+    pub info_bar_mode: String,
+    /// Where it sits: `top` or `bottom`.
+    pub info_bar_pos: String,
+    /// The frame rate (and its 1 % low) as the bar's last part, not only in the corner.
+    pub info_bar_fps: bool,
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
     pub autosave_minutes: u32,
     /// The interface's accent colour (`omsi_ui::theme::Accent`, by name), in the launcher and
@@ -571,6 +578,9 @@ impl Settings {
             head_tracking_invert_z: false,
             voice_chat: true,
             info_bar: false,
+            info_bar_mode: "full".into(),
+            info_bar_pos: "top".into(),
+            info_bar_fps: false,
             autosave_minutes: 5,
             ui_accent: "Amber".into(),
             ui_corners: "rounded".into(),
@@ -1225,6 +1235,17 @@ impl Settings {
                 "ui_scale_window" => s.ui_scale_window = b(v),
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
+                "info_bar_mode" => {
+                    s.info_bar_mode = if matches!(v, "compact" | "essential") {
+                        v.to_string()
+                    } else {
+                        "full".to_string()
+                    }
+                }
+                "info_bar_pos" => {
+                    s.info_bar_pos = if v == "bottom" { "bottom" } else { "top" }.to_string()
+                }
+                "info_bar_fps" => s.info_bar_fps = b(v),
                 "autosave_minutes" => {
                     s.autosave_minutes = v
                         .parse::<u32>()
@@ -1354,6 +1375,10 @@ impl Settings {
         text.push_str(&format!(
             "arrows_switch_cams={}\n",
             self.arrows_switch_cams as u8
+        ));
+        text.push_str(&format!(
+            "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
+            self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
         ));
         text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
         text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));

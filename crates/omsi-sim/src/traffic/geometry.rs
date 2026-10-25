@@ -94,6 +94,7 @@ impl LaneBuilder {
             curvature,
             dist,
             speed_limit_kmh,
+            limit_from_map: false,
             next: Vec::new(),
             traffic_light: None,
             turn: 0,

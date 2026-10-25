@@ -143,7 +143,7 @@ pub struct NavFrame<'a> {
     /// is held to 480 px, as before.
     pub follow_window: bool,
     pub dt: f32,
-    /// Where the information bar is (`ui::Ui::info_rect`): a navigator along the top keeps
+    /// Where the information bar is (`ui::Ui::info_rect`): a navigator on the same side keeps
     /// below it.
     pub info_rect: Option<[f32; 4]>,
 }

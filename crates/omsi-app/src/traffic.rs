@@ -7496,6 +7496,7 @@ impl Traffic {
             t.key = o.key;
             t.reversed = !o.reversed;
             t.speed_limit_kmh = o.speed_limit_kmh;
+            t.limit_from_map = o.limit_from_map;
             t.source = o.source;
             t.offset = o.offset;
             t.name = o.name.clone();
@@ -7556,6 +7557,7 @@ impl Traffic {
             .collect();
         let mut l = omsi_sim::traffic::LaneBuilder::polyline(pts, la.kind, la.width);
         l.speed_limit_kmh = la.speed_limit_kmh.min(lb.speed_limit_kmh);
+        l.limit_from_map = la.limit_from_map || lb.limit_from_map;
         l.name = "(timetable connector)".into();
         l.density = 0.0;
         l.no_cars = true;
