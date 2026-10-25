@@ -393,13 +393,6 @@ pub static OPTS: &[Opt] = &[
         "The launcher's texts at once, the game's at its next start",
         Kind::Language,
     )),
-    now(toggle(
-        GENERAL,
-        "Language",
-        "machine_translation",
-        "Translate the remaining texts automatically",
-        "Offline; the 620 MB download starts at once",
-    )),
     toggle(
         GENERAL,
         "Driving help",
@@ -2162,7 +2155,6 @@ fn after(key: &str, st: &mut Store) {
     match key {
         // (the field of view of the three screens follows from their distance)
         "triple_distance_mm" => st.s["triple_fov_deg"] = json!(0.0),
-        "machine_translation" => crate::mt::enable(st.on("machine_translation")),
         "ui_accent" => omsi_ui::theme::set_accent(
             omsi_ui::theme::Accent::named(st.get("ui_accent").as_str().unwrap_or(""))
                 .unwrap_or_default(),
@@ -2636,13 +2628,6 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             .split_once(" - ")
             .map(|x| x.1.to_string())
             .unwrap_or_default(),
-        // (the translation's download and setting up, while it is under way)
-        None if o.key == "machine_translation"
-            && st.on(o.key)
-            && !matches!(crate::mt::status().as_str(), "" | "Ready") =>
-        {
-            crate::mt::status()
-        }
         None => omsi_ui::tr(o.hint).into_owned(),
     };
     let mut wx = x;
@@ -3577,7 +3562,6 @@ mod tests {
         "metar_sync",
         "time_speed",
         "language",
-        "machine_translation",
         "launcher_rest",
         "voice_chat",
         "ui_scale",

@@ -443,12 +443,6 @@ impl State {
                 .and_then(|x| x.as_str())
                 .unwrap_or("ENG"),
         );
-        crate::mt::enable(
-            settings
-                .get("machine_translation")
-                .and_then(|x| x.as_bool())
-                .unwrap_or(false),
-        );
         let keybindings = core::get_keybindings().unwrap_or(serde_json::Value::Null);
         let mut choice = Choice::load();
         // (at the real time, a trip picked in an earlier session has most likely left)
@@ -1352,11 +1346,6 @@ impl State {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(
-                    maps.iter()
-                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
-                );
-                crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
                 self.maps = maps;
                 self.weathers = weathers;
                 self.pick_map();
@@ -1371,48 +1360,10 @@ impl State {
                 if !self.content_first {
                     return;
                 }
-                crate::mt::protect(
-                    batch
-                        .iter()
-                        .flat_map(|v| {
-                            [
-                                v.name.as_str(),
-                                v.manufacturer.as_str(),
-                                v.type_name.as_str(),
-                            ]
-                        })
-                        .chain(
-                            batch
-                                .iter()
-                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
-                        ),
-                );
                 self.vehicles.extend(batch);
                 self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
-                // (names of things, not the interface: never machine-translated)
-                crate::mt::protect(
-                    maps.iter()
-                        .flat_map(|m| [m.name.as_str(), m.friendly.as_str()]),
-                );
-                crate::mt::protect(
-                    vehicles
-                        .iter()
-                        .flat_map(|v| {
-                            [
-                                v.name.as_str(),
-                                v.manufacturer.as_str(),
-                                v.type_name.as_str(),
-                            ]
-                        })
-                        .chain(
-                            vehicles
-                                .iter()
-                                .flat_map(|v| v.paints.iter().map(|p| p.as_str())),
-                        ),
-                );
-                crate::mt::protect(weathers.iter().map(|w| w.name.as_str()));
                 let known: std::collections::HashSet<String> = self
                     .maps
                     .iter()
@@ -1504,21 +1455,6 @@ impl State {
                 }
             }
             Msg::Lines { map, date, lines } => {
-                if let Ok(ls) = lines.as_ref() {
-                    crate::mt::protect(
-                        ls.iter()
-                            .flat_map(|l| {
-                                l.termini
-                                    .iter()
-                                    .map(|t| t.as_str())
-                                    .chain([l.name.as_str()])
-                            })
-                            .chain(
-                                ls.iter()
-                                    .flat_map(|l| l.tours.iter().map(|t| t.number.as_str())),
-                            ),
-                    );
-                }
                 if (map, date) != self.lines_for {
                     return;
                 }
