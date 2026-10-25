@@ -49,6 +49,7 @@ fn complete(root: &Path) {
     write(root, "Sceneryobjects/house/texture/wall.bmp", bmp(512, 512));
     write(root, "Splines/road.sli", "[texture]\nroad.bmp\n");
     write(root, "Splines/texture/road.bmp", bmp(256, 256));
+    write(root, "Texture/gras.bmp", bmp(256, 256));
 }
 
 #[test]
@@ -58,7 +59,7 @@ fn a_complete_map_has_no_findings() {
     map(&root, TILE);
     let r = check_map(&root, &root.join("Maps/Test"));
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
-    assert_eq!((r.tiles, r.objects, r.splines, r.textures), (1, 1, 1, 2));
+    assert_eq!((r.tiles, r.objects, r.splines, r.textures), (1, 1, 1, 3));
     assert!(r.is_complete());
     let _ = fs::remove_dir_all(&root);
 }
@@ -67,6 +68,7 @@ fn a_complete_map_has_no_findings() {
 fn missing_object_spline_and_texture_are_named_once_with_their_users() {
     let root = temp_root("missing");
     map(&root, TILE);
+    write(&root, "Texture/gras.bmp", bmp(256, 256));
     write(&root, "Sceneryobjects/house/house.sco", "[mesh]\nhouse.x\n");
     write(&root, "Sceneryobjects/house/model/house.x", MESH);
     let r = check_map(&root, &root.join("Maps/Test"));
@@ -93,6 +95,7 @@ fn a_missing_tile_is_a_warning_not_an_error() {
         "Maps/Test/global.cfg",
         "[name]\nTest\n\n[map]\n0\n0\ntile_0_0.map\n",
     );
+    write(&root, "Texture/gras.bmp", bmp(256, 256));
     let r = check_map(&root, &root.join("Maps/Test"));
     assert_eq!(r.findings.len(), 1);
     assert_eq!(r.findings[0].code, "tile-missing");
@@ -372,6 +375,7 @@ fn a_ground_texture_is_looked_for_from_the_installation_folder_only() {
 }
 
 #[test]
+<<<<<<< HEAD
 fn findings_the_baseline_has_too_are_marked_known() {
     let before = temp_root("base-before");
     complete(&before);
@@ -425,5 +429,39 @@ fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
         .map(|f| f.file.as_str())
         .collect();
     assert_eq!(missing.len(), 2, "{missing:?}");
+=======
+fn an_object_a_chrono_patch_adds_is_checked_too() {
+    let root = temp_root("chrono");
+    complete(&root);
+    map(&root, TILE);
+    let patch = "[version]\n14\n\nObject Nr. 0\n[object]\n0\nSceneryobjects\\gone\\gone.sco\n7\n5\n6\n0.25\n90\n0\n0\n0\n";
+    write(&root, "Maps/Test/Chrono/winter/tile_0_0.map", patch);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "object-missing")
+        .unwrap_or_else(|| panic!("{:#?}", r.findings));
+    assert!(f.file.ends_with("gone.sco"), "{}", f.file);
+    assert_eq!(
+        f.referenced_by.as_ref().unwrap().0,
+        "Maps/Test/Chrono/winter/tile_0_0.map"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_map_without_ground_textures_needs_the_installations_gras() {
+    let root = temp_root("nogras");
+    complete(&root);
+    fs::remove_file(root.join("Texture/gras.bmp")).unwrap();
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let g = r.findings.iter().find(|f| f.file.ends_with("gras.bmp"));
+    assert!(g.is_some(), "{:#?}", r.findings);
+    write(&root, "Texture/gras.bmp", bmp(256, 256));
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+>>>>>>> claude/project-thread-nhvp1h
     let _ = fs::remove_dir_all(&root);
 }

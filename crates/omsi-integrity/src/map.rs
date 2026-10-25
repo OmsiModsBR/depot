@@ -130,6 +130,10 @@ impl<'a> Checker<'a> {
             }
         };
         let by = self.rel(&global_path);
+        if global.ground_textures.is_empty() {
+            // (the game falls back to the installation's `Texture\gras.bmp`)
+            self.ground_texture("", &by, true);
+        }
         for (i, g) in global.ground_textures.iter().enumerate() {
             self.ground_texture(&g.texture, &by, i == 0);
             self.ground_texture(&g.detail_texture, &by, false);
@@ -165,26 +169,55 @@ impl<'a> Checker<'a> {
                 }
             };
             self.report.tiles += 1;
-            for o in tile.objects.iter().chain(&tile.attach_objects) {
-                self.report.objects += 1;
-                self.object(&o.file, &tile_name);
+            self.tile_content(&tile, &tile_name);
+            // the patches of every chrono folder (active or not: the check is of the map)
+            for dir in vfs::list_dir(&resolve_path(map_dir, "Chrono"))
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|(_, is_dir)| *is_dir)
+            {
+                let base = resolve_path(map_dir, "Chrono").join(dir.0);
+                let name = t.file.rsplit(['/', '\\']).next().unwrap_or(&t.file);
+                let patch_path = resolve_path(&base, name);
+                if !vfs::is_file(&patch_path) {
+                    continue;
+                }
+                let patch_name = self.rel(&patch_path);
+                match Tile::load(&patch_path) {
+                    Ok(patch) => self.tile_content(&patch, &patch_name),
+                    Err(e) => self.add(
+                        Severity::Error,
+                        "tile-unreadable",
+                        patch_name,
+                        &by,
+                        format!("The chrono patch cannot be read: {e}"),
+                        None,
+                    ),
+                }
             }
-            for a in &tile.spline_attachments {
-                self.report.objects += 1;
-                self.object(&a.file, &tile_name);
-            }
-            for s in &tile.splines {
-                self.report.splines += 1;
-                self.spline(&s.file, &tile_name);
-            }
-            // objects a chrono patch changes to
-            for c in &tile.chrono_changes {
-                if let Some(f) = &c.new_type {
-                    if c.is_spline {
-                        self.spline(f, &tile_name);
-                    } else {
-                        self.object(f, &tile_name);
-                    }
+        }
+    }
+
+    /// The objects, splines and replacements a tile (or a chrono patch of one) names.
+    fn tile_content(&mut self, tile: &Tile, tile_name: &str) {
+        for o in tile.objects.iter().chain(&tile.attach_objects) {
+            self.report.objects += 1;
+            self.object(&o.file, tile_name);
+        }
+        for a in &tile.spline_attachments {
+            self.object(&a.file, tile_name);
+        }
+        for s in &tile.splines {
+            self.report.splines += 1;
+            self.spline(&s.file, tile_name);
+        }
+        // what a chrono patch changes an object or spline to
+        for c in &tile.chrono_changes {
+            if let Some(f) = &c.new_type {
+                if c.is_spline {
+                    self.spline(f, tile_name);
+                } else {
+                    self.object(f, tile_name);
                 }
             }
         }
@@ -199,7 +232,7 @@ impl<'a> Checker<'a> {
             ("", false) => return,
             (n, _) => n,
         };
-        match omsi_texture::find_texture(name, &[self.root]) {
+        match omsi_texture::find_texture_uncached(name, &[self.root]) {
             Some(p) => self.texture(&p, by),
             None => self.add(
                 Severity::Warning,
@@ -372,7 +405,7 @@ impl<'a> Checker<'a> {
                 if is_null_texture(name) || name.starts_with("\\S:") || is_reflexion(name) {
                     continue;
                 }
-                match omsi_texture::find_texture(name, &dir_refs) {
+                match omsi_texture::find_texture_uncached(name, &dir_refs) {
                     Some(p) => self.texture(&p, &mesh_name),
                     None => self.add(
                         Severity::Warning,
@@ -430,7 +463,7 @@ impl<'a> Checker<'a> {
             if name.is_empty() {
                 continue;
             }
-            match omsi_texture::find_texture(name, &dir_refs) {
+            match omsi_texture::find_texture_uncached(name, &dir_refs) {
                 Some(p) => self.texture(&p, &file),
                 None => self.add(
                     Severity::Warning,
@@ -483,7 +516,9 @@ impl<'a> Checker<'a> {
     }
 
     fn long_path(&mut self, path: &Path, by: &str) {
-        if path.to_string_lossy().chars().count() > MAX_PATH && self.seen_long.insert(path.into()) {
+        if path.to_string_lossy().encode_utf16().count() > MAX_PATH
+            && self.seen_long.insert(path.into())
+        {
             self.add(
                 Severity::Warning,
                 "path-too-long",
@@ -492,7 +527,8 @@ impl<'a> Checker<'a> {
                 "The full path is longer than 259 characters.".into(),
                 Some(
                     "Windows refuses paths over 259 characters in most programs, including \
-                     OMSI 2; installed in a deeper folder, this file may not load."
+                     OMSI 2. The length is measured with the folder the installation is in now; \
+                     in a deeper folder, this file may not load."
                         .into(),
                 ),
             );
