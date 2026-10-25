@@ -910,14 +910,7 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
             l.drive.tab = tab + 1;
         }
     } else {
-        let label = if running > 0
-            && l.state
-                .second_armed
-                .map(|t| t.elapsed().as_secs() < 6)
-                .unwrap_or(false)
-        {
-            "Start another game"
-        } else if (l.state.choice.free || l.state.choice.line.is_none())
+        let label = if (l.state.choice.free || l.state.choice.line.is_none())
             && l.state.joined_server.is_none()
         {
             "Drive"
@@ -1052,27 +1045,19 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
             Align::Left,
         );
     } else if running > 0 {
-        let note = if running > 1 {
-            omsi_ui::tr("%{n} games running - see Sessions").replace("%{n}", &running.to_string())
-        } else {
-            omsi_ui::tr("1 game running - see Sessions").into_owned()
-        };
+        let note = omsi_ui::tr("Game: running").into_owned();
         let nr = Rect::new(
             tx,
             y0 + 38.0,
             l.ui.width(&note, 11.5, Weight::Medium).min(tw),
             18.0,
         );
-        let (h, _, clicked) = l.ui.interact(id_of("running-note"), nr);
-        if clicked {
-            l.go(super::Page::Sessions);
-        }
         l.ui.text_in(
             &note,
             nr,
             11.5,
             Weight::Medium,
-            if h { TEXT } else { OK },
+            OK,
             Align::Left,
         );
     }
@@ -3067,25 +3052,8 @@ fn start(l: &mut Launcher) {
         l.state.set_status(format!("LAN: {t}"), true);
         return;
     }
-    let running = l.state.instances.iter().filter(|i| i.running).count();
-    // a second game on one computer is for testing LAN play, not something to do by
-    // accident: with one running, the button asks for a second click
-    if running > 0
-        && l.state
-            .second_armed
-            .map(|t| t.elapsed().as_secs() >= 6)
-            .unwrap_or(true)
-    {
-        l.state.second_armed = Some(std::time::Instant::now());
-        l.state.set_status("A game is running already (its window may be behind this one - see Sessions). Click again to start another one anyway.", true);
-        return;
-    }
-    l.state.second_armed = None;
     l.state.choice.save();
     l.state.launch();
-    if l.state.choice.lan_mode != "off" {
-        l.go(super::Page::Sessions);
-    }
 }
 
 /// The airport of OMSI's METAR list (`Weather/ICAO.txt`) nearest to where map `map` lies

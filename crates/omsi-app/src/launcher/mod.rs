@@ -63,7 +63,6 @@ pub enum Page {
     Profile,
     Settings,
     Controls,
-    Sessions,
     Mods,
     Tutorials,
     Timetable,
@@ -82,7 +81,6 @@ impl Page {
             Page::Profile => UiPage::Profile,
             Page::Settings => UiPage::Settings,
             Page::Controls => UiPage::Controls,
-            Page::Sessions => UiPage::Sessions,
             Page::Mods => UiPage::Mods,
             Page::Tutorials => UiPage::Tutorials,
             Page::Timetable => UiPage::Timetable,
@@ -98,7 +96,6 @@ impl Page {
             UiPage::Maps => Page::Maps,
             UiPage::Mods => Page::Mods,
             UiPage::Timetable => Page::Timetable,
-            UiPage::Sessions => Page::Sessions,
             UiPage::Profile => Page::Profile,
             UiPage::Controls => Page::Controls,
             UiPage::Tutorials => Page::Tutorials,
@@ -432,7 +429,7 @@ impl Launcher {
             if let Some(q) = tt_part("find=") {
                 app.pages.tt.set_find(q);
             }
-            // (profile:drive: the chosen drive's details over Profile / Sessions)
+            // (profile:drive: the chosen drive's details over Profile)
             if p.split(':').nth(1) == Some("drive") {
                 app.pages.drive_details = true;
             }
@@ -1667,7 +1664,7 @@ impl Launcher {
         let reset = !crash && !disconnected && self.pages.confirm_reset;
         // (a window of the Maps page's start lies over the page, as a dialog does)
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
-        // (and a drive's details over Profile / Sessions)
+        // (and a drive's details over Profile)
         let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
         // (and the keyboard's Reload and Add a control over Controls)
         let keys = !mobile
@@ -1701,11 +1698,6 @@ impl Launcher {
             // `go`, so that Maps shows the map the choice holds, not the library's first)
             if self.page == Page::Drive {
                 self.go(Page::Maps);
-                self.page_anim = 1.0;
-            }
-            // (and the games open now are on Profile / Sessions)
-            if self.page == Page::Sessions {
-                self.go(Page::Profile);
                 self.page_anim = 1.0;
             }
             let rail_w = self.rail_w();
@@ -1752,7 +1744,6 @@ impl Launcher {
                 Page::Profile => pages::profile(self, content),
                 Page::Settings => settings::settings(self, content),
                 Page::Controls => pages::controls(self, content),
-                Page::Sessions => pages::sessions(self, content),
                 Page::Mods => pages::mods(self, content),
                 Page::Tutorials => pages::tutorials(self, content),
                 Page::Timetable => timetable::draw(self, content),
@@ -2044,7 +2035,6 @@ impl Launcher {
                     self.state.poll_now();
                 }
                 Page::Mods => self.state.load_mods(),
-                Page::Sessions => self.state.poll_now(),
                 // (counted again each time the page opens: a mod installed meanwhile counts)
                 Page::Setup => {
                     self.state.usage_asked = false;
@@ -2146,7 +2136,6 @@ impl Launcher {
     /// bar over its top: the pages, and the driver at the sidebar's foot.
     fn rail(&mut self) {
         let size = self.ui.size;
-        let running = self.state.instances.iter().filter(|i| i.running).count();
         let jobs = self
             .state
             .jobs
@@ -2154,18 +2143,6 @@ impl Launcher {
             .filter(|j| j.finished.is_none())
             .count();
         let mut badges = Vec::new();
-        if running > 0 {
-            // (the phone lists Sessions; the sidebar has them on Profile / Sessions)
-            badges.push((
-                if mobile::mobile() {
-                    UiPage::Sessions
-                } else {
-                    UiPage::Profile
-                },
-                running.to_string(),
-                OK,
-            ));
-        }
         if jobs > 0 {
             badges.push((UiPage::Mods, jobs.to_string(), accent()));
         }
@@ -2440,16 +2417,14 @@ impl Launcher {
     /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
     /// look has them; returns where the message line can start.
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
-        let games = self.state.instances.len();
+        let games = self.state.instances.iter().filter(|i| i.running).count();
         let root_ok = self.root_ok();
         let chips = [
             (
                 if games == 0 {
                     "Game: not running".to_string()
-                } else if games == 1 {
-                    "Game: running".to_string()
                 } else {
-                    omsi_ui::tr("Games: %{games} running").replace("%{games}", &games.to_string())
+                    "Game: running".to_string()
                 },
                 games > 0,
             ),

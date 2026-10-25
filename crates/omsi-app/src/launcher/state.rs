@@ -417,7 +417,6 @@ pub struct State {
     stamp: Option<String>,
     poll_t: f32,
     polling: bool,
-    pub second_armed: Option<Instant>,
     /// Multiplayer: the saved servers, what each said last (and when it was asked), and the
     /// one the Drive page is joined to now (its address).
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
@@ -504,7 +503,6 @@ impl State {
             stamp: None,
             poll_t: 0.0,
             polling: false,
-            second_armed: None,
             servers: with_official(
                 std::fs::read(servers_path())
                     .ok()
@@ -1027,10 +1025,23 @@ impl State {
         self.launch_with(|_| {});
     }
 
+    /// Only one game runs at a time: with one starting or running, a start says so and does
+    /// nothing (its window may be in the tray).
+    fn one_game_only(&mut self) -> bool {
+        if !self.in_game() {
+            return false;
+        }
+        self.set_status(
+            "A game is running already. Close it before starting another one (its window may be in the tray).",
+            true,
+        );
+        true
+    }
+
     /// Start a session with the duty the choice makes, as `adjust` changes it (Maps: a start
     /// without a bus leaves the bus out of the duty, not out of the choice kept for the next).
     pub fn launch_with(&mut self, adjust: impl FnOnce(&mut core::Duty)) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         if !omsi_cfg::missing_original_essentials(std::path::Path::new(&self.config.root))
@@ -1145,7 +1156,7 @@ impl State {
 
     /// Continue the situation chosen of the map's (`laststn.osn`, or a save slot, #341).
     pub fn launch_last_situation(&mut self) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         let pick = self.save_pick;
@@ -1167,7 +1178,7 @@ impl State {
 
     /// Start one of OMSI's tutorials (1..4).
     pub fn launch_tutorial(&mut self, n: usize) {
-        if !self.save_pending_settings() {
+        if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
         let mut d = self.duty();
