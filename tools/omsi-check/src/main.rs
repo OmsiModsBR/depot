@@ -46,6 +46,11 @@ struct Args {
     /// a texture of that folder.
     #[arg(long, num_args = 2)]
     resolve: Vec<String>,
+    /// Integrity check of one map (the name of its folder under `Maps`): follows the map's
+    /// files down to the textures and lists what is missing, unreadable or not optimized
+    /// for OMSI 2 / DirectX 9, then does nothing else.
+    #[arg(long)]
+    integrity: Option<String>,
 }
 
 mod dump;
@@ -260,6 +265,55 @@ fn check_scripts(root: &Path, verbose: bool) {
     }
 }
 
+fn integrity(root: &Path, map: &str, verbose: bool) -> Result<()> {
+    use omsi_integrity::Severity;
+    let map_dir = resolve_path(&resolve_path(root, "Maps"), map);
+    let r = omsi_integrity::check_map(root, &map_dir);
+    println!(
+        "{}: {} tiles, {} objects, {} splines, {} textures",
+        r.map, r.tiles, r.objects, r.splines, r.textures
+    );
+    for f in &r.findings {
+        let used = f
+            .referenced_by
+            .as_ref()
+            .map(|(by, n)| {
+                format!(
+                    "  (used by {by}{})",
+                    if *n > 1 {
+                        format!(" and {} more", n - 1)
+                    } else {
+                        String::new()
+                    }
+                )
+            })
+            .unwrap_or_default();
+        println!(
+            "[{}] {} {}: {}{used}",
+            f.severity.label(),
+            f.code,
+            f.file,
+            f.message
+        );
+        if verbose {
+            if let Some(d) = &f.detail {
+                println!("    {d}");
+            }
+        }
+    }
+    println!(
+        "{} errors, {} warnings, {} not optimized",
+        r.count(Severity::Error),
+        r.count(Severity::Warning),
+        r.count(Severity::NotOptimized)
+    );
+    if r.is_complete() {
+        Ok(())
+    } else {
+        std::process::exit(1)
+    }
+}
+
 fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
@@ -303,6 +357,9 @@ fn main() -> Result<()> {
             omsi_texture::find_texture(name, &[base.as_path(), base.join("texture").as_path()]);
         println!("texture {:?} -> {:?}", name, tex);
         return Ok(());
+    }
+    if let Some(map) = &args.integrity {
+        return integrity(&root, map, args.verbose);
     }
     if args.dump.is_some() || args.dump_detail.is_some() {
         let (rv, rvs) = roadvehicle_builtins(&root);

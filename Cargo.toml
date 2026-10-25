@@ -10,6 +10,7 @@ members = [
     "crates/omsi-vehicle",
     "crates/omsi-timetable",
     "crates/omsi-content",
+    "crates/omsi-integrity",
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
