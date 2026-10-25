@@ -22,8 +22,8 @@ pub mod mobile;
 mod multiplayer;
 pub(crate) mod pages;
 pub mod phone;
-pub(crate) mod preview;
 mod prerender;
+pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
 mod showroom;
@@ -2338,10 +2338,10 @@ impl Launcher {
             self.prerender.cancel();
             return;
         }
-        if self.prerender.content_ready(
-            self.state.loading_content,
-            self.state.vehicles.is_empty(),
-        ) {
+        if self
+            .prerender
+            .content_ready(self.state.loading_content, self.state.vehicles.is_empty())
+        {
             let c = &self.state.choice;
             // (the light the pictures are drawn in: the chosen map, else the first there is)
             let map = if c.map.is_empty() {

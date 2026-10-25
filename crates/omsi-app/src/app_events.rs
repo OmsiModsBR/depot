@@ -3599,10 +3599,8 @@ impl ApplicationHandler for App {
                                     "input script: the window picture could not be rendered: {e}"
                                 );
                                 if !include_touch {
-                                    self.service_msg = Some((
-                                        format!("Screenshot could not be saved: {e}"),
-                                        4.0,
-                                    ));
+                                    self.service_msg =
+                                        Some((format!("Screenshot could not be saved: {e}"), 4.0));
                                 }
                             }
                         }
