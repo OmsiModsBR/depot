@@ -409,3 +409,48 @@ fn a_map_without_ground_textures_needs_the_installations_gras() {
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_file_added_after_a_check_is_seen_by_the_next_one() {
+    let root = temp_root("rerun");
+    complete(&root);
+    fs::remove_file(root.join("Sceneryobjects/house/texture/wall.bmp")).unwrap();
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.findings.iter().any(|f| f.code == "texture-missing"));
+    // the same file under a name that differs by case only
+    write(
+        &root,
+        "Sceneryobjects/house/texture/WALL.BMP",
+        bmp(512, 512),
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_wasteful_texture_counts_every_file_that_names_it() {
+    let root = temp_root("npotcount");
+    complete(&root);
+    write(
+        &root,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(300, 300),
+    );
+    write(
+        &root,
+        "Sceneryobjects/other/other.sco",
+        "[model]\n..\\house\\house.sco\n",
+    );
+    let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\other\\other.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\n");
+    map(&root, &tile);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap_or_else(|| panic!("{:#?}", r.findings));
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 2, "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
