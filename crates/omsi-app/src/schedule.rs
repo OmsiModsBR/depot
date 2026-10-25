@@ -20,6 +20,8 @@ struct Departure {
     line: String,
     ai_group: String,
     tour: String,
+    /// The timetable line's `[priority]` (1 the most important line).
+    priority: i32,
     /// The tour's validity mask (bits 0-6 Monday..Sunday, 7 public holiday, 8 school
     /// holidays, 9 school days): every tour's departures are kept, and which run is decided
     /// by the day (`Schedule::runs`), so a session carries on past midnight.
@@ -334,6 +336,9 @@ fn project_stop(
 
 pub struct Schedule {
     pub data: TimetableData,
+    /// The options' `[AIPriorityScheduled]`: the least important line (1 to 4) that runs;
+    /// the player's own tour runs whatever its line's priority.
+    max_priority: i32,
     departures: Vec<Departure>,
     /// Depot vehicles per AI group: (type, its fleet from the ailists, depot file).
     depots: HashMap<
@@ -546,6 +551,7 @@ impl Schedule {
                             line: line.name.clone(),
                             ai_group: tour.ai_group.clone(),
                             tour: tour.number.clone(),
+                            priority: line.priority,
                             mask,
                             spawned: false,
                         });
@@ -701,6 +707,7 @@ impl Schedule {
             .flat_map(|t| trip_stations(t).into_iter().skip(1))
             .collect();
         let mut s = Schedule {
+            max_priority: i32::from(crate::settings::Settings::load().ai_priority_scheduled),
             data,
             departures,
             depots,
@@ -952,6 +959,7 @@ impl Schedule {
     /// Whether departure `i`'s tour runs on the current day.
     fn runs(&self, i: usize) -> bool {
         mask_matches(self.departures[i].mask, self.day_bits)
+            && (self.departures[i].priority <= self.max_priority || self.is_player_tour(i))
     }
 
     /// Move the timetable on to the clock's date when it has changed (midnight): the day's

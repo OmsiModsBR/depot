@@ -213,25 +213,37 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
         v["maintenance"] = json!((x as i64).clamp(0, 4));
     }
     if let Some(x) = num("aiunschedfactor") {
-        v["ai_unsched_factor"] = json!((x as i64).clamp(0, 300));
+        v["ai_unsched_factor"] = json!((x as i64).clamp(1, 300));
     }
     if let Some(x) = num("aimaxcountscheduled") {
-        v["ai_max_scheduled"] = json!((x as i64).max(0));
+        v["ai_max_scheduled"] = json!((x as i64).clamp(0, 1000));
     }
-    // (the second line of [AIMaxCountRandom]: the people OMSI makes)
+    // (the first line of [AIMaxCountRandom]: the vehicles without a timetable; the second:
+    // the people OMSI makes)
+    if let Some(x) = o
+        .values
+        .get("aimaxcountrandom")
+        .and_then(|x| x.first())
+        .and_then(|x| x.trim().parse::<i64>().ok())
+    {
+        v["ai_max_random"] = json!(x.clamp(0, 1000));
+    }
     if let Some(x) = o
         .values
         .get("aimaxcountrandom")
         .and_then(|x| x.get(1))
         .and_then(|x| x.trim().parse::<i64>().ok())
     {
-        v["ai_max_humans"] = json!(x.max(1));
+        v["ai_max_humans"] = json!(x.clamp(0, 1000));
+    }
+    if let Some(x) = num("aipriorityscheduled") {
+        v["ai_priority_scheduled"] = json!((x as i64).clamp(1, 4));
     }
     if let Some(x) = num("aimaxcountparked") {
-        v["ai_max_parked"] = json!((x as i64).max(0));
+        v["ai_max_parked"] = json!((x as i64).clamp(0, 100));
     }
     if let Some(x) = num("aipassfactor") {
-        v["pax_density"] = json!((x / 100.0).clamp(0.0, 3.0));
+        v["pax_density"] = json!((x / 100.0).clamp(0.0, 2.0));
     }
     // flags: present or not
     v["head_movement"] = json!(o.flag("driverview_moving"));
@@ -3133,8 +3145,10 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     for (k, d) in [
         ("maintenance", json!(0)),
         ("ai_unsched_factor", json!(100)),
-        ("ai_max_scheduled", json!(0)),
-        ("ai_max_parked", json!(0)),
+        ("ai_max_scheduled", json!(1000)),
+        ("ai_max_random", json!(1000)),
+        ("ai_priority_scheduled", json!(4)),
+        ("ai_max_parked", json!(100)),
         ("ai_max_humans", json!(200)),
         ("use_real_time", json!(false)),
         ("use_real_date", json!(false)),
@@ -3323,7 +3337,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .ok()
                     .filter(|x| x.is_finite())
                     .map(|x| if x > 5.0 { x / 100.0 } else { x })
-                    .map(|x| x.clamp(0.0, 3.0))
+                    .map(|x| x.clamp(0.0, 2.0))
                     .unwrap_or(1.0))
             }
             "triple_fov_deg" => {
@@ -3475,8 +3489,26 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val
                     .trim_end_matches('%')
                     .parse::<f64>()
-                    .map(|x| x.max(0.0) as i64)
-                    .unwrap_or(0))
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(1000))
+            }
+            "ai_max_random" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(1000))
+            }
+            "ai_priority_scheduled" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(1.0, 4.0) as i64)
+                    .unwrap_or(4))
             }
             // (0 to 4, as the game reads it)
             "maintenance" => {
@@ -3494,7 +3526,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .parse::<f64>()
                     .ok()
                     .filter(|x| x.is_finite())
-                    .map(|x| x.clamp(0.0, 300.0))
+                    .map(|x| x.clamp(1.0, 300.0))
                     .map(|x| {
                         if x.fract() == 0.0 {
                             json!(x as i64)
@@ -3504,12 +3536,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     })
                     .unwrap_or(json!(100))
             }
-            // (-1: no parked cars at all, #864)
+            // (the share of the parking spaces with a car, as the file of version 2 and
+            // before had it: -1 none, anything else a count - taken apart below)
             "ai_max_parked" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0))
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .map(|x| x.max(-1.0) as i64)
+                    .unwrap_or(100))
             }
             "ai_max_humans" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
                 if k != "navigator_corner"
@@ -3968,6 +4007,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     if version < 2 && v["boarding"] == "pay" {
         v["boarding"] = json!("auto");
     }
+    // before version 3 the count options meant something else (no limit was 0, every
+    // parking space 0, -1 none): they follow the original's sliders now
+    if version < 3 {
+        if v["ai_max_scheduled"] == json!(0) {
+            v["ai_max_scheduled"] = json!(1000);
+        }
+        v["ai_max_parked"] = json!(if v["ai_max_parked"] == json!(-1) {
+            0
+        } else {
+            100
+        });
+    }
+    v["ai_max_parked"] = json!(v["ai_max_parked"].as_i64().unwrap_or(100).clamp(0, 100));
     v
 }
 
@@ -4207,7 +4259,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     };
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let text = format!(
-        "# Project Depot settings (written by the launcher)\nversion=2\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4262,12 +4314,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
-        f("ai_unsched_factor", 100.0).clamp(0.0, 300.0),
-        n("ai_max_scheduled", 0).max(0),
-        n("ai_max_parked", 0).max(-1),
-        n("ai_max_humans", 200).max(1),
+        f("ai_unsched_factor", 100.0).clamp(1.0, 300.0),
+        n("ai_max_scheduled", 1000).clamp(0, 1000),
+        n("ai_max_random", 1000).clamp(0, 1000),
+        n("ai_priority_scheduled", 4).clamp(1, 4),
+        n("ai_max_parked", 100).clamp(0, 100),
+        n("ai_max_humans", 200).clamp(0, 1000),
         b("use_real_time", false),
         b("use_real_date", false),
         b("use_real_year", false),

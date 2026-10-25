@@ -865,6 +865,17 @@ fn parked_pick(
     })
 }
 
+/// Whether the space with this key keeps a car under the options' share of parked cars
+/// (percent of the spaces, 100 = as the map fills them). The same for a key and a seed, and a
+/// space kept at a share stays kept at any higher one.
+fn parked_space_kept(key: i64, seed: u64, percent: i64) -> bool {
+    if percent >= 100 {
+        return true;
+    }
+    let h = ((key as u64) ^ seed.rotate_left(17)).wrapping_mul(0xA24B_AED4_963E_E407) >> 40;
+    (h % 100) as i64 <= percent - 1
+}
+
 /// A tile read and tessellated, its objects typed but not yet standing on the ground. Kept
 /// (by [`World::prepare_tiles`]) while a loaded tile or one on its way depends on it.
 pub struct StagedTile {
@@ -2543,7 +2554,7 @@ pub struct World {
     /// overlaps one, and sends the workshop's team out when the bus stands in none.
     pub petrol_stations: Mutex<Vec<omsi_sim::collision::Obb>>,
     /// Parked cars standing in the loaded tiles, and the options' `[AIMaxCountParked]`
-    /// (0 = every space the map fills, -1 = none): past it the spaces stay empty.
+    /// (the share of the spaces with a car, 0 to 100 percent).
     pub parked_live: std::sync::atomic::AtomicUsize,
     pub parked_max: i64,
     /// Chosen once per run: which cars stand on the parking spaces (`OMSI_SEED` repeats it).
@@ -4757,10 +4768,7 @@ impl World {
         }
         // leave some spaces empty like the original, and all once the options' count of
         // parked cars stands
-        let full = self.parked_max < 0
-            || (self.parked_max > 0
-                && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64
-                    >= self.parked_max);
+        let full = !parked_space_kept(key, self.parked_seed, self.parked_max);
         let pick = if full {
             None
         } else {
@@ -14840,6 +14848,19 @@ pub(crate) fn resolve_scenery_freetex_name<'a>(
 
 #[cfg(test)]
 mod tests {
+    /// The options' share of parked cars: all at 100, none at 0, and a space kept at a share
+    /// stays kept at any higher one.
+    #[test]
+    fn the_share_of_parked_cars_keeps_the_same_spaces_as_it_grows() {
+        let kept = |p: i64| -> Vec<bool> { (0..500i64).map(|k| parked_space_kept(k, 7, p)).collect() };
+        assert!(kept(100).iter().all(|k| *k));
+        assert!(kept(0).iter().all(|k| !*k));
+        let (low, high) = (kept(30), kept(60));
+        assert!(low.iter().zip(&high).all(|(l, h)| !*l || *h));
+        let share = kept(50).iter().filter(|k| **k).count();
+        assert!((200..300).contains(&share), "{share}");
+    }
+
     /// #174: spaces are mostly filled, the same seed gives the same cars, another seed gives
     /// other ones.
     #[test]

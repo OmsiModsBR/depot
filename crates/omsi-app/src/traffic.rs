@@ -622,8 +622,11 @@ pub struct Traffic {
     pub density_curve: Vec<(f32, f32)>,
     /// The options' `[AIUnschedFactor]`: the share of the random traffic.
     pub unsched_factor: f32,
-    /// The options' `[AIMaxCountScheduled]` (0 = no limit).
+    /// The options' `[AIMaxCountScheduled]`: no more timetable vehicles than that at once.
     pub max_scheduled: u32,
+    /// The options' `[AIMaxCountRandom]` (first line): no more vehicles without a timetable
+    /// than that on the streets at once.
+    pub max_random: u32,
     /// `--no-timetable-buses`: the timetable runs for the player's duty, but puts no AI
     /// bus on the road (#1762).
     pub no_timetable_buses: bool,
@@ -1600,6 +1603,7 @@ impl Traffic {
             density_curve: world.global.traffic_density_road.clone(),
             unsched_factor: crate::settings::Settings::load().ai_unsched_factor,
             max_scheduled: crate::settings::Settings::load().ai_max_scheduled,
+            max_random: crate::settings::Settings::load().ai_max_random,
             no_timetable_buses: false,
             viewer: None,
             occluders: None,
@@ -2444,7 +2448,8 @@ impl Traffic {
             })
             .collect();
         let street_target =
-            (self.target as f32 * density * road_scale(&near_density)).round() as usize;
+            ((self.target as f32 * density * road_scale(&near_density)).round() as usize)
+                .min(self.max_random as usize);
         // the cars that come into range again, where they have got to
         self.wake_dormant(world, renderer, scene, center, street_target);
         // the whole map's population: as dense as around the player, on every street the
@@ -3491,13 +3496,12 @@ impl Traffic {
         if self.no_timetable_buses {
             return None;
         }
-        if self.max_scheduled > 0
-            && self
-                .cars
-                .iter()
-                .filter(|c| c.is_bus() || !c.state.route.is_empty())
-                .count()
-                >= self.max_scheduled as usize
+        if self
+            .cars
+            .iter()
+            .filter(|c| c.is_bus() || !c.state.route.is_empty())
+            .count()
+            >= self.max_scheduled as usize
         {
             return None;
         }
