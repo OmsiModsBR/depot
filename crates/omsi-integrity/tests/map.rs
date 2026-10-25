@@ -495,7 +495,34 @@ fn a_texture_change_master_stands_for_the_texture_the_mesh_names() {
 }
 
 #[test]
-<<<<<<< HEAD
+fn a_file_naming_a_texture_twice_is_one_user() {
+    let root = temp_root("twoslots");
+    complete(&root);
+    write(
+        &root,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(300, 300),
+    );
+    // two materials of one mesh with the same texture
+    let two = MESH.replace(
+        "MeshMaterialList { 1; 1; 0;;",
+        "MeshMaterialList { 2; 1; 0;;",
+    );
+    let material = "Material { 1;1;1;1;; 2; 0;0;0;; 0;0;0;; TextureFilename { \"wall.bmp\"; } }";
+    let two = two.replace(material, &format!("{material} {material}"));
+    write(&root, "Sceneryobjects/house/model/house.x", two);
+    map(&root, TILE);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap();
+    assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", f);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn findings_the_baseline_has_too_are_marked_known() {
     let before = temp_root("base-before");
     complete(&before);
@@ -521,32 +548,10 @@ fn findings_the_baseline_has_too_are_marked_known() {
         .find(|f| f.code == "spline-missing")
         .unwrap();
     let npot = r
-=======
-fn a_file_naming_a_texture_twice_is_one_user() {
-    let root = temp_root("twoslots");
-    complete(&root);
-    write(
-        &root,
-        "Sceneryobjects/house/texture/wall.bmp",
-        bmp(300, 300),
-    );
-    // two materials of one mesh with the same texture
-    let two = MESH.replace(
-        "MeshMaterialList { 1; 1; 0;;",
-        "MeshMaterialList { 2; 1; 0;;",
-    );
-    let material = "Material { 1;1;1;1;; 2; 0;0;0;; 0;0;0;; TextureFilename { \"wall.bmp\"; } }";
-    let two = two.replace(material, &format!("{material} {material}"));
-    write(&root, "Sceneryobjects/house/model/house.x", two);
-    map(&root, TILE);
-    let r = check_map(&root, &root.join("Maps/Test"));
-    let f = r
->>>>>>> feat/integrity-paints
         .findings
         .iter()
         .find(|f| f.code == "texture-npot")
         .unwrap();
-<<<<<<< HEAD
     assert!(spline.known && !npot.known);
     assert_eq!(r.count_new(Severity::Error), 0);
     assert_eq!(r.count_new(Severity::NotOptimized), 1);
@@ -571,8 +576,5 @@ fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
         .map(|f| f.file.as_str())
         .collect();
     assert_eq!(missing.len(), 2, "{missing:?}");
-=======
-    assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", f);
->>>>>>> feat/integrity-paints
     let _ = fs::remove_dir_all(&root);
 }

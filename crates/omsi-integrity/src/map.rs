@@ -110,12 +110,8 @@ impl<'a> Checker<'a> {
                 file,
                 message: p.message,
                 detail: p.detail,
-<<<<<<< HEAD
-                referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.count)),
-                known: false,
-=======
                 referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.users.len())),
->>>>>>> feat/integrity-paints
+                known: false,
             });
         }
         self.report
