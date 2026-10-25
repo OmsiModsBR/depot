@@ -345,6 +345,24 @@ pub(crate) fn place_numbers(app: &App, bus: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A vehicle's description as its author wrote it: its description file in the game's
+/// language (`<bus>_ENG.dsc`), else the `[description]` of the vehicle file.
+pub(crate) fn place_description(app: &App, bus: &str) -> String {
+    let Ok(path) = crate::spawn::player_bus_path(&app.args.root, bus) else {
+        return String::new();
+    };
+    let lang = crate::describe::language_code(&app.settings.language);
+    omsi_content::Dsc::find(&path, &lang)
+        .map(|d| d.description)
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            omsi_vehicle::Vehicle::load(&path)
+                .ok()
+                .map(|v| v.description.trim().to_string())
+        })
+        .unwrap_or_default()
+}
+
 /// A vehicle's depot files as (label, file name), alphabetical (the place list puts the
 /// map's depot file first).
 pub(crate) fn place_depots(app: &App, bus: &str) -> Vec<(String, String)> {
@@ -1579,7 +1597,7 @@ fn limit_row(
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
     if d3d9 {
-        if let Some(l) = crate::api_limits::d3d9(key) {
+        if let Some(l) = crate::api_limits::d3d9(key).filter(|l| !l.is_row()) {
             return l.shown().map(|v| {
                 (
                     row(name, 'i', &omsi_ui::tr(v), &omsi_ui::tr(l.reason), None),
@@ -3131,19 +3149,30 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("100", "100%"),
             ("150", "150%"),
             ("200", "200%"),
+            ("300", "300%"),
         ],
-        "ai_max_scheduled" => vec![
-            ("0", "All"),
+        "ai_max_scheduled" | "ai_max_random" => vec![
+            ("0", "None"),
             ("10", "At most 10"),
             ("25", "At most 25"),
             ("50", "At most 50"),
-        ],
-        "ai_max_parked" => vec![
-            ("-1", "None"),
-            ("0", "Every space"),
-            ("35", "At most 35"),
             ("100", "At most 100"),
             ("250", "At most 250"),
+            ("500", "At most 500"),
+            ("1000", "At most 1000"),
+        ],
+        "ai_priority_scheduled" => vec![
+            ("1", "1: only the most important lines"),
+            ("2", "2"),
+            ("3", "3"),
+            ("4", "4: all lines"),
+        ],
+        "ai_max_parked" => vec![
+            ("0", "None"),
+            ("25", "25%"),
+            ("50", "50%"),
+            ("75", "75%"),
+            ("100", "100%"),
         ],
         "autosave_minutes" => vec![
             ("0", "Off"),
@@ -3153,11 +3182,13 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("15", "Every 15 minutes"),
         ],
         "ai_max_humans" => vec![
+            ("0", "None"),
             ("50", "At most 50"),
             ("100", "At most 100"),
             ("200", "At most 200"),
             ("400", "At most 400"),
             ("800", "At most 800"),
+            ("1000", "At most 1000"),
         ],
         "language" => omsi_launcher_lib::LANGUAGES
             .iter()
@@ -3199,7 +3230,13 @@ fn select_state(
     file: &serde_json::Value,
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
-    let options = select_options(key);
+    let mut options = select_options(key);
+    // (under DirectX9 an option may leave some choices out, see `api_limits`)
+    if crate::launcher::settings::d3d9_fixes_vanilla(file) {
+        if let Some(l) = crate::api_limits::d3d9(key) {
+            options.retain(|o| l.allows(o.0));
+        }
+    }
     let mut cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     // anisotropy 0 is off, the same entry as 1
     if key == "anisotropy" && cur == "0" {
@@ -3349,8 +3386,10 @@ fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "exact_fare", "Passengers pay the exact fare", "No change is given at the cash desk"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("maintenance", "Maintenance", later),
-        pick("ai_unsched_factor", "Random traffic", later),
-        pick("ai_max_scheduled", "Timetable vehicles", later),
+        pick("ai_unsched_factor", "Road traffic factor", later),
+        pick("ai_max_random", "Vehicles without a timetable", later),
+        pick("ai_max_scheduled", "Vehicles with a timetable", later),
+        pick("ai_priority_scheduled", "Highest line priority", later),
         pick("ai_max_parked", "Parked cars", later),
         pick("autosave_minutes", "Autosave", "How often the last situation is saved automatically while you play"),
         pick("ai_max_humans", "People", "The most people in the world at once: waiting at stops, walking or riding. Takes effect when the game starts the next time"),
@@ -4590,6 +4629,7 @@ mod tests {
         for l in crate::api_limits::D3D9 {
             let row = super::limit_row(true, l.key, "Name", own);
             match l.shown() {
+                None if l.is_row() => assert_eq!(row, own(), "{} is a row", l.key),
                 None => assert!(row.is_none(), "{} is hidden", l.key),
                 Some(v) => {
                     let (text, action) = row.unwrap();
