@@ -40,13 +40,16 @@ pub(crate) struct Checker<'a> {
     seen_sli: HashSet<PathBuf>,
     seen_mesh: HashSet<(PathBuf, String)>,
     mesh_cache: HashMap<PathBuf, Option<Vec<omsi_o3d::Material>>>,
-    seen_texture: HashSet<PathBuf>,
+    seen_texture: HashMap<PathBuf, String>,
     seen_long: HashSet<PathBuf>,
     pub(crate) sound_seen: HashSet<PathBuf>,
 }
 
 impl<'a> Checker<'a> {
     pub(crate) fn new(root: &'a Path) -> Self {
+        // (the folder listings the loaders keep are dropped: files may have changed since an
+        // earlier check)
+        omsi_cfg::content_changed();
         Checker {
             root,
             report: Report::default(),
@@ -55,7 +58,7 @@ impl<'a> Checker<'a> {
             seen_sli: HashSet::new(),
             seen_mesh: HashSet::new(),
             mesh_cache: HashMap::new(),
-            seen_texture: HashSet::new(),
+            seen_texture: HashMap::new(),
             seen_long: HashSet::new(),
             sound_seen: HashSet::new(),
         }
@@ -169,7 +172,7 @@ impl<'a> Checker<'a> {
                 }
             };
             self.report.tiles += 1;
-            self.tile_content(&tile, &tile_name);
+            self.tile_content(&tile, &tile_name, true);
             // the patches of every chrono folder (active or not: the check is of the map)
             for dir in vfs::list_dir(&resolve_path(map_dir, "Chrono"))
                 .unwrap_or_default()
@@ -184,7 +187,7 @@ impl<'a> Checker<'a> {
                 }
                 let patch_name = self.rel(&patch_path);
                 match Tile::load(&patch_path) {
-                    Ok(patch) => self.tile_content(&patch, &patch_name),
+                    Ok(patch) => self.tile_content(&patch, &patch_name, false),
                     Err(e) => self.add(
                         Severity::Error,
                         "tile-unreadable",
@@ -199,16 +202,17 @@ impl<'a> Checker<'a> {
     }
 
     /// The objects, splines and replacements a tile (or a chrono patch of one) names.
-    fn tile_content(&mut self, tile: &Tile, tile_name: &str) {
+    fn tile_content(&mut self, tile: &Tile, tile_name: &str, count: bool) {
         for o in tile.objects.iter().chain(&tile.attach_objects) {
-            self.report.objects += 1;
+            self.report.objects += count as usize;
             self.object(&o.file, tile_name);
         }
         for a in &tile.spline_attachments {
+            self.report.objects += count as usize;
             self.object(&a.file, tile_name);
         }
         for s in &tile.splines {
-            self.report.splines += 1;
+            self.report.splines += count as usize;
             self.spline(&s.file, tile_name);
         }
         // what a chrono patch changes an object or spline to
@@ -478,12 +482,19 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn texture(&mut self, path: &Path, by: &str) {
-        if !self.seen_texture.insert(path.to_path_buf()) {
+        if let Some(file) = self.seen_texture.get(path) {
+            // (checked already: each finding about it counts one more file that names it)
+            for code in ["texture-npot", "texture-unreadable", "path-too-long"] {
+                if let Some(p) = self.pending.get_mut(&(code, file.clone())) {
+                    p.count += 1;
+                }
+            }
             return;
         }
+        let file = self.rel(path);
+        self.seen_texture.insert(path.to_path_buf(), file.clone());
         self.report.textures += 1;
         self.long_path(path, by);
-        let file = self.rel(path);
         match image_size(path) {
             Some((w, h)) if !(w.is_power_of_two() && h.is_power_of_two()) => {
                 let (pw, ph) = (next_pow2(w), next_pow2(h));
