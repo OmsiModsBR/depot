@@ -330,11 +330,22 @@ pub fn load_mesh(path: &Path) -> Result<Mesh, O3dError> {
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if ext == "x" {
+    let mesh = if ext == "x" {
         xfile::parse_x(&bytes)
     } else {
         parse_o3d(&bytes)
+    };
+    match &mesh {
+        Ok(m) => log::debug!(
+            "mesh {}: {} vertices, {} triangles, {} materials",
+            path.display(),
+            m.vertices.len(),
+            m.triangles.len(),
+            m.materials.len()
+        ),
+        Err(e) => log::warn!("mesh {} could not be read: {e}", path.display()),
     }
+    mesh
 }
 
 impl Mesh {

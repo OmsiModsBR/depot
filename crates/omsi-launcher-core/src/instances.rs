@@ -348,9 +348,17 @@ pub fn start(game: &Path, args: &[String], d: &crate::Duty, profile: &str) -> Re
     let mut cmd = std::process::Command::new(game);
     cmd.args(args).env(omsi_cfg::flags::INSTANCE.name, &id);
     // the "detailed log" setting: debug lines from the game's own crates, unless the player
-    // set RUST_LOG for this launch themselves
-    if std::env::var_os("RUST_LOG").is_none() && crate::detailed_log_on() {
-        cmd.env("RUST_LOG", DETAILED_LOG_FILTER);
+    // set RUST_LOG for this launch themselves (an empty RUST_LOG says nothing, so the
+    // setting applies; one with a value wins, and the log says the setting did not)
+    if crate::detailed_log_on() {
+        match std::env::var("RUST_LOG") {
+            Ok(v) if !v.trim().is_empty() => crate::log_to_file(&format!(
+                "the detailed log is on, but RUST_LOG={v} is set and wins"
+            )),
+            _ => {
+                cmd.env("RUST_LOG", DETAILED_LOG_FILTER);
+            }
+        }
     }
     let child = cmd
         .stdout(file)
