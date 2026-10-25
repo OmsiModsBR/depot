@@ -727,7 +727,7 @@ pub fn add_vehicle_rect(size: glam::Vec2) -> Rect {
 /// picture's own backdrop round it filling the box. Kept inside the picture (moved, or a
 /// little larger, where the vehicle stands near an edge). Left, top, right, bottom, 0 to 1.
 pub fn preview_part(box_aspect: f32, aspect: f32, part: [f32; 4]) -> [f32; 4] {
-    const MARGIN: f32 = 1.12;
+    const MARGIN: f32 = PREVIEW_MARGIN;
     let a = box_aspect.max(1e-3);
     // (in the picture's height as the unit, so that both sides measure alike)
     let (x0, x1) = (part[0] * aspect, part[2] * aspect);
@@ -750,6 +750,39 @@ pub fn preview_part(box_aspect: f32, aspect: f32, part: [f32; 4]) -> [f32; 4] {
         (cx + w * 0.5) / aspect,
         cy + h * 0.5,
     ]
+}
+
+/// How much room is left round the vehicle in the picture box (1.12: 12 % of its size).
+const PREVIEW_MARGIN: f32 = 1.12;
+
+/// Where in the box `b` to draw a picture (`aspect` wide over high) whose vehicle stands in
+/// `part`, and which part of the picture: the whole box with `preview_part` when a part of
+/// the box's shape holds the vehicle; else (a box much wider or taller than the picture) the
+/// vehicle with its margin, whole, as large as it fits in the middle of the box.
+pub fn preview_fit(b: Rect, aspect: f32, part: [f32; 4]) -> (Rect, [f32; 4]) {
+    let uv = preview_part(b.w / b.h.max(1.0), aspect, part);
+    const E: f32 = 1e-4;
+    if uv[0] <= part[0] + E && uv[1] <= part[1] + E && uv[2] >= part[2] - E && uv[3] >= part[3] - E
+    {
+        return (b, uv);
+    }
+    // (in the picture's height as the unit, so that both sides measure alike)
+    let around = |a: f32, z: f32, end: f32| {
+        let (c, half) = ((a + z) * 0.5, (z - a) * PREVIEW_MARGIN * 0.5);
+        ((c - half).max(0.0), (c + half).min(end))
+    };
+    let (x0, x1) = around(part[0] * aspect, part[2] * aspect, aspect);
+    let (y0, y1) = around(part[1], part[3], 1.0);
+    let ra = (x1 - x0).max(E) / (y1 - y0).max(E);
+    let (w, h) = if ra > b.w / b.h.max(1.0) {
+        (b.w, b.w / ra)
+    } else {
+        (b.h * ra, b.h)
+    };
+    (
+        Rect::new(b.x + (b.w - w) * 0.5, b.y + (b.h - h) * 0.5, w, h),
+        [x0 / aspect, y0, x1 / aspect, y1],
+    )
 }
 
 /// The part of a picture drawn ahead of time (`w` x `h`, RGBA) the vehicle stands in, as
@@ -837,8 +870,8 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     ui.p().rounded_border(box_, 6.0, 1.0, LINE);
     match v.preview {
         Preview::Picture { tex, aspect, part } => {
-            let uv = preview_part(box_.w / box_.h.max(1.0), aspect, part);
-            ui.image_part(box_.inset(1.0), tex, uv, 5.0);
+            let (at, uv) = preview_fit(box_.inset(1.0), aspect, part);
+            ui.image_part(at, tex, uv, 5.0);
         }
         Preview::Loading => {
             ui.text_in(
@@ -1332,6 +1365,25 @@ mod tests {
         assert!(
             wide[0] >= -1e-6 && wide[2] <= 1.0 + 1e-6 && wide[1] >= -1e-6 && wide[3] <= 1.0 + 1e-6
         );
+        // ... where no part of the box's shape holds the bus, the bus is drawn whole, as large
+        // as it fits in the middle of the box
+        let b = Rect::new(10.0, 20.0, 400.0, 100.0);
+        let bus = [0.05, 0.1, 0.95, 0.9];
+        let (at, uv) = preview_fit(b, aspect, bus);
+        assert!(uv[0] <= bus[0] && uv[1] <= bus[1] && uv[2] >= bus[2] && uv[3] >= bus[3]);
+        assert!(uv[0] >= 0.0 && uv[1] >= 0.0 && uv[2] <= 1.0 && uv[3] <= 1.0);
+        assert!((at.h - b.h).abs() < 1e-3 && at.w < b.w);
+        assert!((at.center().x - b.center().x).abs() < 1e-3);
+        let shown = (uv[2] - uv[0]) * aspect / (uv[3] - uv[1]);
+        assert!((at.w / at.h - shown).abs() < 1e-3, "not stretched");
+        // and where one does, the whole box
+        let (at, uv) = preview_fit(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            aspect,
+            [0.3, 0.35, 0.8, 0.75],
+        );
+        assert_eq!(at, Rect::new(0.0, 0.0, 200.0, 100.0));
+        assert_eq!(uv, preview_part(2.0, aspect, [0.3, 0.35, 0.8, 0.75]));
     }
 
     #[test]

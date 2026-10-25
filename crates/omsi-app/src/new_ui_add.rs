@@ -152,6 +152,16 @@ pub(crate) struct AddWindow {
     pressed: bool,
 }
 
+/// A line of the paint or garage list as the window shows it: the first ("Random livery",
+/// "The map's depot file") translated, the vehicle's own names as they are.
+fn own_line(i: usize, line: &str) -> String {
+    if i == 0 {
+        omsi_ui::tr(line).into_owned()
+    } else {
+        line.to_string()
+    }
+}
+
 /// The longest registration the field takes.
 const PLATE_MAX: usize = 16;
 const RANDOM_LIVERY: &str = "Random livery";
@@ -175,9 +185,21 @@ impl AddWindow {
             maker: self.maker,
             vehicles: self.models().iter().map(|v| v.0.clone()).collect(),
             vehicle: self.vehicle,
-            liveries: self.liveries.clone(),
+            // (the first lines are the interface's own, in the player's language; the rest are
+            // the game's names, drawn as they are)
+            liveries: self
+                .liveries
+                .iter()
+                .enumerate()
+                .map(|(i, l)| own_line(i, l))
+                .collect(),
             livery: self.livery,
-            depots: self.depots.iter().map(|d| d.0.clone()).collect(),
+            depots: self
+                .depots
+                .iter()
+                .enumerate()
+                .map(|(i, d)| own_line(i, &d.0))
+                .collect(),
             depot: self.depot,
             numbers: self.numbers.clone(),
             number: self.number,
