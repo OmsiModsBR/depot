@@ -223,6 +223,22 @@ fn main() {
             ],
         );
     });
+    // (a picture of a bus drawn ahead of time, when one is given: DEMO_BUS_PICTURE=file.png)
+    let preview = std::env::var("DEMO_BUS_PICTURE")
+        .ok()
+        .and_then(|f| image::open(f).ok())
+        .map(|i| i.to_rgba8())
+        .and_then(|i| {
+            let (w, h) = i.dimensions();
+            let part = omsi_ui::ingame::subject_part(w as usize, h as usize, i.as_raw())?;
+            let tex = o.gpu.add_image(&o.device, &o.queue, w, h, i.as_raw());
+            Some(omsi_ui::ingame::Preview::Picture {
+                tex,
+                aspect: w as f32 / h as f32,
+                part,
+            })
+        })
+        .unwrap_or(omsi_ui::ingame::Preview::Missing);
     o.shot(&format!("{dir}/add-vehicle.png"), |ui| {
         scene(ui);
         let makers = s(&["Example maker", "Another maker", "Third maker"]);
@@ -239,9 +255,9 @@ fn main() {
             size,
             &omsi_ui::ingame::AddVehicle {
                 makers: &makers,
-                maker: Some(0),
+                maker: 0,
                 vehicles: &vehicles,
-                vehicle: Some(2),
+                vehicle: 2,
                 liveries: &liveries,
                 livery: 2,
                 depots: &depots,
@@ -251,6 +267,10 @@ fn main() {
                 plate: "",
                 plate_focused: false,
                 plate_hint: "Automatic",
+                description: "Example bus 3\n\nTechnical sheet and credits as the author wrote them \
+                    (example text). Line one of the description, as read from the vehicle's \
+                    description file.\n\nPermissions: example text about how the vehicle may be used.",
+                preview,
             },
         );
     });
