@@ -198,6 +198,10 @@ pub fn setup(l: &mut Launcher, area: Rect) {
         if l.pages.setup.tab == 1 {
             y = free_space(l, Rect::new(left.x, y + GAP, left.w, 0.0));
         }
+        // (Windows only: opening the original OMSI 2 through OmsiLaunch)
+        if super::original::available() {
+            y = super::original_ui::engine_card(l, Rect::new(left.x, y + GAP, left.w, 0.0));
+        }
         own_files(l, Rect::new(left.x, y + GAP, left.w, 0.0));
         y += GAP + OWN_FILES_H;
     }

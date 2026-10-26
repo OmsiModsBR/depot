@@ -66,6 +66,8 @@ pub enum Msg {
     SqueezeDone(Squeezed),
     ModInfo(Result<core::install::SourceInfo, String>),
     Installed(Result<core::install::Progress, String>),
+    /// A job of the original OMSI 2 mode (`original.rs`).
+    Original(super::original::Event),
     #[cfg_attr(not(feature = "lan"), allow(dead_code))]
     Join(serde_json::Value),
     #[cfg(feature = "lan")]
@@ -399,6 +401,8 @@ pub struct State {
     usage_gen: u64,
     /// The Free up space card's folders, choices and the job running.
     pub squeeze: Squeeze,
+    /// The original OMSI 2 mode: what is installed and the install flow.
+    pub original: super::original::Original,
     /// Counts the readings of the content that brought other files than before.
     pub content_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
@@ -488,6 +492,7 @@ impl State {
             usage_asked: false,
             usage_gen: 0,
             squeeze: Squeeze::default(),
+            original: Default::default(),
             content_gen: 0,
             mod_info: None,
             mod_path: String::new(),
@@ -519,6 +524,9 @@ impl State {
         s.load_content();
         s.load_profiles();
         s.poll_now();
+        if s.config.original_engine.enabled {
+            s.engine_refresh(true);
+        }
         // (a phone runs the game in the launcher's process: a crash took both, and the
         // launcher learns of it from the previous run's log)
         #[cfg(target_os = "android")]
@@ -551,7 +559,7 @@ impl State {
         self.spawn(move || Msg::Launched(core::launch(&d).map_err(|e| format!("{e:#}"))));
     }
 
-    fn spawn(&self, f: impl FnOnce() -> Msg + Send + 'static) {
+    pub(super) fn spawn(&self, f: impl FnOnce() -> Msg + Send + 'static) {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             // (a job that panics - an odd file of some mod - sent nothing, and the page
@@ -1719,6 +1727,7 @@ impl State {
                 self.poll_now();
             }
             Msg::Installed(Err(e)) => self.set_status(e, true),
+            Msg::Original(e) => self.engine_event(e),
             Msg::Join(v) => {
                 let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
                 let text = v

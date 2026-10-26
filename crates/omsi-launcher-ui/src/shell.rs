@@ -60,6 +60,7 @@ impl Shell {
             logo: self.logo,
             badges: &[],
             footer: ("Project Depot", "preview"),
+            engine: None,
         };
         if let Some(Nav::Page(p)) = bar.draw(ui, h) {
             self.page = p;
@@ -279,6 +280,118 @@ pub enum Nav {
     Page(Page),
     /// The line at the very foot (the driver, in the game's launcher).
     Footer,
+    /// The engine switch: true for the original OMSI 2, false for Depot.
+    Engine(bool),
+}
+
+/// The Depot | OMSI 2 switch, shown only where the original engine can be started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EngineSwitch {
+    /// The original OMSI 2 is the engine in use.
+    pub omsi2: bool,
+    /// A game is running: the switch is shown but cannot be used.
+    pub locked: bool,
+}
+
+const SWITCH_H: f32 = 32.0;
+
+/// The switch as two halves in `r`; the half clicked (true: OMSI 2).
+pub fn engine_switch(ui: &mut Ui, r: Rect, sw: EngineSwitch) -> Option<bool> {
+    ui.p().rounded(r, CONTROL_RADIUS, PANEL_2);
+    ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, LINE);
+    let half = r.w * 0.5;
+    let mut clicked = None;
+    for (omsi2, label, tip) in [
+        (
+            false,
+            "Depot",
+            "Start games with Project Depot's own engine.",
+        ),
+        (
+            true,
+            "OMSI 2",
+            "Start games with the original OMSI 2 through OmsiLaunch.",
+        ),
+    ] {
+        let part = Rect::new(r.x + if omsi2 { half } else { 0.0 }, r.y, half, r.h);
+        let on = sw.omsi2 == omsi2;
+        let id = id_of(if omsi2 {
+            "engine:omsi2"
+        } else {
+            "engine:depot"
+        });
+        let (hover, _, click) = ui.interact_key(id, part);
+        let fill = ui.anim(id, if on { 1.0 } else { 0.0 }, 0.08);
+        let inner = part.inset(2.0);
+        ui.p()
+            .rounded(inner, CONTROL_RADIUS - 1.0, accent().alpha(fill));
+        if !on && hover && !sw.locked {
+            ui.p().rounded(inner, CONTROL_RADIUS - 1.0, HOVER_LAYER);
+        }
+        let c = if on {
+            on_accent()
+        } else if sw.locked {
+            MUTED.alpha(0.6)
+        } else {
+            NAV_TEXT
+        };
+        ui.text_in(label, part, 13.0, Weight::Medium, c, Align::Center);
+        ui.tooltip(
+            part,
+            if sw.locked {
+                "Close the running game to switch."
+            } else {
+                tip
+            },
+        );
+        if click && !on && !sw.locked {
+            clicked = Some(omsi2);
+        }
+    }
+    clicked
+}
+
+/// The narrow top bar's form: one button with the engine in use and a swap icon.
+pub fn engine_swap(ui: &mut Ui, r: Rect, sw: EngineSwitch) -> Option<bool> {
+    let id = id_of("engine:swap");
+    let (hover, _, click) = ui.interact_key(id, r);
+    ui.p().rounded(
+        r,
+        CONTROL_RADIUS,
+        if hover && !sw.locked {
+            HOVER_LAYER
+        } else {
+            PANEL_2
+        },
+    );
+    ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, LINE);
+    let label = if sw.omsi2 { "OMSI 2" } else { "Depot" };
+    let c = if sw.locked { MUTED.alpha(0.6) } else { FG };
+    ui.text_in(
+        label,
+        Rect::new(r.x + 10.0, r.y, r.w - 34.0, r.h),
+        13.0,
+        Weight::Medium,
+        c,
+        Align::Left,
+    );
+    ui.icon(
+        "sync_alt",
+        Vec2::new(r.right() - 17.0, r.center().y),
+        16.0,
+        accent(),
+    );
+    ui.tooltip(
+        r,
+        if sw.locked {
+            "Close the running game to switch."
+        } else if sw.omsi2 {
+            "Playing with the original OMSI 2. Click to switch to Project Depot's engine."
+        } else {
+            "Playing with Project Depot's engine. Click to switch to the original OMSI 2."
+        },
+    );
+    (click && !sw.locked).then_some(!sw.omsi2)
 }
 
 /// The sidebar: the logo, the pages' list, Settings and Setup at its foot and one line under
@@ -292,6 +405,8 @@ pub struct Sidebar<'a> {
     pub badges: &'a [(Page, String, omsi_ui::Color)],
     /// The line at the foot: a name and, smaller, what it is.
     pub footer: (&'a str, &'a str),
+    /// The Depot | OMSI 2 switch under the logo, when the original engine can be started.
+    pub engine: Option<EngineSwitch>,
 }
 
 /// The id the foot line is clickable under.
@@ -313,9 +428,21 @@ impl Sidebar<'_> {
             ui.image(Rect::new(18.0, 26.0, lw, lw * aspect), tex, 0.0);
         }
         let mut nav = None;
-        let row = nav_row(h);
+        // (the switch takes a row's worth under the logo; the list below it is pushed down)
+        let shift = if self.engine.is_some() {
+            SWITCH_H + 10.0
+        } else {
+            0.0
+        };
+        if let Some(sw) = self.engine {
+            let r = Rect::new(18.0, NAV_TOP - 12.0, SIDEBAR_W - 36.0, SWITCH_H);
+            if let Some(omsi2) = engine_switch(ui, r, sw) {
+                nav = Some(Nav::Engine(omsi2));
+            }
+        }
+        let row = nav_row(h, shift);
         for (i, &page) in Page::listed().iter().enumerate() {
-            let top = NAV_TOP + i as f32 * row;
+            let top = NAV_TOP + shift + i as f32 * row;
             if self.entry(ui, page, Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0)) {
                 nav = Some(Nav::Page(page));
             }
@@ -424,7 +551,15 @@ pub struct TopBar<'a> {
     pub logo: Option<(usize, f32)>,
     /// A short count beside a page's name (games running, downloads) and its colour.
     pub badges: &'a [(Page, String, omsi_ui::Color)],
+    /// The Depot | OMSI 2 switch after the logo, when the original engine can be started.
+    pub engine: Option<EngineSwitch>,
 }
+
+/// The switch's width in the top bar (the two halves, or the swap button).
+const TOP_SWITCH_W: f32 = 150.0;
+const TOP_SWAP_W: f32 = 104.0;
+/// Below this window width the top bar's switch is the one swap button.
+const SWAP_BELOW: f32 = 1500.0;
 
 /// A top bar entry's name.
 const TOP_TEXT_PX: f32 = 14.0;
@@ -458,11 +593,21 @@ impl TopBar<'_> {
         }
     }
 
+    /// What the engine switch takes after the logo in a window `w` wide: the two halves, or
+    /// one swap button below `SWAP_BELOW` (nothing without a switch).
+    fn switch_w(&self, w: f32) -> f32 {
+        match self.engine {
+            None => 0.0,
+            Some(_) if w < SWAP_BELOW => TOP_SWAP_W + 16.0,
+            Some(_) => TOP_SWITCH_W + 16.0,
+        }
+    }
+
     /// Whether the entries show only their icons in a window `w` points wide.
     pub fn compact(&self, ui: &Ui, w: f32) -> bool {
         let pages = Page::listed().iter().chain(Page::foot());
         let full: f32 = pages.map(|&p| self.full_w(ui, p) + TOP_GAP).sum();
-        full + TOP_GROUP_GAP > top_space(w, self.logo_w())
+        full + TOP_GROUP_GAP > top_space(w, self.logo_w() + self.switch_w(w))
     }
 
     /// Draw it across a window `w` points wide; what was clicked.
@@ -480,9 +625,23 @@ impl TopBar<'_> {
             );
         }
         let compact = self.compact(ui, w);
-        let start = 18.0 + self.logo_w() + 22.0;
-        let end = start + top_space(w, self.logo_w());
         let mut nav = None;
+        let lead = self.logo_w() + self.switch_w(w);
+        if let Some(sw) = self.engine {
+            let x = 18.0 + self.logo_w() + 16.0;
+            let h = SWITCH_H;
+            let y = (TOPBAR_H - h) * 0.5;
+            let hit = if w < SWAP_BELOW {
+                engine_swap(ui, Rect::new(x, y, TOP_SWAP_W, h), sw)
+            } else {
+                engine_switch(ui, Rect::new(x, y, TOP_SWITCH_W, h), sw)
+            };
+            if let Some(omsi2) = hit {
+                nav = Some(Nav::Engine(omsi2));
+            }
+        }
+        let start = 18.0 + lead + 22.0;
+        let end = start + top_space(w, lead);
         // (Settings and Setup at the right, laid out from there leftwards)
         let foot: Vec<(Page, f32)> = Page::foot()
             .iter()
@@ -595,9 +754,9 @@ fn top_space(w: f32, logo_w: f32) -> f32 {
 
 /// The height of a listed page's row in a window `h` design points high: the design's, or less
 /// when the foot entries would otherwise cover the last pages.
-fn nav_row(h: f32) -> f32 {
+fn nav_row(h: f32, shift: f32) -> f32 {
     let foot_top = h - WHO_H - 8.0 - Page::foot().len() as f32 * FOOT_ROW;
-    NAV_ROW.min((foot_top - NAV_TOP) / Page::listed().len() as f32)
+    NAV_ROW.min((foot_top - NAV_TOP - shift) / Page::listed().len() as f32)
 }
 
 #[cfg(test)]
@@ -612,6 +771,7 @@ mod nav_tests {
             page: Page::Maps,
             logo: None,
             badges: &[],
+            engine: None,
         };
         let mut ui = Ui::new();
         assert!(!bar.compact(&ui, 4000.0));
@@ -647,7 +807,7 @@ mod nav_tests {
     #[test]
     fn listed_pages_never_reach_the_foot_entries() {
         for h in [540.0_f32, 720.0, 941.0, 2160.0] {
-            let row = nav_row(h);
+            let row = nav_row(h, 0.0);
             let end = NAV_TOP + Page::listed().len() as f32 * row;
             let foot_top = h - WHO_H - 8.0 - Page::foot().len() as f32 * FOOT_ROW;
             assert!(
@@ -656,6 +816,6 @@ mod nav_tests {
             );
             assert!(row <= NAV_ROW);
         }
-        assert_eq!(nav_row(941.0), NAV_ROW);
+        assert_eq!(nav_row(941.0, 0.0), NAV_ROW);
     }
 }
