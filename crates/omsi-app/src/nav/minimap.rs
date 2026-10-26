@@ -717,6 +717,14 @@ impl Navigator {
         };
         // (the route goes on following the bus; the maps follow the walker or the camera)
         self.follow(f);
+        // (the stops' helpers in the world stay with the bus too)
+        self.bus_at = f.bus;
+        self.stop_spots = f
+            .stops
+            .iter()
+            .take(3)
+            .map(|st| (st.position, st.name.clone(), f.heading, st.object_id))
+            .collect();
         let f3;
         let f = match f.focus {
             Some(focus) => {
@@ -724,7 +732,6 @@ impl Navigator {
                 f3 = NavFrame {
                     bus: focus.at,
                     heading: focus.heading,
-                    speed_kmh: 0.0,
                     ..f.clone_ref()
                 };
                 &f3
@@ -734,13 +741,6 @@ impl Navigator {
                 f
             }
         };
-        self.bus_at = f.bus;
-        self.stop_spots = f
-            .stops
-            .iter()
-            .take(3)
-            .map(|st| (st.position, st.name.clone(), f.heading, st.object_id))
-            .collect();
         if omsi_cfg::flags::DEBUG_NAV.is_set() && (self.time % 1.0) < f.dt {
             log::info!("navigator: route {} lanes (complete {}, provisional {}, at {}, on it {}, off for {:.1} s), {} stops ahead, next {:?}, key {:?}", self.route.lanes.len(), self.route.complete, self.route.provisional, self.route.progress, self.route.on_route, self.route.off_for, f.stops.len(), f.stops.first().map(|s| (s.name.clone(), s.position.x.round(), s.position.y.round())), self.route.key);
         }
