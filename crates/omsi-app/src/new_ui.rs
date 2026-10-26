@@ -1945,6 +1945,7 @@ mod tests {
         let general = refs(&[
             (row("Navigator", 's', "on", "Enables/Disables the Minimap", None), k("navigator")),
             (row("AI vehicles on the map", 's', "on", "Shows/hides the other (AI) vehicles on the Minimap and the city map", None), k("nav_ai")),
+            (row("Minimap on foot and in the free camera", 's', "off", "On foot the minimap shows a walker icon; in the free camera (F4) it centres on a camera icon and moves with the camera instead of staying on the bus", None), k("nav_follow_view")),
             (row("Terrain contours", 's', "off", "Shows the terrain's contour lines on the city map, when the map ships them (also a button on the map)", None), k("nav_contours")),
             (row("Light map", 's', "off", "The map in a light look: light ground and white roads instead of the dark one", None), k("nav_light")),
             (row("Interface size", 'v', "100 %", "How large the menus and the notes are", Some(0.4)), k("ui_scale")),

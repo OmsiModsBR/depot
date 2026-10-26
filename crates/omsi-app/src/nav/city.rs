@@ -1,6 +1,6 @@
 use super::draw::{
-    arrow, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect, traffic_kind,
-    vehicle_icon, DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM,
+    arrow, focus_marker, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect,
+    traffic_kind, vehicle_icon, DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM,
 };
 use super::geometry::{road_colors, road_geometry, simplify};
 use super::lines::{
@@ -1605,7 +1605,7 @@ impl Navigator {
                 let bus_lane = r
                     .lanes
                     .get(done)
-                    .map(|&l| lane_from_right(n, l, f.bus))
+                    .map(|&l| lane_from_right(n, l, self.bus_at))
                     .unwrap_or(0);
                 build_route(
                     &mut p,
@@ -2249,7 +2249,26 @@ impl Navigator {
                 LINE_TEXT,
             );
         }
-        if let Some((fill, ring)) = self
+        if let Some((at, heading)) = self.bus_marker.filter(|_| f.focus.is_some()) {
+            arrow(
+                &mut ui,
+                to_screen(at),
+                (heading.to_radians() - phi) as f32,
+                8.0 * s,
+                1.3,
+                Color::rgba(10, 10, 10, 0.9),
+                TEXT_DIM,
+            );
+        }
+        if let Some(focus) = f.focus {
+            focus_marker(
+                &mut ui,
+                focus.kind,
+                to_screen(f.bus),
+                (f.heading.to_radians() - phi) as f32,
+                13.0 * s,
+            );
+        } else if let Some((fill, ring)) = self
             .surface
             .as_ref()
             .filter(|_| self.show_surface)

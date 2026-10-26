@@ -676,6 +676,13 @@ pub static OPTS: &[Opt] = &[
         "As in OMSI 2",
     ),
     toggle(GENERAL, "Navigator", "nav_ai", "AI vehicles on the map", ""),
+    toggle(
+        GENERAL,
+        "Navigator",
+        "nav_follow_view",
+        "Minimap on foot and in the free camera",
+        "On foot the minimap shows a walker icon; in the free camera (F4) it centres on a camera icon and moves with the camera instead of staying on the bus",
+    ),
     pick(
         GENERAL,
         "Navigator",
@@ -3687,6 +3694,7 @@ mod tests {
         "navigator",
         "nav_arrows",
         "nav_ai",
+        "nav_follow_view",
         "navigator_corner",
         // (the Interface section, drawn on its own before)
         "ui_accent",

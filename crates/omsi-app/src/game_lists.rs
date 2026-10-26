@@ -2184,6 +2184,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
             }
         }
         "nav_ai" => app.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_follow_view" => s.nav_follow_view,
         "nav_surface" => app
             .navigator
             .as_ref()
@@ -2288,6 +2289,10 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_follow_view" => {
+            app.settings.nav_follow_view = on;
+            Some(("nav_follow_view", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.navigator.as_mut() {
@@ -3359,6 +3364,7 @@ fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_follow_view", "Minimap on foot and in the free camera", "On foot the minimap shows a walker icon; in the free camera (F4) it centres on a camera icon and moves with the camera instead of staying on the bus"),
         switch_row(app, "nav_contours", "Terrain contours", "Shows the terrain's contour lines on the city map, when the map ships them (also a button on the map)"),
         switch_row(app, "nav_light", "Light map", "The map in a light look: light ground and white roads instead of the dark one"),
         switch_row(app, "nav_surface", "Map surface", "Shows the map's own surface (water, green, rivers, place names) under the roads, when the map ships one"),
