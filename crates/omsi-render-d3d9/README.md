@@ -118,9 +118,10 @@ Known differences from the default renderer, each for a later PR:
 * The mip chains made here are box-filtered on the stored (gamma-encoded) values.
 * The anti-aliasing option is plain multisampling of the window's back buffer
   (`set_quality`, the nearest count the card offers). Alpha-tested edges (leaves, fences) are
-  smoothed by alpha-to-coverage when multisampling is on: no discard, the texture's alpha
-  goes to the coverage through the driver switches (`ATOC` for Nvidia and Intel, `A2M1` for
-  AMD; a driver with neither draws them hard-edged). The scene targets of the mirrors are
+  smoothed by alpha-to-coverage when multisampling is on: only the all but transparent texels
+  are discarded, the rest hands its alpha to the coverage through the driver's switch (chosen
+  by the adapter's vendor: `ATOC` for Nvidia and Intel, `A2M1` for AMD; any other adapter
+  keeps the discard at the reference). The scene targets of the mirrors are
   not multisampled and keep the discard. The
   anisotropic filtering option applies to the picture maps (diffuse, transparency, night
   and detail textures), up to the card's limit.

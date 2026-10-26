@@ -102,6 +102,16 @@ fn quality_options_are_taken_as_far_as_the_card_goes() {
 }
 
 #[test]
+fn alpha_to_coverage_follows_the_adapters_vendor() {
+    use super::scene::A2c;
+    assert_eq!(A2c::of_vendor(0x10DE), A2c::Atoc);
+    assert_eq!(A2c::of_vendor(0x8086), A2c::Atoc);
+    assert_eq!(A2c::of_vendor(0x1002), A2c::A2m);
+    // (a software or unknown adapter draws the cut by discard)
+    assert_eq!(A2c::of_vendor(0x1414), A2c::None);
+}
+
+#[test]
 fn opaque_quad_shows_its_texture_times_tint() {
     let Some(mut dev) = device() else { return };
     let px = draw_one(

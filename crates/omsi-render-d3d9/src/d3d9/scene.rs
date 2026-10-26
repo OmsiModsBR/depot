@@ -528,38 +528,68 @@ fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePip
 }
 
 /// The render states of a kind of batch.
-/// The driver switches of alpha-to-coverage under Direct3D 9: Nvidia's and Intel's alpha-to-coverage
-/// format code on the adaptive-tessellation state, AMD's on the point-size state.
-const ATOC_STATE: D3DRENDERSTATETYPE = D3DRS_ADAPTIVETESS_Y;
-const A2M_STATE: D3DRENDERSTATETYPE = D3DRS_POINTSIZE;
+/// The driver switch of alpha-to-coverage under Direct3D 9, which the adapter's vendor decides:
+/// Nvidia and Intel read a format code on the adaptive-tessellation state, AMD one on the
+/// point-size state. A vendor without one draws the cut by discard as without multisampling.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum A2c {
+    None,
+    Atoc,
+    A2m,
+}
+
+impl A2c {
+    pub(super) fn of_vendor(vendor_id: u32) -> Self {
+        match vendor_id {
+            0x10DE | 0x8086 => Self::Atoc,
+            0x1002 => Self::A2m,
+            _ => Self::None,
+        }
+    }
+
+    /// Switches alpha-to-coverage on or off (nothing for a vendor without one).
+    fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
+        let (state, value) = match (self, on) {
+            (Self::None, _) => return Ok(()),
+            (Self::Atoc, true) => (D3DRS_ADAPTIVETESS_Y, four_cc(b"ATOC")),
+            (Self::Atoc, false) => (D3DRS_ADAPTIVETESS_Y, 0),
+            (Self::A2m, true) => (D3DRS_POINTSIZE, four_cc(b"A2M1")),
+            (Self::A2m, false) => (D3DRS_POINTSIZE, four_cc(b"A2M0")),
+        };
+        // SAFETY: a plain state setter on a live device.
+        unsafe { device.SetRenderState(state, value) }.map_err(map_err)
+    }
+}
+
 const fn four_cc(c: &[u8; 4]) -> u32 {
     u32::from_le_bytes(*c)
 }
 
+/// The cut of an alpha-tested draw under alpha-to-coverage: only what is all but transparent
+/// is discarded, the rest hands its alpha to the multisampling as coverage.
+const COVERAGE_CUT: f32 = 0.02;
+
 /// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
 /// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
 /// edge as multisampled OMSI 2 does.
-fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: bool) -> Result<()> {
-    let coverage_now = coverage && kind == DrawKind::AlphaTest;
+fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: A2c) -> Result<()> {
+    let coverage_now = kind == DrawKind::AlphaTest && coverage != A2c::None;
     let flags = [
-        ALPHA_CUT,
-        f32::from(u8::from(kind == DrawKind::AlphaTest && !coverage)),
+        if coverage_now {
+            COVERAGE_CUT
+        } else {
+            ALPHA_CUT
+        },
+        f32::from(u8::from(kind == DrawKind::AlphaTest)),
         f32::from(u8::from(kind == DrawKind::SurfaceDepth)),
         0.0,
     ];
+    coverage.set(device, coverage_now)?;
     // SAFETY: plain state setters; the constant array outlives the call.
     unsafe {
         device
             .SetRenderState(D3DRS_ALPHABLENDENABLE, u32::from(kind.blends()))
             .map_err(map_err)?;
-        // (always set: a target without multisampling follows one with it)
-        let (atoc, a2m) = if coverage_now {
-            (four_cc(b"ATOC"), four_cc(b"A2M1"))
-        } else {
-            (0, four_cc(b"A2M0"))
-        };
-        device.SetRenderState(ATOC_STATE, atoc).map_err(map_err)?;
-        device.SetRenderState(A2M_STATE, a2m).map_err(map_err)?;
         device
             .SetRenderState(D3DRS_ZWRITEENABLE, u32::from(kind.writes_depth()))
             .map_err(map_err)?;
@@ -832,7 +862,7 @@ impl D3d9Device {
             &material,
             target.width,
             target.height,
-            self.msaa.1 > 1,
+            self.coverage(),
         );
         let restored = self.restore_scene_states();
         drawn?;
@@ -863,6 +893,17 @@ impl D3d9Device {
     /// Back to the backend's own states after a scene, whatever happened, with depth as the
     /// backend expects it.
     fn restore_scene_states(&mut self) -> Result<()> {
+        // (the alpha-to-coverage and anisotropic filtering of the scene stay with it)
+        self.a2c.set(&self.device, false)?;
+        for stage in 0..4 {
+            // SAFETY: plain calls on a live device.
+            unsafe {
+                self.device
+                    .SetSamplerState(stage, D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32)
+                    .and_then(|_| self.device.SetSamplerState(stage, D3DSAMP_MAXANISOTROPY, 1))
+                    .map_err(map_err)?;
+            }
+        }
         // SAFETY: plain calls on a live device.
         unsafe {
             self.device
@@ -884,6 +925,15 @@ impl D3d9Device {
                         .Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 1.0, 0)
                 })
                 .map_err(map_err)
+        }
+    }
+
+    /// The alpha-to-coverage switch for a draw to the window's picture: when it is multisampled.
+    fn coverage(&self) -> A2c {
+        if self.msaa.1 > 1 {
+            self.a2c
+        } else {
+            A2c::None
         }
     }
 
@@ -988,7 +1038,7 @@ impl D3d9Device {
                             0,
                         )
                         .map_err(map_err)
-                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h, false));
+                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h, A2c::None));
                     // (the backend's own states, with this surface's depth still bound)
                     let states = self.restore_scene_states();
                     let ended = if own_scene {
@@ -1173,9 +1223,8 @@ impl D3d9Device {
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
         width: u32,
         height: u32,
-        multisampled: bool,
+        coverage: A2c,
     ) -> Result<()> {
-        let coverage = multisampled;
         let lamps = self.bind_lamps(&frame.lamps)?;
         self.bind_or_table()?;
         self.scene.records.clear();
