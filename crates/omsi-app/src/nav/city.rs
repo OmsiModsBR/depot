@@ -1605,7 +1605,7 @@ impl Navigator {
                 let bus_lane = r
                     .lanes
                     .get(done)
-                    .map(|&l| lane_from_right(n, l, f.bus))
+                    .map(|&l| lane_from_right(n, l, self.bus_at))
                     .unwrap_or(0);
                 build_route(
                     &mut p,

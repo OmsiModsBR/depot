@@ -763,8 +763,8 @@ impl Navigator {
             self.next_dist = match (f.stops.first(), net) {
                 (Some(s), Some(n)) if !self.route.lanes.is_empty() => self
                     .route_distance(n, s.position)
-                    .or_else(|| Some((s.position - f.bus).truncate().length())),
-                (Some(s), _) => Some((s.position - f.bus).truncate().length()),
+                    .or_else(|| Some((s.position - self.bus_at).truncate().length())),
+                (Some(s), _) => Some((s.position - self.bus_at).truncate().length()),
                 _ => None,
             };
             self.next_turn = net.and_then(|n| self.turn_ahead(n));
@@ -776,7 +776,7 @@ impl Navigator {
             } else {
                 global
                     .as_deref()
-                    .and_then(|g| g.nearest_lane_near(f.bus, LaneKind::Street))
+                    .and_then(|g| g.nearest_lane_near(self.bus_at, LaneKind::Street))
                     .filter(|l| l.2 < 10.0)
                     .and_then(|l| self.street_of(l.0))
             }
@@ -798,7 +798,7 @@ impl Navigator {
                 .surface
                 .as_ref()
                 .filter(|s| self.show_surface && s.has_location())
-                .and_then(|sf| sf.street_info(f.bus.truncate(), 30.0))
+                .and_then(|sf| sf.street_info(self.bus_at.truncate(), 30.0))
                 .map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
@@ -1009,7 +1009,9 @@ impl Navigator {
                         .min(self.route.lanes.len().saturating_sub(1)),
                 )
                 .copied();
-            let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
+            let bus_lane = first
+                .map(|l| lane_from_right(rn, l, self.bus_at))
+                .unwrap_or(0);
             if self.route_mesh.0 != self.route.version
                 || self.route_mesh.1 != self.jam_version
                 || self.route_mesh.2 != anchor
@@ -1424,7 +1426,7 @@ impl Navigator {
                 None
             };
             let lane = lane.or_else(|| {
-                n.nearest_lane_near(f.bus, LaneKind::Street)
+                n.nearest_lane_near(self.bus_at, LaneKind::Street)
                     .filter(|l| l.2 < 8.0)
                     .map(|l| l.0)
             })?;
