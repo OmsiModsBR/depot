@@ -1,6 +1,6 @@
 use super::draw::{
-    arrow, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon, traffic_kind,
-    vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN,
+    arrow, focus_marker, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon,
+    traffic_kind, vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN,
 };
 use super::geometry::{build_roads, confirm_road_surfaces, congestion_on};
 use super::route::{build_route, lane_from_right, probe_lanes, RouteStyle};
@@ -87,6 +87,7 @@ impl Navigator {
             shown: if enabled { 1.0 } else { 0.0 },
             stop_spots: Vec::new(),
             bus_at: DVec3::ZERO,
+            bus_marker: None,
             next_turn: None,
             street_here: None,
             dist_t: 0.0,
@@ -714,7 +715,25 @@ impl Navigator {
         } else {
             f
         };
+        // (the route goes on following the bus; the maps follow the walker or the camera)
         self.follow(f);
+        let f3;
+        let f = match f.focus {
+            Some(focus) => {
+                self.bus_marker = Some((f.bus, f.heading));
+                f3 = NavFrame {
+                    bus: focus.at,
+                    heading: focus.heading,
+                    speed_kmh: 0.0,
+                    ..f.clone_ref()
+                };
+                &f3
+            }
+            None => {
+                self.bus_marker = None;
+                f
+            }
+        };
         self.bus_at = f.bus;
         self.stop_spots = f
             .stops
@@ -1314,7 +1333,25 @@ impl Navigator {
             .as_ref()
             .filter(|_| self.show_surface)
             .and_then(|s| s.player_style(f.line.as_deref()));
-        if let (Some(bp), Some((fill, ring))) = (project(vpm, vp, rel(f.bus)), player) {
+        // (the bus left behind, while the map follows the walker or the free camera)
+        if let (Some((at, heading)), Some(_)) = (self.bus_marker, f.focus) {
+            if let Some(bp) = project(vpm, vp, rel(at)) {
+                let a = (angle_diff(self.cam_heading, heading) as f32).to_radians();
+                arrow(
+                    &mut ui,
+                    bp,
+                    a,
+                    7.0 * s,
+                    1.25,
+                    Color::rgba(10, 10, 10, 0.8),
+                    TEXT_DIM,
+                );
+            }
+        }
+        if let (Some(focus), Some(bp)) = (f.focus, project(vpm, vp, rel(f.bus))) {
+            let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();
+            focus_marker(&mut ui, focus.kind, bp, a, 12.0 * s);
+        } else if let (Some(bp), Some((fill, ring))) = (project(vpm, vp, rel(f.bus)), player) {
             player_triangle(
                 &mut ui,
                 bp,

@@ -38,6 +38,7 @@ use crate::traffic::Traffic;
 
 mod city;
 mod draw;
+pub use draw::FocusKind;
 mod geometry;
 mod lines;
 mod minimap;
@@ -105,6 +106,16 @@ pub struct NavPlayer {
     pub name: String,
 }
 
+/// Where the maps are centred when it is not on the bus (`Settings::nav_follow_view`): the walker
+/// or the free camera, with the way they face.
+#[derive(Debug, Clone, Copy)]
+pub struct NavFocus {
+    pub kind: draw::FocusKind,
+    pub at: DVec3,
+    /// Compass heading (degrees, 0 = +y, clockwise).
+    pub heading: f64,
+}
+
 /// What the navigator is told each frame.
 pub struct NavFrame<'a> {
     pub traffic: Option<&'a Traffic>,
@@ -113,6 +124,9 @@ pub struct NavFrame<'a> {
     pub bus: DVec3,
     /// Compass heading (degrees, 0 = +y, clockwise).
     pub heading: f64,
+    /// The walker or the free camera the maps follow in place of the bus; the route still follows
+    /// the bus.
+    pub focus: Option<NavFocus>,
     pub speed_kmh: f32,
     /// Outside weather and cabin air temperatures (°C).
     pub outside_temp: f32,
@@ -433,6 +447,8 @@ pub struct Navigator {
     /// for the route arrows.
     stop_spots: Vec<(DVec3, String, f64, i64)>,
     bus_at: DVec3,
+    /// The bus and the way it faces while the maps follow the walker or the free camera.
+    bus_marker: Option<(DVec3, f64)>,
     next_turn: Option<(i32, f32, f64, Option<String>)>,
     /// The street the bus is on.
     street_here: Option<String>,
@@ -542,6 +558,7 @@ impl<'a> NavFrame<'a> {
             players: self.players.clone(),
             bus: self.bus,
             heading: self.heading,
+            focus: self.focus,
             speed_kmh: self.speed_kmh,
             outside_temp: self.outside_temp,
             inside_temp: self.inside_temp,

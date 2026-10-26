@@ -450,6 +450,7 @@ fn the_city_map_draws_over_the_picture() {
         players: Vec::new(),
         bus: DVec3::new(-420.0, -2.0, 0.0),
         heading: 90.0,
+        focus: None,
         speed_kmh: 32.0,
         outside_temp: 18.0,
         inside_temp: 21.0,
@@ -535,4 +536,17 @@ fn a_navigator_in_a_bottom_corner_stands_above_an_information_bar_along_the_bott
     // a navigator at the top is not moved by a bar at the bottom
     n.corner = "top-left".into();
     assert_eq!(n.panel_origin(screen, size, false, Some(bar)), (19.0, 19.0));
+}
+
+#[test]
+fn walker_and_camera_icons_draw_and_differ() {
+    use super::draw::{focus_marker, FocusKind};
+    let draw = |kind| {
+        let mut ui = omsi_ui::Painter::new();
+        focus_marker(&mut ui, kind, glam::Vec2::new(100.0, 100.0), 0.7, 12.0);
+        ui.len()
+    };
+    let (walker, camera) = (draw(FocusKind::Walker), draw(FocusKind::Camera));
+    assert!(walker > 0 && camera > 0);
+    assert_ne!(walker, camera, "the two icons are different shapes");
 }

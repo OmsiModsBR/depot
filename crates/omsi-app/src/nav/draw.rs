@@ -244,6 +244,113 @@ pub(super) fn stop_request_icon(
     row
 }
 
+/// What the navigator is centred on when it is not the bus: the walker on foot, or the free
+/// camera (F4).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum FocusKind {
+    Walker,
+    Camera,
+}
+
+/// A walker seen from above (head between the shoulders, a wedge ahead of it for the way they
+/// face), `k` px from its middle to the tip of the wedge, on a dark outline `grow` times its size.
+pub(super) fn walker_icon(
+    ui: &mut Painter,
+    at: Vec2,
+    angle: f32,
+    k: f32,
+    dark: Color,
+    fill: Color,
+) {
+    let (sn, cs) = angle.sin_cos();
+    let g = |x: f32, y: f32, grow: f32| {
+        let (x, y) = (x * k * grow, y * k * grow);
+        at + Vec2::new(x * cs - y * sn, x * sn + y * cs)
+    };
+    for (grow, c) in [(1.3, dark), (1.0, fill)] {
+        ui.convex(
+            &[
+                g(-0.62, -0.02, grow),
+                g(-0.42, -0.26, grow),
+                g(0.42, -0.26, grow),
+                g(0.62, -0.02, grow),
+                g(0.5, 0.42, grow),
+                g(-0.5, 0.42, grow),
+            ],
+            c,
+        );
+        ui.tri(
+            g(0.0, -1.0, grow),
+            g(-0.3, -0.5, grow),
+            g(0.3, -0.5, grow),
+            c,
+            c,
+            c,
+        );
+    }
+    // the head, ringed so that it reads against the shoulders
+    ui.circle(g(0.0, 0.08, 1.0), 0.36 * k, dark);
+    ui.circle(g(0.0, 0.08, 1.0), 0.27 * k, fill);
+}
+
+/// The free camera seen from above (a body, its lens, and the cone it looks through), `k` px from
+/// its middle to the far edge of the cone, on a dark outline `grow` times its size.
+pub(super) fn camera_icon(
+    ui: &mut Painter,
+    at: Vec2,
+    angle: f32,
+    k: f32,
+    dark: Color,
+    fill: Color,
+) {
+    let (sn, cs) = angle.sin_cos();
+    let g = |x: f32, y: f32, grow: f32| {
+        let (x, y) = (x * k * grow, y * k * grow);
+        at + Vec2::new(x * cs - y * sn, x * sn + y * cs)
+    };
+    // the cone it looks through
+    let cone = fill.alpha(0.3);
+    ui.tri(
+        g(0.0, -0.2, 1.0),
+        g(-0.8, -1.0, 1.0),
+        g(0.8, -1.0, 1.0),
+        cone,
+        cone,
+        cone,
+    );
+    for (grow, c) in [(1.3, dark), (1.0, fill)] {
+        // the body, and the lens ahead of it that flares
+        ui.convex(
+            &[
+                g(-0.55, -0.1, grow),
+                g(0.55, -0.1, grow),
+                g(0.55, 0.55, grow),
+                g(-0.55, 0.55, grow),
+            ],
+            c,
+        );
+        ui.convex(
+            &[
+                g(-0.26, -0.1, grow),
+                g(-0.4, -0.42, grow),
+                g(0.4, -0.42, grow),
+                g(0.26, -0.1, grow),
+            ],
+            c,
+        );
+    }
+    ui.circle(g(0.0, 0.22, 1.0), 0.17 * k, dark);
+}
+
+/// The marker of what the map is centred on: the walker or the camera, or the bus's arrow.
+pub(super) fn focus_marker(ui: &mut Painter, kind: FocusKind, at: Vec2, angle: f32, k: f32) {
+    let dark = Color::rgba(10, 10, 10, 0.9);
+    match kind {
+        FocusKind::Walker => walker_icon(ui, at, angle, k, dark, TEXT),
+        FocusKind::Camera => camera_icon(ui, at, angle, k, dark, TEXT),
+    }
+}
+
 /// An arrow at `at` pointing `angle` (radians, clockwise from up on the screen), `k` px from
 /// its middle to its tip, on a dark outline `grow` times its size: the bus and the players.
 pub(super) fn arrow(

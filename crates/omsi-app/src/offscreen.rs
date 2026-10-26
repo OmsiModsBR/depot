@@ -3210,6 +3210,7 @@ pub(crate) fn run_offscreen(
                 players: Vec::new(),
                 bus: p.vehicle.position,
                 heading: p.vehicle.heading,
+                focus: None,
                 speed_kmh: p.vehicle.motion().velocity_kmh(),
                 outside_temp,
                 inside_temp,
