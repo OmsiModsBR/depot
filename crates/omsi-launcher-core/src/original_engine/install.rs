@@ -203,6 +203,41 @@ fn key(p: &str) -> String {
     p.to_ascii_lowercase()
 }
 
+/// Whether `p` is a symbolic link or, on Windows, any reparse point (a junction too).
+fn is_link(p: &Path) -> bool {
+    let Ok(m) = std::fs::symlink_metadata(p) else {
+        return false;
+    };
+    if m.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const REPARSE_POINT: u32 = 0x400;
+        if m.file_attributes() & REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// The first existing folder (or the file itself) on the way from `root` to `rel` that is a
+/// link: a package path that looks safe would leave the OMSI 2 folder through it.
+fn linked_part(root: &Path, rel: &str) -> Option<String> {
+    let mut cur = root.to_path_buf();
+    for part in rel.split('/') {
+        cur.push(part);
+        if is_link(&cur) {
+            return Some(cur.display().to_string());
+        }
+        if !cur.exists() {
+            break;
+        }
+    }
+    None
+}
+
 /// The files of an OmsiLaunch already in the folder, by its own manifest.
 pub fn owned_paths(root: &Path) -> BTreeSet<String> {
     let mut s = BTreeSet::new();
@@ -263,6 +298,9 @@ pub fn plan_install(root: &Path, zip: &[u8]) -> Result<InstallPlan> {
         total = total.saturating_add(f.size());
         if total > MAX_UNPACKED {
             bail!("the package unpacks to too much data");
+        }
+        if let Some(link) = linked_part(root, &path) {
+            bail!("{link} is a link: OmsiLaunch is not installed through links");
         }
         let target = root.join(&path);
         if target.symlink_metadata().is_ok() {
@@ -366,9 +404,33 @@ pub fn install(
                 bail!("{p} does not match the package's manifest");
             }
         }
+        // every file about to be installed must be one the manifest vouches for
+        let vouched: BTreeSet<String> = m.iter().map(|(p, _)| key(p)).collect();
+        if let Some(f) = plan
+            .files
+            .iter()
+            .find(|f| f.path != "release-manifest.json" && !vouched.contains(&key(&f.path)))
+        {
+            bail!("{} is not listed in the package's manifest", f.path);
+        }
+        // files of the release being replaced that the new one no longer has
+        let keep: BTreeSet<String> = plan.files.iter().map(|f| key(&f.path)).collect();
+        let obsolete: Vec<String> = read_manifest(&root.join("release-manifest.json"))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(p, _)| p)
+            .filter(|p| !keep.contains(&key(p)) && root.join(p).is_file())
+            .collect();
         // move in; remember what to undo
         let mut created: Vec<String> = Vec::new();
         let mut replaced: Vec<String> = Vec::new();
+        let rec = InstallRecord {
+            root: root.to_string_lossy().into_owned(),
+            version: version.to_string(),
+            sha256: sha256.to_string(),
+            files: plan.files.iter().map(|f| f.path.clone()).collect(),
+        };
+        let mut dropped: Vec<String> = Vec::new();
         let moved = (|| -> Result<()> {
             for f in &plan.files {
                 let target = root.join(&f.path);
@@ -382,24 +444,28 @@ pub fn install(
                 }
                 copy_into(&staged.join(&f.path), &target)?;
             }
+            for p in &obsolete {
+                let target = root.join(p);
+                let b = backup.join(p);
+                std::fs::create_dir_all(b.parent().unwrap())?;
+                std::fs::copy(&target, &b)?;
+                std::fs::remove_file(&target)
+                    .with_context(|| format!("removing {}", target.display()))?;
+                dropped.push(p.clone());
+            }
+            // the record is part of the transaction: a failure here restores the old install
+            super::config::write_atomic(&record_path(data), &serde_json::to_vec_pretty(&rec)?)?;
             Ok(())
         })();
         if let Err(e) = moved {
             for p in &created {
                 let _ = std::fs::remove_file(root.join(p));
             }
-            for p in &replaced {
+            for p in replaced.iter().chain(&dropped) {
                 let _ = std::fs::copy(backup.join(p), root.join(p));
             }
             return Err(e);
         }
-        let rec = InstallRecord {
-            root: root.to_string_lossy().into_owned(),
-            version: version.to_string(),
-            sha256: sha256.to_string(),
-            files: plan.files.iter().map(|f| f.path.clone()).collect(),
-        };
-        super::config::write_atomic(&record_path(data), &serde_json::to_vec_pretty(&rec)?)?;
         Ok(rec)
     })();
     let _ = std::fs::remove_dir_all(&stage);
@@ -494,6 +560,9 @@ pub fn remove(root: &Path, data: &Path) -> Result<RemovePlan> {
     let plan = plan_remove(root, data);
     if plan.pending_recovery {
         bail!("a session left OMSI 2 files changed: restore them first");
+    }
+    if let Some(link) = plan.files.iter().find_map(|p| linked_part(root, p)) {
+        bail!("{link} is a link: nothing is removed through links");
     }
     for p in &plan.files {
         let t = root.join(p);
@@ -742,5 +811,93 @@ mod tests {
         assert!(!root.join("OmsiLaunch.exe").exists());
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&data);
+    }
+
+    /// A package whose manifest lists only `listed` of the `entries`.
+    fn zip_with(entries: &[(&str, &[u8])], listed: &[&str]) -> Vec<u8> {
+        let files: Vec<String> = entries
+            .iter()
+            .filter(|(n, _)| listed.contains(n))
+            .map(|(n, b)| format!("{{\"path\":\"{n}\",\"sha256\":\"{}\"}}", sha256_hex(b)))
+            .collect();
+        let manifest = format!("{{\"files\":[{}]}}", files.join(","));
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        for (n, b) in entries {
+            w.start_file(*n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.start_file("release-manifest.json", o).unwrap();
+        w.write_all(manifest.as_bytes()).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_payload_file_the_manifest_does_not_list_is_refused() {
+        let root = tmp("unl");
+        let data = tmp("unld");
+        let z = zip_with(&[("a.dll", b"a"), ("b.dll", b"b")], &["a.dll"]);
+        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let z = zip_with(&[("a.dll", b"a")], &[]);
+        assert!(install(&root, &data, &z, "x", "1").is_err());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn an_update_removes_files_the_new_release_dropped() {
+        let root = tmp("upd");
+        let data = tmp("updd");
+        let v1 = zip_with(
+            &[("plugins/Old.opl", b"old"), ("x.dll", b"x")],
+            &["plugins/Old.opl", "x.dll"],
+        );
+        install(&root, &data, &v1, "1", "1").unwrap();
+        let v2 = zip_with(
+            &[("plugins/New.opl", b"new"), ("x.dll", b"x2")],
+            &["plugins/New.opl", "x.dll"],
+        );
+        let rec = install(&root, &data, &v2, "2", "2").unwrap();
+        assert!(!root.join("plugins/Old.opl").exists());
+        assert!(root.join("plugins/New.opl").is_file());
+        assert!(!rec.files.iter().any(|f| f == "plugins/Old.opl"));
+        remove(&root, &data).unwrap();
+        assert!(!root.join("plugins/New.opl").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_failing_record_write_restores_the_previous_install() {
+        let root = tmp("rec");
+        let data = tmp("recd");
+        let v1 = zip_with(&[("x.dll", b"one")], &["x.dll"]);
+        install(&root, &data, &v1, "1", "1").unwrap();
+        // the record's place is taken by a folder, so writing it fails
+        std::fs::remove_file(record_path(&data)).unwrap();
+        std::fs::create_dir(record_path(&data)).unwrap();
+        let v2 = zip_with(&[("x.dll", b"two"), ("y.dll", b"y")], &["x.dll", "y.dll"]);
+        assert!(install(&root, &data, &v2, "2", "2").is_err());
+        assert_eq!(std::fs::read(root.join("x.dll")).unwrap(), b"one");
+        assert!(!root.join("y.dll").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_folder_in_the_way_is_refused() {
+        let root = tmp("lnk");
+        let data = tmp("lnkd");
+        let outside = tmp("lnko");
+        std::os::unix::fs::symlink(&outside, root.join("plugins")).unwrap();
+        let z = zip_with(&[("plugins/A.opl", b"a")], &["plugins/A.opl"]);
+        assert!(plan_install(&root, &z).is_err());
+        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 }

@@ -85,9 +85,12 @@ impl Running {
 
 impl Drop for Running {
     fn drop(&mut self) {
-        // the launcher closing does not end the game (OmsiLaunch owns it); only the
-        // launch description is no longer needed once nobody watches the session
-        super::config::remove_launch_file(&self.spec_file);
+        // the launcher closing does not end the game (OmsiLaunch owns it). While the child
+        // runs it may not have read its launch description yet, so the file stays then
+        // (the next start of the same session writes it again); once it has ended it goes.
+        if matches!(self.child.try_wait(), Ok(Some(_)) | Err(_)) {
+            super::config::remove_launch_file(&self.spec_file);
+        }
     }
 }
 

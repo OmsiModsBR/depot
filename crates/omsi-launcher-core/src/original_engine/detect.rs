@@ -178,7 +178,9 @@ pub fn omsilaunch_in(root: &Path) -> OmsiLaunchStatus {
             f.get("path").and_then(Value::as_str),
             f.get("sha256").and_then(Value::as_str),
         ) else {
-            continue;
+            // a damaged manifest must never read as intact
+            st.integrity = Integrity::Unreadable;
+            return st;
         };
         // only the permanent plugin closure matters at run time (like OmsiLaunch itself)
         if !path.starts_with("plugins/") || path.contains("..") {
@@ -280,6 +282,19 @@ mod tests {
         let d = tmp("broken");
         install(&d, b"p", "00");
         std::fs::write(d.join("release-manifest.json"), "{").unwrap();
+        assert_eq!(omsilaunch_in(&d).integrity, Integrity::Unreadable);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_manifest_entry_without_a_hash_is_unreadable_not_intact() {
+        let d = tmp("nohash");
+        install(&d, b"p", "00");
+        std::fs::write(
+            d.join("release-manifest.json"),
+            r#"{"files":[{"path":"plugins/OmsiLaunch.Plugin.opl"}]}"#,
+        )
+        .unwrap();
         assert_eq!(omsilaunch_in(&d).integrity, Integrity::Unreadable);
         let _ = std::fs::remove_dir_all(&d);
     }

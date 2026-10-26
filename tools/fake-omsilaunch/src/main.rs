@@ -4,7 +4,8 @@
 //! the file named by `FAKE_OL_LOG` so a test can check the exact arguments Depot passed.
 //!
 //! `FAKE_OL_SCENARIO` picks the answer: `ready` (default), `not_runnable`, `busy`,
-//! `recovery_pending`, `recovery_failed`, `crash` (a launch that ends with code 1).
+//! `recovery_pending`, `recovery_failed`, `shim_fail` and `garbled` (recovery answers that
+//! must not read as clean), `crash` (a launch that ends with code 1).
 //! `FAKE_OL_RUN_MS` is how long a launch "plays" (default 50).
 
 use std::io::Write;
@@ -50,6 +51,11 @@ fn main() {
     } else if has("/recovery-status") || has("/recover") {
         let recover = has("/recover");
         match scenario.as_str() {
+            "shim_fail" => 102,
+            "garbled" => {
+                out("not json");
+                0
+            }
             "busy" => {
                 eprintln!("OL_E_INSTALLATION_BUSY");
                 7
