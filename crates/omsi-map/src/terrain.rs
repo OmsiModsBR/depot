@@ -72,7 +72,11 @@ impl Terrain {
     }
 
     pub fn load(path: &Path) -> Result<Terrain, TerrainError> {
-        Self::parse(&omsi_cfg::vfs::read(path)?)
+        let terrain = Self::parse(&omsi_cfg::vfs::read(path)?);
+        if let Err(e) = &terrain {
+            log::warn!("terrain {} could not be read: {e}", path.display());
+        }
+        terrain
     }
 
     pub fn samples(&self) -> usize {

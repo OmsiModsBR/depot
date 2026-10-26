@@ -3599,10 +3599,8 @@ impl ApplicationHandler for App {
                                     "input script: the window picture could not be rendered: {e}"
                                 );
                                 if !include_touch {
-                                    self.service_msg = Some((
-                                        format!("Screenshot could not be saved: {e}"),
-                                        4.0,
-                                    ));
+                                    self.service_msg =
+                                        Some((format!("Screenshot could not be saved: {e}"), 4.0));
                                 }
                             }
                         }
@@ -3717,6 +3715,13 @@ impl ApplicationHandler for App {
                             let vr_active = self.vr.is_some();
                             #[cfg(not(windows))]
                             let vr_active = false;
+                            // (DirectX9 draws one mirror a frame at most: each is a scene pass of
+                            // its own for a device that is bound by its draw calls)
+                            #[cfg(windows)]
+                            let d3d9_drawing = self.d3d9.is_some();
+                            #[cfg(not(windows))]
+                            let d3d9_drawing = false;
+                            let mirrors_per_frame = if d3d9_drawing { 1 } else { 2 };
                             let rate = {
                                 if vr_active {
                                     // Preserve the user's total redraw budget. A negative
@@ -3768,7 +3773,7 @@ impl ApplicationHandler for App {
                             } else {
                                 self.mirror_budget =
                                     (self.mirror_budget + raw_dt.min(0.1) * rate).min(2.5);
-                                self.mirrors_seen.clamp(1, 2)
+                                self.mirrors_seen.clamp(1, mirrors_per_frame)
                             };
                             let mut drawn = 0;
                             if vr_active && draw_limit > 0 && draw_limit == mirrors {
@@ -3795,7 +3800,7 @@ impl ApplicationHandler for App {
                                     < (if vr_active {
                                         draw_limit
                                     } else {
-                                        self.mirrors_seen.clamp(1, 2)
+                                        self.mirrors_seen.clamp(1, mirrors_per_frame)
                                     })
                                 && (vr_active || self.mirror_budget >= 1.0)
                             {

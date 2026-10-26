@@ -128,12 +128,17 @@ impl Inner {
     }
 
     fn frame(&mut self, plan: &FramePlan, scene: &Scene) {
-        // (a frame the game never presented - a second picture in one game frame - is shown
-        // first, so the device is not left inside a scene)
-        self.present();
-        if let Err(e) = self.begin(plan.clear) {
-            self.failed(e);
-            return;
+        // (a render texture's picture - a mirror's - is drawn on its own, whatever frame is
+        // open: it is no window picture, and has no overlays)
+        let target = plan.target;
+        if target.is_none() {
+            // (a frame the game never presented - a second picture in one game frame - is
+            // shown first, so the device is not left inside a scene)
+            self.present();
+            if let Err(e) = self.begin(plan.clear) {
+                self.failed(e);
+                return;
+            }
         }
         let batch = |b: &omsi_render::PlanBatch| SceneBatch {
             kind: match b.kind {
@@ -215,6 +220,21 @@ impl Inner {
                 transposed: scene.transposed.contains(&texture),
             }));
         let device = &mut self.device;
+        if let Some(texture) = target {
+            if let Err(e) = device.draw_scene_into(
+                texture,
+                (plan.width, plan.height),
+                plan.clear,
+                &frame,
+                material,
+            ) {
+                match e {
+                    BackendError::DeviceLost | BackendError::DeviceNotReset => self.failed(e),
+                    e => self.warn_once("a mirror could not be drawn", e),
+                }
+            }
+            return;
+        }
         let drawn = device
             .draw_scene(&frame, material)
             .and_then(|_| device.draw_overlays(&self.overlays));
@@ -316,6 +336,8 @@ impl Inner {
     fn failed(&mut self, e: BackendError) {
         match e {
             BackendError::DeviceLost => {
+                // (the frame that was open went with the device)
+                self.open = false;
                 // a removed device (driver reset): a new one is opened, and the scene's
                 // meshes and textures go up again from the copies the device keeps
                 log::error!("d3d9: the device was lost; opening it again");

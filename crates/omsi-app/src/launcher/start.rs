@@ -408,17 +408,8 @@ pub fn card(l: &mut Launcher, r: Rect) {
         }
     }
     let _ = foot;
-    let armed = l.state.instances.iter().any(|i| i.running)
-        && l.state
-            .second_armed
-            .is_some_and(|t| t.elapsed().as_secs() < 6);
-    let label = if armed {
-        "Start another game"
-    } else {
-        "Start driving"
-    };
     if l.ui
-        .button("start-go", go, label, Some("o-play"), ButtonKind::Primary)
+        .button("start-go", go, "Start driving", Some("o-play"), ButtonKind::Primary)
     {
         start(l);
     }
@@ -449,20 +440,6 @@ fn start(l: &mut Launcher) {
         l.state.set_status("Choose a map first.", true);
         return;
     }
-    // a second game on one computer is for testing, not something to do by accident: with one
-    // running (its window may be in the tray), the button asks for a second click
-    let running = l.state.instances.iter().filter(|i| i.running).count();
-    if running > 0
-        && l.state
-            .second_armed
-            .map(|t| t.elapsed().as_secs() >= 6)
-            .unwrap_or(true)
-    {
-        l.state.second_armed = Some(std::time::Instant::now());
-        l.state.set_status("A game is running already (its window may be behind this one, or in the tray). Click again to start another one anyway.", true);
-        return;
-    }
-    l.state.second_armed = None;
     match l.state.choice.session.as_str() {
         "saved" => {
             l.state.choice.save();

@@ -11,17 +11,6 @@ pub type Lookup = fn(&str, &str) -> Option<String>;
 
 static STATE: RwLock<(Option<Lookup>, String)> = RwLock::new((None, String::new()));
 
-/// What is asked when the tables have no translation (the application's machine
-/// translation: a text it has translated already, None while it is still at it).
-static FALLBACK: RwLock<Option<Lookup>> = RwLock::new(None);
-
-/// The lookup for texts the tables do not have.
-pub fn set_fallback(f: Option<Lookup>) {
-    if let Ok(mut s) = FALLBACK.write() {
-        *s = f;
-    }
-}
-
 /// The lookup to translate with.
 pub fn set_lookup(f: Lookup) {
     if let Ok(mut s) = STATE.write() {
@@ -53,15 +42,7 @@ pub fn tr(text: &str) -> Cow<'_, str> {
     match (&s.0, s.1.is_empty()) {
         (Some(f), false) if !text.is_empty() => match f(&s.1, text) {
             Some(t) => Cow::Owned(t),
-            None => match FALLBACK
-                .read()
-                .ok()
-                .and_then(|g| *g)
-                .and_then(|g| g(&s.1, text))
-            {
-                Some(t) => Cow::Owned(t),
-                None => Cow::Borrowed(text),
-            },
+            None => Cow::Borrowed(text),
         },
         _ => Cow::Borrowed(text),
     }

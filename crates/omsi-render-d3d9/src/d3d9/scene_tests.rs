@@ -1004,3 +1004,95 @@ fn tile_light_maps_light_their_objects_by_night() {
     let px = draw_lamps(&mut dev, white_lit(&mapped), SECOND, night, over);
     assert!(all(&px, [0, 0, 0, 255], 1), "cleared: {:?}", &px[..4]);
 }
+
+/// A frame of one opaque quad textured with scene texture `texture`, under ambient light.
+fn quad_frame<'a>(
+    batches: &'a [SceneBatch],
+    models: &'a [[[f32; 4]; 4]],
+    params: &'a [[f32; 4]],
+    list: &'a [u32],
+) -> SceneFrame<'a> {
+    SceneFrame {
+        view_proj: IDENTITY,
+        light: light([0.0; 4]),
+        list,
+        models,
+        params,
+        main: batches,
+        cab: &[],
+        surface_bias: -24,
+        lamps: Default::default(),
+    }
+}
+
+#[test]
+fn a_scene_drawn_into_a_texture_is_what_a_later_material_shows() {
+    let Some(mut dev) = device() else { return };
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(3, &v, &i).unwrap();
+    rgba(&mut dev, 5, [200, 100, 50, 255]);
+    let batches = [batch(DrawKind::Opaque, 3, 0, 0..1)];
+    let models = [IDENTITY];
+    let params = [VISIBLE, SECOND];
+    let list = [0u32];
+    let materials = [uniform(0.0)];
+    let into = |dev: &mut D3d9Device| {
+        let frame = quad_frame(&batches, &models, &params, &list);
+        dev.draw_scene_into(9, (4, 4), [0.0, 0.0, 0.0, 1.0], &frame, |m| {
+            materials.get(m).map(|u| SceneMaterial {
+                texture: Some(5),
+                uniform: u,
+                ..Default::default()
+            })
+        })
+    };
+    // outside any frame, then inside one (the window's picture follows each time)
+    into(&mut dev).unwrap();
+    let shown = draw(
+        &mut dev,
+        &batches,
+        &models,
+        &params,
+        &list,
+        light([0.0; 4]),
+        &materials,
+        Some(9),
+    );
+    assert!(all(&shown, [200, 100, 50, 255], 2), "{:?}", &shown[..4]);
+
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 1.0, 1.0],
+    })
+    .unwrap();
+    // a texture of another size is made again
+    rgba(&mut dev, 5, [10, 220, 30, 255]);
+    let frame = quad_frame(&batches, &models, &params, &list);
+    dev.draw_scene_into(9, (2, 2), [0.0, 0.0, 0.0, 1.0], &frame, |m| {
+        materials.get(m).map(|u| SceneMaterial {
+            texture: Some(5),
+            uniform: u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    dev.draw_scene(&frame, |m| {
+        materials.get(m).map(|u| SceneMaterial {
+            texture: Some(9),
+            uniform: u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    let px = dev.end_frame().unwrap();
+    assert!(all(&px, [10, 220, 30, 255], 2), "{:?}", &px[..4]);
+}
+
+#[test]
+fn a_scene_target_of_no_size_is_refused() {
+    let Some(mut dev) = device() else { return };
+    let frame = quad_frame(&[], &[], &[], &[]);
+    let r = dev.draw_scene_into(0, (0, 4), [0.0; 4], &frame, |_| None);
+    assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
+}
