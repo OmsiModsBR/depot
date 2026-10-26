@@ -182,6 +182,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             Err(TryRecvError::Disconnected) => {
                 log::warn!("integrity check: the check stopped without an answer");
                 l.pages.diag.run = None;
+                l.pages.diag.done = None;
             }
             Err(TryRecvError::Empty) => {}
         }
@@ -353,12 +354,12 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         .replace("%{e}", &e.to_string())
         .replace("%{w}", &w.to_string())
         .replace("%{o}", &o.to_string());
-    let (dot_status, _) = if rep.findings.is_empty() {
-        (Status::Found, ())
-    } else if rep.count(Severity::Error) > 0 {
-        (Status::Error, ())
+    let dot_status = if e > 0 {
+        Status::Error
+    } else if w > 0 || o > 0 {
+        Status::Warning
     } else {
-        (Status::Warning, ())
+        Status::Found
     };
     dot(&mut l.ui, r.x + 24.0, r.y + 26.0, dot_status);
     let name = done.name.clone();
