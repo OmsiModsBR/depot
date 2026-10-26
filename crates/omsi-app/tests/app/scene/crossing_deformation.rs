@@ -1,6 +1,14 @@
 //! Artificial road and scenery fixtures.
-use super::ground_query::probe_tile;
-use super::*;
+use glam::{DVec3, Mat4};
+use hashbrown::HashMap;
+use omsi_geometry::{object_rotation, TileSurface};
+use omsi_map::{tile_size, Terrain};
+use openomsi_game::testing::scene::ground_query::probe_tile;
+use openomsi_game::testing::scene::*;
+use openomsi_game::testing::tiles::Pose;
+use parking_lot::Mutex;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 struct Fixture(PathBuf);
 

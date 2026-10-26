@@ -45,7 +45,7 @@ fn tile_key(x: f64, y: f64) -> (i32, i32) {
 }
 
 /// [`drive_probe`] on the tile `key` that holds (x, y).
-pub(super) fn probe_tile(
+pub fn probe_tile(
     surface: Option<&TileSurface>,
     terrain: Option<&Terrain>,
     key: (i32, i32),
