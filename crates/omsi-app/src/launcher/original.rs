@@ -32,8 +32,9 @@ pub fn available() -> bool {
 /// A background job's answer.
 pub enum Event {
     Status(Box<EngineStatus>),
-    Offer(Result<(ReleaseInfo, String), String>),
-    Downloaded(Result<(Arc<Vec<u8>>, InstallPlan), String>),
+    /// (attempt, answer): an answer of an attempt the player left is ignored
+    Offer(u64, Result<(ReleaseInfo, String), String>),
+    Downloaded(u64, Result<(Arc<Vec<u8>>, InstallPlan), String>),
     Installed(Result<String, String>),
     Removed(Result<RemovePlan, String>),
     Latest(Result<ReleaseInfo, String>),
@@ -73,6 +74,8 @@ pub struct Original {
     pub done: Arc<AtomicU64>,
     pub total: Arc<AtomicU64>,
     pub cancel: Arc<AtomicBool>,
+    /// Counts the lookups and downloads started or left, so a late answer can be told apart.
+    pub attempt: u64,
     /// The newest release seen by "Check for updates" (Diagnostics).
     pub latest: Option<Result<ReleaseInfo, String>>,
     pub checking: bool,
@@ -87,6 +90,7 @@ impl Default for Original {
             done: Arc::new(AtomicU64::new(0)),
             total: Arc::new(AtomicU64::new(0)),
             cancel: Arc::new(AtomicBool::new(false)),
+            attempt: 0,
             latest: None,
             checking: false,
         }
@@ -187,8 +191,10 @@ impl State {
         if self.original.busy() {
             return;
         }
+        self.original.attempt += 1;
+        let n = self.original.attempt;
         self.original.flow = Flow::Looking;
-        self.spawn(move || Msg::Original(Event::Offer(offer())));
+        self.spawn(move || Msg::Original(Event::Offer(n, offer())));
     }
 
     /// The player agreed to download the package.
@@ -197,22 +203,27 @@ impl State {
         else {
             return;
         };
+        // each download has its own counters and cancel flag: a worker the player left
+        // can neither be revived nor move the new one's bar
+        self.original.attempt += 1;
+        let n = self.original.attempt;
+        self.original.done = Arc::new(AtomicU64::new(0));
+        self.original.total = Arc::new(AtomicU64::new(0));
+        self.original.cancel = Arc::new(AtomicBool::new(false));
         let (done, total, cancel) = (
             self.original.done.clone(),
             self.original.total.clone(),
             self.original.cancel.clone(),
         );
-        done.store(0, Relaxed);
-        total.store(0, Relaxed);
-        cancel.store(false, Relaxed);
         let root = std::path::PathBuf::from(&self.config.root);
         self.original.flow = Flow::Downloading {
             release: release.clone(),
         };
         self.spawn(move || {
-            Msg::Original(Event::Downloaded(fetch_package(
-                &release, &sha, &root, &done, &total, &cancel,
-            )))
+            Msg::Original(Event::Downloaded(
+                n,
+                fetch_package(&release, &sha, &root, &done, &total, &cancel),
+            ))
         });
     }
 
@@ -269,6 +280,9 @@ impl State {
 
     pub fn engine_cancel(&mut self) {
         self.original.cancel.store(true, Relaxed);
+        if matches!(self.original.flow, Flow::Looking | Flow::Downloading { .. }) {
+            self.original.attempt += 1;
+        }
         if !self.original.busy() || matches!(self.original.flow, Flow::Looking) {
             self.original.flow = Flow::Idle;
         } else if !matches!(self.original.flow, Flow::Installing | Flow::Removing) {
@@ -281,16 +295,21 @@ impl State {
             Event::Status(s) => {
                 self.original.status = Some(*s);
             }
-            Event::Offer(r) => {
+            Event::Offer(n, r) => {
                 // (a lookup the player cancelled meanwhile is dropped)
-                if matches!(self.original.flow, Flow::Looking) {
+                if n == self.original.attempt && matches!(self.original.flow, Flow::Looking) {
                     self.original.flow = match r {
                         Ok((release, sha)) => Flow::Offer { release, sha },
                         Err(e) => Flow::Failed(e),
                     };
                 }
             }
-            Event::Downloaded(r) => {
+            Event::Downloaded(n, r) => {
+                if n != self.original.attempt
+                    || !matches!(self.original.flow, Flow::Downloading { .. })
+                {
+                    return;
+                }
                 let Flow::Downloading { release } =
                     std::mem::replace(&mut self.original.flow, Flow::Idle)
                 else {

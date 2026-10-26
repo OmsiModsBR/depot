@@ -280,21 +280,23 @@ impl Launcher {
             TEXT,
             Align::Left,
         );
-        let mut y = inner.y + 40.0;
+        let body = Rect::new(inner.x, inner.y + 40.0, inner.w, inner.h - 130.0);
         self.ui
-            .push_clip(Rect::new(inner.x, y, inner.w, inner.h - 90.0), 0.0);
-        for (t, px, c, bold) in &lines {
-            let hh = self.ui.paragraph(
-                t,
-                Vec2::new(inner.x, y),
-                inner.w,
-                *px,
-                if *bold { Weight::Bold } else { Weight::Regular },
-                *c,
-            );
-            y += hh + 8.0;
-        }
-        self.ui.pop_clip();
+            .scroll_area("engine-dialog-body", body, &mut |ui, v| {
+                let mut y = v.y;
+                for (t, px, c, bold) in &lines {
+                    let hh = ui.paragraph(
+                        t,
+                        Vec2::new(v.x, y),
+                        v.w - 10.0,
+                        *px,
+                        if *bold { Weight::Bold } else { Weight::Regular },
+                        *c,
+                    );
+                    y += hh + 8.0;
+                }
+                y - v.y
+            });
         if let Flow::Downloading { .. } = self.state.original.flow {
             let (d, t) = (
                 self.state.original.done.load(Relaxed),
