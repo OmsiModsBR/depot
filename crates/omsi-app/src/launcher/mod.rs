@@ -15,6 +15,7 @@ mod chrome;
 mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
+mod integrity;
 mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
