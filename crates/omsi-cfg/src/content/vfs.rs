@@ -582,11 +582,22 @@ pub fn archive_of(path: &Path) -> Option<PathBuf> {
 }
 
 /// Read a whole file, from a folder or from a mounted archive.
+///
+/// The detailed log (debug level) names every file read and every probe that found nothing;
+/// a file that exists but cannot be read is a warning with the reason.
 pub fn read(path: &Path) -> io::Result<Vec<u8>> {
-    match locate(path) {
+    let read = match locate(path) {
         Some((m, key)) => m.read(&key),
         None => std::fs::read(path),
+    };
+    match &read {
+        Ok(b) => log::debug!("loaded {} ({} bytes)", path.display(), b.len()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            log::debug!("not found: {}", path.display())
+        }
+        Err(e) => log::warn!("could not read {}: {e}", path.display()),
     }
+    read
 }
 
 /// Read a text file with OMSI's encoding rules.
@@ -643,9 +654,11 @@ pub fn list_dir(path: &Path) -> Option<Vec<(OsString, bool)>> {
 
 /// Full paths of a folder's entries (like `std::fs::read_dir`), empty when it is not a folder.
 pub fn read_dir_paths(path: &Path) -> Vec<PathBuf> {
-    list_dir(path)
+    let paths: Vec<PathBuf> = list_dir(path)
         .map(|l| l.into_iter().map(|(n, _)| path.join(n)).collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    log::debug!("folder {}: {} entries", path.display(), paths.len());
+    paths
 }
 
 /// Mount every `.zip` in `dir` (in name order) as a content root: where an installer puts
@@ -668,7 +681,10 @@ pub fn mount_dir_zips(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for p in zips {
         match add_content_zip(&p) {
-            Ok(m) => out.push(m),
+            Ok(m) => {
+                log::debug!("content zip mounted: {}", p.display());
+                out.push(m)
+            }
             Err(e) => log::warn!("content zip {}: {e}", p.display()),
         }
     }

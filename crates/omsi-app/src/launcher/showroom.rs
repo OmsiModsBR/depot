@@ -349,13 +349,15 @@ impl Showroom {
                 let path = player_bus_path(&root, &l2.bus)?;
                 let vt = Arc::new(omsi_sim::VehicleType::load(&root, &path)?);
                 let scheme = paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty()));
-                let host = omsi_sim::VehicleHost::new(start_clock(&args));
+                // A mild day, half saturated (22 °C, 9.7 g/m³): a vehicle made before any
+                // weather is set stood at 0 °C, and the heating scripts that read the weather's
+                // temperature in {init} showed every window misted over in the picture.
+                omsi_sim::host::set_ambient_weather(22.0, 9.7);
+                let mut host = omsi_sim::VehicleHost::new(start_clock(&args));
+                // the paint scheme's variables are there for the scripts' {init}, as the game
+                // gives them (spawn.rs), not set after it
+                host.paint_scheme = Some(scheme);
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
-                if let Some(i) = scheme {
-                    for (var, v) in vt.paint_schemes[i].set_vars.clone() {
-                        vehicle.set_var(&var, v);
-                    }
-                }
                 // On the floor (z = 0) and on the wheel physics the game drives it with: the
                 // bus and each rear section a body of its own on its springs (the multibody
                 // articulation). The rear sections followed kinematically here before, hung

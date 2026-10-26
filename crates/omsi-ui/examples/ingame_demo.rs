@@ -239,6 +239,13 @@ fn main() {
             })
         })
         .unwrap_or(omsi_ui::ingame::Preview::Missing);
+    // (the live 3D view turned on, while it starts: DEMO_LIVE=1)
+    let live = std::env::var_os("DEMO_LIVE").is_some();
+    let preview = if live {
+        omsi_ui::ingame::Preview::Starting
+    } else {
+        preview
+    };
     o.shot(&format!("{dir}/add-vehicle.png"), |ui| {
         scene(ui);
         let makers = s(&["Example maker", "Another maker", "Third maker"]);
@@ -271,6 +278,7 @@ fn main() {
                     (example text). Line one of the description, as read from the vehicle's \
                     description file.\n\nPermissions: example text about how the vehicle may be used.",
                 preview,
+                live,
             },
         );
     });

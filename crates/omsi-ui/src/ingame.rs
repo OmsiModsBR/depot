@@ -676,6 +676,9 @@ pub struct AddVehicle<'a> {
     /// The author's description of the vehicle chosen (drawn as it is).
     pub description: &'a str,
     pub preview: Preview,
+    /// The player turned the live 3D view on (its button lit; the box shows `Preview::Live`,
+    /// `Starting` or `Failed` then).
+    pub live: bool,
 }
 
 /// What the picture box of the "Add vehicle" window shows.
@@ -693,10 +696,16 @@ pub enum Preview {
     Loading,
     /// No picture was drawn of this vehicle and paint yet.
     Missing,
+    /// The live 3D view's latest frame, drawn at the box's size.
+    Live { tex: usize },
+    /// The live 3D view is starting (the vehicle is being read).
+    Starting,
+    /// The live 3D view could not be shown.
+    Failed,
 }
 
 /// What a click in the "Add vehicle" window asked for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AddVehicleEvent {
     Maker(usize),
     Vehicle(usize),
@@ -708,6 +717,12 @@ pub enum AddVehicleEvent {
     Plate,
     Place,
     Cancel,
+    /// The live 3D view's button: on or off.
+    Live(bool),
+    /// The mouse dragged over the live view (points across, down): it turns the vehicle.
+    Orbit(f32, f32),
+    /// The wheel over the live view: the distance to the vehicle times this.
+    Zoom(f32),
 }
 
 /// Where the "Add vehicle" window is in a picture of `size` points: in the middle.
@@ -719,6 +734,25 @@ pub fn add_vehicle_rect(size: glam::Vec2) -> Rect {
         ((size.y - h) * 0.5).floor(),
         w,
         h,
+    )
+}
+
+/// Where the picture box of the "Add vehicle" window is in a picture of `size` points (the
+/// live 3D view is drawn at its size).
+pub fn add_vehicle_box(size: glam::Vec2) -> Rect {
+    let r = add_vehicle_rect(size);
+    let body = Rect::new(
+        r.x,
+        r.y + TITLE_H + 1.0,
+        r.w,
+        (r.h - TITLE_H - 1.0).max(0.0),
+    );
+    let lw = ((body.w - 64.0) * 0.43).floor();
+    Rect::new(
+        body.x + 20.0,
+        body.y + 14.0,
+        lw,
+        (body.h - FOOT_H - 14.0 - 4.0 * 62.0 - 18.0).clamp(80.0, 210.0),
     )
 }
 
@@ -860,12 +894,7 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     let x1 = x0 + lw + 24.0;
     let rw = body.right() - 20.0 - x1;
     // the picture of the vehicle, the bus alone filling the box
-    let box_ = Rect::new(
-        x0,
-        body.y + 14.0,
-        lw,
-        (body.h - FOOT_H - 14.0 - 4.0 * 62.0 - 18.0).clamp(80.0, 210.0),
-    );
+    let box_ = add_vehicle_box(size);
     ui.p().rounded(box_, 6.0, FIELD);
     ui.p().rounded_border(box_, 6.0, 1.0, LINE);
     match v.preview {
@@ -907,6 +936,49 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
                 Align::Center,
             );
         }
+        Preview::Live { tex } => ui.image_part(box_.inset(1.0), tex, [0.0, 0.0, 1.0, 1.0], 5.0),
+        Preview::Starting | Preview::Failed => {
+            let (s, c) = if v.preview == Preview::Starting {
+                ("Starting the 3D view…", MUTED)
+            } else {
+                ("The 3D view could not be shown", MUTED.alpha(0.85))
+            };
+            ui.text_in(
+                s,
+                box_.pad(12.0, 0.0),
+                13.0 * TS,
+                Weight::Regular,
+                c,
+                Align::Center,
+            );
+        }
+    }
+    // the live view turns with the mouse dragged over it and comes nearer with the wheel
+    if v.live {
+        if let Some(d) = ui.drag(id_of("add:turn"), box_) {
+            if d != Vec2::ZERO {
+                event = Some(AddVehicleEvent::Orbit(d.x, d.y));
+            }
+        }
+        let wheel = ui.input.wheel.y;
+        if wheel.abs() > 0.0 && ui.hover(box_) {
+            event = Some(AddVehicleEvent::Zoom((1.0 - wheel * 0.08).clamp(0.8, 1.25)));
+        }
+    }
+    // (the live view only when the player asks for it: it reads the vehicle and draws it
+    // beside the game)
+    let tip = if v.live {
+        "Back to the picture"
+    } else {
+        "Show it in 3D: drag to turn it, the wheel brings it nearer"
+    };
+    if live_button(
+        ui,
+        Vec2::new(box_.right() - 20.0, box_.y + 20.0),
+        v.live,
+        tip,
+    ) {
+        event = Some(AddVehicleEvent::Live(!v.live));
     }
     // the four dropdowns under it, as the original's lists by manufacturer, then model, then
     // paint and depot file
@@ -1012,6 +1084,36 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
         None => {}
     }
     event
+}
+
+/// The button in the picture box's corner that turns the live 3D view on and off ("3D" by
+/// a turning arrow): lit in the accent while it is on.
+fn live_button(ui: &mut Ui, top_right: Vec2, on: bool, tip: &str) -> bool {
+    const H: f32 = 26.0;
+    const W: f32 = 54.0;
+    let r = Rect::new(top_right.x - W, top_right.y, W, H);
+    let id = id_of("add:live");
+    let (h, _, clicked) = ui.interact(id, r);
+    let fill = match (on, h) {
+        (true, _) => accent(),
+        (false, true) => BUTTON,
+        (false, false) => PANEL.alpha(0.85),
+    };
+    ui.p().rounded(r, H * 0.5, fill);
+    if !on {
+        ui.p().rounded_border(r, H * 0.5, 1.0, EDGE);
+    }
+    let c = if on { on_accent() } else { FG };
+    ui.icon("360", Vec2::new(r.x + 17.0, r.center().y), 17.0, c);
+    ui.text_in_as_is(
+        "3D",
+        Rect::new(r.x + 28.0, r.y, W - 30.0, H),
+        12.5,
+        Weight::Bold,
+        c,
+    );
+    ui.tooltip(r, tip);
+    clicked
 }
 
 const GOOD: Color = Color::hex(0x4fc27a);
@@ -1247,6 +1349,7 @@ mod tests {
             plate_hint: "Automatic",
             description: "Example bus\nBuilt from 1990 to 1999.",
             preview: Preview::Missing,
+            live: false,
         };
         let frame = |ui: &mut Ui| {
             ui.begin(size, 1.0, 0.016);
@@ -1305,6 +1408,83 @@ mod tests {
         assert_eq!(click(&mut ui, place), Some(AddVehicleEvent::Place));
         let cancel = ui.drawn[&id_of("add:btn:1")].center();
         assert_eq!(click(&mut ui, cancel), Some(AddVehicleEvent::Cancel));
+        let live = ui.drawn[&id_of("add:live")].center();
+        assert_eq!(click(&mut ui, live), Some(AddVehicleEvent::Live(true)));
+    }
+
+    #[test]
+    fn the_live_view_turns_with_the_mouse_dragged_over_it() {
+        let size = Vec2::new(1672.0, 941.0);
+        let none: Vec<String> = Vec::new();
+        let vehicles = vec!["Bus".to_string()];
+        let mut ui = Ui::new();
+        let mut view = AddVehicle {
+            makers: &vehicles,
+            maker: 0,
+            vehicles: &vehicles,
+            vehicle: 0,
+            liveries: &none,
+            livery: 0,
+            depots: &none,
+            depot: 0,
+            numbers: &none,
+            number: 0,
+            plate: "",
+            plate_focused: false,
+            plate_hint: "",
+            description: "",
+            preview: Preview::Live { tex: 1 },
+            live: true,
+        };
+        let mut frame = |ui: &mut Ui, view: &AddVehicle| {
+            ui.begin(size, 1.0, 0.016);
+            let e = add_vehicle(ui, size, view);
+            ui.finish();
+            e
+        };
+        let b = add_vehicle_box(size);
+        frame(&mut ui, &view);
+        assert_eq!(
+            ui.drawn[&id_of("add:turn")],
+            b,
+            "the box the overlay sizes the view to"
+        );
+        // pressed in the box and moved: the moves come back, none before the mouse moved
+        ui.input.mouse = b.center();
+        ui.input.pressed = true;
+        ui.input.down = true;
+        assert_eq!(frame(&mut ui, &view), None);
+        ui.input.pressed = false;
+        ui.input.mouse += Vec2::new(12.0, -3.0);
+        assert_eq!(
+            frame(&mut ui, &view),
+            Some(AddVehicleEvent::Orbit(12.0, -3.0))
+        );
+        ui.input.mouse += Vec2::new(-5.0, 0.0);
+        assert_eq!(
+            frame(&mut ui, &view),
+            Some(AddVehicleEvent::Orbit(-5.0, 0.0))
+        );
+        ui.input.released = true;
+        ui.input.down = false;
+        frame(&mut ui, &view);
+        ui.input.released = false;
+        // the wheel over it comes nearer
+        ui.input.wheel = Vec2::new(0.0, 1.0);
+        assert!(matches!(
+            frame(&mut ui, &view),
+            Some(AddVehicleEvent::Zoom(k)) if k < 1.0
+        ));
+        ui.input.wheel = Vec2::ZERO;
+        // with the live view off the mouse dragged over the picture turns nothing
+        view.live = false;
+        view.preview = Preview::Missing;
+        ui.input.pressed = true;
+        ui.input.down = true;
+        frame(&mut ui, &view);
+        ui.input.pressed = false;
+        ui.input.mouse += Vec2::new(20.0, 0.0);
+        assert_eq!(frame(&mut ui, &view), None);
     }
 
     #[test]

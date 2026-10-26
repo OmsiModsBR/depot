@@ -588,6 +588,24 @@ impl Ui {
         (h, held, clicked)
     }
 
+    /// While the mouse holds the area `r` (pressed inside it), how far it moved since the last
+    /// frame (nothing on the frame it was pressed); None while it does not hold it.
+    pub fn drag(&mut self, id: Id, r: Rect) -> Option<Vec2> {
+        let (_, held, _) = self.interact(id, r);
+        let (kx, ky) = (id ^ 0xd2a6_0000_0000_0001, id ^ 0xd2a6_0000_0000_0002);
+        if !held {
+            self.anims.remove(&kx);
+            self.anims.remove(&ky);
+            return None;
+        }
+        let m = self.input.mouse;
+        let last = self.anims.get(&kx).zip(self.anims.get(&ky));
+        let d = last.map_or(Vec2::ZERO, |(&x, &y)| m - Vec2::new(x, y));
+        self.anims.insert(kx, m.x);
+        self.anims.insert(ky, m.y);
+        Some(d)
+    }
+
     /// `interact` for a widget that does something when clicked: with the keyboard focus on
     /// (`nav.enabled`) it is also a stop for Tab, and Enter or Space press it. Sliders, text
     /// fields, scroll bars and the cells inside a field use plain `interact`: nothing would
