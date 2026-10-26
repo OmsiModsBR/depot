@@ -181,7 +181,17 @@ impl<R: OriginalEngineRunner> Client<'_, R> {
                 failed: false,
             });
         }
-        let v = payload(&out.stdout).unwrap_or(Value::Null);
+        // an unknown state is never reported as a clean one
+        if !matches!(out.code, Some(0) | Some(8)) {
+            let p = problems_of(&out);
+            return Err(anyhow!(p
+                .first()
+                .map(|p| p.message)
+                .unwrap_or("OmsiLaunch did not answer")));
+        }
+        let v = payload(&out.stdout)
+            .filter(Value::is_object)
+            .ok_or_else(|| anyhow!("OmsiLaunch answered with something unreadable"))?;
         let b = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
         Ok(Recovery {
             pending: b("pending"),

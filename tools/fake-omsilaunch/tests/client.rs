@@ -55,6 +55,12 @@ fn client_session_and_recovery_against_the_fake() {
     std::env::set_var("FAKE_OL_SCENARIO", "recovery_failed");
     assert!(c.recover().unwrap().failed);
 
+    // an answer that does not say the state is never taken for a clean one
+    std::env::set_var("FAKE_OL_SCENARIO", "shim_fail");
+    assert!(c.recovery_status().is_err());
+    std::env::set_var("FAKE_OL_SCENARIO", "garbled");
+    assert!(c.recovery_status().is_err());
+
     // a start: the description is written outside the OMSI folder, the command line carries
     // every setting, and the description is gone once the session has ended
     std::env::set_var("FAKE_OL_SCENARIO", "ready");
@@ -92,6 +98,25 @@ fn client_session_and_recovery_against_the_fake() {
             && last.contains("/set:graphics.maxFPS=60")
             && last.contains("/spec:")
     );
+
+    // dropping the supervisor while the session runs keeps the description it may still read
+    std::env::set_var("FAKE_OL_SCENARIO", "ready");
+    std::env::set_var("FAKE_OL_RUN_MS", "400");
+    let l = launch::build(
+        &data,
+        &root,
+        "t3",
+        &World::New {
+            map: "maps/G/global.cfg".into(),
+            entrypoint: 1,
+        },
+        &Map::new(),
+        &Map::new(),
+    )
+    .unwrap();
+    let run = Running::new(c.start(&l.args).unwrap(), l.spec_file.clone());
+    drop(run);
+    assert!(l.spec_file.exists());
 
     std::env::set_var("FAKE_OL_SCENARIO", "crash");
     let l = launch::build(
