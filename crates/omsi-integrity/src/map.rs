@@ -321,11 +321,19 @@ impl<'a> Checker<'a> {
         fallback_bases: &[PathBuf],
         file: &str,
     ) {
-        // (a vehicle names them from its own folder, which may not be the model.cfg's)
-        self.masters = omsi_model::load_texchanges(model_dir, &model.texchanges);
-        for b in fallback_bases {
-            if self.masters.is_empty() {
-                self.masters = omsi_model::load_texchanges(b, &model.texchanges);
+        // each list is named from the vehicle's own folder (an object's: from its model.cfg's)
+        self.masters.clear();
+        for f in &model.texchanges {
+            let bases = fallback_bases
+                .iter()
+                .map(PathBuf::as_path)
+                .chain(std::iter::once(model_dir));
+            for b in bases {
+                if vfs::is_file(&resolve_path(b, f)) {
+                    let got = omsi_model::load_texchanges(b, std::slice::from_ref(f));
+                    self.masters.extend(got);
+                    break;
+                }
             }
         }
         for md in &model.meshes {
@@ -517,7 +525,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn texture(&mut self, path: &Path, by: &str) {
+    pub(crate) fn texture(&mut self, path: &Path, by: &str) {
         if let Some(file) = self.seen_texture.get(path) {
             // (checked already: each finding about it counts one more file that names it)
             for code in ["texture-npot", "texture-unreadable", "path-too-long"] {
@@ -608,7 +616,7 @@ pub(crate) fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 
 /// A texture name that stands for "no texture": exporters write `null.bmp` into slots that
 /// have none.
-fn is_null_texture(name: &str) -> bool {
+pub(crate) fn is_null_texture(name: &str) -> bool {
     let n = name.trim();
     n.is_empty()
         || Path::new(&n.replace('\\', "/"))

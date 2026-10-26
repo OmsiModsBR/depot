@@ -1,6 +1,6 @@
-use crate::map::Checker;
+use crate::map::{is_null_texture, Checker};
 use crate::report::{Report, Severity};
-use omsi_cfg::{resolve_path, vfs};
+use omsi_cfg::{resolve_path, vfs, CfgFile};
 use omsi_model::Model;
 use omsi_vehicle::sound::SoundCfg;
 use omsi_vehicle::vehicle::Vehicle;
@@ -64,14 +64,16 @@ impl Checker<'_> {
                         .flatten()
                         .collect();
                         self.model_meshes(&model, &model_dir, &dirs, &bases, &file);
+                        self.paints(&model, &dir, &dirs);
                     }
-                    Err(_) => self.add(
+                    Err(e) => self.add(
                         Severity::Error,
                         "model-missing",
                         self.rel(&mp),
                         &file,
-                        "The model.cfg the vehicle names is missing or unreadable; it has no body."
-                            .into(),
+                        format!(
+                            "The model.cfg the vehicle names is missing or unreadable ({e}); it has no body."
+                        ),
                         None,
                     ),
                 }
@@ -170,6 +172,87 @@ impl Checker<'_> {
                     None,
                 );
             }
+        }
+    }
+}
+
+impl Checker<'_> {
+    /// The textures of the paint schemes, found as the vehicle loader finds them: the
+    /// `[CTC]` folders are named from the vehicle's folder, every content root's copy of a
+    /// folder is read (a `.cti` of the same name in a root of higher priority wins), then the
+    /// model's own paint items follow. A paint's texture is searched in the paint's folder
+    /// first.
+    fn paints(&mut self, model: &Model, vehicle_dir: &Path, dirs: &[PathBuf]) {
+        // (an item only counts for a model that has a [CTCTexture] of that name: the others
+        // are slots of a folder shared by several models)
+        let slots: Vec<String> = model
+            .ctc_textures
+            .iter()
+            .map(|(n, _)| n.trim().to_ascii_lowercase())
+            .collect();
+        let has = |ctc: &str| slots.contains(&ctc.trim().to_ascii_lowercase());
+        let mut item_dir = vehicle_dir.to_path_buf();
+        for (i, c) in model.ctc.iter().enumerate() {
+            let folder = resolve_path(vehicle_dir, &c.path);
+            if i == 0 {
+                item_dir = folder.clone();
+            }
+            let mut seen = std::collections::HashSet::new();
+            for d in omsi_cfg::mirrored_dirs(&folder) {
+                let mut ctis: Vec<PathBuf> = vfs::read_dir_paths(&d)
+                    .into_iter()
+                    .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("cti")))
+                    .collect();
+                ctis.sort();
+                for cti in ctis {
+                    let name = cti
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                        .unwrap_or_default();
+                    if !seen.insert(name) {
+                        continue;
+                    }
+                    let by = self.rel(&cti);
+                    let Ok(cfg) = CfgFile::read(&cti) else {
+                        continue;
+                    };
+                    let mut r = cfg.reader();
+                    while let Some(k) = r.next_keyword() {
+                        if k == "item" {
+                            let _name = r.str();
+                            let ctc = r.str().to_string();
+                            let texture = r.str().to_string();
+                            if has(&ctc) {
+                                self.paint_texture(&texture, &d, dirs, &by);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let by = self.rel(&model.path);
+        for it in model.items.iter().filter(|it| has(&it.ctc)) {
+            self.paint_texture(&it.texture, &item_dir, dirs, &by);
+        }
+    }
+
+    fn paint_texture(&mut self, name: &str, folder: &Path, dirs: &[PathBuf], by: &str) {
+        let name = name.trim();
+        if is_null_texture(name) {
+            return;
+        }
+        let mut look: Vec<&Path> = vec![folder];
+        look.extend(dirs.iter().map(|d| d.as_path()));
+        match omsi_texture::find_texture_uncached(name, &look) {
+            Some(p) => self.texture(&p, by),
+            None => self.add(
+                Severity::Warning,
+                "texture-missing",
+                name.to_string(),
+                by,
+                "A paint scheme names a texture that is missing; that paint shows white.".into(),
+                None,
+            ),
         }
     }
 }
