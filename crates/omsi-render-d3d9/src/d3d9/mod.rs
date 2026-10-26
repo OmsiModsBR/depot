@@ -271,11 +271,6 @@ impl D3d9Device {
             let d3d = Direct3DCreate9Ex(D3D_SDK_VERSION)
                 .map_err(|e| BackendError::Unsupported(format!("Direct3D 9Ex: {e}")))?;
             let (caps, raw) = read_caps(&d3d)?;
-            let mut ident = D3DADAPTER_IDENTIFIER9::default();
-            let vendor = match d3d.GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &mut ident) {
-                Ok(()) => ident.VendorId,
-                Err(_) => 0,
-            };
             if !caps.meets_floor() {
                 return Err(BackendError::Unsupported(format!(
                     "{} has {:?} and textures up to {}; Shader Model 3.0 and 2048 are needed",
@@ -308,6 +303,7 @@ impl D3d9Device {
             .map_err(map_err)?;
             let device = some(device, "device")?;
             let pipeline = Self::build_pipeline(&device)?;
+            let a2c = scene::A2c::probe(&d3d);
             let scene_caps = scene::SceneCaps::read(&d3d, &raw);
             Ok(Self {
                 _d3d: d3d,
@@ -328,7 +324,7 @@ impl D3d9Device {
                 msaa: (1, 1),
                 anisotropy: 1,
                 max_anisotropy: raw.MaxAnisotropy.max(1),
-                a2c: scene::A2c::of_vendor(vendor),
+                a2c: a2c,
             })
         }
     }

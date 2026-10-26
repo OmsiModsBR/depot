@@ -119,9 +119,9 @@ Known differences from the default renderer, each for a later PR:
 * The anti-aliasing option is plain multisampling of the window's back buffer
   (`set_quality`, the nearest count the card offers). Alpha-tested edges (leaves, fences) are
   smoothed by alpha-to-coverage when multisampling is on: only the all but transparent texels
-  are discarded, the rest hands its alpha to the coverage through the driver's switch (chosen
-  by the adapter's vendor: `ATOC` for Nvidia and Intel, `A2M1` for AMD; any other adapter
-  keeps the discard at the reference). The scene targets of the mirrors are
+  are discarded, the rest hands its alpha to the coverage through the driver's switch (the one the
+  driver reports by a format query: `ATOC` or `A2M1`; a driver with neither keeps the discard
+  at the reference). The scene targets of the mirrors are
   not multisampled and keep the discard. The
   anisotropic filtering option applies to the picture maps (diffuse, transparency, night
   and detail textures), up to the card's limit.

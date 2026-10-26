@@ -528,9 +528,9 @@ fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePip
 }
 
 /// The render states of a kind of batch.
-/// The driver switch of alpha-to-coverage under Direct3D 9, which the adapter's vendor decides:
-/// Nvidia and Intel read a format code on the adaptive-tessellation state, AMD one on the
-/// point-size state. A vendor without one draws the cut by discard as without multisampling.
+/// The driver switch of alpha-to-coverage under Direct3D 9, which the driver reports: a format
+/// code on the adaptive-tessellation state (`ATOC`, Nvidia and others) or on the point-size state
+/// (`A2M1`, AMD). A driver with neither draws the cut by discard as without multisampling.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum A2c {
     None,
@@ -539,11 +539,34 @@ pub(super) enum A2c {
 }
 
 impl A2c {
-    pub(super) fn of_vendor(vendor_id: u32) -> Self {
-        match vendor_id {
-            0x10DE | 0x8086 => Self::Atoc,
-            0x1002 => Self::A2m,
-            _ => Self::None,
+    /// The switch the driver reports having: it answers a format query for the code of the
+    /// one it reads (the documented way to ask), the first of the two it offers.
+    pub(super) fn probe(d3d: &IDirect3D9Ex) -> Self {
+        let mut mode = D3DDISPLAYMODE::default();
+        // SAFETY: the out-parameter is a live local.
+        let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
+            .map(|_| mode.Format)
+            .unwrap_or(D3DFMT_X8R8G8B8);
+        let has = |code: &[u8; 4]| {
+            // SAFETY: plain query on a live interface.
+            unsafe {
+                d3d.CheckDeviceFormat(
+                    D3DADAPTER_DEFAULT,
+                    D3DDEVTYPE_HAL,
+                    display,
+                    0,
+                    D3DRTYPE_SURFACE,
+                    D3DFORMAT(four_cc(code)),
+                )
+            }
+            .is_ok()
+        };
+        if has(b"ATOC") {
+            Self::Atoc
+        } else if has(b"A2M1") {
+            Self::A2m
+        } else {
+            Self::None
         }
     }
 
