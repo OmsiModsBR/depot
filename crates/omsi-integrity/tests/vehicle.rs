@@ -103,12 +103,12 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     write(
         &root,
         "Vehicles/Test/model/model.cfg",
-        "[mesh]\nbody.x\n[CTC]\nPaint\nTexture\\paints\n0\n",
+        "[mesh]\nbody.x\n[CTC]\nPaint\nTexture\\paints\n0\n[CTCTexture]\nbody_ctc\nbody.bmp\n",
     );
     write(
         &root,
         "Vehicles/Test/texture/paints/red.cti",
-        "[item]\nRed\nbody_ctc\nred.bmp\n[item]\nBlue\nbody_ctc\nblue.bmp\n",
+        "[item]\nRed\nbody_ctc\nred.bmp\n[item]\nBlue\nbody_ctc\nblue.bmp\n[item]\nRed\nroof_ctc\nroof_red.bmp\n",
     );
     write(
         &root,
@@ -118,11 +118,18 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
-    assert_eq!(r.findings[0].file, "Vehicles/Test/texture/paints/blue.bmp");
-    assert_eq!(
-        r.findings[0].referenced_by.as_ref().unwrap().0,
-        "Vehicles/Test/texture/paints/red.cti"
+    assert!(
+        r.findings[0].file.ends_with("blue.bmp"),
+        "{}",
+        r.findings[0].file
     );
+    // (the folder is spelled as the model.cfg writes it: `Texture` on a system that ignores case)
+    assert!(r.findings[0]
+        .referenced_by
+        .as_ref()
+        .unwrap()
+        .0
+        .eq_ignore_ascii_case("Vehicles/Test/texture/paints/red.cti"));
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -157,6 +164,39 @@ fn a_reflection_camera_texture_needs_no_file() {
         "Vehicles/Test/model/body.x",
         MESH.replace("body.bmp", "reflexion0.bmp"),
     );
+    let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
+    assert!(r.findings.is_empty(), "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_texture_change_list_is_named_from_the_vehicles_folder() {
+    let root = temp_root("texchange");
+    complete(&root);
+    fs::remove_file(root.join("Vehicles/Test/texture/body.bmp")).unwrap();
+    // two lists: one exists beside the model.cfg as well as in the vehicle's folder, the
+    // other only in the vehicle's folder
+    write(
+        &root,
+        "Vehicles/Test/model/model.cfg",
+        "[mesh]\nbody.x\n[texchanges]\ntexture\\chtex.cfg\ntexture\\chtex2.cfg\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/model/texture/chtex.cfg",
+        "[newtexchangemaster]\nother.bmp\nvar\n[entries]\n1\nalt.bmp\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/texture/chtex.cfg",
+        "[newtexchangemaster]\nbody.bmp\nvar\n[entries]\n1\nalt.bmp\n",
+    );
+    write(
+        &root,
+        "Vehicles/Test/texture/chtex2.cfg",
+        "[newtexchangemaster]\nbody.bmp\nvar\n[entries]\n1\nalt.bmp\n",
+    );
+    write(&root, "Vehicles/Test/texture/alt.bmp", bmp(512, 512));
     let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);

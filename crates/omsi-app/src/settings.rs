@@ -11,7 +11,7 @@ pub(crate) fn data_dir() -> Option<PathBuf> {
 }
 
 /// Version of the settings file (`version=`); files without it are version 1.
-pub const SETTINGS_VERSION: u32 = 2;
+pub const SETTINGS_VERSION: u32 = 3;
 
 /// The items of the information bar the `custom` layout can switch one by one (settings
 /// keys `info_item_<name>`).
@@ -98,10 +98,15 @@ pub struct Settings {
     pub maintenance: u8,
     /// `[AIUnschedFactor]`: the share of the random traffic (percent of the map's density).
     pub ai_unsched_factor: f32,
-    /// `[AIMaxCountScheduled]`: timetable vehicles on the road at once (0 = no limit).
+    /// `[AIMaxCountScheduled]`: timetable vehicles on the road at once, 0 to 1000 (0 = none).
     pub ai_max_scheduled: u32,
-    /// `[AIMaxCountParked]`: parked cars placed in the loaded tiles (0 = every space, -1 =
-    /// none at all).
+    /// `[AIMaxCountRandom]`'s first line: vehicles without a timetable (cars) on the road at
+    /// once, 0 to 1000.
+    pub ai_max_random: u32,
+    /// `[AIPriorityScheduled]`: the least important timetable line (1 to 4) that still runs:
+    /// 1 only the most important lines, 4 all of them.
+    pub ai_priority_scheduled: u8,
+    /// `[AIMaxCountParked]`: the share of the parking spaces with a car, 0 to 100 percent.
     pub ai_max_parked: i32,
     /// `[AIMaxCountRandom]`'s second line: OMSI makes this many people at the start and
     /// no more - everybody waiting, walking and riding comes out
@@ -253,10 +258,6 @@ pub struct Settings {
     pub metar_sync: bool,
     /// The airport (ICAO) whose report the METAR sync follows; empty: the one nearest the map.
     pub metar_station: String,
-    /// Texts the interface has no translation of are translated on this machine by a
-    /// neural translation model (downloaded once, ~620 MB), for the languages OMSI has no
-    /// language files of.
-    pub machine_translation: bool,
     /// Which meshes cast sun shadows: "all" solid ones, or "omsi" - only those the models
     /// mark `[shadow]`, as OMSI 2's shadows do.
     pub shadow_casters: String,
@@ -523,8 +524,10 @@ impl Settings {
             driver: true,
             maintenance: 0,
             ai_unsched_factor: 1.0,
-            ai_max_scheduled: 0,
-            ai_max_parked: 0,
+            ai_max_scheduled: 1000,
+            ai_max_random: 1000,
+            ai_priority_scheduled: 4,
+            ai_max_parked: 100,
             ai_max_humans: 200,
             collision_vehicles: true,
             collision_objects: true,
@@ -538,7 +541,6 @@ impl Settings {
             time_sync: false,
             metar_sync: false,
             metar_station: String::new(),
-            machine_translation: false,
             shadow_casters: "all".into(),
             ctrl_deadzone: 0.0,
             right_stick_look: true,
@@ -873,7 +875,7 @@ impl Settings {
                         .ok()
                         .filter(|x| x.is_finite())
                         .map(|x| if x > 5.0 { x / 100.0 } else { x })
-                        .map(|x| x.clamp(0.0, 3.0))
+                        .map(|x| x.clamp(0.0, 2.0))
                         .unwrap_or(s.pax_density)
                 }
                 "vol_ai" => {
@@ -932,16 +934,28 @@ impl Settings {
                         .parse::<f32>()
                         .ok()
                         .filter(|x| x.is_finite())
-                        .map(|x| (x / 100.0).clamp(0.0, 3.0))
+                        .map(|x| (x / 100.0).clamp(0.01, 3.0))
                         .unwrap_or(s.ai_unsched_factor)
                 }
                 "ai_max_scheduled" | "aimaxcountscheduled" => {
                     s.ai_max_scheduled = v.parse().unwrap_or(s.ai_max_scheduled)
                 }
+                "ai_max_random" | "aimaxcountrandom" => {
+                    s.ai_max_random = v
+                        .parse::<u32>()
+                        .map(|x| x.min(1000))
+                        .unwrap_or(s.ai_max_random)
+                }
+                "ai_priority_scheduled" | "aipriorityscheduled" => {
+                    s.ai_priority_scheduled = v
+                        .parse::<u8>()
+                        .map(|x| x.clamp(1, 4))
+                        .unwrap_or(s.ai_priority_scheduled)
+                }
                 "ai_max_humans" | "aimaxhumans" => {
                     s.ai_max_humans = v
                         .parse::<u32>()
-                        .map(|x| x.max(1))
+                        .map(|x| x.min(1000))
                         .unwrap_or(s.ai_max_humans)
                 }
                 "ai_max_parked" | "aimaxcountparked" => {
@@ -978,7 +992,6 @@ impl Settings {
                         .collect::<String>()
                         .to_ascii_uppercase()
                 }
-                "machine_translation" => s.machine_translation = b(v),
                 "ctrl_deadzone" => {
                     s.ctrl_deadzone = v
                         .parse::<f32>()
@@ -1361,10 +1374,21 @@ impl Settings {
         // Files older than version 2 say `boarding=pay` because that was the launcher's
         // default, not because anybody chose it: passengers then stood at the cash desk
         // waiting for a driver who did not know he had to sell them a ticket.
-        if version < SETTINGS_VERSION && s.boarding == "pay" {
+        if version < 2 && s.boarding == "pay" {
             log::info!("settings: boarding=pay from an old settings file taken as auto (choose pay again in the launcher to keep it)");
             s.boarding = "auto".into();
         }
+        // Before version 3 the count options meant something else: no timetable limit was 0
+        // and every parking space was 0 (-1 none, other values a count); they now follow the
+        // original's sliders (0 is none, 1000 and 100 percent the most).
+        if version < 3 {
+            if s.ai_max_scheduled == 0 {
+                s.ai_max_scheduled = 1000;
+            }
+            s.ai_max_parked = if s.ai_max_parked == -1 { 0 } else { 100 };
+        }
+        s.ai_max_scheduled = s.ai_max_scheduled.min(1000);
+        s.ai_max_parked = s.ai_max_parked.clamp(0, 100);
         s
     }
 
@@ -1414,8 +1438,8 @@ impl Settings {
         text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
         text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
         // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
-        text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
-        text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nmachine_translation={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.machine_translation as u8, self.shadow_casters, self.reflections as u8));
+        text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
+        text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
         text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
         text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
         text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
@@ -1475,8 +1499,15 @@ impl Settings {
         self.render_scale = 0.0;
         self.anisotropy = 1;
         self.post_aa = "off".into();
-        self.mirror_size = 0;
-        self.mirror_refresh = "off".into();
+        // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
+        // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
+        if let Some(l) = crate::api_limits::d3d9("mirror_size") {
+            self.mirror_size = l.fit(&self.mirror_size.to_string()).parse().unwrap_or(0);
+        }
+        if let Some(l) = crate::api_limits::d3d9("mirror_refresh") {
+            self.mirror_refresh = l.fit(&self.mirror_refresh);
+        }
+        self.mirror_hud = 0;
         self.windy_trees = false;
         // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
         // `fair_weather_clouds`)
@@ -1591,6 +1622,38 @@ mod round_trip;
 
 #[cfg(test)]
 mod tests {
+    /// The Traffic AI counts follow the original's sliders: a version 2 file said 0 for "no
+    /// limit" and "every space", -1 for "no parked cars", and a count for the rest.
+    #[test]
+    fn the_traffic_counts_of_an_old_file_are_taken_over() {
+        let old = Settings::from_text("version=2\nai_max_scheduled=0\nai_max_parked=0\n");
+        assert_eq!((old.ai_max_scheduled, old.ai_max_parked), (1000, 100));
+        let none = Settings::from_text("version=2\nai_max_parked=-1\nai_max_scheduled=25\n");
+        assert_eq!((none.ai_max_scheduled, none.ai_max_parked), (25, 0));
+        let count = Settings::from_text("version=2\nai_max_parked=250\n");
+        assert_eq!(count.ai_max_parked, 100);
+        let now = Settings::from_text("version=3\nai_max_scheduled=0\nai_max_parked=51\n");
+        assert_eq!((now.ai_max_scheduled, now.ai_max_parked), (0, 51));
+    }
+
+    /// The ranges of the original's sliders.
+    #[test]
+    fn the_traffic_and_people_options_keep_to_the_originals_ranges() {
+        let s = Settings::from_text(
+            "version=3\nai_max_random=5000\nai_priority_scheduled=9\nai_unsched_factor=0\nai_max_humans=0\npax_density=3\n",
+        );
+        assert_eq!(s.ai_max_random, 1000);
+        assert_eq!(s.ai_priority_scheduled, 4);
+        assert!((s.ai_unsched_factor - 0.01).abs() < 1e-6);
+        assert_eq!(s.ai_max_humans, 0);
+        assert_eq!(s.pax_density, 2.0);
+        let d = Settings::default();
+        assert_eq!(
+            (d.ai_max_scheduled, d.ai_max_random, d.ai_priority_scheduled),
+            (1000, 1000, 4)
+        );
+    }
+
     /// The launcher writes the accents the game reads: the same names, in the same order, the
     /// default first.
     #[test]
@@ -1632,8 +1695,9 @@ mod tests {
         s.msaa = 8;
         s.anisotropy = 16;
         s.render_scale = 0.5;
-        s.mirror_size = 512;
-        s.mirror_refresh = "full".into();
+        s.mirror_size = 64;
+        s.mirror_refresh = "eco".into();
+        s.mirror_hud = 3;
         s.windy_trees = true;
         s.night_brightness = 1.0;
         s.clouds = false;
@@ -1644,8 +1708,12 @@ mod tests {
                 "msaa" => s.msaa == 1,
                 "render_scale" => s.render_scale == 0.0,
                 "anisotropy" => s.anisotropy == 1,
-                "mirror_size" => s.mirror_size == 0,
-                "mirror_refresh" => s.mirror_refresh == "off",
+                "mirror_size" => {
+                    s.mirror_size == 128
+                        && l.allows(&s.mirror_size.to_string())
+                        && s.mirror_hud == 0
+                }
+                "mirror_refresh" => s.mirror_refresh == "full" && l.allows(&s.mirror_refresh),
                 "windy_trees" => !s.windy_trees,
                 "clouds" => s.clouds,
                 "shadows" => !s.shadows,
@@ -1680,16 +1748,21 @@ mod tests {
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
                 // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
                 let saved = Settings::from_text(&format!(
-                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=512\nmirror_refresh=full\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
+                    "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!(
                     (saved.msaa, saved.anisotropy, saved.render_scale),
                     (1, 1, 0.0)
                 );
+                // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
                 assert_eq!(
-                    (saved.mirror_size, saved.mirror_refresh.as_str()),
-                    (0, "off")
+                    (
+                        saved.mirror_size,
+                        saved.mirror_refresh.as_str(),
+                        saved.mirror_hud
+                    ),
+                    (512, "full", 0)
                 );
                 // (what it does draw stays as saved: env maps and shadow meshes)
                 assert!(saved.reflections && saved.shadow_blobs);

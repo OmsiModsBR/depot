@@ -213,25 +213,37 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
         v["maintenance"] = json!((x as i64).clamp(0, 4));
     }
     if let Some(x) = num("aiunschedfactor") {
-        v["ai_unsched_factor"] = json!((x as i64).clamp(0, 300));
+        v["ai_unsched_factor"] = json!((x as i64).clamp(1, 300));
     }
     if let Some(x) = num("aimaxcountscheduled") {
-        v["ai_max_scheduled"] = json!((x as i64).max(0));
+        v["ai_max_scheduled"] = json!((x as i64).clamp(0, 1000));
     }
-    // (the second line of [AIMaxCountRandom]: the people OMSI makes)
+    // (the first line of [AIMaxCountRandom]: the vehicles without a timetable; the second:
+    // the people OMSI makes)
+    if let Some(x) = o
+        .values
+        .get("aimaxcountrandom")
+        .and_then(|x| x.first())
+        .and_then(|x| x.trim().parse::<i64>().ok())
+    {
+        v["ai_max_random"] = json!(x.clamp(0, 1000));
+    }
     if let Some(x) = o
         .values
         .get("aimaxcountrandom")
         .and_then(|x| x.get(1))
         .and_then(|x| x.trim().parse::<i64>().ok())
     {
-        v["ai_max_humans"] = json!(x.max(1));
+        v["ai_max_humans"] = json!(x.clamp(0, 1000));
+    }
+    if let Some(x) = num("aipriorityscheduled") {
+        v["ai_priority_scheduled"] = json!((x as i64).clamp(1, 4));
     }
     if let Some(x) = num("aimaxcountparked") {
-        v["ai_max_parked"] = json!((x as i64).max(0));
+        v["ai_max_parked"] = json!((x as i64).clamp(0, 100));
     }
     if let Some(x) = num("aipassfactor") {
-        v["pax_density"] = json!((x / 100.0).clamp(0.0, 3.0));
+        v["pax_density"] = json!((x / 100.0).clamp(0.0, 2.0));
     }
     // flags: present or not
     v["head_movement"] = json!(o.flag("driverview_moving"));
@@ -3109,6 +3121,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["voice_chat"] = json!(true);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
+    // the game's log with everything it loads and every failure (off: the usual log)
+    v["detailed_log"] = json!(false);
     // the window's size in pixels, "auto" to fit the screen (#904)
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
@@ -3133,8 +3147,10 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     for (k, d) in [
         ("maintenance", json!(0)),
         ("ai_unsched_factor", json!(100)),
-        ("ai_max_scheduled", json!(0)),
-        ("ai_max_parked", json!(0)),
+        ("ai_max_scheduled", json!(1000)),
+        ("ai_max_random", json!(1000)),
+        ("ai_priority_scheduled", json!(4)),
+        ("ai_max_parked", json!(100)),
         ("ai_max_humans", json!(200)),
         ("use_real_time", json!(false)),
         ("use_real_date", json!(false)),
@@ -3176,7 +3192,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("time_sync", json!(false)),
         ("metar_sync", json!(false)),
         ("metar_station", json!("")),
-        ("machine_translation", json!(false)),
         ("shadow_casters", json!("all")),
         ("shadow_blobs", json!(true)),
         ("reflections", json!(true)),
@@ -3323,7 +3338,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .ok()
                     .filter(|x| x.is_finite())
                     .map(|x| if x > 5.0 { x / 100.0 } else { x })
-                    .map(|x| x.clamp(0.0, 3.0))
+                    .map(|x| x.clamp(0.0, 2.0))
                     .unwrap_or(1.0))
             }
             "triple_fov_deg" => {
@@ -3475,8 +3490,26 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 v[&k] = json!(val
                     .trim_end_matches('%')
                     .parse::<f64>()
-                    .map(|x| x.max(0.0) as i64)
-                    .unwrap_or(0))
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(1000))
+            }
+            "ai_max_random" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(1000))
+            }
+            "ai_priority_scheduled" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(1.0, 4.0) as i64)
+                    .unwrap_or(4))
             }
             // (0 to 4, as the game reads it)
             "maintenance" => {
@@ -3494,7 +3527,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .parse::<f64>()
                     .ok()
                     .filter(|x| x.is_finite())
-                    .map(|x| x.clamp(0.0, 300.0))
+                    .map(|x| x.clamp(1.0, 300.0))
                     .map(|x| {
                         if x.fract() == 0.0 {
                             json!(x as i64)
@@ -3504,12 +3537,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     })
                     .unwrap_or(json!(100))
             }
-            // (-1: no parked cars at all, #864)
+            // (the share of the parking spaces with a car, as the file of version 2 and
+            // before had it: -1 none, anything else a count - taken apart below)
             "ai_max_parked" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0))
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .map(|x| x.max(-1.0) as i64)
+                    .unwrap_or(100))
             }
             "ai_max_humans" => {
-                v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .map(|x| x.clamp(0.0, 1000.0) as i64)
+                    .unwrap_or(200))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
                 if k != "navigator_corner"
@@ -3645,7 +3685,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "head_tracking_invert_y"
             | "head_tracking_invert_z"
             | "voice_chat"
-            | "launcher_rest" => v[&k] = json!(b(val)),
+            | "launcher_rest"
+            | "detailed_log" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => {
@@ -3877,7 +3918,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "metar_sync"
             | "ui_scale_window"
             | "notes"
-            | "machine_translation"
             | "reflections"
             | "steering_linear"
             | "old_steering"
@@ -3968,6 +4008,19 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     if version < 2 && v["boarding"] == "pay" {
         v["boarding"] = json!("auto");
     }
+    // before version 3 the count options meant something else (no limit was 0, every
+    // parking space 0, -1 none): they follow the original's sliders now
+    if version < 3 {
+        if v["ai_max_scheduled"] == json!(0) {
+            v["ai_max_scheduled"] = json!(1000);
+        }
+        v["ai_max_parked"] = json!(if v["ai_max_parked"] == json!(-1) {
+            0
+        } else {
+            100
+        });
+    }
+    v["ai_max_parked"] = json!(v["ai_max_parked"].as_i64().unwrap_or(100).clamp(0, 100));
     v
 }
 
@@ -4207,7 +4260,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     };
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let text = format!(
-        "# Project Depot settings (written by the launcher)\nversion=2\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4262,12 +4315,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
-        f("ai_unsched_factor", 100.0).clamp(0.0, 300.0),
-        n("ai_max_scheduled", 0).max(0),
-        n("ai_max_parked", 0).max(-1),
-        n("ai_max_humans", 200).max(1),
+        f("ai_unsched_factor", 100.0).clamp(1.0, 300.0),
+        n("ai_max_scheduled", 1000).clamp(0, 1000),
+        n("ai_max_random", 1000).clamp(0, 1000),
+        n("ai_priority_scheduled", 4).clamp(1, 4),
+        n("ai_max_parked", 100).clamp(0, 100),
+        n("ai_max_humans", 200).clamp(0, 1000),
         b("use_real_time", false),
         b("use_real_date", false),
         b("use_real_year", false),
@@ -4281,7 +4336,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("precision_zoom", false),
     );
     let text = format!(
-        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
         match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
             "tickets" => "tickets",
             "off" => "off",
@@ -4295,7 +4350,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             Some(Value::Number(x)) => x.as_f64().unwrap_or(1.0).clamp(1.0, 30.0),
             _ => 1.0,
         },
-        b("machine_translation", false),
         if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") { "omsi" } else { "all" },
         b("shadow_blobs", true),
         f("ctrl_deadzone", 0.0).clamp(0.0, 0.3),
@@ -4384,7 +4438,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .filter(|x| x.is_finite())
         .unwrap_or(16.0)
         .clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\ndetailed_log={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), b("detailed_log", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -4996,7 +5050,17 @@ pub struct Launched {
     pub others: usize,
 }
 
-/// Start a game for the duty. Any number may run at once; each writes its own log.
+/// Whether the "detailed log" setting is on (the games started from here then write debug
+/// lines of the game's own crates to their log).
+pub fn detailed_log_on() -> bool {
+    get_settings()
+        .ok()
+        .and_then(|v| v.get("detailed_log").and_then(|x| x.as_bool()))
+        .unwrap_or(false)
+}
+
+/// Start a game for the duty. The core does not limit how many run (the CLI and tests use
+/// that); the launcher allows one at a time and enforces it itself.
 pub fn launch(d: &Duty) -> Result<Launched> {
     if IN_PROCESS_GAMES {
         let args = duty_args(d)?;
@@ -5360,6 +5424,7 @@ mod tests {
             ("steer_look", json!(true)),
             ("voice_chat", json!(false)),
             ("launcher_rest", json!(false)),
+            ("detailed_log", json!(true)),
             ("camera_collision", json!(false)),
             ("brake_hold", json!(false)),
             ("auto_clutch", json!(false)),
@@ -5402,6 +5467,7 @@ mod tests {
             "steer_look",
             "voice_chat",
             "launcher_rest",
+            "detailed_log",
             "camera_collision",
             "brake_hold",
             "auto_clutch",

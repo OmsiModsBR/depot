@@ -107,11 +107,6 @@ objc2-io-kit = { version = "0.3.2", default-features = false, features = ["std",
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString"] }
 objc2-game-controller = { version = "0.3.2", default-features = false, features = ["std", "GCController", "GCDevice", "GCExtendedGamepad", "GCPhysicalInputProfile", "GCControllerElement", "GCControllerButtonInput", "GCControllerDirectionPad", "GCControllerAxisInput", "GCProductCategories", "block2"] }
 
-# the interface's machine translation (`mt`): CTranslate2 with Meta's NLLB model, as the
-# `trad` crate does it (Apple's Accelerate for the maths; Apple silicon only)
-[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-ct2rs = { version = "0.10.1", default-features = false, features = ["tokenizers", "accelerate", "ruy"] }
-
 # Android: winit's NativeActivity backend, the system log, and JNI for the few things only
 # Java offers (storage permission, the screen's cut-outs, vibration)
 [target.'cfg(target_os = "android")'.dependencies]

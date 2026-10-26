@@ -1,6 +1,6 @@
 //! The Diagnostics page: what to look at, or send along, when something goes wrong - this
-//! build, the OMSI 2 folder and whether its essential files are there, the game's log, and
-//! the games running now. Nothing on it changes a setting.
+//! build, the OMSI 2 folder and whether its essential files are there, the game's log.
+//! Nothing on it changes a setting.
 
 use super::{Launcher, Page};
 use glam::Vec2;
@@ -40,8 +40,7 @@ fn overview(l: &mut Launcher, area: Rect) {
     folder_card(l, right);
     let y2 = y + 316.0;
     let rest = (area.bottom() - y2 - 24.0).max(200.0);
-    log_card(l, Rect::new(area.x, y2, col, rest));
-    games_card(l, Rect::new(area.x + col + 16.0, y2, col, rest));
+    log_card(l, Rect::new(area.x, y2, area.w, rest));
 }
 
 /// A label and its value on one line of a card, `y` its middle.
@@ -57,12 +56,18 @@ fn line(l: &mut Launcher, r: Rect, y: f32, label: &str, value: &str) {
         Weight::Regular,
         MUTED,
     );
+    // (the value starts after the label when a translation is longer than the usual column)
+    let label_w = l
+        .ui
+        .fonts
+        .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
+    let x = (r.x + 170.0).max(r.x + 19.0 + label_w + 14.0);
     clipped(
         &mut l.ui,
         value,
-        r.x + 170.0,
+        x,
         y,
-        r.w - 190.0,
+        (r.right() - 20.0 - x).max(40.0),
         13.0,
         Weight::Regular,
         FG,
@@ -164,13 +169,26 @@ fn log_card(l: &mut Launcher, r: Rect) {
         "Preview helper",
         &super::preview::helper_log().to_string_lossy(),
     );
-    l.ui.paragraph(
-        "Each is written again when it starts (the game's with each game). A game started with RUST_LOG=debug writes more.",
-        Vec2::new(r.x + 19.0, r.y + 172.0),
-        r.w - 38.0,
-        12.5,
-        Weight::Regular,
-        MUTED,
+    // (the next games started from here write what they load and every failure)
+    let mut detailed = l
+        .state
+        .settings
+        .get("detailed_log")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let row = Rect::new(r.x + 19.0, r.y + 166.0, r.w - 38.0, 32.0);
+    if l.ui.toggle(
+        "diagnostics:detailed-log",
+        row,
+        &mut detailed,
+        "Detailed log",
+    ) {
+        l.state.settings["detailed_log"] = serde_json::json!(detailed);
+        l.state.settings_dirty = 0.3;
+    }
+    l.ui.tooltip(
+        row,
+        "Each is written again when it starts (the game's with each game). With the detailed log on, the next games also write everything they load and every failure, so the file is larger.",
     );
     let b = Rect::new(
         r.x + 19.0,
@@ -189,70 +207,6 @@ fn log_card(l: &mut Launcher, r: Rect) {
         l.ui.clipboard_out = Some(log.to_string_lossy().to_string());
         l.state
             .set_status("The log's path is on the clipboard.", false);
-    }
-}
-
-fn games_card(l: &mut Launcher, r: Rect) {
-    let running: Vec<String> = l
-        .state
-        .instances
-        .iter()
-        .filter(|i| i.running)
-        .map(|i| {
-            omsi_ui::tr("%{map} (process %{pid})")
-                .replace("%{map}", &super::state::short_map(&i.map))
-                .replace("%{pid}", &i.pid.to_string())
-        })
-        .collect();
-    card(
-        &mut l.ui,
-        r,
-        "Games running",
-        Some(&running.len().to_string()),
-    );
-    if running.is_empty() {
-        clipped(
-            &mut l.ui,
-            "No game started from here is running.",
-            r.x + 19.0,
-            r.y + 72.0,
-            r.w - 38.0,
-            13.0,
-            Weight::Regular,
-            MUTED,
-        );
-    } else {
-        let mut y = r.y + 72.0;
-        for g in running.iter().take(4) {
-            dot(&mut l.ui, r.x + 24.0, y, Status::Found);
-            clipped(
-                &mut l.ui,
-                g,
-                r.x + 42.0,
-                y,
-                r.w - 61.0,
-                13.0,
-                Weight::Regular,
-                FG,
-            );
-            y += 30.0;
-        }
-    }
-    let b = Rect::new(
-        r.x + 19.0,
-        (r.y + 140.0).max(r.bottom() - 84.0),
-        r.w - 38.0,
-        44.0,
-    );
-    if action(
-        &mut l.ui,
-        "diagnostics:sessions",
-        b,
-        "OPEN SESSIONS",
-        "Each game's log as it runs, and its Stop button.",
-        true,
-    ) {
-        l.go(Page::Sessions);
     }
 }
 

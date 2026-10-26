@@ -332,11 +332,19 @@ impl<'a> Checker<'a> {
         fallback_bases: &[PathBuf],
         file: &str,
     ) {
-        // (a vehicle names them from its own folder, which may not be the model.cfg's)
-        self.masters = omsi_model::load_texchanges(model_dir, &model.texchanges);
-        for b in fallback_bases {
-            if self.masters.is_empty() {
-                self.masters = omsi_model::load_texchanges(b, &model.texchanges);
+        // each list is named from the vehicle's own folder (an object's: from its model.cfg's)
+        self.masters.clear();
+        for f in &model.texchanges {
+            let bases = fallback_bases
+                .iter()
+                .map(PathBuf::as_path)
+                .chain(std::iter::once(model_dir));
+            for b in bases {
+                if vfs::is_file(&resolve_path(b, f)) {
+                    let got = omsi_model::load_texchanges(b, std::slice::from_ref(f));
+                    self.masters.extend(got);
+                    break;
+                }
             }
         }
         for md in &model.meshes {

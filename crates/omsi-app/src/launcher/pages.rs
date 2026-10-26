@@ -1,7 +1,7 @@
 //! The launcher's other pages: the driver's profile, the settings, the key bindings, the
 //! running games, the mods and where things are.
 
-use super::state::{fmt_bytes, hhmm, short_map};
+use super::state::{fmt_bytes, short_map};
 use super::theme::*;
 use super::ui::{id_of, matches, ButtonKind, Ui};
 use super::Launcher;
@@ -10,13 +10,13 @@ use omsi_launcher_lib as core;
 use omsi_launcher_ui::Page as UiPage;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
-use serde_json::{json, Value};
+use serde_json::json;
 
 #[derive(Default)]
 pub struct PagesView {
     pub new_driver: String,
     pub confirm_delete: Option<std::time::Instant>,
-    /// The drive chosen on Profile / Sessions (the driver's drives, most recent first).
+    /// The drive chosen on Profile (the driver's drives, most recent first).
     pub drive: usize,
     /// Its details window is open.
     pub drive_details: bool,
@@ -109,8 +109,7 @@ fn release_feedback(io: &mut Option<crate::controllers::Devices>, active: &mut b
 pub fn profile(l: &mut Launcher, area: Rect) {
     let body = l.page_title(area, UiPage::Profile);
     if super::mobile::mobile() {
-        // (a phone: the driver and the record on the left, the drives on the right; its games
-        // running have a page of their own)
+        // (a phone: the driver and the record on the left, the drives on the right)
         let left_w = (body.w * 0.56).min(700.0);
         let left = Rect::new(body.x, body.y, left_w, body.h);
         let right = Rect::new(
@@ -133,10 +132,8 @@ pub fn profile(l: &mut Launcher, area: Rect) {
         recent_drives(l, right);
         return;
     }
-    // (as the concept: the driver and their record on the left, the drives finished on the
-    // right, and the games open now along the foot - they belong to the driver too)
-    let open = open_sessions_h(l, body.h);
-    let upper = (body.h - open - GAP * 1.5).max(0.0);
+    // (the driver and their record on the left, the drives finished on the right)
+    let upper = body.h;
     let right_w = omsi_launcher_ui::kit::fit(440.0, body.w);
     let left = Rect::new(body.x, body.y, body.w - right_w - GAP * 1.5, upper);
     let top = Rect::new(left.x, left.y, left.w, 132.0);
@@ -153,10 +150,6 @@ pub fn profile(l: &mut Launcher, area: Rect) {
     recent_drives(
         l,
         Rect::new(left.right() + GAP * 1.5, body.y, right_w, upper),
-    );
-    open_sessions(
-        l,
-        Rect::new(body.x, body.y + upper + GAP * 1.5, body.w, open),
     );
 }
 
@@ -541,215 +534,6 @@ fn recent_drives(l: &mut Launcher, right: Rect) {
     }
 }
 
-/// The open sessions card's height for a page `body_h` high: a row for each game, the log
-/// under its row when open, a third of the page at most.
-fn open_sessions_h(l: &Launcher, body_h: f32) -> f32 {
-    let rows = l.state.instances.len().max(1) as f32;
-    let logs = l
-        .state
-        .instances
-        .iter()
-        .filter(|i| l.state.open_logs.contains(&i.pid))
-        .count() as f32;
-    (52.0 + rows * 62.0 + logs * 190.0).min((body_h * 0.36).max(118.0))
-}
-
-/// The games open now (and those that ended since the launcher started): their log and stop.
-fn open_sessions(l: &mut Launcher, r: Rect) {
-    l.ui.panel(r);
-    let inner = Launcher::card_title(
-        &mut l.ui,
-        Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
-        "Open sessions",
-    );
-    l.ui.text_in(
-        "games running now",
-        Rect::new(inner.x, r.y + 14.0, inner.w, 18.0),
-        12.0,
-        Weight::Regular,
-        TEXT_DIM,
-        Align::Right,
-    );
-    let list = l.state.instances.clone();
-    if list.is_empty() {
-        l.ui.text_in(
-            "No game started from here is running. Start one from Maps.",
-            Rect::new(inner.x, inner.y, inner.w, 30.0),
-            13.0,
-            Weight::Regular,
-            TEXT_DIM,
-            Align::Left,
-        );
-        return;
-    }
-    let names: std::collections::HashMap<String, String> = l
-        .state
-        .vehicles
-        .iter()
-        .map(|v| (v.file.clone(), v.name.clone()))
-        .collect();
-    let short_bus = |b: &str| {
-        names.get(b).cloned().unwrap_or_else(|| {
-            b.rsplit('/')
-                .next()
-                .unwrap_or("")
-                .trim_end_matches(".bus")
-                .to_string()
-        })
-    };
-    let mut actions: Vec<(u32, &str)> = Vec::new();
-    let stopping = l.state.stopping.clone();
-    let open_logs = l.state.open_logs.clone();
-    let logs = l.state.logs.clone();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    l.ui.scroll_area(
-        "open-sessions",
-        Rect::new(inner.x - 4.0, inner.y - 4.0, inner.w + 8.0, inner.h + 8.0),
-        &mut |ui, v| {
-            let mut y = v.y + 4.0;
-            for i in &list {
-                let row = Rect::new(v.x + 4.0, y, v.w - 16.0, 52.0);
-                ui.p().rounded(row, 6.0, Color::WHITE.alpha(0.04));
-                let running = i.running;
-                ui.p().circle(
-                    Vec2::new(row.x + 16.0, row.center().y),
-                    4.5,
-                    if running { OK } else { TEXT_FAINT },
-                );
-                let on_line = i
-                    .line
-                    .as_ref()
-                    .map(|ln| {
-                        omsi_ui::tr(" on line %{line}").replace(
-                            "%{line}",
-                            &format!(
-                                "{ln}{}",
-                                i.tour
-                                    .as_ref()
-                                    .map(|t| format!(" / {t}"))
-                                    .unwrap_or_default()
-                            ),
-                        )
-                    })
-                    .unwrap_or_default();
-                let bus = if i.bus.is_empty() {
-                    omsi_ui::tr("on foot").into_owned()
-                } else {
-                    short_bus(&i.bus)
-                };
-                let bw = 96.0;
-                let buttons = if running { bw * 2.0 + 8.0 } else { bw };
-                let tw = row.w - 40.0 - buttons - 16.0;
-                ui.text_in(
-                    &format!("{} · {bus}{on_line}", short_map(&i.map)),
-                    Rect::new(row.x + 30.0, row.y + 7.0, tw, 20.0),
-                    13.5,
-                    Weight::Medium,
-                    TEXT,
-                    Align::Left,
-                );
-                let status = if running {
-                    if stopping.contains(&i.pid) || i.stopping.is_some() {
-                        omsi_ui::tr("stopping - saving the drive…").into_owned()
-                    } else {
-                        let t = now.saturating_sub(i.started);
-                        omsi_ui::tr("running %{time}").replace(
-                            "%{time}",
-                            &format!("{:02}:{:02}:{:02}", t / 3600, (t / 60) % 60, t % 60),
-                        )
-                    }
-                } else {
-                    let how = if i.exit_code == Some(0) {
-                        String::new()
-                    } else if i.killed {
-                        omsi_ui::tr(" (killed - it did not end by itself, the drive is not saved)")
-                            .into_owned()
-                    } else {
-                        i.exit_code
-                            .map(|c| {
-                                omsi_ui::tr(" (exit code %{code})")
-                                    .replace("%{code}", &c.to_string())
-                            })
-                            .unwrap_or_default()
-                    };
-                    omsi_ui::tr("ended%{how}").replace("%{how}", &how)
-                };
-                ui.text_in(
-                    &format!("{} · {status}", i.profile),
-                    Rect::new(row.x + 30.0, row.y + 27.0, tw, 18.0),
-                    12.0,
-                    Weight::Regular,
-                    TEXT_DIM,
-                    Align::Left,
-                );
-                let log_open = open_logs.contains(&i.pid);
-                let mut bx = row.right() - 10.0 - bw;
-                if running {
-                    let busy = stopping.contains(&i.pid);
-                    if ui.button(
-                        &format!("stop-{}", i.pid),
-                        Rect::new(bx, row.y + 10.0, bw, 32.0),
-                        if busy { "Stopping…" } else { "Stop" },
-                        None,
-                        ButtonKind::Danger,
-                    ) && !busy
-                    {
-                        actions.push((i.pid, "stop"));
-                    }
-                    bx -= bw + 8.0;
-                }
-                if ui.button(
-                    &format!("log-{}", i.pid),
-                    Rect::new(bx, row.y + 10.0, bw, 32.0),
-                    if log_open { "Hide log" } else { "Open log" },
-                    None,
-                    ButtonKind::Normal,
-                ) {
-                    actions.push((i.pid, "log"));
-                }
-                y += 60.0;
-                if log_open {
-                    let lr = Rect::new(row.x, y - 2.0, row.w, 180.0);
-                    ui.p().rounded(lr, 6.0, Color::rgba(6, 8, 10, 0.9));
-                    let lines = logs.get(&i.pid).cloned().unwrap_or_default();
-                    for (k, line) in lines.iter().rev().take(9).rev().enumerate() {
-                        ui.text_in(
-                            line,
-                            Rect::new(lr.x + 10.0, lr.y + 6.0 + k as f32 * 18.0, lr.w - 20.0, 18.0),
-                            11.0,
-                            Weight::Regular,
-                            if line.contains("ERROR") {
-                                DANGER
-                            } else if line.contains("WARN") {
-                                WARN
-                            } else {
-                                TEXT_DIM
-                            },
-                            Align::Left,
-                        );
-                    }
-                    y += 190.0;
-                }
-            }
-            y - v.y
-        },
-    );
-    for (pid, what) in actions {
-        match what {
-            "stop" => l.state.stop(pid),
-            _ => {
-                if !l.state.open_logs.remove(&pid) {
-                    l.state.open_logs.insert(pid);
-                    l.state.log_tail(pid);
-                }
-            }
-        }
-    }
-}
-
 /// What a drive's details window lists: (what, the value).
 fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
     let on_time = (s.stops - s.early - s.late).max(0);
@@ -790,7 +574,7 @@ fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
     ]
 }
 
-/// The window over Profile / Sessions with the chosen drive's details.
+/// The window over Profile with the chosen drive's details.
 pub fn drive_dialog(l: &mut Launcher) {
     let s = l
         .state
@@ -2632,401 +2416,6 @@ pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
     }
 }
 
-// --- sessions ---------------------------------------------------------------------------------
-
-fn ago(t: u64) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(t);
-    let s = now.saturating_sub(t);
-    if s < 60 {
-        format!("{s} s")
-    } else if s < 3600 {
-        omsi_ui::tr("%{m} min").replace("%{m}", &(s / 60).to_string())
-    } else {
-        omsi_ui::tr("%{h} h %{m} min")
-            .replace("%{h}", &(s / 3600).to_string())
-            .replace("%{m}", &((s / 60) % 60).to_string())
-    }
-}
-
-pub fn sessions(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, UiPage::Sessions);
-    let list = l.state.instances.clone();
-    if list.is_empty() {
-        let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
-        l.ui.panel(r);
-        l.ui.icon(
-            "sports_esports",
-            Vec2::new(r.x + 40.0, r.center().y),
-            36.0,
-            TEXT_FAINT,
-        );
-        l.ui.paragraph("No game is running. Start a duty on the Drive page; to drive with friends, turn on hosting on the Multiplayer page and give them the code shown here.", Vec2::new(r.x + 76.0, r.y + 30.0), r.w - 100.0, 13.5, Weight::Regular, TEXT_DIM);
-        return;
-    }
-    let names: std::collections::HashMap<String, String> = l
-        .state
-        .vehicles
-        .iter()
-        .map(|v| (v.file.clone(), v.name.clone()))
-        .collect();
-    let short_bus = |b: &str| {
-        names.get(b).cloned().unwrap_or_else(|| {
-            b.rsplit('/')
-                .next()
-                .unwrap_or("")
-                .trim_end_matches(".bus")
-                .to_string()
-        })
-    };
-    let mut y = body.y - l.ui.scroll.get(&id_of("sessions")).copied().unwrap_or(0.0);
-    // (the page's whole width, as the other pages: at 900 a wide window had the cards in its
-    // left half and the buttons in the middle of nowhere)
-    let view = Rect::new(body.x, body.y, body.w, body.h);
-    let mut actions: Vec<(u32, &str)> = Vec::new();
-    let mut copy: Option<String> = None;
-    l.ui.push_clip(view, 0.0);
-    for i in &list {
-        let lan = i.lan_status.clone().unwrap_or(Value::Null);
-        let role = lan.get("role").and_then(|x| x.as_str()).unwrap_or("");
-        let players: Vec<Value> = lan
-            .get("players")
-            .and_then(|x| x.as_array())
-            .cloned()
-            .unwrap_or_default();
-        let chat: Vec<String> = lan
-            .get("chat")
-            .and_then(|x| x.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|c| c.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let warnings: Vec<String> = lan
-            .get("warnings")
-            .and_then(|x| x.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|c| c.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let log_open = l.state.open_logs.contains(&i.pid);
-        let log_lines = l.state.logs.get(&i.pid).cloned().unwrap_or_default();
-        let mut h = 96.0;
-        if role == "host" {
-            h += 96.0;
-        } else if !role.is_empty() {
-            h += 24.0;
-        }
-        h += if players.is_empty() {
-            0.0
-        } else {
-            26.0 + players.len() as f32 * 20.0
-        };
-        h += if chat.is_empty() {
-            0.0
-        } else {
-            26.0 + chat.len().min(6) as f32 * 18.0
-        };
-        h += warnings.len() as f32 * 20.0;
-        if log_open {
-            h += 220.0;
-        }
-        let r = Rect::new(view.x, y, view.w, h);
-        l.ui.panel(r);
-        let running = i.running;
-        let c = Vec2::new(r.x + 24.0, r.y + 28.0);
-        if running {
-            let pulse = (l.ui.time * 3.0).sin() * 0.5 + 0.5;
-            l.ui.p().circle(c, 6.0 + 3.0 * pulse, OK.alpha(0.25));
-        }
-        l.ui.p()
-            .circle(c, 6.0, if running { OK } else { TEXT_FAINT });
-        let duty = i
-            .line
-            .as_ref()
-            .map(|ln| {
-                omsi_ui::tr(" · line %{line}").replace(
-                    "%{line}",
-                    &format!(
-                        "{ln}{}",
-                        i.tour
-                            .as_ref()
-                            .map(|t| format!(" / {t}"))
-                            .unwrap_or_default()
-                    ),
-                )
-            })
-            .unwrap_or_default();
-        l.ui.text_in(
-            &format!("{} · {}{duty}", short_map(&i.map), short_bus(&i.bus)),
-            Rect::new(r.x + 42.0, r.y + 16.0, r.w - 260.0, 24.0),
-            16.0,
-            Weight::Black,
-            TEXT,
-            Align::Left,
-        );
-        let status = if running {
-            if l.state.stopping.contains(&i.pid) || i.stopping.is_some() {
-                omsi_ui::tr("stopping - saving the run…").into_owned()
-            } else {
-                omsi_ui::tr("running for %{time}").replace("%{time}", &ago(i.started))
-            }
-        } else {
-            let how = if i.exit_code == Some(0) {
-                String::new()
-            } else if i.killed {
-                omsi_ui::tr(" (killed - it did not end by itself, the run is not saved)")
-                    .into_owned()
-            } else {
-                i.exit_code
-                    .map(|c| omsi_ui::tr(" (exit code %{code})").replace("%{code}", &c.to_string()))
-                    .unwrap_or_default()
-            };
-            omsi_ui::tr("ended%{how}").replace("%{how}", &how)
-        };
-        l.ui.text_in(
-            &omsi_ui::tr("%{status} · driver %{name}")
-                .replace("%{status}", &status)
-                .replace("%{name}", &i.profile),
-            Rect::new(r.x + 42.0, r.y + 42.0, r.w - 60.0, 18.0),
-            12.0,
-            Weight::Regular,
-            TEXT_DIM,
-            Align::Left,
-        );
-        l.ui.text_in(
-            &i.last_line,
-            Rect::new(r.x + 42.0, r.y + 62.0, r.w - 60.0, 18.0),
-            11.5,
-            Weight::Regular,
-            TEXT_FAINT,
-            Align::Left,
-        );
-        // buttons
-        let bw = 110.0;
-        if running {
-            let stopping = l.state.stopping.contains(&i.pid);
-            if l.ui.button(
-                &format!("stop-{}", i.pid),
-                Rect::new(r.right() - 18.0 - bw, r.y + 14.0, bw, 34.0),
-                if stopping { "Stopping…" } else { "Stop" },
-                Some("close"),
-                ButtonKind::Danger,
-            ) && !stopping
-            {
-                actions.push((i.pid, "stop"));
-            }
-        }
-        if l.ui.button(
-            &format!("log-{}", i.pid),
-            Rect::new(
-                r.right() - 18.0 - bw - if running { bw + 8.0 } else { 0.0 },
-                r.y + 14.0,
-                bw,
-                34.0,
-            ),
-            if log_open { "Hide log" } else { "Show log" },
-            Some("receipt_long"),
-            ButtonKind::Normal,
-        ) {
-            actions.push((i.pid, "log"));
-        }
-        let mut yy = r.y + 86.0;
-        if role == "host" {
-            let code = lan
-                .get("code")
-                .and_then(|x| x.as_str())
-                .unwrap_or("")
-                .to_string();
-            let box_r = Rect::new(r.x + 20.0, yy, r.w - 40.0, 84.0);
-            l.ui.p().rounded(box_r, 10.0, accent().alpha(0.10));
-            l.ui.p()
-                .rounded_border(box_r, 10.0, 1.0, accent().alpha(0.5));
-            l.ui.text_in(
-                "SESSION CODE",
-                Rect::new(box_r.x + 16.0, box_r.y + 8.0, 200.0, 16.0),
-                10.5,
-                Weight::Black,
-                accent(),
-                Align::Left,
-            );
-            l.ui.text_in(
-                &code,
-                Rect::new(box_r.x + 16.0, box_r.y + 26.0, box_r.w - 170.0, 30.0),
-                20.0,
-                Weight::Condensed,
-                TEXT,
-                Align::Left,
-            );
-            l.ui.text_in(
-                "Your friends paste it into Multiplayer → Connect by Code.",
-                Rect::new(box_r.x + 16.0, box_r.y + 58.0, box_r.w - 170.0, 18.0),
-                11.5,
-                Weight::Regular,
-                TEXT_DIM,
-                Align::Left,
-            );
-            if l.ui.button(
-                &format!("copy-{}", i.pid),
-                Rect::new(box_r.right() - 146.0, box_r.y + 24.0, 130.0, 36.0),
-                "Copy code",
-                Some("content_copy"),
-                ButtonKind::Primary,
-            ) {
-                copy = Some(code.clone());
-            }
-            yy += 96.0;
-        } else if role == "client" {
-            let connected = lan
-                .get("connected")
-                .and_then(|x| x.as_bool())
-                .unwrap_or(false);
-            let text = if let Some(rej) = lan.get("rejected").and_then(|x| x.as_str()) {
-                omsi_ui::tr("not connected: %{reason}").replace("%{reason}", &rej.to_string())
-            } else if connected {
-                omsi_ui::tr("connected to %{host}").replace(
-                    "%{host}",
-                    lan.get("host_name").and_then(|x| x.as_str()).unwrap_or(""),
-                )
-            } else {
-                "connecting…".to_string()
-            };
-            l.ui.text_in(
-                &omsi_ui::tr("Multiplayer: %{text}").replace("%{text}", &text),
-                Rect::new(r.x + 42.0, yy, r.w - 60.0, 20.0),
-                12.5,
-                Weight::Medium,
-                if connected { OK } else { WARN },
-                Align::Left,
-            );
-            yy += 24.0;
-        }
-        if !players.is_empty() {
-            l.ui.text_in(
-                "PLAYERS",
-                Rect::new(r.x + 42.0, yy, 200.0, 18.0),
-                10.5,
-                Weight::Black,
-                TEXT_FAINT,
-                Align::Left,
-            );
-            yy += 22.0;
-            for p in &players {
-                let s = |k: &str| p.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-                let pax = p.get("passengers").and_then(|x| x.as_i64()).unwrap_or(0);
-                let dest = if s("destination").is_empty() {
-                    String::new()
-                } else {
-                    format!(" · {} → {}", s("line"), s("destination"))
-                };
-                l.ui.text_in(
-                    &format!(
-                        "{} · {}{dest}{} · {}",
-                        s("name"),
-                        short_bus(&s("bus")),
-                        if pax > 0 {
-                            omsi_ui::tr(" · %{n} passengers").replace("%{n}", &pax.to_string())
-                        } else {
-                            String::new()
-                        },
-                        s("where")
-                    ),
-                    Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0),
-                    12.5,
-                    Weight::Medium,
-                    TEXT_SOFT,
-                    Align::Left,
-                );
-                yy += 20.0;
-            }
-        }
-        if !chat.is_empty() {
-            l.ui.text_in(
-                "CHAT  (V in the game to write)",
-                Rect::new(r.x + 42.0, yy + 4.0, 300.0, 18.0),
-                10.5,
-                Weight::Black,
-                TEXT_FAINT,
-                Align::Left,
-            );
-            yy += 26.0;
-            for c in chat.iter().rev().take(6).rev() {
-                l.ui.text_in(
-                    c,
-                    Rect::new(r.x + 42.0, yy, r.w - 60.0, 18.0),
-                    12.0,
-                    Weight::Regular,
-                    TEXT_SOFT,
-                    Align::Left,
-                );
-                yy += 18.0;
-            }
-        }
-        for w in &warnings {
-            l.ui.icon("warning", Vec2::new(r.x + 50.0, yy + 9.0), 15.0, WARN);
-            l.ui.text_in(
-                w,
-                Rect::new(r.x + 64.0, yy, r.w - 80.0, 18.0),
-                12.0,
-                Weight::Medium,
-                WARN,
-                Align::Left,
-            );
-            yy += 20.0;
-        }
-        if log_open {
-            let lr = Rect::new(r.x + 20.0, yy + 6.0, r.w - 40.0, 204.0);
-            l.ui.p().rounded(lr, 8.0, Color::rgba(6, 8, 10, 0.9));
-            let text: Vec<String> = log_lines.iter().rev().take(11).rev().cloned().collect();
-            for (k, line) in text.iter().enumerate() {
-                l.ui.text_in(
-                    line,
-                    Rect::new(lr.x + 10.0, lr.y + 6.0 + k as f32 * 18.0, lr.w - 20.0, 18.0),
-                    11.0,
-                    Weight::Regular,
-                    if line.contains("ERROR") {
-                        DANGER
-                    } else if line.contains("WARN") {
-                        WARN
-                    } else {
-                        TEXT_DIM
-                    },
-                    Align::Left,
-                );
-            }
-        }
-        y += h + GAP;
-    }
-    l.ui.pop_clip();
-    // scrolling the list
-    let content = y + l.ui.scroll.get(&id_of("sessions")).copied().unwrap_or(0.0) - body.y;
-    if l.ui.hover(view) && l.ui.input.wheel.y.abs() > 0.0 {
-        let s = l.ui.scroll.entry(id_of("sessions")).or_insert(0.0);
-        *s = (*s - l.ui.input.wheel.y * 40.0).clamp(0.0, (content - view.h).max(0.0));
-    }
-    for (pid, what) in actions {
-        match what {
-            "stop" => l.state.stop(pid),
-            _ => {
-                if !l.state.open_logs.remove(&pid) {
-                    l.state.open_logs.insert(pid);
-                    l.state.log_tail(pid);
-                }
-            }
-        }
-    }
-    if let Some(c) = copy {
-        l.ui.clipboard_out = Some(c);
-        l.state.set_status("Session code copied.", false);
-    }
-    let _ = hhmm;
-}
-
 // --- mods ----------------------------------------------------------------------------------------
 
 pub fn mods(l: &mut Launcher, area: Rect) {
@@ -3482,19 +2871,21 @@ pub fn tutorials(l: &mut Launcher, area: Rect) {
             TEXT,
             Align::Left,
         );
-        l.ui.push_clip(
+        // (scrolled: a long lesson text ran past the card and was cut off)
+        l.ui.scroll_area(
+            &format!("tut-text-{n}"),
             Rect::new(r.x + 18.0, r.y + 46.0, r.w - 36.0, r.h - 110.0),
-            0.0,
+            &mut |ui, v| {
+                ui.paragraph(
+                    text,
+                    Vec2::new(v.x, v.y),
+                    v.w - 12.0,
+                    12.5,
+                    Weight::Regular,
+                    TEXT_DIM,
+                )
+            },
         );
-        l.ui.paragraph(
-            text,
-            Vec2::new(r.x + 18.0, r.y + 46.0),
-            r.w - 36.0,
-            12.5,
-            Weight::Regular,
-            TEXT_DIM,
-        );
-        l.ui.pop_clip();
         if l.ui.button(
             &format!("tut-{n}"),
             Rect::new(r.x + 18.0, r.bottom() - 58.0, 200.0, 40.0),
