@@ -118,7 +118,11 @@ fn the_textures_of_the_paint_schemes_are_checked_in_the_paint_folder() {
     let r = check_vehicle(&root, &root.join("Vehicles/Test/Test.bus"));
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
-    assert_eq!(r.findings[0].file, "blue.bmp");
+    assert!(
+        r.findings[0].file.ends_with("blue.bmp"),
+        "{}",
+        r.findings[0].file
+    );
     // (the folder is spelled as the model.cfg writes it: `Texture` on a system that ignores case)
     assert!(r.findings[0]
         .referenced_by

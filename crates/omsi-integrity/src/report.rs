@@ -29,6 +29,9 @@ pub struct Finding {
     pub detail: Option<String>,
     /// The first file that names it, and how many files do.
     pub referenced_by: Option<(String, usize)>,
+    /// The same finding is in the baseline report (see [`Report::mark_known`]): it was there
+    /// before, not something a change made.
+    pub known: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -44,6 +47,27 @@ pub struct Report {
 impl Report {
     pub fn count(&self, s: Severity) -> usize {
         self.findings.iter().filter(|f| f.severity == s).count()
+    }
+
+    /// Mark the findings that `baseline` (the same content checked as it was, e.g. the
+    /// untouched original of an optimized map) has too, by kind and file.
+    pub fn mark_known(&mut self, baseline: &Report) {
+        let before: std::collections::HashSet<(&str, &str)> = baseline
+            .findings
+            .iter()
+            .map(|f| (f.code, f.file.as_str()))
+            .collect();
+        for f in &mut self.findings {
+            f.known = before.contains(&(f.code, f.file.as_str()));
+        }
+    }
+
+    /// Findings of a severity that are not in the baseline.
+    pub fn count_new(&self, s: Severity) -> usize {
+        self.findings
+            .iter()
+            .filter(|f| f.severity == s && !f.known)
+            .count()
     }
 
     /// Findings per code, for a summary line.

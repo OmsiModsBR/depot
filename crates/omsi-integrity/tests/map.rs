@@ -151,7 +151,10 @@ fn a_night_map_a_material_declares_must_exist() {
     let r = check_map(&root, &root.join("Maps/Test"));
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
-    assert_eq!(r.findings[0].file, "wall_night.bmp");
+    assert_eq!(
+        r.findings[0].file,
+        "Sceneryobjects/house/texture/wall_night.bmp"
+    );
     write(
         &root,
         "Sceneryobjects/house/texture/wall_night.bmp",
@@ -516,5 +519,62 @@ fn a_file_naming_a_texture_twice_is_one_user() {
         .find(|f| f.code == "texture-npot")
         .unwrap();
     assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", f);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn findings_the_baseline_has_too_are_marked_known() {
+    let before = temp_root("base-before");
+    complete(&before);
+    fs::remove_file(before.join("Splines/road.sli")).unwrap();
+    map(&before, TILE);
+    let base = check_map(&before, &before.join("Maps/Test"));
+
+    // the optimized copy: the same spline is still missing, and a new texture problem
+    let after = temp_root("base-after");
+    complete(&after);
+    fs::remove_file(after.join("Splines/road.sli")).unwrap();
+    write(
+        &after,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(1400, 1400),
+    );
+    map(&after, TILE);
+    let mut r = check_map(&after, &after.join("Maps/Test"));
+    r.mark_known(&base);
+    let spline = r
+        .findings
+        .iter()
+        .find(|f| f.code == "spline-missing")
+        .unwrap();
+    let npot = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap();
+    assert!(spline.known && !npot.known);
+    assert_eq!(r.count_new(Severity::Error), 0);
+    assert_eq!(r.count_new(Severity::NotOptimized), 1);
+    let _ = fs::remove_dir_all(&before);
+    let _ = fs::remove_dir_all(&after);
+}
+
+#[test]
+fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
+    let root = temp_root("same-name");
+    complete(&root);
+    write(&root, "Sceneryobjects/other/other.sco", "[mesh]\nhouse.x\n");
+    write(&root, "Sceneryobjects/other/model/house.x", MESH);
+    fs::remove_file(root.join("Sceneryobjects/house/texture/wall.bmp")).unwrap();
+    let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\other\\other.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\n");
+    map(&root, &tile);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let missing: Vec<&str> = r
+        .findings
+        .iter()
+        .filter(|f| f.code == "texture-missing")
+        .map(|f| f.file.as_str())
+        .collect();
+    assert_eq!(missing.len(), 2, "{missing:?}");
     let _ = fs::remove_dir_all(&root);
 }

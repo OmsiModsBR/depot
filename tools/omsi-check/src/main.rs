@@ -54,6 +54,11 @@ struct Args {
     /// The same for one vehicle file, relative to the installation (`Vehicles/Bus/Bus.bus`).
     #[arg(long)]
     integrity_vehicle: Option<String>,
+    /// With `--integrity` / `--integrity-vehicle`: another installation holding the same
+    /// content as it was (the untouched original of an optimized map). A finding it has too
+    /// is marked as already there, so what a change caused stands out.
+    #[arg(long)]
+    integrity_baseline: Option<PathBuf>,
 }
 
 mod dump;
@@ -289,8 +294,13 @@ fn integrity(r: omsi_integrity::Report, verbose: bool) -> Result<()> {
                 )
             })
             .unwrap_or_default();
+        let known = if f.known {
+            " [already in the baseline]"
+        } else {
+            ""
+        };
         println!(
-            "[{}] {} {}: {}{used}",
+            "[{}] {} {}: {}{used}{known}",
             f.severity.label(),
             f.code,
             f.file,
@@ -302,13 +312,22 @@ fn integrity(r: omsi_integrity::Report, verbose: bool) -> Result<()> {
             }
         }
     }
+    let line = |s: Severity| {
+        let (all, new) = (r.count(s), r.count_new(s));
+        if all == new {
+            all.to_string()
+        } else {
+            format!("{all} ({new} not in the baseline)")
+        }
+    };
     println!(
         "{} errors, {} warnings, {} not optimized",
-        r.count(Severity::Error),
-        r.count(Severity::Warning),
-        r.count(Severity::NotOptimized)
+        line(Severity::Error),
+        line(Severity::Warning),
+        line(Severity::NotOptimized)
     );
-    if r.is_complete() {
+    // only an error the baseline does not have fails the run
+    if r.count_new(Severity::Error) == 0 {
         Ok(())
     } else {
         std::process::exit(1)
@@ -361,11 +380,23 @@ fn main() -> Result<()> {
     }
     if let Some(map) = &args.integrity {
         let map_dir = resolve_path(&resolve_path(&root, "Maps"), map);
-        return integrity(omsi_integrity::check_map(&root, &map_dir), args.verbose);
+        let mut r = omsi_integrity::check_map(&root, &map_dir);
+        if let Some(base) = &args.integrity_baseline {
+            let base = base.canonicalize()?;
+            let dir = resolve_path(&resolve_path(&base, "Maps"), map);
+            r.mark_known(&omsi_integrity::check_map(&base, &dir));
+        }
+        return integrity(r, args.verbose);
     }
     if let Some(vehicle) = &args.integrity_vehicle {
         let file = resolve_path(&root, vehicle);
-        return integrity(omsi_integrity::check_vehicle(&root, &file), args.verbose);
+        let mut r = omsi_integrity::check_vehicle(&root, &file);
+        if let Some(base) = &args.integrity_baseline {
+            let base = base.canonicalize()?;
+            let file = resolve_path(&base, vehicle);
+            r.mark_known(&omsi_integrity::check_vehicle(&base, &file));
+        }
+        return integrity(r, args.verbose);
     }
     if args.dump.is_some() || args.dump_detail.is_some() {
         let (rv, rvs) = roadvehicle_builtins(&root);
