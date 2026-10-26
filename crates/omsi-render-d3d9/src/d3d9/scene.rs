@@ -528,10 +528,22 @@ fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePip
 }
 
 /// The render states of a kind of batch.
-fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind) -> Result<()> {
+/// The driver switches of alpha-to-coverage under Direct3D 9: Nvidia's and Intel's alpha-to-coverage
+/// format code on the adaptive-tessellation state, AMD's on the point-size state.
+const ATOC_STATE: D3DRENDERSTATETYPE = D3DRS_ADAPTIVETESS_Y;
+const A2M_STATE: D3DRENDERSTATETYPE = D3DRS_POINTSIZE;
+const fn four_cc(c: &[u8; 4]) -> u32 {
+    u32::from_le_bytes(*c)
+}
+
+/// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
+/// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
+/// edge as multisampled OMSI 2 does.
+fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: bool) -> Result<()> {
+    let coverage_now = coverage && kind == DrawKind::AlphaTest;
     let flags = [
         ALPHA_CUT,
-        f32::from(u8::from(kind == DrawKind::AlphaTest)),
+        f32::from(u8::from(kind == DrawKind::AlphaTest && !coverage)),
         f32::from(u8::from(kind == DrawKind::SurfaceDepth)),
         0.0,
     ];
@@ -540,6 +552,14 @@ fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind) -> Result<()> {
         device
             .SetRenderState(D3DRS_ALPHABLENDENABLE, u32::from(kind.blends()))
             .map_err(map_err)?;
+        // (always set: a target without multisampling follows one with it)
+        let (atoc, a2m) = if coverage_now {
+            (four_cc(b"ATOC"), four_cc(b"A2M1"))
+        } else {
+            (0, four_cc(b"A2M0"))
+        };
+        device.SetRenderState(ATOC_STATE, atoc).map_err(map_err)?;
+        device.SetRenderState(A2M_STATE, a2m).map_err(map_err)?;
         device
             .SetRenderState(D3DRS_ZWRITEENABLE, u32::from(kind.writes_depth()))
             .map_err(map_err)?;
@@ -807,7 +827,13 @@ impl D3d9Device {
         };
         frame.validate()?;
         self.ensure_scene_pipeline()?;
-        let drawn = self.draw_scene_inner(frame, &material, target.width, target.height);
+        let drawn = self.draw_scene_inner(
+            frame,
+            &material,
+            target.width,
+            target.height,
+            self.msaa.1 > 1,
+        );
         let restored = self.restore_scene_states();
         drawn?;
         restored?;
@@ -962,7 +988,7 @@ impl D3d9Device {
                             0,
                         )
                         .map_err(map_err)
-                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h));
+                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h, false));
                     // (the backend's own states, with this surface's depth still bound)
                     let states = self.restore_scene_states();
                     let ended = if own_scene {
@@ -1147,7 +1173,9 @@ impl D3d9Device {
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
         width: u32,
         height: u32,
+        multisampled: bool,
     ) -> Result<()> {
+        let coverage = multisampled;
         let lamps = self.bind_lamps(&frame.lamps)?;
         self.bind_or_table()?;
         self.scene.records.clear();
@@ -1289,7 +1317,7 @@ impl D3d9Device {
             // SAFETY: as above; the buffers and textures belong to this device.
             unsafe {
                 if current.0 != Some(b.kind) {
-                    kind_states(d, b.kind)?;
+                    kind_states(d, b.kind, coverage)?;
                     current.0 = Some(b.kind);
                 }
                 if current.1 != Some(b.cull) {

@@ -117,8 +117,11 @@ Known differences from the default renderer, each for a later PR:
   looks (`sky_color.w`) is not read, so a frame asking for another look is drawn vanilla.
 * The mip chains made here are box-filtered on the stored (gamma-encoded) values.
 * The anti-aliasing option is plain multisampling of the window's back buffer
-  (`set_quality`, the nearest count the card offers); alpha-tested edges (leaves, fences)
-  are not smoothed by it, and the scene targets of the mirrors are not multisampled. The
+  (`set_quality`, the nearest count the card offers). Alpha-tested edges (leaves, fences) are
+  smoothed by alpha-to-coverage when multisampling is on: no discard, the texture's alpha
+  goes to the coverage through the driver switches (`ATOC` for Nvidia and Intel, `A2M1` for
+  AMD; a driver with neither draws them hard-edged). The scene targets of the mirrors are
+  not multisampled and keep the discard. The
   anisotropic filtering option applies to the picture maps (diffuse, transparency, night
   and detail textures), up to the card's limit.
 * The depth-only pass of the transmaps' fully opaque parts is missing, and the depth-only
