@@ -248,9 +248,6 @@ pub(crate) struct AltFrame {
     pub folded: bool,
 }
 
-/// The line at the bottom left while the bar is shown.
-pub(crate) const HINT: &str = "Alt closes the bar · the simulation keeps running";
-
 /// Where the bar's top left corner is in a window of `size` design points.
 fn origin(size: Vec2, n: usize) -> Vec2 {
     size - alt_bar::panel_size(n) - Vec2::splat(MARGIN)
@@ -268,7 +265,6 @@ impl AltFrame {
             alt_bar::draw_folded(ui, corner(ui.size));
             return;
         }
-        alt_bar::hint(ui, HINT);
         let bs: Vec<Button> = self
             .buttons
             .iter()

@@ -115,7 +115,6 @@ fn main() {
             &bar,
             &mut state,
         );
-        alt_bar::hint(ui, "Alt closes the bar \u{b7} the simulation keeps running");
     });
     // folded with its arrow: only a tab is left at the corner
     o.shot(&format!("{dir}/alt-bar-folded.png"), |ui| {
