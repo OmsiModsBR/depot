@@ -115,8 +115,12 @@ Known differences from the default renderer, each for a later PR:
 
 * Only the vanilla ("classic") path is ported: the camera uniform's flag for the other
   looks (`sky_color.w`) is not read, so a frame asking for another look is drawn vanilla.
-* The mip chains made here are box-filtered on the stored (gamma-encoded) values, and the
-  samplers have no anisotropic filtering yet.
+* The mip chains made here are box-filtered on the stored (gamma-encoded) values.
+* The anti-aliasing option is plain multisampling of the window's back buffer
+  (`set_quality`, the nearest count the card offers); alpha-tested edges (leaves, fences)
+  are not smoothed by it, and the scene targets of the mirrors are not multisampled. The
+  anisotropic filtering option applies to the picture maps (diffuse, transparency, night
+  and detail textures), up to the card's limit.
 * The depth-only pass of the transmaps' fully opaque parts is missing, and the depth-only
   surface draws use the scaled terrain uv.
 * The picture's own alpha is blended with one over what is there, as there, only where the

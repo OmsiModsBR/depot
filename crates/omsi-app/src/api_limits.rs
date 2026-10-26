@@ -132,19 +132,9 @@ pub(crate) const D3D9: &[ApiLimit] = &[
         reason: IMPROVEMENT,
     },
     ApiLimit {
-        key: "msaa",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
-    },
-    ApiLimit {
         key: "render_scale",
         limit: Limit::Locked("Auto"),
         reason: "DirectX9 draws at the window size",
-    },
-    ApiLimit {
-        key: "anisotropy",
-        limit: Limit::Locked("Off"),
-        reason: NOT_DRAWN,
     },
     // Mirrors are drawn (flat ones, as OMSI 2 has them): its picture sizes, and the real-time
     // reflections on or off. Economical and the biggest picture are ours.
@@ -192,9 +182,11 @@ mod tests {
             assert_eq!(l.text().is_some(), l.shown().is_some());
             assert!(!l.is_row() || l.text().is_none());
         }
-        assert!(d3d9("msaa")
+        assert!(d3d9("windy_trees")
             .and_then(|l| l.text())
             .is_some_and(|t| t.starts_with("Off - ")));
+        // (anti-aliasing and anisotropic filtering are OMSI 2's own options: drawn, not limited)
+        assert!(d3d9("msaa").is_none() && d3d9("anisotropy").is_none());
         assert!(d3d9("ssao").is_some_and(|l| l.text().is_none()));
         assert!(d3d9("view_distance").is_none());
         let sizes = d3d9("mirror_size").unwrap();
@@ -205,6 +197,5 @@ mod tests {
         assert_eq!(sizes.fit("1024"), "512");
         assert_eq!(sizes.fit("0"), "0");
         assert_eq!(refresh.fit("eco"), "full");
-        assert_eq!(d3d9("msaa").unwrap().fit("4"), "4");
     }
 }
