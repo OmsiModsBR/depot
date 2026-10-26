@@ -303,14 +303,20 @@ impl D3d9Device {
             ] {
                 d.SetRenderState(state, value).map_err(map_err)?;
             }
-            for (state, value) in [
+            // (what stage 0 held is put back after the pass, whatever the scene set it to)
+            let sampler = [
                 (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
                 (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
                 (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
                 (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
                 (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
                 (D3DSAMP_SRGBTEXTURE, linear),
-            ] {
+            ];
+            let mut before = [0u32; 6];
+            for (kept, &(state, _)) in before.iter_mut().zip(&sampler) {
+                d.GetSamplerState(0, state, kept).map_err(map_err)?;
+            }
+            for (state, value) in sampler {
                 d.SetSamplerState(0, state, value).map_err(map_err)?;
             }
             d.SetVertexDeclaration(&p.decl).map_err(map_err)?;
@@ -338,9 +344,9 @@ impl D3d9Device {
                 d.DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, 0, 2)
                     .map_err(map_err)?;
             }
-            // the sampler's colour space is the scene's again
-            d.SetSamplerState(0, D3DSAMP_SRGBTEXTURE, 0)
-                .map_err(map_err)?;
+            for (&(state, _), &value) in sampler.iter().zip(&before) {
+                d.SetSamplerState(0, state, value).map_err(map_err)?;
+            }
             d.SetRenderState(D3DRS_SRGBWRITEENABLE, 0)
                 .map_err(map_err)?;
         }

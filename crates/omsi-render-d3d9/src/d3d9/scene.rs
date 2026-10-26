@@ -1195,7 +1195,15 @@ impl D3d9Device {
             }
             self.scene.instances = Some((some(vb, "instance buffer")?, capacity));
         }
-        self.upload_coronas(frame)?;
+        // (a frame whose coronas cannot be put up is drawn without them)
+        let coronas_ready = match self.upload_coronas(frame) {
+            Ok(()) => true,
+            Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
+            Err(e) => {
+                log::warn!("d3d9: the lights' coronas could not be put up this frame: {e}");
+                false
+            }
+        };
         let d = &self.device;
         let pipeline = self.scene.pipeline.as_ref().expect("built above");
         let light = &frame.light;
@@ -1349,7 +1357,7 @@ impl D3d9Device {
                     .map_err(map_err)?;
                 }
             }
-            if frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
+            if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
                 self.draw_coronas(frame, late)?;
                 // SAFETY: plain calls on a live device; the pipeline belongs to it.
                 unsafe {

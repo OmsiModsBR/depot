@@ -10,8 +10,8 @@
 //! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
 //! frame is done.
 //!
-//! What the plan does not carry yet is not drawn in this mode: the sky, shadows, smoke, and pictures drawn on the GPU into textures (maps, mirrors; see the
-//! crate's README).
+//! What the plan does not carry yet is not drawn in this mode: the sky, shadows, smoke and
+//! pictures drawn on the GPU into textures (the navigator's maps; see the crate's README).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
