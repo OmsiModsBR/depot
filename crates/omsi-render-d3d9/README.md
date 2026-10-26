@@ -16,7 +16,7 @@ is a product decision.
 A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
 pictures and leaves the frame open, the new interface (the Esc menu, the Alt bar, the
 loading screen, drawn by `omsi-ui`) is mirrored into it, and the game presents it when its
-frame is done. Not drawn in that mode yet: the sky, triple screen, screenshots, pictures the
+frame is done. Not drawn in that mode yet: the sky, smoke, triple screen, screenshots, pictures the
 GPU draws into textures (the navigator's maps, mirrors), and what "The scene layer" lists as
 not yet.
 
@@ -31,6 +31,7 @@ not yet.
 | `d3d9` scene layer | Windows | `set_scene_mesh`/`set_scene_texture` (and their update, move and free), and `draw_scene`, one instanced draw per batch with the scene shader |
 | `ui` | all | The interface as this renderer takes it: `omsi-ui`'s layers, draws and vertices, and the HUD's pictures; the layout, viewport and scissor rules shared with `omsi-ui` |
 | `d3d9` interface layer | Windows | Each `omsi-ui` Gpu's pictures, atlas and vertex lists (`ui_image`, `ui_atlas`, `ui_vertices`), `draw_ui` and `draw_overlays`, with the interface shader (`shaders/ui.hlsl`, a port of `omsi-ui`'s) |
+| `d3d9` corona pass | Windows | `set_corona_texture`, and in `draw_scene` the light coronas over the scene (`shaders/corona.hlsl`) |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -107,7 +108,21 @@ instruction slots it takes and how many the card allows
 the log instead of a black world; the scene is then not tried again every frame. That count
 (`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
+The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
+indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
+in fog. They are camera-facing sprites the default renderer keeps the books of
+(`Scene::frame_coronas`, `Scene::frame_corona_runs`), drawn by a pass of their own with their
+own small shaders (the scene's pixel shader keeps its slots; the corona one takes about 55):
+after the world's batches, and again after the vehicle the camera is in, as the default
+renderer orders them. Added over the scene with `src + dst * (1 - src)`, depth-tested and not
+writing depth, in linear light where the device can (the same capability the interface uses).
+A light's own bitmap reaches the device as `MirrorEvent::CoronaTexture`
+(`D3d9Device::set_corona_texture`); picture 0, or one that was never put up, is the standard
+glow. The `OMSI_NO_CORONAS` flag turns them off here too. A device that cannot make the pass
+draws the scene without coronas and says so once in the log. Rain streaks and snowflakes the
+renderer draws as coronas come with them; the snowfall's own pass is not here.
+
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky, smoke,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
@@ -195,6 +210,6 @@ frame plan and asset events to this crate. In order:
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface, the
    HUD's pictures, the minimap and the city map).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
-   specular highlight, the lamps and the tile light maps), then shadows, coronas, smoke and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
+   specular highlight, the lamps, the tile light maps and the light coronas), then shadows, smoke and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.

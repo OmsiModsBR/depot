@@ -443,6 +443,40 @@ impl SceneLamps<'_> {
     }
 }
 
+/// Floats a corona sprite takes: position and size; colour and brightness; direction and
+/// the outer cone's cosine; the up axis and rotating mode; the inner cone's cosine, the z
+/// offset, the parameter bits and the kind (0 a glow, 1 a cone in fog, 2 a halo).
+pub const CORONA_FLOATS: usize = 20;
+
+/// The light coronas of a picture, as the default renderer hands them to its corona shader
+/// (`Scene::frame_coronas` and `Scene::frame_corona_runs` of `omsi-render`): camera-facing
+/// sprites drawn additively over the scene, grouped in runs by picture.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SceneCoronas<'a> {
+    pub sprites: &'a [[f32; CORONA_FLOATS]],
+    /// (picture, first sprite, sprites, drawn after the vehicle the camera is in). Picture 0
+    /// is the standard glow; any other was put up with `set_corona_texture`.
+    pub runs: &'a [(u16, u32, u32, bool)],
+}
+
+impl SceneCoronas<'_> {
+    /// Checks that every run lies in the sprite list.
+    pub fn validate(&self) -> Result<()> {
+        let len = self.sprites.len() as u64;
+        match self
+            .runs
+            .iter()
+            .find(|r| u64::from(r.1) + u64::from(r.2) > len)
+        {
+            Some(r) => Err(BackendError::InvalidArgument(format!(
+                "corona run {}+{} outside a list of {len}",
+                r.1, r.2
+            ))),
+            None => Ok(()),
+        }
+    }
+}
+
 /// One picture of the scene.
 #[derive(Debug, Clone, Copy)]
 pub struct SceneFrame<'a> {
@@ -461,6 +495,8 @@ pub struct SceneFrame<'a> {
     /// The road surfaces' depth bias (the default renderer's, negative pulls towards the eye).
     pub surface_bias: i32,
     pub lamps: SceneLamps<'a>,
+    /// The light coronas drawn over the scene.
+    pub coronas: SceneCoronas<'a>,
 }
 
 impl SceneFrame<'_> {
@@ -488,6 +524,7 @@ impl SceneFrame<'_> {
                 "list entry {e} without its model or parameters"
             )));
         }
+        self.coronas.validate()?;
         self.lamps.validate()
     }
 
@@ -694,6 +731,7 @@ mod tests {
             cab: &[],
             surface_bias: -24,
             lamps: SceneLamps::default(),
+            coronas: SceneCoronas::default(),
         };
         frame.validate().unwrap();
         let mut out = Vec::new();
@@ -719,6 +757,21 @@ mod tests {
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn a_corona_run_must_lie_in_the_sprite_list() {
+        let sprites = [[0.0; CORONA_FLOATS]; 3];
+        let ok = SceneCoronas {
+            sprites: &sprites,
+            runs: &[(0, 0, 2, false), (4, 2, 1, true)],
+        };
+        assert!(ok.validate().is_ok());
+        let bad = SceneCoronas {
+            sprites: &sprites,
+            runs: &[(0, 2, 2, false)],
+        };
+        assert!(bad.validate().is_err());
     }
 
     #[test]

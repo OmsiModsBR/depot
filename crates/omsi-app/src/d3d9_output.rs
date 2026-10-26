@@ -10,8 +10,7 @@
 //! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
 //! frame is done.
 //!
-//! What the plan does not carry yet is not drawn in this mode: the sky, shadows, lamps, the
-//! OMSI material maps, and pictures drawn on the GPU into textures (maps, mirrors; see the
+//! What the plan does not carry yet is not drawn in this mode: the sky, shadows, smoke, and pictures drawn on the GPU into textures (maps, mirrors; see the
 //! crate's README).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,9 +22,9 @@ use omsi_render::{
 };
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneFrame, SceneLamps,
-    SceneLight, SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer,
-    UiOverlay,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneCoronas, SceneFrame,
+    SceneLamps, SceneLight, SceneMaterial, SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame,
+    UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -113,6 +112,16 @@ impl Inner {
                 self.device.move_scene_texture(from, into);
                 Ok(())
             }
+            MirrorEvent::CoronaTexture { id, image } => self.device.set_corona_texture(
+                id,
+                &SceneTexture {
+                    width: image.width,
+                    height: image.height,
+                    format: TexFormat::Rgba8,
+                    levels: std::slice::from_ref(&image.rgba),
+                    make_mips: true,
+                },
+            ),
             MirrorEvent::LightMapTile { slot, rgba } => self.device.set_tile_light_map(
                 omsi_render::LM_ATLAS_TILES * omsi_render::LM_TILE_PX,
                 omsi_render::LM_TILE_PX,
@@ -186,6 +195,14 @@ impl Inner {
             main: &self.main,
             cab: &self.cab,
             surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
+            coronas: if omsi_cfg::flags::NO_CORONAS.is_set() {
+                SceneCoronas::default()
+            } else {
+                SceneCoronas {
+                    sprites: scene.frame_coronas(),
+                    runs: scene.frame_corona_runs(),
+                }
+            },
             lamps: SceneLamps {
                 lights: &lights,
                 grid: scene.frame_light_grid(),
