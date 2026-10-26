@@ -4652,7 +4652,7 @@ mod tests {
     /// too (92E, IBIS 92 and suffix 10).
     #[test]
     fn a_destination_picked_from_the_list_keeps_the_lines_letter() {
-        let mut v = crate::schedule::tests::script_test_vehicle(
+        let mut v = crate::testing::script_test_vehicle(
             "{frame}\n{end}\n",
             "IBIS_LinieKurs\nIBIS_Linie_Suffix\nIBIS_Linie_Complex\nIBIS_TerminusCode\n",
             "Matrix_Nr\nSetLineTo\n",
@@ -4699,7 +4699,7 @@ mod tests {
         set_str(&mut v, "SetLineTo", "5");
         v.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&v), "145");
-        let mut blind = crate::schedule::tests::script_test_vehicle(
+        let mut blind = crate::testing::script_test_vehicle(
             "{trigger:rollband_sync}\n{end}\n",
             "IBIS_LinieKurs\n",
             "SetLineTo\n",

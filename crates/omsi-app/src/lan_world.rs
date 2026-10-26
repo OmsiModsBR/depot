@@ -1686,7 +1686,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let mut v = crate::schedule::tests::script_test_vehicle(
+        let mut v = crate::testing::script_test_vehicle(
             "{frame}\n{end}\n",
             "AI_target_index\nIBIS_TerminusIndex\nIBIS_TerminusCode\n",
             "SetLineTo\n",

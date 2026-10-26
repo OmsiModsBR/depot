@@ -10,7 +10,7 @@ use omsi_render::{Camera, Renderer, Scene};
 use std::time::Instant;
 use winit::keyboard::KeyCode;
 
-fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'static str {
+pub fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'static str {
     // Scripts can cancel the lever themselves after a turn; prefer their current state.
     if let Some(lever) = lever {
         *state = lever;
@@ -36,12 +36,12 @@ fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'sta
 /// in its frame - a bus whose indicator cancels after a turn, on a phone's wheel after a
 /// second or two (#451) - is undone. The player's own keys and clicks run as triggers
 /// between the frames, so they still turn it off.
-fn kept_indicator(cancel: bool, before: Option<f32>, after: Option<f32>) -> Option<f32> {
+pub fn kept_indicator(cancel: bool, before: Option<f32>, after: Option<f32>) -> Option<f32> {
     let (before, after) = (before?.round(), after?.round());
     (!cancel && (before == 1.0 || before == 2.0) && after == 0.0).then_some(before)
 }
 
-pub(crate) fn steering_view_yaw(
+pub fn steering_view_yaw(
     current: f32,
     steering: f32,
     dt: f32,
@@ -57,38 +57,11 @@ pub(crate) fn steering_view_yaw(
     current + (target - current) * (1.0 - (-dt.max(0.0) / response.clamp(0.05, 1.0)).exp())
 }
 
-pub(crate) fn driver_head_look(
-    look: (f32, f32),
-    view: &str,
-    pitch_deg: f32,
-    vr_on: bool,
-) -> (f32, f32) {
+pub fn driver_head_look(look: (f32, f32), view: &str, pitch_deg: f32, vr_on: bool) -> (f32, f32) {
     if view == "driver" {
         (look.0, look.1 + if vr_on { 0.0 } else { pitch_deg })
     } else {
         look
-    }
-}
-
-#[cfg(test)]
-mod driver_head_look_tests {
-    use super::driver_head_look;
-
-    #[test]
-    fn head_pitch_adjusts_only_non_vr_driver_view() {
-        assert_eq!(
-            driver_head_look((4.0, 2.0), "driver", 10.0, false),
-            (4.0, 12.0)
-        );
-        assert_eq!(
-            driver_head_look((4.0, 2.0), "driver", 10.0, true),
-            (4.0, 2.0)
-        );
-        assert_eq!(driver_head_look((4.0, 2.0), "pax", 10.0, false), (4.0, 2.0));
-        assert_eq!(
-            driver_head_look((4.0, 2.0), "outside", 10.0, false),
-            (4.0, 2.0)
-        );
     }
 }
 
@@ -99,11 +72,11 @@ mod driver_head_look_tests {
 /// (`bus_rollband_up`, `_dn`: its line or destination moves by the frame's time on each
 /// call); fired once, it moved by a frame's worth and no more (#1098, #1145).
 #[derive(Default)]
-pub(crate) struct HeldRepeat(hashbrown::HashMap<i32, (Vec<String>, bool)>);
+pub struct HeldRepeat(hashbrown::HashMap<i32, (Vec<String>, bool)>);
 
 impl HeldRepeat {
     /// The key went down with these actions (its press fires them itself).
-    fn press(&mut self, scan: i32, names: Vec<String>) {
+    pub fn press(&mut self, scan: i32, names: Vec<String>) {
         if names.is_empty() {
             self.0.remove(&scan);
         } else {
@@ -111,13 +84,13 @@ impl HeldRepeat {
         }
     }
 
-    fn release(&mut self, scan: i32) {
+    pub fn release(&mut self, scan: i32) {
         self.0.remove(&scan);
     }
 
     /// The actions to fire again this frame: those of every key still held, but not of one
     /// that went down since the last frame - its press was this frame's call.
-    fn due(&mut self) -> Vec<String> {
+    pub fn due(&mut self) -> Vec<String> {
         let mut due = Vec::new();
         for (names, fresh) in self.0.values_mut() {
             if !std::mem::take(fresh) {
@@ -278,7 +251,7 @@ pub(crate) struct Player {
 /// `simple` - W/S/A/D and Up/Down drive (plain Left/Right keep OMSI's interior camera
 /// switch, view_interiorcam_minus/plus; A/D steer); `wasd` - W/S/A/D only;
 /// `arrows` - the arrow keys only (W/S/D keep their OMSI meaning: wipers, viewpoint, gear).
-pub(crate) fn fallback_action(code: KeyCode, preset: &str) -> Option<omsi_sim::EngineAction> {
+pub fn fallback_action(code: KeyCode, preset: &str) -> Option<omsi_sim::EngineAction> {
     use omsi_sim::EngineAction as A;
     let preset = preset.to_ascii_lowercase();
     let (wasd, arrows) = match preset.as_str() {
@@ -792,7 +765,7 @@ pub(crate) fn digit_of(code: KeyCode) -> Option<usize> {
 /// The game's own door actions for a controller button (or a key of `keyboard.cfg`) that
 /// work on every bus: `door_<n>` is the n-th door front to back, as Shift+n on the
 /// keyboard, and `doors_all` every door at once (#916).
-pub(crate) fn door_action(name: &str) -> Option<usize> {
+pub fn door_action(name: &str) -> Option<usize> {
     let n = name.to_ascii_lowercase();
     if n == "doors_all" {
         return Some(0);
@@ -2484,7 +2457,7 @@ impl Player {
 
 /// A sun blind can be left at any position, including after a very short drag. Treating
 /// its drag-only click spot as a toggle turned a small adjustment into full travel.
-fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
+pub fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
     let event = event.to_ascii_lowercase().replace(['_', '-'], "");
     !plain
         && movement < 4.0
@@ -2496,7 +2469,7 @@ fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
 /// Keep the ratchet of the blind the drag script actually moved. Mods number either the
 /// blind (`cp_rollo1_pos`) or its position (`cp_rollo_pos1`); the event name alone cannot
 /// identify the variable. Retraction already updates the ratchet in the frame script.
-fn repair_roller_blind(vehicle: &mut omsi_sim::VehicleInstance, event: &str) {
+pub fn repair_roller_blind(vehicle: &mut omsi_sim::VehicleInstance, event: &str) {
     let event = event.to_ascii_lowercase();
     if !event.contains("rollo") || !event.ends_with("_drag") {
         return;
@@ -2546,201 +2519,6 @@ fn repair_roller_blind(vehicle: &mut omsi_sim::VehicleInstance, event: &str) {
     walk(program, block, &mut hashbrown::HashSet::new(), &mut pairs);
     for (pos, ratchet) in pairs {
         vehicle.state.vars[ratchet as usize] = vehicle.state.vars[pos as usize];
-    }
-}
-
-#[cfg(test)]
-mod roller_blind_tests {
-    use super::{auto_drag_click, repair_roller_blind};
-    use crate::schedule::tests::script_test_vehicle;
-
-    fn blinds() -> omsi_sim::VehicleInstance {
-        // Synthetic controls with both numbering conventions, deliberately different
-        // from their event names. The simple frame stands in for a retaining ratchet.
-        script_test_vehicle(
-            "{trigger:cp_rollo_drag}\n\
-                (L.L.cp_rollo_pos) (L.S.mouse_y) 100 / + (S.L.cp_rollo_pos)\n\
-             {end}\n\
-             {trigger:cp_rollo1_drag}\n(M.L.side)\n{end}\n\
-             {macro:side}\n\
-                (L.L.cp_rollo_pos1) (L.S.mouse_y) 100 / + (S.L.cp_rollo_pos1)\n\
-             {end}\n\
-             {trigger:cp_rollo2_drag}\n\
-                (L.L.cp_rollo2_pos) (L.S.mouse_y) 100 / + (S.L.cp_rollo2_pos)\n\
-             {end}\n\
-             {trigger:window_drag}\n\
-                (L.L.window_pos) (L.S.mouse_y) 100 / + (S.L.window_pos)\n\
-             {end}\n\
-             {frame}\n\
-                (L.L.cp_rollo_rastpos) (L.L.cp_rollo_pos) max (S.L.cp_rollo_pos)\n\
-                (L.L.cp_rollo_rastpos1) (L.L.cp_rollo_pos1) max (S.L.cp_rollo_pos1)\n\
-                (L.L.cp_rollo2_rastpos) (L.L.cp_rollo2_pos) max (S.L.cp_rollo2_pos)\n\
-             {end}\n",
-            "cp_rollo_pos\ncp_rollo_rastpos\ncp_rollo_pos1\ncp_rollo_rastpos1\n\
-             cp_rollo2_pos\ncp_rollo2_rastpos\nwindow_pos\n",
-            "",
-        )
-    }
-
-    fn drag(vehicle: &mut omsi_sim::VehicleInstance, event: &str, dy: f32) {
-        vehicle.host.mouse = (0.0, dy);
-        assert!(vehicle.trigger(event));
-        repair_roller_blind(vehicle, event);
-        vehicle.host.mouse = (0.0, 0.0);
-    }
-
-    #[test]
-    fn numbered_blind_keeps_partial_position_without_moving_another_blind() {
-        for (event, pos, ratchet) in [
-            ("CP_ROLLO1_DRAG", "cp_rollo_pos1", "cp_rollo_rastpos1"),
-            ("cp_rollo2_drag", "cp_rollo2_pos", "cp_rollo2_rastpos"),
-        ] {
-            let mut vehicle = blinds();
-            vehicle.set_var("cp_rollo_pos", 0.4);
-            vehicle.set_var("cp_rollo_rastpos", 0.7);
-            vehicle.set_var(pos, 0.8);
-            vehicle.set_var(ratchet, 0.8);
-            drag(&mut vehicle, event, -30.0);
-            assert!((vehicle.var(pos).unwrap() - 0.5).abs() < 1e-6);
-            assert_eq!(vehicle.var(ratchet), vehicle.var(pos));
-            assert_eq!(vehicle.var("cp_rollo_pos"), Some(0.4));
-            assert_eq!(vehicle.var("cp_rollo_rastpos"), Some(0.7));
-            // Pausing the hand delivers another drag with no movement.
-            drag(&mut vehicle, event, 0.0);
-            vehicle.update_scripts_only(0.0);
-            assert!((vehicle.var(pos).unwrap() - 0.5).abs() < 1e-6);
-        }
-    }
-
-    #[test]
-    fn canonical_blind_still_keeps_its_position() {
-        let mut vehicle = blinds();
-        vehicle.set_var("cp_rollo_pos", 0.8);
-        vehicle.set_var("cp_rollo_rastpos", 0.8);
-        vehicle.set_var("cp_rollo_pos1", 0.3);
-        vehicle.set_var("cp_rollo_rastpos1", 0.6);
-        drag(&mut vehicle, "cp_rollo_drag", -30.0);
-        assert_eq!(vehicle.var("cp_rollo_rastpos"), vehicle.var("cp_rollo_pos"));
-        assert_eq!(vehicle.var("cp_rollo_rastpos1"), Some(0.6));
-        vehicle.update_scripts_only(0.0);
-        assert!((vehicle.var("cp_rollo_pos").unwrap() - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn retract_and_unrelated_events_leave_ratchets_to_their_scripts() {
-        let mut vehicle = blinds();
-        vehicle.set_var("cp_rollo_pos", 0.2);
-        vehicle.set_var("cp_rollo_rastpos", 0.6);
-        vehicle.set_var("cp_rollo_rastpos1", 0.8);
-        for event in [
-            "cp_rollo_retract",
-            "cp_rollo_retract1",
-            "cp_rollo1_retract",
-            "cp_rollo1_retract_off",
-            "cp_rollo1_off",
-            "missing_rollo_drag",
-        ] {
-            repair_roller_blind(&mut vehicle, event);
-            assert_eq!(vehicle.var("cp_rollo_rastpos"), Some(0.6));
-            assert_eq!(vehicle.var("cp_rollo_rastpos1"), Some(0.8));
-        }
-        drag(&mut vehicle, "window_drag", 20.0);
-        assert_eq!(vehicle.var("window_pos"), Some(0.2));
-        assert_eq!(vehicle.var("cp_rollo_rastpos"), Some(0.6));
-        assert_eq!(vehicle.var("cp_rollo_rastpos1"), Some(0.8));
-    }
-
-    #[test]
-    fn a_short_blind_gesture_does_not_become_full_travel() {
-        for event in [
-            "cp_rollo",
-            "cp_rollo1",
-            "CP_ROLLO2",
-            "cp_sun_blind",
-            "cp_Sun-Blind1-1",
-            "C2_CP_Sonnenblende_Seite",
-        ] {
-            assert!(!auto_drag_click(event, false, 0.0));
-            assert!(!auto_drag_click(event, false, 3.9));
-        }
-        assert!(auto_drag_click("cp_Fahrertuer", false, 0.0));
-        assert!(!auto_drag_click("cp_Fahrertuer", false, 4.0));
-        assert!(!auto_drag_click("cp_Fahrertuer", true, 0.0));
-        assert!(auto_drag_click("C2_CP_Stop_Blind", false, 0.0));
-    }
-
-    #[test]
-    fn original_blinds_keep_small_upward_adjustments_after_release() {
-        let Some(root) = omsi_cfg::flags::ROOT.os().map(std::path::PathBuf::from) else {
-            eprintln!("skipped: OMSI_ROOT is not set");
-            return;
-        };
-        let buses: [(&str, &[(&str, &str, &str)]); 3] = [
-            (
-                "Vehicles/Urbino_II/SU_18_V.bus",
-                &[
-                    ("cp_rollo1", "cp_rollo_pos1", "cp_rollo_rastpos1"),
-                    ("cp_rollo2", "cp_rollo_pos2", "cp_rollo_rastpos2"),
-                ],
-            ),
-            (
-                "Vehicles/Solaris BVG/Urbino 18 Main.bus",
-                &[
-                    ("cp_rollo", "cp_rollo_pos", "cp_rollo_rastpos"),
-                    ("cp_rollo1", "cp_rollo1_pos", "cp_rollo1_rastpos"),
-                ],
-            ),
-            (
-                "Vehicles/MAN_NL_NG/MAN_EN92_main.bus",
-                &[("cp_rollo", "cp_rollo_pos", "cp_rollo_rastpos")],
-            ),
-        ];
-        for (path, blinds) in buses {
-            let bus = root.join(path);
-            if !bus.exists() {
-                eprintln!("skipped: no {}", bus.display());
-                continue;
-            }
-            let ty = std::sync::Arc::new(omsi_sim::VehicleType::load(&root, &bus).expect(path));
-            let mut vehicle =
-                omsi_sim::VehicleInstance::new(ty, omsi_sim::VehicleHost::new(Default::default()));
-            vehicle.host.clock.timegap = 1.0 / 60.0;
-            let program = vehicle.ty.program.clone();
-            for &(blind, pos, ratchet) in blinds {
-                for &(_, other_pos, other_ratchet) in blinds {
-                    assert!(vehicle.set_var(other_pos, 0.3));
-                    assert!(vehicle.set_var(other_ratchet, 0.3));
-                }
-                assert!(vehicle.set_var(pos, 0.6));
-                assert!(vehicle.set_var(ratchet, 0.6));
-                let event = format!("{blind}_drag");
-                drag(&mut vehicle, &event, -2.0);
-                let adjusted = vehicle.var(pos).unwrap();
-                assert!(adjusted < 0.6 && adjusted > 0.59, "{path}: {blind}");
-                drag(&mut vehicle, &event, 0.0);
-                assert!(vehicle.trigger(&format!("{blind}_off")));
-                for _ in 0..60 {
-                    vehicle
-                        .vm
-                        .run_frame(&program, &mut vehicle.state, &mut vehicle.host);
-                }
-                assert!(
-                    (vehicle.var(pos).unwrap() - adjusted).abs() < 1e-6,
-                    "{path}: {blind}"
-                );
-                assert!(
-                    (vehicle.var(ratchet).unwrap() - adjusted).abs() < 1e-6,
-                    "{path}: {blind}"
-                );
-                for &(other, other_pos, other_ratchet) in blinds {
-                    if other != blind {
-                        assert!((vehicle.var(other_pos).unwrap() - 0.3).abs() < 1e-6);
-                        assert!((vehicle.var(other_ratchet).unwrap() - 0.3).abs() < 1e-6);
-                    }
-                }
-                assert!(!auto_drag_click(blind, false, 2.0));
-            }
-        }
     }
 }
 
@@ -3177,7 +2955,7 @@ impl Player {
 /// Outside-camera pivot: the `.bus` centre rotated by heading alone. Body pitch
 /// and bank (suspension bounce, cornering roll) would swing the camera if they
 /// reached the pivot; the view only ever yaws with the bus.
-pub(crate) fn orbit_pivot(position: DVec3, heading_deg: f64, center: [f32; 3]) -> DVec3 {
+pub fn orbit_pivot(position: DVec3, heading_deg: f64, center: [f32; 3]) -> DVec3 {
     position
         + glam::Mat4::from_rotation_z((-(heading_deg as f32)).to_radians())
             .transform_point3(Vec3::new(center[0], center[1], center[2]))
@@ -3367,11 +3145,11 @@ pub(crate) fn pick_in(
 /// Depth band (m) inside which overlapping cockpit `[mouseevent]` meshes are disambiguated
 /// by aim (lateral distance to the mesh centre) rather than by which face is a hair closer.
 /// Sized for the Aachen ibox digit row (D10/D11/D12 centres ~16 mm apart on a tilted pad).
-pub(crate) const MOUSEEVENT_PICK_DEPTH_BAND: f32 = 0.03;
+pub const MOUSEEVENT_PICK_DEPTH_BAND: f32 = 0.03;
 
 /// Among ray hits `(t, lateral², id)`, pick the aimed mesh: nearest surface first, then the
 /// smallest lateral distance among hits within [`MOUSEEVENT_PICK_DEPTH_BAND`] of that nearest.
-pub(crate) fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
+pub fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
     let min_t = hits.iter().map(|h| h.0).fold(f32::INFINITY, f32::min);
     if !min_t.is_finite() {
         return None;
@@ -3388,7 +3166,7 @@ pub(crate) fn best_mouseevent_hit(hits: &[(f32, f32, usize)]) -> Option<usize> {
 
 /// A mesh with this `[viewpoint]` is drawn from an interior camera (`inside`) or from outside:
 /// bit 1 outside, bit 2 inside, 0 always.
-pub(crate) fn drawn_from(viewpoint: i32, inside: bool) -> bool {
+pub fn drawn_from(viewpoint: i32, inside: bool) -> bool {
     viewpoint == 0 || viewpoint & if inside { 2 } else { 1 } != 0
 }
 
@@ -3442,7 +3220,7 @@ fn nearest_blocker(
 /// Among ray hits `(t, lateral², id, ray)`, the switch [`best_mouseevent_hit`] picks, unless
 /// `blocker(ray)` (how far along that ray the nearest other mesh is) says something stands in
 /// front of it: then that hit is dropped and the next one tried. Each ray is traced once.
-pub(crate) fn best_unblocked_hit(
+pub fn best_unblocked_hit(
     mut hits: Vec<(f32, f32, usize, usize)>,
     mut blocker: impl FnMut(usize) -> f32,
 ) -> Option<usize> {
@@ -3467,87 +3245,6 @@ pub(crate) fn best_unblocked_hit(
             return Some(id);
         }
         hits.swap_remove(n);
-    }
-}
-
-#[cfg(test)]
-mod mouseevent_pick_tests {
-    use super::{best_mouseevent_hit, best_unblocked_hit, drawn_from, MOUSEEVENT_PICK_DEPTH_BAND};
-
-    #[test]
-    fn a_switch_behind_a_panel_is_not_picked() {
-        // the ray meets a panel 0.3 m away before the switch 0.5 m away
-        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.3), None);
-    }
-
-    #[test]
-    fn a_switch_on_its_panel_is_picked() {
-        // the panel the switch is mounted on lies just behind it, or flush with it
-        assert_eq!(best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.5), Some(7));
-        assert_eq!(
-            best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| 0.52),
-            Some(7)
-        );
-        assert_eq!(
-            best_unblocked_hit(vec![(0.5, 0.0, 7, 0)], |_| f32::INFINITY),
-            Some(7)
-        );
-    }
-
-    #[test]
-    fn a_hidden_switch_gives_way_to_one_seen_by_another_ray() {
-        // ray 0 (nearer switch) is blocked by a window, ray 1 reaches a switch farther off
-        let hits = vec![(0.4, 0.0, 1, 0), (0.6, 0.0, 2, 1)];
-        let mut traced = Vec::new();
-        let pick = best_unblocked_hit(hits, |r| {
-            traced.push(r);
-            if r == 0 {
-                0.2
-            } else {
-                f32::INFINITY
-            }
-        });
-        assert_eq!(pick, Some(2));
-        assert_eq!(traced, vec![0, 1]);
-    }
-
-    #[test]
-    fn viewpoint_bits_decide_what_each_camera_sees() {
-        assert!(drawn_from(0, true) && drawn_from(0, false));
-        assert!(drawn_from(1, false) && !drawn_from(1, true));
-        assert!(drawn_from(2, true) && !drawn_from(2, false));
-        assert!(drawn_from(3, true) && drawn_from(3, false));
-    }
-
-    #[test]
-    fn aachen_ibox_d11_wins_when_d10_is_closer_but_off_aim() {
-        // Realistic AC O530 digit row: D10 (backspace) ~12 mm closer along the ray than
-        // D11 (digit 0), but the cursor aims at D11's centre (lateral ≈ 0).
-        let d10 = 0usize;
-        let d11 = 1usize;
-        let d12 = 2usize;
-        let hits = [
-            (0.488, 0.012_f32.powi(2), d10),
-            (0.500, 0.001_f32.powi(2), d11),
-            (0.512, 0.015_f32.powi(2), d12),
-        ];
-        assert!(
-            (hits[1].0 - hits[0].0) > 0.002,
-            "fixture must exceed the old 2 mm tie window"
-        );
-        assert!((hits[1].0 - hits[0].0) < MOUSEEVENT_PICK_DEPTH_BAND);
-        assert_eq!(best_mouseevent_hit(&hits), Some(d11));
-    }
-
-    #[test]
-    fn clearly_nearer_surface_still_wins_outside_the_band() {
-        let hits = [(0.40, 0.02_f32.powi(2), 0usize), (0.50, 0.0, 1usize)];
-        assert_eq!(best_mouseevent_hit(&hits), Some(0));
-    }
-
-    #[test]
-    fn empty_hits_yield_none() {
-        assert_eq!(best_mouseevent_hit(&[]), None);
     }
 }
 
@@ -3719,7 +3416,7 @@ pub(crate) fn keep_wheel(p: Option<&mut Player>) {
 /// window is the steering from full left to full right lock, divided by the speed in tens of
 /// km/h once the bus is faster than 10 km/h (going backwards counts as standing). At 50 km/h
 /// the same movement of the hand turns the wheels a fifth as far: the wheel "gets heavier".
-pub(crate) fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
+pub fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
     let x = (2.0 * cursor_x / width.max(1.0) - 1.0).clamp(-1.0, 1.0);
     x / (kmh / 10.0).max(1.0)
 }
@@ -3729,7 +3426,7 @@ pub(crate) fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
 /// the way every `fade`), then within ~60 ms - the cursor comes in bursts, and taken as it
 /// came the wheel moved in steps. Without `smooth` (#1092) they are where the cursor says at
 /// once, as OMSI sets the curvature and the pedals from it every frame.
-pub(crate) fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
+pub fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
     if fade > 0.0 {
         (-std::f32::consts::LN_2 / fade * dt).exp()
     } else if smooth {
@@ -3743,115 +3440,12 @@ pub(crate) fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
 /// is snapped: in f32 the easing stops one step short of the target (1 - 6e-8 at 60 fps), and
 /// the stock gearbox scripts kick down only at a throttle of exactly 1 - the cursor at the top
 /// edge never gave it.
-pub(crate) fn mouse_pedal(current: f32, target: f32, k: f32) -> f32 {
+pub fn mouse_pedal(current: f32, target: f32, k: f32) -> f32 {
     let v = target + (current - target) * k;
     if (v - target).abs() < 1e-4 {
         target
     } else {
         v
-    }
-}
-
-#[cfg(test)]
-mod kept_indicator_tests {
-    use super::kept_indicator;
-
-    #[test]
-    fn a_kept_indicator_is_put_back_when_the_script_cancels_it() {
-        // the script's own cancelling stands by default
-        assert_eq!(kept_indicator(true, Some(1.0), Some(0.0)), None);
-        // kept: left and right come back, the hazard lever and a change of side stay
-        assert_eq!(kept_indicator(false, Some(1.0), Some(0.0)), Some(1.0));
-        assert_eq!(kept_indicator(false, Some(2.0), Some(0.0)), Some(2.0));
-        assert_eq!(kept_indicator(false, Some(1.0), Some(2.0)), None);
-        assert_eq!(kept_indicator(false, Some(0.0), Some(0.0)), None);
-        assert_eq!(kept_indicator(false, None, Some(0.0)), None);
-    }
-}
-
-#[cfg(test)]
-mod orbit_pivot_tests {
-    use super::orbit_pivot;
-    use glam::DVec3;
-
-    #[test]
-    fn pivot_yaws_with_the_bus_and_ignores_body_attitude() {
-        // heading 0: the centre passes through unrotated.
-        let p = orbit_pivot(DVec3::new(10.0, 20.0, 5.0), 0.0, [0.0, 0.0, 1.2]);
-        assert!((p.x - 10.0).abs() < 1e-6 && (p.y - 20.0).abs() < 1e-6);
-        assert!((p.z - 6.2).abs() < 1e-6, "{p:?}");
-        // heading 90: the forward offset swings sideways, height untouched
-        // (a body_rotation pivot would also tilt it with pitch/bank).
-        let q = orbit_pivot(DVec3::ZERO, 90.0, [1.0, 2.0, 1.2]);
-        assert!(
-            (q.x - 2.0).abs() < 1e-5 && (q.y + 1.0).abs() < 1e-5,
-            "{q:?}"
-        );
-        assert!((q.z - 1.2).abs() < 1e-6, "{q:?}");
-    }
-}
-
-#[cfg(test)]
-mod mouse_tests {
-    use super::{mouse_follow, mouse_pedal, mouse_steering};
-
-    /// The mouse's wheel eases after the cursor by default; with the smoothing off it is where
-    /// the cursor says the same frame, as in OMSI (#1092) - only the first second after
-    /// switching the mouse steering on still eases, whichever it is.
-    #[test]
-    fn the_wheel_follows_the_cursor_at_once_without_smoothing() {
-        let dt = 1.0 / 60.0;
-        let k = mouse_follow(0.0, dt, true);
-        assert!(k > 0.7 && k < 0.8, "{k}");
-        assert_eq!(mouse_follow(0.0, dt, false), 0.0);
-        assert_eq!(mouse_pedal(0.3, 0.9, mouse_follow(0.0, dt, false)), 0.9);
-        let steer = 0.9 + (0.3 - 0.9) * mouse_follow(0.0, dt, false);
-        assert_eq!(steer, 0.9);
-        for smooth in [true, false] {
-            let k = mouse_follow(1.0, dt, smooth);
-            assert!((k - 0.5f32.powf(dt)).abs() < 1e-6, "{smooth}: {k}");
-        }
-    }
-
-    #[test]
-    fn the_mouse_pedal_reaches_the_floor() {
-        for fps in [30.0f32, 60.0, 144.0] {
-            let k = (-(1.0 / fps) / 0.06f32).exp();
-            let (mut t, mut b) = (0.0, 1.0);
-            for _ in 0..(fps as usize) {
-                t = mouse_pedal(t, 1.0, k);
-                b = mouse_pedal(b, 0.0, k);
-            }
-            // exactly: the kickdown compares the throttle with 1
-            assert_eq!(t, 1.0, "{fps} fps");
-            assert_eq!(b, 0.0, "{fps} fps");
-        }
-        // on the way it still eases
-        let k = (-(1.0 / 60.0f32) / 0.06).exp();
-        let t = mouse_pedal(0.0, 1.0, k);
-        assert!(t > 0.2 && t < 0.3, "{t}");
-    }
-
-    #[test]
-    fn the_mouse_steers_less_the_faster_the_bus() {
-        let w = 1600.0;
-        // standing and slow: the whole width is the whole lock
-        assert_eq!(mouse_steering(0.0, w, 0.0), -1.0);
-        assert_eq!(mouse_steering(1600.0, w, 5.0), 1.0);
-        assert_eq!(mouse_steering(800.0, w, 0.0), 0.0);
-        assert!((mouse_steering(1200.0, w, 10.0) - 0.5).abs() < 1e-6);
-        // faster: divided by the speed in tens of km/h
-        assert!((mouse_steering(1200.0, w, 50.0) - 0.1).abs() < 1e-6);
-        assert!((mouse_steering(1600.0, w, 100.0) - 0.1).abs() < 1e-6);
-        // backwards like standing
-        assert!((mouse_steering(1200.0, w, -20.0) - 0.5).abs() < 1e-6);
-        // it moves smoothly: no step anywhere across the window
-        let mut last = mouse_steering(0.0, w, 30.0);
-        for px in 1..=1600 {
-            let s = mouse_steering(px as f32, w, 30.0);
-            assert!((s - last).abs() < 0.001, "step at {px}");
-            last = s;
-        }
     }
 }
 
@@ -3866,154 +3460,10 @@ fn route_line(t: &omsi_vehicle::hof::InfoTrip) -> String {
         raw.to_string()
     }
 }
-#[cfg(test)]
-mod preset_tests {
-    use super::fallback_action;
-    use omsi_sim::EngineAction as A;
-    use winit::keyboard::KeyCode;
-
-    #[test]
-    fn plain_left_right_steer_only_with_the_arrows_preset() {
-        assert_eq!(fallback_action(KeyCode::ArrowLeft, "simple"), None);
-        assert_eq!(fallback_action(KeyCode::ArrowRight, "simple"), None);
-        assert_eq!(
-            fallback_action(KeyCode::ArrowUp, "simple"),
-            Some(A::Throttle)
-        );
-        assert_eq!(
-            fallback_action(KeyCode::KeyA, "simple"),
-            Some(A::SteeringLeft)
-        );
-        assert_eq!(
-            fallback_action(KeyCode::ArrowLeft, "arrows"),
-            Some(A::SteeringLeft)
-        );
-        assert_eq!(
-            fallback_action(KeyCode::ArrowRight, "arrows"),
-            Some(A::SteeringRight)
-        );
-    }
-}
-
-#[cfg(test)]
-mod indicator_tests {
-    use super::indicator_toggle_action;
-
-    #[test]
-    fn repeated_presses_switch_each_side_on_then_off() {
-        for (side, on) in [(1, "blinker_left_set"), (2, "blinker_right_set")] {
-            let mut state = 0;
-            assert_eq!(indicator_toggle_action(&mut state, None, side), on);
-            assert_eq!(
-                indicator_toggle_action(&mut state, None, side),
-                "blinker_off"
-            );
-            assert_eq!(state, 0);
-        }
-    }
-
-    #[test]
-    fn changing_side_and_automatic_cancellation_use_the_current_lever() {
-        let mut state = 1;
-        assert_eq!(
-            indicator_toggle_action(&mut state, Some(1), 2),
-            "blinker_right_set"
-        );
-        assert_eq!(
-            indicator_toggle_action(&mut state, Some(0), 2),
-            "blinker_right_set"
-        );
-        assert_eq!(
-            indicator_toggle_action(&mut state, Some(2), 2),
-            "blinker_off"
-        );
-    }
-
-    #[test]
-    fn hazards_keep_their_dedicated_toggle_trigger() {
-        let mut state = 0;
-        assert_eq!(
-            indicator_toggle_action(&mut state, Some(0), 3),
-            "blinker_warn_toggle"
-        );
-        assert_eq!(state, 3);
-        assert_eq!(
-            indicator_toggle_action(&mut state, Some(3), 3),
-            "blinker_warn_toggle"
-        );
-        assert_eq!(state, 0);
-    }
-}
-
-#[cfg(test)]
-mod held_repeat_tests {
-    use super::HeldRepeat;
-
-    /// Page Up held three frames turns the roller blind on each of them: once by the press,
-    /// twice from the list; let go, no more (#1098, #1145).
-    #[test]
-    fn a_held_key_is_told_every_frame_after_its_press_until_let_go() {
-        let mut r = HeldRepeat::default();
-        assert!(r.due().is_empty());
-        r.press(201, vec!["bus_rollband_up".into()]);
-        assert!(r.due().is_empty(), "the press itself was this frame's call");
-        assert_eq!(r.due(), vec!["bus_rollband_up".to_string()]);
-        assert_eq!(r.due(), vec!["bus_rollband_up".to_string()]);
-        r.release(201);
-        assert!(r.due().is_empty());
-        // a key without a held action is none of it
-        r.press(63, Vec::new());
-        r.due();
-        assert!(r.due().is_empty());
-    }
-}
-
-#[cfg(test)]
-mod steering_view_tests {
-    use super::steering_view_yaw;
-
-    #[test]
-    fn follows_both_directions_without_snapping_or_overshooting() {
-        let right = steering_view_yaw(0.0, 1.0, 0.016, true, 30.0, 0.25);
-        assert!(right > 0.0 && right < 30.0);
-        assert_eq!(
-            steering_view_yaw(0.0, -1.0, 0.016, true, 30.0, 0.25),
-            -right
-        );
-        let changed = steering_view_yaw(30.0, -1.0, 0.016, true, 30.0, 0.25);
-        assert!(changed < 30.0 && changed > -30.0);
-    }
-
-    #[test]
-    fn smoothing_is_frame_rate_independent_even_at_five_fps() {
-        let mut reference: Option<f32> = None;
-        for fps in [5, 30, 60, 144] {
-            let mut yaw = 0.0;
-            for _ in 0..fps {
-                yaw = steering_view_yaw(yaw, 0.8, 1.0 / fps as f32, true, 40.0, 0.25);
-            }
-            if let Some(reference) = reference {
-                assert!((yaw - reference).abs() < 0.0001);
-            }
-            reference = Some(yaw);
-        }
-    }
-
-    #[test]
-    fn configurable_angle_response_and_return_to_center() {
-        let slow = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.5);
-        let fast = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.1);
-        assert!(fast > slow);
-        assert_eq!(steering_view_yaw(0.0, 2.0, 0.1, true, 45.0, 0.1), fast);
-        let centered = steering_view_yaw(30.0, 1.0, 0.1, false, 45.0, 0.25);
-        assert!(centered > 0.0 && centered < 30.0);
-        assert_eq!(steering_view_yaw(30.0, 0.0, 0.0, true, 45.0, 0.25), 30.0);
-    }
-}
 
 /// The automated manual's choice (#713) from gear `cur` (of `top`), the engine speed as a
 /// multiple of its idle, the pedals and the road speed.
-pub(crate) fn auto_shift_gear(
+pub fn auto_shift_gear(
     cur: i32,
     top: i32,
     n_over_idle: f32,
@@ -4042,43 +3492,5 @@ pub(crate) fn auto_shift_gear(
         cur - 1
     } else {
         cur
-    }
-}
-
-#[cfg(test)]
-mod auto_shift_tests {
-    use super::auto_shift_gear as g;
-
-    #[test]
-    fn the_automated_manual_shifts_by_the_engine_speed() {
-        // pulling away: first gear in from neutral, never reverse
-        assert_eq!(g(0, 5, 1.0, 0.5, 0.0, 0.0), 1);
-        assert_eq!(g(0, 5, 1.0, 0.0, 0.0, 0.0), 0);
-        assert_eq!(g(-1, 5, 3.0, 1.0, 0.0, 5.0), -1);
-        // up early with a light foot, late with a heavy one
-        assert_eq!(g(2, 5, 2.8, 0.3, 0.0, 30.0), 3);
-        assert_eq!(g(2, 5, 2.8, 1.0, 0.0, 30.0), 2);
-        assert_eq!(g(2, 5, 3.7, 1.0, 0.0, 30.0), 3);
-        // never past the top gear, down near the idle, not below first
-        assert_eq!(g(5, 5, 4.0, 1.0, 0.0, 90.0), 5);
-        assert_eq!(g(3, 5, 1.2, 0.0, 0.5, 20.0), 2);
-        assert_eq!(g(1, 5, 1.0, 0.0, 1.0, 2.0), 1);
-        assert_eq!(g(4, 5, 1.0, 0.0, 1.0, 3.0), 1);
-    }
-}
-
-#[cfg(test)]
-mod door_action_tests {
-    use super::door_action;
-
-    /// The door actions that work on every bus (#916).
-    #[test]
-    fn door_actions_name_a_door_or_all_of_them() {
-        assert_eq!(door_action("door_1"), Some(1));
-        assert_eq!(door_action("Door_3"), Some(3));
-        assert_eq!(door_action("doors_all"), Some(0));
-        assert_eq!(door_action("door_0"), None);
-        assert_eq!(door_action("bus_doorfront0"), None);
-        assert_eq!(door_action("door_x"), None);
     }
 }
