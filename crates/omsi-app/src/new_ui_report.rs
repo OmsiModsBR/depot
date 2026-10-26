@@ -193,11 +193,7 @@ impl App {
         self.new_ui.report = Some(Report {
             frame: ReportFrame {
                 title,
-                note: if lan {
-                    "the game keeps running"
-                } else {
-                    "paused"
-                },
+                note: if lan { "" } else { "paused" },
                 rows,
                 totals,
             },

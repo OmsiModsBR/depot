@@ -887,7 +887,7 @@ pub fn subject_part(w: usize, h: usize, rgba: &[u8]) -> Option<[f32; 4]> {
 /// game goes on behind it.
 pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddVehicleEvent> {
     let r = add_vehicle_rect(size);
-    let body = window(ui, r, "Add vehicle", "the game keeps running");
+    let body = window(ui, r, "Add vehicle", "");
     let mut event = None;
     let x0 = body.x + 20.0;
     let lw = ((body.w - 64.0) * 0.43).floor();
