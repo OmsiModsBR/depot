@@ -3912,13 +3912,30 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 100.0))
                     .unwrap_or(100.0))
             }
-            "nav_arrows" | "nav_ai" | "nav_surface" | "nav_light" | "nav_contours" | "get_up"
-            | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "reflections"
-            | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled"
-            | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift"
-            | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => {
-                v[&k] = json!(b(val))
-            }
+            "nav_arrows"
+            | "nav_ai"
+            | "nav_surface"
+            | "nav_light"
+            | "nav_contours"
+            | "get_up"
+            | "time_sync"
+            | "metar_sync"
+            | "ui_scale_window"
+            | "notes"
+            | "reflections"
+            | "steering_linear"
+            | "old_steering"
+            | "red_steer_spd"
+            | "ff_invert"
+            | "ff_enabled"
+            | "brake_hold"
+            | "auto_clutch"
+            | "momentary_gears"
+            | "auto_shift"
+            | "mouse_steering"
+            | "mouse_right_off"
+            | "mouse_smooth"
+            | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_orientation" => {
                 v[&k] = json!(if matches!(val, "north" | "heading") {
                     val
