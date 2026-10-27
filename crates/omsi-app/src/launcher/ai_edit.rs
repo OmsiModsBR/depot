@@ -89,14 +89,15 @@ impl Lists {
     }
 
     /// The files that differ from `saved`, with what to write.
+    /// (A file that does not read back byte for byte is never written: see `cannot_edit`.)
     pub fn to_write(&self, saved: &Lists) -> Vec<(String, Vec<u8>)> {
         let mut out = Vec::new();
-        if self.ailists != saved.ailists {
+        if self.ailists != saved.ailists && self.ailists.exact() {
             out.push((self.ailists_file.clone(), self.ailists.to_bytes()));
         }
         for p in &self.parks {
             let before = saved.parks.iter().find(|s| s.file == p.file);
-            if before.is_none_or(|b| b.doc != p.doc) {
+            if before.is_none_or(|b| b.doc != p.doc) && p.doc.exact() {
                 out.push((p.file.clone(), p.doc.to_bytes()));
             }
         }
