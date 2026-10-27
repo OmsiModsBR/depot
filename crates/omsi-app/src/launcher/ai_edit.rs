@@ -357,6 +357,12 @@ pub fn cannot_edit(l: &Launcher, folder: &str) -> Option<&'static str> {
     if !backup::writable(&dir.join(&lists.ailists_file)) {
         return Some("The map's files cannot be written (read only, or inside an archive).");
     }
+    // (broken UTF-16, say: written back, it would change more than the lines edited)
+    if !lists.ailists.exact() || lists.parks.iter().any(|p| !p.doc.exact()) {
+        return Some(
+            "A list of this map is in a text encoding that cannot be written back unchanged: it is read only here.",
+        );
+    }
     None
 }
 
@@ -1100,10 +1106,9 @@ pub fn parked(l: &mut Launcher, body: Rect) {
         if let Some(p) = omsi_launcher_lib::pick_file(&title) {
             match content_name(&root, &p) {
                 Some(f) if f.to_ascii_lowercase().ends_with(".sco") => {
-                    let _ = e.act(|x| {
-                        x.parks[pi].doc.add(&f);
-                        Ok(())
-                    });
+                    if let Err(err) = e.act(|x| x.parks[pi].doc.add(&f)) {
+                        l.state.set_status(error_text(&err), true);
+                    }
                 }
                 Some(_) => l
                     .state
@@ -1220,18 +1225,12 @@ pub fn parked(l: &mut Launcher, body: Rect) {
     if let Some((i, d)) = step {
         let (f, n) = cars[i].clone();
         let to = (n as i32 + d).max(0) as usize;
-        let _ = e.act(|x| {
-            x.parks[pi].doc.set_count(&f, to);
-            Ok(())
-        });
+        let _ = e.act(|x| x.parks[pi].doc.set_count(&f, to));
         e.car = (to > 0).then_some(i);
     }
     if let Some(i) = drop {
         let f = cars[i].0.clone();
-        let _ = e.act(|x| {
-            x.parks[pi].doc.set_count(&f, 0);
-            Ok(())
-        });
+        let _ = e.act(|x| x.parks[pi].doc.set_count(&f, 0));
         e.car = None;
     }
     save_bar(l, &mut e, mid);
@@ -1296,6 +1295,9 @@ fn error_text(e: &EditError) -> &'static str {
         }
         EditError::HoldsFleet => "A depot's fleet lists follow this group: it stays.",
         EditError::Depot => "A depot's group is read only here.",
+        EditError::Unwritable => {
+            "The list's text encoding cannot hold this name: rename the folder or file to plain letters."
+        }
         _ => "This change cannot be made to the list.",
     }
 }
@@ -2096,8 +2098,8 @@ mod tests {
         now.ailists
             .add_vehicle(g, "Vehicles\\T\\t.ovh", 1.0)
             .unwrap();
-        now.parks[0].doc.set_count("P\\x.sco", 1);
-        now.parks[0].doc.add("P\\y.sco");
+        now.parks[0].doc.set_count("P\\x.sco", 1).unwrap();
+        now.parks[0].doc.add("P\\y.sco").unwrap();
         let c = changes(&saved, &now);
         assert_eq!(
             c,
