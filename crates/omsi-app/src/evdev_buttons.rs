@@ -17,7 +17,7 @@ struct Device {
     buttons: usize,
 }
 
-pub(crate) struct ButtonDevices {
+pub struct ButtonDevices {
     devices: Vec<Device>,
     scanned: Instant,
 }
@@ -144,7 +144,7 @@ impl ButtonDevices {
 }
 
 /// A key below the buttons (0x100, the bitmap's last four words): a keyboard's.
-fn has_keyboard_keys(bitmap: &str) -> bool {
+pub fn has_keyboard_keys(bitmap: &str) -> bool {
     bitmap
         .split_whitespace()
         .rev()
@@ -165,30 +165,10 @@ fn udev_says_no_joystick(node: &str) -> bool {
     !data.lines().any(|l| l == "E:ID_INPUT_JOYSTICK=1")
 }
 
-fn bit_count(bitmap: &str) -> u32 {
+pub fn bit_count(bitmap: &str) -> u32 {
     bitmap
         .split_whitespace()
         .filter_map(|w| u64::from_str_radix(w, 16).ok())
         .map(u64::count_ones)
         .sum()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn axes_are_counted() {
-        assert_eq!(super::bit_count("0"), 0);
-        assert_eq!(super::bit_count("3007b"), 8);
-        assert_eq!(super::bit_count("1 3"), 3);
-    }
-
-    #[test]
-    fn keyboards_and_mice_are_told_from_a_gear_shifter() {
-        // the Aerosoft gear shifter, a gaming mouse, a keyboard's media keys
-        assert!(!super::has_keyboard_keys(
-            "3f 0 0 0 0 0 0 ffff00000000 0 0 0 0"
-        ));
-        assert!(!super::has_keyboard_keys("ffffffff0000 0 0 0 0"));
-        assert!(super::has_keyboard_keys("3f00733fff 0 0 483ffff17aff32d bfd4444600000000 1 130ff38b17d000 677bfad9415fed 19ed68000004400 10000002"));
-    }
 }

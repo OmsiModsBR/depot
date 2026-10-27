@@ -89,6 +89,19 @@ fn clear_and_read_back() {
 }
 
 #[test]
+fn quality_options_are_taken_as_far_as_the_card_goes() {
+    let Some(mut dev) = device() else { return };
+    // (an off-screen device has no window picture to multisample)
+    dev.set_quality(8, 16).unwrap();
+    assert_eq!(dev.msaa.1, 1);
+    assert!((1..=16).contains(&dev.anisotropy) && dev.anisotropy <= dev.max_anisotropy);
+    dev.set_quality(0, 0).unwrap();
+    assert_eq!((dev.msaa.0, dev.anisotropy), (1, 1));
+    dev.begin_frame(&frame([0., 1., 0., 1.])).unwrap();
+    assert!(all_near(&dev.end_frame().unwrap(), [0, 255, 0, 255], 0));
+}
+
+#[test]
 fn opaque_quad_shows_its_texture_times_tint() {
     let Some(mut dev) = device() else { return };
     let px = draw_one(

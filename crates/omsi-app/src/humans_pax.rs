@@ -45,7 +45,7 @@ use std::sync::Arc;
 
 /// OMSI's tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Task {
+pub enum Task {
     Nothing,
     WaitingForBus,
     /// Task 2: the bus comes, to the stop's gather point.
@@ -85,7 +85,7 @@ pub(super) const TICKET_BUY: u8 = 3;
 
 /// One passenger's state: the fields of the original's human the tasks use.
 #[derive(Debug, Clone)]
-pub(super) struct Pax {
+pub struct Pax {
     pub task: Task,
     /// Movement state: 0 stand, 1 to the target, 2 0.7 m short of it, 3 there, 5
     /// along the paths, 6 0.7 m short of the path's end, 7 at the path's end, 9 turning on
@@ -197,7 +197,7 @@ pub(super) struct Pax {
 }
 
 impl Pax {
-    pub(super) fn new(walk_speed: f32, stop_request_random: f64) -> Pax {
+    pub fn new(walk_speed: f32, stop_request_random: f64) -> Pax {
         Pax {
             task: Task::Nothing,
             st: 0,
@@ -265,7 +265,7 @@ impl Pax {
         }
     }
 
-    fn wants_stop_at(&mut self, stop: &RequestStop, bus_pos: DVec3, departing: bool) -> bool {
+    pub fn wants_stop_at(&mut self, stop: &RequestStop, bus_pos: DVec3, departing: bool) -> bool {
         if !self.dest.as_ref().is_some_and(|dest| stop.is_named(dest)) {
             return false;
         }
@@ -286,7 +286,7 @@ impl Pax {
 /// The next stop of the route, independently of the local boarding range. A planned
 /// stop can be known before its tile and its waiting passengers have been loaded.
 #[derive(Debug, Clone)]
-pub(super) struct RequestStop {
+pub struct RequestStop {
     pub id: i64,
     pub name: String,
     pub alias: String,
@@ -305,7 +305,7 @@ pub(super) const OUTSIDE_ROOM: f32 = 50.0;
 
 /// A waiting place of a stop (a `[passpos]` of an object near it).
 #[derive(Debug, Clone)]
-pub(super) struct WaitSpot {
+pub struct WaitSpot {
     /// The `[passpos]` point (world): the feet, or a seated person's hip.
     pub pos: DVec3,
     /// Heading (degrees, the world's).
@@ -317,7 +317,7 @@ pub(super) struct WaitSpot {
 /// The `n`th place beside waiting place `sp` (somebody of a neighbouring stop has it):
 /// 0.7 m along the kerb of the stop (heading `heading`) a step, by turns ahead and behind -
 /// on foot, a seat's place too, facing as the place does.
-pub(super) fn beside_place(sp: &WaitSpot, heading: f64, n: usize) -> WaitSpot {
+pub fn beside_place(sp: &WaitSpot, heading: f64, n: usize) -> WaitSpot {
     let h = heading.to_radians();
     let along = DVec3::new(h.sin(), h.cos(), 0.0);
     let steps = n.div_ceil(2) as f64 * if n % 2 == 1 { 1.0 } else { -1.0 };
@@ -329,7 +329,7 @@ pub(super) fn beside_place(sp: &WaitSpot, heading: f64, n: usize) -> WaitSpot {
 }
 
 /// What OMSI keeps of a bus stop for the people (the station record).
-pub(super) struct PaxStop {
+pub struct PaxStop {
     pub name: String,
     /// Its name in the timetable (empty without one), where the passengers' destinations
     /// come from: the object's label is the stop's name to OMSI, but a map whose
@@ -370,7 +370,7 @@ pub(super) struct PaxStop {
 impl PaxStop {
     /// Whether a destination or a terminus `name` is this stop: its label, or its name in
     /// the timetable.
-    pub(super) fn is_named(&self, name: &str) -> bool {
+    pub fn is_named(&self, name: &str) -> bool {
         let name = name.trim();
         name == self.name.trim() || (!self.alias.is_empty() && name == self.alias.trim())
     }
@@ -380,7 +380,7 @@ impl PaxStop {
 /// second, the lateral one over a second (both weighed down below 1 m/s), and the swings
 /// of the first between +0.2 and -0.2 m/s² (a jerky right foot).
 #[derive(Debug, Clone, Default)]
-pub(super) struct RideComfort {
+pub struct RideComfort {
     /// The eased longitudinal and lateral accelerations (m/s²).
     fast_long: f32,
     slow_lat: f32,
@@ -398,7 +398,7 @@ impl RideComfort {
     /// for the fifth and every further swing of the throttle and brake less than 4 s apart,
     /// 0.1 for a bend taken at over 3 m/s² or braking or pulling away at over 5 m/s² (once
     /// a second at most).
-    pub(super) fn step(&mut self, dt: f32, now_ms: f64, speed: f32, lat: f32, long: f32) -> f32 {
+    pub fn step(&mut self, dt: f32, now_ms: f64, speed: f32, lat: f32, long: f32) -> f32 {
         let w = speed.abs().min(1.0);
         let kf = (10.0 * dt).min(0.5);
         let ks = dt.min(0.5);
@@ -442,14 +442,14 @@ impl RideComfort {
 /// Where a rider's complaints about the driving come (the human's constructor):
 /// the first below 0.1, the second from 0.2 to 0.4, the third (and off at the next stop)
 /// from 0.5 to 0.8, for `r` three draws from 0..1.
-pub(super) fn bad_ride_thresholds(r: [f32; 3]) -> [f32; 3] {
+pub fn bad_ride_thresholds(r: [f32; 3]) -> [f32; 3] {
     let a = 0.1 * r[0];
     [a, 0.1 + a.max(0.1) + 0.2 * r[1], 0.5 + 0.3 * r[2]]
 }
 
 /// The complaint a rider says as the ride's toll `x` reaches their next threshold
 /// (the worst first, each only once): 1, 2, 3 or none.
-pub(super) fn bad_ride_complaint(x: f32, said: u8, at: [f32; 3]) -> Option<u8> {
+pub fn bad_ride_complaint(x: f32, said: u8, at: [f32; 3]) -> Option<u8> {
     if at[2] <= x && said < 3 {
         Some(3)
     } else if at[1] <= x && said < 2 {
@@ -464,7 +464,7 @@ pub(super) fn bad_ride_complaint(x: f32, said: u8, at: [f32; 3]) -> Option<u8> {
 /// What the stops say about a bus this frame: the stop ahead it is pulling
 /// in to, the stops within 60 m, and whether it empties.
 #[derive(Debug, Clone, Default)]
-pub(super) struct BusAtStops {
+pub struct BusAtStops {
     pub next: Option<i64>,
     pub request_next: Option<RequestStop>,
     pub near: Vec<i64>,
@@ -473,7 +473,7 @@ pub(super) struct BusAtStops {
 
 /// The trip the player's duty has the bus on, as the people at the stops see it.
 #[derive(Debug, Clone, PartialEq)]
-pub(super) struct DutyTrip {
+pub struct DutyTrip {
     /// Which trip it is (its name and departure), to notice the next one.
     pub name: String,
     pub departure: f64,
@@ -489,7 +489,7 @@ pub(super) struct DutyTrip {
 impl DutyTrip {
     /// Duty trip `trip`, its stops named as `names` (`Schedule::stop_names`) has them: by the
     /// object's id where it does not know the object, as the stops' targets are.
-    pub(super) fn of(
+    pub fn of(
         trip: &crate::schedule::PlannedTrip,
         names: Option<&HashMap<i64, String>>,
     ) -> DutyTrip {
@@ -516,7 +516,7 @@ impl DutyTrip {
 
 /// Whom a bus takes on at the stops (see `at_stop` and `fit`).
 #[derive(Debug, Clone)]
-pub(super) enum Takes {
+pub enum Takes {
     /// Those whose line record lists its terminus, as in OMSI: a timetable bus.
     Terminus,
     /// The player's bus on a duty: those as well whom its trip takes where they are going,
@@ -534,7 +534,7 @@ pub(super) enum Takes {
 
 /// What a bus near a stop does there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum AtStop {
+pub enum AtStop {
     /// Everybody gets off and nobody on: the bus shows no destination (it is not in
     /// service), or it is at its terminus.
     Empties,
@@ -546,7 +546,7 @@ pub(super) enum AtStop {
 
 /// What a bus showing `terminus` (None: no destination, or one of `[addterminus_allexit]`)
 /// and taking `takes` does at stop `id`.
-pub(super) fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &Takes) -> AtStop {
+pub fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &Takes) -> AtStop {
     let Some(t) = terminus else {
         return AtStop::Empties;
     };
@@ -573,7 +573,7 @@ pub(super) fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &T
 
 /// Why somebody waiting takes a bus (`fit`); the better first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Fit {
+pub enum Fit {
     /// Its terminus is on their line record (OMSI's only test).
     Terminus,
     /// The player's duty takes them where they are going: its trip's terminus is on the
@@ -585,7 +585,7 @@ pub(super) enum Fit {
 
 /// Of the buses somebody waiting may take (bus, why, how far away), the one with the better
 /// reason (`Fit`), of those the nearest.
-pub(super) fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId, Fit)> {
+pub fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId, Fit)> {
     buses
         .min_by(|a, b| a.1.cmp(&b.1).then(a.2.total_cmp(&b.2)))
         .map(|b| (b.0, b.1))
@@ -599,7 +599,7 @@ pub(super) fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option
 /// shortened name, the terminus of another variant of the line, a file made for another
 /// map) left the people at every stop of a duty waiting for another bus. The duty knows
 /// the trip: whoever it takes where they are going gets on.
-pub(super) fn fit(
+pub fn fit(
     id: i64,
     stop: &PaxStop,
     dest: Option<&str>,
@@ -641,7 +641,7 @@ pub(super) fn fit(
 /// the other end, the points reached through it, the link's index, its room
 /// height and step sounds.
 #[derive(Debug, Clone)]
-pub(super) struct RouteLink {
+pub struct RouteLink {
     pub to: usize,
     pub reach: Vec<usize>,
     pub link: usize,
@@ -652,7 +652,7 @@ pub(super) struct RouteLink {
 /// every point a depth-first walk, each point reached noting every point visited so far as
 /// reached through its link back to where it came from. A one-way link a -> b is walked
 /// back only from b.
-pub(super) fn build_routes(n: usize, links: &[(i32, i32, bool)]) -> Vec<Vec<RouteLink>> {
+pub fn build_routes(n: usize, links: &[(i32, i32, bool)]) -> Vec<Vec<RouteLink>> {
     let mut adj: Vec<Vec<RouteLink>> = vec![Vec::new(); n];
     for (k, &(a, b, oneway)) in links.iter().enumerate() {
         if a < 0 || b < 0 || a as usize >= n || b as usize >= n {
@@ -708,7 +708,7 @@ pub(super) fn build_routes(n: usize, links: &[(i32, i32, bool)]) -> Vec<Vec<Rout
 /// Whether passenger `x` keeps timetable bus `bus` at its stop (as in OMSI): on the
 /// way out of it (`Some(None)`, at whatever stop), or walking up to its doors from stop `s`
 /// (`Some(Some(s))`: only while the bus serves that stop). Anybody else, not.
-pub(super) fn holds_bus(x: &Pax, bus: BusId) -> Option<Option<i64>> {
+pub fn holds_bus(x: &Pax, bus: BusId) -> Option<Option<i64>> {
     if x.bus != Some(bus) {
         return None;
     }
@@ -734,7 +734,7 @@ impl Cabin {
     /// rear door has the button boarded by that door alone); `avoid`: a passenger buying
     /// a ticket skips `{noticketsale}` doors. Nothing found: the first of the list, or the
     /// search again without `avoid`.
-    pub(super) fn omsi_nearest(
+    pub fn omsi_nearest(
         &self,
         p: Vec3,
         list: &[Option<usize>],
@@ -792,7 +792,7 @@ impl Cabin {
     /// The validator nearest `p` (bus frame, the height weighed as in `omsi_nearest`): the
     /// one a passenger who came in there stamps at. The first of equally near ones; in a
     /// cabin of sections nobody walks between, one in the sections of `p`'s nearest point.
-    pub(super) fn nearest_stamper(&self, p: Vec3) -> Option<usize> {
+    pub fn nearest_stamper(&self, p: Vec3) -> Option<usize> {
         let at = |s: &(Option<usize>, Vec3)| {
             s.0.and_then(|k| self.graph.points.get(k).copied())
                 .unwrap_or(s.1)
@@ -806,18 +806,14 @@ impl Cabin {
     }
 
     /// The group of sections path point `p` lies in (see `groups`).
-    pub(super) fn group_at(&self, p: Option<usize>) -> Option<usize> {
+    pub fn group_at(&self, p: Option<usize>) -> Option<usize> {
         p.and_then(|q| self.point_group.get(q).copied())
     }
 
     /// The points of `list` in group `g`, the others left out (None): where a trailer hangs
     /// on that nobody walks into from the bus (#718), a passenger keeps to the sections they
     /// are in - the doors and devices of the others are out of reach. One group: `list`.
-    pub(super) fn in_group(
-        &self,
-        list: Vec<Option<usize>>,
-        g: Option<usize>,
-    ) -> Vec<Option<usize>> {
+    pub fn in_group(&self, list: Vec<Option<usize>>, g: Option<usize>) -> Vec<Option<usize>> {
         match g {
             Some(g) if self.groups > 1 => list
                 .into_iter()
@@ -828,7 +824,7 @@ impl Cabin {
     }
 
     /// The next point from `from` towards `to` and the link taken.
-    pub(super) fn route_next(&self, from: usize, to: usize) -> Option<(usize, usize)> {
+    pub fn route_next(&self, from: usize, to: usize) -> Option<(usize, usize)> {
         let links = self.routes.get(from)?;
         links
             .iter()
@@ -837,14 +833,14 @@ impl Cabin {
     }
 
     /// The path points of the entries / exits, in order.
-    pub(super) fn entry_points(&self) -> Vec<Option<usize>> {
+    pub fn entry_points(&self) -> Vec<Option<usize>> {
         self.entries.iter().map(|e| e.point).collect()
     }
-    pub(super) fn exit_points(&self) -> Vec<Option<usize>> {
+    pub fn exit_points(&self) -> Vec<Option<usize>> {
         self.exits.iter().map(|e| e.point).collect()
     }
     /// ({noticketsale}, {withbutton}) of each entry.
-    pub(super) fn entry_flags(&self) -> Vec<(bool, bool)> {
+    pub fn entry_flags(&self) -> Vec<(bool, bool)> {
         self.entries.iter().map(|e| (!e.sells, e.button)).collect()
     }
 }
@@ -884,11 +880,7 @@ impl Humans {
 
     /// The stops as the buses see them this frame, and the
     /// odometers of the buses.
-    pub(super) fn register_buses(
-        &mut self,
-        buses: &[BusNow],
-        dt: f32,
-    ) -> HashMap<BusId, BusAtStops> {
+    pub fn register_buses(&mut self, buses: &[BusNow], dt: f32) -> HashMap<BusId, BusAtStops> {
         let mut out: HashMap<BusId, BusAtStops> = HashMap::new();
         for s in self.stops.values_mut() {
             s.buses.clear();
@@ -1017,12 +1009,7 @@ impl Humans {
     /// place is taken only with the chance `STAND_CHANCE`, or once no seat is free (so a few
     /// riders stand beside empty seats, but not a crowd of them). Within the kind chosen the
     /// pick is at random. (Behaviour first seen in openOMSI #2063, MIT; written afresh.)
-    pub(super) fn reserve_place(
-        &mut self,
-        bus: BusId,
-        places: &[Seat],
-        off: &[bool],
-    ) -> Option<usize> {
+    pub fn reserve_place(&mut self, bus: BusId, places: &[Seat], off: &[bool]) -> Option<usize> {
         let n = places.len();
         let seats = self.seats.entry(bus).or_insert_with(|| vec![false; n]);
         if seats.len() < n {
@@ -2666,7 +2653,7 @@ impl Humans {
     }
 
     /// The greeting or complaint stepping into the player's bus.
-    pub(super) fn greet_or_complain(&mut self, i: usize, bn: &BusNow) {
+    pub fn greet_or_complain(&mut self, i: usize, bn: &BusNow) {
         let Some((whinge, chat)) = self.tickets.as_ref().map(|t| (t.whinge_prop, t.chattiness))
         else {
             return;
@@ -3004,828 +2991,5 @@ impl Humans {
             }
         }
         self.pardon_max = self.pardon_max.max(self.pardons);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::humans::CabinAir;
-    use glam::Mat4;
-    use std::path::Path;
-
-    #[test]
-    fn arriving_ai_uses_the_timetable_stop_not_a_neighbour() {
-        let dir = std::env::temp_dir().join(format!("omsi-ai-stop-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("test.bus"),
-            "[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n",
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("paths.cfg"),
-            "[pathpnt]\n1\n0\n0\n[pathpnt]\n0\n0\n0\n[pathlink]\n0\n1\n",
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("cabin.cfg"),
-            "[entry]\n0\n[exit]\n0\n[passpos]\n0\n0\n0.9\n0.45\n0\n",
-        )
-        .unwrap();
-        let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-        let cabin =
-            Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
-        std::fs::remove_dir_all(&dir).unwrap();
-        let mut humans = Humans::new(Path::new("/nonexistent"));
-        humans.stops.insert(42, test_stop("Scheduled", ""));
-        let mut neighbour = test_stop("Neighbour", "");
-        neighbour.pos = DVec3::Y * 3.0;
-        humans.stops.insert(99, neighbour);
-        let mut bus = BusNow {
-            id: BusId::Ai(3),
-            next_stop: Some(RequestStop {
-                id: 42,
-                name: "Scheduled".into(),
-                alias: String::new(),
-                pos: DVec3::ZERO,
-            }),
-            cabin,
-            pos: DVec3::ZERO,
-            rot: Mat4::IDENTITY,
-            heading: 0.0,
-            speed: 0.0,
-            entry_open: vec![true],
-            exit_open: vec![true],
-            walk_open: None,
-            interior: 0.0,
-            air: CabinAir::default(),
-            half: DVec2::new(1.25, 6.0),
-            centre: DVec2::ZERO,
-            accel: DVec2::ZERO,
-            trailers: Vec::new(),
-            terminus: Some("Elsewhere".into()),
-            takes: Takes::Terminus,
-            places_off: Vec::new(),
-            served: None,
-        };
-        let register = |humans: &mut Humans, bus: &BusNow| {
-            humans
-                .register_buses(std::slice::from_ref(bus), 0.0)
-                .remove(&bus.id)
-                .unwrap()
-        };
-        let registered = register(&mut humans, &bus);
-        assert_eq!(
-            registered.next,
-            Some(42),
-            "a neighbouring platform cannot replace the trip stop"
-        );
-        assert_eq!(
-            registered.near,
-            [42, 99],
-            "nearby stops still participate in boarding detection"
-        );
-        bus.next_stop.as_mut().unwrap().id = 123;
-        assert_eq!(
-            register(&mut humans, &bus).next,
-            None,
-            "do not arrive at a different stop while the trip stop is absent"
-        );
-        bus.served = Some(123);
-        assert_eq!(
-            register(&mut humans, &bus).next,
-            Some(123),
-            "an unloaded timetable stop retains the upstream served-stop fallback"
-        );
-        bus.served = None;
-        bus.next_stop = None;
-        assert_eq!(
-            register(&mut humans, &bus).next,
-            Some(99),
-            "unknown routes retain the geometric fallback"
-        );
-        bus.next_stop = Some(RequestStop {
-            id: 42,
-            name: "Scheduled".into(),
-            alias: String::new(),
-            pos: DVec3::ZERO,
-        });
-        bus.id = BusId::Player;
-        assert_eq!(
-            register(&mut humans, &bus).next,
-            Some(99),
-            "preserve the player's OMSI-compatible geometric detection"
-        );
-    }
-
-    /// A timetable bus waits for the people walking up to its doors from its stop and for
-    /// those on their way out of it - not for the people still at the gather point, who
-    /// held a full bus at the stop for good (#767).
-    #[test]
-    fn who_keeps_a_timetable_bus_at_its_stop() {
-        let bus = BusId::Ai(7);
-        let mut x = Pax::new(1.1, 0.5);
-        x.bus = Some(bus);
-        x.stop = Some(42);
-        x.task = Task::ToBus;
-        assert_eq!(holds_bus(&x, bus), None);
-        x.task = Task::WaitingForBus;
-        assert_eq!(holds_bus(&x, bus), None);
-        x.task = Task::WalkingToBus;
-        assert_eq!(holds_bus(&x, bus), Some(Some(42)));
-        assert_eq!(holds_bus(&x, BusId::Ai(8)), None);
-        x.task = Task::InBusToExit;
-        x.inside = Some(bus);
-        assert_eq!(holds_bus(&x, bus), Some(None));
-        x.task = Task::SittingInBus;
-        assert_eq!(holds_bus(&x, bus), None);
-    }
-
-    /// Smooth driving upsets nobody; a hard stop, a fast bend and a jerky foot do, as in
-    /// OMSI (#862).
-    #[test]
-    fn the_riders_feel_hard_braking_fast_bends_and_a_jerky_foot() {
-        let dt = 0.02;
-        let run = |f: &dyn Fn(f64) -> (f32, f32, f32), secs: f64| {
-            let mut c = RideComfort::default();
-            let mut jolts = Vec::new();
-            let mut t = 0.0;
-            while t < secs {
-                let (v, lat, long) = f(t);
-                let k = c.step(dt, (t + 10.0) * 1000.0, v, lat, long);
-                if k > 0.0 {
-                    jolts.push((t, k));
-                }
-                t += dt as f64;
-            }
-            jolts
-        };
-        // pulling away at 1.2 m/s², cruising, braking at 1.5 m/s² to a stop: nothing
-        assert!(run(
-            &|t| if t < 10.0 {
-                (1.2 * t as f32, 0.0, 1.2)
-            } else if t < 20.0 {
-                (12.0, 0.0, 0.0)
-            } else if t < 28.0 {
-                (12.0 - 1.5 * (t as f32 - 20.0), 0.0, -1.5)
-            } else {
-                (0.0, 0.0, 0.0)
-            },
-            40.0
-        )
-        .is_empty());
-        // a gentle bend at 1.5 m/s² sideways
-        assert!(run(&|_| (10.0, 1.5, 0.0), 10.0).is_empty());
-        // an emergency stop at 7 m/s²: one jolt, not one a frame
-        let hard = run(
-            &|t| {
-                if t < 1.0 {
-                    (14.0, 0.0, 0.0)
-                } else {
-                    (14.0, 0.0, -7.0)
-                }
-            },
-            2.0,
-        );
-        assert_eq!(hard.len(), 1, "{hard:?}");
-        assert_eq!(hard[0].1, 0.1);
-        // a bend at 4 m/s² held for seconds
-        assert_eq!(run(&|_| (12.0, 4.0, 0.0), 6.0).len(), 1);
-        // throttle and brake every 1.5 s: the fifth swing on upsets them, each further one too
-        let jerky = run(
-            &|t| {
-                (
-                    8.0,
-                    0.0,
-                    if (t / 1.5).floor() as i64 % 2 == 0 {
-                        1.0
-                    } else {
-                        -1.0
-                    },
-                )
-            },
-            15.0,
-        );
-        assert!(
-            jerky.len() >= 4 && jerky.iter().all(|j| j.1 == 0.05) && jerky[0].0 > 5.0,
-            "{jerky:?}"
-        );
-        // standing, nothing counts
-        assert!(run(&|_| (0.0, 5.0, -8.0), 5.0).is_empty());
-    }
-
-    #[test]
-    fn complaints_come_worst_first_and_once_each() {
-        let at = bad_ride_thresholds([0.5, 0.5, 0.5]);
-        assert!(
-            (at[0] - 0.05).abs() < 1e-6
-                && (at[1] - 0.3).abs() < 1e-6
-                && (at[2] - 0.65).abs() < 1e-6
-        );
-        let lo = bad_ride_thresholds([0.0, 0.0, 0.0]);
-        let hi = bad_ride_thresholds([1.0, 1.0, 1.0]);
-        assert!(
-            lo[1] >= 0.2 - 1e-6
-                && hi[1] <= 0.4 + 1e-6
-                && lo[2] >= 0.5 - 1e-6
-                && hi[2] <= 0.8 + 1e-6
-        );
-        assert_eq!(bad_ride_complaint(0.01, 0, at), None);
-        assert_eq!(bad_ride_complaint(0.1, 0, at), Some(1));
-        assert_eq!(bad_ride_complaint(0.1, 1, at), None);
-        assert_eq!(bad_ride_complaint(0.35, 1, at), Some(2));
-        // a crash straight to the top: the worst at once, then nothing more
-        assert_eq!(bad_ride_complaint(0.9, 0, at), Some(3));
-        assert_eq!(bad_ride_complaint(0.95, 3, at), None);
-        // three emergency stops in a row take a rider from nothing past 0.27
-        let mut x = 0.0f32;
-        for _ in 0..3 {
-            x += (1.0 - x) * 0.1;
-        }
-        assert!((x - 0.271).abs() < 1e-3);
-    }
-
-    fn test_stop(name: &str, alias: &str) -> PaxStop {
-        PaxStop {
-            name: name.into(),
-            alias: alias.into(),
-            pos: DVec3::ZERO,
-            heading: 0.0,
-            gather: DVec3::ZERO,
-            spots: Vec::new(),
-            taken: Vec::new(),
-            enter_max: 1.0,
-            enter_min: 0.0,
-            length: 30.0,
-            lane: None,
-            was_near: false,
-            near: false,
-            clock_ms: 0.0,
-            want: 0,
-            factor: 1.0,
-            buses: Vec::new(),
-            dests: Vec::new(),
-            lines: Vec::new(),
-        }
-    }
-
-    /// The player's bus on a duty takes the people its trip takes where they are going,
-    /// whatever its depot file calls the terminus; in free drive, or with no destination
-    /// shown, nobody; a bus whose terminus is on their line record comes first.
-    #[test]
-    fn who_boards_the_players_bus() {
-        // line 76 from Bauernhof (stop 10) by Kirche to Endstation; the depot file calls the
-        // terminus "Endstation Grundorf", the timetable "Endstation"
-        let trip = |name: &str| crate::schedule::PlannedStop {
-            object_id: match name {
-                "Bauernhof" => 10,
-                "Kirche" => 11,
-                "Depot" => 13,
-                _ => 12,
-            },
-            name: format!("{name} "),
-            arr: 0.0,
-            dep: 0.0,
-            position: None,
-            dir: Default::default(),
-            stops: name != "Depot",
-        };
-        let planned = crate::schedule::PlannedTrip {
-            name: "76-1".into(),
-            line: "76".into(),
-            terminus: "Endstation ".into(),
-            departure: 8.0 * 3600.0,
-            end: 9.0 * 3600.0,
-            stops: ["Bauernhof", "Depot", "Kirche", "Endstation"]
-                .into_iter()
-                .map(trip)
-                .collect(),
-        };
-        // (named as the timetable's Busstops.cfg names the objects; one it does not know by
-        // its id)
-        let names: HashMap<i64, String> = [
-            (10, "Bauernhof".to_string()),
-            (11, "Kirche".to_string()),
-            (13, "Depot".to_string()),
-        ]
-        .into_iter()
-        .collect();
-        let dt = Arc::new(DutyTrip::of(&planned, Some(&names)));
-        assert_eq!(dt.terminus, "Endstation");
-        assert_eq!(
-            dt.stops.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
-            ["Bauernhof", "Depot", "Kirche", "12"]
-        );
-        let duty = |next: usize, done: bool| Takes::Duty {
-            trip: dt.clone(),
-            next,
-            done,
-        };
-        let here = test_stop("Bauernhof Grundorf", "Bauernhof");
-        let set = |t: &[&str]| t.iter().map(|x| x.to_string()).collect::<HashSet<String>>();
-        let shown = "Endstation Grundorf";
-
-        // on the duty with the destination shown: at the stop, and on the line record
-        // whatever spelling the depot file has
-        assert_eq!(
-            at_stop(10, &here, Some(shown), &duty(0, false)),
-            AtStop::Serves
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                shown,
-                &duty(0, false)
-            ),
-            Some(Fit::Duty)
-        );
-        // a record that does not list the trip's terminus at all (made of another variant's
-        // trips): the trip goes to their stop all the same
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            Some(Fit::Duty)
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("12"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            Some(Fit::Duty)
-        );
-        // ... but not somebody whose stop the trip does not go to, nor one it only passes
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Waldweg"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            None
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Depot"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            None
-        );
-        // nor at a stop the trip has left behind, or does not call at
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(3, false)
-            ),
-            None
-        );
-        assert_eq!(
-            fit(
-                20,
-                &test_stop("Am Teich", "Am Teich"),
-                Some("Kirche"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            None
-        );
-        // another platform of the stop's name will do
-        assert_eq!(
-            fit(
-                14,
-                &test_stop("Bauernhof 2", "Bauernhof"),
-                Some("Kirche"),
-                &set(&["Waldweg"]),
-                shown,
-                &duty(0, false)
-            ),
-            Some(Fit::Duty)
-        );
-        // the depot file's terminus on the record: the bus is theirs as in OMSI
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation Grundorf"]),
-                shown,
-                &duty(0, false)
-            ),
-            Some(Fit::Terminus)
-        );
-
-        // free drive: nobody waiting gets on, the riders get off at their stops
-        assert_eq!(
-            at_stop(10, &here, Some(shown), &Takes::Nobody),
-            AtStop::Passes
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                shown,
-                &Takes::Nobody
-            ),
-            None
-        );
-        // no destination shown (or "Nicht einsteigen"): it empties and takes nobody, duty or not
-        assert_eq!(at_stop(10, &here, None, &duty(0, false)), AtStop::Empties);
-        assert_eq!(at_stop(10, &here, None, &Takes::Nobody), AtStop::Empties);
-        // at the trip's last stop it empties too, whatever the depot file calls it ...
-        let end = test_stop("Endstation Grundorf Wendeschleife", "12");
-        assert_eq!(
-            at_stop(12, &end, Some(shown), &duty(3, true)),
-            AtStop::Empties
-        );
-        assert_eq!(
-            at_stop(12, &end, Some(shown), &duty(3, false)),
-            AtStop::Serves
-        );
-        // ... and as at the terminus it shows
-        assert_eq!(
-            at_stop(
-                12,
-                &test_stop("Endstation Grundorf", ""),
-                Some(shown),
-                &duty(3, false)
-            ),
-            AtStop::Empties
-        );
-        // a finished trip takes nobody by the duty, nor a works trip from the depot
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                shown,
-                &duty(0, true)
-            ),
-            None
-        );
-        let works = Takes::Duty {
-            trip: Arc::new(DutyTrip::of(
-                &crate::schedule::PlannedTrip {
-                    line: String::new(),
-                    ..planned.clone()
-                },
-                Some(&names),
-            )),
-            next: 0,
-            done: false,
-        };
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                shown,
-                &works
-            ),
-            None
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation Grundorf"]),
-                shown,
-                &works
-            ),
-            Some(Fit::Terminus)
-        );
-
-        // a timetable bus: as in OMSI, the terminus on the record or nothing
-        assert_eq!(
-            at_stop(10, &here, Some("Endstation"), &Takes::Terminus),
-            AtStop::Serves
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                "Endstation",
-                &Takes::Terminus
-            ),
-            Some(Fit::Terminus)
-        );
-        assert_eq!(
-            fit(
-                10,
-                &here,
-                Some("Kirche"),
-                &set(&["Endstation"]),
-                "Endstation Grundorf",
-                &Takes::Terminus
-            ),
-            None
-        );
-
-        // two buses at the stop: the one whose terminus is on the record, though further
-        let (ai, me) = (BusId::Ai(5), BusId::Player);
-        assert_eq!(
-            best_bus([(me, Fit::Duty, 5.0), (ai, Fit::Terminus, 30.0)].into_iter()),
-            Some((ai, Fit::Terminus))
-        );
-        assert_eq!(
-            best_bus([(ai, Fit::Terminus, 30.0), (me, Fit::Terminus, 5.0)].into_iter()),
-            Some((me, Fit::Terminus))
-        );
-        assert_eq!(
-            best_bus([(me, Fit::Duty, 5.0)].into_iter()),
-            Some((me, Fit::Duty))
-        );
-        assert_eq!(best_bus(std::iter::empty()), None);
-    }
-
-    fn stop(alias: &str) -> PaxStop {
-        PaxStop {
-            name: "Königsrath, Bf. Ausstieg".into(),
-            alias: alias.into(),
-            pos: DVec3::ZERO,
-            heading: 0.0,
-            gather: DVec3::ZERO,
-            spots: Vec::new(),
-            taken: Vec::new(),
-            enter_max: 1.0,
-            enter_min: 0.0,
-            length: 30.0,
-            lane: None,
-            was_near: false,
-            near: false,
-            clock_ms: 0.0,
-            want: 0,
-            factor: 1.0,
-            buses: Vec::new(),
-            dests: Vec::new(),
-            lines: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn a_stop_answers_to_its_label_and_its_timetable_name() {
-        let s = stop("Koenigsrath Bf Ausstieg");
-        assert!(s.is_named("Königsrath, Bf. Ausstieg "));
-        assert!(
-            s.is_named("Koenigsrath Bf Ausstieg"),
-            "the timetable's spelling"
-        );
-        assert!(!s.is_named("Königsrath, Bf. Pause"));
-        // a stop the timetable does not know: its id, as the riders' destinations then are
-        assert!(stop("4711").is_named("4711"));
-        assert!(!stop("").is_named(""), "no timetable name: no empty match");
-    }
-
-    fn request_stop() -> RequestStop {
-        let stop = stop("Koenigsrath Bf Ausstieg");
-        RequestStop {
-            id: 42,
-            name: stop.name,
-            alias: stop.alias,
-            pos: stop.pos,
-        }
-    }
-
-    #[test]
-    fn passengers_request_between_departure_and_the_approach() {
-        let stop = request_stop();
-        let mut early = Pax::new(1.1, 1.0);
-        let mut middle = Pax::new(1.1, 0.5);
-        let mut late = Pax::new(1.1, 0.0);
-        early.dest = Some(stop.name.clone());
-        middle.dest = early.dest.clone();
-        late.dest = early.dest.clone();
-
-        // A rider can ask just after pulling away, while another waits until the approach.
-        assert!(!early.wants_stop_at(&stop, DVec3::Y * 1000.0, false));
-        assert_eq!(early.stop_request_at, None);
-        assert!(early.wants_stop_at(&stop, DVec3::Y * 1000.0, true));
-        assert!(!middle.wants_stop_at(&stop, DVec3::Y * 1000.0, true));
-        assert!(!late.wants_stop_at(&stop, DVec3::Y * 1000.0, true));
-        // Repeated frames do not draw a new point or shorten the leg used to choose it.
-        for _ in 0..120 {
-            assert!(!middle.wants_stop_at(&stop, DVec3::Y * 600.0, true));
-            assert_eq!(middle.stop_request_at, Some((42, 550.0)));
-        }
-        assert!(middle.wants_stop_at(&stop, DVec3::Y * 550.0, true));
-        assert!(!late.wants_stop_at(&stop, DVec3::Y * 100.01, true));
-        assert!(late.wants_stop_at(&stop, DVec3::Y * 100.0, true));
-        assert!(late.wants_stop_at(&stop, stop.pos, false));
-    }
-
-    #[test]
-    fn short_legs_keep_random_requests_after_departure() {
-        let stop = request_stop();
-        for length in [20.0, 60.0, 80.0, 100.0, 150.0] {
-            let mut early = Pax::new(1.1, 0.8);
-            let mut late = Pax::new(1.1, 0.2);
-            early.dest = Some(stop.name.clone());
-            late.dest = early.dest.clone();
-            assert!(!early.wants_stop_at(&stop, DVec3::Y * length, false));
-            assert!(!early.wants_stop_at(&stop, DVec3::Y * length, true));
-            assert!(!late.wants_stop_at(&stop, DVec3::Y * length, true));
-            let early_point = early.stop_request_at.unwrap().1;
-            let late_point = late.stop_request_at.unwrap().1;
-            assert!(0.0 < late_point && late_point < early_point && early_point < length);
-            let between = (early_point + late_point) / 2.0;
-            for _ in 0..120 {
-                assert!(early.wants_stop_at(&stop, DVec3::Y * between, true));
-                assert!(!late.wants_stop_at(&stop, DVec3::Y * between, true));
-                assert_eq!(late.stop_request_at, Some((stop.id, late_point)));
-            }
-            assert!(late.wants_stop_at(&stop, DVec3::Y * late_point, true));
-        }
-    }
-
-    #[test]
-    fn stop_requests_match_the_destination_and_its_timetable_alias() {
-        let stop = request_stop();
-        let mut passenger = Pax::new(1.1, 0.5);
-        assert!(!passenger.wants_stop_at(&stop, stop.pos, true));
-        passenger.dest = Some("Königsrath, Bf. Pause".into());
-        assert!(!passenger.wants_stop_at(&stop, stop.pos, true));
-        assert_eq!(passenger.stop_request_at, None);
-        passenger.dest = Some(stop.alias.clone());
-        assert!(passenger.wants_stop_at(&stop, stop.pos, true));
-        passenger.dest = Some(stop.name.clone());
-        assert!(passenger.wants_stop_at(&stop, stop.pos, true));
-    }
-
-    #[test]
-    fn stop_request_distances_vary_and_repeat_with_the_passenger_seed() {
-        let mut first = Humans::new(Path::new("/nonexistent"));
-        let mut second = Humans::new(Path::new("/nonexistent"));
-        first.set_lan_seed(42);
-        second.set_lan_seed(42);
-        let stop = request_stop();
-        let mut distances = Vec::new();
-        for _ in 0..100 {
-            let mut passenger = Pax::new(1.1, first.rand_f());
-            let mut repeated = Pax::new(1.1, second.rand_f());
-            passenger.dest = Some(stop.name.clone());
-            repeated.dest = passenger.dest.clone();
-            passenger.wants_stop_at(&stop, DVec3::Y * 1000.0, true);
-            repeated.wants_stop_at(&stop, DVec3::Y * 1000.0, true);
-            assert_eq!(passenger.stop_request_at, repeated.stop_request_at);
-            let distance = passenger.stop_request_at.unwrap().1;
-            assert!((100.0..=1000.0).contains(&distance));
-            distances.push(distance);
-        }
-        assert!(distances.iter().any(|distance| *distance < 300.0));
-        assert!(distances.iter().any(|distance| *distance > 800.0));
-    }
-
-    #[test]
-    fn a_timetable_stop_can_be_requested_before_its_tile_loads() {
-        let mut humans = Humans::new(Path::new("/nonexistent"));
-        let planned = crate::schedule::PlannedStop {
-            object_id: 42,
-            name: "Next stop".into(),
-            position: Some(DVec3::Y * 1000.0),
-            arr: 0.0,
-            dep: 0.0,
-            dir: Default::default(),
-            stops: true,
-        };
-        humans.set_player_next_stop(Some(&planned));
-        assert!(humans.stops.is_empty());
-        let target = humans.player_next_stop.as_ref().unwrap();
-        let mut passenger = Pax::new(1.1, 1.0);
-        passenger.dest = Some(planned.name);
-        assert!(passenger.wants_stop_at(target, DVec3::ZERO, true));
-        humans.set_player_next_stop(None);
-        assert!(humans.player_next_stop.is_none());
-    }
-
-    #[test]
-    pub(super) fn routes_follow_the_link_order_and_one_way_links() {
-        // 0 - 1 - 2, and 2 -> 0 one way
-        let r = build_routes(3, &[(0, 1, false), (1, 2, false), (2, 0, true)]);
-        // from 0 to 2: through 1 (0 cannot use the one-way link back from 0 to 2)
-        let next = |a: usize, b: usize| r[a].iter().find(|l| l.reach.contains(&b)).map(|l| l.to);
-        assert_eq!(next(0, 2), Some(1));
-        assert_eq!(
-            next(2, 0),
-            Some(1).or(Some(0)).filter(|_| true).and(next(2, 0))
-        );
-        assert_eq!(next(1, 0), Some(0));
-        assert_eq!(next(1, 2), Some(2));
-    }
-
-    /// The player's bus at a stop, its saloon light as `saloon_lit` (`AI_Interiorlight`)
-    /// and its model's interior lights as `interior`.
-    fn boarding_bus(saloon_lit: f32, interior: f32) -> BusNow {
-        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let k = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("omsi-too-dark-{}-{k}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("test.bus"),
-            "[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n",
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("paths.cfg"),
-            "[pathpnt]\n1\n0\n0\n[pathpnt]\n0\n0\n0\n[pathlink]\n0\n1\n",
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("cabin.cfg"),
-            "[entry]\n0\n[exit]\n0\n[passpos]\n0\n0\n0.9\n0.45\n0\n",
-        )
-        .unwrap();
-        let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-        let cabin =
-            Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
-        let _ = std::fs::remove_dir_all(&dir);
-        BusNow {
-            id: BusId::Player,
-            next_stop: None,
-            cabin,
-            pos: DVec3::ZERO,
-            rot: Mat4::IDENTITY,
-            heading: 0.0,
-            speed: 0.0,
-            entry_open: vec![true],
-            exit_open: vec![true],
-            walk_open: None,
-            interior,
-            air: CabinAir {
-                saloon_lit,
-                ..CabinAir::default()
-            },
-            half: DVec2::new(1.25, 6.0),
-            centre: DVec2::ZERO,
-            accel: DVec2::ZERO,
-            trailers: Vec::new(),
-            terminus: None,
-            takes: Takes::Terminus,
-            places_off: Vec::new(),
-            served: None,
-        }
-    }
-
-    /// Of `n` people stepping into `bus` in `daylight`, how many found nothing to
-    /// complain about (nobody says anything: the pack never whinges nor chats).
-    fn content_of(bus: &BusNow, daylight: f32, n: u32) -> u32 {
-        let mut humans = Humans::new(Path::new("/nonexistent"));
-        humans.tickets = Some(Arc::new(omsi_content::tickets::TicketPack::default()));
-        humans.daylight = daylight;
-        for _ in 0..n {
-            humans.greet_or_complain(0, bus);
-        }
-        assert_eq!(humans.stepped_in, n);
-        humans.content
-    }
-
-    #[test]
-    fn a_dark_saloon_at_night_is_too_dark_whatever_the_cab_light() {
-        // night: everybody finds the dark saloon too dark, the driver's light on or not
-        assert_eq!(content_of(&boarding_bus(0.0, 0.0), 0.0, 50), 0);
-        assert_eq!(content_of(&boarding_bus(0.0, 0.6), 0.0, 50), 0);
-        // the saloon lit: nobody
-        assert_eq!(content_of(&boarding_bus(1.0, 1.0), 0.0, 50), 50);
-    }
-
-    #[test]
-    fn only_the_dusk_makes_a_dark_saloon_too_dark() {
-        // broad daylight: a dark saloon is no matter
-        assert_eq!(content_of(&boarding_bus(0.0, 0.0), 0.6, 50), 50);
-        // at dusk (0.2 .. 0.5) some find it too dark and some do not
-        let content = content_of(&boarding_bus(0.0, 0.0), 0.35, 200);
-        assert!(
-            content > 0 && content < 200,
-            "{content} of 200 content at dusk"
-        );
     }
 }

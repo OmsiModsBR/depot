@@ -1,6 +1,6 @@
 use super::draw::{
-    arrow, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon, traffic_kind,
-    vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN,
+    arrow, focus_marker, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon,
+    traffic_kind, vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN,
 };
 use super::geometry::{build_roads, confirm_road_surfaces, congestion_on};
 use super::route::{build_route, lane_from_right, probe_lanes, RouteStyle};
@@ -87,6 +87,7 @@ impl Navigator {
             shown: if enabled { 1.0 } else { 0.0 },
             stop_spots: Vec::new(),
             bus_at: DVec3::ZERO,
+            bus_marker: None,
             next_turn: None,
             street_here: None,
             dist_t: 0.0,
@@ -714,7 +715,9 @@ impl Navigator {
         } else {
             f
         };
+        // (the route goes on following the bus; the maps follow the walker or the camera)
         self.follow(f);
+        // (the stops' helpers in the world stay with the bus too)
         self.bus_at = f.bus;
         self.stop_spots = f
             .stops
@@ -722,6 +725,22 @@ impl Navigator {
             .take(3)
             .map(|st| (st.position, st.name.clone(), f.heading, st.object_id))
             .collect();
+        let f3;
+        let f = match f.focus {
+            Some(focus) => {
+                self.bus_marker = Some((f.bus, f.heading));
+                f3 = NavFrame {
+                    bus: focus.at,
+                    heading: focus.heading,
+                    ..f.clone_ref()
+                };
+                &f3
+            }
+            None => {
+                self.bus_marker = None;
+                f
+            }
+        };
         if omsi_cfg::flags::DEBUG_NAV.is_set() && (self.time % 1.0) < f.dt {
             log::info!("navigator: route {} lanes (complete {}, provisional {}, at {}, on it {}, off for {:.1} s), {} stops ahead, next {:?}, key {:?}", self.route.lanes.len(), self.route.complete, self.route.provisional, self.route.progress, self.route.on_route, self.route.off_for, f.stops.len(), f.stops.first().map(|s| (s.name.clone(), s.position.x.round(), s.position.y.round())), self.route.key);
         }
@@ -744,8 +763,8 @@ impl Navigator {
             self.next_dist = match (f.stops.first(), net) {
                 (Some(s), Some(n)) if !self.route.lanes.is_empty() => self
                     .route_distance(n, s.position)
-                    .or_else(|| Some((s.position - f.bus).truncate().length())),
-                (Some(s), _) => Some((s.position - f.bus).truncate().length()),
+                    .or_else(|| Some((s.position - self.bus_at).truncate().length())),
+                (Some(s), _) => Some((s.position - self.bus_at).truncate().length()),
                 _ => None,
             };
             self.next_turn = net.and_then(|n| self.turn_ahead(n));
@@ -757,7 +776,7 @@ impl Navigator {
             } else {
                 global
                     .as_deref()
-                    .and_then(|g| g.nearest_lane_near(f.bus, LaneKind::Street))
+                    .and_then(|g| g.nearest_lane_near(self.bus_at, LaneKind::Street))
                     .filter(|l| l.2 < 10.0)
                     .and_then(|l| self.street_of(l.0))
             }
@@ -779,7 +798,7 @@ impl Navigator {
                 .surface
                 .as_ref()
                 .filter(|s| self.show_surface && s.has_location())
-                .and_then(|sf| sf.street_info(f.bus.truncate(), 30.0))
+                .and_then(|sf| sf.street_info(self.bus_at.truncate(), 30.0))
                 .map_or((0, 0), |s| (s.speed, s.heavy));
         }
         self.first = false;
@@ -990,7 +1009,9 @@ impl Navigator {
                         .min(self.route.lanes.len().saturating_sub(1)),
                 )
                 .copied();
-            let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
+            let bus_lane = first
+                .map(|l| lane_from_right(rn, l, self.bus_at))
+                .unwrap_or(0);
             if self.route_mesh.0 != self.route.version
                 || self.route_mesh.1 != self.jam_version
                 || self.route_mesh.2 != anchor
@@ -1314,7 +1335,25 @@ impl Navigator {
             .as_ref()
             .filter(|_| self.show_surface)
             .and_then(|s| s.player_style(f.line.as_deref()));
-        if let (Some(bp), Some((fill, ring))) = (project(vpm, vp, rel(f.bus)), player) {
+        // (the bus left behind, while the map follows the walker or the free camera)
+        if let (Some((at, heading)), Some(_)) = (self.bus_marker, f.focus) {
+            if let Some(bp) = project(vpm, vp, rel(at)) {
+                let a = (angle_diff(self.cam_heading, heading) as f32).to_radians();
+                arrow(
+                    &mut ui,
+                    bp,
+                    a,
+                    7.0 * s,
+                    1.25,
+                    Color::rgba(10, 10, 10, 0.8),
+                    TEXT_DIM,
+                );
+            }
+        }
+        if let (Some(focus), Some(bp)) = (f.focus, project(vpm, vp, rel(f.bus))) {
+            let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();
+            focus_marker(&mut ui, focus.kind, bp, a, 12.0 * s);
+        } else if let (Some(bp), Some((fill, ring))) = (project(vpm, vp, rel(f.bus)), player) {
             player_triangle(
                 &mut ui,
                 bp,
@@ -1387,7 +1426,7 @@ impl Navigator {
                 None
             };
             let lane = lane.or_else(|| {
-                n.nearest_lane_near(f.bus, LaneKind::Street)
+                n.nearest_lane_near(self.bus_at, LaneKind::Street)
                     .filter(|l| l.2 < 8.0)
                     .map(|l| l.0)
             })?;

@@ -116,6 +116,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `nav_ai` | yes | yes | yes | yes |
 | `nav_arrows` | yes | yes | yes | yes |
 | `nav_contours` | - | yes | yes | yes |
+| `nav_follow_view` | yes | yes | yes | yes |
 | `nav_light` | - | yes | yes | yes |
 | `nav_orientation` | - | yes | yes | yes |
 | `nav_surface` | - | yes | yes | yes |

@@ -43,7 +43,7 @@ pub(crate) fn game_menu_for(args: &crate::cli::Args) -> &'static [(&'static str,
 
 /// The lines of the game menu: (what, label). What can be set is on the pages behind
 /// "Options", "Vehicle options" and "World options" (see `game_lists`).
-pub(crate) const GAME_MENU: [(&str, &str); 15] = [
+pub const GAME_MENU: [(&str, &str); 15] = [
     ("resume", "Resume"),
     ("options", "Options..."),
     ("controls", "Controls..."),

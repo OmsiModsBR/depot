@@ -8,7 +8,7 @@ use crate::app::App;
 
 /// Which list the chooser shows.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ListKind {
+pub enum ListKind {
     Admin,
     /// The options of the game, on this page of the settings window.
     Options(usize),
@@ -95,7 +95,7 @@ fn route_numbers(app: &App) -> Vec<String> {
 /// Whether a line can be represented by the numeric IBIS line/suffix variables openOMSI
 /// already knows how to encode. Everything else must stay as display text: turning "-10"
 /// or "EXP" into a number loses information.
-fn numeric_ibis_line(line: &str) -> bool {
+pub fn numeric_ibis_line(line: &str) -> bool {
     let line = line.trim();
     if line.is_empty() {
         return false;
@@ -187,7 +187,7 @@ fn ibis_line_number(v: &omsi_sim::VehicleInstance) -> Option<String> {
 /// `IBIS_LinieKurs`, the IBIS's number without its letter, a pick made 92E into 92 on the
 /// IBIS and the matrix. Not `SetLineTo` on any other bus: no script of its own writes it,
 /// only an earlier pick, so a line typed on the IBIS since went back to that pick's.
-fn destination_line(v: &omsi_sim::VehicleInstance) -> String {
+pub fn destination_line(v: &omsi_sim::VehicleInstance) -> String {
     let blind = crate::schedule::has_roller_blind(v).then(|| v.str_var("SetLineTo"));
     [Some(v.str_var("Matrix_Nr")), blind]
         .into_iter()
@@ -428,12 +428,12 @@ fn hof_label(p: &std::path::Path) -> String {
 }
 
 /// The time speeds, traffic amounts and passenger shares the options step through.
-const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
-pub(crate) const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
+pub const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
+pub const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
 /// The most traffic anything may ask for: the menu's top step, the server's `traffic <n>`
 /// and server.cfg's `traffic` alike (#1327).
 #[cfg(feature = "server")]
-pub(crate) const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
+pub const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
 const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 /// The pedal strengths the options step through (see `settings::pedal_curve`).
@@ -441,12 +441,12 @@ const PEDAL: [f32; 7] = [0.5, 0.7, 0.85, 1.0, 1.25, 1.5, 2.0];
 
 /// The next of `steps` after `now` (round to the first).
 #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub(crate) fn next_step<T: PartialOrd + Copy>(steps: &[T], now: T) -> T {
+pub fn next_step<T: PartialOrd + Copy>(steps: &[T], now: T) -> T {
     steps.iter().copied().find(|s| *s > now).unwrap_or(steps[0])
 }
 
 /// A list line that heads the lines under it: not chosen, not run.
-pub(crate) const HEADING: &str = "#";
+pub const HEADING: &str = "#";
 /// The end of the action of a line whose value Left and Right step down and up (and the
 /// arrows drawn round its value): the action is run with `-` or `+` in its place, and with
 /// it as it is on Enter (see `App::chooser_adjust`).
@@ -1511,7 +1511,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
 
 /// How a row's value is changed.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum Move {
+pub enum Move {
     /// Enter or a click on the line: the next value (a switch flips, a row of values wraps).
     Next,
     /// Left: the previous value, or off.
@@ -1526,7 +1526,7 @@ pub(crate) enum Move {
 type Page = (&'static str, Vec<(String, String)>);
 
 /// A row of a settings window (see `ui::MenuKind::Options` for the format).
-pub(crate) fn row(name: &str, kind: char, value: &str, desc: &str, frac: Option<f32>) -> String {
+pub fn row(name: &str, kind: char, value: &str, desc: &str, frac: Option<f32>) -> String {
     format!(
         "{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}{}",
         frac.map(|f| format!("{f:.3}")).unwrap_or_default()
@@ -1590,7 +1590,7 @@ fn limit_or(
 }
 
 /// `limit_or` with the API given (so a test can ask without a running game).
-fn limit_row(
+pub fn limit_row(
     d3d9: bool,
     key: &str,
     name: &str,
@@ -1788,7 +1788,10 @@ fn step_move(steps: &[f32], now: f32, mv: Move) -> f32 {
 }
 
 /// Keep the physical triple-screen calibration separate from the single-screen FOV.
-fn set_camera_fov(settings: &mut crate::settings::Settings, value: f32) -> (&'static str, String) {
+pub fn set_camera_fov(
+    settings: &mut crate::settings::Settings,
+    value: f32,
+) -> (&'static str, String) {
     let value = if value < 20.0 {
         0.0
     } else {
@@ -2184,6 +2187,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
             }
         }
         "nav_ai" => app.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
+        "nav_follow_view" => s.nav_follow_view,
         "nav_surface" => app
             .navigator
             .as_ref()
@@ -2288,6 +2292,10 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
             }
             app.settings.nav_ai = on;
             Some(("nav_ai", bit))
+        }
+        "nav_follow_view" => {
+            app.settings.nav_follow_view = on;
+            Some(("nav_follow_view", bit))
         }
         "nav_surface" => {
             if let Some(n) = app.navigator.as_mut() {
@@ -3226,7 +3234,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     }
 }
 
-fn select_state(
+pub fn select_state(
     file: &serde_json::Value,
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
@@ -3359,6 +3367,7 @@ fn options_pages(app: &App) -> Vec<Page> {
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
+        switch_row(app, "nav_follow_view", "Minimap on foot and in the free camera", "On foot the minimap shows a walker icon; in the free camera (F4) it centres on a camera icon and moves with the camera instead of staying on the bus"),
         switch_row(app, "nav_contours", "Terrain contours", "Shows the terrain's contour lines on the city map, when the map ships them (also a button on the map)"),
         switch_row(app, "nav_light", "Light map", "The map in a light look: light ground and white roads instead of the dark one"),
         switch_row(app, "nav_surface", "Map surface", "Shows the map's own surface (water, green, rivers, place names) under the roads, when the map ships one"),
@@ -4361,7 +4370,7 @@ fn tour_trip_name(
 }
 
 /// Numbers compared as numbers where they are ("5" before "13", "N30" after "M49").
-fn natural(a: &str, b: &str) -> std::cmp::Ordering {
+pub fn natural(a: &str, b: &str) -> std::cmp::Ordering {
     let key = |s: &str| {
         let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
         (
@@ -4616,144 +4625,5 @@ fn start_duty(app: &mut App, line: &str, tour: &str) {
                 8.0,
             ))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    /// "DirectX9 (D3D9Ex)": a hidden option has no row, a locked one an info line with its fixed
-    /// value and the reason, an unlimited one its own row; other APIs leave every row alone.
-    #[test]
-    fn the_menu_rows_follow_the_directx9_limit_table() {
-        let own = || Some(("own".to_string(), "id".to_string()));
-        for l in crate::api_limits::D3D9 {
-            let row = super::limit_row(true, l.key, "Name", own);
-            match l.shown() {
-                None if l.is_row() => assert_eq!(row, own(), "{} is a row", l.key),
-                None => assert!(row.is_none(), "{} is hidden", l.key),
-                Some(v) => {
-                    let (text, action) = row.unwrap();
-                    assert_eq!(action, "noop");
-                    assert!(text.contains("Name") && text.contains(v), "{text}");
-                }
-            }
-            assert_eq!(super::limit_row(false, l.key, "Name", own), own());
-        }
-        assert_eq!(super::limit_row(true, "view_distance", "Name", own), own());
-    }
-
-    /// A destination picked from the list keeps the route number the bus shows, its letter
-    /// too (92E, IBIS 92 and suffix 10).
-    #[test]
-    fn a_destination_picked_from_the_list_keeps_the_lines_letter() {
-        let mut v = crate::schedule::tests::script_test_vehicle(
-            "{frame}\n{end}\n",
-            "IBIS_LinieKurs\nIBIS_Linie_Suffix\nIBIS_Linie_Complex\nIBIS_TerminusCode\n",
-            "Matrix_Nr\nSetLineTo\n",
-        );
-        let set_str = |v: &mut omsi_sim::VehicleInstance, name: &str, s: &str| {
-            let i = v.ty.program.str_var(name).unwrap();
-            v.state.str_vars[i as usize] = s.to_string();
-        };
-        v.set_var("IBIS_LinieKurs", 92.0);
-        v.set_var("IBIS_Linie_Suffix", 10.0);
-        v.set_var("IBIS_Linie_Complex", 9210.0);
-        set_str(&mut v, "Matrix_Nr", "92E");
-        assert_eq!(super::destination_line(&v), "92E");
-        let hof = omsi_vehicle::Hof {
-            termini: vec![omsi_vehicle::hof::Terminus {
-                code: 211,
-                texture_id: "U Rathaus Spandau".into(),
-                strings: vec!["RATHAUS SPANDAU".into()],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let line = super::destination_line(&v);
-        crate::schedule::set_player_destination_at(&mut v, &hof, &line, 0, &[]);
-        assert_eq!(
-            (
-                v.var("IBIS_LinieKurs"),
-                v.var("IBIS_Linie_Suffix"),
-                v.var("IBIS_Linie_Complex"),
-                v.var("IBIS_TerminusCode")
-            ),
-            (Some(92.0), Some(10.0), Some(9210.0), Some(211.0))
-        );
-        // a route number the IBIS cannot take is left to the display: the IBIS keeps its own
-        set_str(&mut v, "Matrix_Nr", "-10");
-        assert_eq!(super::destination_line(&v), "92");
-        // nothing shown: the IBIS's number
-        set_str(&mut v, "Matrix_Nr", "   ");
-        set_str(&mut v, "SetLineTo", "");
-        assert_eq!(super::destination_line(&v), "92");
-        // no matrix line, the line of an earlier pick left in SetLineTo and another typed on
-        // the IBIS since: the IBIS's (only a roller blind shows SetLineTo)
-        set_str(&mut v, "Matrix_Nr", "");
-        set_str(&mut v, "SetLineTo", "5");
-        v.set_var("IBIS_LinieKurs", 145.0);
-        assert_eq!(super::destination_line(&v), "145");
-        let mut blind = crate::schedule::tests::script_test_vehicle(
-            "{trigger:rollband_sync}\n{end}\n",
-            "IBIS_LinieKurs\n",
-            "SetLineTo\n",
-        );
-        set_str(&mut blind, "SetLineTo", "  5");
-        blind.set_var("IBIS_LinieKurs", 145.0);
-        assert_eq!(super::destination_line(&blind), "5");
-    }
-
-    #[test]
-    fn escape_fov_updates_the_active_projection_and_can_restore_geometry() {
-        let mut settings = crate::settings::Settings::default();
-        assert_eq!(super::set_camera_fov(&mut settings, 50.0).0, "fov");
-        settings.triple.enabled = true;
-        assert_eq!(
-            super::set_camera_fov(&mut settings, 75.0).0,
-            "triple_fov_deg"
-        );
-        assert_eq!(settings.fov, 50.0);
-        assert_eq!(settings.triple.fov_deg, 75.0);
-        super::set_camera_fov(&mut settings, 0.0);
-        assert_eq!(settings.triple.fov_deg, 0.0);
-    }
-    /// The game menu offers the 16x anisotropic filtering the launcher does (#669): set
-    /// there, it showed as a bare "16" here and could not be chosen again.
-    #[test]
-    fn anisotropy_zero_shows_as_off() {
-        let file = serde_json::json!({ "anisotropy": 0 });
-        let (options, at, _) = super::select_state(&file, "anisotropy");
-        assert_eq!(at.map(|i| options[i].1), Some("Off"));
-    }
-
-    #[test]
-    fn sixteen_x_anisotropy_can_be_chosen_in_the_game_menu() {
-        let file = serde_json::json!({ "anisotropy": 16 });
-        let (options, at, _) = super::select_state(&file, "anisotropy");
-        assert_eq!(at.map(|i| options[i]), Some(("16", "16x")));
-    }
-
-    #[test]
-    fn steps_wrap_round() {
-        assert_eq!(super::next_step(&super::SPEEDS, 1.0), 2.0);
-        assert_eq!(super::next_step(&super::SPEEDS, 15.0), 1.0);
-        assert_eq!(super::next_step(&super::TRAFFIC, 35), 50);
-    }
-
-    #[test]
-    fn lines_sort_as_numbers() {
-        let mut v = vec!["13N", "5", "137", "N30", "92"];
-        v.sort_by(|a, b| super::natural(a, b));
-        assert_eq!(v, vec!["5", "13N", "92", "137", "N30"]);
-    }
-
-    #[test]
-    fn symbols_are_not_forced_through_numeric_ibis_lines() {
-        assert!(super::numeric_ibis_line("10"));
-        assert!(super::numeric_ibis_line("10E"));
-        assert!(super::numeric_ibis_line("X10"));
-        assert!(!super::numeric_ibis_line("-10"));
-        assert!(!super::numeric_ibis_line("10-"));
-        assert!(!super::numeric_ibis_line("EXP"));
     }
 }

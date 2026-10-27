@@ -17,9 +17,6 @@ use crate::widgets::Ui;
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
 
-/// The note at the right of every window's title.
-pub const NOTE: &str = "the game keeps running";
-
 const LINE: Color = Color::hex(0x2b2f37);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const FG: Color = Color::hex(0xe9eaec);
@@ -306,7 +303,7 @@ fn lists_bottom(r: Rect) -> f32 {
 }
 
 fn pick(ui: &mut Ui, r: Rect, v: &Pick, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, NOTE);
+    let body = ingame::window(ui, r, &v.title, "");
     let mut event = None;
     head(ui, &v.head, body.x + 16.0, body.y + 17.0);
     let area = Rect::new(
@@ -335,7 +332,7 @@ fn pick(ui: &mut Ui, r: Rect, v: &Pick, key: u32) -> Option<Event> {
 }
 
 fn time(ui: &mut Ui, r: Rect, v: &Time) -> Option<Event> {
-    let body = ingame::window(ui, r, "Date and time", NOTE);
+    let body = ingame::window(ui, r, "Date and time", "");
     let mut event = None;
     let x0 = body.x + 16.0;
     // the two numbers of the time need less room than the three parts of the date
@@ -448,7 +445,7 @@ fn time(ui: &mut Ui, r: Rect, v: &Time) -> Option<Event> {
 }
 
 fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Weather", NOTE);
+    let body = ingame::window(ui, r, "Weather", "");
     let mut event = None;
     let row = Rect::new(body.x, body.y + 4.0, body.w, CHECK_H);
     if check_row(ui, "tool:weather:real", row, &v.real_label, v.real, None) {
@@ -500,7 +497,7 @@ fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
 }
 
 fn menu(ui: &mut Ui, r: Rect, v: &Menu) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, NOTE);
+    let body = ingame::window(ui, r, &v.title, "");
     let mut event = None;
     for (i, e) in v.entries.iter().enumerate() {
         let row = Rect::new(body.x, body.y + 8.0 + i as f32 * CHECK_H, body.w, CHECK_H);
@@ -572,7 +569,7 @@ fn opens_row(ui: &mut Ui, id: &str, r: Rect, label: &str, disabled: Option<&str>
 }
 
 fn tour(ui: &mut Ui, r: Rect, v: &Tour, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Line and tour", NOTE);
+    let body = ingame::window(ui, r, "Line and tour", "");
     let mut event = None;
     let w0 = (body.w * 0.22).floor();
     let w1 = (body.w * 0.34).floor();
@@ -655,7 +652,7 @@ fn tour(ui: &mut Ui, r: Rect, v: &Tour, key: u32) -> Option<Event> {
 }
 
 fn confirm(ui: &mut Ui, r: Rect, v: &Confirm) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, NOTE);
+    let body = ingame::window(ui, r, &v.title, "");
     ui.paragraph(
         &v.text,
         Vec2::new(body.x + 16.0, body.y + 20.0),
@@ -672,7 +669,7 @@ fn confirm(ui: &mut Ui, r: Rect, v: &Confirm) -> Option<Event> {
 }
 
 fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Line and destination", NOTE);
+    let body = ingame::window(ui, r, "Line and destination", "");
     let mut event = None;
     head(ui, "Route number", body.x + 16.0, body.y + 20.0);
     let f = Rect::new(body.x + 16.0, body.y + 36.0, body.w - 32.0, FIELD_H);
@@ -711,7 +708,7 @@ fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event>
 }
 
 fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Timetable evaluation", NOTE);
+    let body = ingame::window(ui, r, "Timetable evaluation", "");
     let mut event = None;
     let sw = 190.0f32.min(body.w * 0.4);
     let title_w = body.w - 48.0 - sw;
@@ -770,7 +767,7 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
 
 /// A driver's personnel file: the figures it holds. It only shows: its one button closes it.
 fn profile(ui: &mut Ui, r: Rect, v: &Profile) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, NOTE);
+    let body = ingame::window(ui, r, &v.title, "");
     let rows: Vec<(&str, String, Option<Color>)> = v
         .rows
         .iter()
