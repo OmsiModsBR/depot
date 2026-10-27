@@ -26,6 +26,9 @@ default = []
 lan = ["dep:omsi-net", "omsi-launcher-core/lan"]
 # the dedicated server (`--server`), which hosts a LAN session
 server = ["lan"]
+# what the tests in `tests/` reach of the crate's insides (`testing`); the crate's own
+# dev-dependency turns it on
+test-support = []
 
 [build-dependencies]
 winresource.workspace = true
@@ -116,5 +119,6 @@ jni = "0.21"
 ndk-context = "0.1"
 
 [dev-dependencies]
+omsi-app = { path = ".", features = ["test-support"] }
 # the launcher's page tests look at where each widget was drawn (`omsi_ui::widgets::Ui::drawn`)
 omsi-ui = { path = "../omsi-ui", features = ["testing"] }

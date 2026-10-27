@@ -381,6 +381,7 @@ impl D3d9Output {
         renderer: &mut Renderer,
         window: &Arc<Window>,
         vsync: bool,
+        (msaa, anisotropy): (u32, u32),
     ) -> Result<Self> {
         let hwnd = match window.window_handle().map(|h| h.as_raw()) {
             Ok(RawWindowHandle::Win32(h)) => {
@@ -395,6 +396,9 @@ impl D3d9Output {
             .map_err(|e| anyhow!("Direct3D 9Ex: {e}"))?;
         device
             .set_vsync(vsync)
+            .map_err(|e| anyhow!("Direct3D 9Ex: {e}"))?;
+        device
+            .set_quality(msaa, anisotropy)
             .map_err(|e| anyhow!("Direct3D 9Ex: {e}"))?;
         log::info!("graphics: DirectX9 (D3D9Ex) on {:?}", device.caps());
         let inner = Arc::new(Mutex::new(Inner {
@@ -452,6 +456,14 @@ impl D3d9Output {
     pub(crate) fn set_vsync(&self, on: bool) {
         let mut inner = self.lock();
         if let Err(e) = inner.device.set_vsync(on) {
+            inner.failed(e);
+        }
+    }
+
+    /// The anti-aliasing and anisotropic filtering options (the device takes what the card has).
+    pub(crate) fn set_quality(&self, msaa: u32, anisotropy: u32) {
+        let mut inner = self.lock();
+        if let Err(e) = inner.device.set_quality(msaa, anisotropy) {
             inner.failed(e);
         }
     }

@@ -36,15 +36,14 @@ use omsi_ui::{Atlas, Color, Fonts, Gpu, Rect};
 
 use crate::traffic::Traffic;
 
-mod city;
-mod draw;
-mod geometry;
-mod lines;
+pub(crate) mod city;
+pub(crate) mod draw;
+pub use draw::FocusKind;
+pub(crate) mod geometry;
+pub(crate) mod lines;
 mod minimap;
 mod route;
 mod streets;
-#[cfg(test)]
-mod tests;
 
 pub(crate) use draw::stop_requested;
 pub(crate) use geometry::{city_roads, simplify, MapRoad};
@@ -105,6 +104,16 @@ pub struct NavPlayer {
     pub name: String,
 }
 
+/// Where the maps are centred when it is not on the bus (`Settings::nav_follow_view`): the walker
+/// or the free camera, with the way they face.
+#[derive(Debug, Clone, Copy)]
+pub struct NavFocus {
+    pub kind: draw::FocusKind,
+    pub at: DVec3,
+    /// Compass heading (degrees, 0 = +y, clockwise).
+    pub heading: f64,
+}
+
 /// What the navigator is told each frame.
 pub struct NavFrame<'a> {
     pub traffic: Option<&'a Traffic>,
@@ -113,6 +122,9 @@ pub struct NavFrame<'a> {
     pub bus: DVec3,
     /// Compass heading (degrees, 0 = +y, clockwise).
     pub heading: f64,
+    /// The walker or the free camera the maps follow in place of the bus; the route still follows
+    /// the bus.
+    pub focus: Option<NavFocus>,
     pub speed_kmh: f32,
     /// Outside weather and cabin air temperatures (°C).
     pub outside_temp: f32,
@@ -345,12 +357,12 @@ pub struct Navigator {
     /// it has moved far enough to be a drag rather than a click.
     panel_drag: Option<([f32; 2], [f32; 2], bool)>,
     /// The room the window leaves the navigator (width, height) when it was last placed.
-    panel_room: [f32; 2],
+    pub panel_room: [f32; 2],
     /// The city map (a click on the navigator or Shift+M) and where the navigator is on the
     /// screen.
     pub city: CityMap,
-    panel_rect: [f32; 4],
-    origin_x: f32,
+    pub panel_rect: [f32; 4],
+    pub origin_x: f32,
     gpu: Option<Gpu>,
     /// Under "DirectX9 (D3D9Ex)", the mirror the maps' Gpu hands its draws to when it is
     /// made (the maps' textures are drawn on that device too).
@@ -433,6 +445,8 @@ pub struct Navigator {
     /// for the route arrows.
     stop_spots: Vec<(DVec3, String, f64, i64)>,
     bus_at: DVec3,
+    /// The bus and the way it faces while the maps follow the walker or the free camera.
+    bus_marker: Option<(DVec3, f64)>,
     next_turn: Option<(i32, f32, f64, Option<String>)>,
     /// The street the bus is on.
     street_here: Option<String>,
@@ -489,7 +503,7 @@ pub fn duty_parts(
 }
 
 /// Screen position of a world point (relative to the anchor) in target pixels.
-fn project(vp: Mat4, viewport: [f32; 4], p: Vec3) -> Option<Vec2> {
+pub fn project(vp: Mat4, viewport: [f32; 4], p: Vec3) -> Option<Vec2> {
     let c = vp * p.extend(1.0);
     if c.w <= 0.1 {
         return None;
@@ -516,7 +530,7 @@ fn ease(dt: f32, tau: f32) -> f64 {
 }
 
 /// A `navigator_corner` of the form `at x,y` (where the navigator was dragged to, #940).
-pub(crate) fn placed_at(corner: &str) -> Option<[f32; 2]> {
+pub fn placed_at(corner: &str) -> Option<[f32; 2]> {
     let (x, y) = corner.trim().strip_prefix("at")?.trim().split_once(',')?;
     let (x, y) = (x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?);
     (x.is_finite() && y.is_finite()).then(|| [x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)])
@@ -542,6 +556,7 @@ impl<'a> NavFrame<'a> {
             players: self.players.clone(),
             bus: self.bus,
             heading: self.heading,
+            focus: self.focus,
             speed_kmh: self.speed_kmh,
             outside_temp: self.outside_temp,
             inside_temp: self.inside_temp,
@@ -567,7 +582,7 @@ impl<'a> NavFrame<'a> {
 
 /// Rotation of a 2D direction by a compass heading (for tests).
 #[allow(dead_code)]
-fn heading_vec(h: f64) -> DVec2 {
+pub fn heading_vec(h: f64) -> DVec2 {
     let m = DMat3::from_rotation_z(-h.to_radians());
     m.transform_vector2(DVec2::Y)
 }
@@ -582,16 +597,16 @@ pub struct CityMap {
     /// Where the window is on the screen (physical pixels).
     pub rect: [f32; 4],
     /// Centre of the view (world) and metres per pixel.
-    center: DVec2,
-    mpp: f64,
+    pub center: DVec2,
+    pub mpp: f64,
     /// The view stays on the bus until the map is dragged.
     follow: bool,
-    drag: Option<(f32, f32)>,
+    pub drag: Option<(f32, f32)>,
     /// Where the pointer is over the map (window pixels), and the street found under it (for a point of about
     /// two metres: not looked up again while it stays on it).
     hover: Option<(f32, f32)>,
     /// The turn of the view this frame: the map direction that points up on the screen lies this many radians clockwise from the map's up.
-    phi: f64,
+    pub phi: f64,
     /// Where the compass is this frame (it is drawn after the buttons are listed, and takes its place in the list on the next one).
     compass: Option<Rect>,
     hover_cache: Option<(
@@ -607,7 +622,7 @@ pub struct CityMap {
     /// The map's extent (world), for the zoom limits.
     extent: (DVec2, DVec2),
     /// "Centre on the bus" and zoom buttons (window pixels).
-    buttons: Vec<(Rect, u8)>,
+    pub buttons: Vec<(Rect, u8)>,
     /// The surface mesh (buffer 7): the surface version it was built for, its size and anchor.
     surface: Option<(u64, u32, DVec2)>,
     /// The lines panel (the package's bus lines).

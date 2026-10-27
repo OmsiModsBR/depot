@@ -533,13 +533,86 @@ fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePip
 }
 
 /// The render states of a kind of batch.
-fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind) -> Result<()> {
+/// The driver switch of alpha-to-coverage under Direct3D 9, which the driver reports: a format
+/// code on the adaptive-tessellation state (`ATOC`, Nvidia and others) or on the point-size state
+/// (`A2M1`, AMD). A driver with neither draws the cut by discard as without multisampling.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum A2c {
+    None,
+    Atoc,
+    A2m,
+}
+
+impl A2c {
+    /// The switch the driver reports having: it answers a format query for the code of the
+    /// one it reads (the documented way to ask), the first of the two it offers.
+    pub(super) fn probe(d3d: &IDirect3D9Ex) -> Self {
+        let mut mode = D3DDISPLAYMODE::default();
+        // SAFETY: the out-parameter is a live local.
+        let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
+            .map(|_| mode.Format)
+            .unwrap_or(D3DFMT_X8R8G8B8);
+        let has = |code: &[u8; 4]| {
+            // SAFETY: plain query on a live interface.
+            unsafe {
+                d3d.CheckDeviceFormat(
+                    D3DADAPTER_DEFAULT,
+                    D3DDEVTYPE_HAL,
+                    display,
+                    0,
+                    D3DRTYPE_SURFACE,
+                    D3DFORMAT(four_cc(code)),
+                )
+            }
+            .is_ok()
+        };
+        if has(b"ATOC") {
+            Self::Atoc
+        } else if has(b"A2M1") {
+            Self::A2m
+        } else {
+            Self::None
+        }
+    }
+
+    /// Switches alpha-to-coverage on or off (nothing for a vendor without one).
+    fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
+        let (state, value) = match (self, on) {
+            (Self::None, _) => return Ok(()),
+            (Self::Atoc, true) => (D3DRS_ADAPTIVETESS_Y, four_cc(b"ATOC")),
+            (Self::Atoc, false) => (D3DRS_ADAPTIVETESS_Y, 0),
+            (Self::A2m, true) => (D3DRS_POINTSIZE, four_cc(b"A2M1")),
+            (Self::A2m, false) => (D3DRS_POINTSIZE, four_cc(b"A2M0")),
+        };
+        // SAFETY: a plain state setter on a live device.
+        unsafe { device.SetRenderState(state, value) }.map_err(map_err)
+    }
+}
+
+const fn four_cc(c: &[u8; 4]) -> u32 {
+    u32::from_le_bytes(*c)
+}
+
+/// The cut of an alpha-tested draw under alpha-to-coverage: only what is all but transparent
+/// is discarded, the rest hands its alpha to the multisampling as coverage.
+const COVERAGE_CUT: f32 = 0.02;
+
+/// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
+/// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
+/// edge as multisampled OMSI 2 does.
+fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: A2c) -> Result<()> {
+    let coverage_now = kind == DrawKind::AlphaTest && coverage != A2c::None;
     let flags = [
-        ALPHA_CUT,
+        if coverage_now {
+            COVERAGE_CUT
+        } else {
+            ALPHA_CUT
+        },
         f32::from(u8::from(kind == DrawKind::AlphaTest)),
         f32::from(u8::from(kind == DrawKind::SurfaceDepth)),
         0.0,
     ];
+    coverage.set(device, coverage_now)?;
     // SAFETY: plain state setters; the constant array outlives the call.
     unsafe {
         device
@@ -821,7 +894,13 @@ impl D3d9Device {
         };
         frame.validate()?;
         self.ensure_scene_pipeline()?;
-        let drawn = self.draw_scene_inner(frame, &material, target.width, target.height);
+        let drawn = self.draw_scene_inner(
+            frame,
+            &material,
+            target.width,
+            target.height,
+            self.coverage(),
+        );
         let restored = self.restore_scene_states();
         drawn?;
         restored?;
@@ -852,6 +931,17 @@ impl D3d9Device {
     /// Back to the backend's own states after a scene, whatever happened, with depth as the
     /// backend expects it.
     fn restore_scene_states(&mut self) -> Result<()> {
+        // (the alpha-to-coverage and anisotropic filtering of the scene stay with it)
+        self.a2c.set(&self.device, false)?;
+        for stage in 0..4 {
+            // SAFETY: plain calls on a live device.
+            unsafe {
+                self.device
+                    .SetSamplerState(stage, D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32)
+                    .and_then(|_| self.device.SetSamplerState(stage, D3DSAMP_MAXANISOTROPY, 1))
+                    .map_err(map_err)?;
+            }
+        }
         // SAFETY: plain calls on a live device.
         unsafe {
             self.device
@@ -873,6 +963,15 @@ impl D3d9Device {
                         .Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 1.0, 0)
                 })
                 .map_err(map_err)
+        }
+    }
+
+    /// The alpha-to-coverage switch for a draw to the window's picture: when it is multisampled.
+    fn coverage(&self) -> A2c {
+        if self.msaa.1 > 1 {
+            self.a2c
+        } else {
+            A2c::None
         }
     }
 
@@ -977,7 +1076,7 @@ impl D3d9Device {
                             0,
                         )
                         .map_err(map_err)
-                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h));
+                        .and_then(|_| self.draw_scene_inner(frame, &material, w, h, A2c::None));
                     // (the backend's own states, with this surface's depth still bound)
                     let states = self.restore_scene_states();
                     let ended = if own_scene {
@@ -1162,6 +1261,7 @@ impl D3d9Device {
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
         width: u32,
         height: u32,
+        coverage: A2c,
     ) -> Result<()> {
         let lamps = self.bind_lamps(&frame.lamps)?;
         self.bind_or_table()?;
@@ -1257,10 +1357,18 @@ impl D3d9Device {
             d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
             d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
             for stage in 0..SAMPLERS {
+                // (the picture maps - the diffuse, transparency, night and detail textures -
+                // take the anisotropic filtering option; the sphere, mask and bump maps do not)
+                let min = if self.anisotropy > 1 && stage < 4 {
+                    D3DTEXF_ANISOTROPIC
+                } else {
+                    D3DTEXF_LINEAR
+                };
                 for (state, value) in [
-                    (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
+                    (D3DSAMP_MINFILTER, min.0 as u32),
                     (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
+                    (D3DSAMP_MAXANISOTROPY, self.anisotropy),
                 ] {
                     d.SetSamplerState(stage, state, value).map_err(map_err)?;
                 }
@@ -1308,7 +1416,7 @@ impl D3d9Device {
                 // SAFETY: as above; the buffers and textures belong to this device.
                 unsafe {
                     if current.0 != Some(b.kind) {
-                        kind_states(d, b.kind)?;
+                        kind_states(d, b.kind, coverage)?;
                         current.0 = Some(b.kind);
                     }
                     if current.1 != Some(b.cull) {

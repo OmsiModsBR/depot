@@ -152,6 +152,10 @@ mod weather_setup;
 mod weather_time;
 mod world_load;
 
+/// The crate's insides for the tests in `tests/` (see `testing`).
+#[cfg(feature = "test-support")]
+pub mod testing;
+
 // the interface's translations (locales/app.yml; the English text is the key)
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they

@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 /// directions as the other hats on this platform are numbered (`controllers::HAT_BUTTONS`).
 const BUTTONS: usize = 16;
 
-fn button_index(i: usize) -> usize {
+pub fn button_index(i: usize) -> usize {
     if i < 12 {
         i
     } else {
@@ -142,7 +142,7 @@ struct Pad {
     axes: Arc<Mutex<[f32; 6]>>,
 }
 
-pub(crate) struct GcPads {
+pub struct GcPads {
     pads: Vec<Pad>,
     last_scan: Option<std::time::Instant>,
 }
@@ -152,7 +152,7 @@ pub(crate) struct GcPads {
 unsafe impl Send for GcPads {}
 
 impl GcPads {
-    pub(crate) fn new() -> GcPads {
+    pub fn new() -> GcPads {
         GcPads {
             pads: Vec::new(),
             last_scan: None,
@@ -244,16 +244,5 @@ impl GcPads {
                 (p.name.clone(), axes.into_iter().enumerate().collect())
             })
             .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn a_dpad_direction_is_numbered_as_the_first_hat() {
-        assert_eq!(super::button_index(0), 0);
-        assert_eq!(super::button_index(11), 11);
-        assert_eq!(super::button_index(12), crate::controllers::HAT_BUTTONS);
-        assert_eq!(super::button_index(15), crate::controllers::HAT_BUTTONS + 3);
     }
 }

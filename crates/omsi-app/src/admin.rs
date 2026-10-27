@@ -682,7 +682,7 @@ pub(crate) struct ServerAdmin {
 /// A dedicated server admin's order for the AI traffic.
 #[cfg(feature = "server")]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum TrafficOrder {
+pub enum TrafficOrder {
     Density(usize),
     Clear,
 }
@@ -725,7 +725,7 @@ impl ServerAdmin {
 
 /// A weather file an admin may choose: a `Weather/….owt` path, nothing above it.
 #[cfg(feature = "server")]
-fn weather_file_ok(file: &str) -> bool {
+pub fn weather_file_ok(file: &str) -> bool {
     let f = file.replace('\\', "/").to_ascii_lowercase();
     f.starts_with("weather/")
         && f.ends_with(".owt")
@@ -959,13 +959,13 @@ pub(crate) fn server_command(
 
 /// `duty`'s argument: `<line> <tour> <trip> <stop>`, a space in the line or tour name written
 /// `%20` (and `%` as `%25`).
-pub(crate) fn duty_arg(line: &str, tour: &str, trip: usize, stop: usize) -> String {
+pub fn duty_arg(line: &str, tour: &str, trip: usize, stop: usize) -> String {
     let esc = |s: &str| s.trim().replace('%', "%25").replace(' ', "%20");
     format!("{} {} {trip} {stop}", esc(line), esc(tour))
 }
 
 /// `duty_arg` read back: (line, tour, trip, stop).
-pub(crate) fn parse_duty(arg: &str) -> Option<(String, String, usize, usize)> {
+pub fn parse_duty(arg: &str) -> Option<(String, String, usize, usize)> {
     let unesc = |s: &str| s.replace("%20", " ").replace("%25", "%");
     let v: Vec<&str> = arg.split_whitespace().collect();
     let [line, tour, trip, stop] = v[..] else {
@@ -979,43 +979,14 @@ pub(crate) fn parse_duty(arg: &str) -> Option<(String, String, usize, usize)> {
     ))
 }
 
-#[cfg(test)]
-mod duty_tests {
-    use super::{duty_arg, parse_duty};
-
-    #[test]
-    fn a_duty_goes_to_the_game_and_back() {
-        assert_eq!(duty_arg("15", "5", 2, 7), "15 5 2 7");
-        assert_eq!(
-            parse_duty("15 5 2 7"),
-            Some(("15".into(), "5".into(), 2, 7))
-        );
-        // names with spaces and percent signs
-        let a = duty_arg("KI-Zug", "ZOB RB 100%", 0, 0);
-        assert_eq!(a, "KI-Zug ZOB%20RB%20100%25 0 0");
-        assert_eq!(
-            parse_duty(&a),
-            Some(("KI-Zug".into(), "ZOB RB 100%".into(), 0, 0))
-        );
-        // missing or extra parts, not numbers: not a duty
-        for bad in [
-            "",
-            "15",
-            "15 5",
-            "15 5 2",
-            "15 5 2 7 9",
-            "15 5 x 7",
-            "15 5 2 -1",
-        ] {
-            assert_eq!(parse_duty(bad), None, "{bad}");
-        }
-    }
-}
-
 /// Who a `notify` is for: `all`, every other player and the host's own screen; a player's
 /// number, that player - or the host's own screen when it is the host's number (`peers` has
 /// only the others, and `LanSession::command` sends nothing to oneself).
-fn notice_targets(who: &str, others: impl Iterator<Item = u32>, my_id: u32) -> (Vec<u32>, bool) {
+pub fn notice_targets(
+    who: &str,
+    others: impl Iterator<Item = u32>,
+    my_id: u32,
+) -> (Vec<u32>, bool) {
     if who == "all" {
         return (others.filter(|id| *id != my_id).collect(), true);
     }
@@ -1023,60 +994,5 @@ fn notice_targets(who: &str, others: impl Iterator<Item = u32>, my_id: u32) -> (
         Ok(id) if id == my_id => (Vec::new(), true),
         Ok(id) => (vec![id], false),
         Err(_) => (Vec::new(), false),
-    }
-}
-
-#[cfg(test)]
-mod notice_target_tests {
-    use super::notice_targets;
-
-    #[test]
-    fn all_is_every_player_and_the_host_itself() {
-        // the host is player 1, the others 2 and 5
-        assert_eq!(
-            notice_targets("all", [2, 5].into_iter(), 1),
-            (vec![2, 5], true)
-        );
-        assert_eq!(notice_targets("all", [].into_iter(), 1), (vec![], true));
-        // one player; the host's own number: its own screen, nothing sent
-        assert_eq!(notice_targets("5", [2, 5].into_iter(), 1), (vec![5], false));
-        assert_eq!(notice_targets("1", [2, 5].into_iter(), 1), (vec![], true));
-        // not a number: nobody
-        assert_eq!(notice_targets("x", [2, 5].into_iter(), 1), (vec![], false));
-    }
-}
-
-#[cfg(all(test, feature = "server"))]
-mod traffic_order_tests {
-    use super::TrafficOrder;
-
-    #[test]
-    fn a_traffic_order_is_read() {
-        assert_eq!(TrafficOrder::parse("clear"), Some(TrafficOrder::Clear));
-        assert_eq!(TrafficOrder::parse(" 20 "), Some(TrafficOrder::Density(20)));
-        assert_eq!(TrafficOrder::parse("0"), Some(TrafficOrder::Density(0)));
-        assert_eq!(TrafficOrder::parse("400"), Some(TrafficOrder::Density(120)));
-        assert_eq!(
-            TrafficOrder::parse("120"),
-            Some(TrafficOrder::Density(crate::game_lists::TRAFFIC_MAX))
-        );
-        for bad in ["", "next", "-5", "2.5"] {
-            assert_eq!(TrafficOrder::parse(bad), None, "{bad}");
-        }
-    }
-}
-
-#[cfg(all(test, feature = "server"))]
-mod weather_file_tests {
-    use super::weather_file_ok;
-
-    #[test]
-    fn only_a_weather_file() {
-        assert!(weather_file_ok("Weather/#CAVOK.owt"));
-        assert!(weather_file_ok("weather\\Bodennebel.OWT"));
-        assert!(!weather_file_ok("Weather/../server.cfg"));
-        assert!(!weather_file_ok("Weather/sub/x.owt"));
-        assert!(!weather_file_ok("maps/x.owt"));
-        assert!(!weather_file_ok("Weather/x.cfg"));
     }
 }

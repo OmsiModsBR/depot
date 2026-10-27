@@ -1072,6 +1072,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
                         15.0,
                         if hx { accent() } else { TEXT_DIM },
                     );
+                    ui.tooltip(xr, "Back to the default");
                     if cx {
                         reset = Some(n);
                     }

@@ -2,9 +2,9 @@
 //! object editor's keys.
 
 mod editor_input;
-mod keyboard;
+pub(crate) mod keyboard;
 pub(crate) mod menus;
-mod mouse;
+pub(crate) mod mouse;
 
 pub(crate) use keyboard::route_char;
 pub(crate) use keyboard::ROUTE_NUMBER_MAX;

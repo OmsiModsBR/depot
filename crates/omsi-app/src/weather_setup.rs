@@ -325,7 +325,7 @@ fn read_weather(
 /// weather model or telling the vehicles and the sky (as [`load_weather`] does): the season
 /// of the textures asks for it before the session's weather is loaded, and for another
 /// player's weather too.
-pub(crate) fn weather_snow(args: &Args) -> (bool, bool) {
+pub fn weather_snow(args: &Args) -> (bool, bool) {
     let w = if crate::weather_model::is_natural(args.weather.as_deref()) {
         crate::weather_model::WeatherModel::new(
             &crate::situation::start_clock(args),
@@ -585,7 +585,7 @@ pub(crate) fn clouds_of(w: &omsi_content::weather::Weather, drift: [f32; 2]) -> 
 }
 
 /// The clouds' drift after `time` seconds of a steady wind (see `cloud_drift_step`).
-pub(crate) fn cloud_drift_at(w: &omsi_content::weather::Weather, time: f64) -> [f32; 2] {
+pub fn cloud_drift_at(w: &omsi_content::weather::Weather, time: f64) -> [f32; 2] {
     let mut d = [0.0; 2];
     cloud_drift_step(&mut d, w, time);
     d
@@ -595,7 +595,7 @@ pub(crate) fn cloud_drift_at(w: &omsi_content::weather::Weather, time: f64) -> [
 /// tiling; the field repeats every tile, so only the fraction of a tile is kept. (Taken
 /// from the absolute time, every change of the wind while a weather blends in moved the
 /// whole sky by time x change.)
-pub(crate) fn cloud_drift_step(d: &mut [f32; 2], w: &omsi_content::weather::Weather, secs: f64) {
+pub fn cloud_drift_step(d: &mut [f32; 2], w: &omsi_content::weather::Weather, secs: f64) {
     let (dir, speed) = (w.wind.0.to_radians() as f64, w.wind.1 as f64);
     let s = secs * speed / 2500.0;
     d[0] = (d[0] as f64 + dir.sin() * s).rem_euclid(1.0) as f32;
@@ -825,7 +825,7 @@ pub(crate) fn fetch_metar(icao: &str) -> omsi_content::weather::Weather {
 /// file, so it must not be able to add a parameter or change the path (`EDDB&format=json`,
 /// `../x`, `#`): it has to look like a station code (2 to 8 letters or digits) and is
 /// percent-encoded anyway. The host is fixed; nothing else of the URL is variable.
-pub(crate) fn metar_url(icao: &str) -> Option<String> {
+pub fn metar_url(icao: &str) -> Option<String> {
     let code = icao.trim();
     if !(2..=8).contains(&code.len()) || !code.bytes().all(|b| b.is_ascii_alphanumeric()) {
         return None;
@@ -837,7 +837,7 @@ pub(crate) fn metar_url(icao: &str) -> Option<String> {
 }
 
 /// `text` with everything but unreserved characters (`A-Z a-z 0-9 - . _ ~`) as `%XX`.
-pub(crate) fn percent_encode(text: &str) -> String {
+pub fn percent_encode(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for b in text.bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
@@ -911,66 +911,4 @@ pub(crate) fn from_report(s: &str) -> Option<omsi_content::weather::Weather> {
     let mut w = omsi_content::weather::from_metar(icao, raw);
     w.path = std::path::PathBuf::from(format!("metar:{icao}"));
     Some(w)
-}
-#[cfg(test)]
-mod metar_url_tests {
-    use super::*;
-
-    #[test]
-    fn a_station_code_becomes_one_fixed_request() {
-        assert_eq!(
-            metar_url("eddb").unwrap(),
-            "https://aviationweather.gov/api/data/metar?ids=EDDB&format=raw"
-        );
-        assert_eq!(
-            metar_url(" KJFK ").unwrap(),
-            "https://aviationweather.gov/api/data/metar?ids=KJFK&format=raw"
-        );
-        assert!(metar_url("K1A0").is_some());
-    }
-
-    #[test]
-    fn a_code_cannot_change_the_request() {
-        for bad in [
-            "",
-            "E",
-            "EDDB&format=json",
-            "EDDB,KJFK",
-            "../x",
-            "EDDB#",
-            "EDDB?x=1",
-            "ED DB",
-            "EDDB\r\nHost: x",
-            "%45DDB",
-            "EDDBEDDBEDDB",
-            "ÄÖÜ1",
-        ] {
-            assert!(metar_url(bad).is_none(), "{bad:?}");
-        }
-    }
-
-    #[test]
-    fn percent_encoding_leaves_only_unreserved_characters() {
-        assert_eq!(percent_encode("EDDB"), "EDDB");
-        assert_eq!(percent_encode("a&b=c d/é"), "a%26b%3Dc%20d%2F%C3%A9");
-        assert_eq!(percent_encode("-._~"), "-._~");
-    }
-}
-
-#[cfg(test)]
-mod weather_snow_tests {
-    use super::*;
-    use clap::Parser;
-
-    #[test]
-    fn the_snow_of_a_chosen_weather_is_read_without_loading_it() {
-        let mut args = Args::parse_from(["depot"]);
-        args.weather = Some("custom:t=-5;snow=1;snowroad=1".into());
-        assert_eq!(weather_snow(&args), (true, true));
-        args.weather = Some("custom:t=10;snow=0".into());
-        assert_eq!(weather_snow(&args), (false, false));
-        // a file that is not there: no snow, and no weather taken up
-        args.weather = Some("Weather/does-not-exist.owt".into());
-        assert_eq!(weather_snow(&args), (false, false));
-    }
 }

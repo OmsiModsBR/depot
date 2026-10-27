@@ -146,6 +146,8 @@ pub struct Settings {
     pub nav_arrows: bool,
     /// The other (AI) vehicles as dots on the navigator's and the city map.
     pub nav_ai: bool,
+    /// The navigator and the city map follow the walker (a walker icon) and the free camera (F4: a camera icon) in place of the bus; off, the bus.
+    pub nav_follow_view: bool,
     /// The map's own surface (water, green, rivers, names) under the roads of the navigator and the city map, when the map ships one.
     pub nav_surface: bool,
     /// The light look of the map (light ground, white roads) instead of the dark one.
@@ -493,6 +495,7 @@ impl Settings {
             pax_voices: "all".into(),
             nav_arrows: false,
             nav_ai: true,
+            nav_follow_view: false,
             nav_surface: true,
             nav_light: false,
             nav_contours: false,
@@ -817,6 +820,7 @@ impl Settings {
                 }
                 "nav_arrows" => s.nav_arrows = b(v),
                 "nav_ai" => s.nav_ai = b(v),
+                "nav_follow_view" => s.nav_follow_view = b(v),
                 "nav_surface" => s.nav_surface = b(v),
                 "nav_light" => s.nav_light = b(v),
                 "nav_contours" => s.nav_contours = b(v),
@@ -1439,7 +1443,7 @@ impl Settings {
         text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
         // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
         text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
-        text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
+        text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_follow_view={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_follow_view as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
         text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
         text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
         text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
@@ -1495,9 +1499,7 @@ impl Settings {
         self.ssao = false;
         self.detail_textures = false;
         // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
-        self.msaa = 1;
         self.render_scale = 0.0;
-        self.anisotropy = 1;
         self.post_aa = "off".into();
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
@@ -1705,9 +1707,7 @@ mod tests {
         for l in crate::api_limits::D3D9 {
             let ok = match l.key {
                 "graphics" => s.graphics == "vanilla" && s.classic(),
-                "msaa" => s.msaa == 1,
                 "render_scale" => s.render_scale == 0.0,
-                "anisotropy" => s.anisotropy == 1,
                 "mirror_size" => {
                     s.mirror_size == 128
                         && l.allows(&s.mirror_size.to_string())
@@ -1746,14 +1746,15 @@ mod tests {
                     (file.shadows, file.ssao, file.detail_textures)
                 );
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
-                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
+                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`);
+                // anti-aliasing and anisotropic filtering are drawn: kept as saved
                 let saved = Settings::from_text(&format!(
                     "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!(
                     (saved.msaa, saved.anisotropy, saved.render_scale),
-                    (1, 1, 0.0)
+                    (8, 16, 0.0)
                 );
                 // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
                 assert_eq!(

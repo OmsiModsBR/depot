@@ -9,8 +9,15 @@
 //! `Traffic` over that network with cars made from a vehicle type that only declares the
 //! variables, and steps it with `Traffic::tick`, the same frame the game runs.
 
-use super::*;
+use glam::DVec3;
+use hashbrown::HashMap;
+use omsi_sim::ai::MotionKind;
+use omsi_sim::traffic::{AiState, LaneKind, Network, TrafficLightController};
 use omsi_sim::traffic::{Lane, LaneBuilder, LaneKey};
+use omsi_sim::{VehicleInstance, VehicleType};
+use openomsi_game::testing::scene::VehicleRender;
+use openomsi_game::testing::traffic::*;
+use std::sync::Arc;
 
 /// The frame the scenarios step by (s): 30 frames a second.
 pub(super) const DT: f32 = 1.0 / 30.0;

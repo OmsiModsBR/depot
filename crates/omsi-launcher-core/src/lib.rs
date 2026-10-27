@@ -3171,6 +3171,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("pax_voices", json!("all")),
         ("nav_arrows", json!(false)),
         ("nav_ai", json!(true)),
+        ("nav_follow_view", json!(false)),
         ("nav_surface", json!(true)),
         ("nav_light", json!(false)),
         ("nav_contours", json!(false)),
@@ -3910,6 +3911,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             "nav_arrows"
             | "nav_ai"
+            | "nav_follow_view"
             | "nav_surface"
             | "nav_light"
             | "nav_contours"
@@ -4506,10 +4508,11 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         }
     ));
     text.push_str(&format!(
-        "nav_surface={}\nnav_light={}\nnav_contours={}\n",
+        "nav_surface={}\nnav_light={}\nnav_contours={}\nnav_follow_view={}\n",
         b("nav_surface", true),
         b("nav_light", false),
-        b("nav_contours", false)
+        b("nav_contours", false),
+        b("nav_follow_view", false)
     ));
     let orientation = v
         .get("nav_orientation")
@@ -5216,6 +5219,23 @@ pub fn pick_file(title: &str) -> Option<PathBuf> {
     #[cfg(target_os = "android")]
     {
         let _ = title;
+        None
+    }
+}
+
+/// Where to save a file (Diagnostics: the integrity report), `name` offered.
+pub fn save_file(title: &str, name: &str) -> Option<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        rfd::FileDialog::new()
+            .set_title(title)
+            .set_file_name(name)
+            .add_filter("Text", &["txt"])
+            .save_file()
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (title, name);
         None
     }
 }

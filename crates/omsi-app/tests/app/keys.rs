@@ -1,0 +1,19 @@
+#[test]
+fn names() {
+    assert_eq!(
+        openomsi_game::testing::keys::scan_name(17).as_deref(),
+        Some("W")
+    );
+    assert_eq!(
+        openomsi_game::testing::keys::scan_name(72).as_deref(),
+        Some("Num8")
+    );
+    assert_eq!(
+        openomsi_game::testing::keys::scan_name(200).as_deref(),
+        Some("Up")
+    );
+    assert_eq!(
+        openomsi_game::testing::keys::scan_name(52).as_deref(),
+        Some(".")
+    );
+}

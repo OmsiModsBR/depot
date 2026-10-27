@@ -1,3 +1,12 @@
+mod city;
+mod geometry;
+mod lines;
+
+use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
+use hashbrown::HashMap;
+use omsi_sim::traffic::Network;
+use omsi_ui::{Atlas, Color, Rect};
+
 #[test]
 fn centre_panel_map_click_and_drag_use_window_coordinates() {
     let mut n = Navigator::new(true, 0.85, "bottom-left");
@@ -110,14 +119,17 @@ fn the_navigator_keeps_where_it_was_dragged_on_a_phone_and_clear_of_the_informat
     assert_eq!(n.panel_origin(screen, size, false, None), (0.0, 470.0));
 }
 
-use super::draw::{
+use omsi_sim::traffic::{Lane, LaneKey, LaneKind};
+use omsi_ui::{Layer, Painter};
+use openomsi_game::testing;
+use openomsi_game::testing::nav::draw::{
     rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon, Icon,
     STOP_REQUEST,
 };
-use super::geometry::{confirm_road_surfaces, road_geometry, visible_road_lanes};
-use super::*;
-use omsi_sim::traffic::{Lane, LaneKey, LaneKind};
-use omsi_ui::{Layer, Painter};
+use openomsi_game::testing::nav::geometry::{
+    confirm_road_surfaces, road_geometry, visible_road_lanes,
+};
+use openomsi_game::testing::nav::*;
 
 #[test]
 fn stop_request_icon_reserves_space_only_while_active() {
@@ -431,7 +443,7 @@ fn the_city_map_draws_over_the_picture() {
         ),
     ];
     let mut nav = Navigator::new(false, 0.85, "bottom-left");
-    nav.set_map(crate::scene::NavigationMap {
+    nav.set_map(testing::scene::NavigationMap {
         lanes,
         road_surfaces: Vec::new(),
         places: HashMap::new(),
@@ -450,6 +462,7 @@ fn the_city_map_draws_over_the_picture() {
         players: Vec::new(),
         bus: DVec3::new(-420.0, -2.0, 0.0),
         heading: 90.0,
+        focus: None,
         speed_kmh: 32.0,
         outside_temp: 18.0,
         inside_temp: 21.0,
@@ -535,4 +548,17 @@ fn a_navigator_in_a_bottom_corner_stands_above_an_information_bar_along_the_bott
     // a navigator at the top is not moved by a bar at the bottom
     n.corner = "top-left".into();
     assert_eq!(n.panel_origin(screen, size, false, Some(bar)), (19.0, 19.0));
+}
+
+#[test]
+fn walker_and_camera_icons_draw_and_differ() {
+    use testing::nav::draw::{focus_marker, FocusKind};
+    let draw = |kind| {
+        let mut ui = omsi_ui::Painter::new();
+        focus_marker(&mut ui, kind, glam::Vec2::new(100.0, 100.0), 0.7, 12.0);
+        ui.len()
+    };
+    let (walker, camera) = (draw(FocusKind::Walker), draw(FocusKind::Camera));
+    assert!(walker > 0 && camera > 0);
+    assert_ne!(walker, camera, "the two icons are different shapes");
 }

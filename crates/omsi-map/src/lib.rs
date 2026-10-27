@@ -1,8 +1,12 @@
-//! Maps: `global.cfg`, `tile_x_y.map`, terrain, calendar, AI lists, chrono events.
+//! Maps: `global.cfg`, `tile_x_y.map`, terrain, calendar, AI lists, chrono events; the AI
+//! lists and parking lists changed without losing a byte ([`ailists_edit`]), with a backup
+//! of what a save replaces ([`backup`]).
 //!
 //! A tile is 300 m × 300 m; the terrain grid has 61 × 61 samples (5 m spacing).
 
 pub mod ailists;
+pub mod ailists_edit;
+pub mod backup;
 pub mod calendar;
 pub mod global;
 pub mod terrain;

@@ -293,13 +293,16 @@ impl Launcher {
         let mut x = inner.x;
         let y = inner.y + 34.0;
         let mut go_to: Option<PathBuf> = None;
-        if self.ui.button(
+        let up = Rect::new(x, y, 44.0, 34.0);
+        let up_clicked = self.ui.button(
             "browse-up",
-            Rect::new(x, y, 44.0, 34.0),
+            up,
             "",
             Some("drive_folder_upload"),
             ButtonKind::Normal,
-        ) {
+        );
+        self.ui.tooltip(up, "Up one folder");
+        if up_clicked {
             if let Some(p) = b.dir.parent() {
                 go_to = Some(p.to_path_buf());
             }
