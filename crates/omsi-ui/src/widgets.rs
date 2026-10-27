@@ -1360,6 +1360,18 @@ impl Ui {
         changed
     }
 
+    /// A tooltip for each button of a [`Ui::segmented`] drawn in `r`, in order (after the
+    /// mouse rests on it, as every tooltip).
+    pub fn segmented_tips(&mut self, r: Rect, tips: &[&str]) {
+        let n = tips.len().max(1);
+        let w = r.w / n as f32;
+        for (k, t) in tips.iter().enumerate() {
+            if !t.is_empty() {
+                self.tooltip(Rect::new(r.x + w * k as f32, r.y, w, r.h), t);
+            }
+        }
+    }
+
     /// A dropdown: shows the chosen option, opens a list over everything else.
     pub fn select(
         &mut self,
