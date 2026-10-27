@@ -199,11 +199,7 @@ fn friendly(path: &Path, cache: &mut HashMap<PathBuf, String>) -> String {
 }
 
 fn rel(root: &Path, p: &Path) -> String {
-    p.strip_prefix(root)
-        .unwrap_or(p)
-        .display()
-        .to_string()
-        .replace('\\', "/")
+    crate::map::rel_to(root, p)
 }
 
 /// Each entry of a list once, in the list's order, with its count and whether it is there.
@@ -389,8 +385,7 @@ impl AiTraffic {
                     .collect(),
             });
         }
-        t.lines
-            .sort_by(|a, b| natural_key(&a.name).cmp(&natural_key(&b.name)));
+        t.lines.sort_by_key(|a| natural_key(&a.name));
 
         // the parking lists
         let mut parks: Vec<(usize, PathBuf)> = vfs::list_dir(map_dir)
@@ -490,6 +485,10 @@ impl AiTraffic {
     /// The whole view as plain text, in English with Windows line endings (as the integrity
     /// report): `header` are (name, value) lines after the title.
     pub fn to_text(&self, header: &[(String, String)]) -> String {
+        crate::text::without_home(self.text(header), omsi_cfg::paths::home().as_deref())
+    }
+
+    fn text(&self, header: &[(String, String)]) -> String {
         let mut o = String::new();
         let line = |o: &mut String, s: String| {
             o.push_str(&s);
