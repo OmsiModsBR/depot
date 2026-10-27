@@ -1388,6 +1388,18 @@ impl Ui {
         changed
     }
 
+    /// A tooltip for each button of a [`Ui::segmented`] drawn in `r`, in order (after the
+    /// mouse rests on it, as every tooltip).
+    pub fn segmented_tips(&mut self, r: Rect, tips: &[&str]) {
+        let n = tips.len().max(1);
+        let w = r.w / n as f32;
+        for (k, t) in tips.iter().enumerate() {
+            if !t.is_empty() {
+                self.tooltip(Rect::new(r.x + w * k as f32, r.y, w, r.h), t);
+            }
+        }
+    }
+
     /// A dropdown: shows the chosen option, opens a list over everything else.
     pub fn select(
         &mut self,
@@ -2078,10 +2090,13 @@ impl Ui {
                 }
             };
             let w = (shown(self, &t) + 20.0).min(360.0);
-            let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
+            // (a text that fits on one line is laid out with a pixel to spare: measured word
+            // by word it can come out a hair wider than whole, and "Open Setup" broke in two)
+            let wrap_w = w - 19.0;
+            let lines = raw.then(|| self.wrap_as_is(&t, wrap_w, 12.5, Weight::Medium));
             let h = match &lines {
                 Some(l) => l.len() as f32 * self.fonts.size(12.5) * 1.38,
-                None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
+                None => self.paragraph_height(&t, wrap_w, 12.5, Weight::Medium),
             } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
             if r.right() > self.size.x - 8.0 {
@@ -2115,7 +2130,7 @@ impl Ui {
                     self.paragraph(
                         &t,
                         Vec2::new(r.x + 10.0, r.y + 4.0),
-                        w - 20.0,
+                        wrap_w,
                         12.5,
                         Weight::Medium,
                         TEXT_SOFT,
