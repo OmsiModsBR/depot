@@ -107,6 +107,8 @@ instruction slots it takes and how many the card allows
 the log instead of a black world; the scene is then not tried again every frame. That count
 (`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
 
+A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
+
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (rain, wet sheen, snow), the sky, coronas and smoke,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
