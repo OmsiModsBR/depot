@@ -15,14 +15,19 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let body = l.page_title(area, omsi_launcher_ui::Page::Diagnostics);
     let bar = Rect::new(body.x, body.y, body.w, 36.0);
     let mut tab = l.pages.diag.tab;
-    if l.ui.segmented(
-        "diag-tab",
-        Rect::new(bar.x, bar.y, 300.0f32.min(bar.w), bar.h),
-        &mut tab,
-        &["Overview", "Integrity"],
-    ) {
+    let tabs_r = Rect::new(bar.x, bar.y, 300.0f32.min(bar.w), bar.h);
+    if l.ui
+        .segmented("diag-tab", tabs_r, &mut tab, &["Overview", "Integrity"])
+    {
         l.pages.diag.tab = tab;
     }
+    l.ui.segmented_tips(
+        tabs_r,
+        &[
+            "This build, the OMSI 2 folder, the game's log and the games running.",
+            "A complete check of a map or a vehicle, on request.",
+        ],
+    );
     let below = Rect::new(area.x, body.y + 52.0, area.w, area.bottom() - body.y - 52.0);
     match l.pages.diag.tab {
         1 => super::integrity::draw(l, below),

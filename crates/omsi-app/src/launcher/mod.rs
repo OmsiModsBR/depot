@@ -1678,21 +1678,29 @@ impl Launcher {
             && self.page == Page::Controls
             && self.pages.controls_tab == 0
             && self.pages.kb.dialog.is_some();
+        // (and the integrity report's export over Diagnostics)
+        let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
-        let saved =
-            (self.browser.is_some() || crash || reset || disconnected || window || drive || keys)
-                .then(|| {
-                    let i = self.ui.input.clone();
-                    self.ui.input.mouse = Vec2::new(-1e4, -1e4);
-                    self.ui.input.pressed = false;
-                    self.ui.input.released = false;
-                    self.ui.input.wheel = Vec2::ZERO;
-                    self.ui.input.keys.clear();
-                    self.ui.input.text.clear();
-                    i
-                });
+        let saved = (self.browser.is_some()
+            || crash
+            || reset
+            || disconnected
+            || window
+            || drive
+            || keys
+            || diag)
+            .then(|| {
+                let i = self.ui.input.clone();
+                self.ui.input.mouse = Vec2::new(-1e4, -1e4);
+                self.ui.input.pressed = false;
+                self.ui.input.released = false;
+                self.ui.input.wheel = Vec2::ZERO;
+                self.ui.input.keys.clear();
+                self.ui.input.text.clear();
+                i
+            });
         // a phone: the launcher made for it, not the desktop's pages
         if mobile {
             if self.page == Page::Setup && !self.root_ok() && self.phone.page.is_none() {
@@ -1813,6 +1821,8 @@ impl Launcher {
                 pages::drive_dialog(self);
             } else if self.browser.is_none() && keys {
                 keyboard::dialog(self);
+            } else if self.browser.is_none() && diag {
+                integrity::dialog(self);
             } else {
                 self.draw_browser();
             }

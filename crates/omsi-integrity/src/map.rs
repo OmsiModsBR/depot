@@ -1,5 +1,5 @@
 use crate::image_size::{image_size, next_pow2};
-use crate::report::{Finding, Report, Severity};
+use crate::report::{Finding, Progress, Report, Severity};
 use omsi_cfg::{resolve_path, vfs};
 use omsi_map::{GlobalCfg, Tile};
 use omsi_model::{MaterialDef, Model};
@@ -14,7 +14,13 @@ const MAX_PATH: usize = 259;
 /// the OMSI 2 folder the map's content lives in. A caller that wants mod folders searched
 /// first adds them as content roots (`omsi_cfg::add_content_root`) before.
 pub fn check_map(root: &Path, map_dir: &Path) -> Report {
-    let mut c = Checker::new(root);
+    check_map_with(root, map_dir, &Progress::new())
+}
+
+/// [`check_map`] that tells `progress` how far it is (a step per tile) and stops when it is
+/// cancelled.
+pub fn check_map_with(root: &Path, map_dir: &Path, progress: &Progress) -> Report {
+    let mut c = Checker::new(root, progress);
     c.report.map = map_dir
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -35,6 +41,7 @@ struct Pending {
 
 pub(crate) struct Checker<'a> {
     pub(crate) root: &'a Path,
+    pub(crate) progress: &'a Progress,
     pub(crate) report: Report,
     pending: BTreeMap<(&'static str, String), Pending>,
     seen_sco: HashSet<PathBuf>,
@@ -50,12 +57,13 @@ pub(crate) struct Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    pub(crate) fn new(root: &'a Path) -> Self {
+    pub(crate) fn new(root: &'a Path, progress: &'a Progress) -> Self {
         // (the folder listings the loaders keep are dropped: files may have changed since an
         // earlier check)
         omsi_cfg::content_changed();
         Checker {
             root,
+            progress,
             report: Report::default(),
             pending: BTreeMap::new(),
             seen_sco: HashSet::new(),
@@ -79,9 +87,22 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The caller cancelled the check: stop where it is.
+    pub(crate) fn stopped(&self) -> bool {
+        self.progress.cancelled()
+    }
+
     pub(crate) fn rel(&self, p: &Path) -> String {
-        // (always written with `/`, whatever the system)
-        p.strip_prefix(self.root)
+        // (always written with `/`, whatever the system; a file of another content root, the
+        // Depot content folder or a mounted archive, goes by its path in that root, so that a
+        // report sent along names no folder of the user's)
+        let in_root = p.strip_prefix(self.root).ok().or_else(|| {
+            omsi_cfg::content_roots()
+                .iter()
+                .filter_map(|r| p.strip_prefix(r).ok())
+                .min_by_key(|rest| rest.as_os_str().len())
+        });
+        in_root
             .unwrap_or(p)
             .display()
             .to_string()
@@ -108,6 +129,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn finish(mut self) -> Report {
+        self.report.cancelled = self.stopped();
         for ((code, file), p) in std::mem::take(&mut self.pending) {
             self.report.findings.push(Finding {
                 severity: p.severity,
@@ -154,7 +176,12 @@ impl<'a> Checker<'a> {
         // (the game looks for chrono folders at any depth below `Chrono`)
         let mut chrono_dirs = Vec::new();
         collect_dirs(&resolve_path(map_dir, "Chrono"), 4, &mut chrono_dirs);
+        self.progress.set_total(global.tiles.len());
         for t in &global.tiles {
+            if self.stopped() {
+                return;
+            }
+            self.progress.step();
             let path = resolve_path(map_dir, &t.file);
             let tile_name = self.rel(&path);
             if !vfs::is_file(&path) {
@@ -212,6 +239,9 @@ impl<'a> Checker<'a> {
     /// The objects, splines and replacements a tile (or a chrono patch of one) names.
     fn tile_content(&mut self, tile: &Tile, tile_name: &str, count: bool) {
         for o in tile.objects.iter().chain(&tile.attach_objects) {
+            if self.stopped() {
+                return;
+            }
             self.report.objects += count as usize;
             self.object(&o.file, tile_name);
         }
@@ -348,6 +378,9 @@ impl<'a> Checker<'a> {
             }
         }
         for md in &model.meshes {
+            if self.stopped() {
+                break;
+            }
             if md.file.trim().is_empty() {
                 continue;
             }
@@ -387,7 +420,10 @@ impl<'a> Checker<'a> {
         self.long_path(path, by);
         if !self.mesh_cache.contains_key(path) {
             let loaded = match omsi_o3d::load_mesh(path) {
-                Ok(m) => Some(m.materials),
+                Ok(m) => {
+                    self.report.meshes += 1;
+                    Some(m.materials)
+                }
                 Err(e) => {
                     self.add(
                         Severity::Error,
