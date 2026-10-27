@@ -487,6 +487,7 @@ impl ApplicationHandler for App {
                 #[cfg(windows)]
                 if let Some(d) = self.d3d9.as_ref() {
                     d.set_vsync(desktop_vsync);
+                    d.set_quality(self.settings.msaa, u32::from(self.settings.anisotropy));
                 }
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)

@@ -1499,9 +1499,7 @@ impl Settings {
         self.ssao = false;
         self.detail_textures = false;
         // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
-        self.msaa = 1;
         self.render_scale = 0.0;
-        self.anisotropy = 1;
         self.post_aa = "off".into();
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
@@ -1709,9 +1707,7 @@ mod tests {
         for l in crate::api_limits::D3D9 {
             let ok = match l.key {
                 "graphics" => s.graphics == "vanilla" && s.classic(),
-                "msaa" => s.msaa == 1,
                 "render_scale" => s.render_scale == 0.0,
-                "anisotropy" => s.anisotropy == 1,
                 "mirror_size" => {
                     s.mirror_size == 128
                         && l.allows(&s.mirror_size.to_string())
@@ -1750,14 +1746,15 @@ mod tests {
                     (file.shadows, file.ssao, file.detail_textures)
                 );
                 assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
-                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`)
+                // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`);
+                // anti-aliasing and anisotropic filtering are drawn: kept as saved
                 let saved = Settings::from_text(&format!(
                     "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
                 ))
                 .locked_for_api();
                 assert_eq!(
                     (saved.msaa, saved.anisotropy, saved.render_scale),
-                    (1, 1, 0.0)
+                    (8, 16, 0.0)
                 );
                 // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
                 assert_eq!(
