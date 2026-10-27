@@ -208,18 +208,37 @@ fn start(
     let progress = Arc::new(Progress::new());
     let p = progress.clone();
     std::thread::spawn(move || {
-        let mut r = run_check(&root, kind, &target, &p);
-        if let Some(o) = other {
-            if !p.cancelled() {
-                // (the baseline's own steps are not shown: the bar stays full meanwhile)
-                r.mark_known(&run_check(&root, kind, &o, &Progress::new()));
-            }
-        }
-        if !p.cancelled() {
+        let run = |t: &str, p: &Progress| run_check(&root, kind, t, p);
+        if let Some(r) = check_and_compare(run, &target, other.as_deref(), &p) {
             let _ = tx.send(r);
         }
     });
     (rx, progress)
+}
+
+/// `target` checked by `run`, its findings that `other` has too marked as known; nothing
+/// when the check was cancelled. Both checks follow the one `progress`, so that Cancel stops
+/// the comparison too (whose steps are not shown: the bar stays full meanwhile, as `steps`
+/// keeps the count within the total).
+fn check_and_compare(
+    run: impl Fn(&str, &Progress) -> Report,
+    target: &str,
+    other: Option<&str>,
+    progress: &Progress,
+) -> Option<Report> {
+    let mut r = run(target, progress);
+    if let Some(o) = other {
+        if !progress.cancelled() {
+            r.mark_known(&run(o, progress));
+        }
+    }
+    (!progress.cancelled()).then_some(r)
+}
+
+/// Whether a finding counts in the heading, the tabs and the chips: with a comparison, only
+/// those the compared one does not have (the others are still listed, greyed).
+fn counts(f: &omsi_integrity::Finding, compared: bool) -> bool {
+    !compared || !f.known
 }
 
 fn now_text() -> String {
@@ -700,7 +719,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     let ty = sy + 58.0;
     l.pages.diag.cat = l.pages.diag.cat.min(tabs.len());
     let only = l.pages.diag.cat.checked_sub(1).map(|k| tabs[k]);
-    type_tabs(l, Rect::new(r.x + 8.0, ty, r.w - 16.0, 36.0), &tabs, kind);
+    type_tabs(l, Rect::new(r.x + 8.0, ty, r.w - 16.0, 36.0), &tabs);
 
     if empty {
         clipped(
@@ -730,6 +749,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
                     .findings
                     .iter()
                     .filter(|f| f.severity == s && only.is_none_or(|c| f.category() == c))
+                    .filter(|f| counts(f, d.compared.is_some()))
                     .count()
             })
             .unwrap_or(0);
@@ -888,49 +908,48 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
 
 /// The result's tab bar: "All" and a tab for each kind of file, with how many findings it
 /// has and a dot in the colour of the worst of them.
-fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category], kind: usize) {
-    let Some(rep) = l.pages.diag.done.as_ref().map(|d| d.report.clone()) else {
+fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
+    let Some(done) = l.pages.diag.done.as_ref() else {
         return;
     };
-    let _ = kind;
+    let mut labels: Vec<(String, usize, Option<Severity>, String)> = Vec::new();
+    {
+        // (with a comparison, as the heading: only what the compared one does not have)
+        let counted: Vec<&omsi_integrity::Finding> = done
+            .report
+            .findings
+            .iter()
+            .filter(|f| counts(f, done.compared.is_some()))
+            .collect();
+        let worst = |f: &dyn Fn(&omsi_integrity::Finding) -> bool| {
+            counted.iter().filter(|x| f(x)).map(|x| x.severity).min()
+        };
+        let tip_of = |f: &dyn Fn(&omsi_integrity::Finding) -> bool| {
+            let n = |s: Severity| counted.iter().filter(|x| f(x) && x.severity == s).count();
+            omsi_ui::tr("%{e} errors, %{w} warnings, %{o} not optimized")
+                .replace("%{e}", &n(Severity::Error).to_string())
+                .replace("%{w}", &n(Severity::Warning).to_string())
+                .replace("%{o}", &n(Severity::NotOptimized).to_string())
+        };
+        labels.push((
+            omsi_ui::tr("All").to_string(),
+            counted.len(),
+            worst(&|_| true),
+            tip_of(&|_| true),
+        ));
+        for c in tabs {
+            let c = *c;
+            labels.push((
+                omsi_ui::tr(c.label()).to_string(),
+                counted.iter().filter(|f| f.category() == c).count(),
+                worst(&|f| f.category() == c),
+                tip_of(&|f| f.category() == c),
+            ));
+        }
+    }
     l.ui.p()
         .rect(Rect::new(bar.x, bar.bottom() - 1.0, bar.w, 1.0), LINE);
     let px = 12.5;
-    let mut labels: Vec<(String, usize, Option<Severity>, String)> = Vec::new();
-    let worst = |f: &dyn Fn(&omsi_integrity::Finding) -> bool| {
-        rep.findings
-            .iter()
-            .filter(|x| f(x))
-            .map(|x| x.severity)
-            .min()
-    };
-    let tip_of = |f: &dyn Fn(&omsi_integrity::Finding) -> bool| {
-        let n = |s: Severity| {
-            rep.findings
-                .iter()
-                .filter(|x| f(x) && x.severity == s)
-                .count()
-        };
-        omsi_ui::tr("%{e} errors, %{w} warnings, %{o} not optimized")
-            .replace("%{e}", &n(Severity::Error).to_string())
-            .replace("%{w}", &n(Severity::Warning).to_string())
-            .replace("%{o}", &n(Severity::NotOptimized).to_string())
-    };
-    labels.push((
-        omsi_ui::tr("All").to_string(),
-        rep.findings.len(),
-        worst(&|_| true),
-        tip_of(&|_| true),
-    ));
-    for c in tabs {
-        let c = *c;
-        labels.push((
-            omsi_ui::tr(c.label()).to_string(),
-            rep.count_in(c),
-            worst(&|f| f.category() == c),
-            tip_of(&|f| f.category() == c),
-        ));
-    }
     // (narrower padding when the tabs do not fit the bar)
     let natural: f32 = labels
         .iter()
@@ -1247,6 +1266,27 @@ pub fn dialog(l: &mut Launcher) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Cancel while the compared one is read: that read sees it and nothing is sent.
+    #[test]
+    fn cancel_stops_the_comparison_too() {
+        let clicked = Progress::new();
+        let seen = std::cell::Cell::new(false);
+        let run = |t: &str, p: &Progress| {
+            if t == "baseline" {
+                clicked.cancel();
+                seen.set(p.cancelled());
+            }
+            Report::default()
+        };
+        assert!(check_and_compare(run, "map", Some("baseline"), &clicked).is_none());
+        assert!(seen.get(), "the comparison runs on its own progress");
+        // without a comparison, or not cancelled: the report
+        let p = Progress::new();
+        let plain = |_: &str, _: &Progress| Report::default();
+        assert!(check_and_compare(plain, "map", None, &p).is_some());
+        assert!(check_and_compare(plain, "map", Some("other"), &p).is_some());
+    }
 
     #[test]
     fn the_file_name_holds_what_was_checked_and_when() {
