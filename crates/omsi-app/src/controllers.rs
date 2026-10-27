@@ -216,16 +216,16 @@ pub struct Devices {
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     pub button_devices: crate::evdev_buttons::ButtonDevices,
     #[cfg(windows)]
-    di: Option<crate::dinput::DirectInput>,
+    pub di: Option<crate::dinput::DirectInput>,
     /// macOS: Xbox-type controllers, which gilrs and `hid` cannot read at all (see
     /// `mac_game_controller`).
     #[cfg(target_os = "macos")]
-    gc: crate::mac_game_controller::GcPads,
+    pub gc: crate::mac_game_controller::GcPads,
     /// macOS: every axis element of every wheel and joystick, as last read (see `mac_hid`)
     #[cfg(target_os = "macos")]
-    hid: Option<crate::mac_hid::MacHid>,
+    pub hid: Option<crate::mac_hid::MacHid>,
     #[cfg(target_os = "macos")]
-    hid_axes: Vec<crate::mac_hid::HidAxes>,
+    pub hid_axes: Vec<crate::mac_hid::HidAxes>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub hats: Vec<(String, [i8; 8])>,
 }

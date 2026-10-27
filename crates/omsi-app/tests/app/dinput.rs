@@ -1,4 +1,8 @@
 use openomsi_game::testing::dinput::*;
+use std::cell::RefCell;
+use std::time::Duration;
+use windows::Win32::Devices::HumanInterfaceDevice::*;
+use windows::Win32::UI::WindowsAndMessaging::DestroyWindow;
 
 /// With no controller, the periodic lookup stops after the first minute; the
 /// notifications of Windows still find a device plugged in later.

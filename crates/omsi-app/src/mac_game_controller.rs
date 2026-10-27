@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 /// directions as the other hats on this platform are numbered (`controllers::HAT_BUTTONS`).
 const BUTTONS: usize = 16;
 
-fn button_index(i: usize) -> usize {
+pub fn button_index(i: usize) -> usize {
     if i < 12 {
         i
     } else {
@@ -142,7 +142,7 @@ struct Pad {
     axes: Arc<Mutex<[f32; 6]>>,
 }
 
-pub(crate) struct GcPads {
+pub struct GcPads {
     pads: Vec<Pad>,
     last_scan: Option<std::time::Instant>,
 }
@@ -152,7 +152,7 @@ pub(crate) struct GcPads {
 unsafe impl Send for GcPads {}
 
 impl GcPads {
-    pub(crate) fn new() -> GcPads {
+    pub fn new() -> GcPads {
         GcPads {
             pads: Vec::new(),
             last_scan: None,

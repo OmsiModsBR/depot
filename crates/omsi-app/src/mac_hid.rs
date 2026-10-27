@@ -29,13 +29,13 @@ struct Device {
 
 /// A device as last read: its name, (vendor, product) and axes (code, value -1..1) in
 /// declared order.
-pub(crate) struct HidAxes {
+pub struct HidAxes {
     pub name: String,
     pub id: Option<(u16, u16)>,
     pub axes: Vec<(u32, f32)>,
 }
 
-pub(crate) struct MacHid {
+pub struct MacHid {
     manager: CFRetained<IOHIDManager>,
     devices: Vec<Device>,
     last_scan: Option<std::time::Instant>,

@@ -1275,7 +1275,7 @@ fn eye_camera(base: &Camera, position: Vec3, rotation: Quat, fov: xr::Fovf) -> C
     }
 }
 
-fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
+pub fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
     let left = fov.angle_left.tan();
     let right = fov.angle_right.tan();
     let bottom = fov.angle_down.tan();
@@ -1301,11 +1301,11 @@ fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
     ])
 }
 
-fn zoom_eye_position(eye: Vec3, center: Vec3, zoom: f32) -> Vec3 {
+pub fn zoom_eye_position(eye: Vec3, center: Vec3, zoom: f32) -> Vec3 {
     center + (eye - center) / zoom
 }
 
-fn zoom_projection(mut projection: Mat4, zoom: f32) -> Mat4 {
+pub fn zoom_projection(mut projection: Mat4, zoom: f32) -> Mat4 {
     projection.x_axis.x *= zoom;
     projection.y_axis.y *= zoom;
     projection

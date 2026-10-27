@@ -1,4 +1,6 @@
+use glam::{Mat4, Vec3};
 use openomsi_game::testing::openxr::*;
+use openxr as xr;
 
 #[test]
 fn stereo_disparity_stays_stable_through_zoom_animation() {
