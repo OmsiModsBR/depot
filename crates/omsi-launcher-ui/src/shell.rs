@@ -416,22 +416,26 @@ impl Sidebar<'_> {
         }
         let what_w = ui.width(what, 12.0, Weight::Regular);
         let cy = line.center().y;
-        // (the driver's icon, then the name, then what it is - or what to do - at the right)
+        // (the driver's icon, then the name - cut to the room left of what it is, as it is
+        // drawn: translated - then what it is, or what to do, at the right; the whole line
+        // in the tooltip)
         ui.icon("o-user", Vec2::new(line.x + 20.0, cy), 16.0, MUTED);
-        let name = kit::fit_text_as_is(
-            ui,
-            name,
-            12.5,
-            Weight::Bold,
-            (line.w - 40.0 - what_w - 12.0).max(0.0),
-        );
         ui.text_in(
-            &name,
-            Rect::new(line.x + 36.0, cy - 12.0, line.w, 24.0),
+            name,
+            Rect::new(
+                line.x + 36.0,
+                cy - 12.0,
+                (line.w - 40.0 - what_w - 12.0).max(0.0),
+                24.0,
+            ),
             12.5,
             Weight::Bold,
             FG,
             Align::Left,
+        );
+        ui.tooltip(
+            line,
+            &format!("{} · {}", omsi_ui::tr(name), omsi_ui::tr(what)),
         );
         let what_c = if self.footer_ask {
             if hover {
