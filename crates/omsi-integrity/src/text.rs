@@ -86,7 +86,7 @@ fn wrapped(out: &mut String, first: &str, text: &str) {
 }
 
 /// `text` with the home folder `home` (as `\\` or `/` is written) as `%USERPROFILE%`.
-fn without_home(text: String, home: Option<&std::path::Path>) -> String {
+pub(crate) fn without_home(text: String, home: Option<&std::path::Path>) -> String {
     let Some(home) = home.map(|h| h.display().to_string()) else {
         return text;
     };

@@ -93,20 +93,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn rel(&self, p: &Path) -> String {
-        // (always written with `/`, whatever the system; a file of another content root, the
-        // Depot content folder or a mounted archive, goes by its path in that root, so that a
-        // report sent along names no folder of the user's)
-        let in_root = p.strip_prefix(self.root).ok().or_else(|| {
-            omsi_cfg::content_roots()
-                .iter()
-                .filter_map(|r| p.strip_prefix(r).ok())
-                .min_by_key(|rest| rest.as_os_str().len())
-        });
-        in_root
-            .unwrap_or(p)
-            .display()
-            .to_string()
-            .replace('\\', "/")
+        rel_to(self.root, p)
     }
 
     pub(crate) fn add(
@@ -722,4 +709,21 @@ fn collect_dirs(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
             collect_dirs(&sub, depth - 1, out);
         }
     }
+}
+
+/// `p` as a report names it: from `root` (always written with `/`, whatever the system); a
+/// file of another content root, the Depot content folder or a mounted archive, goes by its
+/// path in that root, so that a report sent along names no folder of the user's.
+pub(crate) fn rel_to(root: &Path, p: &Path) -> String {
+    let in_root = p.strip_prefix(root).ok().or_else(|| {
+        omsi_cfg::content_roots()
+            .iter()
+            .filter_map(|r| p.strip_prefix(r).ok())
+            .min_by_key(|rest| rest.as_os_str().len())
+    });
+    in_root
+        .unwrap_or(p)
+        .display()
+        .to_string()
+        .replace('\\', "/")
 }

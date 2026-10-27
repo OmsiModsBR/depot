@@ -15,10 +15,13 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let body = l.page_title(area, omsi_launcher_ui::Page::Diagnostics);
     let bar = Rect::new(body.x, body.y, body.w, 36.0);
     let mut tab = l.pages.diag.tab;
-    let tabs_r = Rect::new(bar.x, bar.y, 300.0f32.min(bar.w), bar.h);
-    if l.ui
-        .segmented("diag-tab", tabs_r, &mut tab, &["Overview", "Integrity"])
-    {
+    let tabs_r = Rect::new(bar.x, bar.y, 420.0f32.min(bar.w), bar.h);
+    if l.ui.segmented(
+        "diag-tab",
+        tabs_r,
+        &mut tab,
+        &["Overview", "Integrity", "AI traffic"],
+    ) {
         l.pages.diag.tab = tab;
     }
     l.ui.segmented_tips(
@@ -26,11 +29,13 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         &[
             "This build, the OMSI 2 folder, the game's log and the games running.",
             "A complete check of a map or a vehicle, on request.",
+            "A map's AI lists as the game takes them on a chosen day: car groups, bus fleet, parked cars, people and traffic density.",
         ],
     );
     let below = Rect::new(area.x, body.y + 52.0, area.w, area.bottom() - body.y - 52.0);
     match l.pages.diag.tab {
         1 => super::integrity::draw(l, below),
+        2 => super::ai_traffic::draw(l, below),
         _ => overview(l, below),
     }
 }
