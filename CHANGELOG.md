@@ -59,6 +59,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - Settings → Graphics API offers "DirectX9 (D3D9Ex)" on Windows (off by default; "Automatic" never picks it). The launcher and the game both keep the choice in `settings.cfg` as `graphics_api=d3d9`.
 
 ### Fixed
+- DirectX9 (D3D9Ex): the shadow under a vehicle (`[isshadow]`) was a solid black box on the road for every vehicle whose shadow picture has no alpha (a DXT1 picture all black, which about half of the AI vehicles of a typical map ship). The renderer blends the shadow by the picture's alpha only: a blob whose picture has none, or whose material is opaque, is left out, and the others (soft shadows with alpha, in RGBA or DXT1/3/5) are drawn as before. Limited, not an improvement: the proper shadows under DirectX9 stay a known gap.
 - Diagnostics → AI traffic → Backups: putting a backup back reads all its copies first, so a backup that lost one changes nothing, and when a file cannot be written the files already put back return to how they were. A backup's file name with `:` (an NTFS stream of the file) is refused.
 - The launcher's bus preview gives the bus its paint scheme the way the game does (its variables are there for the scripts' first run, not set after it) and makes the bus on a mild day (22 °C) instead of at 0 °C, so a bus whose heating script mists the windows when it is cold (several Citaro models) no longer shows them fogged up in the picture.
 
