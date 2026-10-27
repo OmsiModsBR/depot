@@ -53,6 +53,10 @@ pub struct VehiclesView {
     prerender_asked: Option<PrerenderRequest>,
     /// The manufacturers whose models the library keeps folded away (a search shows all).
     folded: std::collections::HashSet<String>,
+    /// The host found no OMSI 2 folder (`set_no_folder`): the page says to choose one.
+    no_folder: bool,
+    /// "Open Setup" was clicked (`take_open_setup`).
+    open_setup: bool,
 }
 
 /// How the background drawing of the vehicles' pictures stands (the host's, shown beside the
@@ -133,11 +137,24 @@ impl Default for VehiclesView {
             prerender: PrerenderStatus::default(),
             prerender_asked: None,
             folded: Default::default(),
+            no_folder: false,
+            open_setup: false,
         }
     }
 }
 
 impl VehiclesView {
+    /// Whether no OMSI 2 folder is chosen (the host's check, each frame): the page then asks
+    /// for one instead of showing why its list could not be read.
+    pub fn set_no_folder(&mut self, none: bool) {
+        self.no_folder = none;
+    }
+
+    /// Whether "Open Setup" was clicked since the last call.
+    pub fn take_open_setup(&mut self) -> bool {
+        std::mem::take(&mut self.open_setup)
+    }
+
     /// A page showing `list` (screenshots and tests).
     pub fn with_catalog(list: Vec<VehicleInfo>) -> VehiclesView {
         VehiclesView {
@@ -354,28 +371,34 @@ impl VehiclesView {
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 120.0);
-                card(ui, r, "Vehicles could not be listed", None);
-                clipped(
-                    ui,
-                    e,
-                    r.x + 19.0,
-                    r.y + 62.0,
-                    r.w - 38.0,
-                    14.0,
-                    Weight::Regular,
-                    MUTED,
-                );
-                clipped(
-                    ui,
-                    "Check the original installation in Setup.",
-                    r.x + 19.0,
-                    r.y + 90.0,
-                    r.w - 38.0,
-                    14.0,
-                    Weight::Regular,
-                    MUTED,
-                );
+                // (no folder chosen yet - the first run - is no error: the page says what to
+                // do, with the way to Setup)
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 300.0);
+                let e = e.clone();
+                let open = if self.no_folder {
+                    kit::empty_state(
+                        ui,
+                        "vehicles:open-setup",
+                        r,
+                        "Vehicle library",
+                        "o-folder",
+                        "No OMSI 2 folder chosen yet",
+                        &["Choose the folder of your original OMSI 2 in Setup to see its vehicles here."],
+                        "Open Setup",
+                    )
+                } else {
+                    kit::empty_state(
+                        ui,
+                        "vehicles:open-setup",
+                        r,
+                        "Vehicles could not be listed",
+                        "warning",
+                        "Vehicles could not be listed",
+                        &[&e, "Check the original installation in Setup."],
+                        "Open Setup",
+                    )
+                };
+                self.open_setup |= open;
                 return;
             }
             _ => {

@@ -3303,7 +3303,7 @@ pub fn reset_dialog(l: &mut Launcher) {
     let size = l.ui.size;
     let full = Rect::new(0.0, 0.0, size.x, size.y);
     l.ui.solid(full);
-    l.ui.p().rect(full, Color::rgba(0, 0, 0, 0.62));
+    l.ui.p().rect(full, super::start::SCRIM);
     let w = (size.x - 48.0).min(520.0);
     let h = 190.0;
     let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);

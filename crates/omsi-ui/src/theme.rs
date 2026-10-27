@@ -174,6 +174,32 @@ pub fn corner(radius: f32) -> f32 {
     }
 }
 
+/// Motion (Windows' "Animation effects"): off, everything that would move or fade shows at
+/// once where it ends.
+static MOTION: AtomicBool = AtomicBool::new(true);
+
+/// Animate from now on (or show every change at once).
+pub fn set_motion(on: bool) {
+    MOTION.store(on, Ordering::Relaxed);
+}
+
+pub fn motion() -> bool {
+    MOTION.load(Ordering::Relaxed)
+}
+
+/// Windows 11's durations of motion (seconds): a small change (a press, a tooltip), a
+/// control's or a page's entrance, and a longer travel (the navigation's indicator).
+pub const MOTION_FAST: f32 = 0.083;
+pub const MOTION_NORMAL: f32 = 0.167;
+pub const MOTION_SLOW: f32 = 0.25;
+
+/// Windows 11's easing for things that arrive: fast at first, slowing to a stop (`t` from 0
+/// to 1).
+pub fn ease_out(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
+}
+
 /// Glass (Settings > Interface > Background: Scene): the launcher's panels let the blurred
 /// picture behind its pages show through.
 static GLASS: AtomicBool = AtomicBool::new(false);

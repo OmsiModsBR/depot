@@ -296,3 +296,106 @@ mod tests {
         assert_eq!(shorten("äöüäöü", 3), "äö\u{2026}");
     }
 }
+
+/// How tall `info_bar` is at width `w` with `message`.
+pub fn info_bar_height(ui: &Ui, w: f32, message: &str) -> f32 {
+    16.0 + 20.0 + ui.paragraph_height(message, w - 64.0, 13.0, Weight::Regular) + 14.0
+}
+
+/// Windows 11's InfoBar across `r` (`info_bar_height` tall): an icon in `tone` at the left, a
+/// bold title and the message under it, in a panel tinted by `tone`. It comes in rising 8 px
+/// with its text fading in (the panel's glass stays as it is) - again each time it is shown.
+pub fn info_bar(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    tone: Color,
+    icon: &str,
+    title: &str,
+    message: &str,
+) {
+    let a = ui.appear(omsi_ui::widgets::id_of(id), omsi_ui::theme::MOTION_NORMAL);
+    let r = Rect::new(r.x, r.y + 8.0 * (1.0 - a), r.w, r.h);
+    ui.solid(r);
+    ui.p().rounded(
+        r,
+        omsi_ui::theme::corner(CONTROL_RADIUS),
+        omsi_ui::theme::surface(PANEL.mix(tone, 0.12)),
+    );
+    ui.p().rounded_border(
+        r,
+        omsi_ui::theme::corner(CONTROL_RADIUS),
+        1.0,
+        tone.alpha(0.35),
+    );
+    ui.push_fade(a);
+    ui.icon(icon, Vec2::new(r.x + 26.0, r.y + 26.0), 20.0, tone);
+    ui.text_in(
+        title,
+        Rect::new(r.x + 48.0, r.y + 14.0, r.w - 64.0, 22.0),
+        14.0,
+        Weight::Bold,
+        FG,
+        Align::Left,
+    );
+    ui.paragraph(
+        message,
+        Vec2::new(r.x + 48.0, r.y + 36.0),
+        r.w - 64.0,
+        13.0,
+        Weight::Regular,
+        NAV_TEXT,
+    );
+    ui.pop_fade();
+}
+
+/// A page with nothing to show yet, in a card titled `card_title` over `r`: an icon, what is
+/// missing (`title`) and the `lines` saying why, centred, and an accent button `action` under
+/// them. True when the button was clicked.
+#[allow(clippy::too_many_arguments)]
+pub fn empty_state(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    card_title: &str,
+    icon: &str,
+    title: &str,
+    lines: &[&str],
+    action: &str,
+) -> bool {
+    card(ui, r, card_title, None);
+    let block = 44.0 + 34.0 + lines.len() as f32 * 22.0 + 20.0 + 34.0;
+    let mut y = r.y + 44.0 + ((r.h - 44.0 - block) * 0.5).max(8.0);
+    ui.icon(icon, Vec2::new(r.center().x, y + 20.0), 40.0, MUTED);
+    y += 44.0;
+    ui.text_in(
+        title,
+        Rect::new(r.x + 20.0, y, r.w - 40.0, 30.0),
+        18.0,
+        Weight::Bold,
+        FG,
+        Align::Center,
+    );
+    y += 34.0;
+    for line in lines {
+        let shown = fit_text(ui, line, 14.0, r.w - 40.0);
+        ui.text_in(
+            &shown,
+            Rect::new(r.x + 20.0, y, r.w - 40.0, 20.0),
+            14.0,
+            Weight::Regular,
+            MUTED,
+            Align::Center,
+        );
+        y += 22.0;
+    }
+    y += 20.0;
+    let w = ui.width(action, 13.0, Weight::Bold) + 64.0;
+    ui.button(
+        id,
+        Rect::new(r.center().x - w * 0.5, y, w, 34.0),
+        action,
+        Some("o-folder"),
+        omsi_ui::widgets::ButtonKind::Primary,
+    )
+}
