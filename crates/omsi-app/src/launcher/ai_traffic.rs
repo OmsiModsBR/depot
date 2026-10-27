@@ -25,6 +25,10 @@ pub struct AiView {
     loading: Option<(String, i32, Receiver<AiTraffic>)>,
     /// The map's folder and day read, and what was read.
     data: Option<(String, i32, Arc<AiTraffic>)>,
+    /// The OMSI 2 folder and the content's generation (`omsi_cfg::content_generation`) of what
+    /// was read: another folder, or a change to the content (a timetable saved, a mod
+    /// installed), reads it again.
+    seen: Option<(String, u64)>,
     /// 0 car groups, 1 bus fleet and lines, 2 parked cars, 3 people, 4 traffic density.
     tab: usize,
     group: usize,
@@ -116,6 +120,17 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let item = keep(l.pages.diag.ai.item.unwrap_or(0), list.len());
     let folder = list[item].1.clone();
     let date = omsi_map::ailists::date_code(&l.pages.diag.ai.date);
+
+    // what was read is dropped when the OMSI 2 folder or its content changed
+    let now = (
+        l.state.config.root.trim().to_string(),
+        omsi_cfg::content_generation(),
+    );
+    if l.pages.diag.ai.seen.as_ref() != Some(&now) {
+        l.pages.diag.ai.data = None;
+        l.pages.diag.ai.loading = None;
+        l.pages.diag.ai.seen = Some(now);
+    }
 
     // the answer of a read, and a new read when the map or the day changed
     if let Some((f, d, rx)) = l.pages.diag.ai.loading.as_ref() {
