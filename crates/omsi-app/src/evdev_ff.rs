@@ -11,7 +11,7 @@ const EVIOCRMFF: libc::c_ulong = 0x4004_4581;
 
 #[repr(C)]
 #[derive(Default)]
-struct FfEffect {
+pub struct FfEffect {
     kind: u16,
     id: i16,
     direction: u16,
@@ -21,14 +21,14 @@ struct FfEffect {
 }
 
 #[repr(C)]
-struct InputEvent {
+pub struct InputEvent {
     time: libc::timeval,
     kind: u16,
     code: u16,
     value: i32,
 }
 
-pub(crate) struct Wheel {
+pub struct Wheel {
     pub name: String,
     file: File,
     id: i16,
@@ -210,7 +210,7 @@ pub(crate) fn wheel_named(name: &str) -> bool {
     constant_force_device(Some(name))
 }
 
-fn has_bit(bitmap: &str, bit: usize) -> bool {
+pub fn has_bit(bitmap: &str, bit: usize) -> bool {
     let words: Vec<u64> = bitmap
         .split_whitespace()
         .rev()
@@ -219,20 +219,4 @@ fn has_bit(bitmap: &str, bit: usize) -> bool {
     words
         .get(bit / 64)
         .is_some_and(|w| w >> (bit % 64) & 1 != 0)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn layouts_match_the_kernel() {
-        assert_eq!(std::mem::size_of::<super::FfEffect>(), 48);
-        assert_eq!(std::mem::size_of::<super::InputEvent>(), 24);
-    }
-
-    #[test]
-    fn ff_bits() {
-        assert!(super::has_bit("11fff0000 0", 0x52));
-        assert!(!super::has_bit("11fff0000 0", 0x61));
-        assert!(!super::has_bit("0", 0x52));
-    }
 }

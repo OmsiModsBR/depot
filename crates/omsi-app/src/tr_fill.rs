@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 /// A template cut at its values: "%{done} of %{total} tiles" is `["", " of ", " tiles"]`.
-pub(crate) fn parts(template: &str) -> Vec<String> {
+pub fn parts(template: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = template;
     while let Some(i) = rest.find("%{") {
@@ -23,7 +23,7 @@ pub(crate) fn parts(template: &str) -> Vec<String> {
 
 /// The values `text` puts into the template cut into `parts`, in order; None when `text` is
 /// not that template.
-pub(crate) fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>> {
+pub fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>> {
     let (first, last) = (parts.first()?, parts.last()?);
     if parts.len() < 2
         || text.len() < first.len() + last.len()
@@ -43,19 +43,8 @@ pub(crate) fn values<'a>(parts: &[String], text: &'a str) -> Option<Vec<&'a str>
     Some(out)
 }
 
-/// Enough words around the values to tell the template apart ("%{a}: %{b}" is not).
-#[cfg(test)]
-pub(crate) fn telling(parts: &[String]) -> bool {
-    parts.len() >= 2
-        && parts
-            .iter()
-            .map(|s| s.trim().chars().count())
-            .sum::<usize>()
-            >= 4
-}
-
 /// The placeholders' names, in order: "%{done} of %{total}" has `done`, `total`.
-fn names(template: &str) -> Vec<&str> {
+pub fn names(template: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = template;
     while let Some(i) = rest.find("%{") {
@@ -69,8 +58,8 @@ fn names(template: &str) -> Vec<&str> {
 /// Placeholder names the tables use for counts and amounts.
 const COUNTS: [&str; 8] = ["n", "v", "count", "total", "done", "maps", "speed", "num"];
 
-struct Template {
-    parts: Vec<String>,
+pub struct Template {
+    pub parts: Vec<String>,
     /// Words on one side only and few of them, and a value named as a count ("%{n} vehicles"):
     /// that value must have digits, or "Clear all placed vehicles" would be taken for it. A name
     /// ("Stop skipped: %{name}") takes any value.
@@ -82,7 +71,7 @@ struct Template {
     weight: usize,
 }
 
-fn templates(lang: &str) -> Arc<Vec<Template>> {
+pub fn templates(lang: &str) -> Arc<Vec<Template>> {
     static T: OnceLock<RwLock<HashMap<String, Arc<Vec<Template>>>>> = OnceLock::new();
     let t = T.get_or_init(Default::default);
     if let Some(v) = t.read().get(lang) {
@@ -122,7 +111,7 @@ fn templates(lang: &str) -> Arc<Vec<Template>> {
 
 /// `text` in `lang` when it is a template of the tables with its values filled in. A value
 /// the tables have is translated too ("Weather: Custom weather").
-pub(crate) fn fill(lang: &str, text: &str) -> Option<String> {
+pub fn fill(lang: &str, text: &str) -> Option<String> {
     // (what was asked in this language, found or not: the painter asks every frame)
     static SEEN: Mutex<(String, Option<HashMap<String, Option<String>>>)> =
         Mutex::new((String::new(), None));
@@ -162,55 +151,4 @@ pub(crate) fn fill(lang: &str, text: &str) -> Option<String> {
     }
     m.insert(text.to_string(), found.clone());
     found
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_text_is_cut_at_its_values() {
-        let p = parts("Loading map tiles (first area) \u{b7} %{done} of %{total}");
-        assert_eq!(p, ["Loading map tiles (first area) \u{b7} ", " of ", ""]);
-        assert_eq!(
-            values(&p, "Loading map tiles (first area) \u{b7} 62 of 100"),
-            Some(vec!["62", "100"])
-        );
-        assert_eq!(values(&p, "Loading map tiles (first area) \u{b7} 62"), None);
-        assert_eq!(values(&parts("Gear %{n}"), "Gear 3"), Some(vec!["3"]));
-        assert_eq!(names("%{done} of %{total}"), ["done", "total"]);
-        assert!(telling(&parts("Gear %{n}")));
-        assert!(!telling(&parts("%{a}: %{b}")));
-        assert!(!telling(&parts("no values here")));
-    }
-
-    #[test]
-    fn a_formatted_text_is_found_through_its_template() {
-        assert_eq!(
-            fill(
-                "de",
-                "Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100"
-            ),
-            None
-        );
-        assert_eq!(
-            fill("de", "Loading map tiles (first area) \u{b7} 62 of 100").as_deref(),
-            Some("Kartenkacheln werden geladen (erster Bereich) \u{b7} 62 von 100")
-        );
-        assert_eq!(fill("de", "Back to my bus"), None);
-        // (too few words to tell it apart: its caller fills it in)
-        assert!(templates("de")
-            .iter()
-            .all(|t| t.parts != parts("Line %{line}")));
-        assert_eq!(
-            fill("de", "Loading map tiles (first area) \u{b7}  of 100"),
-            None
-        );
-        // (a name without digits is still a value; a count without them is not)
-        assert_eq!(
-            fill("de", "Stop skipped: Hauptbahnhof").as_deref(),
-            Some("Haltestelle ausgelassen: Hauptbahnhof")
-        );
-        assert_eq!(fill("de", "Clear all placed vehicles"), None);
-    }
 }

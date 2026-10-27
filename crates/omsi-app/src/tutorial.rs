@@ -123,15 +123,3 @@ impl Tutorial {
         self.pages.get(self.at)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn text() {
-        let (t, x) = super::page_text(
-            "<style>b{}</style><h2>Hello!</h2><p>One &quot;two&quot;</p><p>Three</p>",
-        );
-        assert_eq!(t, "Hello!");
-        assert_eq!(x, "One \"two\"\nThree");
-    }
-}

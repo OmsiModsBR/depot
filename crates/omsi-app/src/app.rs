@@ -627,6 +627,7 @@ impl App {
                 &mut renderer,
                 &window,
                 self.settings.vsync,
+                (self.settings.msaa, u32::from(self.settings.anisotropy)),
             ) {
                 Ok(out) => self.d3d9 = Some(out),
                 Err(e) => {

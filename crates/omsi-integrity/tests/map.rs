@@ -1,6 +1,6 @@
 //! A small map built from scratch in a temporary folder: nothing here is game content.
 
-use omsi_integrity::{check_map, image_size, next_pow2, Severity};
+use omsi_integrity::{check_map, check_map_with, image_size, next_pow2, Progress, Severity};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -60,7 +60,8 @@ fn a_complete_map_has_no_findings() {
     let r = check_map(&root, &root.join("Maps/Test"));
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
     assert_eq!((r.tiles, r.objects, r.splines, r.textures), (1, 1, 1, 3));
-    assert!(r.is_complete());
+    assert_eq!(r.meshes, 1);
+    assert!(r.is_complete() && !r.cancelled);
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -151,7 +152,10 @@ fn a_night_map_a_material_declares_must_exist() {
     let r = check_map(&root, &root.join("Maps/Test"));
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     assert_eq!(r.findings[0].code, "texture-missing");
-    assert_eq!(r.findings[0].file, "wall_night.bmp");
+    assert_eq!(
+        r.findings[0].file,
+        "Sceneryobjects/house/texture/wall_night.bmp"
+    );
     write(
         &root,
         "Sceneryobjects/house/texture/wall_night.bmp",
@@ -516,5 +520,230 @@ fn a_file_naming_a_texture_twice_is_one_user() {
         .find(|f| f.code == "texture-npot")
         .unwrap();
     assert_eq!(f.referenced_by.as_ref().unwrap().1, 1, "{:#?}", f);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn findings_the_baseline_has_too_are_marked_known() {
+    let before = temp_root("base-before");
+    complete(&before);
+    fs::remove_file(before.join("Splines/road.sli")).unwrap();
+    map(&before, TILE);
+    let base = check_map(&before, &before.join("Maps/Test"));
+
+    // the optimized copy: the same spline is still missing, and a new texture problem
+    let after = temp_root("base-after");
+    complete(&after);
+    fs::remove_file(after.join("Splines/road.sli")).unwrap();
+    write(
+        &after,
+        "Sceneryobjects/house/texture/wall.bmp",
+        bmp(1400, 1400),
+    );
+    map(&after, TILE);
+    let mut r = check_map(&after, &after.join("Maps/Test"));
+    r.mark_known(&base);
+    let spline = r
+        .findings
+        .iter()
+        .find(|f| f.code == "spline-missing")
+        .unwrap();
+    let npot = r
+        .findings
+        .iter()
+        .find(|f| f.code == "texture-npot")
+        .unwrap();
+    assert!(spline.known && !npot.known);
+    assert_eq!(r.count_new(Severity::Error), 0);
+    assert_eq!(r.count_new(Severity::NotOptimized), 1);
+    let _ = fs::remove_dir_all(&before);
+    let _ = fs::remove_dir_all(&after);
+}
+
+#[test]
+fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
+    let root = temp_root("same-name");
+    complete(&root);
+    write(&root, "Sceneryobjects/other/other.sco", "[mesh]\nhouse.x\n");
+    write(&root, "Sceneryobjects/other/model/house.x", MESH);
+    fs::remove_file(root.join("Sceneryobjects/house/texture/wall.bmp")).unwrap();
+    let tile = format!("{TILE}\nObject Nr. 1\n[object]\n0\nSceneryobjects\\other\\other.sco\n8\n5\n6\n0.25\n90\n0\n0\n0\n");
+    map(&root, &tile);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let missing: Vec<&str> = r
+        .findings
+        .iter()
+        .filter(|f| f.code == "texture-missing")
+        .map(|f| f.file.as_str())
+        .collect();
+    assert_eq!(missing.len(), 2, "{missing:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn progress_counts_the_tiles_and_a_cancel_stops_the_check() {
+    let root = temp_root("progress");
+    complete(&root);
+    write(
+        &root,
+        "Maps/Test/global.cfg",
+        "[name]\nTest\n\n[map]\n0\n0\ntile_0_0.map\n\n[map]\n1\n0\ntile_1_0.map\n",
+    );
+    write(&root, "Maps/Test/tile_0_0.map", TILE);
+    write(&root, "Maps/Test/tile_1_0.map", TILE);
+    let p = Progress::new();
+    let r = check_map_with(&root, &root.join("Maps/Test"), &p);
+    assert_eq!(p.steps(), Some((2, 2)));
+    assert_eq!(r.tiles, 2);
+    assert!(!r.cancelled);
+
+    // cancelled before it starts: no tile is read, and the report says it is a part only
+    let p = Progress::new();
+    p.cancel();
+    let r = check_map_with(&root, &root.join("Maps/Test"), &p);
+    assert_eq!(r.tiles, 0);
+    assert!(r.cancelled);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_ai_lists_parked_cars_people_and_tours_name_what_is_there() {
+    let root = temp_root("ai");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Car/car.ovh", "[friendlyname]\nCar\n");
+    write(&root, "Vehicles/Bus/bus.bus", "[friendlyname]\nBus\n");
+    write(&root, "Vehicles/Bus/Home.hof", "[name]\nHome\n");
+    write(
+        &root,
+        "Maps/Test/ailists.cfg",
+        "[aigroup_2]\nCars\n\nVehicles\\Car\\car.ovh\t2\nVehicles\\Car\\gone.ovh\t1\n[end]\n\n\
+         [aigroup_depot]\nBuses\nHome\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n1\tB-1\t\t\t\n[end]\n\n\
+         [aigroup_depot]\nTrams\nElsewhere\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n2\tB-2\t\t\t\n[end]\n",
+    );
+    write(
+        &root,
+        "Maps/Test/unsched_vehgroups.txt",
+        "[group]\nCars\n1\n\n[group]\nTrucks\n1\n",
+    );
+    write(
+        &root,
+        "Maps/Test/parklist_p.txt",
+        "Sceneryobjects\\house\\house.sco\nSceneryobjects\\cars\\gone.sco\nnot a car\n",
+    );
+    write(
+        &root,
+        "Maps/Test/parklist_p_2.txt",
+        "Sceneryobjects\\cars\\other.sco\n",
+    );
+    write(&root, "Humans/a/man.hum", "");
+    write(
+        &root,
+        "Maps/Test/humans.txt",
+        "Humans\\a\\man.hum\nHumans\\a\\gone.hum\n",
+    );
+    write(&root, "Maps/Test/drivers.txt", "Humans\\a\\driver.hum\n");
+    write(
+        &root,
+        "Maps/Test/TTData/1.ttl",
+        "[newtour]\n1\nBuses\n0\n\n[newtour]\n2\nGhosts\n0\n",
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let of = |code: &str| -> Vec<&str> {
+        r.findings
+            .iter()
+            .filter(|f| f.code == code)
+            .map(|f| f.file.as_str())
+            .collect()
+    };
+    assert_eq!(
+        of("ai-vehicle-missing"),
+        ["Vehicles/Car/gone.ovh"],
+        "{:#?}",
+        r.findings
+    );
+    assert_eq!(of("depot-missing"), ["Vehicles/Bus/Elsewhere.hof"]);
+    assert_eq!(
+        of("ai-group-unknown"),
+        ["Maps/Test/unsched_vehgroups.txt: Trucks"]
+    );
+    assert_eq!(
+        of("parked-car-missing"),
+        [
+            "Sceneryobjects/cars/gone.sco",
+            "Sceneryobjects/cars/other.sco"
+        ]
+    );
+    assert_eq!(of("human-missing"), ["Humans/a/gone.hum"]);
+    assert_eq!(of("driver-missing"), ["Humans/a/driver.hum"]);
+    let tours = r
+        .findings
+        .iter()
+        .find(|f| f.code == "tour-group-unknown")
+        .unwrap();
+    assert_eq!(tours.file, "Maps/Test/TTData/1.ttl");
+    assert!(tours.message.contains("\"Ghosts\"") && !tours.message.contains("Buses"));
+    assert!(of("ai-list-large").is_empty());
+    // (the parked car that is there is checked as an object: its house is complete)
+    assert!(of("object-missing").is_empty());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_scenario_that_changes_a_depot_file_is_checked_against_the_maps_buses() {
+    let root = temp_root("ai-chrono-depot");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Bus/bus.bus", "[friendlyname]\nBus\n");
+    write(&root, "Vehicles/Bus/Home.hof", "[name]\nHome\n");
+    write(
+        &root,
+        "Maps/Test/ailists.cfg",
+        "[aigroup_depot]\nBuses\nHome\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n1\tB-1\t\t\t\n[end]\n",
+    );
+    // the update names another depot file for the group and no buses of its own
+    write(
+        &root,
+        "Maps/Test/Chrono/Later/ailists_#upd.cfg",
+        "[aigroup_depot]\nBuses\nNewHome\n\n",
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let missing: Vec<&str> = r
+        .findings
+        .iter()
+        .filter(|f| f.code == "depot-missing")
+        .map(|f| f.file.as_str())
+        .collect();
+    assert_eq!(missing, ["Vehicles/Bus/NewHome.hof"], "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_ai_list_over_16_kb_is_not_optimized_and_says_why() {
+    let root = temp_root("ai-large");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Car/car.ovh", "[friendlyname]\nCar\n");
+    let mut list = String::from("[aigroup_2]\nCars\n\n");
+    while list.len() <= 17 * 1024 {
+        list.push_str("Vehicles\\Car\\car.ovh\t1\n");
+    }
+    list.push_str("[end]\n");
+    write(&root, "Maps/Test/ailists.cfg", &list);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "ai-list-large")
+        .unwrap();
+    assert_eq!(f.severity, Severity::NotOptimized);
+    assert_eq!(f.file, "Maps/Test/ailists.cfg");
+    assert_eq!(f.category(), omsi_integrity::Category::AiLists);
+    assert!(f.message.contains("16 KB"), "{}", f.message);
+    assert!(f.detail.as_deref().unwrap().contains("high-performance"));
+    assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
     let _ = fs::remove_dir_all(&root);
 }

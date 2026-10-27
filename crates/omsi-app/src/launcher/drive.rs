@@ -853,9 +853,10 @@ fn book_panel(l: &mut Launcher, r: Rect) {
         Some("receipt_long"),
     );
     let shut = Rect::new(r.right() - 44.0, r.y + 10.0, 30.0, 30.0);
-    if l.ui
-        .button("book-shut", shut, "", Some("close"), ButtonKind::Ghost)
-    {
+    let shut_clicked =
+        l.ui.button("book-shut", shut, "", Some("close"), ButtonKind::Ghost);
+    l.ui.tooltip(shut, "Close");
+    if shut_clicked {
         l.drive.book_open = false;
         l.drive.book_shut = true;
     }

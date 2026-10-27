@@ -216,7 +216,7 @@ pub fn thumb_shape() -> Shape {
 pub const THUMB_SIZE: (u32, u32) = (336, 208);
 
 /// Changes when the showroom draws a bus differently (the small pictures are drawn again).
-const THUMB_REVISION: &str = "thumb-1";
+const THUMB_REVISION: &str = "thumb-2";
 
 /// How many small pictures are kept at most, in a folder of their own (the oldest go), and
 /// how many one run draws, so that it never prunes its own pictures.

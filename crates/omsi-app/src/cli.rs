@@ -11,266 +11,266 @@ pub(crate) const DEFAULT_SIZE: &str = "1600x900";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "depot", version = crate::startup::VERSION, about = "Project Depot")]
-pub(crate) struct Args {
+pub struct Args {
     /// OMSI 2 installation root (the folder that contains `maps`, `Vehicles`, …).
     /// Found by itself when left out: $OMSI_ROOT, the folder remembered from last time,
     /// a folder next to this program, or the usual Steam locations.
     #[arg(long, default_value = ".")]
-    pub(crate) root: PathBuf,
+    pub root: PathBuf,
     /// Map to load, relative to root (e.g. maps/Grundorf/global.cfg).
     #[arg(long, default_value = "maps/Grundorf/global.cfg")]
-    pub(crate) map: String,
+    pub map: String,
     /// Render one frame to this PNG instead of opening a window.
     #[arg(long)]
-    pub(crate) offscreen: Option<PathBuf>,
+    pub offscreen: Option<PathBuf>,
     /// Offscreen image size.
     #[arg(long, default_value = DEFAULT_SIZE)]
-    pub(crate) size: String,
+    pub size: String,
     /// Camera: x,y,z,yaw,pitch (world metres / degrees). Default: the map's editor camera.
     #[arg(long)]
-    pub(crate) cam: Option<String>,
+    pub cam: Option<String>,
     /// Only load tiles within this many tiles of the camera/spawn tile, all at once
     /// (default: 2 for offscreen renders; the window streams the tiles around the camera).
     #[arg(long)]
-    pub(crate) radius: Option<i32>,
+    pub radius: Option<i32>,
     /// How far around the camera the window keeps tiles loaded (m); `view_distance` in the
     /// settings file, 1200 m by default.
     #[arg(long = "view-distance")]
-    pub(crate) view_distance: Option<f64>,
+    pub view_distance: Option<f64>,
     /// Load every tile of the map.
     #[arg(long)]
-    pub(crate) all: bool,
+    pub all: bool,
     /// Vehicle to spawn (relative to root, e.g. Vehicles/MAN_SD200/MAN_SD80.bus).
     #[arg(long)]
-    pub(crate) bus: Option<String>,
+    pub bus: Option<String>,
     /// Entry point index (from global.cfg) where the vehicle is placed.
     #[arg(long, default_value_t = 0)]
-    pub(crate) entry: usize,
+    pub entry: usize,
     /// View: driver, pax, outside, or free; mirror<n> shows what mirror n's camera sees (a check).
     #[arg(long, default_value = "driver")]
-    pub(crate) view: String,
+    pub view: String,
     /// Put the bus into service at the start of the run (the Shift+U auto-start). With
     /// `--situation` the bus is not started up again (it keeps its saved state and IBIS);
     /// the flag then only has the duty's next trips typed into the IBIS as they come.
     #[arg(long)]
-    pub(crate) autostart: bool,
+    pub autostart: bool,
     /// Start as a pedestrian where the bus would stand (the bus left out): one is placed
     /// from the game menu, or a placed one taken over at its driver's door (G).
     #[arg(long)]
-    pub(crate) on_foot: bool,
+    pub on_foot: bool,
     /// Control preset: `simple` (W/S/A/D and Up/Down drive, Left/Right switch the interior
     /// camera as in OMSI; the default), `wasd`,
     /// `arrows` (leaves W, S and D to the jobs `Inputs/keyboard.cfg` gives them - wipers,
     /// viewpoint and the D of the automatic gearbox) or `omsi` (only the original layout,
     /// Shift + numpad). With WASD driving, hold shift for the OMSI meaning of a key.
     #[arg(long, default_value = "simple")]
-    pub(crate) drive_keys: String,
+    pub drive_keys: String,
     /// LAN play: host a session on this UDP port (27015 when the value is 0).
     #[arg(long)]
-    pub(crate) lan_host: Option<u16>,
+    pub lan_host: Option<u16>,
     /// LAN play: join the host at ip[:port], or `auto` to find one on the local network.
     #[arg(long)]
-    pub(crate) lan_join: Option<String>,
+    pub lan_join: Option<String>,
     /// Dedicated server: host a session from this server.cfg (written with the defaults when
     /// missing), with no window, no sound and no graphics card.
     #[arg(long)]
-    pub(crate) server: Option<PathBuf>,
+    pub server: Option<PathBuf>,
     /// Your name as the other players see it.
     #[arg(long, default_value = "Driver")]
-    pub(crate) lan_name: String,
+    pub lan_name: String,
     /// Season override: spring, summer, autumn or winter (else the date decides, as in OMSI).
     #[arg(long)]
-    pub(crate) season: Option<String>,
+    pub season: Option<String>,
     /// Fire script triggers after spawning: name[@seconds],… (times apply during --drive).
     #[arg(long)]
-    pub(crate) triggers: Option<String>,
+    pub triggers: Option<String>,
     /// Set script variables after spawning: name=value[,name=value…].
     #[arg(long)]
-    pub(crate) setvar: Option<String>,
+    pub setvar: Option<String>,
     /// Offscreen: simulate this many seconds with full throttle before rendering.
     #[arg(long)]
-    pub(crate) drive: Option<f32>,
+    pub drive: Option<f32>,
     /// Number of AI traffic vehicles to keep around the camera (0 = none).
     #[arg(long, default_value_t = 0)]
-    pub(crate) traffic: usize,
+    pub traffic: usize,
     /// Paint scheme / advert of the player vehicle: item name or index from its .cti files.
     #[arg(long)]
-    pub(crate) paint: Option<String>,
+    pub paint: Option<String>,
     /// Number plate (registration) of the player vehicle, e.g. `--plate "B-AB 1234"`: it goes
     /// into the bus's `ident` string variable instead of the plate its `[number]` list, its
     /// `[registration_*]` mode or the map's `registrations.txt` gives it.
     #[arg(long)]
-    pub(crate) plate: Option<String>,
+    pub plate: Option<String>,
     /// Fleet number of the player vehicle from its `[number]` list, e.g. `--number 4711`
     /// (the first entry when absent or not in the list); it goes into the `number` string
     /// variable and, unless the plate is free, gives the plate that list pairs with it.
     #[arg(long)]
-    pub(crate) number: Option<String>,
+    pub number: Option<String>,
     /// Time of day at start, HH:MM (default 09:00).
     #[arg(long, default_value = "09:00")]
-    pub(crate) time: String,
+    pub time: String,
     /// Run the timetable: scheduled AI buses from the map's TTData (needs --traffic > 0 or this).
     #[arg(long)]
-    pub(crate) schedule: bool,
+    pub schedule: bool,
     /// With --schedule: the timetable for the player's own duty only, no timetable AI
     /// buses (the launcher's "Disable timetable buses" with a line chosen).
     #[arg(long)]
-    pub(crate) no_timetable_buses: bool,
+    pub no_timetable_buses: bool,
     /// Date at start, YYYY-MM-DD (default 1989-05-30).
     #[arg(long)]
-    pub(crate) date: Option<String>,
+    pub date: Option<String>,
     /// Window mode: quit after this many seconds (automated runs).
     #[arg(long)]
-    pub(crate) exit_after: Option<f32>,
+    pub exit_after: Option<f32>,
     /// Depot (.hof) name for the player vehicle (default: the map's depot group).
     #[arg(long)]
-    pub(crate) hof: Option<String>,
+    pub hof: Option<String>,
     /// Set script string variables after spawning: name=value[,name=value…].
     #[arg(long)]
-    pub(crate) setstr: Option<String>,
+    pub setstr: Option<String>,
     /// Weather file (relative to root), e.g. Weather/Bodennebel.owt; `natural` (or none) is
     /// the physical weather model, `cycle` the weather cycle.
     #[arg(long)]
-    pub(crate) weather: Option<String>,
+    pub weather: Option<String>,
     /// Passengers at bus stops (window and offscreen).
     #[arg(long)]
-    pub(crate) passengers: bool,
+    pub passengers: bool,
     /// Start with this many passengers already seated in the player's bus.
     #[arg(long, default_value_t = 0)]
-    pub(crate) riders: usize,
+    pub riders: usize,
     /// Personnel file of the driver (e.g. Drivers/OMSI-Fan.odr): the run is added to it.
     #[arg(long)]
-    pub(crate) driver: Option<String>,
+    pub driver: Option<String>,
     /// Offscreen: click the cockpit at this pixel (x,y of the rendered image) and report
     /// which switch was hit.
     #[arg(long)]
-    pub(crate) click: Option<String>,
+    pub click: Option<String>,
     /// Offscreen: turn the head (or swing the outside camera) by yaw,pitch degrees.
     #[arg(long)]
-    pub(crate) look: Option<String>,
+    pub look: Option<String>,
     /// How dirty the bus starts (0..1); it keeps collecting dirt as it drives.
     #[arg(long)]
-    pub(crate) dirt: Option<f32>,
+    pub dirt: Option<f32>,
     /// Fill the tank before the run starts (the depot's fuel pump).
     #[arg(long)]
-    pub(crate) refuel: bool,
+    pub refuel: bool,
     /// Run the bus through the wash before the run starts.
     #[arg(long)]
-    pub(crate) wash: bool,
+    pub wash: bool,
     /// Have the workshop repair the bus before the run starts.
     #[arg(long)]
-    pub(crate) repair: bool,
+    pub repair: bool,
     /// Spawn the player vehicle here instead of the entry point: x,y,heading[,z] (z: the
     /// road's height, when it lies above the ground).
     #[arg(long)]
-    pub(crate) spawn: Option<String>,
+    pub spawn: Option<String>,
     /// Open the window on the monitor that holds this desktop point (x,y in pixels; the
     /// launcher passes a point of its own window). Default: the primary monitor.
     #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
-    pub(crate) monitor_at: Option<String>,
+    pub monitor_at: Option<String>,
     /// Start without the menu (the command line defines everything).
     #[arg(long)]
-    pub(crate) no_menu: bool,
+    pub no_menu: bool,
     /// Situation file (.osn): map, date/time, weather, the player's vehicle and its tour.
     #[arg(long)]
-    pub(crate) situation: Option<String>,
+    pub situation: Option<String>,
     /// Write the state after --drive to this .osn file (offscreen runs only; the window has no key for it).
     #[arg(long)]
-    pub(crate) save_situation: Option<PathBuf>,
+    pub save_situation: Option<PathBuf>,
     /// Offscreen: put the camera behind AI car with this id (from OMSI_DEBUG_TRAFFIC logs),
     /// or "auto" = the first car that overtakes (then --snapshots are seconds after that).
     #[arg(long)]
-    pub(crate) follow: Option<String>,
+    pub follow: Option<String>,
     /// Offscreen: also save images at these seconds of the --drive run (out_<t>.png).
     #[arg(long)]
-    pub(crate) snapshots: Option<String>,
+    pub snapshots: Option<String>,
     /// Day of year override (set by --situation).
     #[arg(long, hide = true)]
-    pub(crate) day_of_year: Option<i32>,
+    pub day_of_year: Option<i32>,
     /// The launcher's bus preview, drawn for it with no window (see `launcher::preview`).
     #[arg(long, hide = true)]
-    pub(crate) preview_helper: bool,
+    pub preview_helper: bool,
     /// The program that started the launcher (`depot-launcher`): the launcher ends with it.
     #[arg(long, hide = true)]
-    pub(crate) parent_pid: Option<u32>,
+    pub parent_pid: Option<u32>,
     /// Vehicle state snapshot applied after spawning (set by --situation): name=value pairs.
     #[arg(skip)]
-    pub(crate) situation_vars: Vec<(String, f32)>,
+    pub situation_vars: Vec<(String, f32)>,
     #[arg(skip)]
-    pub(crate) situation_strvars: Vec<(String, String)>,
+    pub situation_strvars: Vec<(String, String)>,
     /// The saved bus odometer, applied after spawning so initialization cannot replace it.
     #[arg(skip)]
-    pub(crate) situation_odometer_km: Option<f64>,
+    pub situation_odometer_km: Option<f64>,
     /// The saved script textures' files without `_<n>.dds` (`<situation>.osn_<vehicle>`),
     /// drawn back into the bus after spawning (`situation::restore_script_textures`).
     #[arg(skip)]
-    pub(crate) situation_script_textures: Option<std::path::PathBuf>,
+    pub situation_script_textures: Option<std::path::PathBuf>,
     /// Saved ordinal in the current timetable trip; absent in older situations.
     #[arg(skip)]
-    pub(crate) situation_next_stop: Option<usize>,
+    pub situation_next_stop: Option<usize>,
     /// The situation's further vehicles (besides the one driven): each stands where it was
     /// saved with its variables.
     #[arg(skip)]
-    pub(crate) situation_others: Vec<SituationOther>,
+    pub situation_others: Vec<SituationOther>,
     /// The trip of the duty the bus was placed at (`duty_start::place_on_duty`).
     #[arg(skip)]
-    pub(crate) duty_trip: Option<usize>,
+    pub duty_trip: Option<usize>,
     /// The stop of that trip the duty starts at (a first stop no road leads to is skipped).
     #[arg(skip)]
-    pub(crate) duty_first_stop: usize,
+    pub duty_first_stop: usize,
     /// The duty's first trip was hours away at the start time: the clock was moved on to
     /// shortly before the bus has to set off (what the HUD says at the start).
     #[arg(skip)]
-    pub(crate) clock_moved: Option<String>,
+    pub clock_moved: Option<String>,
     /// With a duty: start at the entry point nearest to its first stop by road (the
     /// launcher's "Automatic") instead of `--entry`.
     #[arg(long)]
-    pub(crate) auto_entry: bool,
+    pub auto_entry: bool,
     /// With a duty: the clock stays at `--time` however late its first trip leaves (the
     /// launcher's start at the real time).
     #[arg(long)]
-    pub(crate) keep_time: bool,
+    pub keep_time: bool,
     /// OMSI's tutorial 1..4 (its situation, and its pages beside the picture).
     #[arg(long)]
-    pub(crate) tutorial: Option<usize>,
+    pub tutorial: Option<usize>,
     /// Player's line and tour from the timetable (needs --schedule), e.g. --line 76 --tour 1.
     #[arg(long)]
-    pub(crate) line: Option<String>,
+    pub line: Option<String>,
     #[arg(long)]
-    pub(crate) tour: Option<String>,
+    pub tour: Option<String>,
     /// The trip of the tour to start with, as OMSI's timetable dialog picks it: its
     /// departure time (HH:MM) or its place in the tour (1 = the first). Without it the duty
     /// starts with the trip under way at --time, else the next to leave.
     #[arg(long)]
-    pub(crate) trip: Option<String>,
+    pub trip: Option<String>,
     /// With --trip: drive on with the rest of the tour after that trip instead of ending the
     /// duty at its terminus.
     #[arg(long)]
-    pub(crate) whole_tour: bool,
+    pub whole_tour: bool,
     /// Write the player's vehicle (with --bus and --paint) as a binary glTF file for the
     /// launcher's 3D preview, and quit.
     #[arg(long)]
-    pub(crate) export_glb: Option<PathBuf>,
+    pub export_glb: Option<PathBuf>,
     /// Enhanced graphics, as the settings' `enhanced=1`: the physically based renderer
     /// (high-range lighting with GGX reflections, a computed sky, soft sun shadows,
     /// automatic exposure, a glow around real highlights and the PBR Neutral tone curve).
     #[arg(long)]
-    pub(crate) enhanced: bool,
+    pub enhanced: bool,
     /// Enhanced+ graphics, as the settings' `graphics=enhanced_plus`: Enhanced with
     /// ray-traced sun shadows, ambient occlusion and reflections (where the graphics card
     /// can trace rays).
     #[arg(long)]
-    pub(crate) enhanced_plus: bool,
+    pub enhanced_plus: bool,
     /// Open the launcher (the default when the program is started without arguments).
     #[arg(long)]
-    pub(crate) launcher: bool,
+    pub launcher: bool,
     /// Skip the launcher and show the in-game start menu instead.
     #[arg(long)]
-    pub(crate) menu: bool,
+    pub menu: bool,
     /// A mod or map archive (.zip) read in place as a content root, without unpacking it;
     /// may be given several times. `OMSI_CONTENT_ZIP` (separated like PATH) does the same.
     #[arg(long = "content-zip")]
-    pub(crate) content_zip: Vec<PathBuf>,
+    pub content_zip: Vec<PathBuf>,
 }
 
 pub(crate) fn parse_time(s: &str) -> f64 {
@@ -316,7 +316,7 @@ pub(crate) fn parse_triggers(args: &Args) -> Vec<(String, f32)> {
 }
 
 impl Args {
-    pub(crate) fn is_resuming(&self) -> bool {
+    pub fn is_resuming(&self) -> bool {
         self.situation.is_some()
             || self.situation_odometer_km.is_some()
             || !self.situation_vars.is_empty()
@@ -326,7 +326,7 @@ impl Args {
 
 /// A vehicle of a situation that is not the one driven.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SituationOther {
+pub struct SituationOther {
     pub bus: String,
     /// x,y,heading,z as `--spawn` takes it
     pub spawn: String,

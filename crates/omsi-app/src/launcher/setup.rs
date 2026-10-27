@@ -153,8 +153,24 @@ pub fn type_color(name: &str) -> Color {
 }
 
 pub fn setup(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, UiPage::Setup);
+    let mut body = l.page_title(area, UiPage::Setup);
     let phone = super::mobile::mobile();
+    // (the first run, or a folder gone: what to do, over the page, until a complete OMSI 2
+    // folder is saved)
+    if !phone && !l.root_ok() {
+        let message = "The launcher reads the maps and vehicles of your original OMSI 2. Choose its folder (the one with Omsi.exe, maps and Vehicles in it) with Browse, then press Save.";
+        let h = omsi_launcher_ui::kit::info_bar_height(&l.ui, body.w, message);
+        omsi_launcher_ui::kit::info_bar(
+            &mut l.ui,
+            "setup:first-run",
+            Rect::new(body.x, body.y, body.w, h),
+            accent(),
+            "info",
+            "Choose your OMSI 2 folder",
+            message,
+        );
+        body = Rect::new(body.x, body.y + h + GAP, body.w, body.h - h - GAP);
+    }
     if !l.state.usage_asked && !phone {
         l.state.usage_asked = true;
         l.state.load_usage();
@@ -223,6 +239,7 @@ fn folder_row(
     hint: &str,
     icon: &str,
     status: &(Status, String),
+    primary: bool,
 ) -> (bool, bool) {
     ui.text_in(
         label,
@@ -244,7 +261,11 @@ fn folder_row(
         Rect::new(x + w - 82.0, y + 20.0, 82.0, 34.0),
         "Browse",
         None,
-        ButtonKind::Normal,
+        if primary {
+            ButtonKind::Primary
+        } else {
+            ButtonKind::Normal
+        },
     );
     omsi_launcher_ui::kit::dot(ui, x + 4.0, y + 68.0, status.0);
     let c = match status.0 {
@@ -320,6 +341,7 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
             .unwrap_or((Status::Unverified, String::new()))
     };
     let content_hint = l.pages.setup.content_now.clone().unwrap_or_default();
+    let first = !l.root_ok();
     let mut y = inner.y;
     let list: &[(usize, &str, &str, &str)] = if in_process {
         &[(0, "OMSI 2 folder", "/path/to/OMSI 2", "o-folder")]
@@ -344,6 +366,8 @@ fn folders(l: &mut Launcher, col: Rect) -> f32 {
             hint,
             icon,
             &st,
+            // (no complete folder yet: Browse is the way on, until a good one is chosen)
+            f == 0 && first && st.0 != Status::Found,
         );
         if changed {
             set(&mut l.pages.setup, f, values[f].clone());
@@ -1305,7 +1329,11 @@ fn foot(l: &mut Launcher, r: Rect) {
     } else {
         dim_button(&mut l.ui, revert, "Revert");
     }
-    if l.ui
+    // (nothing chosen yet on the first run: nothing to save)
+    if !edited && !l.root_ok() {
+        dim_button(&mut l.ui, save, "Save");
+    } else if l
+        .ui
         .button("cfg-save", save, "Save", Some("save"), ButtonKind::Primary)
     {
         save_folders(l);
