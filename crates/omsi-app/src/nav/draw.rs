@@ -77,7 +77,7 @@ pub(super) fn player_triangle(
 
 /// What a vehicle looks like on the map: a road vehicle (bus, trolleybus), a tram, a metro train, a train.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(super) enum Icon {
+pub enum Icon {
     Road,
     Tram,
     Metro,
@@ -89,7 +89,7 @@ pub(super) enum Icon {
 /// from. A road vehicle has a cut front; a tram is long and cut at both ends, with a joint in the middle; a metro
 /// train is longer, square at both ends with a wide windscreen; a train is the longest, narrow, with a pointed nose.
 /// `min_px` keeps it readable from far away; the line is written beside it.
-pub(super) fn vehicle_icon(
+pub fn vehicle_icon(
     p: &mut Painter,
     at: Vec3,
     heading: f64,
@@ -215,7 +215,7 @@ pub(super) const LATE: Color = Color::rgba(235, 85, 70, 1.0);
 pub(super) const EARLY: Color = Color::rgba(90, 160, 240, 1.0);
 pub(super) const ON_TIME: Color = Color::rgba(110, 200, 120, 1.0);
 pub(super) const WARN: Color = Color::rgba(235, 170, 60, 1.0);
-pub(super) const STOP_REQUEST: Color = Color::hex(0xF0A030);
+pub const STOP_REQUEST: Color = Color::hex(0xF0A030);
 
 pub(crate) fn stop_requested(vehicle: &omsi_sim::vehicle::VehicleInstance) -> bool {
     ["haltewunsch", "haltewunschlampe"]
@@ -223,7 +223,7 @@ pub(crate) fn stop_requested(vehicle: &omsi_sim::vehicle::VehicleInstance) -> bo
         .any(|name| vehicle.var(name).is_some_and(|v| v > 0.5))
 }
 
-pub(super) fn stop_request_icon(
+pub fn stop_request_icon(
     ui: &mut Painter,
     atlas: &mut Atlas,
     requested: bool,
@@ -343,7 +343,7 @@ pub(super) fn camera_icon(
 }
 
 /// The marker of what the map is centred on: the walker or the camera, or the bus's arrow.
-pub(super) fn focus_marker(ui: &mut Painter, kind: FocusKind, at: Vec2, angle: f32, k: f32) {
+pub fn focus_marker(ui: &mut Painter, kind: FocusKind, at: Vec2, angle: f32, k: f32) {
     let dark = Color::rgba(10, 10, 10, 0.9);
     match kind {
         FocusKind::Walker => walker_icon(ui, at, angle, k, dark, TEXT),
@@ -379,19 +379,13 @@ pub(super) fn arrow(
     ui.tri(tip, m, r, fill, fill, fill);
 }
 
-pub(super) fn rects_overlap(a: &Rect, b: &Rect) -> bool {
+pub fn rects_overlap(a: &Rect, b: &Rect) -> bool {
     a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
 }
 
 /// Stop positions stay on the route. Move only their labels, or omit a label if none of
 /// the nearby positions fits. Call in route order so the next stop has first choice.
-pub(super) fn stop_label_rect(
-    p: Vec2,
-    width: f32,
-    s: f32,
-    win: Rect,
-    taken: &[Rect],
-) -> Option<Rect> {
+pub fn stop_label_rect(p: Vec2, width: f32, s: f32, win: Rect, taken: &[Rect]) -> Option<Rect> {
     let h = 20.0 * s;
     let gap = 10.0 * s;
     let positions = [
@@ -414,7 +408,7 @@ pub(super) fn stop_label_rect(
         })
 }
 
-pub(super) fn spaced_markers(
+pub fn spaced_markers(
     points: impl IntoIterator<Item = (usize, Vec2)>,
     gap: f32,
 ) -> Vec<(usize, Vec2)> {

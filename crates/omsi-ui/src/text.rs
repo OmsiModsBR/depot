@@ -109,6 +109,9 @@ pub const PAD: u32 = 1;
 
 pub struct Fonts {
     faces: Vec<(Weight, FontVec)>,
+    /// The smallest size text is drawn and measured at (interface pixels; 0: any): the
+    /// launcher keeps every text at least 12 physical pixels high (`Ui::text_floor`).
+    pub floor: f32,
 }
 
 /// The system's fonts for the scripts Roboto has not (Chinese, Japanese, Korean, the
@@ -241,7 +244,13 @@ impl Fonts {
                 Some((w, f))
             })
             .collect();
-        Fonts { faces }
+        Fonts { faces, floor: 0.0 }
+    }
+
+    /// The size text asked at `px` is drawn and measured at: `px`, or the floor when that is
+    /// larger.
+    pub fn size(&self, px: f32) -> f32 {
+        px.max(self.floor)
     }
 
     fn face(&self, w: Weight) -> &FontVec {
@@ -261,6 +270,7 @@ impl Fonts {
     /// [`Fonts::width`] of a text that is not the interface's own (a Lua plugin's): as it
     /// is, not looked up in the translations.
     pub fn width_as_is(&self, text: &str, px: f32, weight: Weight) -> f32 {
+        let px = self.size(px);
         let comp = composed(text);
         let text = &*comp;
         let main = self.face(weight);
@@ -283,12 +293,14 @@ impl Fonts {
 
     /// Line height (ascent − descent) at `px`.
     pub fn line_height(&self, px: f32, weight: Weight) -> f32 {
+        let px = self.size(px);
         let f = self.face(weight).as_scaled(PxScale::from(px));
         f.ascent() - f.descent()
     }
 
     /// Height of capitals above the baseline at `px` (for centring a line on a box).
     pub fn cap_height(&self, px: f32, weight: Weight) -> f32 {
+        let px = self.size(px);
         let f = self.face(weight).as_scaled(PxScale::from(px));
         let id = f.glyph_id('H');
         let g = id.with_scale(PxScale::from(px));

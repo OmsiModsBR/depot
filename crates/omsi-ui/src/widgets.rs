@@ -214,6 +214,17 @@ pub struct Ui {
     /// Layers: how they are seen, what is drawn, and with which texture (0: the atlas).
     layers: Vec<(Layer, Painter, usize)>,
     clip_stack: Vec<(Rect, f32)>,
+    /// How opaque what is drawn now is (`push_fade`), and the values it had before.
+    fade: f32,
+    fade_stack: Vec<f32>,
+    /// Something is still on its way (`tween`, `appear`): the next frame should come soon.
+    moving: bool,
+    /// The launcher's tooltips: every button names itself in one, and each shows after the
+    /// mouse has rested a whole second (the game's own menus stay as they are).
+    pub auto_tips: bool,
+    /// No text smaller than this many physical pixels (Fluent's caption, 12, in the
+    /// launcher; 0: as asked), whatever the window's scale.
+    pub text_floor: f32,
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
@@ -257,6 +268,11 @@ impl Ui {
             dt: 1.0 / 60.0,
             layers: Vec::new(),
             clip_stack: Vec::new(),
+            fade: 1.0,
+            fade_stack: Vec::new(),
+            moving: false,
+            auto_tips: false,
+            text_floor: 0.0,
             hot: None,
             active: None,
             focus: None,
@@ -284,11 +300,19 @@ impl Ui {
     pub fn begin(&mut self, size: Vec2, scale: f32, dt: f32) {
         self.size = size;
         self.scale = scale;
+        self.fonts.floor = if self.text_floor > 0.0 && scale > 0.0 {
+            self.text_floor / scale
+        } else {
+            0.0
+        };
         self.dt = dt.clamp(0.0, 0.1);
         self.time += self.dt;
         self.atlas.begin_frame();
         self.layers.clear();
         self.clip_stack.clear();
+        self.fade = 1.0;
+        self.fade_stack.clear();
+        self.moving = false;
         self.hot = None;
         self.wheel_taken = false;
         self.cursor = winit::window::CursorIcon::Default;
@@ -359,10 +383,32 @@ impl Ui {
             viewport: [0.0, 0.0, self.size.x, self.size.y],
             clip: [clip.x * s, clip.y * s, clip.right() * s, clip.bottom() * s],
             radius: radius * s,
-            opacity: 1.0,
+            opacity: self.fade,
             px_scale: 0.0,
         };
         self.layers.push((layer, Painter::with_scale(s), 0));
+    }
+
+    /// Draw what follows `alpha` times as opaque (inside another fade, both), until
+    /// `pop_fade`: something fading in or out as a whole.
+    pub fn push_fade(&mut self, alpha: f32) {
+        self.fade_stack.push(self.fade);
+        self.fade *= alpha.clamp(0.0, 1.0);
+        let (r, rad) = self.clip_and_radius();
+        self.push_layer(r, rad);
+    }
+
+    pub fn pop_fade(&mut self) {
+        self.fade = self.fade_stack.pop().unwrap_or(1.0);
+        let (r, rad) = self.clip_and_radius();
+        self.push_layer(r, rad);
+    }
+
+    fn clip_and_radius(&self) -> (Rect, f32) {
+        self.clip_stack
+            .last()
+            .copied()
+            .unwrap_or((Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0))
     }
 
     /// Whether a scroll area took this frame's wheel (what is left scrolls the page).
@@ -547,6 +593,66 @@ impl Ui {
         *v
     }
 
+    /// A value that travels to `to` in `secs` seconds as Windows 11 moves things (fast, then
+    /// slowing to a stop), from wherever it was when `to` last changed; the first time, and
+    /// with motion off (`theme::motion`), it is `to` at once.
+    pub fn tween(&mut self, id: Id, to: f32, secs: f32) -> f32 {
+        let (k_from, k_to, k_at) = (
+            id ^ 0x7e3e_0000_0000_0001,
+            id ^ 0x7e3e_0000_0000_0002,
+            id ^ 0x7e3e_0000_0000_0003,
+        );
+        let now = self.time;
+        let value = |a: &HashMap<Id, f32>| -> Option<(f32, bool)> {
+            let (from, target, at) = (*a.get(&k_from)?, *a.get(&k_to)?, *a.get(&k_at)?);
+            let p = if secs > 0.0 && crate::theme::motion() {
+                (now - at) / secs
+            } else {
+                1.0
+            };
+            Some((from + (target - from) * crate::theme::ease_out(p), p < 1.0))
+        };
+        let value = |ui: &mut Ui| -> Option<f32> {
+            let (v, on_way) = value(&ui.anims)?;
+            ui.moving |= on_way;
+            Some(v)
+        };
+        match self.anims.get(&k_to).copied() {
+            Some(target) if target == to => value(self).unwrap_or(to),
+            Some(_) => {
+                let from = value(self).unwrap_or(to);
+                self.anims.insert(k_from, from);
+                self.anims.insert(k_to, to);
+                self.anims.insert(k_at, now);
+                value(self).unwrap_or(to)
+            }
+            None => {
+                self.anims.insert(k_from, to);
+                self.anims.insert(k_to, to);
+                self.anims.insert(k_at, now - secs);
+                to
+            }
+        }
+    }
+
+    /// How far `id` has come into view, 0 to 1 over `secs` seconds (eased as `tween`) since
+    /// it was first drawn - again after a frame it was not drawn in (a window opened again).
+    /// 1 with motion off.
+    pub fn appear(&mut self, id: Id, secs: f32) -> f32 {
+        if !crate::theme::motion() || secs <= 0.0 {
+            return 1.0;
+        }
+        let shown = self.hovered_for(id ^ 0xa99e_a400_0000_0001, true);
+        self.moving |= shown < secs;
+        crate::theme::ease_out(shown / secs)
+    }
+
+    /// Whether something is still on its way to where it ends (`tween`, `appear`): a window
+    /// that draws less often while idle should keep drawing at its full rate.
+    pub fn moving(&self) -> bool {
+        self.moving
+    }
+
     /// For how many seconds `id` has been under the mouse without a break: 0 while it is not,
     /// and counted again from 0 after a frame it was not drawn (a closed bar opened again).
     pub fn hovered_for(&mut self, id: Id, hovered: bool) -> f32 {
@@ -620,6 +726,17 @@ impl Ui {
     }
 
     pub fn tooltip(&mut self, r: Rect, text: &str) {
+        // (the launcher's: after the mouse has rested on `r` a whole second - the eased value
+        // below never went back down, so a tooltip seen once came at once ever after)
+        if self.auto_tips {
+            let id = id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55;
+            let rest = self.hover(r) && !self.input.down;
+            if self.hovered_for(id, rest) >= 1.0 {
+                self.tooltip = Some((text.to_string(), self.input.mouse));
+                self.tooltip_raw = false;
+            }
+            return;
+        }
         if self.hover(r) && !self.input.down {
             let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
             if t > 0.9 {
@@ -850,8 +967,8 @@ impl Ui {
         c: Color,
     ) -> f32 {
         let text = &*crate::tr(text);
-        let lh = px * 1.38;
-        let mut y = at.y + px;
+        let lh = self.fonts.size(px) * 1.38;
+        let mut y = at.y + self.fonts.size(px);
         let mut n = 0;
         for para in text.split('\n') {
             let mut line = String::new();
@@ -889,10 +1006,10 @@ impl Ui {
         weight: Weight,
         c: Color,
     ) -> f32 {
-        let lh = px * 1.38;
+        let lh = self.fonts.size(px) * 1.38;
         let lines = self.wrap_as_is(text, width, px, weight);
         for (n, line) in lines.iter().enumerate() {
-            let y = at.y + px + n as f32 * lh;
+            let y = at.y + self.fonts.size(px) + n as f32 * lh;
             self.text_as_is(line, Vec2::new(at.x, y), px, weight, c, Align::Left);
         }
         lines.len() as f32 * lh
@@ -901,7 +1018,7 @@ impl Ui {
     /// Height `paragraph` would take.
     pub fn paragraph_height(&self, text: &str, width: f32, px: f32, weight: Weight) -> f32 {
         let text = &*crate::tr(text);
-        let lh = px * 1.38;
+        let lh = self.fonts.size(px) * 1.38;
         let mut n = 0;
         for para in text.split('\n') {
             let mut line = String::new();
@@ -1029,13 +1146,21 @@ impl Ui {
         let id = id_of(name);
         let (h, held, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
+        // (pressed, as Windows 11 shows it: the fill steps back from hover and the label
+        // dims a little, quickly)
+        let p = self.tween(id ^ 0x9e55, if held { 1.0 } else { 0.0 }, MOTION_FAST);
         let rr = if held { r.inset(0.5) } else { r };
+        let hover = t * (1.0 - 0.6 * p);
         let (fill, text_c, edge) = match kind {
-            ButtonKind::Primary => (accent().lighten(0.08 * t), on_accent(), Color::CLEAR),
-            ButtonKind::Danger => (FIELD.mix(HOVER, t), DANGER, DANGER.alpha(0.4 + 0.3 * t)),
-            ButtonKind::Normal => (FIELD.mix(HOVER, t), TEXT, EDGE),
+            ButtonKind::Primary => (
+                accent().lighten(0.08 * hover).darken(0.1 * p),
+                on_accent().alpha(1.0 - 0.2 * p),
+                Color::CLEAR,
+            ),
+            ButtonKind::Danger => (FIELD.mix(HOVER, hover), DANGER, DANGER.alpha(0.4 + 0.3 * t)),
+            ButtonKind::Normal => (FIELD.mix(HOVER, hover), TEXT.mix(TEXT_SOFT, p), EDGE),
             ButtonKind::Ghost => (
-                Color::WHITE.alpha(0.05 * t),
+                Color::WHITE.alpha(0.05 * hover),
                 if h { TEXT } else { TEXT_DIM },
                 Color::CLEAR,
             ),
@@ -1075,6 +1200,10 @@ impl Ui {
             text_c,
             Align::Left,
         );
+        // (a tooltip the caller gives after this one replaces it)
+        if self.auto_tips && !label.is_empty() {
+            self.tooltip(r, label);
+        }
         clicked
     }
 
@@ -1392,8 +1521,23 @@ impl Ui {
         placeholder: &str,
         icon: Option<&str>,
     ) -> bool {
+        self.text_input_end(name, r, value, placeholder, icon, 0.0)
+    }
+
+    /// [`Ui::text_input`] with its last `end` points left to a button drawn inside the field
+    /// afterwards (a calendar's, as Windows' date field has it): the field's frame spans all
+    /// of `r`, the typing and the clicks only the rest.
+    pub fn text_input_end(
+        &mut self,
+        name: &str,
+        r: Rect,
+        value: &mut String,
+        placeholder: &str,
+        icon: Option<&str>,
+        end: f32,
+    ) -> bool {
         let id = id_of(name);
-        let (h, _, _) = self.interact(id, r);
+        let (h, _, _) = self.interact(id, Rect::new(r.x, r.y, (r.w - end).max(0.0), r.h));
         if h {
             self.cursor = winit::window::CursorIcon::Text;
         }
@@ -1534,7 +1678,7 @@ impl Ui {
             self.icon(i, Vec2::new(x + 8.0, r.center().y), 18.0, TEXT_DIM);
             x += 24.0;
         }
-        let inner = Rect::new(x, r.y, r.right() - x - 10.0, r.h);
+        let inner = Rect::new(x, r.y, r.right() - end - x - 10.0, r.h);
         self.push_clip(inner, 0.0);
         let px = 13.0;
 
@@ -1727,7 +1871,11 @@ impl Ui {
     /// Only the calendar's button, for a date typed beside it (YYYY-MM-DD): the calendar opens
     /// under `r`.
     pub fn calendar_button(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
-        self.date_control(name, r, date, false)
+        let changed = self.date_control(name, r, date, false);
+        if self.auto_tips {
+            self.tooltip(r, "Choose a date");
+        }
+        changed
     }
 
     fn date_control(&mut self, name: &str, r: Rect, date: &mut String, field: bool) -> bool {
@@ -1927,6 +2075,8 @@ impl Ui {
     /// Draw the popups and tooltip over everything and hand the layers over.
     pub fn finish(&mut self) -> (Vec<Layer>, Vec<Vertex>, Vec<(std::ops::Range<u32>, usize)>) {
         self.clip_stack.clear();
+        self.fade = 1.0;
+        self.fade_stack.clear();
         self.push_layer(Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0);
         self.draw_popup();
         self.draw_date_popup();
@@ -1940,10 +2090,13 @@ impl Ui {
                 }
             };
             let w = (shown(self, &t) + 20.0).min(360.0);
-            let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
+            // (a text that fits on one line is laid out with a pixel to spare: measured word
+            // by word it can come out a hair wider than whole, and "Open Setup" broke in two)
+            let wrap_w = w - 19.0;
+            let lines = raw.then(|| self.wrap_as_is(&t, wrap_w, 12.5, Weight::Medium));
             let h = match &lines {
-                Some(l) => l.len() as f32 * 12.5 * 1.38,
-                None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
+                Some(l) => l.len() as f32 * self.fonts.size(12.5) * 1.38,
+                None => self.paragraph_height(&t, wrap_w, 12.5, Weight::Medium),
             } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
             if r.right() > self.size.x - 8.0 {
@@ -1952,15 +2105,20 @@ impl Ui {
             if r.bottom() > self.size.y - 8.0 {
                 r.y = at.y - 12.0 - r.h;
             }
+            // (it fades in rising 4 px, each time it shows another text)
+            let a = self.appear(id_of(&t) ^ 0x7001_7100, MOTION_FAST);
+            r.y += 4.0 * (1.0 - a);
+            self.push_fade(a);
             self.p().rounded(r, 6.0, Color::rgba(34, 34, 34, 1.0));
             self.p()
                 .rounded_border(r, 7.0, 1.0, Color::WHITE.alpha(0.1));
             match lines {
                 Some(lines) => {
+                    let sz = self.fonts.size(12.5);
                     for (k, l) in lines.iter().enumerate() {
                         self.text_as_is(
                             l,
-                            Vec2::new(r.x + 10.0, r.y + 4.0 + 12.5 + k as f32 * 12.5 * 1.38),
+                            Vec2::new(r.x + 10.0, r.y + 4.0 + sz + k as f32 * sz * 1.38),
                             12.5,
                             Weight::Medium,
                             TEXT_SOFT,
@@ -1972,13 +2130,14 @@ impl Ui {
                     self.paragraph(
                         &t,
                         Vec2::new(r.x + 10.0, r.y + 4.0),
-                        w - 20.0,
+                        wrap_w,
                         12.5,
                         Weight::Medium,
                         TEXT_SOFT,
                     );
                 }
             }
+            self.pop_fade();
         }
         if let Some(r) = self.nav.ring() {
             self.p().rounded_border(r, 8.0, 2.0, accent());
@@ -2776,5 +2935,99 @@ mod tests {
         frame(&mut ui, &mut sel);
         assert!(ui.popup.is_none());
         assert_eq!(sel, 1);
+    }
+
+    /// A tween travels from where it stood to its new value in its time, eased (most of the
+    /// way early), and stays there; the first time it is at once where it ends. With motion
+    /// off every change is at once.
+    #[test]
+    fn a_tween_travels_eased_and_motion_off_jumps() {
+        let mut ui = Ui::new();
+        let id = id_of("tween");
+        let step = |ui: &mut Ui, to: f32| {
+            ui.begin(Vec2::new(100.0, 100.0), 1.0, 0.05);
+            ui.tween(id, to, 0.25)
+        };
+        assert_eq!(step(&mut ui, 0.0), 0.0);
+        assert_eq!(step(&mut ui, 10.0), 0.0);
+        assert!(ui.moving());
+        let v = step(&mut ui, 10.0);
+        assert!(v > 4.0 && v < 10.0, "{v}");
+        for _ in 0..6 {
+            step(&mut ui, 10.0);
+        }
+        assert_eq!(step(&mut ui, 10.0), 10.0);
+        assert!(!ui.moving());
+        crate::theme::set_motion(false);
+        let jumped = step(&mut ui, 0.0);
+        let seen = ui.appear(id_of("appear"), 0.2);
+        crate::theme::set_motion(true);
+        assert_eq!(jumped, 0.0);
+        assert_eq!(seen, 1.0);
+    }
+
+    /// What is drawn inside `push_fade` is drawn that much fainter, and what follows
+    /// `pop_fade` as before.
+    #[test]
+    fn a_fade_makes_its_layers_fainter_until_popped() {
+        let mut ui = Ui::new();
+        ui.begin(Vec2::new(100.0, 100.0), 1.0, 0.05);
+        ui.push_fade(0.5);
+        ui.push_fade(0.5);
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 0.25);
+        ui.pop_fade();
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 0.5);
+        ui.pop_fade();
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 1.0);
+    }
+
+    /// In the launcher every button names itself once the mouse has rested on it about a
+    /// second; a tooltip the caller gives after it wins; the game's buttons stay without.
+    #[test]
+    fn a_launcher_button_names_itself_in_a_tooltip() {
+        let r = Rect::new(10.0, 10.0, 80.0, 30.0);
+        let rest = |auto: bool, own: Option<&str>, secs: f32| {
+            let mut ui = Ui::new();
+            ui.auto_tips = auto;
+            let mut tip = None;
+            for _ in 0..(secs / 0.05) as usize {
+                ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.05);
+                ui.input.mouse = Vec2::new(40.0, 20.0);
+                ui.button("b", r, "Save", None, ButtonKind::Normal);
+                if let Some(t) = own {
+                    ui.tooltip(r, t);
+                }
+                tip = ui.tooltip.clone().map(|t| t.0);
+            }
+            tip
+        };
+        assert_eq!(rest(true, None, 0.5), None);
+        assert_eq!(rest(true, None, 1.2).as_deref(), Some("Save"));
+        assert_eq!(
+            rest(true, Some("Save the folders"), 1.2).as_deref(),
+            Some("Save the folders")
+        );
+        assert_eq!(rest(false, None, 1.2), None);
+    }
+
+    /// With a text floor (the launcher's), text is measured - and so laid out - no smaller
+    /// than that many physical pixels at the frame's scale; larger text and a Ui without one
+    /// are as asked.
+    #[test]
+    fn a_text_floor_keeps_small_text_readable_in_a_small_window() {
+        let mut ui = Ui::new();
+        let at = |ui: &Ui, px: f32| ui.width("Explore map", px, Weight::Regular);
+        ui.begin(Vec2::new(400.0, 300.0), 0.8, 0.05);
+        let (small, large) = (at(&ui, 10.0), at(&ui, 15.0));
+        assert!(small < large);
+        ui.text_floor = 12.0;
+        ui.begin(Vec2::new(400.0, 300.0), 0.8, 0.05);
+        assert_eq!(at(&ui, 10.0), large);
+        assert_eq!(
+            at(&ui, 18.0),
+            ui.fonts.width("Explore map", 18.0, Weight::Regular)
+        );
+        ui.begin(Vec2::new(400.0, 300.0), 2.0, 0.05);
+        assert_eq!(at(&ui, 10.0), small);
     }
 }
