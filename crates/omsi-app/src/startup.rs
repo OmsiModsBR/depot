@@ -682,7 +682,7 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
 
 /// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
 /// is the "as OMSI 2" renderer: it ignores all of them.
-pub(crate) fn enhanced_wanted(
+pub fn enhanced_wanted(
     settings: &crate::settings::Settings,
     flag: bool,
     flag_plus: bool,

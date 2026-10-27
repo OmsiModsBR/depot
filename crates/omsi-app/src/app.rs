@@ -1300,7 +1300,7 @@ impl App {
 /// Where a streamed map loads around while it starts: the vehicle's spawn point (a bus must
 /// stand on ground when it appears, whatever `--cam` says), and the camera unless the view
 /// follows the bus (every view but the free camera does, `--cam` or not).
-pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) -> Vec<DVec3> {
+pub fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) -> Vec<DVec3> {
     let mut out: Vec<DVec3> = spawn_point(args, world).into_iter().collect();
     let view_in_bus = args.bus.is_some() && args.view != "free";
     if out.is_empty() || !view_in_bus {
@@ -1458,7 +1458,7 @@ pub(crate) struct FrozenMirrors {
 }
 
 #[derive(Default)]
-pub(crate) struct CamBlend {
+pub struct CamBlend {
     /// (view, camera numbers) of the last frame: a change of the numbers inside the same
     /// view is a camera switch.
     pub key: Option<(String, (usize, usize))>,
@@ -1480,7 +1480,7 @@ pub(crate) struct CamBlend {
 /// A small difference between two pictures of the camera (world position, angles in degrees,
 /// field of view) that is eased out instead of being cut.
 #[derive(Clone, Copy)]
-pub(crate) struct CamCarry {
+pub struct CamCarry {
     pub pos: glam::DVec3,
     pub yaw: f32,
     pub pitch: f32,
@@ -1532,31 +1532,6 @@ impl CamBlend {
     pub fn progress(&self) -> f32 {
         let t = self.t.clamp(0.0, 1.0);
         1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t)
-    }
-}
-
-#[cfg(test)]
-mod cam_blend_tests {
-    use super::CamBlend;
-
-    fn blend(t: f32) -> f32 {
-        CamBlend {
-            key: None,
-            from: None,
-            shown: None,
-            entering: false,
-            t,
-            carry: None,
-        }
-        .progress()
-    }
-
-    #[test]
-    fn glide_starts_fast_and_settles_softly() {
-        assert_eq!(blend(0.0), 0.0);
-        assert_eq!(blend(1.0), 1.0);
-        assert!((blend(0.5) - 0.875).abs() < 1e-6);
-        assert!(blend(0.2) > 0.4, "fast off the mark");
     }
 }
 

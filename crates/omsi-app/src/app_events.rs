@@ -14,7 +14,7 @@ const MIRROR_FREEZE_REDRAW: f32 = 2.0;
 
 /// Consume the VR redraw budget without updating a mirror twice in one frame.
 /// Negative rates request every mirror each frame; zero freezes immediately.
-fn vr_mirror_updates(budget: &mut f32, dt: f32, rate: f32, mirrors: usize) -> usize {
+pub fn vr_mirror_updates(budget: &mut f32, dt: f32, rate: f32, mirrors: usize) -> usize {
     if mirrors == 0 || rate == 0.0 {
         *budget = 0.0;
         return 0;
@@ -45,7 +45,7 @@ fn ground_loaded_at(world: Option<&crate::scene::World>, at: glam::DVec3) -> boo
 
 /// The textures' budget (bytes) after the card ran out of memory with `now` (0 = none yet):
 /// 600 MB to start with, then three fifths of it each time, never under 300 MB.
-fn reduced_texture_budget(now: u64) -> u64 {
+pub fn reduced_texture_budget(now: u64) -> u64 {
     if now == 0 {
         600_000_000
     } else {
@@ -53,7 +53,7 @@ fn reduced_texture_budget(now: u64) -> u64 {
     }
 }
 
-fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
+pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     // (three levels, far apart, and a wide band between going down and up again: every
     // step makes the picture's targets anew - hundreds of MB with MSAA and HDR - and a
     // scale that went up and down by 5 % every two seconds stuttered at each change and
@@ -4741,7 +4741,7 @@ pub(crate) fn vehicle_temperatures(p: &Player) -> (f32, f32) {
 /// on, to five km/h: the lane that runs the way it faces within eight metres (so not the
 /// cross street in a junction; backing up, the way it came from), and only a limit the map
 /// itself gives - a street without one has the traffic's default, which is no sign.
-pub(crate) fn street_limit(
+pub fn street_limit(
     net: &omsi_sim::traffic::Network,
     pos: glam::DVec3,
     heading: f64,
@@ -4758,7 +4758,7 @@ pub(crate) fn street_limit(
 
 /// What the information bar says, in the layout the player chose (`info_bar_mode`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum InfoMode {
+pub enum InfoMode {
     /// Every item.
     Full,
     /// The time, the speed and its limit, the line, the next stop and the delay.
@@ -4770,7 +4770,7 @@ pub(crate) enum InfoMode {
 }
 
 impl InfoMode {
-    pub(crate) fn from_setting(s: &str) -> InfoMode {
+    pub fn from_setting(s: &str) -> InfoMode {
         match s {
             "compact" => InfoMode::Compact,
             "essential" => InfoMode::Essential,
@@ -4781,7 +4781,7 @@ impl InfoMode {
 }
 
 /// What `info_bar` reads from the game.
-pub(crate) struct InfoData<'a> {
+pub struct InfoData<'a> {
     pub clock: &'a omsi_sim::SimClock,
     pub player: Option<&'a Player>,
     pub duty: Option<&'a crate::schedule::PlayerDuty>,
@@ -4803,7 +4803,7 @@ pub(crate) struct InfoData<'a> {
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
 /// and the trip with its next stop and delay. A group of it is one thing the player reads at
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
-pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
+pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
     use ui::{InfoItem, InfoTone};
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
@@ -4943,19 +4943,19 @@ pub(crate) fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBa
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.
-fn distance_driven(metres: f64) -> String {
+pub fn distance_driven(metres: f64) -> String {
     format!("{:.1} km", metres.max(0.0) / 1000.0)
 }
 
 /// The bus's odometer to a hundred metres, as the stock cockpits show it (km and tenths).
-fn odometer_reading(km: f64) -> String {
+pub fn odometer_reading(km: f64) -> String {
     format!("{} {:.1} km", omsi_ui::tr("Odometer"), km.max(0.0))
 }
 
 /// `n` (of `capacity`, when the bus has places to count) with the word for a passenger in the
 /// interface's language (singular for one; both words are keys of the tables - the whole line
 /// is too much of a sentence to translate).
-fn passengers_aboard(n: usize, capacity: Option<usize>) -> String {
+pub fn passengers_aboard(n: usize, capacity: Option<usize>) -> String {
     let word = omsi_ui::tr(if n == 1 && capacity.is_none() {
         "Passenger"
     } else {
@@ -4964,241 +4964,5 @@ fn passengers_aboard(n: usize, capacity: Option<usize>) -> String {
     match capacity {
         Some(c) => format!("{n} / {c} {word}"),
         None => format!("{n} {word}"),
-    }
-}
-
-#[cfg(test)]
-mod governor_tests {
-    use super::render_scale_step;
-
-    #[test]
-    fn cpu_stutters_do_not_reduce_picture_quality() {
-        assert!(render_scale_step(35.0, 0.1) > 0.0);
-        assert!(render_scale_step(35.0, 0.6) < 0.0);
-        assert!(render_scale_step(60.0, 0.6) > 0.0);
-    }
-}
-
-#[cfg(test)]
-mod out_of_memory_tests {
-    use super::reduced_texture_budget;
-
-    #[test]
-    fn the_first_shortage_sets_a_budget() {
-        assert_eq!(reduced_texture_budget(0), 600_000_000);
-    }
-
-    #[test]
-    fn each_later_shortage_takes_two_fifths_off() {
-        assert_eq!(reduced_texture_budget(1_000_000_000), 600_000_000);
-        assert_eq!(reduced_texture_budget(600_000_000), 360_000_000);
-    }
-
-    #[test]
-    fn the_budget_never_goes_under_300_mb() {
-        assert_eq!(reduced_texture_budget(360_000_000), 300_000_000);
-        assert_eq!(reduced_texture_budget(300_000_000), 300_000_000);
-    }
-}
-
-#[cfg(test)]
-mod info_tests {
-    use super::{distance_driven, odometer_reading, passengers_aboard};
-
-    #[test]
-    fn the_distance_driven_is_written_in_kilometres() {
-        assert_eq!(distance_driven(0.0), "0.0 km");
-        assert_eq!(distance_driven(12_345.0), "12.3 km");
-    }
-
-    #[test]
-    fn the_odometer_reads_kilometres_and_tenths() {
-        assert_eq!(odometer_reading(75_556.639), "Odometer 75556.6 km");
-    }
-
-    /// The count stands before the word, which is singular for one passenger (in the
-    /// tables' language; without a lookup the English key is drawn as it is).
-    #[test]
-    fn one_passenger_is_written_in_the_singular() {
-        assert_eq!(passengers_aboard(0, None), "0 Passengers");
-        assert_eq!(passengers_aboard(1, None), "1 Passenger");
-        assert_eq!(passengers_aboard(23, None), "23 Passengers");
-    }
-
-    /// With the places the bus has, the count is "aboard / places" and the word is the plural.
-    #[test]
-    fn the_passengers_come_with_the_places_of_the_bus() {
-        assert_eq!(passengers_aboard(36, Some(111)), "36 / 111 Passengers");
-        assert_eq!(passengers_aboard(1, Some(40)), "1 / 40 Passengers");
-    }
-
-    #[test]
-    fn the_layout_is_read_from_the_setting() {
-        use super::InfoMode;
-        assert_eq!(InfoMode::from_setting("full"), InfoMode::Full);
-        assert_eq!(InfoMode::from_setting("compact"), InfoMode::Compact);
-        assert_eq!(InfoMode::from_setting("essential"), InfoMode::Essential);
-        assert_eq!(InfoMode::from_setting("custom"), InfoMode::Custom);
-        assert_eq!(InfoMode::from_setting("sideways"), InfoMode::Full);
-    }
-
-    /// The custom layout leaves out the items switched off; the others keep their layout.
-    #[test]
-    fn the_custom_layout_leaves_out_what_is_switched_off() {
-        use super::{info_bar, InfoData, InfoMode};
-        let clock = omsi_sim::SimClock::default();
-        let mut data = InfoData {
-            clock: &clock,
-            player: None,
-            duty: None,
-            passengers: None,
-            capacity: None,
-            metres: 0.0,
-            limit: None,
-            fps: None,
-            items: [true; 9],
-        };
-        assert_eq!(info_bar(&data, InfoMode::Custom, false).groups.len(), 1);
-        data.items[0] = false;
-        assert!(info_bar(&data, InfoMode::Custom, false).groups.is_empty());
-        // the other layouts do not read the switches
-        assert_eq!(info_bar(&data, InfoMode::Full, false).groups.len(), 1);
-    }
-
-    /// Without a vehicle the bar has the time, and the frame rate when it is asked for.
-    #[test]
-    fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
-        use super::{info_bar, InfoData, InfoMode};
-        let clock = omsi_sim::SimClock::default();
-        let data = InfoData {
-            clock: &clock,
-            player: None,
-            duty: None,
-            passengers: None,
-            capacity: None,
-            metres: 0.0,
-            limit: None,
-            fps: Some((74.0, Some(52.0))),
-            items: [true; 9],
-        };
-        let bar = info_bar(&data, InfoMode::Full, true);
-        assert!(bar.bottom);
-        assert_eq!(bar.groups.len(), 2);
-        assert!(bar.groups[1][0].text.starts_with("74 fps"));
-        let compact = info_bar(&data, InfoMode::Compact, false);
-        assert_eq!(compact.groups[1][0].text, "74 / 52 fps");
-        // (asked for, the frame rate is there in every layout)
-        assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 1);
-    }
-}
-
-#[cfg(test)]
-mod vr_mirror_tests {
-    use super::vr_mirror_updates;
-
-    #[test]
-    fn every_frame_updates_all_mirrors_even_at_low_game_fps() {
-        let mut budget = 0.75;
-        for dt in [1.0 / 90.0, 1.0 / 30.0, 0.5] {
-            assert_eq!(vr_mirror_updates(&mut budget, dt, -1.0, 8), 8);
-            assert_eq!(budget, 0.0);
-        }
-    }
-
-    #[test]
-    fn a_high_budget_is_not_limited_to_two_mirrors_per_frame() {
-        let mut budget = 0.0;
-        assert_eq!(vr_mirror_updates(&mut budget, 1.0 / 60.0, 240.0, 4), 4);
-        assert_eq!(vr_mirror_updates(&mut budget, 0.5, 360.0, 4), 4);
-        assert!(budget <= 0.5);
-    }
-
-    #[test]
-    fn fractional_credit_preserves_the_selected_total_rate() {
-        for fps in [30, 60, 90] {
-            let mut budget = 0.0;
-            let updates: usize = (0..fps * 10)
-                .map(|_| vr_mirror_updates(&mut budget, 1.0 / fps as f32, 16.0, 4))
-                .sum();
-            assert!((159..=160).contains(&updates), "fps={fps}: {updates}");
-        }
-    }
-
-    #[test]
-    fn off_and_no_mirrors_discard_old_credit() {
-        let mut budget = 2.5;
-        assert_eq!(vr_mirror_updates(&mut budget, 0.1, 0.0, 4), 0);
-        assert_eq!(budget, 0.0);
-        assert_eq!(vr_mirror_updates(&mut budget, 0.1, -1.0, 0), 0);
-        assert_eq!(vr_mirror_updates(&mut budget, 0.1, 360.0, 0), 0);
-        assert_eq!(budget, 0.0);
-    }
-}
-
-#[cfg(test)]
-mod street_limit_tests {
-    use super::street_limit;
-    use glam::DVec3;
-    use omsi_sim::traffic::{Lane, LaneBuilder, LaneKind, Network};
-
-    fn road(a: (f64, f64), b: (f64, f64), limit: Option<f32>) -> Lane {
-        let mut l = LaneBuilder::polyline(
-            vec![DVec3::new(a.0, a.1, 0.0), DVec3::new(b.0, b.1, 0.0)],
-            LaneKind::Street,
-            3.0,
-        );
-        if let Some(v) = limit {
-            l.speed_limit_kmh = v;
-            l.limit_from_map = true;
-        }
-        l
-    }
-
-    fn net(lanes: Vec<Lane>) -> Network {
-        let mut n = Network {
-            lanes,
-            ..Default::default()
-        };
-        n.build_grid();
-        n
-    }
-
-    #[test]
-    fn the_limit_is_the_one_of_the_street_the_vehicle_drives_along() {
-        // a 30 zone running north, crossed by a 50 road running east, the vehicle at the
-        // crossing and a little off the east road's centre line, heading north
-        let n = net(vec![
-            road((0.0, -50.0), (0.0, 50.0), Some(30.0)),
-            road((-50.0, 1.0), (50.0, 1.0), Some(50.0)),
-        ]);
-        assert_eq!(street_limit(&n, DVec3::new(0.5, 0.0, 0.0), 0.0), Some(30.0));
-        // heading east it is the other street's
-        assert_eq!(
-            street_limit(&n, DVec3::new(0.5, 0.0, 0.0), 90.0),
-            Some(50.0)
-        );
-    }
-
-    #[test]
-    fn a_street_without_a_limit_from_the_map_shows_none() {
-        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), None)]);
-        assert_eq!(street_limit(&n, DVec3::new(0.0, 0.0, 0.0), 0.0), None);
-    }
-
-    #[test]
-    fn off_the_streets_it_shows_none_and_backing_up_it_still_reads() {
-        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), Some(30.0))]);
-        assert_eq!(street_limit(&n, DVec3::new(40.0, 0.0, 0.0), 0.0), None);
-        // heading south on the northbound lane: reversing along it
-        assert_eq!(
-            street_limit(&n, DVec3::new(0.0, 0.0, 0.0), 180.0),
-            Some(30.0)
-        );
-    }
-
-    #[test]
-    fn the_limit_is_given_to_five() {
-        let n = net(vec![road((0.0, -50.0), (0.0, 50.0), Some(48.0))]);
-        assert_eq!(street_limit(&n, DVec3::ZERO, 0.0), Some(50.0));
     }
 }
