@@ -15,6 +15,9 @@ pub struct TextLines {
     encoding: TextEncoding,
     /// The break a new line gets: the file's first one (CR LF in a file without any).
     eol: &'static str,
+    /// The lines give back the bytes they were read from (not so for broken UTF-16: an odd
+    /// last byte, a lone surrogate): only then can the file be written.
+    exact: bool,
 }
 
 impl Default for TextLines {
@@ -30,6 +33,7 @@ impl TextLines {
             lines: Vec::new(),
             encoding: TextEncoding::CodePage(CodePage::Windows1252),
             eol: "\r\n",
+            exact: true,
         }
     }
 
@@ -66,10 +70,29 @@ impl TextLines {
             .map(|l| l.1)
             .find(|e| !e.is_empty())
             .unwrap_or("\r\n");
-        TextLines {
+        let mut t = TextLines {
             lines,
             encoding,
             eol,
+            exact: true,
+        };
+        t.exact = t.to_bytes() == bytes;
+        t
+    }
+
+    /// Whether the file can be written: its lines give back the bytes it was read from, so
+    /// a change touches nothing else.
+    pub fn exact(&self) -> bool {
+        self.exact
+    }
+
+    /// Whether `s` can be written in the file's text encoding as it is (a Cyrillic name
+    /// cannot in a Windows-1252 file).
+    pub fn holds(&self, s: &str) -> bool {
+        match self.encoding {
+            TextEncoding::Utf16Le | TextEncoding::Utf16Be | TextEncoding::Utf8 { .. } => true,
+            TextEncoding::CodePage(page) => !page.encoding().encode(s).2,
+            TextEncoding::Latin1 => s.chars().all(|c| (c as u32) < 0x100),
         }
     }
 
@@ -165,6 +188,8 @@ pub enum EditError {
     Default,
     #[error("the lists of a depot's vehicles that follow belong to this group")]
     HoldsFleet,
+    #[error("the file's text encoding cannot hold this name")]
+    Unwritable,
 }
 
 /// The kind of block a group is.
@@ -255,6 +280,11 @@ impl AiListsDoc {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.text.to_bytes()
+    }
+
+    /// Whether the file can be written back (see [`TextLines::exact`]).
+    pub fn exact(&self) -> bool {
+        self.text.exact()
     }
 
     pub fn groups(&self) -> &[DocGroup] {
@@ -383,11 +413,15 @@ impl AiListsDoc {
         }
         let line = grp.vehicles.get(v).ok_or(EditError::NoVehicle)?.line;
         let old = self.text.line(line).to_string();
-        let file = match old.split_once('\t') {
-            Some((f, _)) => f,
-            None => old.trim_end(),
+        // (whatever follows the weight's field stays)
+        let new = match old.split_once('\t') {
+            Some((f, rest)) => match rest.split_once('\t') {
+                Some((_, tail)) => format!("{f}\t{}\t{tail}", weight_text(w)),
+                None => format!("{f}\t{}", weight_text(w)),
+            },
+            None => format!("{}\t{}", old.trim_end(), weight_text(w)),
         };
-        self.text.set(line, &format!("{file}\t{}", weight_text(w)));
+        self.text.set(line, &new);
         self.index();
         Ok(())
     }
@@ -397,6 +431,9 @@ impl AiListsDoc {
     pub fn add_vehicle(&mut self, g: usize, file: &str, w: f32) -> Result<(), EditError> {
         if !w.is_finite() || w < 0.0 {
             return Err(EditError::BadWeight);
+        }
+        if !self.text.holds(file.trim()) {
+            return Err(EditError::Unwritable);
         }
         let grp = self.editable(g)?;
         let at = match (grp.vehicles.last(), grp.end) {
@@ -459,6 +496,9 @@ impl AiListsDoc {
         }
         if self.find(name).is_some() {
             return Err(EditError::Exists);
+        }
+        if !self.text.holds(name) {
+            return Err(EditError::Unwritable);
         }
         if !self.text.is_empty() && !self.text.line(self.text.len() - 1).trim().is_empty() {
             self.text.push("");
@@ -523,6 +563,11 @@ impl ParkListDoc {
         self.text.to_bytes()
     }
 
+    /// Whether the list can be written back (see [`TextLines::exact`]).
+    pub fn exact(&self) -> bool {
+        self.text.exact()
+    }
+
     /// Each car once, in the list's order, with how many times it is listed.
     pub fn cars(&self) -> Vec<(String, usize)> {
         let mut out: Vec<(String, usize)> = Vec::new();
@@ -550,13 +595,16 @@ impl ParkListDoc {
 
     /// `file` listed `n` times: the extra lines go after its last one (or after the last
     /// car), the ones too many come off from the end.
-    pub fn set_count(&mut self, file: &str, n: usize) {
+    pub fn set_count(&mut self, file: &str, n: usize) -> Result<(), EditError> {
         let at = self.lines_of(file);
         if n < at.len() {
             for i in at[n..].iter().rev() {
                 self.text.remove(*i);
             }
-            return;
+            return Ok(());
+        }
+        if !self.text.holds(file.trim()) {
+            return Err(EditError::Unwritable);
         }
         let (pos, text) = match at.last() {
             Some(last) => (*last + 1, self.text.line(*last).to_string()),
@@ -572,11 +620,12 @@ impl ParkListDoc {
         for _ in at.len()..n {
             self.text.insert(pos, &text);
         }
+        Ok(())
     }
 
-    pub fn add(&mut self, file: &str) {
+    pub fn add(&mut self, file: &str) -> Result<(), EditError> {
         let n = self.lines_of(file).len();
-        self.set_count(file, n + 1);
+        self.set_count(file, n + 1)
     }
 }
 
@@ -816,18 +865,18 @@ mod tests {
                 ("Vehicles\\P\\b.sco".to_string(), 1)
             ]
         );
-        p.set_count("vehicles\\p\\A.sco", 3);
-        p.set_count("Vehicles\\P\\b.sco", 0);
-        p.add("Vehicles\\P\\c.sco");
+        p.set_count("vehicles\\p\\A.sco", 3).unwrap();
+        p.set_count("Vehicles\\P\\b.sco", 0).unwrap();
+        p.add("Vehicles\\P\\c.sco").unwrap();
         assert_eq!(
             String::from_utf8(p.to_bytes()).unwrap(),
             "' parked cars\r\nVehicles\\P\\a.sco\r\nVehicles\\P\\a.sco\r\nVehicles\\P\\a.sco\r\nVehicles\\P\\c.sco\r\n\r\nnot a car\r\n"
         );
-        p.set_count("Vehicles\\P\\a.sco", 1);
+        p.set_count("Vehicles\\P\\a.sco", 1).unwrap();
         assert_eq!(p.cars()[0], ("Vehicles\\P\\a.sco".to_string(), 1));
         let mut n = ParkListDoc::new();
-        n.add("Vehicles\\P\\a.sco");
-        n.add("Vehicles\\P\\a.sco");
+        n.add("Vehicles\\P\\a.sco").unwrap();
+        n.add("Vehicles\\P\\a.sco").unwrap();
         assert_eq!(
             n.to_bytes(),
             b"Vehicles\\P\\a.sco\r\nVehicles\\P\\a.sco\r\n"
@@ -836,6 +885,61 @@ mod tests {
 
     /// Every map of an installation, when there is one: its lists read back byte for byte,
     /// and its groups as the game reads them.
+    #[test]
+    fn broken_utf16_is_read_but_not_written() {
+        let good: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain(
+                "[aigroup_2]\r\nA\r\n"
+                    .encode_utf16()
+                    .flat_map(u16::to_le_bytes),
+            )
+            .collect();
+        assert!(AiListsDoc::from_bytes(&good).exact());
+        // an odd last byte
+        let mut odd = good.clone();
+        odd.push(b'x');
+        assert!(!AiListsDoc::from_bytes(&odd).exact());
+        // a lone surrogate
+        let mut lone = good.clone();
+        lone.extend_from_slice(&0xD800u16.to_le_bytes());
+        assert!(!AiListsDoc::from_bytes(&lone).exact());
+        assert!(!ParkListDoc::from_bytes(&lone).exact());
+    }
+
+    #[test]
+    fn a_name_the_file_cannot_hold_is_refused() {
+        // (plain ASCII is written as Windows-1252, which has no Cyrillic)
+        let mut d = AiListsDoc::from_bytes(b"[aigroup_2]\r\nCars\r\n\r\n[end]\r\n");
+        assert_eq!(
+            d.add_vehicle(0, "Vehicles\\\u{416}\\a.ovh", 1.0),
+            Err(EditError::Unwritable)
+        );
+        assert_eq!(d.add_group("\u{416}"), Err(EditError::Unwritable));
+        d.add_vehicle(0, "Vehicles\\M\u{fc}ller\\a.ovh", 1.0)
+            .unwrap();
+        let mut p = ParkListDoc::from_bytes(b"a.sco\r\n");
+        assert_eq!(p.add("\u{416}.sco"), Err(EditError::Unwritable));
+        // a UTF-16 file holds any name
+        let wide: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain("a.sco\r\n".encode_utf16().flat_map(u16::to_le_bytes))
+            .collect();
+        let mut p = ParkListDoc::from_bytes(&wide);
+        p.add("\u{416}.sco").unwrap();
+    }
+
+    #[test]
+    fn a_weight_keeps_what_follows_it_on_its_line() {
+        let mut d =
+            AiListsDoc::from_bytes(b"[aigroup_2]\r\nCars\r\n\r\na.ovh\t7\t' note\r\n[end]\r\n");
+        d.set_weight(0, 0, 3.0).unwrap();
+        assert_eq!(
+            d.to_bytes(),
+            b"[aigroup_2]\r\nCars\r\n\r\na.ovh\t3\t' note\r\n[end]\r\n"
+        );
+    }
+
     #[test]
     fn the_installed_maps_read_back() {
         let root = std::env::var_os("OMSI_ROOT")

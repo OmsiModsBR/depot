@@ -35,7 +35,8 @@ pub fn stamp(year: i32, month: i32, day: i32, hour: i32, minute: i32) -> String 
     format!("{year:04}-{month:02}-{day:02}_{hour:02}-{minute:02}")
 }
 
-/// Where the backups of the map in `map_dir` go: `~/.depot/backups/<map folder>`.
+/// Where the backups of the map in `map_dir` go: `~/.depot/backups/<map folder>`. (By the
+/// folder's name alone: two OMSI 2 installations with a map of the same folder share it.)
 pub fn store_of(map_dir: &Path) -> Option<PathBuf> {
     let name = map_dir.file_name()?;
     Some(omsi_cfg::paths::data_dir()?.join("backups").join(name))
@@ -50,6 +51,27 @@ pub fn writable(path: &Path) -> bool {
     }
 }
 
+/// Whether `file` is a file a backup may hold and put back: an AI list (`ailists.cfg`) or a
+/// parking list (`parklist_p*.txt`) right in the map folder - never a path that leaves it.
+pub fn allowed(file: &str) -> bool {
+    let mut parts = Path::new(file).components();
+    let (Some(std::path::Component::Normal(name)), None) = (parts.next(), parts.next()) else {
+        return false;
+    };
+    let name = name.to_string_lossy().to_ascii_lowercase();
+    name == "ailists.cfg" || (name.starts_with("parklist_p") && name.ends_with(".txt"))
+}
+
+fn check(files: &[&str]) -> io::Result<()> {
+    match files.iter().find(|f| !allowed(f)) {
+        Some(f) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{f} is not an AI or parking list of the map folder"),
+        )),
+        None => Ok(()),
+    }
+}
+
 fn manifest_text(files: &[BackedUp]) -> String {
     files
         .iter()
@@ -57,20 +79,28 @@ fn manifest_text(files: &[BackedUp]) -> String {
         .collect()
 }
 
-fn free_dir(store: &Path, stamp: &str) -> PathBuf {
+/// A new folder for a backup: `stamp`, else `stamp-2`, `stamp-3`... (made here, so two saves
+/// at once never share one).
+fn free_dir(store: &Path, stamp: &str) -> io::Result<PathBuf> {
+    std::fs::create_dir_all(store)?;
     let mut dir = store.join(stamp);
     let mut n = 2;
-    while dir.exists() {
-        dir = store.join(format!("{stamp}-{n}"));
-        n += 1;
+    loop {
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                dir = store.join(format!("{stamp}-{n}"));
+                n += 1;
+            }
+            Err(e) => return Err(e),
+        }
     }
-    dir
 }
 
 /// Copy the files `files` (paths in the map folder) as they are now into a new backup.
 fn take(map_dir: &Path, store: &Path, stamp: &str, files: &[&str]) -> io::Result<Backup> {
-    let dir = free_dir(store, stamp);
-    std::fs::create_dir_all(&dir)?;
+    check(files)?;
+    let dir = free_dir(store, stamp)?;
     let mut held = Vec::new();
     for f in files {
         let src = map_dir.join(f);
@@ -100,7 +130,8 @@ fn take(map_dir: &Path, store: &Path, stamp: &str, files: &[&str]) -> io::Result
 
 /// Write `files` ((path in the map folder, bytes)) into the map folder, after a backup of
 /// what they replace. When a write fails, the files already written are put back as they
-/// were and the error is returned; the backup stays.
+/// were and the error is returned; the backup stays. Only AI and parking lists of the map
+/// folder are written (see [`allowed`]).
 pub fn write_with_backup(
     map_dir: &Path,
     store: &Path,
@@ -111,7 +142,16 @@ pub fn write_with_backup(
     let backup = take(map_dir, store, stamp, &names)?;
     for (i, (f, bytes)) in files.iter().enumerate() {
         if let Err(e) = omsi_cfg::write_atomic(map_dir.join(f), bytes) {
-            let _ = put_back(map_dir, &backup, &backup.files[..i]);
+            if let Err(back) = put_back(map_dir, &backup, &backup.files[..i]) {
+                return Err(io::Error::new(
+                    e.kind(),
+                    format!(
+                        "{e}; the files written before it could not be put back either ({back}): \
+                         the backup {} holds them",
+                        backup.dir.display()
+                    ),
+                ));
+            }
             return Err(e);
         }
     }
@@ -131,7 +171,8 @@ fn put_back(map_dir: &Path, backup: &Backup, files: &[BackedUp]) -> io::Result<(
     Ok(())
 }
 
-/// The backups in `store`, newest first.
+/// The backups in `store`, newest first. A backup whose list names a file it may not hold
+/// (see [`allowed`]) is left out.
 pub fn list(store: &Path) -> Vec<Backup> {
     let mut out: Vec<Backup> = std::fs::read_dir(store)
         .into_iter()
@@ -140,7 +181,7 @@ pub fn list(store: &Path) -> Vec<Backup> {
         .filter_map(|e| {
             let dir = e.path();
             let text = std::fs::read_to_string(dir.join(MANIFEST)).ok()?;
-            let files = text
+            let files: Vec<BackedUp> = text
                 .lines()
                 .filter_map(|l| {
                     let (kind, file) = l.split_once('\t')?;
@@ -150,6 +191,9 @@ pub fn list(store: &Path) -> Vec<Backup> {
                     })
                 })
                 .collect();
+            if !files.iter().all(|f| allowed(&f.file)) {
+                return None;
+            }
             Some(Backup {
                 stamp: e.file_name().to_string_lossy().into_owned(),
                 dir,
@@ -173,6 +217,7 @@ pub fn list(store: &Path) -> Vec<Backup> {
 /// restore can itself be undone; that new backup is returned.
 pub fn restore(map_dir: &Path, store: &Path, stamp: &str, backup: &Backup) -> io::Result<Backup> {
     let names: Vec<&str> = backup.files.iter().map(|f| f.file.as_str()).collect();
+    // (`take` refuses a file that is not an AI or parking list of the map folder)
     let now = take(map_dir, store, stamp, &names)?;
     put_back(map_dir, backup, &backup.files)?;
     Ok(now)
@@ -273,16 +318,69 @@ mod tests {
         let store = base.join("store");
         std::fs::create_dir_all(&map).unwrap();
         std::fs::write(map.join("ailists.cfg"), b"old").unwrap();
-        // the second file's folder is not there: its write fails
+        // a folder where the second file goes: its write fails
+        std::fs::create_dir(map.join("parklist_p.txt")).unwrap();
         let files = vec![
             ("ailists.cfg".to_string(), b"new".to_vec()),
-            ("missing/parklist_p.txt".to_string(), b"x".to_vec()),
+            ("parklist_p.txt".to_string(), b"x".to_vec()),
         ];
         assert!(write_with_backup(&map, &store, "s", &files).is_err());
         assert_eq!(std::fs::read(map.join("ailists.cfg")).unwrap(), b"old");
         assert!(writable(&map.join("ailists.cfg")));
-        assert!(writable(&map.join("parklist_p.txt")));
+        assert!(writable(&map.join("parklist_p_2.txt")));
         assert!(!writable(&map.join("missing/parklist_p.txt")));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn nothing_outside_the_map_folder_is_written_or_taken_out() {
+        let base = temp("outside");
+        let map = base.join("maps").join("M");
+        let store = base.join("store");
+        std::fs::create_dir_all(&map).unwrap();
+        std::fs::write(map.join("ailists.cfg"), b"lists").unwrap();
+        let victim = base.join("victim.txt");
+        std::fs::write(&victim, b"keep").unwrap();
+
+        for name in [
+            "../../victim.txt".to_string(),
+            "../ailists.cfg".to_string(),
+            victim.display().to_string(),
+            "sub/ailists.cfg".to_string(),
+            "global.cfg".to_string(),
+        ] {
+            assert!(!allowed(&name), "{name}");
+            let files = vec![(name.clone(), b"x".to_vec())];
+            let e = write_with_backup(&map, &store, "s", &files).unwrap_err();
+            assert_eq!(e.kind(), io::ErrorKind::InvalidInput, "{name}");
+        }
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+        assert!(!base.join("maps").join("ailists.cfg").exists());
+        for name in [
+            "ailists.cfg",
+            "AILISTS.CFG",
+            "parklist_p.txt",
+            "parklist_p_3.txt",
+        ] {
+            assert!(allowed(name), "{name}");
+        }
+
+        // a forged list in a backup: the backup is not offered, and a restore of it is refused
+        let forged = store.join("2026-01-01_00-00");
+        std::fs::create_dir_all(&forged).unwrap();
+        std::fs::write(forged.join(MANIFEST), "new\t../../victim.txt\r\n").unwrap();
+        assert!(list(&store).is_empty());
+        let b = Backup {
+            dir: forged.clone(),
+            stamp: "2026-01-01_00-00".into(),
+            files: vec![BackedUp {
+                file: "../../victim.txt".into(),
+                existed: false,
+            }],
+        };
+        assert!(restore(&map, &store, "t", &b).is_err());
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+        assert_eq!(std::fs::read(map.join("ailists.cfg")).unwrap(), b"lists");
         let _ = std::fs::remove_dir_all(&base);
     }
 }
