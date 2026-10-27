@@ -106,9 +106,22 @@ pub struct D3d9Device {
     ui: ui::UiStore,
     /// Presents wait for the display's refresh.
     vsync: bool,
+    /// The multisampling the player asked for (1 = off) and what the card gave of it.
+    msaa: (u32, u32),
+    /// The anisotropic filtering the player asked for (1 = off); the card's own limit.
+    anisotropy: u32,
+    max_anisotropy: u32,
+    /// How the adapter's driver switches alpha-to-coverage on.
+    a2c: scene::A2c,
 }
 
-fn present_params(target: Target, width: u32, height: u32, vsync: bool) -> D3DPRESENT_PARAMETERS {
+fn present_params(
+    target: Target,
+    width: u32,
+    height: u32,
+    vsync: bool,
+    samples: u32,
+) -> D3DPRESENT_PARAMETERS {
     let (hwnd, w, h) = match target {
         // 1x1 back buffer: an off-screen device never presents.
         Target::Offscreen => (HWND::default(), 1, 1),
@@ -123,6 +136,7 @@ fn present_params(target: Target, width: u32, height: u32, vsync: bool) -> D3DPR
         hDeviceWindow: hwnd,
         EnableAutoDepthStencil: true.into(),
         AutoDepthStencilFormat: D3DFMT_D24X8,
+        MultiSampleType: D3DMULTISAMPLE_TYPE(if samples > 1 { samples as i32 } else { 0 }),
         PresentationInterval: if vsync {
             D3DPRESENT_INTERVAL_ONE as u32
         } else {
@@ -275,7 +289,7 @@ impl D3d9Device {
                 Target::Offscreen => GetDesktopWindow(),
                 Target::Window(hwnd) => hwnd,
             };
-            let mut pp = present_params(target, width, height, true);
+            let mut pp = present_params(target, width, height, true, 1);
             let mut device = None;
             d3d.CreateDeviceEx(
                 D3DADAPTER_DEFAULT,
@@ -289,6 +303,7 @@ impl D3d9Device {
             .map_err(map_err)?;
             let device = some(device, "device")?;
             let pipeline = Self::build_pipeline(&device)?;
+            let a2c = scene::A2c::probe(&d3d);
             let scene_caps = scene::SceneCaps::read(&d3d, &raw);
             Ok(Self {
                 _d3d: d3d,
@@ -306,6 +321,10 @@ impl D3d9Device {
                 scene_caps,
                 ui: ui::UiStore::default(),
                 vsync: true,
+                msaa: (1, 1),
+                anisotropy: 1,
+                max_anisotropy: raw.MaxAnisotropy.max(1),
+                a2c: a2c,
             })
         }
     }
@@ -425,11 +444,64 @@ impl D3d9Device {
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         if let Target::Window(_) = self.target {
             self.window_size = (width.max(1), height.max(1));
-            let mut pp = present_params(self.target, width, height, self.vsync);
+            let mut pp = present_params(self.target, width, height, self.vsync, self.msaa.1);
             // SAFETY: `pp` outlives the call.
             unsafe { self.device.ResetEx(&mut pp, std::ptr::null_mut()) }.map_err(map_err)?;
         }
         Ok(())
+    }
+
+    /// The multisampling (2, 4, 8; 1 = off) and anisotropic filtering (2..16; 1 = off) of the
+    /// options, as far as the card has them: the nearest lower multisample count it offers
+    /// for the window's picture. Changing the count resets the device.
+    pub fn set_quality(&mut self, msaa: u32, anisotropy: u32) -> Result<()> {
+        let msaa = msaa.max(1);
+        self.anisotropy = anisotropy.clamp(1, self.max_anisotropy);
+        if self.msaa.0 == msaa {
+            return Ok(());
+        }
+        let granted = match self.target {
+            Target::Offscreen => 1,
+            Target::Window(_) => self.samples_for(msaa),
+        };
+        self.msaa = (msaa, granted);
+        if granted != msaa {
+            log::warn!("d3d9: {msaa}x multisampling is not offered here; {granted}x is used");
+        }
+        let (w, h) = self.window_size;
+        self.resize(w, h)
+    }
+
+    /// The largest sample count up to `wanted` the card offers for the window's back buffer and
+    /// its depth surface (1 when none).
+    fn samples_for(&self, wanted: u32) -> u32 {
+        let mut mode = D3DDISPLAYMODE::default();
+        // SAFETY: the out-parameter is a live local.
+        let display = unsafe {
+            self._d3d
+                .GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode)
+        }
+        .map(|_| mode.Format)
+        .unwrap_or(D3DFMT_X8R8G8B8);
+        let offered = |format: D3DFORMAT, n: u32| {
+            // SAFETY: plain query on a live interface; the quality-levels out-parameter is not
+            // wanted.
+            unsafe {
+                self._d3d.CheckDeviceMultiSampleType(
+                    D3DADAPTER_DEFAULT,
+                    D3DDEVTYPE_HAL,
+                    format,
+                    true,
+                    D3DMULTISAMPLE_TYPE(n as i32),
+                    std::ptr::null_mut(),
+                )
+            }
+            .is_ok()
+        };
+        (2..=wanted.min(8))
+            .rev()
+            .find(|&n| offered(display, n) && offered(D3DFMT_D24X8, n))
+            .unwrap_or(1)
     }
 
     /// Whether presents wait for the display's refresh (on when the device opens).
@@ -722,6 +794,7 @@ impl RenderBackend for D3d9Device {
         let (w, h) = self.window_size;
         let generation = self.generation.wrapping_add(1);
         let vsync = self.vsync;
+        let (msaa, anisotropy) = (self.msaa.0, self.anisotropy);
         let fresh = Self::open_with(self.target, w, h)?;
         // (the scene's meshes and textures go up again from their copies: the game does not
         // send them twice)
@@ -730,7 +803,8 @@ impl RenderBackend for D3d9Device {
         *self = fresh;
         self.generation = generation;
         let restored = self.restore_scene(copies).and(self.restore_ui(owners));
-        self.set_vsync(vsync).and(restored)
+        let quality = self.set_quality(msaa, anisotropy);
+        self.set_vsync(vsync).and(restored).and(quality)
     }
 }
 

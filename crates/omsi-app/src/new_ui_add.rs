@@ -44,7 +44,7 @@ pub(crate) struct Picture {
 }
 
 /// What names the picture of `bus` in `paint` under `root`.
-pub(crate) fn picture_key(root: &std::path::Path, bus: &str, paint: &str) -> u64 {
+pub fn picture_key(root: &std::path::Path, bus: &str, paint: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (root, bus, paint).hash(&mut h);
@@ -64,11 +64,11 @@ pub(crate) fn read_picture(root: &std::path::Path, bus: &str, paint: &str) -> Op
 
 /// What the overlay draws of the window, owned so that it can cross to the renderer.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct AddFrame {
-    makers: Vec<String>,
+pub struct AddFrame {
+    pub makers: Vec<String>,
     maker: usize,
-    vehicles: Vec<String>,
-    vehicle: usize,
+    pub vehicles: Vec<String>,
+    pub vehicle: usize,
     liveries: Vec<String>,
     livery: usize,
     depots: Vec<String>,
@@ -76,18 +76,18 @@ pub(crate) struct AddFrame {
     numbers: Vec<String>,
     number: usize,
     plate: String,
-    plate_focused: bool,
-    description: String,
+    pub plate_focused: bool,
+    pub description: String,
     /// Which picture the window shows (see [`picture_key`]).
-    picture: Option<u64>,
+    pub picture: Option<u64>,
     /// The live 3D view, while it is on: the vehicle and paint it should show
     /// (`preview::tag`), and whether it could not be shown.
-    live: Option<(u64, bool)>,
+    pub live: Option<(u64, bool)>,
 }
 
 impl AddFrame {
     /// The player has the live 3D view on.
-    pub(crate) fn live_on(&self) -> bool {
+    pub fn live_on(&self) -> bool {
         self.live.is_some()
     }
 
@@ -95,7 +95,7 @@ impl AddFrame {
     /// its texture, width over height and the vehicle's part (none: there is none of it).
     /// With the live view on, its frame the overlay has (which vehicle and paint it shows,
     /// and its texture) instead.
-    pub(crate) fn preview(
+    pub fn preview(
         &self,
         have: Option<(u64, Option<(usize, f32, [f32; 4])>)>,
         live: Option<(u64, usize)>,
@@ -150,7 +150,7 @@ impl AddFrame {
 
 /// The window's state on the game's side.
 #[derive(Debug, Default)]
-pub(crate) struct AddWindow {
+pub struct AddWindow {
     /// The manufacturers with their models as (label, vehicle file), as the place list has them.
     makers: Vec<(String, Vec<(String, String)>)>,
     maker: usize,
@@ -194,7 +194,7 @@ pub(crate) const PLACING: &str = "Put down the vehicle on the mouse first";
 const MAP_DEPOT: &str = "The map's depot file";
 
 impl AddWindow {
-    pub(crate) fn new(makers: Vec<(String, Vec<(String, String)>)>) -> AddWindow {
+    pub fn new(makers: Vec<(String, Vec<(String, String)>)>) -> AddWindow {
         AddWindow {
             makers,
             liveries: vec![RANDOM_LIVERY.to_string()],
@@ -203,7 +203,7 @@ impl AddWindow {
         }
     }
 
-    pub(crate) fn frame(&self) -> AddFrame {
+    pub fn frame(&self) -> AddFrame {
         AddFrame {
             makers: self.makers.iter().map(|m| m.0.clone()).collect(),
             maker: self.maker,
@@ -245,7 +245,7 @@ impl AddWindow {
 
     /// Where the manufacturer `maker` and its vehicle file `file` are in the lists (the
     /// first model of the manufacturer when its file is gone; none when the manufacturer is).
-    pub(crate) fn find(&self, maker: &str, file: &str) -> Option<(usize, usize)> {
+    pub fn find(&self, maker: &str, file: &str) -> Option<(usize, usize)> {
         let m = self.makers.iter().position(|m| m.0 == maker)?;
         let v = self.makers[m]
             .1
@@ -256,7 +256,7 @@ impl AddWindow {
     }
 
     /// The manufacturer and the vehicle file chosen now.
-    pub(crate) fn chosen(&self) -> Option<(String, String)> {
+    pub fn chosen(&self) -> Option<(String, String)> {
         let maker = self.makers.get(self.maker)?.0.clone();
         let file = self.models().get(self.vehicle)?.1.clone();
         Some((maker, file))
@@ -264,7 +264,7 @@ impl AddWindow {
 
     /// Choose the manufacturer at `i`: its first model is chosen with it (see [`choose`]).
     /// Returns that model's file, for the caller to read its lists.
-    pub(crate) fn choose_maker(&mut self, i: usize) -> Option<String> {
+    pub fn choose_maker(&mut self, i: usize) -> Option<String> {
         if i >= self.makers.len() {
             return None;
         }
@@ -276,7 +276,7 @@ impl AddWindow {
     /// Choose the model at `i` of the chosen manufacturer with its `liveries`, `depots` (as
     /// the place list reads them), fleet numbers and description; the livery, the depot file
     /// and the number go back to the first line and the typed registration goes.
-    pub(crate) fn choose(
+    pub fn choose(
         &mut self,
         i: usize,
         liveries: Vec<String>,
@@ -304,18 +304,18 @@ impl AddWindow {
     }
 
     /// Pick the fleet number at line `i`.
-    pub(crate) fn set_number(&mut self, i: usize) {
+    pub fn set_number(&mut self, i: usize) {
         if i < self.numbers.len() {
             self.number = i;
         }
     }
 
-    pub(crate) fn focus_plate(&mut self) {
+    pub fn focus_plate(&mut self) {
         self.plate_focused = true;
     }
 
     /// Text typed into the registration's field. True when the field took it.
-    pub(crate) fn type_plate(&mut self, text: &str) -> bool {
+    pub fn type_plate(&mut self, text: &str) -> bool {
         if !self.plate_focused {
             return false;
         }
@@ -328,7 +328,7 @@ impl AddWindow {
     }
 
     /// The fleet number and the registration to put down (`None`: the vehicle's own).
-    pub(crate) fn identity(&self) -> (Option<String>, Option<String>) {
+    pub fn identity(&self) -> (Option<String>, Option<String>) {
         let number = self.numbers.get(self.number).cloned();
         let plate = Some(self.plate.trim().to_string()).filter(|p| !p.is_empty());
         (number, plate)
@@ -338,13 +338,13 @@ impl AddWindow {
         self.models().get(i).map(|v| v.1.as_str())
     }
 
-    pub(crate) fn set_livery(&mut self, i: usize) {
+    pub fn set_livery(&mut self, i: usize) {
         if i < self.liveries.len() {
             self.livery = i;
         }
     }
 
-    pub(crate) fn set_depot(&mut self, i: usize) {
+    pub fn set_depot(&mut self, i: usize) {
         if i < self.depots.len() {
             self.depot = i;
         }
@@ -352,7 +352,7 @@ impl AddWindow {
 
     /// The vehicle file and the paint whose picture the window shows: the paint chosen, the
     /// bus's own (the empty name) for "Random livery".
-    pub(crate) fn picture_look(&self) -> Option<(String, String)> {
+    pub fn picture_look(&self) -> Option<(String, String)> {
         let file = self.models().get(self.vehicle)?.1.clone();
         let paint = if self.livery > 0 {
             self.liveries[self.livery].trim().to_string()
@@ -368,7 +368,7 @@ impl AddWindow {
 
     /// What "Place" puts down: the vehicle's file, its livery (`None`: random) and its depot
     /// file (`None`: the map's).
-    pub(crate) fn placement(&self) -> Option<(String, Option<String>, Option<String>)> {
+    pub fn placement(&self) -> Option<(String, Option<String>, Option<String>)> {
         let (_, file) = self.models().get(self.vehicle)?;
         let livery = (self.livery > 0).then(|| self.liveries[self.livery].clone());
         let depot = (self.depot > 0).then(|| self.depots[self.depot].1.clone());
@@ -729,180 +729,5 @@ impl App {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn window() -> AddWindow {
-        let mut w = AddWindow::new(vec![
-            (
-                "Maker".into(),
-                vec![
-                    ("Bus A".into(), "Vehicles/A/a.bus".into()),
-                    ("Bus B".into(), "Vehicles/B/b.bus".into()),
-                ],
-            ),
-            (
-                "Other".into(),
-                vec![("Bus C".into(), "Vehicles/C/c.bus".into())],
-            ),
-        ]);
-        w.choose_maker(0);
-        w.choose(0, vec![], vec![], vec![], String::new());
-        w
-    }
-
-    #[test]
-    fn a_manufacturer_comes_with_its_first_model() {
-        let mut w = window();
-        assert_eq!(w.frame().makers, vec!["Maker".to_string(), "Other".into()]);
-        assert_eq!(
-            w.frame().vehicles,
-            vec!["Bus A".to_string(), "Bus B".into()]
-        );
-        w.choose(1, vec!["Red".into()], vec![], vec![], "About B".into());
-        assert_eq!(w.choose_maker(1).as_deref(), Some("Vehicles/C/c.bus"));
-        assert_eq!(w.frame().vehicles, vec!["Bus C".to_string()]);
-        assert_eq!(w.frame().vehicle, 0);
-        assert_eq!(w.choose_maker(7), None);
-        assert_eq!(
-            w.chosen(),
-            Some(("Other".into(), "Vehicles/C/c.bus".into()))
-        );
-    }
-
-    #[test]
-    fn the_window_finds_the_vehicle_chosen_last() {
-        let w = window();
-        assert_eq!(w.find("Maker", "Vehicles/B/b.bus"), Some((0, 1)));
-        assert_eq!(w.find("Other", "Vehicles/gone.bus"), Some((1, 0)));
-        assert_eq!(w.find("Gone", "Vehicles/A/a.bus"), None);
-    }
-
-    #[test]
-    fn the_first_lines_mean_random_livery_and_the_maps_depot_file() {
-        let mut w = window();
-        assert_eq!(w.placement(), Some(("Vehicles/A/a.bus".into(), None, None)));
-        w.choose(
-            1,
-            vec!["Red".into()],
-            vec![("Depot B  (b.hof)".into(), "b.hof".into())],
-            vec![],
-            String::new(),
-        );
-        assert_eq!(w.placement(), Some(("Vehicles/B/b.bus".into(), None, None)));
-        w.set_livery(1);
-        w.set_depot(1);
-        assert_eq!(
-            w.placement(),
-            Some((
-                "Vehicles/B/b.bus".into(),
-                Some("Red".into()),
-                Some("b.hof".into())
-            ))
-        );
-        // another vehicle starts again on the first lines
-        w.choose(0, vec![], vec![], vec![], String::new());
-        assert_eq!(w.placement(), Some(("Vehicles/A/a.bus".into(), None, None)));
-        // a line that is not there changes nothing
-        w.set_livery(5);
-        w.choose(9, vec![], vec![], vec![], String::new());
-        assert_eq!(w.placement(), Some(("Vehicles/A/a.bus".into(), None, None)));
-    }
-
-    #[test]
-    fn the_number_is_picked_and_the_plate_is_typed() {
-        let mut w = window();
-        w.choose(
-            0,
-            vec![],
-            vec![],
-            vec!["10".into(), "11".into(), "12".into()],
-            String::new(),
-        );
-        w.set_number(2);
-        assert_eq!(w.identity(), (Some("12".into()), None));
-        w.set_number(9);
-        assert_eq!(w.identity(), (Some("12".into()), None));
-        assert!(
-            !w.type_plate("ab"),
-            "the field has no keyboard before it is clicked"
-        );
-        w.focus_plate();
-        assert!(w.type_plate(" B-XY 12\n"));
-        assert_eq!(w.identity(), (Some("12".into()), Some("B-XY 12".into())));
-        // another vehicle forgets both
-        w.choose(1, vec![], vec![], vec!["7".into()], String::new());
-        assert_eq!(w.identity(), (Some("7".into()), None));
-        assert!(!w.frame().plate_focused);
-    }
-
-    #[test]
-    fn the_picture_is_of_the_paint_chosen_and_the_buss_own_for_a_random_one() {
-        let mut w = window();
-        w.choose(1, vec![" Red ".into()], vec![], vec![], "About B".into());
-        assert_eq!(
-            w.picture_look(),
-            Some(("Vehicles/B/b.bus".into(), String::new()))
-        );
-        w.set_livery(1);
-        assert_eq!(
-            w.picture_look(),
-            Some(("Vehicles/B/b.bus".into(), "Red".into()))
-        );
-        assert_eq!(w.frame().description, "About B");
-    }
-
-    #[test]
-    fn the_picture_box_waits_for_its_own_picture() {
-        let mut f = window().frame();
-        assert_eq!(f.preview(None, None), Preview::Missing, "nothing asked for");
-        f.picture = Some(7);
-        assert_eq!(f.preview(None, None), Preview::Loading);
-        assert_eq!(
-            f.preview(Some((6, None)), None),
-            Preview::Loading,
-            "another's"
-        );
-        assert_eq!(f.preview(Some((7, None)), None), Preview::Missing);
-        assert_eq!(
-            f.preview(Some((7, Some((3, 1.5, [0.1, 0.2, 0.9, 0.8])))), None),
-            Preview::Picture {
-                tex: 3,
-                aspect: 1.5,
-                part: [0.1, 0.2, 0.9, 0.8]
-            }
-        );
-        let root = std::path::Path::new("C:/OMSI 2");
-        assert_ne!(
-            picture_key(root, "Vehicles/A/a.bus", ""),
-            picture_key(root, "Vehicles/A/a.bus", "Red")
-        );
-    }
-
-    #[test]
-    fn the_live_view_shows_its_own_frame_or_says_how_it_stands() {
-        let mut f = window().frame();
-        f.picture = Some(7);
-        let pic = Some((7, Some((3, 1.5, [0.0, 0.0, 1.0, 1.0]))));
-        assert!(!f.live_on());
-        assert!(
-            matches!(f.preview(pic, Some((9, 4))), Preview::Picture { .. }),
-            "off: the picture, whatever frame is left"
-        );
-        f.live = Some((9, false));
-        assert!(f.live_on());
-        assert_eq!(f.preview(pic, None), Preview::Starting);
-        assert_eq!(
-            f.preview(pic, Some((8, 4))),
-            Preview::Starting,
-            "a frame of the vehicle shown before"
-        );
-        assert_eq!(f.preview(pic, Some((9, 4))), Preview::Live { tex: 4 });
-        f.live = Some((9, true));
-        assert_eq!(f.preview(pic, Some((9, 4))), Preview::Failed);
     }
 }

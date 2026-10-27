@@ -53,6 +53,7 @@ const VARIED: &[(&str, &str)] = &[
     ("pax_voices", "tickets"),
     ("nav_arrows", "1"),
     ("nav_ai", "0"),
+    ("nav_follow_view", "1"),
     ("nav_surface", "0"),
     ("nav_light", "1"),
     ("nav_contours", "1"),

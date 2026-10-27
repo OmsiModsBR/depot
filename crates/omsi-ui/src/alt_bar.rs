@@ -280,16 +280,6 @@ pub fn draw_folded(ui: &mut Ui, corner: Vec2) {
     }
 }
 
-/// The line at the bottom left while the bar is shown: how it closes, and that the game
-/// goes on.
-pub fn hint(ui: &mut Ui, s: &str) {
-    let px = 12.0 * TS;
-    let w = ui.width(s, px, Weight::Regular) + 20.0;
-    let r = Rect::new(20.0, ui.size.y - 18.0 - 24.0, w, 24.0);
-    ui.p().rounded(r, 4.0, Color::rgba(14, 15, 17, 0.6));
-    ui.text_in(s, r, px, Weight::Regular, FG, Align::Center);
-}
-
 /// What the top bar says.
 pub struct TopBar<'a> {
     /// "Line 50 · Example route"

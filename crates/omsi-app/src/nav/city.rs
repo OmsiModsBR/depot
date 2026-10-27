@@ -1,6 +1,6 @@
 use super::draw::{
-    arrow, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect, traffic_kind,
-    vehicle_icon, DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM,
+    arrow, focus_marker, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect,
+    traffic_kind, vehicle_icon, DRIVEN, LEVEL, STREET, TEXT, TEXT_DIM,
 };
 use super::geometry::{road_colors, road_geometry, simplify};
 use super::lines::{
@@ -171,7 +171,7 @@ impl Navigator {
     /// middle with the on-screen controls (`touch`), below the information bar (`info`) where
     /// they would lie over each other - unless it was dragged somewhere, which it keeps
     /// (kept inside the window), by the mouse or a finger.
-    pub(super) fn panel_origin(
+    pub fn panel_origin(
         &mut self,
         screen: (f32, f32),
         size: (f32, f32),
@@ -1605,7 +1605,7 @@ impl Navigator {
                 let bus_lane = r
                     .lanes
                     .get(done)
-                    .map(|&l| lane_from_right(n, l, f.bus))
+                    .map(|&l| lane_from_right(n, l, self.bus_at))
                     .unwrap_or(0);
                 build_route(
                     &mut p,
@@ -2249,7 +2249,26 @@ impl Navigator {
                 LINE_TEXT,
             );
         }
-        if let Some((fill, ring)) = self
+        if let Some((at, heading)) = self.bus_marker.filter(|_| f.focus.is_some()) {
+            arrow(
+                &mut ui,
+                to_screen(at),
+                (heading.to_radians() - phi) as f32,
+                8.0 * s,
+                1.3,
+                Color::rgba(10, 10, 10, 0.9),
+                TEXT_DIM,
+            );
+        }
+        if let Some(focus) = f.focus {
+            focus_marker(
+                &mut ui,
+                focus.kind,
+                to_screen(f.bus),
+                (f.heading.to_radians() - phi) as f32,
+                13.0 * s,
+            );
+        } else if let Some((fill, ring)) = self
             .surface
             .as_ref()
             .filter(|_| self.show_surface)
@@ -2941,14 +2960,14 @@ impl Navigator {
 }
 
 /// Where the lines panel stands across the city map: its left edge and its width (it keeps 12 px from the right edge).
-fn lines_panel_span(w: f32, s: f32) -> (f32, f32) {
+pub fn lines_panel_span(w: f32, s: f32) -> (f32, f32) {
     let pw = (332.0 * s).min(w * 0.42);
     (w - pw - 12.0 * s, pw)
 }
 
 /// The compass' centre on a city map `w` x `h` when no legend carries it: at the bottom right, and left of the lines
 /// panel while that is open.
-fn compass_centre(w: f32, h: f32, s: f32, panel_open: bool) -> Vec2 {
+pub fn compass_centre(w: f32, h: f32, s: f32, panel_open: bool) -> Vec2 {
     let r = 24.0 * s;
     let right = if panel_open {
         lines_panel_span(w, s).0 - 12.0 * s
@@ -2956,41 +2975,4 @@ fn compass_centre(w: f32, h: f32, s: f32, panel_open: bool) -> Vec2 {
         w - 36.0 * s
     };
     Vec2::new(right - r, h - 62.0 * s - r)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The compass' clickable rect, as `draw` registers it.
-    fn compass_rect(w: f32, h: f32, s: f32, open: bool) -> Rect {
-        let (c, r) = (compass_centre(w, h, s, open), 24.0 * s);
-        Rect::new(c.x - r, c.y - r, 2.0 * r, 2.0 * r + 16.0 * s)
-    }
-
-    #[test]
-    fn the_compass_keeps_its_place_while_the_lines_panel_is_closed() {
-        let (w, h, s) = (1280.0, 720.0, 1.0);
-        let c = compass_centre(w, h, s, false);
-        assert_eq!((c.x, c.y), (w - 36.0 - 24.0, h - 62.0 - 24.0));
-    }
-
-    #[test]
-    fn the_compass_never_sits_under_the_lines_panel() {
-        for (w, h) in [
-            (1920.0, 1080.0),
-            (1280.0, 720.0),
-            (1024.0, 600.0),
-            (640.0, 480.0),
-            (400.0, 300.0),
-        ] {
-            for s in [0.75, 1.0, 1.5, 2.0] {
-                let (x0, pw) = lines_panel_span(w, s);
-                let panel = Rect::new(x0, 44.0 * s, pw, h - 44.0 * s - 12.0 * s);
-                let compass = compass_rect(w, h, s, true);
-                assert!(!rects_overlap(&compass, &panel), "{w}x{h} at {s}");
-                assert!(compass.right() <= x0, "{w}x{h} at {s}");
-            }
-        }
-    }
 }

@@ -5,16 +5,13 @@ use crate::app::App;
 use crate::camera_util::{cursor_ray, pixel_angle, ORBIT_MAX, ORBIT_MIN};
 use omsi_render::Camera;
 use winit::keyboard::KeyCode;
-// (its look tests also check two of the keyboard's helpers)
-#[cfg(test)]
-use super::keyboard::{key_left_free, route_char};
 
 /// How far (m) a click reaches a page (`[htmltexture]`) on a scenery object.
 pub(crate) const HTML_OBJECT_REACH: f32 = 4.0;
 
 /// Degrees the view turns per (logical) pixel of the cursor's way while looking round:
 /// OMSI's fov / 78.75.
-pub(crate) fn look_deg_per_px(fov_deg: f32) -> f32 {
+pub fn look_deg_per_px(fov_deg: f32) -> f32 {
     fov_deg / 78.75
 }
 
@@ -22,7 +19,7 @@ pub(crate) fn look_deg_per_px(fov_deg: f32) -> f32 {
 /// deg/px (faster than the head's 0.15), pitch between -60 (near top-down)
 /// and +25 (just below eye level) around the -15 rest pose, so the camera
 /// never swings under the bus. Pure (tested below).
-pub(crate) fn chase_orbit_step(yaw: f32, pitch: f32, dx_px: f32, dy_px: f32) -> (f32, f32) {
+pub fn chase_orbit_step(yaw: f32, pitch: f32, dx_px: f32, dy_px: f32) -> (f32, f32) {
     const GAIN: f32 = 0.35;
     (
         (yaw + dx_px * GAIN).rem_euclid(360.0),
@@ -35,7 +32,7 @@ pub(crate) fn chase_orbit_step(yaw: f32, pitch: f32, dx_px: f32, dy_px: f32) -> 
 /// `1/(1+5.5*z)` — full zoom ~6.5x in. Drag down (`dy > 0`) zooms in.
 /// Never past 1.0 (never wider than the bus's own field of view); the floor
 /// is the caller's clamp. Pure (tested below).
-pub(crate) fn precision_zoom_step(mult: f32, dy_px: f32, intent: f32) -> f32 {
+pub fn precision_zoom_step(mult: f32, dy_px: f32, intent: f32) -> f32 {
     const RANGE: f32 = 5.5;
     const FULL_DRAG_PX: f32 = 364.0;
     let z = ((1.0 / mult.max(0.154) - 1.0) / RANGE).clamp(0.0, 1.0);
@@ -44,19 +41,15 @@ pub(crate) fn precision_zoom_step(mult: f32, dy_px: f32, intent: f32) -> f32 {
 }
 
 /// F1 zoom intent: the head zoom runs 20% slower than outside/free.
-pub(crate) const ZOOM_INTENT_F1: f32 = 0.56;
+pub const ZOOM_INTENT_F1: f32 = 0.56;
 
 /// Outside/free zoom intent: a full 364 px drag takes `z` 0 to 0.70.
-pub(crate) const ZOOM_INTENT: f32 = 0.70;
+pub const ZOOM_INTENT: f32 = 0.70;
 
 /// Eased Space return for the F1 head: look and zoom glide home on the same
 /// ease-out as the viewpoint switch instead of teleporting. `t` seconds in;
 /// returns the current look, zoom and done. Pure (tested below).
-pub(crate) fn reset_blend(
-    look_from: (f32, f32),
-    zoom_from: f32,
-    t: f32,
-) -> ((f32, f32), f32, bool) {
+pub fn reset_blend(look_from: (f32, f32), zoom_from: f32, t: f32) -> ((f32, f32), f32, bool) {
     let x = (t / crate::app::CAM_BLEND_SECS).clamp(0.0, 1.0);
     let u = 1.0 - x;
     let s = 1.0 - u * u * u;
@@ -65,109 +58,6 @@ pub(crate) fn reset_blend(
         zoom_from + (1.0 - zoom_from) * s,
         x >= 1.0,
     )
-}
-
-#[cfg(test)]
-pub(crate) mod look_tests {
-    /// F1 given to a door and the driver's view moved to 1 (#701): F1 is not the view any more.
-    #[test]
-    fn a_built_in_view_key_steps_aside_for_the_players_own() {
-        use omsi_content::KeyBinding;
-        let kb = |a: &str, k: i32| KeyBinding {
-            action: a.into(),
-            scan_code: k,
-            modifier: 0,
-        };
-        let none = std::collections::HashSet::new();
-        assert!(super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[]
-        ));
-        let own: std::collections::HashSet<i32> = [59].into();
-        assert!(!super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &own,
-            &[]
-        ));
-        assert!(!super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[kb("view_set_driver", 2)]
-        ));
-        assert!(super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[kb("view_set_passenger", 60)]
-        ));
-    }
-
-    #[test]
-    fn a_route_number_takes_digits_letters_and_symbols() {
-        use winit::keyboard::KeyCode;
-        assert_eq!(super::route_char(KeyCode::Digit5), Some('5'));
-        assert_eq!(super::route_char(KeyCode::Numpad0), Some('0'));
-        assert_eq!(super::route_char(KeyCode::KeyE), Some('E'));
-        assert_eq!(super::route_char(KeyCode::Minus), Some('-'));
-        assert_eq!(super::route_char(KeyCode::NumpadSubtract), Some('-'));
-        assert_eq!(super::route_char(KeyCode::NumpadAdd), Some('+'));
-        assert_eq!(super::route_char(KeyCode::Slash), Some('/'));
-        assert_eq!(super::route_char(KeyCode::Space), None);
-    }
-
-    #[test]
-    fn a_cursor_way_of_78_75_px_turns_by_the_field_of_view() {
-        assert!((78.75 * super::look_deg_per_px(60.0) - 60.0).abs() < 1e-4);
-    }
-
-    #[test]
-    fn chase_orbits_at_035_deg_px_with_stops_above_and_below() {
-        // 100 px drag down-right: +35 yaw, -35 pitch.
-        let (y, p) = super::chase_orbit_step(0.0, 0.0, 100.0, 100.0);
-        assert!(
-            (y - 35.0).abs() < 1e-4 && (p + 35.0).abs() < 1e-4,
-            "{y} {p}"
-        );
-        // yaw wraps the full circle.
-        assert!((super::chase_orbit_step(350.0, 0.0, 100.0, 0.0).0 - 25.0).abs() < 1e-3);
-        // pitch never leaves the stops, whichever way it is dragged.
-        assert_eq!(super::chase_orbit_step(0.0, 0.0, 0.0, -1000.0).1, 25.0);
-        assert_eq!(super::chase_orbit_step(0.0, 0.0, 0.0, 1000.0).1, -60.0);
-    }
-
-    #[test]
-    fn space_return_eases_home_like_the_viewpoint_switch() {
-        // start: untouched; partway: well on the way (ease-out); end: exact and done.
-        let (look, zoom, done) = super::reset_blend((30.0, -10.0), 0.5, 0.0);
-        assert_eq!((look, zoom, done), ((30.0, -10.0), 0.5, false));
-        let (look, zoom, done) = super::reset_blend((30.0, -10.0), 0.5, 0.27);
-        assert!(look.0 > 3.0 && look.0 < 27.0 && zoom > 0.5 && zoom < 1.0 && !done);
-        let (look, zoom, done) = super::reset_blend((30.0, -10.0), 0.5, 0.54);
-        assert_eq!((look, zoom, done), ((0.0, 0.0), 1.0, true));
-        assert!(super::reset_blend((30.0, -10.0), 0.5, 5.0).2);
-    }
-
-    #[test]
-    fn precision_zoom_follows_the_fov_curve_and_never_widens() {
-        // a full 364 px drag down takes z 0 to 0.70: m = 1/(1+5.5*0.70).
-        let m = super::precision_zoom_step(1.0, 364.0, super::ZOOM_INTENT);
-        assert!((m - 1.0 / (1.0 + 5.5 * 0.70)).abs() < 1e-4, "{m}");
-        // drag down zooms in, drag up undoes it, never past 1.0.
-        let mid = super::precision_zoom_step(1.0, 100.0, super::ZOOM_INTENT);
-        assert!(mid < 1.0 && mid > 0.45, "{mid}");
-        assert!((super::precision_zoom_step(mid, -100.0, super::ZOOM_INTENT) - 1.0).abs() < 1e-4);
-        assert_eq!(
-            super::precision_zoom_step(1.0, -50.0, super::ZOOM_INTENT),
-            1.0
-        );
-        // F1 runs the same curve 20% slower.
-        let slow = super::precision_zoom_step(1.0, 100.0, super::ZOOM_INTENT_F1);
-        assert!(slow > mid && slow < 1.0, "{slow} vs {mid}");
-    }
 }
 
 /// `App::sync_view_look` for where `self` is borrowed in parts.
@@ -185,7 +75,7 @@ pub(crate) fn look_key_of(view: &str, cam: Option<(usize, usize)>) -> String {
 /// yaw with no stop. Capped at 140 degrees each way, a quarter of the coach stayed out of
 /// sight (#909). The turn is kept within -180..180 so that letting go of a glance still
 /// swings the short way back.
-pub(crate) fn cab_look_yaw(yaw: f32) -> f32 {
+pub fn cab_look_yaw(yaw: f32) -> f32 {
     (yaw + 180.0).rem_euclid(360.0) - 180.0
 }
 
@@ -220,12 +110,7 @@ pub(crate) fn swap_view_look(
 ///
 /// A free function: it is called where `self` is borrowed in parts, and needs nothing of the
 /// app but the two angles.
-pub(crate) fn ease_look(
-    shown: &mut (f32, f32),
-    wanted: (f32, f32),
-    dt: f32,
-    ms: f32,
-) -> (f32, f32) {
+pub fn ease_look(shown: &mut (f32, f32), wanted: (f32, f32), dt: f32, ms: f32) -> (f32, f32) {
     let tau = ms * 0.001;
     if !(tau > 0.0) || !dt.is_finite() || dt <= 0.0 {
         *shown = wanted;
@@ -245,68 +130,9 @@ pub(crate) fn ease_look(
     *shown
 }
 
-#[cfg(test)]
-pub(crate) mod look_smoothing_tests {
-    use super::ease_look;
-
-    /// A cab's yaw (-180..180) eased across the back stays in its range: from 170 to -170 it
-    /// goes through 180, not out to 190 or round to 350.
-    #[test]
-    fn a_cab_yaw_stays_within_half_a_turn() {
-        let mut shown = (170.0, 0.0);
-        for _ in 0..30 {
-            let (yaw, _) = ease_look(&mut shown, (-170.0, 0.0), 1.0 / 60.0, 100.0);
-            assert!((-180.0..=180.0).contains(&yaw), "{yaw}");
-            assert!(yaw >= 170.0 || yaw <= -170.0, "the short way round: {yaw}");
-        }
-    }
-
-    /// The step is `1 - e^(-dt/tau)`: a machine drawing 600 frames a second glides exactly
-    /// as far in a second as one drawing 60 (a plain fraction of the way would smooth the
-    /// faster of the two harder, and the same setting would feel different on a faster PC).
-    #[test]
-    fn the_glide_does_not_depend_on_the_frame_rate() {
-        let (from, to) = ((0.0, 0.0), (30.0, 10.0));
-        let mut slow = from;
-        for _ in 0..60 {
-            ease_look(&mut slow, to, 1.0 / 60.0, 100.0);
-        }
-        let mut fast = from;
-        for _ in 0..600 {
-            ease_look(&mut fast, to, 1.0 / 600.0, 100.0);
-        }
-        assert!(
-            (slow.0 - fast.0).abs() < 0.01 && (slow.1 - fast.1).abs() < 0.01,
-            "{slow:?} against {fast:?}"
-        );
-        // a whole second at a time constant of 100 ms is very nearly there
-        assert!(slow.0 > 29.9 && slow.1 > 9.9, "{slow:?}");
-    }
-
-    /// A head turned a degree past north eases a degree forward, not 359 back.
-    #[test]
-    fn the_glide_goes_the_short_way_round() {
-        let mut shown = (359.0, 0.0);
-        let there = ease_look(&mut shown, (1.0, 0.0), 0.05, 100.0);
-        assert!((there.0 - 359.0).rem_euclid(360.0) < 1.0, "{there:?}");
-    }
-
-    /// Off, the view is drawn exactly where the head points, at once: what every machine
-    /// had before this was a setting.
-    #[test]
-    fn without_the_setting_the_view_is_where_the_head_points() {
-        let mut shown = (0.0, 0.0);
-        assert_eq!(
-            ease_look(&mut shown, (30.0, 10.0), 1.0 / 60.0, 0.0),
-            (30.0, 10.0)
-        );
-        assert_eq!(shown, (30.0, 10.0));
-    }
-}
-
 /// A part of a vehicle (its origin, heading in degrees and `[boundingbox]`) is in reach of
 /// a person standing at `eye`: within 3 m of the box's half length round its centre.
-pub(crate) fn part_in_reach(
+pub fn part_in_reach(
     eye: glam::DVec3,
     at: glam::DVec3,
     heading: f64,
@@ -323,86 +149,13 @@ pub(crate) fn part_in_reach(
     (eye - centre).length() < reach
 }
 
-#[cfg(test)]
-pub(crate) mod reach_tests {
-    use super::part_in_reach;
-    use glam::DVec3;
-
-    /// Standing by the rear section of an articulated bus, 17 m behind the front part's
-    /// origin: out of the front part's reach, in the rear one's.
-    #[test]
-    fn the_rear_section_is_reached_by_its_own_box() {
-        let front = [2.5, 11.0, 3.0, 0.0, -3.0, 1.5];
-        let rear = [2.5, 7.0, 3.0, 0.0, -3.5, 1.5];
-        let eye = DVec3::new(2.0, -17.0, 1.7);
-        assert!(!part_in_reach(eye, DVec3::ZERO, 0.0, Some(front)));
-        assert!(part_in_reach(
-            eye,
-            DVec3::new(0.0, -12.0, 0.0),
-            0.0,
-            Some(rear)
-        ));
-        // (the box's centre turns with the part: heading 180, the rear is ahead)
-        assert!(part_in_reach(
-            DVec3::new(-2.0, 17.0, 1.7),
-            DVec3::new(0.0, 12.0, 0.0),
-            180.0,
-            Some(rear)
-        ));
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod cab_look_tests {
-    use super::cab_look_yaw;
-
-    /// A passenger and the driver turn all the way round, as in OMSI (#909).
-    #[test]
-    fn the_head_turns_all_the_way_round() {
-        let mut yaw = 0.0;
-        for _ in 0..40 {
-            yaw = cab_look_yaw(yaw + 10.0);
-        }
-        // 400 degrees turned: 40 past straight ahead, the short way
-        assert!((yaw - 40.0).abs() < 1e-3, "{yaw}");
-        assert!((cab_look_yaw(170.0 + 20.0) + 170.0).abs() < 1e-3);
-        // (the driver looks back down the saloon: no stop at 140 degrees)
-        assert!((cab_look_yaw(175.0) - 175.0).abs() < 1e-3);
-        assert!((cab_look_yaw(-160.0) + 160.0).abs() < 1e-3);
-    }
-}
-
 /// The first entry a drop-down (or the tours' timetable) of `n` entries showing `rows`
 /// shows with its thumb (`len` high) at the top `thumb_top` in `track`.
-pub(crate) fn dropdown_top_at(
-    thumb_top: f32,
-    track: [f32; 4],
-    len: f32,
-    n: usize,
-    rows: usize,
-) -> usize {
+pub fn dropdown_top_at(thumb_top: f32, track: [f32; 4], len: f32, n: usize, rows: usize) -> usize {
     let max = n.saturating_sub(rows);
     let travel = (track[3] - track[1] - len).max(1.0);
     let f = ((thumb_top - track[1]) / travel).clamp(0.0, 1.0);
     ((f * max as f32).round() as usize).min(max)
-}
-
-#[cfg(test)]
-pub(crate) mod dropdown_tests {
-    /// A drop-down's thumb dragged down its track scrolls the list to its end (#794).
-    #[test]
-    fn a_dropdowns_thumb_dragged_scrolls_it() {
-        // 40 entries, 8 shown, a 300 px track with a 60 px thumb
-        let track = [0.0, 100.0, 4.0, 400.0];
-        assert_eq!(super::dropdown_top_at(100.0, track, 60.0, 40, 8), 0);
-        assert_eq!(super::dropdown_top_at(340.0, track, 60.0, 40, 8), 32);
-        assert_eq!(super::dropdown_top_at(220.0, track, 60.0, 40, 8), 16);
-        // past the ends it stays at them
-        assert_eq!(super::dropdown_top_at(-50.0, track, 60.0, 40, 8), 0);
-        assert_eq!(super::dropdown_top_at(900.0, track, 60.0, 40, 8), 32);
-        // a list that fits never scrolls
-        assert_eq!(super::dropdown_top_at(300.0, track, 60.0, 5, 8), 0);
-    }
 }
 
 impl App {
