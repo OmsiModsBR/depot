@@ -380,10 +380,11 @@ pub fn empty_state(
         Align::Center,
     );
     y += 34.0;
+    // (a line too long for the card is cut as it is drawn, translated, and shows whole in a
+    // tooltip)
     for line in lines {
-        let shown = fit_text(ui, line, 14.0, r.w - 40.0);
-        ui.text_in(
-            &shown,
+        ui.text_in_tip(
+            line,
             Rect::new(r.x + 20.0, y, r.w - 40.0, 20.0),
             14.0,
             Weight::Regular,

@@ -2081,10 +2081,13 @@ impl Ui {
                 }
             };
             let w = (shown(self, &t) + 20.0).min(360.0);
-            let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
+            // (a text that fits on one line is laid out with a pixel to spare: measured word
+            // by word it can come out a hair wider than whole, and "Open Setup" broke in two)
+            let wrap_w = w - 19.0;
+            let lines = raw.then(|| self.wrap_as_is(&t, wrap_w, 12.5, Weight::Medium));
             let h = match &lines {
                 Some(l) => l.len() as f32 * 12.5 * 1.38,
-                None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
+                None => self.paragraph_height(&t, wrap_w, 12.5, Weight::Medium),
             } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
             if r.right() > self.size.x - 8.0 {
@@ -2117,7 +2120,7 @@ impl Ui {
                     self.paragraph(
                         &t,
                         Vec2::new(r.x + 10.0, r.y + 4.0),
-                        w - 20.0,
+                        wrap_w,
                         12.5,
                         Weight::Medium,
                         TEXT_SOFT,
