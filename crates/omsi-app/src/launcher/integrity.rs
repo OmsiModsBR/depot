@@ -1271,6 +1271,8 @@ mod tests {
                 Category::Splines,
                 Category::Models,
                 Category::Textures,
+                Category::AiLists,
+                Category::Timetable,
                 Category::Paths
             ]
         );
