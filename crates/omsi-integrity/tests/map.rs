@@ -692,6 +692,36 @@ fn the_ai_lists_parked_cars_people_and_tours_name_what_is_there() {
 }
 
 #[test]
+fn a_scenario_that_changes_a_depot_file_is_checked_against_the_maps_buses() {
+    let root = temp_root("ai-chrono-depot");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Bus/bus.bus", "[friendlyname]\nBus\n");
+    write(&root, "Vehicles/Bus/Home.hof", "[name]\nHome\n");
+    write(
+        &root,
+        "Maps/Test/ailists.cfg",
+        "[aigroup_depot]\nBuses\nHome\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n1\tB-1\t\t\t\n[end]\n",
+    );
+    // the update names another depot file for the group and no buses of its own
+    write(
+        &root,
+        "Maps/Test/Chrono/Later/ailists_#upd.cfg",
+        "[aigroup_depot]\nBuses\nNewHome\n\n",
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let missing: Vec<&str> = r
+        .findings
+        .iter()
+        .filter(|f| f.code == "depot-missing")
+        .map(|f| f.file.as_str())
+        .collect();
+    assert_eq!(missing, ["Vehicles/Bus/NewHome.hof"], "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn an_ai_list_over_16_kb_is_not_optimized_and_says_why() {
     let root = temp_root("ai-large");
     complete(&root);
