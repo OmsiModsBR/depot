@@ -226,6 +226,9 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        if !self.stopped() {
+            self.ai_lists(map_dir, &chrono_dirs);
+        }
     }
 
     /// The objects, splines and replacements a tile (or a chrono patch of one) names.
@@ -279,7 +282,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn object(&mut self, rel: &str, by: &str) {
+    pub(crate) fn object(&mut self, rel: &str, by: &str) {
         if rel.trim().is_empty() {
             return;
         }

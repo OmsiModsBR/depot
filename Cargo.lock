@@ -2941,6 +2941,7 @@ dependencies = [
  "omsi-o3d",
  "omsi-scenery",
  "omsi-texture",
+ "omsi-timetable",
  "omsi-vehicle",
 ]
 

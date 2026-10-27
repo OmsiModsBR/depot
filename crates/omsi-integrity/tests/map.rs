@@ -605,3 +605,115 @@ fn progress_counts_the_tiles_and_a_cancel_stops_the_check() {
     assert!(r.cancelled);
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn the_ai_lists_parked_cars_people_and_tours_name_what_is_there() {
+    let root = temp_root("ai");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Car/car.ovh", "[friendlyname]\nCar\n");
+    write(&root, "Vehicles/Bus/bus.bus", "[friendlyname]\nBus\n");
+    write(&root, "Vehicles/Bus/Home.hof", "[name]\nHome\n");
+    write(
+        &root,
+        "Maps/Test/ailists.cfg",
+        "[aigroup_2]\nCars\n\nVehicles\\Car\\car.ovh\t2\nVehicles\\Car\\gone.ovh\t1\n[end]\n\n\
+         [aigroup_depot]\nBuses\nHome\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n1\tB-1\t\t\t\n[end]\n\n\
+         [aigroup_depot]\nTrams\nElsewhere\n\n\
+         [aigroup_depot_typgroup_2]\nVehicles\\Bus\\bus.bus\n2\tB-2\t\t\t\n[end]\n",
+    );
+    write(
+        &root,
+        "Maps/Test/unsched_vehgroups.txt",
+        "[group]\nCars\n1\n\n[group]\nTrucks\n1\n",
+    );
+    write(
+        &root,
+        "Maps/Test/parklist_p.txt",
+        "Sceneryobjects\\house\\house.sco\nSceneryobjects\\cars\\gone.sco\nnot a car\n",
+    );
+    write(
+        &root,
+        "Maps/Test/parklist_p_2.txt",
+        "Sceneryobjects\\cars\\other.sco\n",
+    );
+    write(&root, "Humans/a/man.hum", "");
+    write(
+        &root,
+        "Maps/Test/humans.txt",
+        "Humans\\a\\man.hum\nHumans\\a\\gone.hum\n",
+    );
+    write(&root, "Maps/Test/drivers.txt", "Humans\\a\\driver.hum\n");
+    write(
+        &root,
+        "Maps/Test/TTData/1.ttl",
+        "[newtour]\n1\nBuses\n0\n\n[newtour]\n2\nGhosts\n0\n",
+    );
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let of = |code: &str| -> Vec<&str> {
+        r.findings
+            .iter()
+            .filter(|f| f.code == code)
+            .map(|f| f.file.as_str())
+            .collect()
+    };
+    assert_eq!(
+        of("ai-vehicle-missing"),
+        ["Vehicles/Car/gone.ovh"],
+        "{:#?}",
+        r.findings
+    );
+    assert_eq!(of("depot-missing"), ["Vehicles/Bus/Elsewhere.hof"]);
+    assert_eq!(
+        of("ai-group-unknown"),
+        ["Maps/Test/unsched_vehgroups.txt: Trucks"]
+    );
+    assert_eq!(
+        of("parked-car-missing"),
+        [
+            "Sceneryobjects/cars/gone.sco",
+            "Sceneryobjects/cars/other.sco"
+        ]
+    );
+    assert_eq!(of("human-missing"), ["Humans/a/gone.hum"]);
+    assert_eq!(of("driver-missing"), ["Humans/a/driver.hum"]);
+    let tours = r
+        .findings
+        .iter()
+        .find(|f| f.code == "tour-group-unknown")
+        .unwrap();
+    assert_eq!(tours.file, "Maps/Test/TTData/1.ttl");
+    assert!(tours.message.contains("\"Ghosts\"") && !tours.message.contains("Buses"));
+    assert!(of("ai-list-large").is_empty());
+    // (the parked car that is there is checked as an object: its house is complete)
+    assert!(of("object-missing").is_empty());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_ai_list_over_16_kb_is_not_optimized_and_says_why() {
+    let root = temp_root("ai-large");
+    complete(&root);
+    map(&root, TILE);
+    write(&root, "Vehicles/Car/car.ovh", "[friendlyname]\nCar\n");
+    let mut list = String::from("[aigroup_2]\nCars\n\n");
+    while list.len() <= 17 * 1024 {
+        list.push_str("Vehicles\\Car\\car.ovh\t1\n");
+    }
+    list.push_str("[end]\n");
+    write(&root, "Maps/Test/ailists.cfg", &list);
+    let r = check_map(&root, &root.join("Maps/Test"));
+    let f = r
+        .findings
+        .iter()
+        .find(|f| f.code == "ai-list-large")
+        .unwrap();
+    assert_eq!(f.severity, Severity::NotOptimized);
+    assert_eq!(f.file, "Maps/Test/ailists.cfg");
+    assert_eq!(f.category(), omsi_integrity::Category::AiLists);
+    assert!(f.message.contains("16 KB"), "{}", f.message);
+    assert!(f.detail.as_deref().unwrap().contains("high-performance"));
+    assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);
+    let _ = fs::remove_dir_all(&root);
+}
