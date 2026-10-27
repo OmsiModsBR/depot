@@ -15,6 +15,8 @@ pub const BG: Color = omsi_ui::theme::BG;
 pub const SIDE: Color = omsi_ui::theme::RAIL;
 pub const PANEL: Color = omsi_ui::theme::PANEL;
 pub const PANEL_2: Color = omsi_ui::theme::FIELD;
+/// Around a picture that does not fill its card (the map's): darker than the card.
+pub const PICTURE_BG: Color = Color::hex(0x18191c);
 pub const LINE: Color = omsi_ui::theme::EDGE;
 pub const FG: Color = omsi_ui::theme::TEXT;
 pub const MUTED: Color = omsi_ui::theme::TEXT_DIM;

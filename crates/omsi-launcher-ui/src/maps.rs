@@ -375,13 +375,13 @@ impl MapsView {
         card(ui, r, "Map", None);
         // (the map's own radar view, with its streets and start points, in a window over the
         // page)
-        let bw = ui.width("EXPLORE MAP", 12.5, Weight::Bold) + 52.0;
+        let bw = ui.width("Explore map", 13.0, Weight::Medium) + 52.0;
         let b = Rect::new(r.right() - 15.0 - bw, r.y + 10.0, bw, 30.0);
         if m.is_some()
             && ui.button(
                 "maps:explore",
                 b,
-                "EXPLORE MAP",
+                "Explore map",
                 Some("o-pin"),
                 ButtonKind::Normal,
             )
@@ -403,8 +403,16 @@ impl MapsView {
             );
         }
         let inner = Rect::new(r.x + 1.0, r.y + 50.0, r.w - 2.0, r.h - 51.0);
-        ui.p().rect(inner, PANEL_2);
+        // (the picture area ends in the card's own round corners, and the room the picture
+        // leaves is darker than the card, as round a photo; square, its corners stood out of
+        // the card)
+        ui.push_clip(
+            r.inset(1.0),
+            omsi_ui::theme::corner(omsi_ui::theme::RADIUS - 1.0),
+        );
+        ui.p().rect(inner, PICTURE_BG);
         if m.is_none() {
+            ui.pop_clip();
             return;
         }
         match self.map_picture {
@@ -422,7 +430,15 @@ impl MapsView {
                     w,
                     h,
                 );
-                ui.image(pic, tex, 0.0);
+                // (a picture as wide as the card reaches its round lower corners: rounded
+                // as they are - the clip above cuts colours, not pictures)
+                let wide = pic.w >= inner.w - 0.5 && pic.bottom() >= inner.bottom() - 0.5;
+                let round = if wide {
+                    omsi_ui::theme::corner(omsi_ui::theme::RADIUS - 1.0)
+                } else {
+                    0.0
+                };
+                ui.image(pic, tex, round);
             }
             None => {
                 ui.text_in(
@@ -439,16 +455,14 @@ impl MapsView {
                 );
             }
         }
+        ui.pop_clip();
     }
 
     fn about(&mut self, ui: &mut Ui, r: Rect, m: Option<&MapInfo>) {
-        card(
-            ui,
-            r,
-            "About this map",
-            Some("scroll for the full description"),
-        );
-        let Some(m) = m else { return };
+        let Some(m) = m else {
+            card(ui, r, "About this map", None);
+            return;
+        };
         let desc = shorten(m.description.trim(), DESCRIPTION_CHARS);
         let desc = if desc.is_empty() {
             "The author wrote no description.".to_string()
@@ -457,6 +471,14 @@ impl MapsView {
         };
         let area = Rect::new(r.x + 8.0, r.y + 44.0, r.w - 16.0, (r.h - 52.0).max(0.0));
         let px = 12.5 * TEXT_SCALE;
+        // (the hint to scroll only when there is more than the card shows)
+        let longer = ui.paragraph_height(&desc, area.w - 26.0, px, Weight::Regular) + 24.0 > area.h;
+        card(
+            ui,
+            r,
+            "About this map",
+            longer.then_some("scroll for the full description"),
+        );
         ui.scroll_area("maps:about", area, &mut |ui, view| {
             ui.paragraph(
                 &desc,

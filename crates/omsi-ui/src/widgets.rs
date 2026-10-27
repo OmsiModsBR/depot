@@ -1380,8 +1380,23 @@ impl Ui {
         placeholder: &str,
         icon: Option<&str>,
     ) -> bool {
+        self.text_input_end(name, r, value, placeholder, icon, 0.0)
+    }
+
+    /// [`Ui::text_input`] with its last `end` points left to a button drawn inside the field
+    /// afterwards (a calendar's, as Windows' date field has it): the field's frame spans all
+    /// of `r`, the typing and the clicks only the rest.
+    pub fn text_input_end(
+        &mut self,
+        name: &str,
+        r: Rect,
+        value: &mut String,
+        placeholder: &str,
+        icon: Option<&str>,
+        end: f32,
+    ) -> bool {
         let id = id_of(name);
-        let (h, _, _) = self.interact(id, r);
+        let (h, _, _) = self.interact(id, Rect::new(r.x, r.y, (r.w - end).max(0.0), r.h));
         if h {
             self.cursor = winit::window::CursorIcon::Text;
         }
@@ -1522,7 +1537,7 @@ impl Ui {
             self.icon(i, Vec2::new(x + 8.0, r.center().y), 18.0, TEXT_DIM);
             x += 24.0;
         }
-        let inner = Rect::new(x, r.y, r.right() - x - 10.0, r.h);
+        let inner = Rect::new(x, r.y, r.right() - end - x - 10.0, r.h);
         self.push_clip(inner, 0.0);
         let px = 13.0;
 
