@@ -214,6 +214,11 @@ pub struct Ui {
     /// Layers: how they are seen, what is drawn, and with which texture (0: the atlas).
     layers: Vec<(Layer, Painter, usize)>,
     clip_stack: Vec<(Rect, f32)>,
+    /// How opaque what is drawn now is (`push_fade`), and the values it had before.
+    fade: f32,
+    fade_stack: Vec<f32>,
+    /// Something is still on its way (`tween`, `appear`): the next frame should come soon.
+    moving: bool,
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
@@ -257,6 +262,9 @@ impl Ui {
             dt: 1.0 / 60.0,
             layers: Vec::new(),
             clip_stack: Vec::new(),
+            fade: 1.0,
+            fade_stack: Vec::new(),
+            moving: false,
             hot: None,
             active: None,
             focus: None,
@@ -289,6 +297,9 @@ impl Ui {
         self.atlas.begin_frame();
         self.layers.clear();
         self.clip_stack.clear();
+        self.fade = 1.0;
+        self.fade_stack.clear();
+        self.moving = false;
         self.hot = None;
         self.wheel_taken = false;
         self.cursor = winit::window::CursorIcon::Default;
@@ -359,10 +370,32 @@ impl Ui {
             viewport: [0.0, 0.0, self.size.x, self.size.y],
             clip: [clip.x * s, clip.y * s, clip.right() * s, clip.bottom() * s],
             radius: radius * s,
-            opacity: 1.0,
+            opacity: self.fade,
             px_scale: 0.0,
         };
         self.layers.push((layer, Painter::with_scale(s), 0));
+    }
+
+    /// Draw what follows `alpha` times as opaque (inside another fade, both), until
+    /// `pop_fade`: something fading in or out as a whole.
+    pub fn push_fade(&mut self, alpha: f32) {
+        self.fade_stack.push(self.fade);
+        self.fade *= alpha.clamp(0.0, 1.0);
+        let (r, rad) = self.clip_and_radius();
+        self.push_layer(r, rad);
+    }
+
+    pub fn pop_fade(&mut self) {
+        self.fade = self.fade_stack.pop().unwrap_or(1.0);
+        let (r, rad) = self.clip_and_radius();
+        self.push_layer(r, rad);
+    }
+
+    fn clip_and_radius(&self) -> (Rect, f32) {
+        self.clip_stack
+            .last()
+            .copied()
+            .unwrap_or((Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0))
     }
 
     /// Whether a scroll area took this frame's wheel (what is left scrolls the page).
@@ -545,6 +578,66 @@ impl Ui {
         let v = self.anims.entry(id).or_insert(to);
         *v += (to - *v) * k;
         *v
+    }
+
+    /// A value that travels to `to` in `secs` seconds as Windows 11 moves things (fast, then
+    /// slowing to a stop), from wherever it was when `to` last changed; the first time, and
+    /// with motion off (`theme::motion`), it is `to` at once.
+    pub fn tween(&mut self, id: Id, to: f32, secs: f32) -> f32 {
+        let (k_from, k_to, k_at) = (
+            id ^ 0x7e3e_0000_0000_0001,
+            id ^ 0x7e3e_0000_0000_0002,
+            id ^ 0x7e3e_0000_0000_0003,
+        );
+        let now = self.time;
+        let value = |a: &HashMap<Id, f32>| -> Option<(f32, bool)> {
+            let (from, target, at) = (*a.get(&k_from)?, *a.get(&k_to)?, *a.get(&k_at)?);
+            let p = if secs > 0.0 && crate::theme::motion() {
+                (now - at) / secs
+            } else {
+                1.0
+            };
+            Some((from + (target - from) * crate::theme::ease_out(p), p < 1.0))
+        };
+        let value = |ui: &mut Ui| -> Option<f32> {
+            let (v, on_way) = value(&ui.anims)?;
+            ui.moving |= on_way;
+            Some(v)
+        };
+        match self.anims.get(&k_to).copied() {
+            Some(target) if target == to => value(self).unwrap_or(to),
+            Some(_) => {
+                let from = value(self).unwrap_or(to);
+                self.anims.insert(k_from, from);
+                self.anims.insert(k_to, to);
+                self.anims.insert(k_at, now);
+                value(self).unwrap_or(to)
+            }
+            None => {
+                self.anims.insert(k_from, to);
+                self.anims.insert(k_to, to);
+                self.anims.insert(k_at, now - secs);
+                to
+            }
+        }
+    }
+
+    /// How far `id` has come into view, 0 to 1 over `secs` seconds (eased as `tween`) since
+    /// it was first drawn - again after a frame it was not drawn in (a window opened again).
+    /// 1 with motion off.
+    pub fn appear(&mut self, id: Id, secs: f32) -> f32 {
+        if !crate::theme::motion() || secs <= 0.0 {
+            return 1.0;
+        }
+        let shown = self.hovered_for(id ^ 0xa99e_a400_0000_0001, true);
+        self.moving |= shown < secs;
+        crate::theme::ease_out(shown / secs)
+    }
+
+    /// Whether something is still on its way to where it ends (`tween`, `appear`): a window
+    /// that draws less often while idle should keep drawing at its full rate.
+    pub fn moving(&self) -> bool {
+        self.moving
     }
 
     /// For how many seconds `id` has been under the mouse without a break: 0 while it is not,
@@ -1029,13 +1122,21 @@ impl Ui {
         let id = id_of(name);
         let (h, held, clicked) = self.interact_key(id, r);
         let t = self.anim(id, if h { 1.0 } else { 0.0 }, 0.06);
+        // (pressed, as Windows 11 shows it: the fill steps back from hover and the label
+        // dims a little, quickly)
+        let p = self.tween(id ^ 0x9e55, if held { 1.0 } else { 0.0 }, MOTION_FAST);
         let rr = if held { r.inset(0.5) } else { r };
+        let hover = t * (1.0 - 0.6 * p);
         let (fill, text_c, edge) = match kind {
-            ButtonKind::Primary => (accent().lighten(0.08 * t), on_accent(), Color::CLEAR),
-            ButtonKind::Danger => (FIELD.mix(HOVER, t), DANGER, DANGER.alpha(0.4 + 0.3 * t)),
-            ButtonKind::Normal => (FIELD.mix(HOVER, t), TEXT, EDGE),
+            ButtonKind::Primary => (
+                accent().lighten(0.08 * hover).darken(0.1 * p),
+                on_accent().alpha(1.0 - 0.2 * p),
+                Color::CLEAR,
+            ),
+            ButtonKind::Danger => (FIELD.mix(HOVER, hover), DANGER, DANGER.alpha(0.4 + 0.3 * t)),
+            ButtonKind::Normal => (FIELD.mix(HOVER, hover), TEXT.mix(TEXT_SOFT, p), EDGE),
             ButtonKind::Ghost => (
-                Color::WHITE.alpha(0.05 * t),
+                Color::WHITE.alpha(0.05 * hover),
                 if h { TEXT } else { TEXT_DIM },
                 Color::CLEAR,
             ),
@@ -1930,6 +2031,8 @@ impl Ui {
     /// Draw the popups and tooltip over everything and hand the layers over.
     pub fn finish(&mut self) -> (Vec<Layer>, Vec<Vertex>, Vec<(std::ops::Range<u32>, usize)>) {
         self.clip_stack.clear();
+        self.fade = 1.0;
+        self.fade_stack.clear();
         self.push_layer(Rect::new(0.0, 0.0, self.size.x, self.size.y), 0.0);
         self.draw_popup();
         self.draw_date_popup();
@@ -1955,6 +2058,10 @@ impl Ui {
             if r.bottom() > self.size.y - 8.0 {
                 r.y = at.y - 12.0 - r.h;
             }
+            // (it fades in rising 4 px, each time it shows another text)
+            let a = self.appear(id_of(&t) ^ 0x7001_7100, MOTION_FAST);
+            r.y += 4.0 * (1.0 - a);
+            self.push_fade(a);
             self.p().rounded(r, 6.0, Color::rgba(34, 34, 34, 1.0));
             self.p()
                 .rounded_border(r, 7.0, 1.0, Color::WHITE.alpha(0.1));
@@ -1982,6 +2089,7 @@ impl Ui {
                     );
                 }
             }
+            self.pop_fade();
         }
         if let Some(r) = self.nav.ring() {
             self.p().rounded_border(r, 8.0, 2.0, accent());
@@ -2779,5 +2887,49 @@ mod tests {
         frame(&mut ui, &mut sel);
         assert!(ui.popup.is_none());
         assert_eq!(sel, 1);
+    }
+
+    /// A tween travels from where it stood to its new value in its time, eased (most of the
+    /// way early), and stays there; the first time it is at once where it ends. With motion
+    /// off every change is at once.
+    #[test]
+    fn a_tween_travels_eased_and_motion_off_jumps() {
+        let mut ui = Ui::new();
+        let id = id_of("tween");
+        let step = |ui: &mut Ui, to: f32| {
+            ui.begin(Vec2::new(100.0, 100.0), 1.0, 0.05);
+            ui.tween(id, to, 0.25)
+        };
+        assert_eq!(step(&mut ui, 0.0), 0.0);
+        assert_eq!(step(&mut ui, 10.0), 0.0);
+        assert!(ui.moving());
+        let v = step(&mut ui, 10.0);
+        assert!(v > 4.0 && v < 10.0, "{v}");
+        for _ in 0..6 {
+            step(&mut ui, 10.0);
+        }
+        assert_eq!(step(&mut ui, 10.0), 10.0);
+        assert!(!ui.moving());
+        crate::theme::set_motion(false);
+        let jumped = step(&mut ui, 0.0);
+        let seen = ui.appear(id_of("appear"), 0.2);
+        crate::theme::set_motion(true);
+        assert_eq!(jumped, 0.0);
+        assert_eq!(seen, 1.0);
+    }
+
+    /// What is drawn inside `push_fade` is drawn that much fainter, and what follows
+    /// `pop_fade` as before.
+    #[test]
+    fn a_fade_makes_its_layers_fainter_until_popped() {
+        let mut ui = Ui::new();
+        ui.begin(Vec2::new(100.0, 100.0), 1.0, 0.05);
+        ui.push_fade(0.5);
+        ui.push_fade(0.5);
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 0.25);
+        ui.pop_fade();
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 0.5);
+        ui.pop_fade();
+        assert_eq!(ui.layers.last().unwrap().0.opacity, 1.0);
     }
 }

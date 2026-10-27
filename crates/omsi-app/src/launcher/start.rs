@@ -490,13 +490,17 @@ fn start(l: &mut Launcher) {
     }
 }
 
+/// How a dialog darkens the page under it: as Windows 11's, enough to set the dialog apart,
+/// the page under it still seen (at 0.62 it was almost hidden).
+pub(super) const SCRIM: omsi_ui::Color = omsi_ui::Color::rgba(0, 0, 0, 0.45);
+
 /// The dialog's frame, `w` x `h` in the middle of the window, over the page darkened: its
 /// title and a note at the right of it. Returns its inside, under the title.
 pub(super) fn dialog(l: &mut Launcher, w: f32, h: f32, title: &str, note: &str) -> Rect {
     let size = l.ui.size;
     let full = Rect::new(0.0, 0.0, size.x, size.y);
     l.ui.solid(full);
-    l.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
+    l.ui.p().rect(full, SCRIM);
     let (w, h) = (w.min(size.x - 48.0), h.min(size.y - 48.0));
     let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
     l.ui.p().rounded(r, RADIUS, PANEL);

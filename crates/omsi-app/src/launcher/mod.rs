@@ -330,6 +330,7 @@ impl Launcher {
             chrome: Default::default(),
             logo_accent: omsi_ui::theme::current_accent(),
         };
+        omsi_ui::theme::set_motion(windows_motion());
         // no original installation found anywhere: the launcher still opens, on Setup, and says
         // what it needs (only starting a session needs the game)
         if omsi_cfg::missing_original_essentials(std::path::Path::new(&app.state.config.root)).len()
@@ -823,6 +824,7 @@ impl ApplicationHandler for Launcher {
         } else if !self.focused && !omsi_cfg::flags::BACKGROUND.is_set() {
             0.1
         } else if self.last_input.elapsed().as_secs_f32() > 3.0
+            && !self.ui.moving()
             && self.dragging.is_none()
             && self.script.is_empty()
         {
@@ -1126,6 +1128,8 @@ impl Launcher {
         self.focused = f;
         if f {
             self.root_ok = None;
+            // (Windows' "Animation effects" may have changed while the window was away)
+            omsi_ui::theme::set_motion(windows_motion());
         }
         if !f {
             self.pages.pads.cancel_feedback_test();
@@ -1702,7 +1706,11 @@ impl Launcher {
                 self.page_anim = 1.0;
             }
             let rail_w = self.rail_w();
-            self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
+            self.page_anim = if omsi_ui::theme::motion() {
+                (self.page_anim + self.ui.dt / omsi_ui::theme::MOTION_NORMAL).min(1.0)
+            } else {
+                1.0
+            };
             // (no wider than a page reads well: on a wide screen the rest is margin, the page
             // in the middle - the panels stretched across 2000 px with their text at one end;
             // under the top bar, the heading a little closer to it than to the window's edge)
@@ -1729,8 +1737,15 @@ impl Launcher {
                 w,
                 h,
             );
-            let e = 1.0 - (1.0 - self.page_anim).powi(3);
-            let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
+            // (a page comes in as Windows 11's do: rising 12 px into place; its panels' glass
+            // stays as it is, nothing fades)
+            let e = omsi_ui::theme::ease_out(self.page_anim);
+            let content = Rect::new(
+                content.x,
+                content.y + 12.0 * (1.0 - e),
+                content.w,
+                content.h,
+            );
             let glass = self.draw_backdrop();
             omsi_ui::theme::set_glass(glass);
             match self.page {
@@ -1758,6 +1773,32 @@ impl Launcher {
         }
         if let Some(i) = saved {
             self.ui.input = i;
+            // (a window over the page fades in with the page's darkening, as Windows 11's
+            // dialogs do; each one again when it opens)
+            let which = if disconnected {
+                "disconnect"
+            } else if crash {
+                "crash"
+            } else if reset {
+                "reset"
+            } else if self.browser.is_none() && window {
+                match self.start.popup {
+                    Some(start::Popup::StartPoint) => "start-point",
+                    Some(start::Popup::Weather) => "weather",
+                    _ => "explore",
+                }
+            } else if self.browser.is_none() && drive {
+                "drive"
+            } else if self.browser.is_none() && keys {
+                "keys"
+            } else {
+                "browser"
+            };
+            let a = self.ui.appear(
+                omsi_ui::widgets::id_of(&format!("dialog:{which}")),
+                omsi_ui::theme::MOTION_NORMAL,
+            );
+            self.ui.push_fade(a);
             if disconnected {
                 self.draw_disconnect_dialog();
             } else if crash {
@@ -1773,6 +1814,7 @@ impl Launcher {
             } else {
                 self.draw_browser();
             }
+            self.ui.pop_fade();
         }
         // a game starts: the last picture before the launcher gives its graphics device up
         // (see `frame`), which stays in the window until the game ends
@@ -2620,6 +2662,31 @@ fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::Render
         shadow_size: 1024,
         render_scale: 1.0,
         ..settings.render_options()
+    }
+}
+
+/// Whether Windows animates its controls (Settings > Accessibility > Visual effects >
+/// Animation effects): off, the launcher shows every change at once too. Elsewhere, on.
+fn windows_motion() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        };
+        let mut on = windows::core::BOOL(1);
+        let read = unsafe {
+            SystemParametersInfoW(
+                SPI_GETCLIENTAREAANIMATION,
+                0,
+                Some(&mut on as *mut _ as *mut core::ffi::c_void),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+            )
+        };
+        read.is_err() || on.as_bool()
+    }
+    #[cfg(not(windows))]
+    {
+        true
     }
 }
 
