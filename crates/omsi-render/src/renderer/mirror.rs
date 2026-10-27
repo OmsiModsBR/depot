@@ -89,6 +89,12 @@ pub enum MirrorEvent<'a> {
         slot: (u32, u32),
         rgba: &'a [u8],
     },
+    /// Picture `id` of the light coronas (`Corona::texture`, `Renderer::set_corona_texture`):
+    /// RGBA8, straight alpha, sRGB colours; its brightness is the glow's shape.
+    CoronaTexture {
+        id: u16,
+        image: &'a omsi_texture::Image,
+    },
 }
 
 /// Receives the asset events; see [`MirrorEvent`].
@@ -257,6 +263,24 @@ impl crate::scene::Scene {
     /// [`FramePlan::light_grid`]) a fixed number of light indices, `u32::MAX` for none.
     pub fn frame_light_grid(&self) -> &[u32] {
         &self.last_grid
+    }
+
+    /// The last frame's light coronas (and the fog cones and halos of lights), the sprites
+    /// the default renderer draws additively over the scene, 20 floats each in the order of
+    /// its `corona.wgsl` vertex inputs: position (render-origin relative) and size; colour
+    /// and brightness; direction and the outer cone's cosine; up axis and rotating mode;
+    /// the inner cone's cosine, the z offset (or the fog's visibility), the parameter bits
+    /// and the kind (0 a glow, 1 a cone in fog, 2 a halo). Only kept while an asset mirror is
+    /// set. Sorted by picture; see [`Scene::frame_corona_runs`].
+    pub fn frame_coronas(&self) -> &[[f32; 20]] {
+        &self.last_coronas
+    }
+
+    /// The runs of [`Scene::frame_coronas`] by picture: (picture, first sprite, sprites,
+    /// drawn after the vehicle the camera is in). Picture 0 is the standard glow, any other
+    /// one that reached the mirror as [`MirrorEvent::CoronaTexture`].
+    pub fn frame_corona_runs(&self) -> &[(u16, u32, u32, bool)] {
+        &self.corona_runs
     }
 }
 

@@ -9,6 +9,7 @@
 //! (`D3d9Device::set_scene_mesh`, `set_scene_texture`, `draw_scene`, see [`crate::scene`]).
 //! Shader Model 3.0 is the floor.
 
+mod coronas;
 mod scene;
 pub mod shader;
 mod ui;
