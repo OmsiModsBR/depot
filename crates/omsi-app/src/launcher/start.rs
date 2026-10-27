@@ -223,13 +223,15 @@ pub fn card(l: &mut Launcher, r: Rect) {
     if follows(l, "use_real_date") {
         clock_field(l, Rect::new(x, y, w, 34.0), "Today's date (Settings)");
     } else {
+        // (the calendar inside the field, at its right end, as Windows' date field has it)
         let mut text = std::mem::take(&mut l.start.date_text);
-        if l.ui.text_input(
+        if l.ui.text_input_end(
             "start-date",
-            Rect::new(x, y, w - 42.0, 34.0),
+            Rect::new(x, y, w, 34.0),
             &mut text,
             "dd/mm/yyyy",
             None,
+            34.0,
         ) {
             if let Some(iso) = date_typed(&text) {
                 l.state.choice.date = iso;
@@ -241,7 +243,7 @@ pub fn card(l: &mut Launcher, r: Rect) {
         let mut d = l.state.choice.date.clone();
         if l.ui.calendar_button(
             "start-calendar",
-            Rect::new(x + w - 34.0, y, 34.0, 34.0),
+            Rect::new(x + w - 32.0, y + 3.0, 28.0, 28.0),
             &mut d,
         ) {
             l.state.choice.date = d;
@@ -355,21 +357,45 @@ pub fn card(l: &mut Launcher, r: Rect) {
             .map(|b| omsi_launcher_lib::display_bus_name(&b.name))
             .filter(|_| !l.state.choice.bus.is_empty());
         if bus.is_none() || session != "new" {
-            let hint = if session == "new" {
-                "No vehicle selected. Add or change vehicles in the game with the ALT menu."
+            let (hint, icon) = if session == "new" {
+                (
+                    "No vehicle selected. Add or change vehicles in the game with the ALT menu.",
+                    "o-bus",
+                )
             } else {
-                "You start on foot at the start point; place a vehicle in the game with the ALT menu."
+                (
+                    "You start on foot at the start point; place a vehicle in the game with the ALT menu.",
+                    "o-user",
+                )
             };
-            let hh = l.ui.paragraph_height(hint, w, 12.0, Weight::Regular);
-            foot -= hh;
+            // (a quiet note over the button, in a box of its own, with room between them -
+            // the lines used to touch the button)
+            let pad = 10.0;
+            let tx = x + pad + 26.0;
+            let tw = w - (tx - x) - pad;
+            let hh = l.ui.paragraph_height(hint, tw, 12.5, Weight::Regular);
+            // (`paragraph` leaves a line's spacing under the last line: less padding there)
+            let note_h = hh + pad * 2.0 - 4.0;
+            let note = Rect::new(x, foot - note_h, w, note_h);
+            foot = note.y;
+            l.ui.p()
+                .rounded(note, CONTROL_RADIUS, omsi_ui::theme::surface(FIELD));
+            l.ui.p().rounded_border(note, CONTROL_RADIUS, 1.0, EDGE);
+            l.ui.icon(
+                icon,
+                Vec2::new(x + pad + 9.0, note.y + pad + 8.0),
+                16.0,
+                TEXT_DIM,
+            );
             l.ui.paragraph(
                 hint,
-                Vec2::new(x, foot + 12.0),
-                w,
-                12.0,
+                Vec2::new(tx, note.y + pad - 2.0),
+                tw,
+                12.5,
                 Weight::Regular,
                 TEXT_DIM,
             );
+            foot -= 10.0;
         }
         if let (Some(name), "new") = (bus, session) {
             foot -= 26.0;
@@ -464,13 +490,17 @@ fn start(l: &mut Launcher) {
     }
 }
 
+/// How a dialog darkens the page under it: as Windows 11's, enough to set the dialog apart,
+/// the page under it still seen (at 0.62 it was almost hidden).
+pub(super) const SCRIM: omsi_ui::Color = omsi_ui::Color::rgba(0, 0, 0, 0.45);
+
 /// The dialog's frame, `w` x `h` in the middle of the window, over the page darkened: its
 /// title and a note at the right of it. Returns its inside, under the title.
 pub(super) fn dialog(l: &mut Launcher, w: f32, h: f32, title: &str, note: &str) -> Rect {
     let size = l.ui.size;
     let full = Rect::new(0.0, 0.0, size.x, size.y);
     l.ui.solid(full);
-    l.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
+    l.ui.p().rect(full, SCRIM);
     let (w, h) = (w.min(size.x - 48.0), h.min(size.y - 48.0));
     let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
     l.ui.p().rounded(r, RADIUS, PANEL);
