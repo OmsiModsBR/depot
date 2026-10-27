@@ -2688,7 +2688,7 @@ fn windows_motion() -> bool {
             SystemParametersInfoW(
                 SPI_GETCLIENTAREAANIMATION,
                 0,
-                Some(&mut on as *mut _ as *mut core::ffi::c_void),
+                Some(&mut on as *mut _ as *mut std::ffi::c_void),
                 SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
             )
         };
