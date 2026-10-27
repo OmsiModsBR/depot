@@ -161,6 +161,9 @@ pub struct Scene {
     /// Runs of this frame's coronas by picture: (texture, first, count).
     /// (and whether the run belongs to the vehicle the camera is in, drawn after it)
     pub(crate) corona_runs: Vec<(u16, u32, u32, bool)>,
+    /// This frame's coronas as the sprite list the runs index (kept only while a second
+    /// renderer mirrors the frame: `Scene::frame_coronas`).
+    pub(crate) last_coronas: Vec<[f32; 20]>,
     pub(crate) model_buf: Option<GpuArray>,
     pub(crate) params_buf: Option<GpuArray>,
     pub(crate) light_buf: Option<GpuArray>,

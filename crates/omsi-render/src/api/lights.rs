@@ -62,6 +62,9 @@ impl Renderer {
     /// Register picture `id` for coronas (`Corona::texture`): a light's own bitmap, whose
     /// brightness is the glow's shape.
     pub fn set_corona_texture(&mut self, id: u16, img: &omsi_texture::Image) {
+        if self.mirroring() {
+            self.mirror(MirrorEvent::CoronaTexture { id, image: img });
+        }
         let t = upload_texture(&self.device, &self.queue, img, true);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("corona picture"),

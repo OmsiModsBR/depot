@@ -138,6 +138,8 @@ pub(super) struct SceneStore {
     meshes: Vec<Option<Mesh>>,
     textures: Vec<Option<IDirect3DTexture9>>,
     pipeline: Option<ScenePipeline>,
+    /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
+    pub(super) coronas: super::coronas::CoronaStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
     unsupported: Option<String>,
     /// The per-frame instance records, and the dynamic buffer they go up in (with the
@@ -289,11 +291,14 @@ fn fill_float_texture(
 pub(super) struct SceneCopies {
     meshes: Vec<Option<(Vec<f32>, Vec<u32>)>>,
     textures: Vec<Option<TextureCopy>>,
+    /// The lights' coronas' own pictures, under the renderer's picture numbers (they outlive
+    /// a scene).
+    pub(super) coronas: Vec<Option<TextureCopy>>,
     /// The tile light map atlas: its side and its pixels (RGBA).
     tile_map: Option<(u32, Vec<u8>)>,
 }
 
-struct TextureCopy {
+pub(super) struct TextureCopy {
     width: u32,
     height: u32,
     format: TexFormat,
@@ -305,7 +310,7 @@ struct TextureCopy {
 }
 
 impl TextureCopy {
-    fn of(t: &SceneTexture) -> Self {
+    pub(super) fn of(t: &SceneTexture) -> Self {
         let kept = if t.wants_mips() { 1 } else { t.levels.len() };
         Self {
             translucent: t.alpha_in_use(),
@@ -317,7 +322,7 @@ impl TextureCopy {
         }
     }
 
-    fn texture(&self) -> SceneTexture<'_> {
+    pub(super) fn texture(&self) -> SceneTexture<'_> {
         SceneTexture {
             width: self.width,
             height: self.height,
@@ -751,7 +756,11 @@ impl D3d9Device {
         self.scene.meshes.clear();
         self.scene.textures.clear();
         self.scene.tile_map = None;
-        self.scene.copies = SceneCopies::default();
+        // (the coronas' pictures stay: the renderer puts them up once, not per scene)
+        self.scene.copies = SceneCopies {
+            coronas: std::mem::take(&mut self.scene.copies.coronas),
+            ..SceneCopies::default()
+        };
     }
 
     /// Puts `copies` (a lost device's) up on this one under the same ids. One that cannot be
@@ -766,6 +775,11 @@ impl D3d9Device {
         for (id, kept) in copies.textures.into_iter().enumerate() {
             if let Some(kept) = kept {
                 done = done.and(self.set_scene_texture(id, &kept.texture()));
+            }
+        }
+        for (id, kept) in copies.coronas.into_iter().enumerate() {
+            if let (Some(kept), Ok(id)) = (kept, u16::try_from(id)) {
+                done = done.and(self.set_corona_texture(id, &kept.texture()));
             }
         }
         if let Some((side, rgba)) = copies.tile_map {
@@ -913,6 +927,7 @@ impl D3d9Device {
                 Err(e) => return Err(e),
             }
         }
+        self.ensure_coronas();
         Ok(())
     }
 
@@ -1283,6 +1298,15 @@ impl D3d9Device {
             }
             self.scene.instances = Some((some(vb, "instance buffer")?, capacity));
         }
+        // (a frame whose coronas cannot be put up is drawn without them)
+        let coronas_ready = match self.upload_coronas(frame) {
+            Ok(()) => true,
+            Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
+            Err(e) => {
+                log::warn!("d3d9: the lights' coronas could not be put up this frame: {e}");
+                false
+            }
+        };
         let d = &self.device;
         let pipeline = self.scene.pipeline.as_ref().expect("built above");
         let light = &frame.light;
@@ -1379,67 +1403,88 @@ impl D3d9Device {
         let mut current: (Option<DrawKind>, Option<bool>, Option<bool>, Option<usize>) =
             (None, None, None, None);
         let mut skipped = 0usize;
-        for b in frame.main.iter().chain(frame.cab) {
-            if b.count == 0 || b.instances.is_empty() {
-                continue;
-            }
-            let (Some(Some(mesh)), Some(m)) = (self.scene.meshes.get(b.mesh), material(b.material))
-            else {
-                skipped += 1;
-                continue;
-            };
-            check_batch(b, mesh, &m)?;
-            // SAFETY: as above; the buffers and textures belong to this device.
-            unsafe {
-                if current.0 != Some(b.kind) {
-                    kind_states(d, b.kind, coverage)?;
-                    current.0 = Some(b.kind);
+        // the world's batches and its coronas, then the vehicle the camera is in and its own
+        for (late, batches) in [(false, frame.main), (true, frame.cab)] {
+            for b in batches {
+                if b.count == 0 || b.instances.is_empty() {
+                    continue;
                 }
-                if current.1 != Some(b.cull) {
-                    let mode = if b.cull { D3DCULL_CCW } else { D3DCULL_NONE };
-                    d.SetRenderState(D3DRS_CULLMODE, mode.0 as u32)
-                        .map_err(map_err)?;
-                    current.1 = Some(b.cull);
-                }
-                if current.2 != Some(b.surface) {
-                    let (c, s) = if b.surface { (bias, slope) } else { (0.0, 0.0) };
-                    d.SetRenderState(D3DRS_DEPTHBIAS, c.to_bits())
-                        .map_err(map_err)?;
-                    d.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, s.to_bits())
-                        .map_err(map_err)?;
-                    current.2 = Some(b.surface);
-                }
-                if current.3 != Some(b.material) {
-                    self.bind_material(&m)?;
-                    current.3 = Some(b.material);
-                }
-                d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
-                d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
-                    .map_err(map_err)?;
-                d.SetIndices(&mesh.ib).map_err(map_err)?;
-                // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
-                // black box on the road: it is left out, the runs between are drawn)
-                let hide_blobs = b.kind.blends() && !self.covers(&m);
-                for run in blob_free_runs(frame, b.instances.clone(), hide_blobs) {
-                    let n = run.end - run.start;
-                    d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
-                        .map_err(map_err)?;
-                    if let Some((vb, _)) = &self.scene.instances {
-                        // (no overflow: the run lies in the list, whose bytes were checked
-                        // above)
-                        d.SetStreamSource(1, vb, run.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
-                            .map_err(map_err)?;
+                let (Some(Some(mesh)), Some(m)) =
+                    (self.scene.meshes.get(b.mesh), material(b.material))
+                else {
+                    skipped += 1;
+                    continue;
+                };
+                check_batch(b, mesh, &m)?;
+                // SAFETY: as above; the buffers and textures belong to this device.
+                unsafe {
+                    if current.0 != Some(b.kind) {
+                        kind_states(d, b.kind, coverage)?;
+                        current.0 = Some(b.kind);
                     }
-                    d.DrawIndexedPrimitive(
-                        D3DPT_TRIANGLELIST,
-                        0,
-                        0,
-                        mesh.vertices,
-                        b.first,
-                        b.count / 3,
-                    )
-                    .map_err(map_err)?;
+                    if current.1 != Some(b.cull) {
+                        let mode = if b.cull { D3DCULL_CCW } else { D3DCULL_NONE };
+                        d.SetRenderState(D3DRS_CULLMODE, mode.0 as u32)
+                            .map_err(map_err)?;
+                        current.1 = Some(b.cull);
+                    }
+                    if current.2 != Some(b.surface) {
+                        let (c, s) = if b.surface { (bias, slope) } else { (0.0, 0.0) };
+                        d.SetRenderState(D3DRS_DEPTHBIAS, c.to_bits())
+                            .map_err(map_err)?;
+                        d.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, s.to_bits())
+                            .map_err(map_err)?;
+                        current.2 = Some(b.surface);
+                    }
+                    if current.3 != Some(b.material) {
+                        self.bind_material(&m)?;
+                        current.3 = Some(b.material);
+                    }
+                    d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
+                    d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
+                        .map_err(map_err)?;
+                    d.SetIndices(&mesh.ib).map_err(map_err)?;
+                    // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
+                    // black box on the road: it is left out, the runs between are drawn)
+                    let hide_blobs = b.kind.blends() && !self.covers(&m);
+                    for run in blob_free_runs(frame, b.instances.clone(), hide_blobs) {
+                        let n = run.end - run.start;
+                        d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
+                            .map_err(map_err)?;
+                        if let Some((vb, _)) = &self.scene.instances {
+                            // (no overflow: the run lies in the list, whose bytes were checked
+                            // above)
+                            d.SetStreamSource(1, vb, run.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
+                                .map_err(map_err)?;
+                        }
+                        d.DrawIndexedPrimitive(
+                            D3DPT_TRIANGLELIST,
+                            0,
+                            0,
+                            mesh.vertices,
+                            b.first,
+                            b.count / 3,
+                        )
+                        .map_err(map_err)?;
+                    }
                 }
+            }
+            if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
+                self.draw_coronas(frame, late)?;
+                // SAFETY: plain calls on a live device; the pipeline belongs to it.
+                unsafe {
+                    d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
+                    d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
+                    d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
+                    d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                        .map_err(map_err)?;
+                    d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                        .map_err(map_err)?;
+                    d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
+                        .map_err(map_err)?;
+                }
+                // (the batches' states and material are bound again)
+                current = (None, None, None, None);
             }
         }
         if skipped > 0 {

@@ -1062,6 +1062,7 @@ fn mirror_and_plan_describe_what_is_drawn() {
             MirrorEvent::MoveMesh { from, into } => format!("move mesh {from} {into}"),
             MirrorEvent::MoveTexture { from, into } => format!("move texture {from} {into}"),
             MirrorEvent::LightMapTile { slot, .. } => format!("light map {slot:?}"),
+            MirrorEvent::CoronaTexture { id, .. } => format!("corona picture {id}"),
         });
     })));
     let plans: Arc<Mutex<Vec<(FramePlan, usize)>>> = Arc::default();
@@ -1143,4 +1144,81 @@ fn mirror_and_plan_describe_what_is_drawn() {
             "list entries index the slots"
         );
     }
+}
+
+/// A second renderer gets the lights' own pictures as they go up, and the frame's coronas
+/// with the runs by picture (kept only while a mirror is set).
+#[test]
+fn mirror_carries_the_coronas() {
+    use std::sync::{Arc, Mutex};
+    let _serial = MIRROR_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut renderer = noop_renderer();
+
+    let pictures: Arc<Mutex<Vec<(u16, u32)>>> = Arc::default();
+    let seen = pictures.clone();
+    renderer.set_asset_mirror(Some(Box::new(move |e: MirrorEvent<'_>| {
+        if let MirrorEvent::CoronaTexture { id, image } = e {
+            seen.lock().unwrap().push((id, image.width));
+        }
+    })));
+    let frames: Arc<Mutex<Vec<(usize, Vec<(u16, u32, u32, bool)>)>>> = Arc::default();
+    let got = frames.clone();
+    renderer.set_plan_sink(Some(Box::new(move |_: &FramePlan, scene: &Scene| {
+        got.lock().unwrap().push((
+            scene.frame_coronas().len(),
+            scene.frame_corona_runs().to_vec(),
+        ));
+    })));
+
+    renderer.set_corona_texture(
+        7,
+        &omsi_texture::Image {
+            width: 2,
+            height: 2,
+            rgba: vec![255; 16],
+            has_alpha: false,
+        },
+    );
+    assert_eq!(*pictures.lock().unwrap(), vec![(7, 2)]);
+
+    let mut scene = renderer.new_scene();
+    for (texture, brightness) in [(7, 1.0), (0, 1.0), (7, 0.5), (0, 0.0)] {
+        scene.coronas.push(crate::Corona {
+            position: DVec3::new(0.0, 10.0, 0.0),
+            brightness,
+            texture,
+            ..Default::default()
+        });
+    }
+    let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = target.create_view(&Default::default());
+    let camera = Camera {
+        position: DVec3::new(0.0, 0.0, 0.5),
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 60.0,
+        near: 0.1,
+        far: 1000.0,
+    };
+    renderer.render(&mut scene, &view, 64, 64, &camera, &Lighting::default());
+
+    let frames = frames.lock().unwrap();
+    assert_eq!(frames.len(), 1);
+    // (the one that is not lit is left out; the rest are sorted by picture)
+    assert_eq!(frames[0].0, 3);
+    assert_eq!(frames[0].1, vec![(0, 0, 1, false), (7, 1, 2, false)]);
 }

@@ -95,6 +95,13 @@ impl Renderer {
             })
             .collect();
         scene.corona_count = data.len() as u32;
+        scene.last_coronas.clear();
+        if self.mirroring() {
+            scene.last_coronas.extend(
+                data.iter()
+                    .map(|g| bytemuck::cast::<GpuCorona, [f32; 20]>(*g)),
+            );
+        }
         if data.is_empty() {
             return;
         }
