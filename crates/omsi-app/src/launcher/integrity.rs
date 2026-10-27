@@ -16,7 +16,7 @@ use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
 
 pub struct DiagView {
-    /// The page's tab: 0 the overview, 1 the integrity check.
+    /// The page's tab: 0 the overview, 1 the integrity check, 2 the AI traffic.
     pub tab: usize,
     /// What is checked: 0 a map, 1 a vehicle.
     kind: usize,
@@ -32,6 +32,8 @@ pub struct DiagView {
     search: String,
     /// The export window, while it is open.
     export: Option<Export>,
+    /// The AI traffic tab.
+    pub(super) ai: super::ai_traffic::AiView,
 }
 
 impl Default for DiagView {
@@ -47,6 +49,7 @@ impl Default for DiagView {
             show: [true; 3],
             search: String::new(),
             export: None,
+            ai: Default::default(),
         }
     }
 }
@@ -151,7 +154,7 @@ fn tabs(kind: usize, r: &Report) -> Vec<Category> {
 }
 
 /// What can be checked: (shown name, the map's folder or the vehicle's file).
-fn items(l: &Launcher, kind: usize) -> Vec<(String, String)> {
+pub(super) fn items(l: &Launcher, kind: usize) -> Vec<(String, String)> {
     if kind == 0 {
         l.state
             .maps

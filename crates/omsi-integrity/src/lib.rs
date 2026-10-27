@@ -17,6 +17,7 @@ mod image_size;
 mod map;
 mod report;
 mod text;
+pub mod traffic;
 mod vehicle;
 
 pub use ai::AILISTS_RECOMMENDED_MAX;
@@ -24,4 +25,5 @@ pub use image_size::{image_size, next_pow2};
 pub use map::{check_map, check_map_with};
 pub use report::{Category, Finding, Progress, Report, Severity};
 pub use text::TextOptions;
+pub use traffic::AiTraffic;
 pub use vehicle::{check_vehicle, check_vehicle_with};
