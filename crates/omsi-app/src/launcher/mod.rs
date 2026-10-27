@@ -2267,7 +2267,12 @@ impl Launcher {
         };
         let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
         self.vehicles.set_picture(has_bus.then_some(picture));
+        let none = !self.root_ok();
+        self.vehicles.set_no_folder(none);
         self.vehicles.draw(&mut self.ui, body);
+        if self.vehicles.take_open_setup() {
+            self.go(Page::Setup);
+        }
         // (the bus the next start uses: its card shows what is chosen for it)
         if let Some(file) = self
             .vehicles
@@ -2414,7 +2419,12 @@ impl Launcher {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        let none = !self.root_ok();
+        self.maps.set_no_folder(none);
         self.maps.draw(&mut self.ui, body);
+        if self.maps.take_open_setup() {
+            self.go(Page::Setup);
+        }
         // the chosen map's picture, read from its folder on a thread
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic
