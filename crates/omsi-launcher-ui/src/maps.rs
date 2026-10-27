@@ -36,6 +36,9 @@ pub struct MapsView {
     map_picture: Option<(usize, f32)>,
     /// That picture is still being looked for or read.
     picture_reading: bool,
+    /// That picture has just been read, and fades in when it is drawn (not again on coming
+    /// back to the page).
+    picture_fresh: bool,
     /// The rows' small pictures on the GPU, by map file (`set_thumb`).
     thumbs: std::collections::HashMap<String, usize>,
     /// The rows whose picture has just been read, and fades in when it is drawn.
@@ -62,6 +65,7 @@ impl Default for MapsView {
             current: None,
             map_picture: None,
             picture_reading: false,
+            picture_fresh: false,
             thumbs: Default::default(),
             fresh_thumbs: Default::default(),
             visible: Vec::new(),
@@ -90,11 +94,13 @@ impl MapsView {
     /// The picture from that map's folder (its texture and width over height), when it has one,
     /// and whether it is still being read.
     pub fn set_picture(&mut self, p: Option<(usize, f32)>, reading: bool) {
+        if p.is_some() && p.map(|p| p.0) != self.map_picture.map(|p| p.0) {
+            self.picture_fresh = true;
+        }
         self.map_picture = p;
         self.picture_reading = reading;
     }
 
-    /// The map chosen in the library (its place in the catalog).
     /// The files of the library's rows on screen (after `draw`), for their small pictures.
     pub fn visible(&self) -> &[String] {
         &self.visible
@@ -115,6 +121,7 @@ impl MapsView {
         }
     }
 
+    /// The map chosen in the library (its place in the catalog).
     pub fn chosen(&self) -> usize {
         self.selected
     }
@@ -466,8 +473,14 @@ impl MapsView {
                     0.0
                 };
                 // (fading in once read, from the dark room around it)
-                let key = format!("maps:picture:{}:{tex}", m.map_or("", |m| m.file.as_str()));
-                let a = ui.appear(omsi_ui::widgets::id_of(&key), omsi_ui::theme::MOTION_NORMAL);
+                let a = if self.picture_fresh {
+                    let key = format!("maps:picture:{}:{tex}", m.map_or("", |m| m.file.as_str()));
+                    let a = ui.appear(omsi_ui::widgets::id_of(&key), omsi_ui::theme::MOTION_NORMAL);
+                    self.picture_fresh = a < 1.0;
+                    a
+                } else {
+                    1.0
+                };
                 ui.push_fade(a);
                 ui.image(pic, tex, round);
                 ui.pop_fade();
@@ -534,7 +547,6 @@ fn map_title(m: &MapInfo) -> String {
     }
 }
 
-/// The size of a row's small picture.
 /// The page's three columns in `body`: the library, the map's picture and its description
 /// under it, the start.
 fn columns(body: Rect) -> (Rect, Rect, Rect, Rect) {
@@ -623,6 +635,7 @@ fn skeleton(ui: &mut Ui, (lib, picture, about, start): (Rect, Rect, Rect, Rect))
     }
 }
 
+/// The size of a row's small picture.
 const THUMB_W: f32 = 84.0;
 const THUMB_H: f32 = 52.0;
 
