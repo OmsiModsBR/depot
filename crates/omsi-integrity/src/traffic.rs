@@ -481,15 +481,28 @@ pub struct VehicleFile {
 /// The vehicles of the installation and the installed mods (each folder of `Vehicles` in
 /// every content root, the first root's file of a name winning), by folder and file name.
 pub fn vehicle_files(root: &Path) -> Vec<VehicleFile> {
-    let mut dirs = omsi_cfg::read_dir_merged("Vehicles");
-    if omsi_cfg::content_roots().is_empty() {
-        dirs = vfs::list_dir(&resolve_path(root, "Vehicles"))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|(_, d)| *d)
-            .map(|(n, _)| resolve_path(root, "Vehicles").join(n))
-            .collect();
+    // every root's vehicle folders, the first root's first: a folder a mod and the
+    // installation both have gives the files of both (one file of a name, the first root's)
+    let mut roots = omsi_cfg::content_roots();
+    if !roots.iter().any(|r| r == root) {
+        roots.push(root.to_path_buf());
     }
+    vehicle_files_in(&roots)
+}
+
+/// [`vehicle_files`] of the roots `roots`, the first one's file of a name winning.
+pub fn vehicle_files_in(roots: &[PathBuf]) -> Vec<VehicleFile> {
+    let dirs: Vec<PathBuf> = roots
+        .iter()
+        .flat_map(|r| {
+            let base = resolve_path(r, "Vehicles");
+            vfs::list_dir(&base)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|(_, d)| *d)
+                .map(move |(n, _)| base.join(n))
+        })
+        .collect();
     let mut names = HashMap::new();
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();

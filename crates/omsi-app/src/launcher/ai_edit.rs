@@ -948,7 +948,8 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     }
     let gi = e.group;
     if let Some((i, d)) = step {
-        let w = (g.vehicles[i].weight + d as f32).max(0.0).floor();
+        // (a weight of 0.5 goes to 1.5: only the step changes it)
+        let w = (g.vehicles[i].weight + d as f32).max(0.0);
         let _ = e.act(|x| x.ailists.set_weight(gi, i, w));
         e.vehicle = Some(i);
     }
@@ -958,8 +959,14 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     }
     save_bar(l, &mut e, mid);
 
-    // the chosen vehicle
-    let g = e.now.ailists.groups()[gi].clone();
+    // the chosen vehicle (Discard may have taken the group away: a new one, not saved)
+    let Some(g) = e.now.ailists.groups().get(gi).cloned() else {
+        e.group = 0;
+        e.vehicle = None;
+        details(l, right_r, &[]);
+        l.pages.diag.ai.edit = Some(e);
+        return;
+    };
     let total: f32 = g.vehicles.iter().map(|v| v.weight.max(0.0)).sum();
     match e.vehicle.and_then(|v| g.vehicles.get(v).map(|x| (v, x))) {
         Some((k, v)) => {
