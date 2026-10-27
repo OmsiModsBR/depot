@@ -1,0 +1,33 @@
+name: Render probe (issue 324)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/render-probe.yml
+      - crates/omsi-render/tests/adapter_probe.rs
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [dx12, vulkan, gl]
+    env:
+      CARGO_BUILD_JOBS: 2
+      OMSI_PROBE_BACKEND: ${{ matrix.backend }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: 1.99.0
+      - name: Probe the renderer on ${{ matrix.backend }}
+        shell: pwsh
+        run: cargo test --locked --release -p omsi-render --test adapter_probe -- --ignored --nocapture
