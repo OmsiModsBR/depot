@@ -36,6 +36,9 @@ pub struct MapsView {
     map_picture: Option<(usize, f32)>,
     /// That picture is still being looked for or read.
     picture_reading: bool,
+    /// That picture has just been read, and fades in when it is drawn (not again on coming
+    /// back to the page).
+    picture_fresh: bool,
     /// The rows' small pictures on the GPU, by map file (`set_thumb`).
     thumbs: std::collections::HashMap<String, usize>,
     /// The rows whose picture has just been read, and fades in when it is drawn.
@@ -46,6 +49,10 @@ pub struct MapsView {
     start_area: Option<Rect>,
     /// "Explore map" was clicked (`take_explore`).
     explore: bool,
+    /// The host found no OMSI 2 folder (`set_no_folder`): the page says to choose one.
+    no_folder: bool,
+    /// "Open Setup" was clicked (`take_open_setup`).
+    open_setup: bool,
 }
 
 impl Default for MapsView {
@@ -58,11 +65,14 @@ impl Default for MapsView {
             current: None,
             map_picture: None,
             picture_reading: false,
+            picture_fresh: false,
             thumbs: Default::default(),
             fresh_thumbs: Default::default(),
             visible: Vec::new(),
             start_area: None,
             explore: false,
+            no_folder: false,
+            open_setup: false,
         }
     }
 }
@@ -84,11 +94,13 @@ impl MapsView {
     /// The picture from that map's folder (its texture and width over height), when it has one,
     /// and whether it is still being read.
     pub fn set_picture(&mut self, p: Option<(usize, f32)>, reading: bool) {
+        if p.is_some() && p.map(|p| p.0) != self.map_picture.map(|p| p.0) {
+            self.picture_fresh = true;
+        }
         self.map_picture = p;
         self.picture_reading = reading;
     }
 
-    /// The map chosen in the library (its place in the catalog).
     /// The files of the library's rows on screen (after `draw`), for their small pictures.
     pub fn visible(&self) -> &[String] {
         &self.visible
@@ -109,6 +121,7 @@ impl MapsView {
         }
     }
 
+    /// The map chosen in the library (its place in the catalog).
     pub fn chosen(&self) -> usize {
         self.selected
     }
@@ -117,6 +130,17 @@ impl MapsView {
     /// or could not be).
     pub fn start_area(&self) -> Option<Rect> {
         self.start_area
+    }
+
+    /// Whether no OMSI 2 folder is chosen (the host's check, each frame): the page then asks
+    /// for one instead of showing why its list could not be read.
+    pub fn set_no_folder(&mut self, none: bool) {
+        self.no_folder = none;
+    }
+
+    /// Whether "Open Setup" was clicked since the last call.
+    pub fn take_open_setup(&mut self) -> bool {
+        std::mem::take(&mut self.open_setup)
     }
 
     /// "Explore map" was clicked, once.
@@ -223,28 +247,34 @@ impl MapsView {
         let list = match &self.catalog {
             Catalog::Ready(l) => Rc::clone(l),
             Catalog::Failed(e) => {
-                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 120.0);
-                card(ui, r, "Maps could not be listed", None);
-                clipped(
-                    ui,
-                    e,
-                    r.x + 19.0,
-                    r.y + 62.0,
-                    r.w - 38.0,
-                    14.0,
-                    Weight::Regular,
-                    MUTED,
-                );
-                clipped(
-                    ui,
-                    "Check the original installation in Setup.",
-                    r.x + 19.0,
-                    r.y + 90.0,
-                    r.w - 38.0,
-                    14.0,
-                    Weight::Regular,
-                    MUTED,
-                );
+                // (no folder chosen yet - the first run - is no error: the page says what to
+                // do, with the way to Setup)
+                let r = Rect::new(body.x, body.y + BODY_TOP, body.w, 300.0);
+                let e = e.clone();
+                let open = if self.no_folder {
+                    kit::empty_state(
+                        ui,
+                        "maps:open-setup",
+                        r,
+                        "Map library",
+                        "o-folder",
+                        "No OMSI 2 folder chosen yet",
+                        &["Choose the folder of your original OMSI 2 in Setup to see its maps here."],
+                        "Open Setup",
+                    )
+                } else {
+                    kit::empty_state(
+                        ui,
+                        "maps:open-setup",
+                        r,
+                        "Maps could not be listed",
+                        "warning",
+                        "Maps could not be listed",
+                        &[&e, "Check the original installation in Setup."],
+                        "Open Setup",
+                    )
+                };
+                self.open_setup |= open;
                 return;
             }
             _ => {
@@ -443,8 +473,14 @@ impl MapsView {
                     0.0
                 };
                 // (fading in once read, from the dark room around it)
-                let key = format!("maps:picture:{}:{tex}", m.map_or("", |m| m.file.as_str()));
-                let a = ui.appear(omsi_ui::widgets::id_of(&key), omsi_ui::theme::MOTION_NORMAL);
+                let a = if self.picture_fresh {
+                    let key = format!("maps:picture:{}:{tex}", m.map_or("", |m| m.file.as_str()));
+                    let a = ui.appear(omsi_ui::widgets::id_of(&key), omsi_ui::theme::MOTION_NORMAL);
+                    self.picture_fresh = a < 1.0;
+                    a
+                } else {
+                    1.0
+                };
                 ui.push_fade(a);
                 ui.image(pic, tex, round);
                 ui.pop_fade();
@@ -511,7 +547,6 @@ fn map_title(m: &MapInfo) -> String {
     }
 }
 
-/// The size of a row's small picture.
 /// The page's three columns in `body`: the library, the map's picture and its description
 /// under it, the start.
 fn columns(body: Rect) -> (Rect, Rect, Rect, Rect) {
@@ -600,6 +635,7 @@ fn skeleton(ui: &mut Ui, (lib, picture, about, start): (Rect, Rect, Rect, Rect))
     }
 }
 
+/// The size of a row's small picture.
 const THUMB_W: f32 = 84.0;
 const THUMB_H: f32 = 52.0;
 
