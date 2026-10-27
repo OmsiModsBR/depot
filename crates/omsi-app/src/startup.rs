@@ -175,7 +175,7 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 /// own assignment ([`omsi_content::input::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
-pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
+pub fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     let Ok(m) = omsi_content::KeyboardCfg::load(&keyboard_cfg(root)) else {
         return Default::default();
     };
@@ -269,10 +269,10 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// the game gets over (the texture left out, fewer textures from then on). Without it the
 /// driver itself ran out, and wgpu takes that - in a submit, a present - as the device
 /// lost (#48). Not a threshold for losing the device: that stays the driver's.
-pub(crate) const RESOURCE_MEMORY_PERCENT: u8 = 95;
+pub const RESOURCE_MEMORY_PERCENT: u8 = 95;
 
 /// The instance's settings for `backends` (None: wgpu's default set).
-pub(crate) fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::InstanceDescriptor {
+pub fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::InstanceDescriptor {
     let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
     if let Some(b) = backends {
         d.backends = b;
@@ -285,7 +285,7 @@ pub(crate) fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::Ins
 }
 
 /// Use the native supported API for both windowed and offscreen rendering.
-pub(crate) fn graphics_instance() -> wgpu::Instance {
+pub fn graphics_instance() -> wgpu::Instance {
     let descriptor = instance_descriptor(None);
     #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
@@ -419,7 +419,7 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
     software_adapter(&info.name, info.device_type)
 }
 
-fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
+pub fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
     device_type == wgpu::DeviceType::Cpu
         || name.contains("Microsoft Basic Render Driver")
         || name.contains("llvmpipe")
@@ -600,7 +600,7 @@ pub(crate) fn under_gamescope() -> bool {
 
 /// The monitor whose area holds the desktop point `at` (`rects`: each monitor's top left
 /// and size in pixels, in the order of the system's list).
-pub(crate) fn monitor_holding(rects: &[((i32, i32), (u32, u32))], at: (i32, i32)) -> Option<usize> {
+pub fn monitor_holding(rects: &[((i32, i32), (u32, u32))], at: (i32, i32)) -> Option<usize> {
     rects.iter().position(|&((x, y), (w, h))| {
         at.0 >= x
             && at.1 >= y
@@ -610,7 +610,7 @@ pub(crate) fn monitor_holding(rects: &[((i32, i32), (u32, u32))], at: (i32, i32)
 }
 
 /// `--monitor-at X,Y` as a point.
-pub(crate) fn parse_point(text: &str) -> Option<(i32, i32)> {
+pub fn parse_point(text: &str) -> Option<(i32, i32)> {
     let (a, b) = text.split_once(',')?;
     Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
 }
@@ -662,11 +662,7 @@ pub(crate) fn fit_window(
 /// `want` points fitted into a screen of `screen` pixels at `scale` (the size kept to 90 %
 /// of its width and 85 % of its height - a title bar and a task bar take some - with the
 /// shape kept), and where it starts for the screen's middle (pixels).
-pub(crate) fn fit_rect(
-    want: (f64, f64),
-    screen: (f64, f64),
-    scale: f64,
-) -> ((f64, f64), (i32, i32)) {
+pub fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f64, f64), (i32, i32)) {
     let (sw, sh) = (screen.0 / scale, screen.1 / scale);
     let k = (sw * 0.9 / want.0).min(sh * 0.85 / want.1).min(1.0);
     let (w, h) = ((want.0 * k).round(), (want.1 * k).round());
@@ -768,138 +764,5 @@ pub(crate) fn attach_parent_console() {
     // redirected log file stays the output)
     unsafe {
         AttachConsole(ATTACH_PARENT_PROCESS);
-    }
-}
-
-#[cfg(test)]
-mod own_key_tests {
-    /// OMSI's own file as it comes has no key of the player's own.
-    #[test]
-    fn the_stock_file_has_none_of_the_players() {
-        let root = std::path::Path::new("../../../OMSI 2 Original");
-        if !root.join("Inputs/keyboard.cfg").exists() {
-            return;
-        }
-        assert!(super::own_bindings(root, 0).is_empty());
-        assert!(super::own_bindings(root, omsi_content::input::KEY_SHIFT).is_empty());
-    }
-}
-
-#[cfg(test)]
-mod instance_tests {
-    use super::{instance_descriptor, RESOURCE_MEMORY_PERCENT};
-
-    /// Resources past the card's budget are refused as an "out of memory" the game gets
-    /// over, before the driver runs out (#48); losing the device stays the driver's call.
-    #[test]
-    fn every_instance_refuses_resources_past_the_memory_budget() {
-        for backends in [
-            None,
-            Some(wgpu::Backends::VULKAN),
-            Some(wgpu::Backends::DX12),
-        ] {
-            let d = instance_descriptor(backends);
-            assert_eq!(
-                d.memory_budget_thresholds.for_resource_creation,
-                Some(RESOURCE_MEMORY_PERCENT)
-            );
-            assert_eq!(d.memory_budget_thresholds.for_device_loss, None);
-        }
-    }
-
-    #[test]
-    fn the_backends_asked_for_are_kept() {
-        assert_eq!(
-            instance_descriptor(Some(wgpu::Backends::GL)).backends,
-            wgpu::Backends::GL
-        );
-        assert_eq!(
-            instance_descriptor(None).backends,
-            wgpu::InstanceDescriptor::new_without_display_handle().backends
-        );
-    }
-}
-
-#[cfg(test)]
-mod window_tests {
-    use super::software_adapter;
-
-    /// The software renderers come after every graphics chip (#770).
-    #[test]
-    fn software_renderers_are_told_from_chips() {
-        use wgpu::DeviceType::*;
-        assert!(software_adapter("Microsoft Basic Render Driver", Cpu));
-        assert!(software_adapter("Microsoft Basic Render Driver", Other));
-        assert!(software_adapter("llvmpipe (LLVM 15.0.7, 256 bits)", Cpu));
-        assert!(!software_adapter(
-            "Intel(R) HD Graphics 2500",
-            IntegratedGpu
-        ));
-        assert!(!software_adapter(
-            "NVIDIA GeForce RTX 3050 Laptop GPU",
-            DiscreteGpu
-        ));
-    }
-
-    #[test]
-    fn the_window_fits_a_small_screen_and_sits_in_its_middle() {
-        // 1920 x 1200 at 125 %: 1600 x 900 points would be 2000 px wide
-        let ((w, h), (x, y)) = super::fit_rect((1600.0, 900.0), (1920.0, 1200.0), 1.25);
-        assert!(
-            w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0,
-            "{w} x {h}"
-        );
-        assert!(((w / h) - 16.0 / 9.0).abs() < 0.01);
-        assert!((x as f64 - (1920.0 - w * 1.25) / 2.0).abs() <= 1.0);
-        assert!(y > 0);
-        // a big screen keeps the size asked for
-        let ((w, h), _) = super::fit_rect((1600.0, 900.0), (3840.0, 2160.0), 1.5);
-        assert_eq!((w, h), (1600.0, 900.0));
-    }
-}
-
-#[cfg(test)]
-mod monitor_tests {
-    use super::*;
-
-    #[test]
-    fn the_monitor_holding_a_point_is_found_whatever_its_place() {
-        // a monitor left of the primary one, the primary one, one above it
-        let rects = [
-            ((-1920, 0), (1920, 1080)),
-            ((0, 0), (2560, 1440)),
-            ((0, -1080), (1920, 1080)),
-        ];
-        assert_eq!(monitor_holding(&rects, (-100, 500)), Some(0));
-        assert_eq!(monitor_holding(&rects, (0, 0)), Some(1));
-        assert_eq!(monitor_holding(&rects, (2559, 1439)), Some(1));
-        assert_eq!(monitor_holding(&rects, (2560, 1439)), None);
-        assert_eq!(monitor_holding(&rects, (100, -1)), Some(2));
-        assert_eq!(monitor_holding(&rects, (5000, 5000)), None);
-        assert_eq!(monitor_holding(&[], (0, 0)), None);
-    }
-
-    #[test]
-    fn a_monitor_left_of_the_primary_one_gets_through_the_argument_parser() {
-        use clap::Parser;
-        for form in [
-            vec!["depot", "--monitor-at=-1500,300"],
-            vec!["depot", "--monitor-at", "-1500,300"],
-        ] {
-            let args =
-                crate::cli::Args::try_parse_from(&form).unwrap_or_else(|e| panic!("{form:?}: {e}"));
-            assert_eq!(
-                args.monitor_at.as_deref().and_then(parse_point),
-                Some((-1500, 300))
-            );
-        }
-    }
-
-    #[test]
-    fn the_monitor_point_is_read_from_the_command_line() {
-        assert_eq!(parse_point("-1500,300"), Some((-1500, 300)));
-        assert_eq!(parse_point(" 10 , 20 "), Some((10, 20)));
-        assert_eq!(parse_point("10"), None);
-        assert_eq!(parse_point("a,b"), None);
     }
 }

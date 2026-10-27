@@ -5223,6 +5223,23 @@ pub fn pick_file(title: &str) -> Option<PathBuf> {
     }
 }
 
+/// Where to save a file (Diagnostics: the integrity report), `name` offered.
+pub fn save_file(title: &str, name: &str) -> Option<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        rfd::FileDialog::new()
+            .set_title(title)
+            .set_file_name(name)
+            .add_filter("Text", &["txt"])
+            .save_file()
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (title, name);
+        None
+    }
+}
+
 /// A phone runs one program: the launcher hands the game's command line over here and the
 /// same process plays it in the same window (see the app's `android.rs`) instead of starting
 /// another process.

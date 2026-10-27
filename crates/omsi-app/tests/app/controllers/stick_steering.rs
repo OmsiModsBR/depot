@@ -1,0 +1,31 @@
+#[test]
+fn an_idle_device_nobody_set_up_does_not_hold_the_sticks_steering() {
+    assert!(openomsi_game::testing::controllers::stick_steers(
+        None, false, 0.0
+    ));
+    assert!(openomsi_game::testing::controllers::stick_steers(
+        Some(0.0),
+        false,
+        -0.6
+    ));
+    assert!(openomsi_game::testing::controllers::stick_steers(
+        Some(0.0),
+        false,
+        0.0
+    ));
+    assert!(openomsi_game::testing::controllers::stick_steers(
+        Some(0.02),
+        false,
+        0.0
+    ));
+    assert!(!openomsi_game::testing::controllers::stick_steers(
+        Some(0.8),
+        false,
+        0.3
+    ));
+    assert!(!openomsi_game::testing::controllers::stick_steers(
+        Some(0.0),
+        true,
+        1.0
+    ));
+}

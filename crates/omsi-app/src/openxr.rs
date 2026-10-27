@@ -1275,7 +1275,7 @@ fn eye_camera(base: &Camera, position: Vec3, rotation: Quat, fov: xr::Fovf) -> C
     }
 }
 
-fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
+pub fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
     let left = fov.angle_left.tan();
     let right = fov.angle_right.tan();
     let bottom = fov.angle_down.tan();
@@ -1301,68 +1301,14 @@ fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
     ])
 }
 
-fn zoom_eye_position(eye: Vec3, center: Vec3, zoom: f32) -> Vec3 {
+pub fn zoom_eye_position(eye: Vec3, center: Vec3, zoom: f32) -> Vec3 {
     center + (eye - center) / zoom
 }
 
-fn zoom_projection(mut projection: Mat4, zoom: f32) -> Mat4 {
+pub fn zoom_projection(mut projection: Mat4, zoom: f32) -> Mat4 {
     projection.x_axis.x *= zoom;
     projection.y_axis.y *= zoom;
     projection
-}
-
-#[cfg(test)]
-mod zoom_tests {
-    use super::*;
-
-    #[test]
-    fn stereo_disparity_stays_stable_through_zoom_animation() {
-        let left_eye = Vec3::new(-0.032, 0.0, 0.0);
-        let right_eye = Vec3::new(0.032, 0.0, 0.0);
-        let left = eye_projection(
-            xr::Fovf {
-                angle_left: -0.9,
-                angle_right: 0.8,
-                angle_up: 0.8,
-                angle_down: -0.8,
-            },
-            0.05,
-            1000.0,
-        );
-        let right = eye_projection(
-            xr::Fovf {
-                angle_left: -0.8,
-                angle_right: 0.9,
-                angle_up: 0.8,
-                angle_down: -0.8,
-            },
-            0.05,
-            1000.0,
-        );
-        let screen_x = |eye: Vec3, projection: Mat4, point: Vec3| {
-            let clip = projection * (point - eye).extend(1.0);
-            clip.x / clip.w
-        };
-        for depth in [0.8, 2.0, 10.0] {
-            let point = Vec3::new(0.12, 0.0, -depth);
-            let normal = screen_x(left_eye, left, point) - screen_x(right_eye, right, point);
-            for zoom in [1.0, 1.1, 1.3, 1.45, 1.6] {
-                let magnified = screen_x(
-                    zoom_eye_position(left_eye, Vec3::ZERO, zoom),
-                    zoom_projection(left, zoom),
-                    point,
-                ) - screen_x(
-                    zoom_eye_position(right_eye, Vec3::ZERO, zoom),
-                    zoom_projection(right, zoom),
-                    point,
-                );
-                assert!(
-                    (magnified - normal).abs() < 1e-5,
-                    "depth {depth}, zoom {zoom}: {magnified} instead of {normal}"
-                );
-            }
-        }
-    }
 }
 
 fn eye_ray(
