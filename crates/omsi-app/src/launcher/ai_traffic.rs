@@ -628,31 +628,36 @@ fn table(
 /// The details of the chosen entry: (label, value) rows under the card's title.
 fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
     card(&mut l.ui, r, "Details", None);
-    let mut y = r.y + 50.0;
     let lw = (r.w * 0.36).max(90.0);
-    for (k, v) in rows {
-        l.ui.p()
-            .rect(Rect::new(r.x + 1.0, y - 4.0, r.w - 2.0, 1.0), LINE);
-        clipped(
-            &mut l.ui,
-            k,
-            r.x + 17.0,
-            y + 13.0,
-            lw - 10.0,
-            12.0,
-            Weight::Regular,
-            MUTED,
-        );
-        l.ui.text_in_as_is(
-            v,
-            Rect::new(r.x + 17.0 + lw, y, r.w - lw - 30.0, 26.0),
-            12.5,
-            Weight::Regular,
-            FG,
-        );
-        l.ui.tooltip(Rect::new(r.x, y - 4.0, r.w, 30.0), v);
-        y += 31.0;
-    }
+    // (the rows scroll when the card is short: under a vehicle's picture)
+    let list = Rect::new(r.x, r.y + 46.0, r.w, (r.h - 50.0).max(0.0));
+    l.ui.scroll_area("ai-details", list, &mut |ui, v| {
+        let mut y = v.y + 4.0;
+        for (k, val) in rows {
+            ui.p()
+                .rect(Rect::new(v.x + 1.0, y - 4.0, v.w - 2.0, 1.0), LINE);
+            clipped(
+                ui,
+                k,
+                v.x + 17.0,
+                y + 13.0,
+                lw - 10.0,
+                12.0,
+                Weight::Regular,
+                MUTED,
+            );
+            ui.text_in_as_is(
+                val,
+                Rect::new(v.x + 17.0 + lw, y, v.w - lw - 30.0, 26.0),
+                12.5,
+                Weight::Regular,
+                FG,
+            );
+            ui.tooltip(Rect::new(v.x, y - 4.0, v.w, 30.0), val);
+            y += 31.0;
+        }
+        y - v.y
+    });
 }
 
 /// The vehicle `file` in `paint` (empty: its own) at the top of `r`, as the preview helper
