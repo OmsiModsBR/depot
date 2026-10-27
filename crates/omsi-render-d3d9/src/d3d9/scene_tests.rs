@@ -115,6 +115,7 @@ fn draw(
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
+        coronas: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -264,6 +265,7 @@ fn depth_is_reversed_nearer_is_greater() {
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
+        coronas: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -382,6 +384,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         cab: &[],
         surface_bias: 0,
         lamps: Default::default(),
+        coronas: Default::default(),
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -555,6 +558,7 @@ fn draw_lamps(
         cab: &[],
         surface_bias: -24,
         lamps,
+        coronas: Default::default(),
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -721,6 +725,7 @@ fn texture_addressing_follows_the_material() {
             cab: &[],
             surface_bias: -24,
             lamps: Default::default(),
+            coronas: Default::default(),
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -1022,6 +1027,7 @@ fn quad_frame<'a>(
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
+        coronas: Default::default(),
     }
 }
 
@@ -1132,6 +1138,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
+        coronas: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -1182,4 +1189,211 @@ fn a_shadow_blob_shows_by_its_texture_alpha_and_not_as_a_solid_box() {
         let px = black_over_white(&mut dev, format, level, 1.0);
         assert!(all(&px, black, 3), "{format:?} surface: {px:?}");
     }
+}
+
+// ---- light coronas ----
+
+/// A red glow over the whole target, facing the camera on its axis, at clip depth `z`;
+/// `picture` its picture (0 the standard glow). Its centre is `[red, 0, 0]`.
+fn red_glow(z: f32, picture: u16) -> ([f32; crate::scene::CORONA_FLOATS], u16) {
+    (
+        [
+            0.0, 0.0, z, 10.0, // position, size
+            1.0, 0.0, 0.0, 1.0, // colour, brightness
+            0.0, 0.0, -1.0, 0.5, // faces the camera, outer cone's cosine
+            0.0, 1.0, 0.0, 0.0, // up axis, flat and facing its direction
+            0.9, 0.0, 0.0, 0.0, // inner cone's cosine, no z offset, no bits, a glow
+        ],
+        picture,
+    )
+}
+
+fn corona_light() -> SceneLight {
+    SceneLight {
+        cam_pos: [0.0, 0.0, -1.0, 0.0],
+        ambient: [1.0, 1.0, 1.0, 0.0],
+        sky_color: [0.0, 0.0, 0.0, 1.0],
+        ..Default::default()
+    }
+}
+
+/// Draws a blue quad of mesh 0 at depth `quad_z` as the world (`late` false) or as the
+/// vehicle the camera is in, and `runs` of `sprites` over a black clear.
+fn draw_coronas(
+    dev: &mut D3d9Device,
+    quad_z: Option<f32>,
+    late_quad: bool,
+    sprites: &[[f32; crate::scene::CORONA_FLOATS]],
+    runs: &[(u16, u32, u32, bool)],
+) -> Vec<u8> {
+    if let Some(z) = quad_z {
+        let (v, i) = quad(z);
+        dev.set_scene_mesh(0, &v, &i).unwrap();
+        rgba(dev, 0, [0, 0, 255, 255]);
+    }
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let blue = [batch(DrawKind::Opaque, 0, 0, 0..1)];
+    let (main, cab): (&[SceneBatch], &[SceneBatch]) = match (quad_z, late_quad) {
+        (None, _) => (&[], &[]),
+        (Some(_), false) => (&blue, &[]),
+        (Some(_), true) => (&[], &blue),
+    };
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: corona_light(),
+        list: &[0],
+        models: &[IDENTITY],
+        params: &[VISIBLE, SECOND],
+        main,
+        cab,
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: crate::scene::SceneCoronas { sprites, runs },
+    };
+    let u = uniform(0.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(0),
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    dev.end_frame().unwrap()
+}
+
+#[test]
+fn a_corona_is_added_over_the_scene_in_its_colour() {
+    let Some(mut dev) = device() else { return };
+    let (sprite, picture) = red_glow(0.5, 0);
+    let px = draw_coronas(&mut dev, None, false, &[sprite], &[(picture, 0, 1, false)]);
+    // (the standard glow is brightest in the middle and fades towards its rim)
+    let c = &px[((H / 2 * W + W / 2) * 4) as usize..][..4];
+    assert!(c[0] > 150 && c[1] <= 1 && c[2] <= 1 && c[3] == 255, "{c:?}");
+    assert!(
+        px.chunks_exact(4).all(|p| p[1] <= 1 && p[2] <= 1),
+        "a red light adds no green or blue: {:?}",
+        &px[..8]
+    );
+    // no sprite, nothing added
+    let px = draw_coronas(&mut dev, None, false, &[], &[]);
+    assert!(all(&px, [0, 0, 0, 255], 0));
+    // a light of no brightness draws nothing
+    let (mut dark, picture) = red_glow(0.5, 0);
+    dark[7] = 0.0;
+    let px = draw_coronas(&mut dev, None, false, &[dark], &[(picture, 0, 1, false)]);
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+}
+
+#[test]
+fn a_corona_behind_a_surface_is_hidden_by_it() {
+    let Some(mut dev) = device() else { return };
+    let (sprite, picture) = red_glow(0.5, 0);
+    // a blue wall nearer than the light
+    let px = draw_coronas(
+        &mut dev,
+        Some(0.9),
+        false,
+        &[sprite],
+        &[(picture, 0, 1, false)],
+    );
+    assert!(all(&px, [0, 0, 255, 255], 1), "{:?}", &px[..4]);
+    // a blue wall behind it: the light shows over the wall, and does not take its blue
+    let px = draw_coronas(
+        &mut dev,
+        Some(0.2),
+        false,
+        &[sprite],
+        &[(picture, 0, 1, true)],
+    );
+    let c = &px[((H / 2 * W + W / 2) * 4) as usize..][..4];
+    assert!(c[0] > 150 && c[2] >= 250, "{c:?}");
+}
+
+#[test]
+fn the_vehicle_the_camera_is_in_is_drawn_before_its_own_coronas() {
+    let Some(mut dev) = device() else { return };
+    let (sprite, picture) = red_glow(0.5, 0);
+    // the cab's wall is behind the light, but drawn after the world's coronas: it covers them
+    let px = draw_coronas(
+        &mut dev,
+        Some(0.2),
+        true,
+        &[sprite],
+        &[(picture, 0, 1, false)],
+    );
+    assert!(all(&px, [0, 0, 255, 255], 1), "{:?}", &px[..4]);
+    // and the cab's own coronas come after it: they show
+    let px = draw_coronas(
+        &mut dev,
+        Some(0.2),
+        true,
+        &[sprite],
+        &[(picture, 0, 1, true)],
+    );
+    let c = &px[((H / 2 * W + W / 2) * 4) as usize..][..4];
+    assert!(c[0] > 150 && c[2] >= 250, "{c:?}");
+}
+
+#[test]
+fn a_light_with_its_own_picture_takes_its_shape_and_a_missing_one_the_glow() {
+    let Some(mut dev) = device() else { return };
+    let white = vec![[255u8, 255, 255, 255].repeat(4)];
+    dev.set_corona_texture(
+        5,
+        &SceneTexture {
+            width: 2,
+            height: 2,
+            format: TexFormat::Rgba8,
+            levels: &white,
+            make_mips: true,
+        },
+    )
+    .unwrap();
+    let (sprite, _) = red_glow(0.5, 0);
+    // a flat white picture lights the whole sprite
+    let px = draw_coronas(&mut dev, None, false, &[sprite], &[(5, 0, 1, false)]);
+    assert!(all(&px, [255, 0, 0, 255], 2), "{:?}", &px[..4]);
+    // picture 6 was never put up: the standard glow
+    let px = draw_coronas(&mut dev, None, false, &[sprite], &[(6, 0, 1, false)]);
+    assert!(!all(&px, [255, 0, 0, 255], 2), "{:?}", &px[..4]);
+    // the pictures belong to the renderer: they survive a new scene and a device opened again
+    dev.clear_scene();
+    dev.recover().unwrap();
+    let px = draw_coronas(&mut dev, None, false, &[sprite], &[(5, 0, 1, false)]);
+    assert!(all(&px, [255, 0, 0, 255], 2), "{:?}", &px[..4]);
+}
+
+#[test]
+fn a_corona_run_outside_the_sprites_is_refused() {
+    let Some(mut dev) = device() else { return };
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0; 4],
+    })
+    .unwrap();
+    let (sprite, _) = red_glow(0.5, 0);
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: corona_light(),
+        list: &[],
+        models: &[],
+        params: &[],
+        main: &[],
+        cab: &[],
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: crate::scene::SceneCoronas {
+            sprites: &[sprite],
+            runs: &[(0, 0, 2, false)],
+        },
+    };
+    let r = dev.draw_scene(&frame, |_| None);
+    assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
 }

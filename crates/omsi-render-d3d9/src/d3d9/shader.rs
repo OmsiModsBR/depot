@@ -18,6 +18,7 @@ use crate::{BackendError, Result};
 pub(crate) const BASIC: &str = include_str!("shaders/basic.hlsl");
 pub(crate) const SCENE: &str = include_str!("shaders/scene.hlsl");
 pub(crate) const UI: &str = include_str!("shaders/ui.hlsl");
+pub(crate) const CORONA: &str = include_str!("shaders/corona.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -229,6 +230,18 @@ mod tests {
             counted.abs_diff(slots) <= slots / 10,
             "counted {counted}, the compiler {slots}"
         );
+    }
+
+    #[test]
+    fn corona_shaders_compile_for_sm3() {
+        let vs = compile(CORONA, "corona.hlsl", "vs_main", Stage::Vertex).unwrap();
+        let ps = compile(CORONA, "corona.hlsl", "ps_main", Stage::Pixel).unwrap();
+        assert_eq!(vs[0], 0xFFFE_0300);
+        assert_eq!(ps[0], 0xFFFF_0300);
+        // (a separate pass: its pixel shader has its own 512 slots, with room to spare)
+        let slots = reported_slots(&ps).unwrap();
+        println!("corona pixel shader: {slots} instruction slots");
+        assert!(slots <= 460, "the corona pixel shader takes {slots} slots");
     }
 
     #[test]
