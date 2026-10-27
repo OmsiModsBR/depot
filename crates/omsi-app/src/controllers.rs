@@ -178,7 +178,7 @@ fn wheel_steering(axis: f32, reversed: bool, flags: i32, deadzone: f32, gain: f3
 /// knows it as a gamepad (a known layout of sticks and triggers), and whether it can push
 /// back (force feedback).
 #[derive(Debug, Clone)]
-pub(crate) struct Connected {
+pub struct Connected {
     pub name: String,
     pub hardware_id: Option<(u16, u16)>,
     pub axes: Vec<(usize, f32)>,

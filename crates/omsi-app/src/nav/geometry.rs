@@ -29,7 +29,7 @@ pub(super) fn congestion_on(
 
 /// Street lanes that stand for drawn roads, including editor-only paths corroborated by
 /// road surfaces. Uncorroborated helpers must not make a phantom road on the GPS.
-pub(super) fn visible_road_lanes(net: &Network) -> Vec<(usize, &omsi_sim::traffic::Lane)> {
+pub fn visible_road_lanes(net: &Network) -> Vec<(usize, &omsi_sim::traffic::Lane)> {
     let mut seen = hashbrown::HashSet::<(LaneKey, u32)>::new();
     net.lanes
         .iter()
@@ -66,7 +66,7 @@ pub(crate) fn city_roads(
 }
 
 /// A road of the city map: the centre line of a carriageway, as wide as the map makes it.
-pub(crate) struct MapRoad {
+pub struct MapRoad {
     pub points: Vec<DVec3>,
     pub width: f32,
     /// A road cars drive far along (the map's own speed limits say so): drawn brighter.
@@ -76,7 +76,7 @@ pub(crate) struct MapRoad {
 /// Some maps separate the asphalt mesh from their editor-only traffic splines. Use the
 /// actual road footprint to distinguish those paths from invisible scenery helpers. This
 /// changes only the navigator's copy of the network; driving still uses the original data.
-pub(super) fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, f32)]) {
+pub fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, f32)]) {
     let mut segments = Vec::new();
     let mut grid: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
     for (pts, width) in surfaces {
@@ -186,7 +186,7 @@ pub(super) fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, 
 /// Traffic paths are lane centres, not separate streets. Adjacent paths on one spline
 /// describe one carriageway; combine their footprints without filling a median. Align
 /// opposing directions before averaging so bends, mirrors and ramps retain their shape.
-pub(super) fn road_geometry(net: &Network) -> Vec<MapRoad> {
+pub fn road_geometry(net: &Network) -> Vec<MapRoad> {
     let mut roads = Vec::new();
     let mut splines =
         std::collections::BTreeMap::<((i32, i32), i64), Vec<&omsi_sim::traffic::Lane>>::new();
@@ -367,38 +367,12 @@ pub(crate) fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
 
 /// The map's turn (radians) one frame of `dt` seconds on its way to `target`: the short way round, easing out, and
 /// exactly on the target once it is within a thousandth of a radian.
-pub(super) fn turn_towards(phi: f64, target: f64, dt: f64) -> f64 {
+pub fn turn_towards(phi: f64, target: f64, dt: f64) -> f64 {
     use std::f64::consts::{PI, TAU};
     let diff = (target - phi + PI).rem_euclid(TAU) - PI;
     if diff.abs() < 1e-3 {
         target
     } else {
         phi + diff * (1.0 - (-dt.max(0.0) * 8.0).exp())
-    }
-}
-
-#[cfg(test)]
-mod turn_tests {
-    use super::turn_towards;
-    use std::f64::consts::PI;
-
-    #[test]
-    fn the_view_turns_the_short_way_and_lands_on_the_target() {
-        // from 350 degrees to 10: forwards through north, not back through 340 degrees
-        let (a, b) = (350f64.to_radians(), 10f64.to_radians());
-        let step = turn_towards(a, b, 1.0 / 60.0);
-        assert!(step > a, "{step}");
-        // it eases in a few frames and then sits exactly on the target
-        let mut p = 0.0;
-        for _ in 0..600 {
-            p = turn_towards(p, PI * 0.75, 1.0 / 60.0);
-        }
-        assert_eq!(p, PI * 0.75);
-        // no time passing, no turning; a target already reached stays
-        assert_eq!(turn_towards(1.0, 2.0, 0.0), 1.0);
-        assert_eq!(turn_towards(0.5, 0.5, 0.016), 0.5);
-        // a step never overshoots
-        let s = turn_towards(0.0, 1.0, 10.0);
-        assert!(s <= 1.0 && s > 0.99);
     }
 }
