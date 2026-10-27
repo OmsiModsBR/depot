@@ -219,6 +219,9 @@ pub struct Ui {
     fade_stack: Vec<f32>,
     /// Something is still on its way (`tween`, `appear`): the next frame should come soon.
     moving: bool,
+    /// The launcher's tooltips: every button names itself in one, and each shows after the
+    /// mouse has rested a whole second (the game's own menus stay as they are).
+    pub auto_tips: bool,
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
@@ -265,6 +268,7 @@ impl Ui {
             fade: 1.0,
             fade_stack: Vec::new(),
             moving: false,
+            auto_tips: false,
             hot: None,
             active: None,
             focus: None,
@@ -713,6 +717,17 @@ impl Ui {
     }
 
     pub fn tooltip(&mut self, r: Rect, text: &str) {
+        // (the launcher's: after the mouse has rested on `r` a whole second - the eased value
+        // below never went back down, so a tooltip seen once came at once ever after)
+        if self.auto_tips {
+            let id = id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55;
+            let rest = self.hover(r) && !self.input.down;
+            if self.hovered_for(id, rest) >= 1.0 {
+                self.tooltip = Some((text.to_string(), self.input.mouse));
+                self.tooltip_raw = false;
+            }
+            return;
+        }
         if self.hover(r) && !self.input.down {
             let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
             if t > 0.9 {
@@ -1176,6 +1191,10 @@ impl Ui {
             text_c,
             Align::Left,
         );
+        // (a tooltip the caller gives after this one replaces it)
+        if self.auto_tips && !label.is_empty() {
+            self.tooltip(r, label);
+        }
         clicked
     }
 
@@ -1831,7 +1850,11 @@ impl Ui {
     /// Only the calendar's button, for a date typed beside it (YYYY-MM-DD): the calendar opens
     /// under `r`.
     pub fn calendar_button(&mut self, name: &str, r: Rect, date: &mut String) -> bool {
-        self.date_control(name, r, date, false)
+        let changed = self.date_control(name, r, date, false);
+        if self.auto_tips {
+            self.tooltip(r, "Choose a date");
+        }
+        changed
     }
 
     fn date_control(&mut self, name: &str, r: Rect, date: &mut String, field: bool) -> bool {
@@ -2931,5 +2954,34 @@ mod tests {
         assert_eq!(ui.layers.last().unwrap().0.opacity, 0.5);
         ui.pop_fade();
         assert_eq!(ui.layers.last().unwrap().0.opacity, 1.0);
+    }
+
+    /// In the launcher every button names itself once the mouse has rested on it about a
+    /// second; a tooltip the caller gives after it wins; the game's buttons stay without.
+    #[test]
+    fn a_launcher_button_names_itself_in_a_tooltip() {
+        let r = Rect::new(10.0, 10.0, 80.0, 30.0);
+        let rest = |auto: bool, own: Option<&str>, secs: f32| {
+            let mut ui = Ui::new();
+            ui.auto_tips = auto;
+            let mut tip = None;
+            for _ in 0..(secs / 0.05) as usize {
+                ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.05);
+                ui.input.mouse = Vec2::new(40.0, 20.0);
+                ui.button("b", r, "Save", None, ButtonKind::Normal);
+                if let Some(t) = own {
+                    ui.tooltip(r, t);
+                }
+                tip = ui.tooltip.clone().map(|t| t.0);
+            }
+            tip
+        };
+        assert_eq!(rest(true, None, 0.5), None);
+        assert_eq!(rest(true, None, 1.2).as_deref(), Some("Save"));
+        assert_eq!(
+            rest(true, Some("Save the folders"), 1.2).as_deref(),
+            Some("Save the folders")
+        );
+        assert_eq!(rest(false, None, 1.2), None);
     }
 }

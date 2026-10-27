@@ -267,6 +267,16 @@ pub fn caption_buttons(ui: &mut Ui, w: f32, maximized: bool) -> Option<Caption> 
                 p.line(m + Vec2::new(-5.0, 5.0), m + Vec2::new(5.0, -5.0), 1.0, ink);
             }
         }
+        // (named as Windows names its own)
+        ui.tooltip(
+            r,
+            match c {
+                Caption::Minimize => "Minimize",
+                Caption::Maximize if maximized => "Restore down",
+                Caption::Maximize => "Maximize",
+                Caption::Close => "Close",
+            },
+        );
         if clicked {
             out = Some(c);
         }

@@ -330,6 +330,8 @@ impl Launcher {
             chrome: Default::default(),
             logo_accent: omsi_ui::theme::current_accent(),
         };
+        // (every button of the launcher names itself after the mouse rests on it a second)
+        app.ui.auto_tips = true;
         omsi_ui::theme::set_motion(windows_motion());
         // no original installation found anywhere: the launcher still opens, on Setup, and says
         // what it needs (only starting a session needs the game)

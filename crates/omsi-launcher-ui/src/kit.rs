@@ -250,6 +250,9 @@ pub fn action(ui: &mut Ui, id: &str, b: Rect, label: &str, note: &str, enabled: 
         Weight::Regular,
         MUTED,
     );
+    if enabled {
+        ui.tooltip(b, label);
+    }
     enabled && clicked
 }
 

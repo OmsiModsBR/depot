@@ -426,6 +426,7 @@ pub fn card(l: &mut Launcher, r: Rect) {
                 if h { accent().lighten(0.15) } else { accent() },
                 Align::Right,
             );
+            l.ui.tooltip(clear, "Clear");
             if clicked {
                 // (the whole preselection goes: no depot file, number or plate picked for it
                 // stays behind for the game)
