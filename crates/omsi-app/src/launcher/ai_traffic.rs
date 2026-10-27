@@ -102,6 +102,7 @@ pub(super) fn keep(i: usize, n: usize) -> usize {
 }
 
 pub fn draw(l: &mut Launcher, area: Rect) {
+    l.pages.diag.ai.showing = false;
     let list = super::integrity::items(l, 0);
     let root = PathBuf::from(l.state.config.root.trim());
     if list.is_empty() || root.as_os_str().is_empty() {
@@ -146,7 +147,6 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     }
     let editing = l.pages.diag.ai.edit.is_some();
     let folder = list[item].1.clone();
-    l.pages.diag.ai.showing = false;
     l.pages.diag.ai.map_file = l
         .state
         .maps
