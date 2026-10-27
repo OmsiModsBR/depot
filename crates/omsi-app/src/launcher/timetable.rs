@@ -503,7 +503,13 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     ) {
         tv.tab = tab;
     }
-    let mw = 240.0f32.min(bar.w * 0.25);
+    // (the Schematic tab puts its direction here: the dropdown and the swap button)
+    let dir_w = if tv.tab == 1 {
+        240.0f32.min(bar.w * 0.25) + 118.0
+    } else {
+        0.0
+    };
+    let mw = 240.0f32.min(bar.w * 0.25).max(dir_w);
     let map_r = Rect::new(bar.right() - mw, bar.y, mw, bar.h);
     let note = "Stops, streets and routes are read from the map; only departures can be edited";
     let nw = l.ui.width(note, 12.0, Weight::Regular) + 24.0;
@@ -513,15 +519,48 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         l.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
         l.ui.text_in(note, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
     }
-    // (the map is the one chosen on the Maps page: only its name is shown here)
-    l.ui.text_in(
-        &maps[tv.map].0,
-        map_r,
-        13.0,
-        Weight::Medium,
-        TEXT_DIM,
-        Align::Right,
-    );
+    if tv.tab == 1 {
+        let dirs = tv
+            .plan
+            .line(&tv.chosen)
+            .map(|k| tv.plan.directions(k))
+            .unwrap_or_default();
+        if !dirs.is_empty() {
+            let names: Vec<String> = dirs
+                .iter()
+                .map(|d| omsi_ui::tr("Direction: to %{stop}").replace("%{stop}", &d.to_string()))
+                .collect();
+            let mut d = tv.dir % dirs.len();
+            let sw = 110.0;
+            if l.ui.select(
+                "tt-dir",
+                Rect::new(map_r.x, map_r.y, map_r.w - sw - 8.0, map_r.h),
+                &mut d,
+                &names,
+            ) {
+                tv.dir = d;
+            }
+            if l.ui.button(
+                "tt-swap",
+                Rect::new(map_r.right() - sw, map_r.y, sw, map_r.h),
+                "Swap direction",
+                None,
+                ButtonKind::Normal,
+            ) {
+                tv.dir = (tv.dir + 1) % dirs.len();
+            }
+        }
+    } else {
+        // (the map is the one chosen on the Maps page: only its name is shown here)
+        l.ui.text_in(
+            &maps[tv.map].0,
+            map_r,
+            13.0,
+            Weight::Medium,
+            TEXT_DIM,
+            Align::Right,
+        );
+    }
     let main = Rect::new(
         body.x,
         bar.bottom() + 14.0,
@@ -618,38 +657,8 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
                     .collect();
             }
         }
-        1 => {
-            let dirs = plan
-                .line(&tv.chosen)
-                .map(|k| plan.directions(k))
-                .unwrap_or_default();
-            if !dirs.is_empty() {
-                let names: Vec<String> = dirs
-                    .iter()
-                    .map(|d| {
-                        omsi_ui::tr("Direction: to %{stop}").replace("%{stop}", &d.to_string())
-                    })
-                    .collect();
-                let mut d = tv.dir % dirs.len();
-                if ui.select(
-                    "tt-dir",
-                    Rect::new(foot.x, foot.y, foot.w, ROW),
-                    &mut d,
-                    &names,
-                ) {
-                    tv.dir = d;
-                }
-                if ui.button(
-                    "tt-swap",
-                    Rect::new(foot.x, foot.bottom() - ROW, foot.w, ROW),
-                    "Swap direction",
-                    None,
-                    ButtonKind::Normal,
-                ) {
-                    tv.dir = (tv.dir + 1) % dirs.len();
-                }
-            }
-        }
+        // (the direction is chosen in the bar over the page)
+        1 => {}
         _ => {
             // a new line: its name, then Add (the file is `<name>.ttl` in the map's TTData)
             let new_r = Rect::new(foot.x, foot.y, foot.w - 90.0, ROW);
