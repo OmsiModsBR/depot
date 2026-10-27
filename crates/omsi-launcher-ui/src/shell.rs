@@ -60,6 +60,7 @@ impl Shell {
             logo: self.logo,
             badges: &[],
             footer: ("Project Depot", "preview"),
+            footer_ask: false,
         };
         if let Some(Nav::Page(p)) = bar.draw(ui, h) {
             self.page = p;
@@ -292,6 +293,9 @@ pub struct Sidebar<'a> {
     pub badges: &'a [(Page, String, omsi_ui::Color)],
     /// The line at the foot: a name and, smaller, what it is.
     pub footer: (&'a str, &'a str),
+    /// The right-hand part of the foot line asks for something ("Create" a driver): in the
+    /// accent, not muted.
+    pub footer_ask: bool,
 }
 
 /// The id the foot line is clickable under.
@@ -341,27 +345,42 @@ impl Sidebar<'_> {
         let (name, what) = self.footer;
         let what_w = ui.width(what, 12.0, Weight::Regular);
         let cy = line.center().y;
+        // (the driver's icon, then the name, then what it is - or what to do - at the right)
+        ui.icon("o-user", Vec2::new(line.x + 20.0, cy), 16.0, MUTED);
         let name = kit::fit_text_as_is(
             ui,
             name,
             12.5,
             Weight::Bold,
-            (line.w - 28.0 - what_w - 12.0).max(0.0),
+            (line.w - 40.0 - what_w - 12.0).max(0.0),
         );
         ui.text_in(
             &name,
-            Rect::new(line.x + 12.0, cy - 12.0, line.w, 24.0),
+            Rect::new(line.x + 36.0, cy - 12.0, line.w, 24.0),
             12.5,
             Weight::Bold,
             FG,
             Align::Left,
         );
+        let what_c = if self.footer_ask {
+            if hover {
+                accent().lighten(0.15)
+            } else {
+                accent()
+            }
+        } else {
+            MUTED
+        };
         ui.text_in(
             what,
             Rect::new(line.x, cy - 12.0, line.w - 12.0, 24.0),
             12.0,
-            Weight::Regular,
-            MUTED,
+            if self.footer_ask {
+                Weight::Medium
+            } else {
+                Weight::Regular
+            },
+            what_c,
             Align::Right,
         );
         if clicked {
@@ -526,10 +545,13 @@ impl TopBar<'_> {
             1.0
         };
         let tile = Rect::new(r.x, 8.0, r.w, TOPBAR_H - 16.0);
-        // (as the sidebar: the chosen entry a layer lighter, with a short accent bar - under
-        // it here, along the bar's edge)
+        // (Windows 11's top navigation: the chosen entry marked only by the accent bar under
+        // it, along the bar's edge - a lighter tile as well marked it twice; the tile is the
+        // mouse's, as on the other entries)
         if on {
-            ui.p().rounded(tile, CONTROL_RADIUS, SELECTED_LAYER);
+            if hover || down {
+                ui.p().rounded(tile, CONTROL_RADIUS, HOVER_LAYER);
+            }
             let lit = ui.anim(id, 1.0, 0.08);
             let bar = (r.w - 24.0) * lit;
             ui.p().rounded(

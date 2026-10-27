@@ -2161,12 +2161,14 @@ impl Launcher {
             Some(p) => (p.level, p.name.clone()),
             None => (1, self.state.config.profile.clone()),
         };
-        let name = if name.is_empty() {
-            "No driver".to_string()
+        // (no driver yet: no level to show, and the foot asks for one - it opens Profile)
+        let ask = name.is_empty();
+        let name = if ask { "No driver".to_string() } else { name };
+        let level = if ask {
+            "Create".to_string()
         } else {
-            name
+            omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string())
         };
-        let level = omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string());
         let page = self.page.shown().unwrap_or(UiPage::Drive);
         let nav = if self.top_nav() {
             omsi_launcher_ui::shell::TopBar {
@@ -2181,6 +2183,7 @@ impl Launcher {
                 logo: self.logo,
                 badges: &badges,
                 footer: (&name, &level),
+                footer_ask: ask,
             }
             .draw(&mut self.ui, size.y)
         };
@@ -2430,6 +2433,8 @@ impl Launcher {
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
         let games = self.state.instances.iter().filter(|i| i.running).count();
         let root_ok = self.root_ok();
+        // (each chip's dot says how it stands at a glance: green when all is well, amber when
+        // something is missing; none while there is nothing to say - a game not running)
         let chips = [
             (
                 if games == 0 {
@@ -2437,7 +2442,7 @@ impl Launcher {
                 } else {
                     "Game: running".to_string()
                 },
-                games > 0,
+                (games > 0).then_some(OK),
             ),
             (
                 (if root_ok {
@@ -2446,7 +2451,7 @@ impl Launcher {
                     "OMSI 2 folder: not chosen"
                 })
                 .to_string(),
-                false,
+                Some(if root_ok { OK } else { WARN }),
             ),
             (
                 (if self.preview.live {
@@ -2455,19 +2460,19 @@ impl Launcher {
                     "Preview helper: stopped"
                 })
                 .to_string(),
-                self.preview.live,
+                self.preview.live.then_some(OK),
             ),
         ];
         let mut at = x;
-        for (t, lit) in chips {
-            // (a lit chip leads with its dot, the words after it)
-            let dot = if lit { 12.0 } else { 0.0 };
+        for (t, dot_c) in chips {
+            // (a chip with a dot leads with it, the words after it)
+            let dot = if dot_c.is_some() { 12.0 } else { 0.0 };
             let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
             let r = Rect::new(at, cy - 12.0, w, 24.0);
             self.ui.p().rounded(r, 12.0, PANEL);
             self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
-            if lit {
-                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);
+            if let Some(c) = dot_c {
+                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, c);
             }
             let tx = Rect::new(r.x + dot, r.y, w - dot, 24.0);
             self.ui
