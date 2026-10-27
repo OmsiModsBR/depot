@@ -391,13 +391,32 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         return;
     }
     let tv = &mut l.pages.tt;
-    // (first shown: the map chosen on the Maps page, not the first of the list)
-    if tv.loaded.is_none() {
-        if let Some(k) = maps.iter().position(|m| m.1 == l.state.choice.map) {
-            tv.map = k;
+    // (always the map chosen on the Maps page: this page has no map of its own)
+    let want_map = maps
+        .iter()
+        .position(|m| m.1 == l.state.choice.map)
+        .unwrap_or(tv.map)
+        .min(maps.len() - 1);
+    if want_map != tv.map {
+        // (another map: this one's changes are saved first, not lost)
+        if !tv.dirty.is_empty() {
+            let (saved, err) = save_all(tv);
+            match err {
+                Some(e) => l.state.set_status(
+                    omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()),
+                    true,
+                ),
+                None => l.state.set_status(
+                    omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()),
+                    false,
+                ),
+            }
         }
+        tv.map = want_map;
+        tv.stop = None;
+        tv.chosen.clear();
+        tv.find.clear();
     }
-    tv.map = tv.map.min(maps.len() - 1);
     // read the chosen map's timetable
     if tv.loaded.as_deref() != Some(maps[tv.map].1.as_str()) {
         let file = &maps[tv.map].1;
@@ -484,9 +503,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     ) {
         tv.tab = tab;
     }
-    let names: Vec<String> = maps.iter().map(|m| m.0.clone()).collect();
     let mw = 240.0f32.min(bar.w * 0.25);
-    let mut m = tv.map;
     let map_r = Rect::new(bar.right() - mw, bar.y, mw, bar.h);
     let note = "Stops, streets and routes are read from the map; only departures can be edited";
     let nw = l.ui.width(note, 12.0, Weight::Regular) + 24.0;
@@ -496,28 +513,15 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         l.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
         l.ui.text_in(note, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
     }
-    if l.ui.select("tt-map", map_r, &mut m, &names) {
-        // (another map: this one's changes are saved first, not lost)
-        if !tv.dirty.is_empty() {
-            let (saved, err) = save_all(tv);
-            match err {
-                Some(e) => l.state.set_status(
-                    omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()),
-                    true,
-                ),
-                None => l.state.set_status(
-                    omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()),
-                    false,
-                ),
-            }
-        }
-        tv.map = m;
-        tv.loaded = None;
-        tv.stop = None;
-        tv.chosen.clear();
-        tv.find.clear();
-        return;
-    }
+    // (the map is the one chosen on the Maps page: only its name is shown here)
+    l.ui.text_in(
+        &maps[tv.map].0,
+        map_r,
+        13.0,
+        Weight::Medium,
+        TEXT_DIM,
+        Align::Right,
+    );
     let main = Rect::new(
         body.x,
         bar.bottom() + 14.0,
